@@ -1,8 +1,7 @@
 import { commands } from '@/lib/tauri-bindings'
-import { info as logInfo } from '@tauri-apps/plugin-log'
 import { logger } from '@/lib/logger'
-import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
+import { useProjectStore } from '@/store/project-store'
 import { isValidOscTarget } from '@/lib/audio-prefs'
 
 /**
@@ -16,30 +15,36 @@ import { isValidOscTarget } from '@/lib/audio-prefs'
  */
 
 /** Whether a session can be started right now (§8.1 gating). */
-export function canStart(): boolean {
-  const { currentProject, preflightStatus } = useProjectStore.getState()
-  const { audioMode, lanIp, sessionStatus, oscTargetInput } =
-    useSessionStore.getState()
+export function canStart(input: {
+  currentProject: unknown
+  preflightStatus: string
+  sessionStatus: string
+  lanIp: string | null
+  audioMode: string
+  oscTargetInput: string
+}): boolean {
+  const {
+    currentProject,
+    preflightStatus,
+    sessionStatus,
+    lanIp,
+    audioMode,
+    oscTargetInput,
+  } = input
 
-  const verdict =
-    !!currentProject &&
-    preflightStatus === 'ready' &&
-    sessionStatus === 'idle' &&
-    !!lanIp &&
-    !(audioMode === 'external' && !isValidOscTarget(oscTargetInput))
-
-  // Temporary debug: pinpoints which field blocks the Load button.
-  void logInfo(
-    `canStart verdict: ${JSON.stringify({
-      verdict,
-      hasProject: !!currentProject,
-      preflightStatus,
-      sessionStatus,
-      lanIp,
-      audioMode,
-    })}`
-  )
-  return verdict
+  if (
+    !currentProject ||
+    preflightStatus !== 'ready' ||
+    sessionStatus !== 'idle' ||
+    !lanIp
+  ) {
+    return false
+  }
+  // §6.6: external mode cannot start with an invalid target.
+  if (audioMode === 'external' && !isValidOscTarget(oscTargetInput)) {
+    return false
+  }
+  return true
 }
 
 /** The OSC target parameter for startProject (null unless external). */
@@ -50,12 +55,23 @@ function resolveOscTarget(): string | null {
 
 /** §8.1: explicitly start the selected project. */
 export async function start(): Promise<void> {
-  if (!canStart()) return
+  const { currentProject, preflightStatus } = useProjectStore.getState()
+  const { audioMode, lanIp, sessionStatus, oscTargetInput } =
+    useSessionStore.getState()
+  if (
+    !canStart({
+      currentProject,
+      preflightStatus,
+      sessionStatus,
+      lanIp,
+      audioMode,
+      oscTargetInput,
+    })
+  ) {
+    return
+  }
 
-  const { currentProject } = useProjectStore.getState()
-  const { audioMode, lanIp } = useSessionStore.getState()
-  // `canStart()` already verified these, but the guard lives in a
-  // different scope — re-narrow for TypeScript's control flow.
+  // `canStart()` already verified these — narrow for TS.
   if (!currentProject || !lanIp) return
 
   logger.info('Starting project', {

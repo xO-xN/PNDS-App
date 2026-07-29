@@ -10,22 +10,31 @@ import { cn } from '@/lib/utils'
  * preflights it — starting is always explicit: Load turns green once the
  * project is preflighted, a LAN address is chosen (§7), and — for external
  * mode — the OSC target is valid (§6.6). Close while the session runs.
+ *
+ * Every field canStart reads is passed as an explicit argument so the
+ * React Compiler can see that the hook results are consumed — without
+ * this, unused hook subscriptions get dead-code-eliminated and the
+ * component never re-renders after its initial mount.
  */
 export function SessionActionButton() {
   const { t } = useTranslation()
-  // Every field canStart() reads must be subscribed, or the button never
-  // re-evaluates when they change (e.g. lanIp lands after the preflight
-  // re-render and the button would stay disabled forever).
+  const currentProject = useProjectStore(state => state.currentProject)
+  const preflightStatus = useProjectStore(state => state.preflightStatus)
   const sessionStatus = useSessionStore(state => state.sessionStatus)
-  useSessionStore(state => state.audioMode)
-  useSessionStore(state => state.lanIp)
-  useSessionStore(state => state.oscTargetInput)
-  useProjectStore(state => state.currentProject)
-  useProjectStore(state => state.preflightStatus)
+  const audioMode = useSessionStore(state => state.audioMode)
+  const lanIp = useSessionStore(state => state.lanIp)
+  const oscTargetInput = useSessionStore(state => state.oscTargetInput)
 
   const running = sessionStatus === 'ready'
   const busy = sessionStatus === 'starting' || sessionStatus === 'stopping'
-  const loadable = canStart()
+  const loadable = canStart({
+    currentProject,
+    preflightStatus,
+    sessionStatus,
+    lanIp,
+    audioMode,
+    oscTargetInput,
+  })
 
   if (running) {
     return (
