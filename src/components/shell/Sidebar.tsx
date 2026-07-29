@@ -9,6 +9,7 @@ import {
   stopAndReset,
 } from '@/lib/open-project'
 import { SettingsCard } from './SettingsCard'
+import { SessionActionButton } from './SessionActionButton'
 import { TrafficLights } from './TrafficLights'
 import { cn } from '@/lib/utils'
 
@@ -39,9 +40,14 @@ export function Sidebar({ variant, onRequestClose }: SidebarProps) {
     void openProject(path)
   }
 
-  const handleStop = async () => {
-    await stopAndReset()
-    onRequestClose?.()
+  /** ✕ on the project card: remove the project from the history list
+   * (stopping it first if it is the loaded/running one). */
+  const handleRemove = async (path: string) => {
+    if (useProjectStore.getState().currentProject?.path === path) {
+      await stopAndReset()
+      onRequestClose?.()
+    }
+    useProjectStore.getState().removeTrusted(path)
   }
 
   const otherPaths = trustedPaths.filter(p => p !== currentProject?.path)
@@ -120,8 +126,8 @@ export function Sidebar({ variant, onRequestClose }: SidebarProps) {
             </span>
             {running ? (
               <button
-                aria-label={t('sidebar.stopProject')}
-                onClick={() => void handleStop()}
+                aria-label={t('sidebar.removeFromHistory')}
+                onClick={() => void handleRemove(currentProject.path)}
                 className="text-black/70 hover:text-black"
               >
                 <X size={16} />
@@ -139,7 +145,7 @@ export function Sidebar({ variant, onRequestClose }: SidebarProps) {
             disabled={busy}
             onClick={() => handleEntryClick(path)}
             title={path}
-            className="flex h-[68px] items-center justify-center truncate px-9 text-[15px] text-black/85 hover:bg-black/5 disabled:opacity-50"
+            className="mx-5 flex h-[68px] items-center justify-center truncate rounded-xl px-4 text-[15px] text-black/85 transition-colors duration-150 hover:bg-black/5 disabled:opacity-50"
           >
             {path.split('/').filter(Boolean).pop() ?? path}
           </button>
@@ -163,9 +169,10 @@ export function Sidebar({ variant, onRequestClose }: SidebarProps) {
         {t('sidebar.open')}
       </button>
 
-      {/* Settings card pinned to the bottom (§10.2) */}
+      {/* Settings card + primary action pinned to the bottom (§10.2) */}
       <div className="mt-auto px-5 pb-5 pt-6">
         <SettingsCard />
+        <SessionActionButton />
       </div>
     </aside>
   )

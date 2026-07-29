@@ -22,6 +22,7 @@ interface ProjectState {
   preflightError: string | null
   isTrusted: (path: string) => boolean
   trustProject: (path: string) => void
+  removeTrusted: (path: string) => void
   requestTrust: (path: string | null) => void
   startPreflight: () => void
   preflightSucceeded: (path: string, manifest: Manifest) => void
@@ -43,6 +44,16 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       trustedPaths: state.trustedPaths.includes(path)
         ? state.trustedPaths
         : [...state.trustedPaths, path],
+    })),
+
+  removeTrusted: path =>
+    set(state => ({
+      trustedPaths: state.trustedPaths.filter(p => p !== path),
+      currentProject:
+        state.currentProject?.path === path ? null : state.currentProject,
+      ...(state.currentProject?.path === path
+        ? { preflightStatus: 'idle' as const, preflightError: null }
+        : {}),
     })),
 
   requestTrust: path => set({ pendingTrustPath: path }),

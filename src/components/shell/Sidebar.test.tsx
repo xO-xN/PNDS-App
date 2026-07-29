@@ -118,19 +118,55 @@ describe('Sidebar', () => {
     )
   })
 
-  it('stops the project from the overlay card ✕ button and frees the entry', async () => {
+  it('removes the project from history via the card ✕ button', async () => {
     const user = userEvent.setup()
     seedLoadedProject()
     useSessionStore.setState({ sessionStatus: 'ready' })
 
     render(<Sidebar variant="overlay" />)
-    await user.click(screen.getByRole('button', { name: /stop project/i }))
+    await user.click(
+      screen.getByRole('button', { name: /remove from history/i })
+    )
 
+    // A running project is stopped first, then dropped from the list
     expect(commands.stopProject).toHaveBeenCalled()
-    // After stopping, the project returns to a plain selectable entry
     await waitFor(() => {
       expect(useProjectStore.getState().currentProject).toBeNull()
+      expect(useProjectStore.getState().trustedPaths).toHaveLength(0)
     })
+  })
+
+  it('starts the selected project via the Load button', async () => {
+    const user = userEvent.setup()
+    seedLoadedProject()
+    useSessionStore.setState({ sessionStatus: 'idle' })
+
+    render(<Sidebar variant="static" />)
+    await user.click(screen.getByRole('button', { name: /^load$/i }))
+
+    await waitFor(() => {
+      expect(commands.startProject).toHaveBeenCalledWith(
+        '/Users/test/Inarticulate III',
+        'internal',
+        '192.168.1.10'
+      )
+    })
+  })
+
+  it('closes the running project via the Close button', async () => {
+    const user = userEvent.setup()
+    seedLoadedProject()
+    useSessionStore.setState({ sessionStatus: 'ready' })
+
+    render(<Sidebar variant="overlay" />)
+    await user.click(screen.getByRole('button', { name: /^close$/i }))
+
+    await waitFor(() => {
+      expect(commands.stopProject).toHaveBeenCalled()
+      expect(useProjectStore.getState().currentProject).toBeNull()
+    })
+    // The project stays in history and can be loaded again
+    expect(useProjectStore.getState().trustedPaths).toHaveLength(1)
   })
 
   it('starts once the user picks a LAN address when several exist (§7)', async () => {
