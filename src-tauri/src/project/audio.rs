@@ -115,10 +115,9 @@ pub fn plugins_dir() -> Result<PathBuf, String> {
 /// stdout/stderr handles (wired into the session output tail by the caller).
 /// `device` selects the output via -H (§6.5); None uses the system default.
 ///
-/// Upstream note (SC 3.13): -H opens the device for both directions, so
-/// output-only devices (e.g. built-in speakers) fail to boot — the error is
-/// surfaced to the Error Page via scsynth's stderr tail. Duplex devices
-/// work, and the system-default path works for output-only devices.
+/// We bundle SC 3.14.x because 3.13's -H opened devices for input even with
+/// `-i 0`, which broke output-only devices (built-in speakers, TVs). The
+/// upstream guard on `mNumInputs > 0` in 3.14 lets any CoreAudio device work.
 pub fn spawn_scsynth(
     binary: &Path,
     cfg: &ScsynthConfig,
@@ -393,49 +392,64 @@ mod tests {
             return;
         };
 
-        // Boot (mirroring the app's single retry for transient driver-init
-        // failures, so the test is not flaky on busy machines).
+        // Boot attempts: system default first; if CoreAudio init is flaky
+        // on this machine (e.g. a network/display device as default), fall
+        // back to a stable duplex device when one is available.
+        let mut attempts: Vec<Option<String>> = vec![None];
+        if let Ok(list) = list_output_devices() {
+            if let Some(stable) = list
+                .devices
+                .iter()
+                .find(|d| d.starts_with("BlackHole"))
+                .cloned()
+            {
+                attempts.push(Some(stable));
+            }
+        }
+
         let (mut child, client) = {
             let mut last_err = None;
             let mut booted = None;
-            for _ in 0..2 {
-                let port = allocate_udp_port().unwrap();
-                let mut c = spawn_scsynth(
-                    &binary,
-                    &ScsynthConfig {
-                        sample_rate: 48000,
-                        block_size: 64,
-                        audio_bus_channels: 128,
-                    },
-                    port,
-                    &plugins,
-                    None,
-                )
-                .unwrap();
+            'outer: for device in &attempts {
+                for _ in 0..2 {
+                    let port = allocate_udp_port().unwrap();
+                    let mut c = spawn_scsynth(
+                        &binary,
+                        &ScsynthConfig {
+                            sample_rate: 48000,
+                            block_size: 64,
+                            audio_bus_channels: 128,
+                        },
+                        port,
+                        &plugins,
+                        device.as_deref(),
+                    )
+                    .unwrap();
 
-                // Drain scsynth output so it cannot block on a full pipe.
-                let mut stdout = c.stdout.take().unwrap();
-                std::thread::spawn(move || {
-                    let mut buf = [0u8; 1024];
-                    while stdout.read(&mut buf).is_ok_and(|n| n > 0) {}
-                });
-                let mut stderr = c.stderr.take().unwrap();
-                std::thread::spawn(move || {
-                    let mut buf = [0u8; 1024];
-                    while stderr.read(&mut buf).is_ok_and(|n| n > 0) {}
-                });
+                    // Drain scsynth output so it cannot block on a full pipe.
+                    let mut stdout = c.stdout.take().unwrap();
+                    std::thread::spawn(move || {
+                        let mut buf = [0u8; 1024];
+                        while stdout.read(&mut buf).is_ok_and(|n| n > 0) {}
+                    });
+                    let mut stderr = c.stderr.take().unwrap();
+                    std::thread::spawn(move || {
+                        let mut buf = [0u8; 1024];
+                        while stderr.read(&mut buf).is_ok_and(|n| n > 0) {}
+                    });
 
-                let client = OscClient::connect(&format!("127.0.0.1:{port}")).unwrap();
-                match wait_for_scsynth(&client, &mut c) {
-                    Ok(()) => {
-                        booted = Some((c, client));
-                        break;
-                    }
-                    Err(e) => {
-                        last_err = Some(e);
-                        let pid = c.id();
-                        let _ = Command::new("/bin/kill").arg(pid.to_string()).status();
-                        let _ = c.wait();
+                    let client = OscClient::connect(&format!("127.0.0.1:{port}")).unwrap();
+                    match wait_for_scsynth(&client, &mut c) {
+                        Ok(()) => {
+                            booted = Some((c, client));
+                            break 'outer;
+                        }
+                        Err(e) => {
+                            last_err = Some(e);
+                            let pid = c.id();
+                            let _ = Command::new("/bin/kill").arg(pid.to_string()).status();
+                            let _ = c.wait();
+                        }
                     }
                 }
             }

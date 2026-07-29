@@ -57,16 +57,7 @@
     "longDescription": "在演出现场打开并运行 PNDS 数字乐谱工程：启动工程的乐谱服务器与内置 SuperCollider 声音服务器，管理音频模式与输出设备，并显示工程的监视/指挥界面。",
     "copyright": "Copyright © 2026 xO-xN. All rights reserved.",
     "macOS": {
-      "frameworks": [
-        "Frameworks/libsndfile.1.dylib",
-        "Frameworks/libFLAC.12.dylib",
-        "Frameworks/libvorbis.0.dylib",
-        "Frameworks/libvorbisenc.2.dylib",
-        "Frameworks/libopus.0.dylib",
-        "Frameworks/libogg.0.dylib",
-        "Frameworks/libmpg123.0.dylib",
-        "Frameworks/libmp3lame.0.dylib"
-      ],
+      "frameworks": ["Frameworks/libsndfile.dylib"],
       "minimumSystemVersion": "10.15",
       "signingIdentity": "-",
       "providerShortName": null,
