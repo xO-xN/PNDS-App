@@ -189,7 +189,7 @@ export function Sidebar({ variant, onRequestClose }: SidebarProps) {
               <button
                 type="button"
                 disabled={busy || isCurrent}
-                onClick={() => handleEntryClick(path)}
+                onMouseDown={() => handleEntryClick(path)}
                 title={path}
                 className="flex-1 truncate text-center text-[15px] text-(--pnds-text)/85 disabled:opacity-60"
               >
