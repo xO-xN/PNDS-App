@@ -25,7 +25,7 @@ export function LoadingScreen({ onDissolveEnd }: Props) {
   }
 
   return (
-    <div className="flex min-h-full flex-col items-center justify-center bg-[#d9d9d9]">
+    <div className="flex h-full w-full flex-col items-center justify-center bg-[#d9d9d9]">
       <PndsLogoCanvas
         size={380}
         ready={reallyReady}

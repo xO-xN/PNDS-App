@@ -77,7 +77,7 @@ export async function runPreflight(path: string): Promise<void> {
   if (addrs.status === 'ok') {
     useSessionStore.getState().setLanAddresses(addrs.data)
     const [first] = addrs.data
-    if (addrs.data.length === 1 && first) {
+    if (first) {
       useSessionStore.getState().setLanIp(first)
     }
   }

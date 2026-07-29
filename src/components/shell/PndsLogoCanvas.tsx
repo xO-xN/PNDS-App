@@ -211,15 +211,17 @@ function drawFrame(
       y = CY + q * Math.sin(angle)
     }
 
-    const progress =
-      f < ENTRANCE_FRAMES
-        ? Math.min(Math.max((f - showAt) / DOT_REVEAL_DURATION, 0), 1)
-        : 1
-    const bez = f < ENTRANCE_FRAMES ? bezierOut(progress) : 1
+    // Entrance formulas only run during phase 1. In wait/closure the dots
+    // are already at their final positions — no re-trigger.
+    const entering = phase === 'entrance' && f < ENTRANCE_FRAMES
+    const progress = entering
+      ? Math.min(Math.max((f - showAt) / DOT_REVEAL_DURATION, 0), 1)
+      : 1
+    const bez = entering ? bezierOut(progress) : 1
     // p5: y += lerp(50, 0, spring(t))
-    const sp = f < ENTRANCE_FRAMES ? spring(progress) : 1
+    const sp = entering ? spring(progress) : 1
     const yLifted = y + 50 * (1 - sp)
-    // p5: circle(x, y, 50 * gs * cs)  where cs = lerp(0.4, 1, bezierOut(t))
+    // p5: circle(x, y, 50 * gs * cs)  where cs = lerp(0.4, 1, bez)
     const cs = 0.4 + (1 - 0.4) * bez
     const radius = 25 * gs * cs
     ctx.beginPath()
