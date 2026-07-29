@@ -214,7 +214,9 @@ impl OscClient {
 }
 
 /// §8.1 step 2: wait until scsynth answers /status (it is fully booted).
-pub fn wait_for_scsynth(client: &OscClient) -> Result<(), String> {
+/// Fails fast when the process exits during boot (e.g. an output-only
+/// device rejected by -H) instead of waiting out the full timeout.
+pub fn wait_for_scsynth(client: &OscClient, child: &mut Child) -> Result<(), String> {
     let deadline = Instant::now() + SCSYNTH_BOOT_TIMEOUT;
     loop {
         client.send(OscMessage {
@@ -226,6 +228,11 @@ pub fn wait_for_scsynth(client: &OscClient) -> Result<(), String> {
             .is_ok()
         {
             return Ok(());
+        }
+        if let Ok(Some(status)) = child.try_wait() {
+            return Err(format!(
+                "Audio engine exited during startup ({status}). See output below."
+            ));
         }
         if Instant::now() >= deadline {
             return Err(
@@ -386,34 +393,57 @@ mod tests {
             return;
         };
 
-        let port = allocate_udp_port().unwrap();
-        let mut child = spawn_scsynth(
-            &binary,
-            &ScsynthConfig {
-                sample_rate: 48000,
-                block_size: 64,
-                audio_bus_channels: 128,
-            },
-            port,
-            &plugins,
-            None,
-        )
-        .unwrap();
+        // Boot (mirroring the app's single retry for transient driver-init
+        // failures, so the test is not flaky on busy machines).
+        let (mut child, client) = {
+            let mut last_err = None;
+            let mut booted = None;
+            for _ in 0..2 {
+                let port = allocate_udp_port().unwrap();
+                let mut c = spawn_scsynth(
+                    &binary,
+                    &ScsynthConfig {
+                        sample_rate: 48000,
+                        block_size: 64,
+                        audio_bus_channels: 128,
+                    },
+                    port,
+                    &plugins,
+                    None,
+                )
+                .unwrap();
 
-        // Drain scsynth output so it cannot block on a full pipe.
-        let mut stdout = child.stdout.take().unwrap();
-        std::thread::spawn(move || {
-            let mut buf = [0u8; 1024];
-            while stdout.read(&mut buf).is_ok_and(|n| n > 0) {}
-        });
-        let mut stderr = child.stderr.take().unwrap();
-        std::thread::spawn(move || {
-            let mut buf = [0u8; 1024];
-            while stderr.read(&mut buf).is_ok_and(|n| n > 0) {}
-        });
+                // Drain scsynth output so it cannot block on a full pipe.
+                let mut stdout = c.stdout.take().unwrap();
+                std::thread::spawn(move || {
+                    let mut buf = [0u8; 1024];
+                    while stdout.read(&mut buf).is_ok_and(|n| n > 0) {}
+                });
+                let mut stderr = c.stderr.take().unwrap();
+                std::thread::spawn(move || {
+                    let mut buf = [0u8; 1024];
+                    while stderr.read(&mut buf).is_ok_and(|n| n > 0) {}
+                });
 
-        let client = OscClient::connect(&format!("127.0.0.1:{port}")).unwrap();
-        wait_for_scsynth(&client).expect("scsynth should boot and answer /status");
+                let client = OscClient::connect(&format!("127.0.0.1:{port}")).unwrap();
+                match wait_for_scsynth(&client, &mut c) {
+                    Ok(()) => {
+                        booted = Some((c, client));
+                        break;
+                    }
+                    Err(e) => {
+                        last_err = Some(e);
+                        let pid = c.id();
+                        let _ = Command::new("/bin/kill").arg(pid.to_string()).status();
+                        let _ = c.wait();
+                    }
+                }
+            }
+            match booted {
+                Some(v) => v,
+                None => panic!("scsynth should boot and answer /status: {last_err:?}"),
+            }
+        };
         create_master_synth(&client, &synthdef, 0.5).expect("master synth should be created");
         set_master_gain(&client, 0.25).unwrap();
         release_master_and_quit(&client);

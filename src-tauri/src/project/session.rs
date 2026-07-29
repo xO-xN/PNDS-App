@@ -371,35 +371,25 @@ impl SessionManager {
                     .scsynth
                     .as_ref()
                     .ok_or("manifest is missing audio.scsynth (required for internal mode)")?;
-                let port = allocate_udp_port()?;
-                let binary = crate::project::audio::scsynth_binary_path()?;
-                let plugins = crate::project::audio::plugins_dir()?;
-                let mut sc_child = crate::project::audio::spawn_scsynth(
-                    &binary,
-                    sc_cfg,
-                    port,
-                    &plugins,
-                    device.as_deref(),
-                )?;
-                let sc_pid = sc_child.id();
-
-                let client =
-                    crate::project::audio::OscClient::connect(&format!("127.0.0.1:{port}"))?;
-                if let Err(e) = crate::project::audio::wait_for_scsynth(&client) {
-                    stop_child_gracefully(&mut sc_child, sc_pid, SHUTDOWN_TIMEOUT);
-                    return Err(e);
+                // CoreAudio driver init can fail transiently (device still
+                // held by a previous run); retry once before giving up.
+                let mut last_err = String::new();
+                let mut booted = None;
+                for attempt in 1..=2 {
+                    match Self::boot_scsynth(&app_data_dir, sc_cfg, device.as_deref()) {
+                        Ok(ok) => {
+                            booted = Some(ok);
+                            break;
+                        }
+                        Err(e) => {
+                            last_err = e;
+                            log::warn!("scsynth boot attempt {attempt} failed: {last_err}");
+                        }
+                    }
                 }
-                if let Err(e) = preflight::record_session_child(
-                    &app_data_dir,
-                    sc_pid,
-                    "scsynth-aarch64-apple-darwin".to_string(),
-                ) {
-                    log::warn!("Failed to record scsynth child: {e}");
-                }
-                log::info!(
-                    "scsynth ready on UDP port {port} (pid {sc_pid}, device: {})",
-                    device.as_deref().unwrap_or("system default")
-                );
+                let Some((sc_child, port)) = booted else {
+                    return Err(last_err);
+                };
                 (
                     Some(format!("127.0.0.1:{port}")),
                     Some(sc_child),
@@ -657,6 +647,39 @@ impl SessionManager {
         if let Err(e) = app.emit("pnds:session", snapshot) {
             log::warn!("Failed to emit session snapshot: {e}");
         }
+    }
+
+    /// Boots scsynth on a fresh dynamic UDP port and waits for /status
+    /// (§6.2, §8.1 step 2). On failure the child is killed before returning.
+    fn boot_scsynth(
+        app_data_dir: &Path,
+        sc_cfg: &crate::project::manifest::ScsynthConfig,
+        device: Option<&str>,
+    ) -> Result<(Child, u16), String> {
+        let port = allocate_udp_port()?;
+        let binary = crate::project::audio::scsynth_binary_path()?;
+        let plugins = crate::project::audio::plugins_dir()?;
+        let mut child =
+            crate::project::audio::spawn_scsynth(&binary, sc_cfg, port, &plugins, device)?;
+        let pid = child.id();
+
+        let client = crate::project::audio::OscClient::connect(&format!("127.0.0.1:{port}"))?;
+        if let Err(e) = crate::project::audio::wait_for_scsynth(&client, &mut child) {
+            stop_child_gracefully(&mut child, pid, SHUTDOWN_TIMEOUT);
+            return Err(e);
+        }
+        if let Err(e) = preflight::record_session_child(
+            app_data_dir,
+            pid,
+            "scsynth-aarch64-apple-darwin".to_string(),
+        ) {
+            log::warn!("Failed to record scsynth child: {e}");
+        }
+        log::info!(
+            "scsynth ready on UDP port {port} (pid {pid}, device: {})",
+            device.unwrap_or("system default")
+        );
+        Ok((child, port))
     }
 
     /// §8.1 step 7 (internal): create the App Master Synth at the tail of
