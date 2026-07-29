@@ -77,12 +77,17 @@ function dist(x1: number, y1: number, x2: number, y2: number): number {
 
 // ── Per-session random colours ──────────────────────────────────────────
 function pickSessionColors(): { dotColors: string[]; textColor: string } {
-  const dots = Array.from({ length: 5 }, () => PALETTE[Math.floor(Math.random() * PALETTE.length)]) as string[]
+  const dots = Array.from(
+    { length: 5 },
+    () => PALETTE[Math.floor(Math.random() * PALETTE.length)]
+  ) as string[]
   const used = new Set(dots)
   const unused = PALETTE.filter(c => !used.has(c))
   return {
     dotColors: dots,
-    textColor: (unused.length > 0 ? unused[Math.floor(Math.random() * unused.length)] : '#000') as string,
+    textColor: (unused.length > 0
+      ? unused[Math.floor(Math.random() * unused.length)]
+      : '#000') as string,
   }
 }
 
@@ -189,8 +194,12 @@ function drawFrame(
     const showAt = i * DOT_REVEAL_INTERVAL
     if (phase === 'entrance' && f < showAt) continue
 
-    ctx.fillStyle = dotColors[i]!
-    let [x, y] = DOT_POSITIONS[i]!
+    const dc = dotColors[i]
+    if (!dc) continue
+    ctx.fillStyle = dc
+    const pos = DOT_POSITIONS[i]
+    if (!pos) continue
+    let [x, y] = pos
     x = CX + (x - CX) * gs
     y = CY + (y - CY) * gs
 
@@ -246,11 +255,9 @@ export function PndsLogoCanvas({ size = 190, ready, onDissolveEnd }: Props) {
   const bgRef = useRef(randomBgPositions())
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
-  // Reset on mount
+  // Reset on mount (state already defaults to 'entrance' / false).
   useEffect(() => {
     frameRef.current = 0
-    setPhase('entrance')
-    setDissolving(false)
     colsRef.current = pickSessionColors()
     bgRef.current = randomBgPositions()
   }, [])
@@ -259,7 +266,7 @@ export function PndsLogoCanvas({ size = 190, ready, onDissolveEnd }: Props) {
   useEffect(() => {
     if (ready && phase === 'wait') {
       frameRef.current = 0
-      setPhase('closure')
+      queueMicrotask(() => setPhase('closure'))
     }
     // If already ready before entrance finishes, let entrance complete first
   }, [ready, phase])
@@ -269,7 +276,8 @@ export function PndsLogoCanvas({ size = 190, ready, onDissolveEnd }: Props) {
     if (phase === 'done') return
     const canvas = canvasRef.current
     if (!canvas) return
-    const ctx = canvas.getContext('2d')!
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
     const cols = colsRef.current,
       bg = bgRef.current
 
@@ -288,12 +296,12 @@ export function PndsLogoCanvas({ size = 190, ready, onDissolveEnd }: Props) {
           // entrance complete → wait or jump directly to closure if ready
           if (ready) {
             frameRef.current = 0
-            setPhase('closure')
+            queueMicrotask(() => setPhase('closure'))
             return
           } else {
             // Paint the completed entrance frame once more, then pause
             drawFrame(ctx, ENTRANCE_FRAMES, 'wait', cols, bg)
-            setPhase('wait')
+            queueMicrotask(() => setPhase('wait'))
             return
           }
         } else {

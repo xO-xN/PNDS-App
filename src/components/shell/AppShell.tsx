@@ -56,7 +56,7 @@ export function AppShell() {
   // Reset the dissolve gate whenever we leave the running/loading state.
   useEffect(() => {
     if (sessionStatus !== 'starting' && sessionStatus !== 'ready') {
-      setLoadingDone(false)
+      queueMicrotask(() => setLoadingDone(false))
     }
   }, [sessionStatus])
 

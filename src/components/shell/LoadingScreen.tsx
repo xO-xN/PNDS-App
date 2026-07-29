@@ -20,7 +20,7 @@ export function LoadingScreen({ onDissolveEnd }: Props) {
   const health = useSessionStore(state => state.health)
   const sessionStatus = useSessionStore(state => state.sessionStatus)
 
-  const reallyReady = sessionStatus === "ready" && health !== null
+  const reallyReady = sessionStatus === 'ready' && health !== null
 
   const handleCancel = async () => {
     await stopAndReset()
