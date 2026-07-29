@@ -14,6 +14,7 @@ pub fn generate_bindings() -> Builder<tauri::Wry> {
         project::get_session_state,
         project::set_master_volume,
         project::list_lan_addresses,
+        project::list_output_devices,
     ])
 }
 

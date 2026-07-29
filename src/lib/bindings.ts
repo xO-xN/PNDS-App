@@ -71,11 +71,12 @@ async cleanupOrphanedProcesses() : Promise<Result<number, string>> {
 },
 /**
  * Starts the score server of a validated project (§8.1). Progress and
- * health updates are delivered via `pnds:session` events.
+ * health updates are delivered via `pnds:session` events. `osc_target` is
+ * required (and validated) only for external mode (§6.6).
  */
-async startProject(path: string, mode: string, lanIp: string) : Promise<Result<null, string>> {
+async startProject(path: string, mode: string, lanIp: string, oscTarget: string | null) : Promise<Result<null, string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("start_project", { path, mode, lanIp }) };
+    return { status: "ok", data: await TAURI_INVOKE("start_project", { path, mode, lanIp, oscTarget }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -126,6 +127,17 @@ async listLanAddresses() : Promise<Result<string[], string>> {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+/**
+ * §6.5: available CoreAudio output devices and the system default.
+ */
+async listOutputDevices() : Promise<Result<AudioDeviceList, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("list_output_devices") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 
@@ -142,20 +154,36 @@ async listLanAddresses() : Promise<Result<string[], string>> {
 /**
  * Application preferences that persist to disk.
  * Only contains settings that should be saved between sessions.
- * Audio device and per-project OSC targets arrive in task-5.
  */
 export type AppPreferences = { theme: string; 
 /**
  * User's preferred language (V1 ships English-only)
  * If None, uses system locale detection
  */
-language: string | null }
+language: string | null; 
+/**
+ * §6.5: chosen CoreAudio output device name. `None` = system default.
+ * This is an app-local preference and never touches project manifests.
+ */
+outputDevice?: string | null; 
+/**
+ * §6.6: last valid external OSC target per project id.
+ */
+oscTargets?: Partial<{ [key in string]: string }> }
 export type AudioConfig = { defaultMode: string; supportedModes: string[]; synthdefs: string[] | null; scsynth: ScsynthConfig | null; 
 /**
  * Debug-only fallback for standalone runs. The App must never use it;
  * internal mode OSC targets are always dynamically assigned (§5.2).
  */
 standaloneTarget: string | null }
+/**
+ * §6.5: available CoreAudio output devices (name = scsynth -H value).
+ */
+export type AudioDeviceList = { devices: string[]; 
+/**
+ * Name of the system default output device, if any.
+ */
+default: string | null }
 export type HealthAudio = { 
 /**
  * `starting | ready | error | disabled` (disabled = none mode, §9.1)

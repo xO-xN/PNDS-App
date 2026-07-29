@@ -64,6 +64,13 @@ vi.mock('@/lib/tauri-bindings', () => ({
     listLanAddresses: vi
       .fn()
       .mockResolvedValue({ status: 'ok', data: ['192.168.1.10'] }),
+    listOutputDevices: vi.fn().mockResolvedValue({
+      status: 'ok',
+      data: {
+        devices: ['Mac mini Speakers', 'BlackHole 16ch', 'BlackHole 2ch'],
+        default: 'Mac mini Speakers',
+      },
+    }),
     setMasterVolume: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
   },
   unwrapResult: vi.fn((result: { status: string; data?: unknown }) => {

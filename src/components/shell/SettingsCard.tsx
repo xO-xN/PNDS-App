@@ -1,10 +1,19 @@
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Volume2, ChevronDown } from 'lucide-react'
+import { toast } from 'sonner'
 import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 import { commands } from '@/lib/tauri-bindings'
 import { logger } from '@/lib/logger'
 import { restartSession } from '@/lib/open-project'
+import {
+  isValidOscTarget,
+  saveOscTarget,
+  saveOutputDevice,
+  SYSTEM_DEFAULT_DEVICE,
+} from '@/lib/audio-prefs'
+import { cn } from '@/lib/utils'
 
 const MODE_LABELS: Record<string, string> = {
   internal: 'Internal Synth',
@@ -12,13 +21,14 @@ const MODE_LABELS: Record<string, string> = {
   none: 'None',
 }
 
+// §6.5: warn about a missing saved device once per app launch.
+let missingDeviceWarned = false
+
 /**
  * The sidebar settings card (§10.2). Rows are organized as a two-column
  * grid — short label on the left, control on the right — inside a white
- * card that matches the selected-project card. Mode is selectable whenever
- * a project is loaded; changing it while running restarts the session
- * (§8.3). Volume and device stay disabled until task-4/task-5; the LAN row
- * (not covered by Figma) only appears when several interfaces exist.
+ * card that matches the selected-project card. Mode/device/target changes
+ * restart the session (§8.3); the volume applies live (§6.4).
  */
 export function SettingsCard() {
   const { t } = useTranslation()
@@ -27,17 +37,44 @@ export function SettingsCard() {
   const audioMode = useSessionStore(state => state.audioMode)
   const lanIp = useSessionStore(state => state.lanIp)
   const lanAddresses = useSessionStore(state => state.lanAddresses)
+  const outputDevice = useSessionStore(state => state.outputDevice)
+  const oscTargetInput = useSessionStore(state => state.oscTargetInput)
+  const [devices, setDevices] = useState<string[]>([])
 
   const modes = currentProject?.manifest.audio.supportedModes ?? []
   const projectLoaded = currentProject !== null
   const running = sessionStatus !== 'idle'
-  // §6.4: the master volume applies to the internal signal path only.
   const volumeEnabled = sessionStatus === 'ready' && audioMode === 'internal'
   const volume = useSessionStore(state => state.volume)
+  const oscTargetValid = isValidOscTarget(oscTargetInput)
+
+  // §6.5: enumerate CoreAudio outputs; fall back to system default with a
+  // notice when the saved device has disappeared.
+  useEffect(() => {
+    void commands.listOutputDevices().then(result => {
+      if (result.status !== 'ok') {
+        logger.warn('Failed to list output devices', { error: result.error })
+        return
+      }
+      setDevices(result.data.devices)
+      const saved = useSessionStore.getState().outputDevice
+      if (
+        saved !== SYSTEM_DEFAULT_DEVICE &&
+        !result.data.devices.includes(saved) &&
+        !missingDeviceWarned
+      ) {
+        missingDeviceWarned = true
+        useSessionStore.getState().setOutputDevice(SYSTEM_DEFAULT_DEVICE)
+        void saveOutputDevice(null)
+        toast.info(
+          `Saved output device "${saved}" is not available; using the system default.`
+        )
+      }
+    })
+  }, [])
 
   const handleModeChange = (mode: string) => {
     useSessionStore.getState().setAudioMode(mode)
-    // §8.3: changing the mode of a live session is a full restart.
     if (running) void restartSession()
   }
 
@@ -50,10 +87,18 @@ export function SettingsCard() {
     })
   }
 
-  const handleLanChange = (ip: string) => {
-    // Choosing an address only makes the session loadable (§7); starting
-    // stays an explicit action via the Load button.
-    useSessionStore.getState().setLanIp(ip)
+  const handleDeviceChange = (device: string) => {
+    useSessionStore.getState().setOutputDevice(device)
+    void saveOutputDevice(device === SYSTEM_DEFAULT_DEVICE ? null : device)
+    // §8.3: device changes restart the session (only internal uses scsynth).
+    if (running && audioMode === 'internal') void restartSession()
+  }
+
+  const commitOscTarget = () => {
+    if (!oscTargetValid || !currentProject) return
+    void saveOscTarget(currentProject.manifest.id, oscTargetInput)
+    // §8.3: target changes restart a running external session.
+    if (running && audioMode === 'external') void restartSession()
   }
 
   const selectClass =
@@ -69,9 +114,21 @@ export function SettingsCard() {
         <span className="w-14 shrink-0 text-black/50">OSC</span>
         <input
           aria-label={t('sidebar.oscTarget')}
-          defaultValue="127.0.0.1:3333"
+          value={oscTargetInput}
           disabled={!projectLoaded || audioMode !== 'external'}
-          className="h-6 w-full rounded-full bg-[#e5e5e5] px-2.5 text-center font-mono text-[11px] text-black/80 outline-none disabled:opacity-40"
+          onChange={e =>
+            useSessionStore.getState().setOscTargetInput(e.target.value)
+          }
+          onBlur={commitOscTarget}
+          onKeyDown={e => {
+            if (e.key === 'Enter') commitOscTarget()
+          }}
+          className={cn(
+            'h-6 w-full rounded-full bg-[#e5e5e5] px-2.5 text-center font-mono text-[11px] text-black/80 outline-none disabled:opacity-40',
+            audioMode === 'external' &&
+              !oscTargetValid &&
+              'ring-2 ring-red-500/60'
+          )}
         />
       </div>
 
@@ -120,16 +177,26 @@ export function SettingsCard() {
         </span>
       </div>
 
-      {/* Output device (task-5) */}
+      {/* Output device (§6.5): app-local preference, restart to apply */}
       <div className="flex items-center gap-2">
         <span className="w-14 shrink-0 text-black/50">Device</span>
         <div className="relative flex-1">
           <select
             aria-label={t('sidebar.outputDevice')}
-            disabled
+            value={outputDevice}
+            onChange={e => handleDeviceChange(e.target.value)}
             className={selectClass}
           >
-            <option>{t('sidebar.systemDefault')}</option>
+            <option value={SYSTEM_DEFAULT_DEVICE}>
+              {t('sidebar.systemDefault')}
+            </option>
+            {devices
+              .filter(d => d !== outputDevice)
+              .map(device => (
+                <option key={device} value={device}>
+                  {device}
+                </option>
+              ))}
           </select>
           <ChevronDown
             size={12}
@@ -146,7 +213,9 @@ export function SettingsCard() {
             <select
               aria-label={t('session.lanAddress')}
               value={lanIp ?? ''}
-              onChange={e => handleLanChange(e.target.value)}
+              onChange={e =>
+                useSessionStore.getState().setLanIp(e.target.value)
+              }
               className={selectClass}
             >
               <option value="" disabled>

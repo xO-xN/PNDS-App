@@ -21,16 +21,11 @@ fn get_preferences_path(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(app_data_dir.join("preferences.json"))
 }
 
-/// Loads user preferences from disk.
-/// Returns default preferences if the file doesn't exist.
-#[tauri::command]
-#[specta::specta]
-pub async fn load_preferences(app: AppHandle) -> Result<AppPreferences, String> {
-    log::debug!("Loading preferences from disk");
-    let prefs_path = get_preferences_path(&app)?;
+/// Loads user preferences from disk (sync variant for internal callers).
+pub fn load_preferences_sync(app: &AppHandle) -> Result<AppPreferences, String> {
+    let prefs_path = get_preferences_path(app)?;
 
     if !prefs_path.exists() {
-        log::info!("Preferences file not found, using defaults");
         return Ok(AppPreferences::default());
     }
 
@@ -39,11 +34,19 @@ pub async fn load_preferences(app: AppHandle) -> Result<AppPreferences, String> 
         format!("Failed to read preferences file: {e}")
     })?;
 
-    let preferences: AppPreferences = serde_json::from_str(&contents).map_err(|e| {
+    serde_json::from_str(&contents).map_err(|e| {
         log::error!("Failed to parse preferences JSON: {e}");
         format!("Failed to parse preferences: {e}")
-    })?;
+    })
+}
 
+/// Loads user preferences from disk.
+/// Returns default preferences if the file doesn't exist.
+#[tauri::command]
+#[specta::specta]
+pub async fn load_preferences(app: AppHandle) -> Result<AppPreferences, String> {
+    log::debug!("Loading preferences from disk");
+    let preferences = load_preferences_sync(&app)?;
     log::info!("Successfully loaded preferences");
     Ok(preferences)
 }

@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 use specta::Type;
+use std::collections::HashMap;
 
 // ============================================================================
 // Preferences
@@ -9,13 +10,20 @@ use specta::Type;
 
 /// Application preferences that persist to disk.
 /// Only contains settings that should be saved between sessions.
-/// Audio device and per-project OSC targets arrive in task-5.
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
 pub struct AppPreferences {
     pub theme: String,
     /// User's preferred language (V1 ships English-only)
     /// If None, uses system locale detection
     pub language: Option<String>,
+    /// §6.5: chosen CoreAudio output device name. `None` = system default.
+    /// This is an app-local preference and never touches project manifests.
+    #[serde(default)]
+    pub output_device: Option<String>,
+    /// §6.6: last valid external OSC target per project id.
+    #[serde(default)]
+    pub osc_targets: HashMap<String, String>,
 }
 
 impl Default for AppPreferences {
@@ -23,6 +31,8 @@ impl Default for AppPreferences {
         Self {
             theme: "system".to_string(),
             language: None, // None means use system locale
+            output_device: None,
+            osc_targets: HashMap::new(),
         }
     }
 }

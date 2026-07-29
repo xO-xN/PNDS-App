@@ -2,24 +2,32 @@ import { useTranslation } from 'react-i18next'
 import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 import { startIfReady, stopAndReset } from '@/lib/open-project'
+import { isValidOscTarget } from '@/lib/audio-prefs'
 import { cn } from '@/lib/utils'
 
 /**
  * The sidebar's primary session action (§8). Selecting a project only
  * preflights it — starting is always explicit: Load turns green once the
- * project is preflighted and a LAN address is chosen (§7), and becomes a
- * red Close while the session runs.
+ * project is preflighted, a LAN address is chosen (§7), and — for external
+ * mode — the OSC target is valid (§6.6). Close while the session runs.
  */
 export function SessionActionButton() {
   const { t } = useTranslation()
   const currentProject = useProjectStore(state => state.currentProject)
   const sessionStatus = useSessionStore(state => state.sessionStatus)
+  const audioMode = useSessionStore(state => state.audioMode)
   const lanIp = useSessionStore(state => state.lanIp)
+  const oscTargetInput = useSessionStore(state => state.oscTargetInput)
 
   const running = sessionStatus === 'ready'
   const busy = sessionStatus === 'starting' || sessionStatus === 'stopping'
+  const targetReady =
+    audioMode !== 'external' || isValidOscTarget(oscTargetInput)
   const canLoad =
-    currentProject !== null && sessionStatus === 'idle' && lanIp !== null
+    currentProject !== null &&
+    sessionStatus === 'idle' &&
+    lanIp !== null &&
+    targetReady
 
   if (running) {
     return (

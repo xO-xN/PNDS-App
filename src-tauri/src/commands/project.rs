@@ -62,7 +62,8 @@ pub async fn preflight_project(app: AppHandle, path: String) -> Result<Manifest,
 }
 
 /// Starts the score server of a validated project (§8.1). Progress and
-/// health updates are delivered via `pnds:session` events.
+/// health updates are delivered via `pnds:session` events. `osc_target` is
+/// required (and validated) only for external mode (§6.6).
 #[tauri::command]
 #[specta::specta]
 pub async fn start_project(
@@ -71,9 +72,10 @@ pub async fn start_project(
     path: String,
     mode: String,
     lan_ip: String,
+    osc_target: Option<String>,
 ) -> Result<(), String> {
     let dir = app_data_dir(&app)?;
-    state.start(app, dir, path, mode, lan_ip)
+    state.start(app, dir, path, mode, lan_ip, osc_target)
 }
 
 /// Stops the running score server (§8.2). Idempotent.
@@ -111,4 +113,11 @@ pub async fn set_master_volume(
 #[specta::specta]
 pub async fn list_lan_addresses() -> Result<Vec<String>, String> {
     crate::project::session::list_lan_addresses()
+}
+
+/// §6.5: available CoreAudio output devices and the system default.
+#[tauri::command]
+#[specta::specta]
+pub async fn list_output_devices() -> Result<crate::project::audio::AudioDeviceList, String> {
+    crate::project::audio::list_output_devices()
 }

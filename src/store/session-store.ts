@@ -21,10 +21,16 @@ interface SessionState {
   /** Selected LAN IPv4 (§7); null until the user chooses when multiple exist. */
   lanIp: string | null
   lanAddresses: string[]
+  /** §6.5: chosen output device name, or "System default". */
+  outputDevice: string
+  /** §6.6: external OSC target input (per-project prefilled, default 3333). */
+  oscTargetInput: string
   setAudioMode: (mode: string) => void
   setLanIp: (ip: string) => void
   setLanAddresses: (ips: string[]) => void
   setVolume: (percent: number) => void
+  setOutputDevice: (device: string) => void
+  setOscTargetInput: (target: string) => void
   applySnapshot: (snapshot: SessionSnapshot) => void
   failLocal: (message: string) => void
   bumpMonitorReload: () => void
@@ -43,11 +49,15 @@ export const useSessionStore = create<SessionState>()(set => ({
   audioMode: 'internal',
   lanIp: null,
   lanAddresses: [],
+  outputDevice: 'System default',
+  oscTargetInput: '127.0.0.1:3333',
 
   setAudioMode: audioMode => set({ audioMode }),
   setLanIp: lanIp => set({ lanIp }),
   setLanAddresses: lanAddresses => set({ lanAddresses }),
   setVolume: volume => set({ volume }),
+  setOutputDevice: outputDevice => set({ outputDevice }),
+  setOscTargetInput: oscTargetInput => set({ oscTargetInput }),
 
   applySnapshot: snapshot =>
     set(state => ({

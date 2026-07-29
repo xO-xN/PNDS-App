@@ -23,6 +23,7 @@ export function ErrorScreen() {
   const audioMode = useSessionStore(state => state.audioMode)
   const lanIp = useSessionStore(state => state.lanIp)
   const oscTarget = useSessionStore(state => state.oscTarget)
+  const oscTargetInput = useSessionStore(state => state.oscTargetInput)
   const [isRetrying, setIsRetrying] = useState(false)
 
   const handleRetry = async () => {
@@ -33,10 +34,12 @@ export function ErrorScreen() {
       mode: audioMode,
     })
     try {
+      const target = audioMode === 'external' ? oscTargetInput : null
       const result = await commands.startProject(
         currentProject.path,
         audioMode,
-        lanIp
+        lanIp,
+        target
       )
       if (result.status === 'error') {
         useSessionStore.getState().failLocal(result.error)

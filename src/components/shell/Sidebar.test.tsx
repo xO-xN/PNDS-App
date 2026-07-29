@@ -155,7 +155,8 @@ describe('Sidebar', () => {
       expect(commands.startProject).toHaveBeenCalledWith(
         PROJECT_PATH,
         'internal',
-        '192.168.1.10'
+        '192.168.1.10',
+        null
       )
     })
   })
@@ -177,7 +178,8 @@ describe('Sidebar', () => {
     expect(commands.startProject).toHaveBeenCalledWith(
       PROJECT_PATH,
       'none',
-      '192.168.1.10'
+      '192.168.1.10',
+      null
     )
   })
 
@@ -270,6 +272,79 @@ describe('Sidebar', () => {
     ).toBeDisabled()
   })
 
+  it('saves the output device choice and restarts a running internal session (§6.5, §8.3)', async () => {
+    const user = userEvent.setup()
+    seedLoadedProject()
+    useSessionStore.setState({ sessionStatus: 'ready' })
+
+    render(<Sidebar variant="overlay" />)
+    // Wait for the async device list to populate first
+    await screen.findByRole('option', { name: 'BlackHole 16ch' })
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: /output device/i }),
+      'BlackHole 16ch'
+    )
+
+    // Choice is persisted as an app-local preference
+    await waitFor(() => {
+      expect(commands.savePreferences).toHaveBeenCalledWith(
+        expect.objectContaining({ outputDevice: 'BlackHole 16ch' })
+      )
+    })
+    // …and a running internal session restarts to apply it (§8.3)
+    expect(commands.stopProject).toHaveBeenCalled()
+    expect(commands.startProject).toHaveBeenCalled()
+  })
+
+  it('blocks Load for external mode with an invalid OSC target (§6.6)', async () => {
+    const user = userEvent.setup()
+    seedLoadedProject()
+    useSessionStore.setState({
+      audioMode: 'external',
+      oscTargetInput: 'not-a-target',
+    })
+
+    render(<Sidebar variant="static" />)
+    expect(screen.getByRole('button', { name: /^load$/i })).toBeDisabled()
+
+    // Fix the target → Load becomes available and starts with the target
+    const input = screen.getByRole('textbox', { name: /osc target/i })
+    await user.clear(input)
+    await user.type(input, '127.0.0.1:57120')
+    expect(screen.getByRole('button', { name: /^load$/i })).toBeEnabled()
+
+    await user.click(screen.getByRole('button', { name: /^load$/i }))
+    await waitFor(() => {
+      expect(commands.startProject).toHaveBeenCalledWith(
+        PROJECT_PATH,
+        'external',
+        '192.168.1.10',
+        '127.0.0.1:57120'
+      )
+    })
+  })
+
+  it('persists a valid external OSC target per project (§6.6)', async () => {
+    const user = userEvent.setup()
+    seedLoadedProject()
+    useSessionStore.setState({
+      audioMode: 'external',
+      oscTargetInput: '127.0.0.1:57120',
+    })
+
+    render(<Sidebar variant="static" />)
+    await user.click(screen.getByRole('textbox', { name: /osc target/i }))
+    await user.tab() // blur commits
+
+    await waitFor(() => {
+      expect(commands.savePreferences).toHaveBeenCalledWith(
+        expect.objectContaining({
+          oscTargets: { 'inarticulate-iii': '127.0.0.1:57120' },
+        })
+      )
+    })
+  })
+
   it('does not start on LAN pick alone; Load becomes the trigger (§7)', async () => {
     const user = userEvent.setup()
     seedLoadedProject()
@@ -295,7 +370,8 @@ describe('Sidebar', () => {
       expect(commands.startProject).toHaveBeenCalledWith(
         PROJECT_PATH,
         'internal',
-        '10.0.0.5'
+        '10.0.0.5',
+        null
       )
     })
   })

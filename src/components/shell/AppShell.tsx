@@ -3,6 +3,7 @@ import { listen } from '@tauri-apps/api/event'
 import { Toaster } from 'sonner'
 import { commands, type SessionSnapshot } from '@/lib/tauri-bindings'
 import { useSessionStore } from '@/store/session-store'
+import { loadAudioPreferences } from '@/lib/audio-prefs'
 import { WelcomeScreen } from '@/components/welcome'
 import { Sidebar } from './Sidebar'
 import { MonitorView } from './MonitorView'
@@ -35,6 +36,15 @@ export function AppShell() {
     return () => {
       void unlisten.then(off => off())
     }
+  }, [])
+
+  // §6.5: restore the saved output device (app-local preference).
+  useEffect(() => {
+    void loadAudioPreferences().then(prefs => {
+      if (prefs?.outputDevice) {
+        useSessionStore.getState().setOutputDevice(prefs.outputDevice)
+      }
+    })
   }, [])
 
   if (sessionStatus === 'ready') {

@@ -5,12 +5,36 @@
 //!   project synths → private bus 2/3 → pndsMaster (gain) → hw bus 0/1
 
 use rosc::{OscMessage, OscPacket, OscType};
+use serde::Serialize;
+use specta::Type;
 use std::net::UdpSocket;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
 use crate::project::manifest::ScsynthConfig;
+
+/// §6.5: available CoreAudio output devices (name = scsynth -H value).
+#[derive(Debug, Clone, Default, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioDeviceList {
+    pub devices: Vec<String>,
+    /// Name of the system default output device, if any.
+    pub default: Option<String>,
+}
+
+/// §6.5: enumerate CoreAudio output devices via cpal.
+pub fn list_output_devices() -> Result<AudioDeviceList, String> {
+    use cpal::traits::{DeviceTrait, HostTrait};
+    let host = cpal::default_host();
+    let devices = host
+        .output_devices()
+        .map_err(|e| format!("Failed to enumerate audio output devices: {e}"))?
+        .filter_map(|d| d.name().ok())
+        .collect();
+    let default = host.default_output_device().and_then(|d| d.name().ok());
+    Ok(AudioDeviceList { devices, default })
+}
 
 /// §6.3 output bus protocol: project audio goes to the private stereo bus.
 pub const PRIVATE_OUTPUT_BUS: i32 = 2;
@@ -89,32 +113,42 @@ pub fn plugins_dir() -> Result<PathBuf, String> {
 
 /// Spawns scsynth with the §6.2 flags and returns the child plus its
 /// stdout/stderr handles (wired into the session output tail by the caller).
+/// `device` selects the output via -H (§6.5); None uses the system default.
+///
+/// Upstream note (SC 3.13): -H opens the device for both directions, so
+/// output-only devices (e.g. built-in speakers) fail to boot — the error is
+/// surfaced to the Error Page via scsynth's stderr tail. Duplex devices
+/// work, and the system-default path works for output-only devices.
 pub fn spawn_scsynth(
     binary: &Path,
     cfg: &ScsynthConfig,
     port: u16,
     plugins: &Path,
+    device: Option<&str>,
 ) -> Result<Child, String> {
-    Command::new(binary)
-        .args([
-            "-i",
-            "0",
-            "-o",
-            "2",
-            "-S",
-            &cfg.sample_rate.to_string(),
-            "-z",
-            &cfg.block_size.to_string(),
-            "-a",
-            &cfg.audio_bus_channels.to_string(),
-            "-u",
-            &port.to_string(),
-            "-B",
-            "127.0.0.1",
-            "-U",
-            &plugins.to_string_lossy(),
-        ])
-        .stdin(Stdio::null())
+    let mut cmd = Command::new(binary);
+    cmd.args([
+        "-i",
+        "0",
+        "-o",
+        "2",
+        "-S",
+        &cfg.sample_rate.to_string(),
+        "-z",
+        &cfg.block_size.to_string(),
+        "-a",
+        &cfg.audio_bus_channels.to_string(),
+        "-u",
+        &port.to_string(),
+        "-B",
+        "127.0.0.1",
+        "-U",
+        &plugins.to_string_lossy(),
+    ]);
+    if let Some(name) = device {
+        cmd.args(["-H", name]);
+    }
+    cmd.stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -290,9 +324,40 @@ pub fn volume_percent_to_gain(percent: f32) -> f32 {
     10f32.powf(db / 20.0)
 }
 
+/// §6.6: validate an external OSC target in `host:port` form.
+pub fn validate_osc_target(target: &str) -> Result<(), String> {
+    let (host, port) = target
+        .rsplit_once(':')
+        .ok_or("OSC target must be host:port (e.g. 127.0.0.1:3333)")?;
+    if host.trim().is_empty() {
+        return Err("OSC target host must not be empty".to_string());
+    }
+    if host.chars().any(char::is_whitespace) {
+        return Err("OSC target host must not contain whitespace".to_string());
+    }
+    match port.parse::<u16>() {
+        Ok(p) if p > 0 => Ok(()),
+        _ => Err("OSC target port must be a number between 1 and 65535".to_string()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn osc_target_validation() {
+        assert!(validate_osc_target("127.0.0.1:3333").is_ok());
+        assert!(validate_osc_target("192.168.1.20:57120").is_ok());
+        assert!(validate_osc_target("localhost:9000").is_ok());
+        assert!(validate_osc_target("127.0.0.1").is_err());
+        assert!(validate_osc_target("127.0.0.1:").is_err());
+        assert!(validate_osc_target(":3333").is_err());
+        assert!(validate_osc_target("127.0.0.1:0").is_err());
+        assert!(validate_osc_target("127.0.0.1:70000").is_err());
+        assert!(validate_osc_target("my host:3333").is_err());
+        assert!(validate_osc_target("127.0.0.1:abc").is_err());
+    }
     use crate::project::session::allocate_udp_port;
     use std::io::Read;
 
@@ -331,6 +396,7 @@ mod tests {
             },
             port,
             &plugins,
+            None,
         )
         .unwrap();
 

@@ -28,8 +28,6 @@ const HEALTH_TIMEOUT: Duration = Duration::from_secs(30);
 const HEALTH_REQUEST_TIMEOUT: Duration = Duration::from_millis(800);
 /// Number of node stdout/stderr lines kept for error reports (§10.3).
 const OUTPUT_TAIL_LINES: usize = 50;
-/// Default external OSC target (editable in the sidebar from task-5, §6.6).
-pub const DEFAULT_EXTERNAL_TARGET: &str = "127.0.0.1:3333";
 
 // ============================================================================
 // Types shared with the frontend
@@ -320,6 +318,7 @@ impl SessionManager {
         path: String,
         mode: String,
         lan_ip: String,
+        osc_target: Option<String>,
     ) -> Result<(), String> {
         let root = PathBuf::from(&path);
         let manifest = load_manifest(&root)?;
@@ -338,6 +337,31 @@ impl SessionManager {
             manifest.score_server.monitor_port,
         )?;
 
+        // §6.5: the output device comes from app-local preferences (never
+        // from the project manifest). A missing saved device falls back to
+        // the system default with a warning.
+        let device = if mode == "internal" {
+            let prefs = crate::commands::preferences::load_preferences_sync(&app)?;
+            match prefs.output_device {
+                Some(name) => {
+                    let devices = crate::project::audio::list_output_devices()
+                        .unwrap_or_default()
+                        .devices;
+                    if devices.contains(&name) {
+                        Some(name)
+                    } else {
+                        log::warn!(
+                            "Saved output device \"{name}\" is not available; falling back to the system default (§6.5)"
+                        );
+                        None
+                    }
+                }
+                None => None,
+            }
+        } else {
+            None
+        };
+
         // §8.1: internal mode boots scsynth first (and waits for /status)
         // before the score server starts. External/none skip this entirely.
         let (osc_target, scsynth_child, scsynth_port) = match mode.as_str() {
@@ -350,8 +374,13 @@ impl SessionManager {
                 let port = allocate_udp_port()?;
                 let binary = crate::project::audio::scsynth_binary_path()?;
                 let plugins = crate::project::audio::plugins_dir()?;
-                let mut sc_child =
-                    crate::project::audio::spawn_scsynth(&binary, sc_cfg, port, &plugins)?;
+                let mut sc_child = crate::project::audio::spawn_scsynth(
+                    &binary,
+                    sc_cfg,
+                    port,
+                    &plugins,
+                    device.as_deref(),
+                )?;
                 let sc_pid = sc_child.id();
 
                 let client =
@@ -367,14 +396,23 @@ impl SessionManager {
                 ) {
                     log::warn!("Failed to record scsynth child: {e}");
                 }
-                log::info!("scsynth ready on UDP port {port} (pid {sc_pid})");
+                log::info!(
+                    "scsynth ready on UDP port {port} (pid {sc_pid}, device: {})",
+                    device.as_deref().unwrap_or("system default")
+                );
                 (
                     Some(format!("127.0.0.1:{port}")),
                     Some(sc_child),
                     Some(port),
                 )
             }
-            "external" => (Some(DEFAULT_EXTERNAL_TARGET.to_string()), None, None),
+            "external" => {
+                // §6.6: external mode requires a valid user-provided target.
+                let target =
+                    osc_target.ok_or("External mode requires an OSC target (host:port)")?;
+                crate::project::audio::validate_osc_target(&target)?;
+                (Some(target), None, None)
+            }
             _ => (None, None, None),
         };
 
