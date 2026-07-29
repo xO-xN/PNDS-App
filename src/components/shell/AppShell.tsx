@@ -87,20 +87,28 @@ export function AppShell() {
     )
   }
 
-  // ── Welcome / Loading / Dissolve ──
+  // ── Loading / Dissolve (full-screen, no sidebar — Logo is centered) ──
   const loadingPhase =
     sessionStatus === 'starting' || (sessionStatus === 'ready' && !loadingDone)
 
+  if (loadingPhase) {
+    return (
+      <>
+        <div className="h-screen w-screen overflow-hidden rounded-[12px] bg-[#d9d9d9]">
+          <LoadingScreen onDissolveEnd={() => setLoadingDone(true)} />
+        </div>
+        <Toaster position="bottom-right" />
+      </>
+    )
+  }
+
+  // ── Welcome (sidebar always open) ──
   return (
     <>
       <div className="flex h-screen w-screen overflow-hidden rounded-[12px] bg-[#d9d9d9]">
         <Sidebar variant="static" />
         <main className="flex-1 overflow-auto">
-          {loadingPhase ? (
-            <LoadingScreen onDissolveEnd={() => setLoadingDone(true)} />
-          ) : (
-            <WelcomeScreen />
-          )}
+          <WelcomeScreen />
         </main>
       </div>
       <Toaster position="bottom-right" />
