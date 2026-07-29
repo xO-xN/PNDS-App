@@ -341,6 +341,23 @@ impl SessionManager {
             manifest.score_server.monitor_port,
         )?;
 
+        // ---------------------------------------------------------------
+        // §10.3: signal "starting" as early as possible so the loading
+        // screen switches immediately and the logo animation begins
+        // playing while scsynth and Node are still booting below.
+        {
+            let mut inner = self.lock();
+            inner.generation += 1;
+            inner.reset_run_state();
+            inner.status = "starting".to_string();
+            inner.project_name = Some(manifest.name.clone());
+            inner.project_path = Some(path.clone());
+            inner.audio_mode = Some(mode.clone());
+            inner.lan_ip = Some(lan_ip.clone());
+        }
+        self.emit(&app);
+        // ---------------------------------------------------------------
+
         // §6.5: the output device comes from app-local preferences (never
         // from the project manifest). A missing saved device falls back to
         // the system default with a warning.
