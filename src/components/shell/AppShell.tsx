@@ -87,29 +87,28 @@ export function AppShell() {
     )
   }
 
-  // ── Welcome / Loading / Dissolve (sidebar always mounted so it fades
-  //    out smoothly, not an instant snap)
+  // ── Loading / Dissolve (full-screen, no sidebar — Logo is centered) ──
   const loadingPhase =
     sessionStatus === 'starting' || (sessionStatus === 'ready' && !loadingDone)
 
+  if (loadingPhase) {
+    return (
+      <>
+        <div className="h-screen w-screen overflow-hidden rounded-2xl bg-(--pnds-bg)">
+          <LoadingScreen onDissolveEnd={() => setLoadingDone(true)} />
+        </div>
+        <Toaster position="bottom-right" />
+      </>
+    )
+  }
+
+  // ── Welcome (sidebar always open) ──
   return (
     <>
-      <div className="relative flex h-screen w-screen overflow-hidden rounded-2xl bg-(--pnds-bg)">
-        <div
-          className={`shrink-0 transition-opacity duration-300 ${
-            loadingPhase
-              ? 'pointer-events-none absolute inset-y-0 left-0 z-10 opacity-0'
-              : 'opacity-100'
-          }`}
-        >
-          <Sidebar variant="static" />
-        </div>
+      <div className="flex h-screen w-screen overflow-hidden rounded-2xl bg-(--pnds-bg)">
+        <Sidebar variant="static" />
         <main className="flex-1 overflow-auto">
-          {loadingPhase ? (
-            <LoadingScreen onDissolveEnd={() => setLoadingDone(true)} />
-          ) : (
-            <WelcomeScreen />
-          )}
+          <WelcomeScreen />
         </main>
       </div>
       <Toaster position="bottom-right" />
