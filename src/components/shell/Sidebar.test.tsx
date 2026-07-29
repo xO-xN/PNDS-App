@@ -150,7 +150,13 @@ describe('Sidebar', () => {
     })
     expect(commands.startProject).not.toHaveBeenCalled()
 
-    await user.click(screen.getByRole('button', { name: /^load$/i }))
+    // …and the Load button must light up once preflight + LAN are in place
+    const loadButton = screen.getByRole('button', { name: /^load$/i })
+    await waitFor(() => {
+      expect(loadButton).toBeEnabled()
+    })
+
+    await user.click(loadButton)
     await waitFor(() => {
       expect(commands.startProject).toHaveBeenCalledWith(
         PROJECT_PATH,

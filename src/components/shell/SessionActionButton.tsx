@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { stopAndReset } from '@/lib/open-project'
 import { canStart, start } from '@/lib/session-flow'
+import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 import { cn } from '@/lib/utils'
 
@@ -12,10 +13,15 @@ import { cn } from '@/lib/utils'
  */
 export function SessionActionButton() {
   const { t } = useTranslation()
+  // Every field canStart() reads must be subscribed, or the button never
+  // re-evaluates when they change (e.g. lanIp lands after the preflight
+  // re-render and the button would stay disabled forever).
   const sessionStatus = useSessionStore(state => state.sessionStatus)
-  // Subscribed so React re-renders when these affect canStart() (§6.6).
   useSessionStore(state => state.audioMode)
+  useSessionStore(state => state.lanIp)
   useSessionStore(state => state.oscTargetInput)
+  useProjectStore(state => state.currentProject)
+  useProjectStore(state => state.preflightStatus)
 
   const running = sessionStatus === 'ready'
   const busy = sessionStatus === 'starting' || sessionStatus === 'stopping'
