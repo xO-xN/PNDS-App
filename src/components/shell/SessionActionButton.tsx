@@ -33,6 +33,13 @@ export function SessionActionButton() {
     )
   }
 
+  const label =
+    sessionStatus === 'starting'
+      ? t('session.starting')
+      : sessionStatus === 'stopping'
+        ? t('session.stopping')
+        : t('sidebar.loadProject')
+
   return (
     <button
       type="button"
@@ -45,7 +52,7 @@ export function SessionActionButton() {
           : 'bg-black/10 text-black/40 shadow-none'
       )}
     >
-      {busy ? t('session.stopping') : t('sidebar.loadProject')}
+      {label}
     </button>
   )
 }
