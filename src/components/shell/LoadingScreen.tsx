@@ -9,11 +9,9 @@ interface Props {
 }
 
 /**
- * Loading screen with the PNDS Logo animation (§10.3 two-phase contract).
- *
- * Phase 1: autonomous dot/circle entrance (~0.8 s). Phase 2: triggered
- * when the session is ready — the logo converges and dissolves. The
- * `onDissolveEnd` callback lets AppShell route to the monitor afterward.
+ * Loading screen (§10.3): just the PNDS Logo animation on a plain
+ * background. Phase 1 plays autonomously; Phase 2 triggers when the
+ * session reports ready. Cancel sits below as a subtle link.
  */
 export function LoadingScreen({ onDissolveEnd }: Props) {
   const { t } = useTranslation()
@@ -27,24 +25,16 @@ export function LoadingScreen({ onDissolveEnd }: Props) {
   }
 
   return (
-    <div className="flex min-h-full flex-col items-center bg-[#d9d9d9] p-8 pt-[24vh]">
-      <h1 className="text-[28px] font-light tracking-wide text-black">
-        {t('loading.title')}
-      </h1>
-      <div className="mt-[7vh]">
-        <PndsLogoCanvas
-          size={190}
-          ready={reallyReady}
-          onDissolveEnd={onDissolveEnd}
-        />
-      </div>
-      <p className="mt-[6vh] text-[15px] text-black/60">
-        {health ? t('loading.waitingReady') : t('loading.startingServer')}
-      </p>
+    <div className="flex min-h-full flex-col items-center justify-center bg-[#d9d9d9]">
+      <PndsLogoCanvas
+        size={380}
+        ready={reallyReady}
+        onDissolveEnd={onDissolveEnd}
+      />
       <Button
-        variant="outline"
+        variant="link"
         size="sm"
-        className="mt-4 border-black/20 bg-transparent text-black/70 hover:bg-black/5"
+        className="mt-6 text-black/40 hover:text-black/60"
         onClick={() => void handleCancel()}
       >
         {t('loading.cancel')}

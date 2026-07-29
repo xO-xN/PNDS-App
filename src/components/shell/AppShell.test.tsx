@@ -71,20 +71,20 @@ describe('AppShell', () => {
     act(() => {
       sessionHandler?.({ payload: { ...readySnapshot, status: 'starting' } })
     })
-    expect(screen.getByText(/loading project/i)).toBeInTheDocument()
+    expect(screen.getByText(/cancel/i)).toBeInTheDocument()
 
     act(() => {
       sessionHandler?.({ payload: readySnapshot })
     })
     // The dissolve gate keeps the loading layer briefly visible — the
     // subscription survived the transition even before the dissolve ends.
-    expect(screen.getByText(/loading project/i)).toBeInTheDocument()
+    expect(screen.getByText(/cancel/i)).toBeInTheDocument()
   })
 
   it('shows the loading screen with a cancel escape while starting (§10.3)', async () => {
     useSessionStore.setState({ sessionStatus: 'starting' })
     render(<AppShell />)
-    expect(screen.getByText(/loading project/i)).toBeInTheDocument()
+    expect(screen.getByText(/cancel/i)).toBeInTheDocument()
 
     await act(async () => {
       screen.getByRole('button', { name: /cancel/i }).click()

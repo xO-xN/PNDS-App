@@ -11,7 +11,6 @@ const DOT_POSITIONS: [number, number][] = [
   [260, 340],
   [260, 260],
 ]
-const DOT_RADIUS = 25
 const D_LIGHT = 2 * Math.hypot(40, 120) // larger background circle diameter
 const D_DARK = 2 * Math.hypot(120, 140) // smaller background circle
 
@@ -217,17 +216,14 @@ function drawFrame(
         ? Math.min(Math.max((f - showAt) / DOT_REVEAL_DURATION, 0), 1)
         : 1
     const bez = f < ENTRANCE_FRAMES ? bezierOut(progress) : 1
-    const scale = 0.4 + (1 - 0.4) * bez // 0.4→1
-    const yOff = (f < ENTRANCE_FRAMES ? spring(progress) : 1) * 50
-    const radius = DOT_RADIUS * gs * scale
+    // p5: y += lerp(50, 0, spring(t))
+    const sp = f < ENTRANCE_FRAMES ? spring(progress) : 1
+    const yLifted = y + 50 * (1 - sp)
+    // p5: circle(x, y, 50 * gs * cs)  where cs = lerp(0.4, 1, bezierOut(t))
+    const cs = 0.4 + (1 - 0.4) * bez
+    const radius = 25 * gs * cs
     ctx.beginPath()
-    ctx.arc(
-      x,
-      y - yOff * (1 - Math.min(f / ENTRANCE_FRAMES, 1)),
-      radius,
-      0,
-      Math.PI * 2
-    )
+    ctx.arc(x, yLifted, radius, 0, Math.PI * 2)
     ctx.fill()
   }
 
