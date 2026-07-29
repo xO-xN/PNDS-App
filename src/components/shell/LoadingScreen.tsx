@@ -2,15 +2,22 @@ import { useTranslation } from 'react-i18next'
 import { commands } from '@/lib/tauri-bindings'
 import { useSessionStore } from '@/store/session-store'
 import { Button } from '@/components/ui/button'
+import { PndsLogo } from './PndsLogo'
 
 /**
- * Loading placeholder (task-3). The real PNDS Logo p5 animation with the
- * five-stage contract (§10.3) replaces this in task-6. A stuck startup can
- * always be cancelled (§10.3 Back/Close semantics), which stops the score
- * server and returns to Welcome.
+ * Loading screen (§10.3; Figma "Loading a project"): title, the PNDS logo,
+ * and the current phase text. task-3 placeholder — task-6 replaces the
+ * static logo with the animated p5 sketch driven by the five real startup
+ * stages, random colors, and the dissolve transition. Cancel stays as an
+ * escape hatch for stuck startups (stops the score server, back to Welcome).
  */
 export function LoadingScreen() {
   const { t } = useTranslation()
+  const health = useSessionStore(state => state.health)
+
+  const phaseText = health
+    ? t('loading.waitingReady')
+    : t('loading.startingServer')
 
   const handleCancel = async () => {
     await commands.stopProject()
@@ -18,10 +25,18 @@ export function LoadingScreen() {
   }
 
   return (
-    <div className="flex h-screen w-screen flex-col items-center justify-center gap-4 bg-gradient-to-br from-[#eef2f8] via-[#e9edf6] to-[#e6ecf4]">
-      <h1 className="text-4xl font-semibold tracking-wide">{t('app.name')}</h1>
-      <p className="text-sm text-muted-foreground">{t('loading.starting')}</p>
-      <Button variant="outline" size="sm" onClick={() => void handleCancel()}>
+    <div className="flex min-h-full flex-col items-center justify-center gap-10 bg-[#d9d9d9] p-8">
+      <h1 className="text-[28px] font-light tracking-wide text-black">
+        {t('loading.title')}
+      </h1>
+      <PndsLogo size={180} />
+      <p className="text-[15px] text-black/60">{phaseText}</p>
+      <Button
+        variant="outline"
+        size="sm"
+        className="border-black/20 bg-transparent text-black/70 hover:bg-black/5"
+        onClick={() => void handleCancel()}
+      >
         {t('loading.cancel')}
       </Button>
     </div>

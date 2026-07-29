@@ -76,8 +76,8 @@ export function ErrorScreen() {
   }
 
   return (
-    <div className="flex h-screen w-screen flex-col items-center justify-center gap-5 bg-gradient-to-br from-[#eef2f8] via-[#e9edf6] to-[#e6ecf4] p-8">
-      <h1 className="text-2xl font-semibold">{t('error.title')}</h1>
+    <div className="flex h-screen w-screen flex-col items-center justify-center gap-5 bg-[#d9d9d9] p-8">
+      <h1 className="text-2xl font-semibold text-black">{t('error.title')}</h1>
 
       <p
         role="alert"

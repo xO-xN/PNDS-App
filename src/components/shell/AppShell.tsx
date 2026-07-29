@@ -11,9 +11,9 @@ import { ErrorScreen } from './ErrorScreen'
 
 /**
  * Application shell (§10.1): routes between the four window states —
- * Welcome (sidebar always open), Loading, Running (monitor + floating
- * sidebar), Error. The session status from the Rust backend drives the
- * transitions; the five-state animation contract arrives in task-6.
+ * Welcome and Loading share the "sidebar + main" layout with the sidebar
+ * always open (§10.4, Figma); Running is the full-window monitor with the
+ * hover-in sidebar; Error stands alone. Session status drives transitions.
  *
  * The `pnds:session` subscription lives here because the shell is always
  * mounted — putting it in a routed child would drop backend events during
@@ -37,22 +37,33 @@ export function AppShell() {
     }
   }, [])
 
+  if (sessionStatus === 'ready') {
+    return (
+      <>
+        <MonitorView />
+        <Toaster position="bottom-right" />
+      </>
+    )
+  }
+
+  if (sessionStatus === 'error') {
+    return (
+      <>
+        <ErrorScreen />
+        <Toaster position="bottom-right" />
+      </>
+    )
+  }
+
+  // Welcome and Loading share the always-open sidebar layout (§10.4).
   return (
     <>
-      {sessionStatus === 'starting' ? (
-        <LoadingScreen />
-      ) : sessionStatus === 'ready' ? (
-        <MonitorView />
-      ) : sessionStatus === 'error' ? (
-        <ErrorScreen />
-      ) : (
-        <div className="flex h-screen w-screen overflow-hidden bg-gradient-to-br from-[#eef2f8] via-[#e9edf6] to-[#e6ecf4]">
-          <Sidebar variant="static" />
-          <main className="flex-1 overflow-auto">
-            <WelcomeScreen />
-          </main>
-        </div>
-      )}
+      <div className="flex h-screen w-screen overflow-hidden bg-[#d9d9d9]">
+        <Sidebar variant="static" />
+        <main className="flex-1 overflow-auto">
+          {sessionStatus === 'starting' ? <LoadingScreen /> : <WelcomeScreen />}
+        </main>
+      </div>
       <Toaster position="bottom-right" />
     </>
   )

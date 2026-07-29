@@ -7,6 +7,15 @@
 @layer base {
   :root {
     --app-corner-radius: 12px;
+
+    /* PNDS design tokens (from Figma "PNDS UI Design", 2026-07) */
+    --pnds-bg: #d9d9d9;
+    --pnds-sidebar-bg: #bfbfbf;
+    --pnds-card: #f5f5f5;
+    --pnds-pill: #d9d9d9;
+    --pnds-accent: #0088ff;
+    --pnds-text: #000000;
+    --pnds-text-secondary: #555555;
   }
 
   /* Square corners - used on Windows/Linux when fullscreen */

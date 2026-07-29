@@ -39,13 +39,14 @@ describe('WelcomeScreen', () => {
     useProjectStore.setState({
       currentProject: null,
       trustedPaths: [],
+      pendingTrustPath: null,
       preflightStatus: 'idle',
       preflightError: null,
     })
     useSessionStore.getState().resetSession()
   })
 
-  it('asks for trust on first open, then runs preflight (§4)', async () => {
+  it('asks for trust on first open, then preflights and starts (§4, §8.1)', async () => {
     const user = userEvent.setup()
     vi.mocked(open).mockResolvedValue('/Users/test/Inarticulate III')
     vi.mocked(commands.preflightProject).mockResolvedValue({
@@ -68,10 +69,14 @@ describe('WelcomeScreen', () => {
         '/Users/test/Inarticulate III'
       )
     })
-
-    // Success: project info is displayed
-    expect(await screen.findByText('Inarticulate III')).toBeInTheDocument()
-    expect(screen.getByText(/6868/)).toBeInTheDocument()
+    // Single LAN address is auto-selected → session starts right away
+    await waitFor(() => {
+      expect(commands.startProject).toHaveBeenCalledWith(
+        '/Users/test/Inarticulate III',
+        'internal',
+        '192.168.1.10'
+      )
+    })
   })
 
   it('does not run preflight when trust is declined', async () => {
@@ -89,7 +94,7 @@ describe('WelcomeScreen', () => {
     ).toBe(false)
   })
 
-  it('shows a readable preflight error', async () => {
+  it('shows a readable preflight error and does not start', async () => {
     const user = userEvent.setup()
     vi.mocked(open).mockResolvedValue('/Users/test/Broken')
     vi.mocked(commands.preflightProject).mockResolvedValue({
@@ -106,6 +111,7 @@ describe('WelcomeScreen', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'scoreServer.monitorPort'
     )
+    expect(commands.startProject).not.toHaveBeenCalled()
   })
 
   it('skips the trust dialog for paths trusted this session', async () => {
@@ -124,79 +130,5 @@ describe('WelcomeScreen', () => {
       expect(commands.preflightProject).toHaveBeenCalled()
     })
     expect(screen.queryByText(/trust this project/i)).not.toBeInTheDocument()
-  })
-
-  it('starts the project with the chosen mode and LAN address (§6.1, §7)', async () => {
-    const user = userEvent.setup()
-    vi.mocked(open).mockResolvedValue('/Users/test/Inarticulate III')
-    vi.mocked(commands.preflightProject).mockResolvedValue({
-      status: 'ok',
-      data: manifest,
-    })
-    vi.mocked(commands.listLanAddresses).mockResolvedValue({
-      status: 'ok',
-      data: ['192.168.1.10'],
-    })
-
-    render(<WelcomeScreen />)
-    await user.click(screen.getByRole('button', { name: /open project/i }))
-    await user.click(
-      await screen.findByRole('button', { name: /trust and continue/i })
-    )
-
-    // Default mode comes from the manifest; switch it to "none"
-    const modeSelect = await screen.findByRole('combobox', {
-      name: /audio mode/i,
-    })
-    await user.selectOptions(modeSelect, 'none')
-
-    await user.click(screen.getByRole('button', { name: /start project/i }))
-    await waitFor(() => {
-      expect(commands.startProject).toHaveBeenCalledWith(
-        '/Users/test/Inarticulate III',
-        'none',
-        '192.168.1.10'
-      )
-    })
-  })
-
-  it('requires an explicit LAN choice when several addresses exist (§7)', async () => {
-    const user = userEvent.setup()
-    vi.mocked(open).mockResolvedValue('/Users/test/Inarticulate III')
-    vi.mocked(commands.preflightProject).mockResolvedValue({
-      status: 'ok',
-      data: manifest,
-    })
-    vi.mocked(commands.listLanAddresses).mockResolvedValue({
-      status: 'ok',
-      data: ['192.168.1.10', '10.0.0.5'],
-    })
-
-    render(<WelcomeScreen />)
-    await user.click(screen.getByRole('button', { name: /open project/i }))
-    await user.click(
-      await screen.findByRole('button', { name: /trust and continue/i })
-    )
-
-    // Start must stay disabled until the user picks an address
-    const startButton = await screen.findByRole('button', {
-      name: /start project/i,
-    })
-    expect(startButton).toBeDisabled()
-
-    await user.selectOptions(
-      screen.getByRole('combobox', { name: /network address/i }),
-      '10.0.0.5'
-    )
-    expect(startButton).toBeEnabled()
-
-    await user.click(startButton)
-    await waitFor(() => {
-      expect(commands.startProject).toHaveBeenCalledWith(
-        '/Users/test/Inarticulate III',
-        'internal',
-        '10.0.0.5'
-      )
-    })
   })
 })

@@ -1,31 +1,37 @@
 import { useTranslation } from 'react-i18next'
+import { Plus, X, Menu } from 'lucide-react'
 import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 import { commands } from '@/lib/tauri-bindings'
-import { logger } from '@/lib/logger'
-import { promptOpenProject, runPreflight } from '@/lib/open-project'
-import { Button } from '@/components/ui/button'
+import { openProject, promptOpenProject } from '@/lib/open-project'
+import { SettingsCard } from './SettingsCard'
 import { cn } from '@/lib/utils'
 
 interface SidebarProps {
-  /** welcome: statically visible; running: floats over the monitor */
+  /** welcome/loading: statically visible; running: floats over the monitor */
   variant: 'static' | 'overlay'
   onRequestClose?: () => void
 }
 
 /**
- * PNDS sidebar (§10.1, §10.2). Static and always open on Welcome; hidden
- * during a performance until hovered in from the left edge. Session-restart
- * behavior for mode/device/target changes arrives in task-5 — those
- * controls are shown read-only/disabled for now.
+ * PNDS sidebar (§10.1, §10.2; Figma "PNDS UI Design"). Always open on
+ * Welcome/Loading; floats in from the left edge during a performance.
+ * Clicking a project entry starts it (trust gate + preflight first, §4/§5);
+ * switching projects while running asks for confirmation (§8.3, task-5).
  */
 export function Sidebar({ variant, onRequestClose }: SidebarProps) {
   const { t } = useTranslation()
   const trustedPaths = useProjectStore(state => state.trustedPaths)
   const currentProject = useProjectStore(state => state.currentProject)
   const sessionStatus = useSessionStore(state => state.sessionStatus)
-  const audioMode = useSessionStore(state => state.audioMode)
   const running = variant === 'overlay'
+  const busy = sessionStatus === 'starting' || sessionStatus === 'stopping'
+
+  const handleEntryClick = (path: string) => {
+    if (busy) return
+    if (running && currentProject && path === currentProject.path) return
+    void openProject(path)
+  }
 
   const handleStop = async () => {
     const result = await commands.stopProject()
@@ -35,142 +41,98 @@ export function Sidebar({ variant, onRequestClose }: SidebarProps) {
     onRequestClose?.()
   }
 
+  const otherPaths = trustedPaths.filter(p => p !== currentProject?.path)
+
   return (
     <aside
       data-testid="sidebar"
       className={cn(
-        'flex h-full w-64 flex-col gap-5 overflow-y-auto p-4 text-sm',
-        variant === 'static' && 'border-e border-black/5 bg-white/50',
+        'relative flex h-full w-64 flex-col overflow-y-auto px-4 pb-4 pt-12 text-sm',
+        variant === 'static' && 'bg-[#bfbfbf]',
         variant === 'overlay' &&
-          'rounded-e-2xl border-e border-white/40 bg-white/70 shadow-2xl backdrop-blur-xl'
+          'rounded-e-2xl border-e border-white/30 bg-[#bfbfbf]/85 shadow-2xl backdrop-blur-xl'
       )}
     >
-      <div className="pt-1 text-base font-semibold tracking-wide">
-        {t('app.name')}
-      </div>
+      {/* Window drag area (§10.1: the sidebar must offer window dragging) */}
+      <div
+        data-tauri-drag-region
+        className="absolute left-0 right-0 top-0 h-10"
+      />
 
-      <section>
-        <h2 className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-          {t('sidebar.projects')}
-        </h2>
-        {!running && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full"
-            onClick={() => void promptOpenProject()}
+      {/* PNDS Projects */}
+      <h2 className="px-2 text-[15px] font-normal text-black">
+        {t('sidebar.projects')}
+      </h2>
+
+      <nav className="mt-4 flex flex-col">
+        {currentProject && (
+          <div
+            data-testid="current-project-card"
+            className="flex items-center justify-between rounded-xl bg-[#f5f5f5] px-4 py-3 shadow-sm"
           >
-            {t('welcome.openProject')}
-          </Button>
-        )}
-        <ul className="mt-2 space-y-1">
-          {trustedPaths.map(path => (
-            <li key={path}>
+            {running ? (
               <button
-                type="button"
-                disabled={running}
-                onClick={() => void runPreflight(path)}
-                className="w-full truncate rounded-md px-2 py-1 text-start text-xs text-muted-foreground hover:bg-black/5 disabled:opacity-60"
-                title={path}
+                aria-label={t('sidebar.hideSidebar')}
+                onClick={onRequestClose}
+                className="text-black/70 hover:text-black"
               >
-                {path.split('/').filter(Boolean).pop() ?? path}
+                <Menu size={16} />
               </button>
-            </li>
-          ))}
-          {trustedPaths.length === 0 && (
-            <li className="px-2 py-1 text-xs text-muted-foreground">
-              {t('sidebar.noProjects')}
-            </li>
-          )}
-        </ul>
-      </section>
-
-      {currentProject && (
-        <section className="border-t border-black/5 pt-4">
-          <h2 className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            {t('sidebar.current')}
-          </h2>
-          <p className="font-medium">{currentProject.manifest.name}</p>
-
-          <div className="mt-3 flex flex-col gap-3">
-            <label className="flex items-center justify-between gap-2">
-              <span className="text-muted-foreground">
-                {t('session.audioMode')}
-              </span>
-              <select
-                className="rounded-md border bg-background px-2 py-1 disabled:opacity-60"
-                value={audioMode}
-                disabled={running}
-                onChange={e => {
-                  useSessionStore.getState().setAudioMode(e.target.value)
-                  logger.debug('Audio mode changed in sidebar', {
-                    mode: e.target.value,
-                  })
-                }}
+            ) : (
+              <span className="w-4" />
+            )}
+            <span className="mx-2 flex-1 truncate text-center text-[15px] text-black">
+              {currentProject.manifest.name}
+            </span>
+            {running ? (
+              <button
+                aria-label={t('sidebar.stopProject')}
+                onClick={() => void handleStop()}
+                className="text-black/70 hover:text-black"
               >
-                {currentProject.manifest.audio.supportedModes.map(mode => (
-                  <option key={mode} value={mode}>
-                    {mode}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="flex items-center justify-between gap-2">
-              <span className="text-muted-foreground">
-                {t('sidebar.oscTarget')}
-              </span>
-              <input
-                className="w-32 rounded-md border bg-background px-2 py-1 disabled:opacity-60"
-                defaultValue="127.0.0.1:3333"
-                disabled={running || audioMode !== 'external'}
-                title={t('sidebar.availableLater')}
-              />
-            </label>
-
-            <label className="flex items-center justify-between gap-2">
-              <span className="text-muted-foreground">
-                {t('sidebar.outputDevice')}
-              </span>
-              <select
-                className="rounded-md border bg-background px-2 py-1 disabled:opacity-60"
-                disabled
-                title={t('sidebar.availableLater')}
-              >
-                <option>{t('sidebar.systemDefault')}</option>
-              </select>
-            </label>
-
-            <label className="flex items-center justify-between gap-2">
-              <span className="text-muted-foreground">
-                {t('sidebar.volume')}
-              </span>
-              <input
-                type="range"
-                className="w-28 disabled:opacity-60"
-                min={0}
-                max={100}
-                defaultValue={80}
-                disabled
-                title={t('sidebar.availableLater')}
-              />
-            </label>
+                <X size={16} />
+              </button>
+            ) : (
+              <span className="w-4" />
+            )}
           </div>
-        </section>
-      )}
+        )}
 
-      {running && sessionStatus === 'ready' && (
-        <div className="mt-auto border-t border-black/5 pt-4">
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full"
-            onClick={() => void handleStop()}
+        {otherPaths.map(path => (
+          <button
+            key={path}
+            type="button"
+            disabled={busy}
+            onClick={() => handleEntryClick(path)}
+            title={path}
+            className="truncate rounded-xl px-4 py-3 text-center text-[15px] text-black/85 hover:bg-black/5 disabled:opacity-50"
           >
-            {t('sidebar.stopProject')}
-          </Button>
-        </div>
-      )}
+            {path.split('/').filter(Boolean).pop() ?? path}
+          </button>
+        ))}
+
+        {trustedPaths.length === 0 && (
+          <p className="px-2 py-3 text-center text-xs text-black/50">
+            {t('sidebar.noProjects')}
+          </p>
+        )}
+      </nav>
+
+      <button
+        type="button"
+        onClick={() => void promptOpenProject()}
+        disabled={busy}
+        aria-label={t('welcome.openProject')}
+        className="mt-3 inline-flex w-fit items-center gap-1.5 rounded-full border border-black/60 px-3.5 py-1 text-[13px] text-black hover:bg-black/5 disabled:opacity-50"
+      >
+        <Plus size={14} />
+        {t('sidebar.open')}
+      </button>
+
+      {/* Settings card pinned to the bottom (§10.2) */}
+      <div className="mt-auto pt-6">
+        <SettingsCard />
+      </div>
     </aside>
   )
 }

@@ -120,10 +120,13 @@
   "toast.error.fullscreenEnterFailed": "Failed to enter fullscreen: {{message}}",
   "toast.error.fullscreenExitFailed": "Failed to exit fullscreen: {{message}}",
 
-  "welcome.title": "PNDS",
-  "welcome.subtitle": "Platform for Networked Digital Score",
+  "welcome.title": "Hi! Welcome to PNDS",
+  "welcome.subtitle": "The Platform for Network Digital Score",
   "welcome.openProject": "Open Project…",
   "welcome.checking": "Checking project…",
+  "welcome.hintStart": "Start a PNDS Digital Score by ",
+  "welcome.hintEnd": " a new project",
+  "welcome.hintSelect": "or select a project on the left sidebar",
 
   "trust.title": "Trust this project?",
   "trust.description": "This project will run local Node.js code on this Mac:\n\n{{path}}\n\nOnly continue if you trust its source.",
@@ -149,6 +152,8 @@
   "session.performerUrl": "Performer URL",
 
   "sidebar.projects": "PNDS Projects",
+  "sidebar.open": "Open",
+  "sidebar.hideSidebar": "Hide sidebar",
   "sidebar.noProjects": "No projects opened yet",
   "sidebar.current": "Current Project",
   "sidebar.oscTarget": "OSC Target",
@@ -158,7 +163,10 @@
   "sidebar.stopProject": "Stop Project",
   "sidebar.availableLater": "Available in a later development phase",
 
+  "loading.title": "Loading Project ...",
   "loading.starting": "Starting project…",
+  "loading.startingServer": "Starting the score server…",
+  "loading.waitingReady": "Waiting for the project to report ready…",
   "loading.cancel": "Cancel",
 
   "error.title": "Something went wrong",

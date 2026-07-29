@@ -53,7 +53,9 @@ describe('AppShell', () => {
   it('shows Welcome with an always-open sidebar when idle (§10.4)', () => {
     render(<AppShell />)
     expect(screen.getByTestId('sidebar')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'PNDS' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: 'Hi! Welcome to PNDS' })
+    ).toBeInTheDocument()
   })
 
   it('subscribes to session events at shell level and survives transitions', () => {
@@ -67,7 +69,7 @@ describe('AppShell', () => {
     act(() => {
       sessionHandler?.({ payload: { ...readySnapshot, status: 'starting' } })
     })
-    expect(screen.getByText(/starting project/i)).toBeInTheDocument()
+    expect(screen.getByText(/loading project/i)).toBeInTheDocument()
 
     act(() => {
       sessionHandler?.({ payload: readySnapshot })
@@ -78,7 +80,7 @@ describe('AppShell', () => {
   it('shows the loading screen with a cancel escape while starting (§10.3)', async () => {
     useSessionStore.setState({ sessionStatus: 'starting' })
     render(<AppShell />)
-    expect(screen.getByText(/starting project/i)).toBeInTheDocument()
+    expect(screen.getByText(/loading project/i)).toBeInTheDocument()
 
     await act(async () => {
       screen.getByRole('button', { name: /cancel/i }).click()
