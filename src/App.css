@@ -59,13 +59,13 @@
     --app-corner-radius: 12px;
 
     /* PNDS design tokens (from Figma "PNDS UI Design", 2026-07) */
-    --pnds-bg: #d9d9d9;
-    --pnds-sidebar-bg: #bfbfbf;
-    --pnds-card: #f5f5f5;
-    --pnds-pill: #d9d9d9;
-    --pnds-accent: #0088ff;
-    --pnds-text: #000000;
-    --pnds-text-secondary: #555555;
+    --pnds-bg: #eef0f8;
+    --pnds-sidebar-bg: #e2e5f3;
+    --pnds-card: #ffffff;
+    --pnds-pill: #dce0f0;
+    --pnds-accent: #5a4ff3;
+    --pnds-text: #171a2b;
+    --pnds-text-secondary: #5d6484;
   }
 
   @keyframes spin-shrink {

@@ -191,13 +191,11 @@ export function SettingsCard() {
             <option value={SYSTEM_DEFAULT_DEVICE}>
               {t('sidebar.systemDefault')}
             </option>
-            {devices
-              .filter(d => d !== outputDevice)
-              .map(device => (
-                <option key={device} value={device}>
-                  {device}
-                </option>
-              ))}
+            {devices.map(device => (
+              <option key={device} value={device}>
+                {device}
+              </option>
+            ))}
           </select>
           <ChevronDown
             size={12}
