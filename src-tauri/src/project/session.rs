@@ -191,8 +191,6 @@ fn fetch_health(performer_port: u16) -> Result<HealthPayload, String> {
     serde_json::from_str(&body).map_err(|e| format!("health payload is not valid JSON: {e}"))
 }
 
-/// §8.2 stop: SIGTERM, wait, then SIGKILL. Returns when the child is dead.
-
 // ============================================================================
 // Session manager
 // ============================================================================
@@ -369,15 +367,17 @@ impl SessionManager {
         };
 
         // §11: open the per-session log file.
-        let mut session_log = crate::project::logs::SessionLogger::open(
+        let session_log = crate::project::logs::SessionLogger::open(
             &app_data_dir,
-            &manifest.id,
-            &manifest.name,
-            &path,
-            &mode,
-            &lan_ip,
-            osc_target.as_deref().unwrap_or("(none)"),
-            device.as_deref().unwrap_or("(system default)"),
+            crate::project::logs::SessionLogParams {
+                project_id: &manifest.id,
+                project_name: &manifest.name,
+                project_path: &path,
+                audio_mode: &mode,
+                lan_ip: &lan_ip,
+                osc_target: osc_target.as_deref().unwrap_or("none"),
+                output_device: device.as_deref().unwrap_or("system default"),
+            },
         )
         .ok();
 
@@ -461,6 +461,7 @@ impl SessionManager {
             inner.audio_mode = Some(mode.clone());
             inner.lan_ip = Some(lan_ip.clone());
             inner.osc_target = osc_target.clone();
+            inner.logger = session_log;
             inner.generation
         };
         self.emit(&app);

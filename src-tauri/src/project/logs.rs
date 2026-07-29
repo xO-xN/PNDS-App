@@ -13,24 +13,24 @@ const LOGS_DIR: &str = "session-logs";
 /// Maximum number of session log files to retain.
 const MAX_LOG_FILES: usize = 20;
 
+pub struct SessionLogParams<'a> {
+    pub project_id: &'a str,
+    pub project_name: &'a str,
+    pub project_path: &'a str,
+    pub audio_mode: &'a str,
+    pub lan_ip: &'a str,
+    pub osc_target: &'a str,
+    pub output_device: &'a str,
+}
+
 pub struct SessionLogger {
     file: Option<BufWriter<fs::File>>,
-    path: PathBuf,
 }
 
 impl SessionLogger {
     /// Creates log directory and rotates old files. Returns a new logger
     /// that appends one line per call.
-    pub fn open(
-        app_data_dir: &Path,
-        project_id: &str,
-        project_name: &str,
-        project_path: &str,
-        audio_mode: &str,
-        lan_ip: &str,
-        osc_target: &str,
-        output_device: &str,
-    ) -> Result<Self, String> {
+    pub fn open(app_data_dir: &Path, params: SessionLogParams) -> Result<Self, String> {
         let dir = app_data_dir.join(LOGS_DIR);
         fs::create_dir_all(&dir).map_err(|e| format!("Failed to create session-logs dir: {e}"))?;
 
@@ -40,7 +40,7 @@ impl SessionLogger {
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
-        let fname = format!("session-{ts}-{project_id}.log");
+        let fname = format!("session-{ts}-{}.log", params.project_id);
         let path = dir.join(&fname);
 
         let file = fs::File::create(&path)
@@ -49,18 +49,16 @@ impl SessionLogger {
 
         let _ = writeln!(
             writer,
-            "PNDS session log | project: {project_name} ({project_id}) | path: {project_path}"
+            "PNDS session log | project: {} ({}) | path: {}",
+            params.project_name, params.project_id, params.project_path
         );
         let _ = writeln!(
             writer,
-            "mode={audio_mode} lan={lan_ip} osc={osc_target} device={output_device}"
+            "mode={} lan={} osc={} device={}",
+            params.audio_mode, params.lan_ip, params.osc_target, params.output_device
         );
-        let _ = writeln!(writer, "");
 
-        Ok(Self {
-            file: Some(writer),
-            path,
-        })
+        Ok(Self { file: Some(writer) })
     }
 
     pub fn write_line(&mut self, line: &str) {
@@ -77,13 +75,9 @@ impl SessionLogger {
     /// Closes the log file, writing a stop marker.
     pub fn close(&mut self) {
         if let Some(mut f) = self.file.take() {
-            let _ = writeln!(f, "");
+            let _ = writeln!(f);
             let _ = writeln!(f, "[session end]");
         }
-    }
-
-    pub fn path(&self) -> &Path {
-        &self.path
     }
 
     /// Removes older log files so at most MAX_LOG_FILES remain.

@@ -81,7 +81,7 @@ export const useSessionStore = create<SessionState>()(set => ({
       // user's pre-start selection so Welcome controls don't reset.
       lanIp: snapshot.lanIp ?? state.lanIp,
       audioMode: snapshot.audioMode ?? state.audioMode,
-      startupStage: snapshot.startupStage ?? state.startupStage,
+      startupStage: snapshot.startupStage,
       // After a committed session event, any pending is resolved.
       pendingChanges: false,
     })),
