@@ -61,8 +61,11 @@ export function AppShell() {
   if (sessionStatus === 'error') {
     return (
       <>
-        <div className="h-screen w-screen overflow-hidden rounded-[12px]">
-          <ErrorScreen />
+        <div className="flex h-screen w-screen overflow-hidden rounded-[12px] bg-[#d9d9d9]">
+          <Sidebar variant="static" />
+          <main className="flex-1 overflow-auto">
+            <ErrorScreen />
+          </main>
         </div>
         <Toaster position="bottom-right" />
       </>

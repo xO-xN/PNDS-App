@@ -101,11 +101,14 @@ export async function restart(): Promise<void> {
     mode: audioMode,
   })
   await commands.stopProject()
+  // Re-read the store after stop — ensure the latest oscTargetInput is used.
+  const target = resolveOscTarget()
+  logger.info('Restart OSC target', { mode: audioMode, target })
   const result = await commands.startProject(
     currentProject.path,
     audioMode,
     lanIp,
-    resolveOscTarget()
+    target
   )
   if (result.status === 'error') {
     useSessionStore.getState().failLocal(result.error)
