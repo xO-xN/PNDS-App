@@ -1,10 +1,12 @@
 import { useTranslation } from 'react-i18next'
-import { Plus, X, Menu } from 'lucide-react'
+import { Plus, X, Menu, Share, RefreshCw } from 'lucide-react'
 import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 import { commands } from '@/lib/tauri-bindings'
+import { logger } from '@/lib/logger'
 import { openProject, promptOpenProject } from '@/lib/open-project'
 import { SettingsCard } from './SettingsCard'
+import { TrafficLights } from './TrafficLights'
 import { cn } from '@/lib/utils'
 
 interface SidebarProps {
@@ -14,10 +16,11 @@ interface SidebarProps {
 }
 
 /**
- * PNDS sidebar (§10.1, §10.2; Figma "PNDS UI Design"). Always open on
- * Welcome/Loading; floats in from the left edge during a performance.
- * Clicking a project entry starts it (trust gate + preflight first, §4/§5);
- * switching projects while running asks for confirmation (§8.3, task-5).
+ * PNDS sidebar (§10.1, §10.2; Figma "PNDS UI Design"). A floating rounded
+ * panel (Zen-browser style) that is always open on Welcome/Loading and
+ * pops in over the monitor during a performance. Clicking a project entry
+ * starts it (trust gate + preflight first, §4/§5); switching projects
+ * while running asks for confirmation (§8.3, task-5).
  */
 export function Sidebar({ variant, onRequestClose }: SidebarProps) {
   const { t } = useTranslation()
@@ -47,20 +50,48 @@ export function Sidebar({ variant, onRequestClose }: SidebarProps) {
     <aside
       data-testid="sidebar"
       className={cn(
-        'relative flex h-full w-[320px] flex-col overflow-y-auto px-0 pb-11 pt-0 text-sm',
-        variant === 'static' && 'bg-[#bfbfbf]',
+        'relative flex w-[320px] flex-col overflow-hidden rounded-2xl text-sm',
+        variant === 'static' &&
+          'm-3 border border-black/5 bg-[#bfbfbf] shadow-sm',
         variant === 'overlay' &&
-          'rounded-e-2xl border-e border-white/30 bg-[#bfbfbf]/85 shadow-2xl backdrop-blur-xl'
+          'h-full border border-white/30 bg-[#bfbfbf]/90 shadow-2xl backdrop-blur-xl'
       )}
     >
-      {/* Window drag area (§10.1: the sidebar must offer window dragging) */}
-      <div
-        data-tauri-drag-region
-        className="absolute left-0 right-0 top-0 h-10"
-      />
+      {/* Top row: custom traffic lights (left), share/refresh (right).
+          The strip behind them is the window drag region (§10.1). */}
+      <div className="relative px-4 pt-4">
+        <div data-tauri-drag-region className="absolute inset-x-0 top-0 h-14" />
+        <div className="relative z-10 flex items-center justify-between">
+          <TrafficLights />
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              aria-label={t('sidebar.share')}
+              title={t('sidebar.comingSoon')}
+              onClick={() =>
+                logger.debug('sidebar share clicked (not wired yet)')
+              }
+              className="rounded-md p-1.5 text-black/70 hover:bg-black/5 hover:text-black"
+            >
+              <Share size={15} />
+            </button>
+            <button
+              type="button"
+              aria-label={t('sidebar.refresh')}
+              title={t('sidebar.comingSoon')}
+              onClick={() =>
+                logger.debug('sidebar refresh clicked (not wired yet)')
+              }
+              className="rounded-md p-1.5 text-black/70 hover:bg-black/5 hover:text-black"
+            >
+              <RefreshCw size={15} />
+            </button>
+          </div>
+        </div>
+      </div>
 
       {/* PNDS Projects */}
-      <h2 className="mt-[60px] px-9 text-[14px] font-normal text-black">
+      <h2 className="mt-5 px-9 text-[14px] font-normal text-black">
         {t('sidebar.projects')}
       </h2>
 
@@ -130,7 +161,7 @@ export function Sidebar({ variant, onRequestClose }: SidebarProps) {
       </button>
 
       {/* Settings card pinned to the bottom (§10.2) */}
-      <div className="mt-auto flex justify-center pt-6">
+      <div className="mt-auto flex justify-center pb-11 pt-6">
         <SettingsCard />
       </div>
     </aside>

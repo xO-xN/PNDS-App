@@ -107,8 +107,10 @@ describe('AppShell', () => {
     expect(monitor).toHaveAttribute('src', 'http://192.168.1.10:6869/')
     expect(screen.getByText('PNDS - Inarticulate III')).toBeInTheDocument()
     expect(screen.getByTestId('sidebar-hover-zone')).toBeInTheDocument()
-    // Sidebar stays hidden until hovered
-    expect(screen.queryByTestId('sidebar')).not.toBeInTheDocument()
+    // Sidebar stays mounted for the slide animation but is visually hidden
+    const popover = screen.getByTestId('sidebar-popover')
+    expect(popover.className).toContain('opacity-0')
+    expect(popover.className).toContain('pointer-events-none')
   })
 
   it('shows the error page with summary and details on failure (§10.3)', () => {

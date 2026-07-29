@@ -1,12 +1,14 @@
 import { useState } from 'react'
 import { useSessionStore } from '@/store/session-store'
 import { Sidebar } from './Sidebar'
+import { cn } from '@/lib/utils'
 
 /**
  * Performance view (§10.1): the project's monitor page fills the whole
- * window; the PNDS sidebar floats in only when the pointer touches the
- * left edge; the top-center title strip shows "PNDS - <project>" and is
- * the window drag region (§10.1, §9.3 reserves that area in the monitor).
+ * window; the top-center title strip shows "PNDS - <project>" and is the
+ * window drag region (§10.1, §9.3 reserves that area in the monitor).
+ * The floating sidebar pops in from the left edge (Zen-browser style
+ * slide + fade) and slides back out when the pointer leaves.
  */
 export function MonitorView() {
   const health = useSessionStore(state => state.health)
@@ -40,24 +42,29 @@ export function MonitorView() {
         PNDS - {projectName}
       </div>
 
-      {/* Left-edge hover zone that reveals the sidebar */}
+      {/* Left-edge hover zone that pops the sidebar in */}
       <div
         data-testid="sidebar-hover-zone"
         className="absolute left-0 top-0 z-40 h-full w-2"
         onMouseEnter={() => setSidebarVisible(true)}
       />
 
-      {sidebarVisible && (
-        <div
-          className="absolute left-0 top-0 z-50 h-full"
-          onMouseLeave={() => setSidebarVisible(false)}
-        >
-          <Sidebar
-            variant="overlay"
-            onRequestClose={() => setSidebarVisible(false)}
-          />
-        </div>
-      )}
+      {/* Floating sidebar: always mounted so the slide/fade animates both ways */}
+      <div
+        data-testid="sidebar-popover"
+        className={cn(
+          'absolute bottom-3 left-3 top-3 z-50 transition-all duration-200 ease-out',
+          sidebarVisible
+            ? 'translate-x-0 opacity-100'
+            : 'pointer-events-none -translate-x-5 opacity-0'
+        )}
+        onMouseLeave={() => setSidebarVisible(false)}
+      >
+        <Sidebar
+          variant="overlay"
+          onRequestClose={() => setSidebarVisible(false)}
+        />
+      </div>
     </div>
   )
 }

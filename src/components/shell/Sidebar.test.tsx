@@ -62,6 +62,21 @@ describe('Sidebar', () => {
     expect(screen.getByTestId('settings-card')).toBeInTheDocument()
   })
 
+  it('shows custom traffic lights and top-right action buttons', () => {
+    render(<Sidebar variant="static" />)
+    expect(
+      screen.getByRole('button', { name: /close window/i })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /minimize window/i })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /zoom window/i })
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /share/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /refresh/i })).toBeInTheDocument()
+  })
+
   it('starts a trusted project when its entry is clicked', async () => {
     const user = userEvent.setup()
     useProjectStore.getState().trustProject('/Users/test/Inarticulate III')
