@@ -182,11 +182,13 @@ describe('Sidebar', () => {
     render(<Sidebar variant="overlay" />)
     await user.click(screen.getByRole('button', { name: /^close$/i }))
 
+    // stopProject is called; currentProject stays set until the backend
+    // idle snapshot arrives (card keeps its highlight during shutdown)
     await waitFor(() => {
       expect(commands.stopProject).toHaveBeenCalled()
-      expect(useProjectStore.getState().currentProject).toBeNull()
     })
     expect(useProjectStore.getState().trustedPaths).toHaveLength(1)
+    expect(useProjectStore.getState().currentProject).not.toBeNull()
   })
 
   it('removes a non-open project from history via its ✕ button', async () => {

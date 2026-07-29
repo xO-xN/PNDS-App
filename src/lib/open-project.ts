@@ -97,6 +97,8 @@ export async function stopAndReset(): Promise<void> {
   if (result.status === 'error') {
     logger.warn('stopProject failed during reset', { error: result.error })
   }
-  useProjectStore.getState().clearProject()
+  // clearProject is deferred — the backend snapshot's idle transition
+  // triggers it in session-store (so the card stays highlighted until
+  // the process actually stops and ports are free).
   useSessionStore.getState().resetSession()
 }
