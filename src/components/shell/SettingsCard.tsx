@@ -11,13 +11,12 @@ const MODE_LABELS: Record<string, string> = {
 }
 
 /**
- * The sidebar settings card (§10.2, Figma "PNDS UI Design"): OSC target,
- * audio mode, divider, volume, output device — plus the LAN row, which
- * Figma does not cover and only appears when several interfaces exist.
- *
- * Control availability: mode is selectable whenever a project is loaded;
- * changing it while running restarts the session (§8.3). Volume and device
- * stay disabled until task-4/task-5.
+ * The sidebar settings card (§10.2). Rows are organized as a two-column
+ * grid — short label on the left, control on the right — inside a white
+ * card that matches the selected-project card. Mode is selectable whenever
+ * a project is loaded; changing it while running restarts the session
+ * (§8.3). Volume and device stay disabled until task-4/task-5; the LAN row
+ * (not covered by Figma) only appears when several interfaces exist.
  */
 export function SettingsCard() {
   const { t } = useTranslation()
@@ -43,49 +42,55 @@ export function SettingsCard() {
     void startIfReady()
   }
 
+  const selectClass =
+    'h-6 w-full appearance-none rounded-md bg-[#e5e5e5] pl-2 pr-6 text-[12px] text-black/80 outline-none disabled:opacity-40'
+
   return (
     <div
       data-testid="settings-card"
-      className="flex w-[213px] flex-col gap-2 rounded-xl border border-black/10 bg-black/5 p-3 text-[13px]"
+      className="flex w-full flex-col gap-2.5 rounded-xl bg-[#f5f5f5] p-3.5 text-[13px] shadow-sm"
     >
       {/* OSC target (§6.6): prefilled default, editable for external mode */}
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-black/80">OSC</span>
+      <div className="flex items-center gap-2">
+        <span className="w-14 shrink-0 text-black/50">OSC</span>
         <input
           aria-label={t('sidebar.oscTarget')}
           defaultValue="127.0.0.1:3333"
           disabled={!projectLoaded || audioMode !== 'external'}
-          className="w-32 rounded-full bg-[#d9d9d9] px-2.5 py-0.5 text-center text-xs text-black/80 outline-none disabled:opacity-50"
+          className="h-6 w-full rounded-full bg-[#e5e5e5] px-2.5 text-center font-mono text-[11px] text-black/80 outline-none disabled:opacity-40"
         />
       </div>
 
       {/* Audio mode */}
-      <div className="relative">
-        <select
-          aria-label={t('session.audioMode')}
-          value={audioMode}
-          disabled={!projectLoaded}
-          onChange={e => handleModeChange(e.target.value)}
-          className="w-full appearance-none rounded-md bg-transparent px-1 py-0.5 text-black/80 outline-none disabled:opacity-50"
-        >
-          {modes.length === 0 && <option value="">—</option>}
-          {modes.map(mode => (
-            <option key={mode} value={mode}>
-              {MODE_LABELS[mode] ?? mode}
-            </option>
-          ))}
-        </select>
-        <ChevronDown
-          size={14}
-          className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 text-black/50"
-        />
+      <div className="flex items-center gap-2">
+        <span className="w-14 shrink-0 text-black/50">Mode</span>
+        <div className="relative flex-1">
+          <select
+            aria-label={t('session.audioMode')}
+            value={audioMode}
+            disabled={!projectLoaded}
+            onChange={e => handleModeChange(e.target.value)}
+            className={selectClass}
+          >
+            {modes.length === 0 && <option value="">—</option>}
+            {modes.map(mode => (
+              <option key={mode} value={mode}>
+                {MODE_LABELS[mode] ?? mode}
+              </option>
+            ))}
+          </select>
+          <ChevronDown
+            size={12}
+            className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-black/50"
+          />
+        </div>
       </div>
 
-      <hr className="border-black/15" />
+      <hr className="border-black/10" />
 
       {/* Master volume (task-4) */}
       <div className="flex items-center gap-2">
-        <Volume2 size={15} className="shrink-0 text-black/70" />
+        <Volume2 size={14} className="shrink-0 text-black/50" />
         <input
           type="range"
           aria-label={t('sidebar.volume')}
@@ -93,47 +98,53 @@ export function SettingsCard() {
           max={100}
           defaultValue={80}
           disabled
-          className="w-full accent-[#0088ff] disabled:opacity-50"
+          className="h-6 w-full accent-[#0088ff] disabled:opacity-40"
         />
       </div>
 
       {/* Output device (task-5) */}
-      <div className="relative">
-        <select
-          aria-label={t('sidebar.outputDevice')}
-          disabled
-          className="w-full appearance-none rounded-md bg-transparent px-1 py-0.5 text-black/80 outline-none disabled:opacity-50"
-        >
-          <option>{t('sidebar.systemDefault')}</option>
-        </select>
-        <ChevronDown
-          size={14}
-          className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 text-black/50"
-        />
+      <div className="flex items-center gap-2">
+        <span className="w-14 shrink-0 text-black/50">Device</span>
+        <div className="relative flex-1">
+          <select
+            aria-label={t('sidebar.outputDevice')}
+            disabled
+            className={selectClass}
+          >
+            <option>{t('sidebar.systemDefault')}</option>
+          </select>
+          <ChevronDown
+            size={12}
+            className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-black/50"
+          />
+        </div>
       </div>
 
       {/* LAN address (not covered by Figma; §7: explicit choice required) */}
       {lanAddresses.length > 1 && (
-        <div className="relative">
-          <select
-            aria-label={t('session.lanAddress')}
-            value={lanIp ?? ''}
-            onChange={e => handleLanChange(e.target.value)}
-            className="w-full appearance-none rounded-md bg-transparent px-1 py-0.5 text-black/80 outline-none"
-          >
-            <option value="" disabled>
-              {t('session.lanAddressHint')}
-            </option>
-            {lanAddresses.map(ip => (
-              <option key={ip} value={ip}>
-                {ip}
+        <div className="flex items-center gap-2">
+          <span className="w-14 shrink-0 text-black/50">LAN</span>
+          <div className="relative flex-1">
+            <select
+              aria-label={t('session.lanAddress')}
+              value={lanIp ?? ''}
+              onChange={e => handleLanChange(e.target.value)}
+              className={selectClass}
+            >
+              <option value="" disabled>
+                {t('session.lanAddressHint')}
               </option>
-            ))}
-          </select>
-          <ChevronDown
-            size={14}
-            className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 text-black/50"
-          />
+              {lanAddresses.map(ip => (
+                <option key={ip} value={ip}>
+                  {ip}
+                </option>
+              ))}
+            </select>
+            <ChevronDown
+              size={12}
+              className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-black/50"
+            />
+          </div>
         </div>
       )}
     </div>

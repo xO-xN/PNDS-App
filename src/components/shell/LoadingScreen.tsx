@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next'
-import { commands } from '@/lib/tauri-bindings'
+import { stopAndReset } from '@/lib/open-project'
 import { useSessionStore } from '@/store/session-store'
 import { Button } from '@/components/ui/button'
 import { PndsLogo } from './PndsLogo'
@@ -20,8 +20,7 @@ export function LoadingScreen() {
     : t('loading.startingServer')
 
   const handleCancel = async () => {
-    await commands.stopProject()
-    useSessionStore.getState().resetSession()
+    await stopAndReset()
   }
 
   return (

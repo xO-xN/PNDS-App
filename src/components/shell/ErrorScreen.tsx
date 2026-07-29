@@ -6,6 +6,7 @@ import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 import { commands } from '@/lib/tauri-bindings'
 import { logger } from '@/lib/logger'
+import { stopAndReset } from '@/lib/open-project'
 import { Button } from '@/components/ui/button'
 
 /**
@@ -46,13 +47,7 @@ export function ErrorScreen() {
   }
 
   const handleBack = async () => {
-    // Navigation must never depend on the stop call succeeding.
-    try {
-      await commands.stopProject()
-    } finally {
-      useProjectStore.getState().clearProject()
-      useSessionStore.getState().resetSession()
-    }
+    await stopAndReset()
   }
 
   const details = {

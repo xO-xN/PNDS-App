@@ -118,14 +118,19 @@ describe('Sidebar', () => {
     )
   })
 
-  it('stops the project from the overlay card ✕ button', async () => {
+  it('stops the project from the overlay card ✕ button and frees the entry', async () => {
     const user = userEvent.setup()
     seedLoadedProject()
     useSessionStore.setState({ sessionStatus: 'ready' })
 
     render(<Sidebar variant="overlay" />)
     await user.click(screen.getByRole('button', { name: /stop project/i }))
+
     expect(commands.stopProject).toHaveBeenCalled()
+    // After stopping, the project returns to a plain selectable entry
+    await waitFor(() => {
+      expect(useProjectStore.getState().currentProject).toBeNull()
+    })
   })
 
   it('starts once the user picks a LAN address when several exist (§7)', async () => {

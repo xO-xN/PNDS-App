@@ -121,3 +121,17 @@ export async function restartSession(): Promise<void> {
     useSessionStore.getState().failLocal(result.error)
   }
 }
+
+/**
+ * Stops the session and returns the project to a plain sidebar entry:
+ * after this, the project is clickable again and re-running it goes
+ * through preflight as usual (§8.2, §10.4).
+ */
+export async function stopAndReset(): Promise<void> {
+  const result = await commands.stopProject()
+  if (result.status === 'error') {
+    logger.warn('stopProject failed during reset', { error: result.error })
+  }
+  useProjectStore.getState().clearProject()
+  useSessionStore.getState().resetSession()
+}

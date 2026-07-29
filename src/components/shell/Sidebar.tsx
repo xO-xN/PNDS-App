@@ -2,9 +2,12 @@ import { useTranslation } from 'react-i18next'
 import { Plus, X, Menu, Share, RefreshCw } from 'lucide-react'
 import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
-import { commands } from '@/lib/tauri-bindings'
 import { logger } from '@/lib/logger'
-import { openProject, promptOpenProject } from '@/lib/open-project'
+import {
+  openProject,
+  promptOpenProject,
+  stopAndReset,
+} from '@/lib/open-project'
 import { SettingsCard } from './SettingsCard'
 import { TrafficLights } from './TrafficLights'
 import { cn } from '@/lib/utils'
@@ -37,10 +40,7 @@ export function Sidebar({ variant, onRequestClose }: SidebarProps) {
   }
 
   const handleStop = async () => {
-    const result = await commands.stopProject()
-    if (result.status === 'error') {
-      useSessionStore.getState().failLocal(result.error)
-    }
+    await stopAndReset()
     onRequestClose?.()
   }
 
@@ -58,40 +58,43 @@ export function Sidebar({ variant, onRequestClose }: SidebarProps) {
       )}
     >
       {/* Top row: custom traffic lights (left), share/refresh (right).
-          The strip behind them is the window drag region (§10.1). */}
-      <div className="relative px-4 pt-4">
-        <div data-tauri-drag-region className="absolute inset-x-0 top-0 h-14" />
-        <div className="relative z-10 flex items-center justify-between">
+          The whole strip is a window drag region (§10.1); the button
+          clusters opt out so they stay clickable. */}
+      <div
+        data-tauri-drag-region
+        className="flex h-14 items-start justify-between px-4 pt-4"
+      >
+        <div data-tauri-drag-region="false">
           <TrafficLights />
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              aria-label={t('sidebar.share')}
-              title={t('sidebar.comingSoon')}
-              onClick={() =>
-                logger.debug('sidebar share clicked (not wired yet)')
-              }
-              className="rounded-md p-1.5 text-black/70 hover:bg-black/5 hover:text-black"
-            >
-              <Share size={15} />
-            </button>
-            <button
-              type="button"
-              aria-label={t('sidebar.refresh')}
-              title={t('sidebar.comingSoon')}
-              onClick={() =>
-                logger.debug('sidebar refresh clicked (not wired yet)')
-              }
-              className="rounded-md p-1.5 text-black/70 hover:bg-black/5 hover:text-black"
-            >
-              <RefreshCw size={15} />
-            </button>
-          </div>
+        </div>
+        <div data-tauri-drag-region="false" className="flex items-center gap-1">
+          <button
+            type="button"
+            aria-label={t('sidebar.share')}
+            title={t('sidebar.comingSoon')}
+            onClick={() =>
+              logger.debug('sidebar share clicked (not wired yet)')
+            }
+            className="rounded-md p-1.5 text-black/70 hover:bg-black/5 hover:text-black"
+          >
+            <Share size={15} />
+          </button>
+          <button
+            type="button"
+            aria-label={t('sidebar.refresh')}
+            title={t('sidebar.comingSoon')}
+            onClick={() =>
+              logger.debug('sidebar refresh clicked (not wired yet)')
+            }
+            className="rounded-md p-1.5 text-black/70 hover:bg-black/5 hover:text-black"
+          >
+            <RefreshCw size={15} />
+          </button>
         </div>
       </div>
 
       {/* PNDS Projects */}
-      <h2 className="mt-5 px-9 text-[14px] font-normal text-black">
+      <h2 className="mt-2 px-9 text-[14px] font-normal text-black">
         {t('sidebar.projects')}
       </h2>
 
@@ -161,7 +164,7 @@ export function Sidebar({ variant, onRequestClose }: SidebarProps) {
       </button>
 
       {/* Settings card pinned to the bottom (§10.2) */}
-      <div className="mt-auto flex justify-center pb-11 pt-6">
+      <div className="mt-auto px-5 pb-5 pt-6">
         <SettingsCard />
       </div>
     </aside>
