@@ -93,7 +93,7 @@ export async function start(): Promise<void> {
 /** §8.3: restart the session with the current settings. */
 export async function restart(): Promise<void> {
   const { currentProject } = useProjectStore.getState()
-  const { audioMode, lanIp } = useSessionStore.getState()
+  const { audioMode, lanIp, oscTargetInput } = useSessionStore.getState()
   if (!currentProject || !lanIp) return
 
   logger.info('Restarting session', {
@@ -102,8 +102,10 @@ export async function restart(): Promise<void> {
   })
   useSessionStore.getState().setPendingChanges(false)
   await commands.stopProject()
-  // Re-read the store after stop — ensure the latest oscTargetInput is used.
-  const target = resolveOscTarget()
+  // Capture BEFORE the await — stopProject emits snapshots whose
+  // audio_mode is the PREVIOUS session's mode, and applySnapshot
+  // overwrites the user's pending selection (?? only guards null).
+  const target = audioMode === 'external' ? oscTargetInput : null
   const result = await commands.startProject(
     currentProject.path,
     audioMode,
