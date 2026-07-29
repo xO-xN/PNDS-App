@@ -12,6 +12,8 @@ interface SessionState {
   projectName: string | null
   /** OSC target reported by the backend (internal: dynamic; external: §6.6). */
   oscTarget: string | null
+  /** Incremented to force the monitor iframe to reload (sidebar refresh). */
+  monitorReloadNonce: number
   /** Selected audio mode; defaults to the manifest's defaultMode (§6.1). */
   audioMode: string
   /** Selected LAN IPv4 (§7); null until the user chooses when multiple exist. */
@@ -22,6 +24,7 @@ interface SessionState {
   setLanAddresses: (ips: string[]) => void
   applySnapshot: (snapshot: SessionSnapshot) => void
   failLocal: (message: string) => void
+  bumpMonitorReload: () => void
   resetSession: () => void
 }
 
@@ -32,6 +35,7 @@ export const useSessionStore = create<SessionState>()(set => ({
   outputTail: [],
   projectName: null,
   oscTarget: null,
+  monitorReloadNonce: 0,
   audioMode: 'internal',
   lanIp: null,
   lanAddresses: [],
@@ -55,6 +59,9 @@ export const useSessionStore = create<SessionState>()(set => ({
     })),
 
   failLocal: message => set({ sessionStatus: 'error', sessionError: message }),
+
+  bumpMonitorReload: () =>
+    set(state => ({ monitorReloadNonce: state.monitorReloadNonce + 1 })),
 
   resetSession: () =>
     set({

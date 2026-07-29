@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Plus, X, Share, RefreshCw, GripVertical } from 'lucide-react'
+import { openUrl } from '@tauri-apps/plugin-opener'
 import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
-import { logger } from '@/lib/logger'
 import {
   openProject,
   promptOpenProject,
@@ -44,7 +44,12 @@ export function Sidebar({ variant, onRequestClose }: SidebarProps) {
   const trustedPaths = useProjectStore(state => state.trustedPaths)
   const currentProject = useProjectStore(state => state.currentProject)
   const sessionStatus = useSessionStore(state => state.sessionStatus)
+  const lanIp = useSessionStore(state => state.lanIp)
+  const monitorPort = useSessionStore(
+    state => state.health?.scoreServer?.monitorPort
+  )
   const busy = sessionStatus === 'starting' || sessionStatus === 'stopping'
+  const running = sessionStatus === 'ready'
   const [pendingSwitchPath, setPendingSwitchPath] = useState<string | null>(
     null
   )
@@ -52,6 +57,12 @@ export function Sidebar({ variant, onRequestClose }: SidebarProps) {
 
   const basename = (path: string) =>
     path.split('/').filter(Boolean).pop() ?? path
+
+  /** Share: open the monitor page in the default external browser. */
+  const handleShare = async () => {
+    if (!running || !lanIp || !monitorPort) return
+    await openUrl(`http://${lanIp}:${monitorPort}/`)
+  }
 
   const handleEntryClick = (path: string) => {
     if (busy || path === currentProject?.path) return
@@ -110,22 +121,20 @@ export function Sidebar({ variant, onRequestClose }: SidebarProps) {
           <button
             type="button"
             aria-label={t('sidebar.share')}
-            title={t('sidebar.comingSoon')}
-            onClick={() =>
-              logger.debug('sidebar share clicked (not wired yet)')
-            }
-            className="rounded-md p-1.5 text-black/70 hover:bg-black/5 hover:text-black"
+            title={t('sidebar.shareHint')}
+            disabled={!running || !lanIp || !monitorPort}
+            onClick={() => void handleShare()}
+            className="rounded-md p-1.5 text-black/70 hover:bg-black/5 hover:text-black disabled:opacity-40"
           >
             <Share size={15} />
           </button>
           <button
             type="button"
             aria-label={t('sidebar.refresh')}
-            title={t('sidebar.comingSoon')}
-            onClick={() =>
-              logger.debug('sidebar refresh clicked (not wired yet)')
-            }
-            className="rounded-md p-1.5 text-black/70 hover:bg-black/5 hover:text-black"
+            title={t('sidebar.refreshHint')}
+            disabled={!running}
+            onClick={() => useSessionStore.getState().bumpMonitorReload()}
+            className="rounded-md p-1.5 text-black/70 hover:bg-black/5 hover:text-black disabled:opacity-40"
           >
             <RefreshCw size={15} />
           </button>

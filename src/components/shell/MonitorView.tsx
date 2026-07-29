@@ -14,6 +14,7 @@ export function MonitorView() {
   const health = useSessionStore(state => state.health)
   const projectName = useSessionStore(state => state.projectName)
   const lanIp = useSessionStore(state => state.lanIp)
+  const reloadNonce = useSessionStore(state => state.monitorReloadNonce)
   const [sidebarVisible, setSidebarVisible] = useState(false)
 
   const monitorPort = health?.scoreServer?.monitorPort
@@ -29,6 +30,7 @@ export function MonitorView() {
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-black">
       <iframe
+        key={reloadNonce}
         src={`http://${lanIp}:${monitorPort}/`}
         title="Project monitor"
         className="absolute inset-0 h-full w-full border-0"

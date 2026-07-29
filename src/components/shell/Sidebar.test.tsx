@@ -1,11 +1,16 @@
 import { render, screen, waitFor, within } from '@/test/test-utils'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { openUrl } from '@tauri-apps/plugin-opener'
 import { commands } from '@/lib/tauri-bindings'
 import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 import { Sidebar } from './Sidebar'
 import type { Manifest } from '@/lib/tauri-bindings'
+
+vi.mock('@tauri-apps/plugin-opener', () => ({
+  openUrl: vi.fn().mockResolvedValue(undefined),
+}))
 
 const manifest: Manifest = {
   schemaVersion: 1,
@@ -77,8 +82,55 @@ describe('Sidebar', () => {
     expect(
       screen.getByRole('button', { name: /zoom window/i })
     ).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /share/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /refresh/i })).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /open in browser/i })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /reload monitor/i })
+    ).toBeInTheDocument()
+  })
+
+  it('opens the monitor page in the default browser via Share (running only)', async () => {
+    const user = userEvent.setup()
+    seedLoadedProject()
+
+    const { rerender } = render(<Sidebar variant="static" />)
+    // Not running: Share is disabled
+    expect(
+      screen.getByRole('button', { name: /open in browser/i })
+    ).toBeDisabled()
+
+    useSessionStore.setState({
+      sessionStatus: 'ready',
+      health: {
+        status: 'ready',
+        projectId: 'inarticulate-iii',
+        audioMode: 'none',
+        audio: { status: 'disabled', target: null, error: null },
+        scoreServer: { performerPort: 6868, monitorPort: 6869, error: null },
+      },
+    })
+    rerender(<Sidebar variant="overlay" />)
+
+    await user.click(screen.getByRole('button', { name: /open in browser/i }))
+    expect(openUrl).toHaveBeenCalledWith('http://192.168.1.10:6869/')
+  })
+
+  it('reloads the monitor via Refresh (running only)', async () => {
+    const user = userEvent.setup()
+    seedLoadedProject()
+
+    const { rerender } = render(<Sidebar variant="static" />)
+    expect(
+      screen.getByRole('button', { name: /reload monitor/i })
+    ).toBeDisabled()
+
+    useSessionStore.setState({ sessionStatus: 'ready' })
+    rerender(<Sidebar variant="overlay" />)
+
+    const before = useSessionStore.getState().monitorReloadNonce
+    await user.click(screen.getByRole('button', { name: /reload monitor/i }))
+    expect(useSessionStore.getState().monitorReloadNonce).toBe(before + 1)
   })
 
   it('selects a project on click, then starts it via the Load button', async () => {
