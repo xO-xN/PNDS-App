@@ -83,7 +83,11 @@ export function ErrorScreen() {
         >
           {isRetrying ? t('error.retrying') : t('error.retry')}
         </Button>
-        <Button variant="outline" onClick={() => void handleBack()}>
+        <Button
+          variant="outline"
+          className="border-(--pnds-text)/25 text-(--pnds-text)/80 hover:bg-(--pnds-text)/5"
+          onClick={() => void handleBack()}
+        >
           {t('error.back')}
         </Button>
       </div>
@@ -121,7 +125,7 @@ export function ErrorScreen() {
         <Button
           variant="outline"
           size="sm"
-          className="mt-3"
+          className="mt-3 border-(--pnds-text)/25 text-(--pnds-text)/80 hover:bg-(--pnds-text)/5"
           onClick={() => void handleCopy()}
         >
           {t('error.copy')}
