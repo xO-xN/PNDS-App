@@ -1,11 +1,45 @@
-import { render, screen } from '@/test/test-utils'
-import { describe, it, expect, beforeEach } from 'vitest'
+import { render, screen, act } from '@/test/test-utils'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { listen } from '@tauri-apps/api/event'
+import { commands } from '@/lib/tauri-bindings'
 import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 import { AppShell } from './AppShell'
+import type { SessionSnapshot } from '@/lib/tauri-bindings'
+
+const readySnapshot: SessionSnapshot = {
+  status: 'ready',
+  projectName: 'Inarticulate III',
+  projectPath: '/p',
+  audioMode: 'none',
+  lanIp: '192.168.1.10',
+  oscTarget: null,
+  health: {
+    status: 'ready',
+    projectId: 'inarticulate-iii',
+    audioMode: 'none',
+    audio: { status: 'disabled', target: null, error: null },
+    scoreServer: { performerPort: 6868, monitorPort: 6869, error: null },
+  },
+  error: null,
+  outputTail: [],
+}
+
+/** Captured handler for the shell-level pnds:session subscription. */
+let sessionHandler: ((event: { payload: SessionSnapshot }) => void) | null
 
 describe('AppShell', () => {
   beforeEach(() => {
+    vi.clearAllMocks()
+    sessionHandler = null
+    vi.mocked(listen).mockImplementation((event, cb) => {
+      if (event === 'pnds:session') {
+        sessionHandler = cb as (event: { payload: SessionSnapshot }) => void
+      }
+      return Promise.resolve(() => {
+        // mock unlisten
+      })
+    })
     useProjectStore.setState({
       currentProject: null,
       trustedPaths: [],
@@ -22,10 +56,34 @@ describe('AppShell', () => {
     expect(screen.getByRole('heading', { name: 'PNDS' })).toBeInTheDocument()
   })
 
-  it('shows the loading screen while the session starts (§10.3)', () => {
+  it('subscribes to session events at shell level and survives transitions', () => {
+    render(<AppShell />)
+    expect(vi.mocked(listen)).toHaveBeenCalledWith(
+      'pnds:session',
+      expect.any(Function)
+    )
+
+    // Welcome → Starting → Ready: the same subscription must keep working
+    act(() => {
+      sessionHandler?.({ payload: { ...readySnapshot, status: 'starting' } })
+    })
+    expect(screen.getByText(/starting project/i)).toBeInTheDocument()
+
+    act(() => {
+      sessionHandler?.({ payload: readySnapshot })
+    })
+    expect(screen.getByTitle('Project monitor')).toBeInTheDocument()
+  })
+
+  it('shows the loading screen with a cancel escape while starting (§10.3)', async () => {
     useSessionStore.setState({ sessionStatus: 'starting' })
     render(<AppShell />)
     expect(screen.getByText(/starting project/i)).toBeInTheDocument()
+
+    await act(async () => {
+      screen.getByRole('button', { name: /cancel/i }).click()
+    })
+    expect(commands.stopProject).toHaveBeenCalled()
   })
 
   it('shows the monitor with drag title and hover zone when running (§10.1)', () => {

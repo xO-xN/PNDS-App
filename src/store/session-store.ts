@@ -41,14 +41,18 @@ export const useSessionStore = create<SessionState>()(set => ({
   setLanAddresses: lanAddresses => set({ lanAddresses }),
 
   applySnapshot: snapshot =>
-    set({
+    set(state => ({
       sessionStatus: snapshot.status as SessionStatus,
       sessionError: snapshot.error,
       health: snapshot.health,
       outputTail: snapshot.outputTail,
       projectName: snapshot.projectName,
       oscTarget: snapshot.oscTarget,
-    }),
+      // Backend-owned session facts; when absent (idle snapshots), keep the
+      // user's pre-start selection so Welcome controls don't reset.
+      lanIp: snapshot.lanIp ?? state.lanIp,
+      audioMode: snapshot.audioMode ?? state.audioMode,
+    })),
 
   failLocal: message => set({ sessionStatus: 'error', sessionError: message }),
 

@@ -1,7 +1,5 @@
-import { useEffect } from 'react'
-import { listen } from '@tauri-apps/api/event'
 import { useTranslation } from 'react-i18next'
-import { commands, type SessionSnapshot } from '@/lib/tauri-bindings'
+import { commands } from '@/lib/tauri-bindings'
 import { logger } from '@/lib/logger'
 import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
@@ -22,7 +20,9 @@ import {
  * Welcome main area (§10.4): hero plus, after a project passes preflight,
  * the project card with audio mode (§6.1) / LAN address (§7) selection and
  * the start action. Renders the trust confirmation dialog (§4) driven by
- * `pendingTrustPath`. Loading/Running/Error states are handled by AppShell.
+ * `pendingTrustPath`. Loading/Running/Error states are handled by AppShell
+ * (which also owns the session event subscription, so it survives view
+ * transitions).
  */
 export function WelcomeScreen() {
   const { t } = useTranslation()
@@ -34,21 +34,6 @@ export function WelcomeScreen() {
   const audioMode = useSessionStore(state => state.audioMode)
   const lanIp = useSessionStore(state => state.lanIp)
   const lanAddresses = useSessionStore(state => state.lanAddresses)
-
-  // Mirror the Rust session state: live events + initial restore on mount.
-  useEffect(() => {
-    const unlisten = listen<SessionSnapshot>('pnds:session', event => {
-      useSessionStore.getState().applySnapshot(event.payload)
-    })
-    void commands.getSessionState().then(result => {
-      if (result.status === 'ok') {
-        useSessionStore.getState().applySnapshot(result.data)
-      }
-    })
-    return () => {
-      void unlisten.then(off => off())
-    }
-  }, [])
 
   const handleStart = async () => {
     if (!currentProject || !lanIp) return

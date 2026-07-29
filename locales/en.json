@@ -159,6 +159,7 @@
   "sidebar.availableLater": "Available in a later development phase",
 
   "loading.starting": "Starting project…",
+  "loading.cancel": "Cancel",
 
   "error.title": "Something went wrong",
   "error.retry": "Retry",
