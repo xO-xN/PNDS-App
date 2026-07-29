@@ -62,6 +62,7 @@
   "sidebar.volume": "Master Volume",
   "sidebar.loadProject": "Load",
   "sidebar.closeProject": "Close",
+  "sidebar.change": "Change",
   "sidebar.removeFromHistory": "Remove from history",
   "sidebar.dragToReorder": "Drag to reorder",
   "switchProject.title": "Load the “{{name}}”?",

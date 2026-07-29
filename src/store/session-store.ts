@@ -31,9 +31,14 @@ interface SessionState {
   setVolume: (percent: number) => void
   setOutputDevice: (device: string) => void
   setOscTargetInput: (target: string) => void
+  /** True when the user has changed a setting since the session last
+   * committed its configuration (mode / device / LAN / OSC target).
+   * The Change button lights yellow while this is set. */
+  pendingChanges: boolean
   applySnapshot: (snapshot: SessionSnapshot) => void
   failLocal: (message: string) => void
   bumpMonitorReload: () => void
+  setPendingChanges: (v: boolean) => void
   resetSession: () => void
 }
 
@@ -51,6 +56,7 @@ export const useSessionStore = create<SessionState>()(set => ({
   lanAddresses: [],
   outputDevice: 'System default',
   oscTargetInput: '127.0.0.1:3333',
+  pendingChanges: false,
 
   setAudioMode: audioMode => set({ audioMode }),
   setLanIp: lanIp => set({ lanIp }),
@@ -72,12 +78,16 @@ export const useSessionStore = create<SessionState>()(set => ({
       // user's pre-start selection so Welcome controls don't reset.
       lanIp: snapshot.lanIp ?? state.lanIp,
       audioMode: snapshot.audioMode ?? state.audioMode,
+      // After a committed session event, any pending is resolved.
+      pendingChanges: false,
     })),
 
   failLocal: message => set({ sessionStatus: 'error', sessionError: message }),
 
   bumpMonitorReload: () =>
     set(state => ({ monitorReloadNonce: state.monitorReloadNonce + 1 })),
+
+  setPendingChanges: (pendingChanges: boolean) => set({ pendingChanges }),
 
   resetSession: () =>
     set({
@@ -90,5 +100,6 @@ export const useSessionStore = create<SessionState>()(set => ({
       audioMode: 'internal',
       lanIp: null,
       lanAddresses: [],
+      pendingChanges: false,
     }),
 }))
