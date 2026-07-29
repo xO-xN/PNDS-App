@@ -20,19 +20,23 @@ export function canStart(): boolean {
   const { audioMode, lanIp, sessionStatus, oscTargetInput } =
     useSessionStore.getState()
 
-  if (
-    !currentProject ||
-    preflightStatus !== 'ready' ||
-    sessionStatus !== 'idle' ||
-    !lanIp
-  ) {
-    return false
-  }
-  // §6.6: external mode cannot start with an invalid target.
-  if (audioMode === 'external' && !isValidOscTarget(oscTargetInput)) {
-    return false
-  }
-  return true
+  const verdict =
+    !!currentProject &&
+    preflightStatus === 'ready' &&
+    sessionStatus === 'idle' &&
+    !!lanIp &&
+    !(audioMode === 'external' && !isValidOscTarget(oscTargetInput))
+
+  // Temporary debug: pinpoints which field blocks the Load button.
+  logger.info('canStart verdict', {
+    verdict,
+    hasProject: !!currentProject,
+    preflightStatus,
+    sessionStatus,
+    lanIp,
+    audioMode,
+  })
+  return verdict
 }
 
 /** The OSC target parameter for startProject (null unless external). */

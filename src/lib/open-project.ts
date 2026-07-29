@@ -4,11 +4,7 @@ import { commands } from '@/lib/tauri-bindings'
 import { logger } from '@/lib/logger'
 import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
-import {
-  DEFAULT_OSC_TARGET,
-  isValidOscTarget,
-  loadAudioPreferences,
-} from '@/lib/audio-prefs'
+import { DEFAULT_OSC_TARGET, loadAudioPreferences } from '@/lib/audio-prefs'
 
 /**
  * Shared project flows (§4, §6.1, §7, §8):
@@ -79,67 +75,6 @@ export async function runPreflight(path: string): Promise<void> {
     if (addrs.data.length === 1 && first) {
       useSessionStore.getState().setLanIp(first)
     }
-  }
-}
-
-/**
- * Starts the session when everything is in place: preflight passed, an
- * audio mode is selected, and a LAN address is chosen (§7 requires an
- * explicit choice when several exist). No-op otherwise — the settings
- * card calls this again once the user picks an address.
- */
-export async function startIfReady(): Promise<void> {
-  const { currentProject, preflightStatus } = useProjectStore.getState()
-  const { audioMode, lanIp, sessionStatus, oscTargetInput } =
-    useSessionStore.getState()
-  if (
-    !currentProject ||
-    preflightStatus !== 'ready' ||
-    sessionStatus !== 'idle' ||
-    !lanIp
-  ) {
-    return
-  }
-  // §6.6: external mode cannot start with an invalid target.
-  const oscTarget = audioMode === 'external' ? oscTargetInput : null
-  if (audioMode === 'external' && !isValidOscTarget(oscTargetInput)) {
-    return
-  }
-  logger.info('Starting project', {
-    path: currentProject.path,
-    mode: audioMode,
-    lanIp,
-  })
-  const result = await commands.startProject(
-    currentProject.path,
-    audioMode,
-    lanIp,
-    oscTarget
-  )
-  if (result.status === 'error') {
-    useSessionStore.getState().failLocal(result.error)
-  }
-}
-
-/** §8.3: any mode/device/target change is a full session restart. */
-export async function restartSession(): Promise<void> {
-  const { currentProject } = useProjectStore.getState()
-  const { audioMode, lanIp, oscTargetInput } = useSessionStore.getState()
-  if (!currentProject || !lanIp) return
-  logger.info('Restarting session', {
-    path: currentProject.path,
-    mode: audioMode,
-  })
-  await commands.stopProject()
-  const oscTarget = audioMode === 'external' ? oscTargetInput : null
-  const result = await commands.startProject(
-    currentProject.path,
-    audioMode,
-    lanIp,
-    oscTarget
-  )
-  if (result.status === 'error') {
-    useSessionStore.getState().failLocal(result.error)
   }
 }
 
