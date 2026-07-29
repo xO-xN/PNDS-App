@@ -26,7 +26,7 @@ pub(crate) fn app_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
 #[specta::specta]
 pub async fn cleanup_orphaned_processes(app: AppHandle) -> Result<u32, String> {
     let dir = app_data_dir(&app)?;
-    preflight::cleanup_orphaned_processes(&dir)
+    crate::project::children::ChildRegistry::new(dir).cleanup_orphans()
 }
 
 /// Full preflight for a candidate project directory (§8.1 step 1):
@@ -42,7 +42,7 @@ pub async fn preflight_project(app: AppHandle, path: String) -> Result<Manifest,
 
     // §8.2: stale children must be gone before port checks are meaningful.
     let dir = app_data_dir(&app)?;
-    let terminated = preflight::cleanup_orphaned_processes(&dir)?;
+    let terminated = crate::project::children::ChildRegistry::new(dir.clone()).cleanup_orphans()?;
     if terminated > 0 {
         log::info!("Preflight terminated {terminated} orphaned process(es)");
     }

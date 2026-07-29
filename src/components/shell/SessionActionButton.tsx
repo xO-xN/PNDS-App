@@ -1,8 +1,7 @@
 import { useTranslation } from 'react-i18next'
-import { useProjectStore } from '@/store/project-store'
+import { stopAndReset } from '@/lib/open-project'
+import { canStart, start } from '@/lib/session-flow'
 import { useSessionStore } from '@/store/session-store'
-import { startIfReady, stopAndReset } from '@/lib/open-project'
-import { isValidOscTarget } from '@/lib/audio-prefs'
 import { cn } from '@/lib/utils'
 
 /**
@@ -13,21 +12,14 @@ import { cn } from '@/lib/utils'
  */
 export function SessionActionButton() {
   const { t } = useTranslation()
-  const currentProject = useProjectStore(state => state.currentProject)
   const sessionStatus = useSessionStore(state => state.sessionStatus)
-  const audioMode = useSessionStore(state => state.audioMode)
-  const lanIp = useSessionStore(state => state.lanIp)
-  const oscTargetInput = useSessionStore(state => state.oscTargetInput)
+  // Subscribed so React re-renders when these affect canStart() (§6.6).
+  useSessionStore(state => state.audioMode)
+  useSessionStore(state => state.oscTargetInput)
 
   const running = sessionStatus === 'ready'
   const busy = sessionStatus === 'starting' || sessionStatus === 'stopping'
-  const targetReady =
-    audioMode !== 'external' || isValidOscTarget(oscTargetInput)
-  const canLoad =
-    currentProject !== null &&
-    sessionStatus === 'idle' &&
-    lanIp !== null &&
-    targetReady
+  const loadable = canStart()
 
   if (running) {
     return (
@@ -51,11 +43,11 @@ export function SessionActionButton() {
   return (
     <button
       type="button"
-      disabled={!canLoad || busy}
-      onClick={() => void startIfReady()}
+      disabled={!loadable || busy}
+      onClick={() => void start()}
       className={cn(
         'mt-3 h-9 w-full rounded-xl text-[14px] shadow-sm transition-colors',
-        canLoad
+        loadable
           ? 'bg-[#34c759] text-white hover:bg-[#2eb34e]'
           : 'bg-black/10 text-black/40 shadow-none'
       )}

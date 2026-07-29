@@ -16,11 +16,10 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter};
 
+use crate::project::children::{self, ChildRegistry};
 use crate::project::manifest::{load_manifest, Manifest};
 use crate::project::preflight;
 
-/// Graceful-shutdown window before SIGKILL (§8.2 step 2).
-const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
 /// Health polling cadence and overall startup timeout (§8.1 step 5).
 const HEALTH_POLL_INTERVAL: Duration = Duration::from_millis(500);
 const HEALTH_TIMEOUT: Duration = Duration::from_secs(30);
@@ -191,30 +190,6 @@ fn fetch_health(performer_port: u16) -> Result<HealthPayload, String> {
 }
 
 /// §8.2 stop: SIGTERM, wait, then SIGKILL. Returns when the child is dead.
-fn stop_child_gracefully(child: &mut Child, pid: u32, timeout: Duration) {
-    let _ = Command::new("/bin/kill").arg(pid.to_string()).status();
-    let deadline = Instant::now() + timeout;
-    loop {
-        match child.try_wait() {
-            Ok(Some(_)) => return,
-            Ok(None) => {
-                if Instant::now() >= deadline {
-                    log::warn!("Score server (pid {pid}) ignored SIGTERM; sending SIGKILL");
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    return;
-                }
-                std::thread::sleep(Duration::from_millis(100));
-            }
-            Err(e) => {
-                log::warn!("Failed to wait for score server (pid {pid}): {e}");
-                let _ = child.kill();
-                let _ = child.wait();
-                return;
-            }
-        }
-    }
-}
 
 // ============================================================================
 // Session manager
@@ -332,6 +307,7 @@ impl SessionManager {
         if lan_ip.parse::<std::net::Ipv4Addr>().is_err() || lan_ip.starts_with("127.") {
             return Err(format!("Invalid LAN IPv4 address: \"{lan_ip}\""));
         }
+        let registry = ChildRegistry::new(app_data_dir.clone());
         preflight::check_ports_available(
             manifest.score_server.performer_port,
             manifest.score_server.monitor_port,
@@ -426,11 +402,7 @@ impl SessionManager {
         })?;
         let pid = child.id();
 
-        if let Err(e) =
-            preflight::record_session_child(&app_data_dir, pid, entry.to_string_lossy().to_string())
-        {
-            log::warn!("Failed to record session child: {e}");
-        }
+        registry.record(pid, entry.to_string_lossy().to_string());
         log::info!(
             "Score server started (pid {pid}): {} --audio-mode {mode}",
             entry.display()
@@ -632,7 +604,7 @@ impl SessionManager {
                 guard.status = "error".to_string();
                 guard.error = Some(format!("Score server exited unexpectedly ({status})."));
                 drop(guard);
-                let _ = preflight::clear_session_child(app_data_dir, pid);
+                ChildRegistry::new(app_data_dir.to_path_buf()).clear(pid);
                 Self::emit_static(app, inner);
                 return;
             }
@@ -665,16 +637,11 @@ impl SessionManager {
 
         let client = crate::project::audio::OscClient::connect(&format!("127.0.0.1:{port}"))?;
         if let Err(e) = crate::project::audio::wait_for_scsynth(&client, &mut child) {
-            stop_child_gracefully(&mut child, pid, SHUTDOWN_TIMEOUT);
+            children::kill_escalate(&mut child, pid, children::SHUTDOWN_GRACE_WINDOW);
             return Err(e);
         }
-        if let Err(e) = preflight::record_session_child(
-            app_data_dir,
-            pid,
-            "scsynth-aarch64-apple-darwin".to_string(),
-        ) {
-            log::warn!("Failed to record scsynth child: {e}");
-        }
+        ChildRegistry::new(app_data_dir.to_path_buf())
+            .record(pid, "scsynth-aarch64-apple-darwin".to_string());
         log::info!(
             "scsynth ready on UDP port {port} (pid {pid}, device: {})",
             device.unwrap_or("system default")
@@ -698,6 +665,7 @@ impl SessionManager {
     /// grace window, master synth release, scsynth quit. Both are removed
     /// from the session-children record afterwards.
     fn teardown_children(inner: &Arc<Mutex<SessionInner>>, app_data_dir: &Path) {
+        let registry = ChildRegistry::new(app_data_dir.to_path_buf());
         let (node_child, node_pid, sc_child, sc_pid, sc_port, master_ready) = {
             let mut guard = inner.lock().unwrap_or_else(|e| e.into_inner());
             let node_pid = guard.child.as_ref().map(|c| c.id());
@@ -713,8 +681,12 @@ impl SessionManager {
         };
 
         if let Some(mut c) = node_child {
-            stop_child_gracefully(&mut c, node_pid.unwrap_or(0), SHUTDOWN_TIMEOUT);
-            let _ = preflight::clear_session_child(app_data_dir, node_pid.unwrap_or(0));
+            children::kill_escalate(
+                &mut c,
+                node_pid.unwrap_or(0),
+                children::SHUTDOWN_GRACE_WINDOW,
+            );
+            registry.clear(node_pid.unwrap_or(0));
             log::info!("Score server stopped (pid {})", node_pid.unwrap_or(0));
         }
 
@@ -726,8 +698,12 @@ impl SessionManager {
                     crate::project::audio::quit_scsynth(&client, master_ready);
                 }
             }
-            stop_child_gracefully(&mut sc, sc_pid.unwrap_or(0), SHUTDOWN_TIMEOUT);
-            let _ = preflight::clear_session_child(app_data_dir, sc_pid.unwrap_or(0));
+            children::kill_escalate(
+                &mut sc,
+                sc_pid.unwrap_or(0),
+                children::SHUTDOWN_GRACE_WINDOW,
+            );
+            registry.clear(sc_pid.unwrap_or(0));
             log::info!("scsynth stopped (pid {})", sc_pid.unwrap_or(0));
         }
     }
@@ -877,7 +853,7 @@ mod tests {
     fn graceful_stop_kills_child() {
         let mut child = Command::new("sleep").arg("30").spawn().unwrap();
         let pid = child.id();
-        stop_child_gracefully(&mut child, pid, Duration::from_secs(2));
+        children::kill_escalate(&mut child, pid, Duration::from_secs(2));
         assert!(child.try_wait().unwrap().is_some());
     }
 
@@ -972,7 +948,7 @@ mod tests {
         assert_eq!(health.audio.as_ref().unwrap().status, "disabled");
 
         let pid = child.id();
-        stop_child_gracefully(&mut child, pid, Duration::from_secs(2));
+        children::kill_escalate(&mut child, pid, Duration::from_secs(2));
         assert!(child.try_wait().unwrap().is_some());
     }
 }

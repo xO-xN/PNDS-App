@@ -99,7 +99,8 @@ pub fn run() {
             // §8.2: terminate child processes left behind by an abnormal
             // previous exit (crash, force-quit). Best-effort at startup.
             if let Ok(dir) = commands::project::app_data_dir(app.handle()) {
-                match crate::project::preflight::cleanup_orphaned_processes(&dir) {
+                let registry = crate::project::children::ChildRegistry::new(dir);
+                match registry.cleanup_orphans() {
                     Ok(n) if n > 0 => log::info!("Startup cleanup terminated {n} orphan(s)"),
                     Ok(_) => {}
                     Err(e) => log::warn!("Startup orphan cleanup failed: {e}"),

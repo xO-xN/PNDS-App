@@ -6,7 +6,7 @@ import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 import { commands } from '@/lib/tauri-bindings'
 import { logger } from '@/lib/logger'
-import { restartSession } from '@/lib/open-project'
+import { restart } from '@/lib/session-flow'
 import {
   isValidOscTarget,
   saveOscTarget,
@@ -75,7 +75,7 @@ export function SettingsCard() {
 
   const handleModeChange = (mode: string) => {
     useSessionStore.getState().setAudioMode(mode)
-    if (running) void restartSession()
+    if (running) void restart()
   }
 
   const handleVolumeChange = (percent: number) => {
@@ -91,14 +91,14 @@ export function SettingsCard() {
     useSessionStore.getState().setOutputDevice(device)
     void saveOutputDevice(device === SYSTEM_DEFAULT_DEVICE ? null : device)
     // §8.3: device changes restart the session (only internal uses scsynth).
-    if (running && audioMode === 'internal') void restartSession()
+    if (running && audioMode === 'internal') void restart()
   }
 
   const commitOscTarget = () => {
     if (!oscTargetValid || !currentProject) return
     void saveOscTarget(currentProject.manifest.id, oscTargetInput)
     // §8.3: target changes restart a running external session.
-    if (running && audioMode === 'external') void restartSession()
+    if (running && audioMode === 'external') void restart()
   }
 
   const selectClass =
