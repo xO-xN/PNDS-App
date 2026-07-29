@@ -12,11 +12,19 @@
 #   - libsndfile.dylib   → src-tauri/Frameworks/ (bundle Frameworks)
 #   - UGen plugins       → src-tauri/plugins/   (bundle Resources, -U flag)
 #
+# While the dmg is mounted we also use its sclang to compile
+# src-tauri/resources/synthdefs/pndsMaster.scsyndef (see
+# scripts/build-synthdefs.sh for the standalone equivalent, useful when you
+# already have SuperCollider.app installed and are only iterating on the
+# .scd source). This is what lets CI (task-7 release workflow) produce a
+# working build without a separate SuperCollider install step.
+#
 # SuperCollider is GPL-3.0. Distributing scsynth as a separate process that
 # the App talks to over OSC is "mere aggregation"; the App itself stays MIT.
 #
 # Usage: npm run scsynth:fetch
 # Override package URL: SC_DMG_URL=https://... npm run scsynth:fetch
+# Skip the synthdef compile step: SKIP_SYNTHDEF_BUILD=1 npm run scsynth:fetch
 
 set -euo pipefail
 
@@ -28,6 +36,8 @@ BIN_DIR="$ROOT/src-tauri/binaries"
 FMW_DIR="$ROOT/src-tauri/Frameworks"
 PLUGINS_DIR="$ROOT/src-tauri/plugins"
 SIDECAR="$BIN_DIR/scsynth-aarch64-apple-darwin"
+SYNTHDEF_SRC="$ROOT/src-tauri/resources/synthdefs/source/pnds-master.scd"
+SYNTHDEF_OUT_DIR="$ROOT/src-tauri/resources/synthdefs"
 
 TMP="$(mktemp -d)"
 MOUNT_POINT=""
@@ -70,6 +80,23 @@ for f in "$SC_RES/plugins/"*.scx; do
   esac
 done
 echo "[pnds] $(ls "$PLUGINS_DIR" | wc -l | tr -d ' ') plugin files copied"
+
+if [ "${SKIP_SYNTHDEF_BUILD:-0}" != "1" ]; then
+  SCLANG="$MOUNT_POINT/SuperCollider.app/Contents/MacOS/sclang"
+  if [ -x "$SCLANG" ]; then
+    echo "[pnds] compiling pndsMaster.scsyndef via mounted sclang…"
+    mkdir -p "$SYNTHDEF_OUT_DIR"
+    "$SCLANG" "$SYNTHDEF_SRC" "$SYNTHDEF_OUT_DIR"
+    if [ ! -s "$SYNTHDEF_OUT_DIR/pndsMaster.scsyndef" ]; then
+      echo "error: expected artifact missing: $SYNTHDEF_OUT_DIR/pndsMaster.scsyndef" >&2
+      exit 1
+    fi
+    echo "[pnds] synthdef ready: $SYNTHDEF_OUT_DIR/pndsMaster.scsyndef"
+  else
+    echo "warning: sclang not found at $SCLANG; skipping synthdef compile" >&2
+    echo "         run \`npm run synthdefs:build\` separately if needed" >&2
+  fi
+fi
 
 # Plugins resolve libsndfile via @loader_path/../../Frameworks. In the
 # bundle that maps to Contents/Frameworks (correct); in dev it maps to

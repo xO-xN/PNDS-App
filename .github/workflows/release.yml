@@ -40,6 +40,15 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      # src-tauri/binaries, Frameworks, plugins, and resources/synthdefs are
+      # gitignored (~100MB Node runtime + SuperCollider extraction); these
+      # scripts provision them fresh on every release build (task-7).
+      - name: Fetch Node sidecar
+        run: npm run node:fetch
+
+      - name: Fetch scsynth sidecar and compile master synthdef
+        run: npm run scsynth:fetch
+
       - name: Build and release
         uses: tauri-apps/tauri-action@dev
         env:
@@ -62,5 +71,5 @@ jobs:
             **Full Changelog**: https://github.com/${{ github.repository }}/commits/${{ github.ref_name || inputs.version }}
           releaseDraft: true
           prerelease: false
-          includeUpdaterJson: true
+          uploadUpdaterJson: true
           args: '--bundles app,dmg'

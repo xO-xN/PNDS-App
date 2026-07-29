@@ -69,10 +69,15 @@ This will:
 
 Then GitHub Actions will:
 
-1. Build the app for all platforms
-2. Create a draft release
-3. Generate `latest.json` for auto-updates
-4. Upload all installers and signatures
+1. Provision the Node.js and scsynth sidecars (`npm run node:fetch` /
+   `npm run scsynth:fetch`) — these binaries are gitignored and not
+   committed, so CI fetches them fresh on every release build; the scsynth
+   step also compiles `pndsMaster.scsyndef` using the mounted SuperCollider
+   dmg's `sclang`
+2. Build the app for all platforms
+3. Create a draft release
+4. Generate `latest.json` for auto-updates
+5. Upload all installers and signatures
 
 Finally, manually publish the draft release on GitHub.
 
