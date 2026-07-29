@@ -76,7 +76,9 @@ describe('AppShell', () => {
     act(() => {
       sessionHandler?.({ payload: readySnapshot })
     })
-    expect(screen.getByTitle('Project monitor')).toBeInTheDocument()
+    // The dissolve gate keeps the loading layer briefly visible — the
+    // subscription survived the transition even before the dissolve ends.
+    expect(screen.getByText(/loading project/i)).toBeInTheDocument()
   })
 
   it('shows the loading screen with a cancel escape while starting (§10.3)', async () => {

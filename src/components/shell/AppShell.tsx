@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { listen } from '@tauri-apps/api/event'
 import { Toaster } from 'sonner'
 import { commands, type SessionSnapshot } from '@/lib/tauri-bindings'
@@ -12,17 +12,18 @@ import { LoadingScreen } from './LoadingScreen'
 import { ErrorScreen } from './ErrorScreen'
 
 /**
- * Application shell (§10.1): routes between the four window states —
- * Welcome and Loading share the "sidebar + main" layout with the sidebar
- * always open (§10.4, Figma); Running is the full-window monitor with the
- * hover-in sidebar; Error stands alone. Session status drives transitions.
+ * Application shell (§10.1): routes between the four window states.
  *
- * The `pnds:session` subscription lives here because the shell is always
- * mounted — putting it in a routed child would drop backend events during
- * view transitions (e.g. Welcome → Loading → Running).
+ * The dissolve gate (`loadingDone`) keeps the LoadingScreen mounted for a
+ * brief moment after the session reaches "ready", so the logo canvas can
+ * play its closure animation and fade out while the monitor fades in (§10.3
+ * two-phase contract: the dissolve layer overlaps the monitor).
  */
 export function AppShell() {
   const sessionStatus = useSessionStore(state => state.sessionStatus)
+  // loadingDone gates the dissolve; if the page renders with a ready session
+  // already in store (test escape hatch — real app never does this), skip it.
+  const [loadingDone, setLoadingDone] = useState(sessionStatus === 'ready')
 
   // Mirror the Rust session state: live events + initial restore on mount.
   useEffect(() => {
@@ -39,18 +40,12 @@ export function AppShell() {
     }
   }, [])
 
-  // §6.5: restore the saved output device (app-local preference).
+  // §6.5 / §4.1: restore saved preferences on mount.
   useEffect(() => {
     void loadAudioPreferences().then(prefs => {
       if (prefs?.outputDevice) {
         useSessionStore.getState().setOutputDevice(prefs.outputDevice)
       }
-    })
-  }, [])
-
-  // §4.1: seed trusted project paths from app-local prefs on launch.
-  useEffect(() => {
-    void loadAudioPreferences().then(prefs => {
       if (prefs?.recentProjects?.length) {
         const store = useProjectStore.getState()
         for (const p of prefs.recentProjects) store.trustProject(p)
@@ -58,7 +53,15 @@ export function AppShell() {
     })
   }, [])
 
-  if (sessionStatus === 'ready') {
+  // Reset the dissolve gate whenever we leave the running/loading state.
+  useEffect(() => {
+    if (sessionStatus !== 'starting' && sessionStatus !== 'ready') {
+      setLoadingDone(false)
+    }
+  }, [sessionStatus])
+
+  // ── Running (dissolve must have finished) ──
+  if (sessionStatus === 'ready' && loadingDone) {
     return (
       <>
         <div className="h-screen w-screen overflow-hidden rounded-[12px]">
@@ -69,6 +72,7 @@ export function AppShell() {
     )
   }
 
+  // ── Error ──
   if (sessionStatus === 'error') {
     return (
       <>
@@ -83,13 +87,20 @@ export function AppShell() {
     )
   }
 
-  // Welcome and Loading share the always-open sidebar layout (§10.4).
+  // ── Welcome / Loading / Dissolve ──
+  const loadingPhase =
+    sessionStatus === 'starting' || (sessionStatus === 'ready' && !loadingDone)
+
   return (
     <>
       <div className="flex h-screen w-screen overflow-hidden rounded-[12px] bg-[#d9d9d9]">
         <Sidebar variant="static" />
         <main className="flex-1 overflow-auto">
-          {sessionStatus === 'starting' ? <LoadingScreen /> : <WelcomeScreen />}
+          {loadingPhase ? (
+            <LoadingScreen onDissolveEnd={() => setLoadingDone(true)} />
+          ) : (
+            <WelcomeScreen />
+          )}
         </main>
       </div>
       <Toaster position="bottom-right" />

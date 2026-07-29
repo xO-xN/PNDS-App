@@ -1,42 +1,26 @@
-import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { stopAndReset } from '@/lib/open-project'
 import { useSessionStore } from '@/store/session-store'
 import { Button } from '@/components/ui/button'
-import { AnimatedPndsLogo } from './PndsLogo'
+import { PndsLogoCanvas } from './PndsLogoCanvas'
+
+interface Props {
+  onDissolveEnd?: () => void
+}
 
 /**
- * Loading screen with the five-stage PNDS Logo animation (§10.3).
+ * Loading screen with the PNDS Logo animation (§10.3 two-phase contract).
  *
- * Dots appear in real-time as the Rust session pushes `startupStage`:
- * 1 = preflight passed → 2 = audio ready → 3 = node started →
- * 4 = health ready → 5 = monitor loaded (frontend only). After stage 5
- * the logo spins and dissolves while the monitor fades in underneath.
+ * Phase 1: autonomous dot/circle entrance (~0.8 s). Phase 2: triggered
+ * when the session is ready — the logo converges and dissolves. The
+ * `onDissolveEnd` callback lets AppShell route to the monitor afterward.
  */
-export function LoadingScreen() {
+export function LoadingScreen({ onDissolveEnd }: Props) {
   const { t } = useTranslation()
-  const startupStage = useSessionStore(state => state.startupStage)
   const health = useSessionStore(state => state.health)
-  const completedRef = useRef(false)
+  const sessionStatus = useSessionStore(state => state.sessionStatus)
 
-  const phaseText = health
-    ? t('loading.waitingReady')
-    : t('loading.startingServer')
-
-  // Mark stage 5 when the monitor iframe has loaded (task-3 already
-  // waits for the iframe to render — we bump stage via a small delay
-  // after health ready, covering the iframe paint).
-  useEffect(() => {
-    if (startupStage >= 4 && !completedRef.current) {
-      // Give the monitor iframe a brief moment to render before
-      // starting the dissolve animation.
-      const timer = setTimeout(() => {
-        useSessionStore.getState().setStartupStage(5)
-        completedRef.current = true
-      }, 600)
-      return () => clearTimeout(timer)
-    }
-  }, [startupStage])
+  const reallyReady = sessionStatus === "ready" && health !== null
 
   const handleCancel = async () => {
     await stopAndReset()
@@ -48,9 +32,15 @@ export function LoadingScreen() {
         {t('loading.title')}
       </h1>
       <div className="mt-[7vh]">
-        <AnimatedPndsLogo stage={startupStage} size={190} />
+        <PndsLogoCanvas
+          size={190}
+          ready={reallyReady}
+          onDissolveEnd={onDissolveEnd}
+        />
       </div>
-      <p className="mt-[6vh] text-[15px] text-black/60">{phaseText}</p>
+      <p className="mt-[6vh] text-[15px] text-black/60">
+        {health ? t('loading.waitingReady') : t('loading.startingServer')}
+      </p>
       <Button
         variant="outline"
         size="sm"
