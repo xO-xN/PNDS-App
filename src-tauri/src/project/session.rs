@@ -725,6 +725,10 @@ impl SessionManager {
                 inner.status = "idle".to_string();
             } else {
                 inner.status = "stopping".to_string();
+                // Clear mode/ip so the frontend's ??-guard preserves the
+                // user's pending selection across the stop barrier.
+                inner.audio_mode = None;
+                inner.lan_ip = None;
             }
         }
         self.emit(app);
