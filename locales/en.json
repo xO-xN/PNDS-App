@@ -120,5 +120,19 @@
 
   "project.version": "Version",
   "project.modes": "Audio modes",
-  "project.ports": "Ports (performer / monitor)"
+  "project.ports": "Ports (performer / monitor)",
+
+  "session.audioMode": "Audio mode",
+  "session.lanAddress": "Network address",
+  "session.lanAddressHint": "Select…",
+  "session.noLan": "No LAN IPv4 address found. Connect this Mac to your performance network and try again.",
+  "session.start": "Start Project",
+  "session.stop": "Stop",
+  "session.starting": "Starting…",
+  "session.stopping": "Stopping…",
+  "session.waitingHealth": "Waiting for the project to report ready…",
+  "session.ready": "Running",
+  "session.error": "Session error",
+  "session.audioStatus": "Audio",
+  "session.performerUrl": "Performer URL"
 }

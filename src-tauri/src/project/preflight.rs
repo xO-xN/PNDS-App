@@ -203,8 +203,9 @@ mod tests {
             err.contains(&format!("Port {port} is already in use")),
             "unexpected: {err}"
         );
-        drop(listener);
-        check_ports_available(port, 0).unwrap();
+        // No rebind-after-drop assertion: tests run in parallel, and another
+        // test may legitimately grab the freed ephemeral port first (a
+        // 127.0.0.1 bind collides with a 0.0.0.0 wildcard bind on macOS).
     }
 
     #[test]

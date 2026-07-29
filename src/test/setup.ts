@@ -50,6 +50,25 @@ vi.mock('@/lib/tauri-bindings', () => ({
     cleanupOrphanedProcesses: vi
       .fn()
       .mockResolvedValue({ status: 'ok', data: 0 }),
+    startProject: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
+    stopProject: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
+    getSessionState: vi.fn().mockResolvedValue({
+      status: 'ok',
+      data: {
+        status: 'idle',
+        projectName: null,
+        projectPath: null,
+        audioMode: null,
+        lanIp: null,
+        oscTarget: null,
+        health: null,
+        error: null,
+        outputTail: [],
+      },
+    }),
+    listLanAddresses: vi
+      .fn()
+      .mockResolvedValue({ status: 'ok', data: ['192.168.1.10'] }),
   },
   unwrapResult: vi.fn((result: { status: string; data?: unknown }) => {
     if (result.status === 'ok') return result.data

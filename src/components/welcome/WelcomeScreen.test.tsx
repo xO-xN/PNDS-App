@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { open } from '@tauri-apps/plugin-dialog'
 import { commands } from '@/lib/tauri-bindings'
 import { useProjectStore } from '@/store/project-store'
+import { useSessionStore } from '@/store/session-store'
 import { WelcomeScreen } from './WelcomeScreen'
 import type { Manifest } from '@/lib/tauri-bindings'
 
@@ -41,6 +42,7 @@ describe('WelcomeScreen', () => {
       preflightStatus: 'idle',
       preflightError: null,
     })
+    useSessionStore.getState().resetSession()
   })
 
   it('asks for trust on first open, then runs preflight (§4)', async () => {
@@ -122,5 +124,79 @@ describe('WelcomeScreen', () => {
       expect(commands.preflightProject).toHaveBeenCalled()
     })
     expect(screen.queryByText(/trust this project/i)).not.toBeInTheDocument()
+  })
+
+  it('starts the project with the chosen mode and LAN address (§6.1, §7)', async () => {
+    const user = userEvent.setup()
+    vi.mocked(open).mockResolvedValue('/Users/test/Inarticulate III')
+    vi.mocked(commands.preflightProject).mockResolvedValue({
+      status: 'ok',
+      data: manifest,
+    })
+    vi.mocked(commands.listLanAddresses).mockResolvedValue({
+      status: 'ok',
+      data: ['192.168.1.10'],
+    })
+
+    render(<WelcomeScreen />)
+    await user.click(screen.getByRole('button', { name: /open project/i }))
+    await user.click(
+      await screen.findByRole('button', { name: /trust and continue/i })
+    )
+
+    // Default mode comes from the manifest; switch it to "none"
+    const modeSelect = await screen.findByRole('combobox', {
+      name: /audio mode/i,
+    })
+    await user.selectOptions(modeSelect, 'none')
+
+    await user.click(screen.getByRole('button', { name: /start project/i }))
+    await waitFor(() => {
+      expect(commands.startProject).toHaveBeenCalledWith(
+        '/Users/test/Inarticulate III',
+        'none',
+        '192.168.1.10'
+      )
+    })
+  })
+
+  it('requires an explicit LAN choice when several addresses exist (§7)', async () => {
+    const user = userEvent.setup()
+    vi.mocked(open).mockResolvedValue('/Users/test/Inarticulate III')
+    vi.mocked(commands.preflightProject).mockResolvedValue({
+      status: 'ok',
+      data: manifest,
+    })
+    vi.mocked(commands.listLanAddresses).mockResolvedValue({
+      status: 'ok',
+      data: ['192.168.1.10', '10.0.0.5'],
+    })
+
+    render(<WelcomeScreen />)
+    await user.click(screen.getByRole('button', { name: /open project/i }))
+    await user.click(
+      await screen.findByRole('button', { name: /trust and continue/i })
+    )
+
+    // Start must stay disabled until the user picks an address
+    const startButton = await screen.findByRole('button', {
+      name: /start project/i,
+    })
+    expect(startButton).toBeDisabled()
+
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: /network address/i }),
+      '10.0.0.5'
+    )
+    expect(startButton).toBeEnabled()
+
+    await user.click(startButton)
+    await waitFor(() => {
+      expect(commands.startProject).toHaveBeenCalledWith(
+        '/Users/test/Inarticulate III',
+        'internal',
+        '10.0.0.5'
+      )
+    })
   })
 })

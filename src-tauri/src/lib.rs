@@ -61,6 +61,7 @@ pub fn run() {
     app_builder = app_builder
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_notification::init())
+        .manage(crate::project::session::SessionManager::default())
         .plugin({
             #[allow(unused_mut)]
             let mut targets = vec![
@@ -208,6 +209,19 @@ pub fn run() {
             // which doesn't fire for Cmd+Q on macOS (tauri-apps/tauri#9198).
             RunEvent::Exit => {
                 log::info!("Application exiting — performing cleanup");
+
+                // §8.2: never leave an orphaned score server behind.
+                {
+                    use tauri::Manager;
+                    let session = app_handle.state::<crate::project::session::SessionManager>();
+                    if session.has_active_session() {
+                        if let Ok(dir) = commands::project::app_data_dir(app_handle) {
+                            if let Err(e) = session.stop(app_handle, &dir) {
+                                log::warn!("Failed to stop score server on exit: {e}");
+                            }
+                        }
+                    }
+                }
 
                 // Hide the quick-pane panel to prevent crashes during teardown
                 #[cfg(target_os = "macos")]

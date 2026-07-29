@@ -4,10 +4,11 @@
 //! spawned (docs/PNDS_APP_REQUIREMENTS.md §4, §5, §7, §8.2).
 
 use std::path::PathBuf;
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Manager, State};
 
 use crate::project::manifest::{load_manifest, Manifest};
 use crate::project::preflight;
+use crate::project::session::{SessionManager, SessionSnapshot};
 
 /// Resolves (and creates) the app data directory used for session records.
 pub(crate) fn app_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
@@ -58,4 +59,44 @@ pub async fn preflight_project(app: AppHandle, path: String) -> Result<Manifest,
         manifest.name
     );
     Ok(manifest)
+}
+
+/// Starts the score server of a validated project (§8.1). Progress and
+/// health updates are delivered via `pnds:session` events.
+#[tauri::command]
+#[specta::specta]
+pub async fn start_project(
+    app: AppHandle,
+    state: State<'_, SessionManager>,
+    path: String,
+    mode: String,
+    lan_ip: String,
+) -> Result<(), String> {
+    let dir = app_data_dir(&app)?;
+    state.start(app, dir, path, mode, lan_ip)
+}
+
+/// Stops the running score server (§8.2). Idempotent.
+#[tauri::command]
+#[specta::specta]
+pub async fn stop_project(app: AppHandle, state: State<'_, SessionManager>) -> Result<(), String> {
+    let dir = app_data_dir(&app)?;
+    state.stop(&app, &dir)
+}
+
+/// Current session snapshot (frontend restores state on load).
+#[tauri::command]
+#[specta::specta]
+pub async fn get_session_state(
+    state: State<'_, SessionManager>,
+) -> Result<SessionSnapshot, String> {
+    Ok(state.snapshot())
+}
+
+/// Usable LAN IPv4 addresses (§7). The user must choose when more than
+/// one exists; loopback is never offered.
+#[tauri::command]
+#[specta::specta]
+pub async fn list_lan_addresses() -> Result<Vec<String>, String> {
+    crate::project::session::list_lan_addresses()
 }

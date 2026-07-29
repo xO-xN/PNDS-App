@@ -15,7 +15,7 @@
 ## 工作内容
 
 - 生成 updater 密钥对，配置 GitHub Secrets（`TAURI_PRIVATE_KEY`、`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`），把 pubkey 填入 `tauri.conf.json`（见 `docs/developer/releases.md`）
-- 替换应用图标：用户已设计好 PNDS icon（蓝紫渐变 + 五彩色点 + PNDS 字样；源 PNG 待用户提供存入仓库，建议 1024×1024），用 `npm run tauri icon <源文件>` 重新生成 `src-tauri/icons/` 全套尺寸
+- ~~替换应用图标~~（已完成 2026-07-29：源文件 `assets/pnds-icon.png`，全套尺寸已生成）
 - release workflow（已裁为 macOS-only）完整跑通一次：tag → dmg + app + updater json → draft release
 - 干净机器验证：从 dmg 安装、走 Open Anyway、完整运行一次演出
 - 现场验收（§13 集成验证 + §15 DoD 逐项）：

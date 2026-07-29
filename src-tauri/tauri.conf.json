@@ -39,6 +39,7 @@
     "createUpdaterArtifacts": true,
     "active": true,
     "targets": "all",
+    "externalBin": ["binaries/node"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -67,7 +68,7 @@
         "https://github.com/xO-xN/PNDS-App/releases/latest/download/latest.json"
       ],
       "dialog": true,
-      "pubkey": "YOUR_UPDATER_PUBLIC_KEY_HERE"
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDU2MDUxNzYxNzVBNTZGRjcKUldUM2I2VjFZUmNGVnNzYlIxMVV1MFM5Umw3akdoaEkyL0F4YzVMMHowb2F4WmJSSGcxcC9BNFAK"
     }
   }
 }

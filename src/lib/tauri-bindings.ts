@@ -25,11 +25,15 @@ export { commands, type Result } from './bindings'
 export type {
   AppPreferences,
   AudioConfig,
+  HealthAudio,
+  HealthPayload,
+  HealthScoreServer,
   JsonValue,
   Manifest,
   RecoveryError,
   ScoreServer,
   ScsynthConfig,
+  SessionSnapshot,
 } from './bindings'
 
 /**

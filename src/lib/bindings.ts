@@ -117,6 +117,52 @@ async cleanupOrphanedProcesses() : Promise<Result<number, string>> {
 }
 },
 /**
+ * Starts the score server of a validated project (§8.1). Progress and
+ * health updates are delivered via `pnds:session` events.
+ */
+async startProject(path: string, mode: string, lanIp: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("start_project", { path, mode, lanIp }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Stops the running score server (§8.2). Idempotent.
+ */
+async stopProject() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("stop_project") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Current session snapshot (frontend restores state on load).
+ */
+async getSessionState() : Promise<Result<SessionSnapshot, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_session_state") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Usable LAN IPv4 addresses (§7). The user must choose when more than
+ * one exists; loopback is never offered.
+ */
+async listLanAddresses() : Promise<Result<string[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("list_lan_addresses") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * Shows the quick pane window and makes it the key window (for keyboard input).
  */
 async showQuickPane() : Promise<Result<null, string>> {
@@ -201,6 +247,21 @@ export type AudioConfig = { defaultMode: string; supportedModes: string[]; synth
  * internal mode OSC targets are always dynamically assigned (§5.2).
  */
 standaloneTarget: string | null }
+export type HealthAudio = { 
+/**
+ * `starting | ready | error | disabled` (disabled = none mode, §9.1)
+ */
+status: string; target?: string | null; error?: string | null }
+/**
+ * §9.1 health payload. Only the contract fields are modeled; the App must
+ * not rely on anything else.
+ */
+export type HealthPayload = { 
+/**
+ * `starting | ready | error | stopping`
+ */
+status: string; projectId?: string | null; audioMode?: string | null; audio?: HealthAudio | null; scoreServer?: HealthScoreServer | null }
+export type HealthScoreServer = { performerPort?: number | null; monitorPort?: number | null; error?: string | null }
 export type JsonValue = null | boolean | number | string | JsonValue[] | Partial<{ [key in string]: JsonValue }>
 export type Manifest = { schemaVersion: number; id: string; name: string; version: string; description: string | null; scoreServer: ScoreServer; audio: AudioConfig }
 /**
@@ -229,6 +290,14 @@ export type RecoveryError =
 { type: "ParseError"; message: string }
 export type ScoreServer = { entry: string; workingDirectory: string; performerPort: number; monitorPort: number }
 export type ScsynthConfig = { sampleRate: number; blockSize: number; audioBusChannels: number }
+/**
+ * Session snapshot emitted to the frontend as the `pnds:session` event.
+ */
+export type SessionSnapshot = { 
+/**
+ * `idle | starting | ready | error | stopping`
+ */
+status: string; projectName: string | null; projectPath: string | null; audioMode: string | null; lanIp: string | null; oscTarget: string | null; health: HealthPayload | null; error: string | null; outputTail: string[] }
 
 /** tauri-specta globals **/
 

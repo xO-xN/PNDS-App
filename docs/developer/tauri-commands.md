@@ -231,7 +231,11 @@ vi.mock('@/lib/tauri-bindings', () => ({
 | `loadEmergencyData`        | `filename: string`                    | `Result<JsonValue, string>`      | Load recovery data                 |
 | `cleanupOldRecoveryFiles`  | none                                  | `Result<number, string>`         | Cleanup old files                  |
 | `preflightProject`         | `path: string`                        | `Result<Manifest, string>`       | Project preflight (§5/§7/§8.2)     |
-| `cleanupOrphanedProcesses` | none                                  | `Result<number, string>`         | Kill stale session children (§8.2) |
+| `cleanupOrphanedProcesses` | none | `Result<number, string>` | Kill stale session children (§8.2) |
+| `startProject` | `path, mode, lanIp: string` | `Result<null, string>` | Start score server session (§8.1) |
+| `stopProject` | none | `Result<null, string>` | Graceful session stop (§8.2) |
+| `getSessionState` | none | `Result<SessionSnapshot, string>` | Current session snapshot |
+| `listLanAddresses` | none | `Result<string[], string>` | LAN IPv4 candidates (§7) |
 
 ## Dependencies
 

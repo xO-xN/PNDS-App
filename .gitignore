@@ -25,3 +25,6 @@ jscpd-report
 *.njsproj
 *.sln
 *.sw?
+
+# Bundled Node.js sidecar (fetched via npm run node:fetch)
+src-tauri/binaries/
