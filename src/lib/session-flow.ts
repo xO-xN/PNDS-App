@@ -1,4 +1,5 @@
 import { commands } from '@/lib/tauri-bindings'
+import { info as logInfo } from '@tauri-apps/plugin-log'
 import { logger } from '@/lib/logger'
 import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
@@ -28,14 +29,16 @@ export function canStart(): boolean {
     !(audioMode === 'external' && !isValidOscTarget(oscTargetInput))
 
   // Temporary debug: pinpoints which field blocks the Load button.
-  logger.info('canStart verdict', {
-    verdict,
-    hasProject: !!currentProject,
-    preflightStatus,
-    sessionStatus,
-    lanIp,
-    audioMode,
-  })
+  void logInfo(
+    `canStart verdict: ${JSON.stringify({
+      verdict,
+      hasProject: !!currentProject,
+      preflightStatus,
+      sessionStatus,
+      lanIp,
+      audioMode,
+    })}`
+  )
   return verdict
 }
 
