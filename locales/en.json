@@ -163,6 +163,7 @@
 
   "error.title": "Something went wrong",
   "error.retry": "Retry",
+  "error.retrying": "Retrying…",
   "error.back": "Back",
   "error.details": "Technical details",
   "error.copy": "Copy details",

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { writeText } from '@tauri-apps/plugin-clipboard-manager'
 import { toast } from 'sonner'
@@ -21,27 +22,37 @@ export function ErrorScreen() {
   const audioMode = useSessionStore(state => state.audioMode)
   const lanIp = useSessionStore(state => state.lanIp)
   const oscTarget = useSessionStore(state => state.oscTarget)
+  const [isRetrying, setIsRetrying] = useState(false)
 
   const handleRetry = async () => {
-    if (!currentProject || !lanIp) return
+    if (!currentProject || !lanIp || isRetrying) return
+    setIsRetrying(true)
     logger.info('Retrying session start', {
       path: currentProject.path,
       mode: audioMode,
     })
-    const result = await commands.startProject(
-      currentProject.path,
-      audioMode,
-      lanIp
-    )
-    if (result.status === 'error') {
-      useSessionStore.getState().failLocal(result.error)
+    try {
+      const result = await commands.startProject(
+        currentProject.path,
+        audioMode,
+        lanIp
+      )
+      if (result.status === 'error') {
+        useSessionStore.getState().failLocal(result.error)
+      }
+    } finally {
+      setIsRetrying(false)
     }
   }
 
   const handleBack = async () => {
-    await commands.stopProject()
-    useProjectStore.getState().clearProject()
-    useSessionStore.getState().resetSession()
+    // Navigation must never depend on the stop call succeeding.
+    try {
+      await commands.stopProject()
+    } finally {
+      useProjectStore.getState().clearProject()
+      useSessionStore.getState().resetSession()
+    }
   }
 
   const details = {
@@ -78,9 +89,9 @@ export function ErrorScreen() {
       <div className="flex gap-3">
         <Button
           onClick={() => void handleRetry()}
-          disabled={!currentProject || !lanIp}
+          disabled={!currentProject || !lanIp || isRetrying}
         >
-          {t('error.retry')}
+          {isRetrying ? t('error.retrying') : t('error.retry')}
         </Button>
         <Button variant="outline" onClick={() => void handleBack()}>
           {t('error.back')}

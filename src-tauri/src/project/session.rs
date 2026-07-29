@@ -289,7 +289,7 @@ impl SessionManager {
         self.lock().snapshot()
     }
 
-    fn emit(&self, app: &AppHandle) {
+    fn emit<R: tauri::Runtime>(&self, app: &AppHandle<R>) {
         let snapshot = self.snapshot();
         if let Err(e) = app.emit("pnds:session", snapshot) {
             log::warn!("Failed to emit session snapshot: {e}");
@@ -549,20 +549,29 @@ impl SessionManager {
     }
 
     /// §8.2 stop sequence for the score server. Idempotent.
-    pub fn stop(&self, app: &AppHandle, app_data_dir: &Path) -> Result<(), String> {
+    ///
+    /// NOTE: never call `emit` while holding the inner lock — `emit` takes a
+    /// snapshot, which locks again (std Mutex is not reentrant → deadlock).
+    pub fn stop<R: tauri::Runtime>(
+        &self,
+        app: &AppHandle<R>,
+        app_data_dir: &Path,
+    ) -> Result<(), String> {
         let (child, pid) = {
             let mut inner = self.lock();
-            if inner.child.is_none() {
-                inner.generation += 1;
-                inner.reset_run_state();
-                inner.status = "idle".to_string();
-                self.emit(app);
-                return Ok(());
-            }
             inner.generation += 1;
-            inner.status = "stopping".to_string();
-            let pid = inner.child.as_ref().map(|c| c.id()).unwrap_or(0);
-            (inner.child.take(), pid)
+            match inner.child.take() {
+                Some(child) => {
+                    inner.status = "stopping".to_string();
+                    let pid = child.id();
+                    (Some(child), pid)
+                }
+                None => {
+                    inner.reset_run_state();
+                    inner.status = "idle".to_string();
+                    (None, 0)
+                }
+            }
         };
         self.emit(app);
 
@@ -570,14 +579,14 @@ impl SessionManager {
             stop_child_gracefully(&mut c, pid, SHUTDOWN_TIMEOUT);
             let _ = preflight::clear_session_child(app_data_dir, pid);
             log::info!("Score server stopped (pid {pid})");
-        }
 
-        {
-            let mut inner = self.lock();
-            inner.reset_run_state();
-            inner.status = "idle".to_string();
+            {
+                let mut inner = self.lock();
+                inner.reset_run_state();
+                inner.status = "idle".to_string();
+            }
+            self.emit(app);
         }
-        self.emit(app);
         Ok(())
     }
 
@@ -665,6 +674,46 @@ mod tests {
         let pid = child.id();
         stop_child_gracefully(&mut child, pid, Duration::from_secs(2));
         assert!(child.try_wait().unwrap().is_some());
+    }
+
+    /// Regression: stop() with no running child deadlocked before (emit was
+    /// called while holding the inner lock).
+    #[test]
+    fn stop_without_child_returns_ok() {
+        let app = tauri::test::mock_app().handle().clone();
+        let manager = SessionManager::default();
+        let dir = tempfile::tempdir().unwrap();
+        manager.stop(&app, dir.path()).unwrap();
+        assert_eq!(manager.snapshot().status, "idle");
+        // Idempotent: a second stop is fine too.
+        manager.stop(&app, dir.path()).unwrap();
+    }
+
+    #[test]
+    fn stop_with_child_terminates_and_resets() {
+        let app = tauri::test::mock_app().handle().clone();
+        let manager = SessionManager::default();
+        let dir = tempfile::tempdir().unwrap();
+
+        let child = Command::new("sleep").arg("30").spawn().unwrap();
+        let pid = child.id();
+        {
+            let mut inner = manager.lock();
+            inner.child = Some(child);
+            inner.status = "ready".to_string();
+        }
+        assert!(manager.has_active_session());
+
+        manager.stop(&app, dir.path()).unwrap();
+
+        assert!(!manager.has_active_session());
+        assert_eq!(manager.snapshot().status, "idle");
+        let alive = Command::new("/bin/kill")
+            .args(["-0", &pid.to_string()])
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        assert!(!alive);
     }
 
     /// Integration: health polling against a real (fixture) score server.
