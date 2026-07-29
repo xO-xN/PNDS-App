@@ -140,18 +140,19 @@ function drawFrame(
   let r = 0 // rotation angle
   let gs = 2 // dot global scale
 
-  if (phase === 'closure' || (phase === 'wait' && f >= ENTRANCE_FRAMES)) {
-    // Closure: circles finished expanding, dots/rings converge
+  if (phase === 'closure') {
+    // Closure: dots/circles converge from the entrance end state
     d1 = D_LIGHT
     d2 = D_DARK
-    const p = phase === 'closure' ? spring(Math.min(f / CLOSURE_FRAMES, 1)) : 1
+    const p = spring(Math.min(f / CLOSURE_FRAMES, 1))
     t = p
     r = (p * 225 * Math.PI) / 180
     gs = 2 + (1 - 2) * p // 2→1
-  } else if (f >= ENTRANCE_FRAMES) {
-    // Wait phase: circles fully expanded, no convergence
+  } else if (phase === 'wait' || f >= ENTRANCE_FRAMES) {
+    // Wait and post-entrance: full expansion, no convergence yet
     d1 = D_LIGHT
     d2 = D_DARK
+    // t=0, r=0, gs=2 already by initialiser
   } else {
     // Entrance: circles grow
     if (f >= LIGHT_CIRCLE_START) {
