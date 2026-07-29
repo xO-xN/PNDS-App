@@ -181,7 +181,7 @@ export function Sidebar({ variant, onRequestClose }: SidebarProps) {
                 }}
                 onDragEnd={() => setDragPath(null)}
                 aria-label={t('sidebar.dragToReorder')}
-                className="w-5 shrink-0 cursor-grab text-(--pnds-text)/40 opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing"
+                className="w-5 shrink-0 cursor-grab text-(--pnds-text)/40 opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing pointer-events-none group-hover:pointer-events-auto"
               >
                 <GripVertical size={14} />
               </span>
