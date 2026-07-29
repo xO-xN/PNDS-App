@@ -1,0 +1,73 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "PNDS",
+  "version": "0.1.0",
+  "identifier": "com.xo-xn.pnds-app",
+  "build": {
+    "removeUnusedCommands": true,
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "PNDS",
+        "width": 1200,
+        "height": 800,
+        "minWidth": 1000,
+        "minHeight": 700,
+        "resizable": true,
+        "fullscreen": false,
+        "maximized": false,
+        "center": true,
+        "decorations": true,
+        "alwaysOnTop": false,
+        "transparent": false,
+        "shadow": true,
+        "dragDropEnabled": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' tauri: ipc: http://ipc.localhost"
+    },
+    "macOSPrivateApi": true
+  },
+  "bundle": {
+    "createUpdaterArtifacts": true,
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "publisher": "xO-xN",
+    "category": "Music",
+    "shortDescription": "PNDS 数字乐谱演出 Host",
+    "longDescription": "在演出现场打开并运行 PNDS 数字乐谱工程：启动工程的乐谱服务器与内置 SuperCollider 声音服务器，管理音频模式与输出设备，并显示工程的监视/指挥界面。",
+    "copyright": "Copyright © 2026 xO-xN. All rights reserved.",
+    "macOS": {
+      "frameworks": [],
+      "minimumSystemVersion": "10.15",
+      "signingIdentity": "-",
+      "providerShortName": null,
+      "entitlements": null,
+      "exceptionDomain": ""
+    }
+  },
+  "plugins": {
+    "updater": {
+      "active": true,
+      "endpoints": [
+        "https://github.com/xO-xN/PNDS-App/releases/latest/download/latest.json"
+      ],
+      "dialog": true,
+      "pubkey": "YOUR_UPDATER_PUBLIC_KEY_HERE"
+    }
+  }
+}

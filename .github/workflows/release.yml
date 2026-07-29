@@ -1,0 +1,66 @@
+name: 'Release PNDS'
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v1.0.0)'
+        required: true
+        type: string
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  publish-tauri:
+    permissions:
+      contents: write
+    # V1 scope: macOS Apple Silicon only (see docs/PNDS_APP_REQUIREMENTS.md §2)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+          cache: 'npm'
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build and release
+        uses: tauri-apps/tauri-action@dev
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ github.ref_name || inputs.version }}
+          releaseName: 'PNDS ${{ github.ref_name || inputs.version }}'
+          releaseBody: |
+            ## PNDS ${{ github.ref_name || inputs.version }}
+
+            ### Installation Instructions
+            - **macOS (Apple Silicon)**: Download the `.dmg` file and drag PNDS to the Applications folder
+            - V1 builds are ad-hoc signed (no Apple notarization). On first launch macOS will block the app: right-click PNDS → **Open**, or **System Settings → Privacy & Security → Open Anyway**.
+
+            ### Auto-Updates
+            Existing users will receive automatic update notifications.
+
+            **Full Changelog**: https://github.com/${{ github.repository }}/commits/${{ github.ref_name || inputs.version }}
+          releaseDraft: true
+          prerelease: false
+          includeUpdaterJson: true
+          args: '--bundles app,dmg'
