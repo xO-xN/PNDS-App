@@ -8,7 +8,7 @@ import { logger } from './lib/logger'
 import { cleanupOldFiles } from './lib/recovery'
 import { commands } from './lib/tauri-bindings'
 import './App.css'
-import { MainWindow } from './components/layout/MainWindow'
+import { WelcomeScreen } from './components/welcome'
 import { ThemeProvider } from './components/ThemeProvider'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { useSquareCornersEffect } from './hooks/useSquareCornersEffect'
@@ -114,7 +114,7 @@ function App() {
   return (
     <ErrorBoundary>
       <ThemeProvider>
-        <MainWindow />
+        <WelcomeScreen />
       </ThemeProvider>
     </ErrorBoundary>
   )

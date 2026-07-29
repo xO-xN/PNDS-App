@@ -92,6 +92,31 @@ async cleanupOldRecoveryFiles() : Promise<Result<number, RecoveryError>> {
 }
 },
 /**
+ * Full preflight for a candidate project directory (§8.1 step 1):
+ * orphan cleanup → manifest validation → dependency check → port check.
+ * Returns the validated manifest so the frontend can show project info.
+ */
+async preflightProject(path: string) : Promise<Result<Manifest, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("preflight_project", { path }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Cleans up child processes left behind by an abnormal previous exit.
+ * Also runs automatically at app startup and at the start of preflight.
+ */
+async cleanupOrphanedProcesses() : Promise<Result<number, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("cleanup_orphaned_processes") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * Shows the quick pane window and makes it the key window (for keyboard input).
  */
 async showQuickPane() : Promise<Result<null, string>> {
@@ -170,7 +195,14 @@ quick_pane_shortcut: string | null;
  * If None, uses system locale detection
  */
 language: string | null }
+export type AudioConfig = { defaultMode: string; supportedModes: string[]; synthdefs: string[] | null; scsynth: ScsynthConfig | null; 
+/**
+ * Debug-only fallback for standalone runs. The App must never use it;
+ * internal mode OSC targets are always dynamically assigned (§5.2).
+ */
+standaloneTarget: string | null }
 export type JsonValue = null | boolean | number | string | JsonValue[] | Partial<{ [key in string]: JsonValue }>
+export type Manifest = { schemaVersion: number; id: string; name: string; version: string; description: string | null; scoreServer: ScoreServer; audio: AudioConfig }
 /**
  * Error types for recovery operations (typed for frontend matching)
  */
@@ -195,6 +227,8 @@ export type RecoveryError =
  * JSON serialization/deserialization error
  */
 { type: "ParseError"; message: string }
+export type ScoreServer = { entry: string; workingDirectory: string; performerPort: number; monitorPort: number }
+export type ScsynthConfig = { sampleRate: number; blockSize: number; audioBusChannels: number }
 
 /** tauri-specta globals **/
 

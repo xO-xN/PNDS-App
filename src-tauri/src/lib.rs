@@ -6,6 +6,7 @@
 
 mod bindings;
 mod commands;
+mod project;
 mod types;
 mod utils;
 
@@ -107,6 +108,16 @@ pub fn run() {
                 "App handle initialized for package: {}",
                 app.package_info().name
             );
+
+            // §8.2: terminate child processes left behind by an abnormal
+            // previous exit (crash, force-quit). Best-effort at startup.
+            if let Ok(dir) = commands::project::app_data_dir(app.handle()) {
+                match crate::project::preflight::cleanup_orphaned_processes(&dir) {
+                    Ok(n) if n > 0 => log::info!("Startup cleanup terminated {n} orphan(s)"),
+                    Ok(_) => {}
+                    Err(e) => log::warn!("Startup orphan cleanup failed: {e}"),
+                }
+            }
 
             // Set up global shortcut plugin (without any shortcuts - we register them separately)
             #[cfg(desktop)]

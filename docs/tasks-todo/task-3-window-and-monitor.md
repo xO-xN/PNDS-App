@@ -9,6 +9,7 @@
 ## 工作内容
 
 - 窗口：`decorations: false`（macos conf 已具备），单一 WebView；侧栏覆盖式浮出（hover 左边缘），不改变 monitor 布局；侧栏提供窗口拖动、最小化、退出；保留 macOS 菜单栏与 `⌘W`/`⌘Q`/`⌘M`
+- **顶部中央标题区**（2026-07-29 新增，§10.1/§9.3）：工程运行中显示「PNDS - \<工程名\>」，整体为窗口 drag region（`data-tauri-drag-region`），覆盖于 monitor 之上、不改变其布局；只含标题文字，无其他控件；Welcome 状态拖动仍由常开侧栏提供
 - monitor 以 iframe 嵌入 React 壳（§9.3 工程允许被嵌）；用所选 Host LAN IP 加载（§7）；**放宽 `tauri.conf.json` CSP**：`frame-src` / `connect-src` 允许局域网 HTTP
 - Welcome：侧栏常开 + Recent Projects 列表（完整 §4.1 行为在 task-6）；启动不自动运行工程
 - Error Page：简明摘要 + Retry + Back/Close；可展开复制的技术详情（工程路径、音频模式、LAN IP、OSC target、输出设备、失败阶段、Node/scsynth stderr 末尾、health payload）
@@ -24,4 +25,5 @@
 
 - Welcome/加载/演出/Error 四态转换正确（§15-5）
 - 演出中窗口只有 monitor；hover 左缘侧栏浮出/移开收起
+- 运行中可通过顶部中央标题区拖动窗口；标题随工程名更新
 - 强制错误（占用端口、删除 .scsyndef）显示正确 Error Page

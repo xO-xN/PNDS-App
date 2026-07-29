@@ -19,6 +19,7 @@
     "opener:default",
     "clipboard-manager:default",
     "dialog:default",
+    "dialog:allow-open",
     "fs:default",
     "log:default",
     "notification:default",

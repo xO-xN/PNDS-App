@@ -1,0 +1,537 @@
+//! PNDS project `manifest.json` parsing and validation.
+//!
+//! Implements the schemaVersion 1 contract from
+//! `docs/PNDS_APP_REQUIREMENTS.md` §5. All user-facing error strings are
+//! English (the V1 UI is English-only).
+
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use specta::Type;
+use std::path::{Component, Path, PathBuf};
+
+/// Audio mode names defined by the V1 contract (§6.1).
+const VALID_MODES: [&str; 3] = ["internal", "external", "none"];
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct Manifest {
+    pub schema_version: u32,
+    pub id: String,
+    pub name: String,
+    pub version: String,
+    pub description: Option<String>,
+    pub score_server: ScoreServer,
+    pub audio: AudioConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ScoreServer {
+    pub entry: String,
+    pub working_directory: String,
+    pub performer_port: u16,
+    pub monitor_port: u16,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioConfig {
+    pub default_mode: String,
+    pub supported_modes: Vec<String>,
+    pub synthdefs: Option<Vec<String>>,
+    pub scsynth: Option<ScsynthConfig>,
+    /// Debug-only fallback for standalone runs. The App must never use it;
+    /// internal mode OSC targets are always dynamically assigned (§5.2).
+    pub standalone_target: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ScsynthConfig {
+    pub sample_rate: u32,
+    pub block_size: u32,
+    pub audio_bus_channels: u32,
+}
+
+/// Loads and fully validates the manifest of the project at `project_root`.
+pub fn load_manifest(project_root: &Path) -> Result<Manifest, String> {
+    let path = project_root.join("manifest.json");
+    let raw = std::fs::read_to_string(&path)
+        .map_err(|_| format!("manifest.json not found or unreadable: {}", path.display()))?;
+
+    let value: Value =
+        serde_json::from_str(&raw).map_err(|e| format!("manifest.json is not valid JSON: {e}"))?;
+
+    validate_schema(&value)?;
+
+    let manifest: Manifest = serde_json::from_value(value)
+        .map_err(|e| format!("manifest.json does not match the schema: {e}"))?;
+
+    validate_paths(&manifest, project_root)?;
+    Ok(manifest)
+}
+
+/// Returns true if a dotted field path exists and is not null.
+fn field_present(mut cur: &Value, path: &str) -> bool {
+    for part in path.split('.') {
+        match cur.get(part) {
+            Some(next) => cur = next,
+            None => return false,
+        }
+    }
+    !cur.is_null()
+}
+
+fn get<'a>(value: &'a Value, path: &str) -> Option<&'a Value> {
+    let mut cur = value;
+    for part in path.split('.') {
+        cur = cur.get(part)?;
+    }
+    Some(cur)
+}
+
+/// Schema-level validation with friendly, field-specific errors (§5.2).
+fn validate_schema(value: &Value) -> Result<(), String> {
+    // §5.4: the schema version gate runs before anything else.
+    match value.get("schemaVersion").and_then(Value::as_u64) {
+        Some(1) => {}
+        _ => {
+            return Err(
+                "Unsupported schema version: manifest.json must declare \"schemaVersion\": 1"
+                    .to_string(),
+            );
+        }
+    }
+
+    const REQUIRED: [&str; 9] = [
+        "id",
+        "name",
+        "version",
+        "scoreServer.entry",
+        "scoreServer.workingDirectory",
+        "scoreServer.performerPort",
+        "scoreServer.monitorPort",
+        "audio.defaultMode",
+        "audio.supportedModes",
+    ];
+    for field in REQUIRED {
+        if !field_present(value, field) {
+            return Err(format!("manifest.json missing required field: {field}"));
+        }
+    }
+
+    // Ports: positive integers within u16 range, and distinct.
+    let mut ports = [0u64; 2];
+    for (i, field) in ["scoreServer.performerPort", "scoreServer.monitorPort"]
+        .iter()
+        .enumerate()
+    {
+        match get(value, field).and_then(Value::as_u64) {
+            Some(p) if (1..=65535).contains(&p) => ports[i] = p,
+            _ => return Err(format!("{field} must be an integer between 1 and 65535")),
+        }
+    }
+    if ports[0] == ports[1] {
+        return Err(
+            "scoreServer.performerPort and scoreServer.monitorPort must differ".to_string(),
+        );
+    }
+
+    // Audio modes.
+    let modes: Vec<&str> = match get(value, "audio.supportedModes").and_then(Value::as_array) {
+        Some(arr) if !arr.is_empty() => arr.iter().filter_map(Value::as_str).collect(),
+        _ => {
+            return Err("audio.supportedModes must be a non-empty array of mode names".to_string());
+        }
+    };
+    if modes.len()
+        != get(value, "audio.supportedModes").map_or(0, |v| v.as_array().map_or(0, |a| a.len()))
+    {
+        return Err("audio.supportedModes must contain only strings".to_string());
+    }
+    for mode in &modes {
+        if !VALID_MODES.contains(mode) {
+            return Err(format!(
+                "audio.supportedModes contains an unknown mode: \"{mode}\" (expected one of: internal, external, none)"
+            ));
+        }
+    }
+    let default_mode = get(value, "audio.defaultMode")
+        .and_then(Value::as_str)
+        .ok_or("audio.defaultMode must be a string")?;
+    if !modes.contains(&default_mode) {
+        return Err(format!(
+            "audio.defaultMode \"{default_mode}\" is not listed in audio.supportedModes"
+        ));
+    }
+
+    // §5.2 conditional requirements for internal mode.
+    if modes.contains(&"internal") {
+        match get(value, "audio.synthdefs").and_then(Value::as_array) {
+            Some(arr) if !arr.is_empty() && arr.iter().all(|v| v.as_str().is_some()) => {}
+            _ => {
+                return Err(
+                    "audio.synthdefs is required (non-empty array of paths) when \"internal\" is supported"
+                        .to_string(),
+                );
+            }
+        }
+        for field in [
+            "audio.scsynth.sampleRate",
+            "audio.scsynth.blockSize",
+            "audio.scsynth.audioBusChannels",
+        ] {
+            match get(value, field).and_then(Value::as_u64) {
+                Some(n) if n > 0 => {}
+                _ => {
+                    return Err(format!(
+                        "{field} is required (positive integer) for internal mode"
+                    ))
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Resolves a manifest-relative path, enforcing §5.4: relative only, no
+/// escape, and the real (symlink-resolved) path must stay inside the project.
+fn resolve_within(
+    root: &Path,
+    canonical_root: &Path,
+    rel: &str,
+    field: &str,
+) -> Result<PathBuf, String> {
+    let rel_path = Path::new(rel);
+    if rel_path.is_absolute() {
+        return Err(format!("{field} must be a relative path: \"{rel}\""));
+    }
+    if rel_path
+        .components()
+        .any(|c| matches!(c, Component::ParentDir))
+    {
+        return Err(format!(
+            "{field} must not escape the project directory: \"{rel}\""
+        ));
+    }
+    let joined = root.join(rel_path);
+    let canonical = joined
+        .canonicalize()
+        .map_err(|_| format!("{field} not found: {}", joined.display()))?;
+    if !canonical.starts_with(canonical_root) {
+        return Err(format!(
+            "{field} points outside the project directory: \"{rel}\""
+        ));
+    }
+    Ok(canonical)
+}
+
+/// Filesystem-level validation (§5.4).
+fn validate_paths(manifest: &Manifest, root: &Path) -> Result<(), String> {
+    let canonical_root = root
+        .canonicalize()
+        .map_err(|e| format!("Cannot resolve project directory: {e}"))?;
+
+    let entry = resolve_within(
+        root,
+        &canonical_root,
+        &manifest.score_server.entry,
+        "scoreServer.entry",
+    )?;
+    if !entry.is_file() {
+        return Err("scoreServer.entry is not a file".to_string());
+    }
+
+    let working_dir = resolve_within(
+        root,
+        &canonical_root,
+        &manifest.score_server.working_directory,
+        "scoreServer.workingDirectory",
+    )?;
+    if !working_dir.is_dir() {
+        return Err("scoreServer.workingDirectory is not a directory".to_string());
+    }
+
+    if manifest
+        .audio
+        .supported_modes
+        .iter()
+        .any(|m| m == "internal")
+    {
+        for synthdef in manifest.audio.synthdefs.as_deref().unwrap_or(&[]) {
+            let path = resolve_within(root, &canonical_root, synthdef, "audio.synthdefs[]")?;
+            if !path.is_file() {
+                return Err(format!(
+                    "audio.synthdefs entry is not a file: \"{synthdef}\""
+                ));
+            }
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    /// Writes a valid §5.1 manifest plus the files it references.
+    fn write_valid_project(dir: &Path) {
+        fs::create_dir_all(dir.join("node_modules")).unwrap();
+        fs::create_dir_all(dir.join("supercollider/synthdefs")).unwrap();
+        fs::write(dir.join("server.js"), "// score server").unwrap();
+        fs::write(
+            dir.join("supercollider/synthdefs/inarticulate-iii.scsyndef"),
+            b"SCgf",
+        )
+        .unwrap();
+        fs::write(
+            dir.join("manifest.json"),
+            r#"{
+              "schemaVersion": 1,
+              "id": "inarticulate-iii",
+              "name": "Inarticulate III",
+              "version": "0.1.0",
+              "scoreServer": {
+                "entry": "server.js",
+                "workingDirectory": ".",
+                "performerPort": 6868,
+                "monitorPort": 6869
+              },
+              "audio": {
+                "defaultMode": "internal",
+                "supportedModes": ["internal", "external", "none"],
+                "synthdefs": ["supercollider/synthdefs/inarticulate-iii.scsyndef"],
+                "scsynth": { "sampleRate": 48000, "blockSize": 64, "audioBusChannels": 128 },
+                "standaloneTarget": "127.0.0.1:57110"
+              }
+            }"#,
+        )
+        .unwrap();
+    }
+
+    fn write_manifest(dir: &Path, body: &str) {
+        fs::write(dir.join("manifest.json"), body).unwrap();
+    }
+
+    #[test]
+    fn valid_manifest_loads() {
+        let dir = tempfile::tempdir().unwrap();
+        write_valid_project(dir.path());
+        let manifest = load_manifest(dir.path()).unwrap();
+        assert_eq!(manifest.id, "inarticulate-iii");
+        assert_eq!(manifest.score_server.performer_port, 6868);
+        assert_eq!(manifest.audio.scsynth.as_ref().unwrap().sample_rate, 48000);
+    }
+
+    #[test]
+    fn missing_manifest_is_readable_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let err = load_manifest(dir.path()).unwrap_err();
+        assert!(err.contains("manifest.json not found"), "unexpected: {err}");
+    }
+
+    #[test]
+    fn invalid_json_is_readable_error() {
+        let dir = tempfile::tempdir().unwrap();
+        write_manifest(dir.path(), "{ not json");
+        let err = load_manifest(dir.path()).unwrap_err();
+        assert!(err.contains("not valid JSON"), "unexpected: {err}");
+    }
+
+    #[test]
+    fn wrong_schema_version_rejected() {
+        let dir = tempfile::tempdir().unwrap();
+        write_manifest(dir.path(), r#"{ "schemaVersion": 2 }"#);
+        let err = load_manifest(dir.path()).unwrap_err();
+        assert!(
+            err.contains("Unsupported schema version"),
+            "unexpected: {err}"
+        );
+    }
+
+    #[test]
+    fn missing_required_field_named() {
+        let dir = tempfile::tempdir().unwrap();
+        write_valid_project(dir.path());
+        write_manifest(
+            dir.path(),
+            r#"{
+              "schemaVersion": 1, "id": "x", "name": "X", "version": "0.1.0",
+              "scoreServer": { "entry": "server.js", "workingDirectory": ".", "performerPort": 6868 },
+              "audio": { "defaultMode": "none", "supportedModes": ["none"] }
+            }"#,
+        );
+        let err = load_manifest(dir.path()).unwrap_err();
+        assert!(err.contains("scoreServer.monitorPort"), "unexpected: {err}");
+    }
+
+    #[test]
+    fn default_mode_must_be_supported() {
+        let dir = tempfile::tempdir().unwrap();
+        write_valid_project(dir.path());
+        write_manifest(
+            dir.path(),
+            r#"{
+              "schemaVersion": 1, "id": "x", "name": "X", "version": "0.1.0",
+              "scoreServer": { "entry": "server.js", "workingDirectory": ".", "performerPort": 6868, "monitorPort": 6869 },
+              "audio": { "defaultMode": "internal", "supportedModes": ["none"] }
+            }"#,
+        );
+        let err = load_manifest(dir.path()).unwrap_err();
+        assert!(err.contains("defaultMode"), "unexpected: {err}");
+    }
+
+    #[test]
+    fn internal_requires_synthdefs_and_scsynth_params() {
+        let dir = tempfile::tempdir().unwrap();
+        write_valid_project(dir.path());
+        // Missing synthdefs
+        write_manifest(
+            dir.path(),
+            r#"{
+              "schemaVersion": 1, "id": "x", "name": "X", "version": "0.1.0",
+              "scoreServer": { "entry": "server.js", "workingDirectory": ".", "performerPort": 6868, "monitorPort": 6869 },
+              "audio": { "defaultMode": "internal", "supportedModes": ["internal"],
+                "scsynth": { "sampleRate": 48000, "blockSize": 64, "audioBusChannels": 128 } }
+            }"#,
+        );
+        assert!(load_manifest(dir.path()).unwrap_err().contains("synthdefs"));
+
+        // Missing scsynth.blockSize
+        write_manifest(
+            dir.path(),
+            r#"{
+              "schemaVersion": 1, "id": "x", "name": "X", "version": "0.1.0",
+              "scoreServer": { "entry": "server.js", "workingDirectory": ".", "performerPort": 6868, "monitorPort": 6869 },
+              "audio": { "defaultMode": "internal", "supportedModes": ["internal"],
+                "synthdefs": ["supercollider/synthdefs/inarticulate-iii.scsyndef"],
+                "scsynth": { "sampleRate": 48000, "audioBusChannels": 128 } }
+            }"#,
+        );
+        let err = load_manifest(dir.path()).unwrap_err();
+        assert!(err.contains("blockSize"), "unexpected: {err}");
+    }
+
+    #[test]
+    fn external_only_project_needs_no_synthdefs() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir_all(dir.path().join("node_modules")).unwrap();
+        fs::write(dir.path().join("server.js"), "//").unwrap();
+        write_manifest(
+            dir.path(),
+            r#"{
+              "schemaVersion": 1, "id": "x", "name": "X", "version": "0.1.0",
+              "scoreServer": { "entry": "server.js", "workingDirectory": ".", "performerPort": 6868, "monitorPort": 6869 },
+              "audio": { "defaultMode": "external", "supportedModes": ["external", "none"] }
+            }"#,
+        );
+        load_manifest(dir.path()).unwrap();
+    }
+
+    #[test]
+    fn absolute_entry_path_rejected() {
+        let dir = tempfile::tempdir().unwrap();
+        write_valid_project(dir.path());
+        write_manifest(
+            dir.path(),
+            r#"{
+              "schemaVersion": 1, "id": "x", "name": "X", "version": "0.1.0",
+              "scoreServer": { "entry": "/etc/passwd", "workingDirectory": ".", "performerPort": 6868, "monitorPort": 6869 },
+              "audio": { "defaultMode": "none", "supportedModes": ["none"] }
+            }"#,
+        );
+        let err = load_manifest(dir.path()).unwrap_err();
+        assert!(err.contains("relative path"), "unexpected: {err}");
+    }
+
+    #[test]
+    fn parent_escape_rejected() {
+        let dir = tempfile::tempdir().unwrap();
+        write_valid_project(dir.path());
+        write_manifest(
+            dir.path(),
+            r#"{
+              "schemaVersion": 1, "id": "x", "name": "X", "version": "0.1.0",
+              "scoreServer": { "entry": "../outside.js", "workingDirectory": ".", "performerPort": 6868, "monitorPort": 6869 },
+              "audio": { "defaultMode": "none", "supportedModes": ["none"] }
+            }"#,
+        );
+        let err = load_manifest(dir.path()).unwrap_err();
+        assert!(err.contains("escape"), "unexpected: {err}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlink_escaping_project_rejected() {
+        let dir = tempfile::tempdir().unwrap();
+        write_valid_project(dir.path());
+        // Point the synthdef at a file outside the project root.
+        let outside = tempfile::NamedTempFile::new().unwrap();
+        std::os::unix::fs::symlink(
+            outside.path(),
+            dir.path()
+                .join("supercollider/synthdefs/inarticulate-iii.scsyndef"),
+        )
+        .unwrap_err(); // target already exists from write_valid_project
+        fs::remove_file(
+            dir.path()
+                .join("supercollider/synthdefs/inarticulate-iii.scsyndef"),
+        )
+        .unwrap();
+        std::os::unix::fs::symlink(
+            outside.path(),
+            dir.path()
+                .join("supercollider/synthdefs/inarticulate-iii.scsyndef"),
+        )
+        .unwrap();
+        let err = load_manifest(dir.path()).unwrap_err();
+        assert!(err.contains("outside the project"), "unexpected: {err}");
+    }
+
+    #[test]
+    fn missing_entry_file_named() {
+        let dir = tempfile::tempdir().unwrap();
+        write_valid_project(dir.path());
+        fs::remove_file(dir.path().join("server.js")).unwrap();
+        let err = load_manifest(dir.path()).unwrap_err();
+        assert!(
+            err.contains("scoreServer.entry not found"),
+            "unexpected: {err}"
+        );
+    }
+
+    #[test]
+    fn equal_ports_rejected() {
+        let dir = tempfile::tempdir().unwrap();
+        write_valid_project(dir.path());
+        write_manifest(
+            dir.path(),
+            r#"{
+              "schemaVersion": 1, "id": "x", "name": "X", "version": "0.1.0",
+              "scoreServer": { "entry": "server.js", "workingDirectory": ".", "performerPort": 6868, "monitorPort": 6868 },
+              "audio": { "defaultMode": "none", "supportedModes": ["none"] }
+            }"#,
+        );
+        let err = load_manifest(dir.path()).unwrap_err();
+        assert!(err.contains("must differ"), "unexpected: {err}");
+    }
+
+    #[test]
+    fn zero_port_rejected() {
+        let dir = tempfile::tempdir().unwrap();
+        write_valid_project(dir.path());
+        write_manifest(
+            dir.path(),
+            r#"{
+              "schemaVersion": 1, "id": "x", "name": "X", "version": "0.1.0",
+              "scoreServer": { "entry": "server.js", "workingDirectory": ".", "performerPort": 0, "monitorPort": 6869 },
+              "audio": { "defaultMode": "none", "supportedModes": ["none"] }
+            }"#,
+        );
+        let err = load_manifest(dir.path()).unwrap_err();
+        assert!(err.contains("between 1 and 65535"), "unexpected: {err}");
+    }
+}

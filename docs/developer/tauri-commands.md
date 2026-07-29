@@ -221,15 +221,17 @@ vi.mock('@/lib/tauri-bindings', () => ({
 
 ## Available Commands
 
-| Command                   | Parameters                            | Returns                          | Description         |
-| ------------------------- | ------------------------------------- | -------------------------------- | ------------------- |
-| `greet`                   | `name: string`                        | `string`                         | Simple greeting     |
-| `loadPreferences`         | none                                  | `Result<AppPreferences, string>` | Load preferences    |
-| `savePreferences`         | `preferences: AppPreferences`         | `Result<null, string>`           | Save preferences    |
-| `sendNativeNotification`  | `title: string, body: string \| null` | `Result<null, string>`           | System notification |
-| `saveEmergencyData`       | `filename: string, data: JsonValue`   | `Result<null, string>`           | Save recovery data  |
-| `loadEmergencyData`       | `filename: string`                    | `Result<JsonValue, string>`      | Load recovery data  |
-| `cleanupOldRecoveryFiles` | none                                  | `Result<number, string>`         | Cleanup old files   |
+| Command                    | Parameters                            | Returns                          | Description                        |
+| -------------------------- | ------------------------------------- | -------------------------------- | ---------------------------------- |
+| `greet`                    | `name: string`                        | `string`                         | Simple greeting                    |
+| `loadPreferences`          | none                                  | `Result<AppPreferences, string>` | Load preferences                   |
+| `savePreferences`          | `preferences: AppPreferences`         | `Result<null, string>`           | Save preferences                   |
+| `sendNativeNotification`   | `title: string, body: string \| null` | `Result<null, string>`           | System notification                |
+| `saveEmergencyData`        | `filename: string, data: JsonValue`   | `Result<null, string>`           | Save recovery data                 |
+| `loadEmergencyData`        | `filename: string`                    | `Result<JsonValue, string>`      | Load recovery data                 |
+| `cleanupOldRecoveryFiles`  | none                                  | `Result<number, string>`         | Cleanup old files                  |
+| `preflightProject`         | `path: string`                        | `Result<Manifest, string>`       | Project preflight (§5/§7/§8.2)     |
+| `cleanupOrphanedProcesses` | none                                  | `Result<number, string>`         | Kill stale session children (§8.2) |
 
 ## Dependencies
 

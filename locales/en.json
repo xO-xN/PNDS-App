@@ -106,5 +106,19 @@
   "toast.error.windowMinimizeFailed": "Failed to minimize window: {{message}}",
   "toast.error.windowMaximizeFailed": "Failed to toggle maximize: {{message}}",
   "toast.error.fullscreenEnterFailed": "Failed to enter fullscreen: {{message}}",
-  "toast.error.fullscreenExitFailed": "Failed to exit fullscreen: {{message}}"
+  "toast.error.fullscreenExitFailed": "Failed to exit fullscreen: {{message}}",
+
+  "welcome.title": "PNDS",
+  "welcome.subtitle": "Platform for Networked Digital Score",
+  "welcome.openProject": "Open Project…",
+  "welcome.checking": "Checking project…",
+
+  "trust.title": "Trust this project?",
+  "trust.description": "This project will run local Node.js code on this Mac:\n\n{{path}}\n\nOnly continue if you trust its source.",
+  "trust.cancel": "Cancel",
+  "trust.confirm": "Trust and Continue",
+
+  "project.version": "Version",
+  "project.modes": "Audio modes",
+  "project.ports": "Ports (performer / monitor)"
 }

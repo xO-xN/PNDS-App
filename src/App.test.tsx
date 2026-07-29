@@ -5,24 +5,11 @@ import App from './App'
 // Tauri bindings are mocked globally in src/test/setup.ts
 
 describe('App', () => {
-  it('renders main window layout', () => {
+  it('renders the welcome screen (§10.4: no project runs automatically)', () => {
     render(<App />)
+    expect(screen.getByRole('heading', { name: 'PNDS' })).toBeInTheDocument()
     expect(
-      screen.getByRole('heading', { name: /hello world/i })
+      screen.getByRole('button', { name: /open project/i })
     ).toBeInTheDocument()
-  })
-
-  it('renders title bar with traffic light buttons', () => {
-    render(<App />)
-    // Find specifically the window control buttons in the title bar
-    const titleBarButtons = screen
-      .getAllByRole('button')
-      .filter(
-        button =>
-          button.getAttribute('aria-label')?.includes('window') ||
-          button.className.includes('window-control')
-      )
-    // Should have at least the window control buttons
-    expect(titleBarButtons.length).toBeGreaterThan(0)
   })
 })
