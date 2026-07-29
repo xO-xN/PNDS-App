@@ -139,6 +139,19 @@ describe('Sidebar', () => {
 
     render(<Sidebar variant="overlay" />)
 
+    // Wait for the async device list to populate first
+    await screen.findByRole('option', { name: 'BlackHole 16ch' })
+    const deviceSelect = screen.getByRole('combobox', {
+      name: /output device/i,
+    }) as HTMLSelectElement
+    await user.selectOptions(deviceSelect, 'BlackHole 16ch')
+    // Regression: the selected device must stay displayed (an earlier
+    // filter dropped the current option, snapping back to default)
+    expect(deviceSelect.value).toBe('BlackHole 16ch')
+    expect(
+      screen.getByRole('button', { name: /^change$/i })
+    ).toBeInTheDocument()
+
     // Switching mode does NOT restart immediately — it shows the Change button
     await user.selectOptions(
       screen.getByRole('combobox', { name: /audio mode/i }),
