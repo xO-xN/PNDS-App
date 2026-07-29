@@ -29,7 +29,7 @@ export function WelcomeScreen() {
   const busy = preflightStatus === 'checking' || sessionStatus === 'starting'
 
   return (
-    <div className="flex min-h-full flex-col items-center justify-center bg-(--pnds-bg) p-8 animate-[fade-in_0.5s_ease-in]">
+    <div className="flex min-h-full flex-col items-center justify-center bg-(--pnds-bg) p-8 animate-[fade-in_0.8s_ease-in]">
       <header className="text-center">
         <h1 className="text-[44px] font-light leading-tight tracking-wide text-(--pnds-text)">
           {t('welcome.title')}
