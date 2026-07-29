@@ -29,17 +29,17 @@ export function WelcomeScreen() {
   const busy = preflightStatus === 'checking' || sessionStatus === 'starting'
 
   return (
-    <div className="flex min-h-full flex-col items-center justify-center gap-6 bg-[#d9d9d9] p-8">
+    <div className="flex min-h-full flex-col items-center bg-[#d9d9d9] p-8 pt-[26vh]">
       <header className="text-center">
-        <h1 className="text-[40px] font-light leading-tight tracking-wide text-black">
+        <h1 className="text-[44px] font-light leading-tight tracking-wide text-black">
           {t('welcome.title')}
         </h1>
-        <p className="mt-2 text-[15px] text-black/60">
+        <p className="mt-3 text-[16px] text-black/60">
           {t('welcome.subtitle')}
         </p>
       </header>
 
-      <p className="mt-16 max-w-2xl text-center text-[15px] leading-8 text-black/80">
+      <p className="mt-[9vh] max-w-2xl text-center text-[15px] leading-8 text-black/80">
         {t('welcome.hintStart')}
         <button
           type="button"
@@ -57,13 +57,13 @@ export function WelcomeScreen() {
       </p>
 
       {preflightStatus === 'checking' && (
-        <p className="text-sm text-black/60">{t('welcome.checking')}</p>
+        <p className="mt-6 text-sm text-black/60">{t('welcome.checking')}</p>
       )}
 
       {preflightStatus === 'error' && preflightError && (
         <div
           role="alert"
-          className="max-w-xl whitespace-pre-wrap rounded-xl border border-red-800/20 bg-red-500/10 p-4 text-start text-sm text-red-900"
+          className="font-manrope mt-6 max-w-xl whitespace-pre-wrap rounded-xl border border-red-800/20 bg-red-500/10 p-4 text-start text-sm text-red-900"
         >
           {preflightError}
         </div>

@@ -47,7 +47,7 @@ export function Sidebar({ variant, onRequestClose }: SidebarProps) {
     <aside
       data-testid="sidebar"
       className={cn(
-        'relative flex h-full w-64 flex-col overflow-y-auto px-4 pb-4 pt-12 text-sm',
+        'relative flex h-full w-[320px] flex-col overflow-y-auto px-0 pb-11 pt-0 text-sm',
         variant === 'static' && 'bg-[#bfbfbf]',
         variant === 'overlay' &&
           'rounded-e-2xl border-e border-white/30 bg-[#bfbfbf]/85 shadow-2xl backdrop-blur-xl'
@@ -60,15 +60,15 @@ export function Sidebar({ variant, onRequestClose }: SidebarProps) {
       />
 
       {/* PNDS Projects */}
-      <h2 className="px-2 text-[15px] font-normal text-black">
+      <h2 className="mt-[60px] px-9 text-[14px] font-normal text-black">
         {t('sidebar.projects')}
       </h2>
 
-      <nav className="mt-4 flex flex-col">
+      <nav className="mt-6 flex flex-col">
         {currentProject && (
           <div
             data-testid="current-project-card"
-            className="flex items-center justify-between rounded-xl bg-[#f5f5f5] px-4 py-3 shadow-sm"
+            className="mx-5 flex h-[57px] items-center justify-between rounded-xl bg-[#f5f5f5] px-4 shadow-sm"
           >
             {running ? (
               <button
@@ -105,14 +105,14 @@ export function Sidebar({ variant, onRequestClose }: SidebarProps) {
             disabled={busy}
             onClick={() => handleEntryClick(path)}
             title={path}
-            className="truncate rounded-xl px-4 py-3 text-center text-[15px] text-black/85 hover:bg-black/5 disabled:opacity-50"
+            className="flex h-[68px] items-center justify-center truncate px-9 text-[15px] text-black/85 hover:bg-black/5 disabled:opacity-50"
           >
             {path.split('/').filter(Boolean).pop() ?? path}
           </button>
         ))}
 
         {trustedPaths.length === 0 && (
-          <p className="px-2 py-3 text-center text-xs text-black/50">
+          <p className="px-9 py-3 text-center text-xs text-black/50">
             {t('sidebar.noProjects')}
           </p>
         )}
@@ -123,14 +123,14 @@ export function Sidebar({ variant, onRequestClose }: SidebarProps) {
         onClick={() => void promptOpenProject()}
         disabled={busy}
         aria-label={t('welcome.openProject')}
-        className="mt-3 inline-flex w-fit items-center gap-1.5 rounded-full border border-black/60 px-3.5 py-1 text-[13px] text-black hover:bg-black/5 disabled:opacity-50"
+        className="mx-auto mt-3 inline-flex h-6 items-center gap-1 rounded-full border border-black/60 px-3 text-[12px] text-black hover:bg-black/5 disabled:opacity-50"
       >
-        <Plus size={14} />
+        <Plus size={12} />
         {t('sidebar.open')}
       </button>
 
       {/* Settings card pinned to the bottom (§10.2) */}
-      <div className="mt-auto pt-6">
+      <div className="mt-auto flex justify-center pt-6">
         <SettingsCard />
       </div>
     </aside>

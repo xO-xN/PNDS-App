@@ -81,7 +81,7 @@ export function ErrorScreen() {
 
       <p
         role="alert"
-        className="max-w-xl whitespace-pre-wrap text-center text-sm text-destructive"
+        className="font-manrope max-w-xl whitespace-pre-wrap text-center text-sm text-destructive"
       >
         {sessionError ?? t('toast.error.generic')}
       </p>
@@ -98,7 +98,7 @@ export function ErrorScreen() {
         </Button>
       </div>
 
-      <details className="w-full max-w-xl rounded-md border bg-white/60 p-4 text-xs backdrop-blur-md">
+      <details className="font-manrope w-full max-w-xl rounded-md border bg-white/60 p-4 text-xs backdrop-blur-md">
         <summary className="cursor-pointer text-sm font-medium">
           {t('error.details')}
         </summary>

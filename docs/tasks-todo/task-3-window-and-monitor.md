@@ -15,6 +15,11 @@
 - Error Page：简明摘要 + Retry + Back/Close；可展开复制的技术详情（工程路径、音频模式、LAN IP、OSC target、输出设备、失败阶段、Node/scsynth stderr 末尾、health payload）
 - 视觉：以 Figma [PNDS UI Design](https://www.figma.com/design/gxqwfZbIrsMfXTgrZyabv1/PNDS-UI-Design?node-id=37-46) 为参考（Figma MCP 已配置）；§10.1 列出的旧稿元素不得原样实现；英文 UI
 
+## 进度记录
+
+- 2026-07-29 结构层完成：四态路由、monitor 承载、侧栏行为、拖动区、错误流、模板裁剪；修复 session 事件订阅丢失与 stop() 死锁两个 bug
+- 2026-07-29 Figma 视觉还原完成：灰阶设计系统（#d9d9d9/#bfbfbf/#f5f5f5/#0088ff）、设计版侧栏（条目点击即启动、底部设置卡、选中白卡 ≡/✕）、Welcome 内嵌 +Open、Loading 静态 Logo；字体待定（等用户确认字体名）；侧栏右上角图标未做（§10.2 无定义）
+
 ## 模板裁剪（2026-07-29 确认）
 
 - 拆除：quick pane（`Cmd+Shift+.` 浮窗）、命令面板（`Cmd+K`）、模板双侧栏与自定义标题栏、偏好设置对话框、语言切换 UI（V1 仅英文，fr/ar locale 已删）

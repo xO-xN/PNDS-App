@@ -40,7 +40,9 @@ export function AppShell() {
   if (sessionStatus === 'ready') {
     return (
       <>
-        <MonitorView />
+        <div className="h-screen w-screen overflow-hidden rounded-[12px]">
+          <MonitorView />
+        </div>
         <Toaster position="bottom-right" />
       </>
     )
@@ -49,7 +51,9 @@ export function AppShell() {
   if (sessionStatus === 'error') {
     return (
       <>
-        <ErrorScreen />
+        <div className="h-screen w-screen overflow-hidden rounded-[12px]">
+          <ErrorScreen />
+        </div>
         <Toaster position="bottom-right" />
       </>
     )
@@ -58,7 +62,7 @@ export function AppShell() {
   // Welcome and Loading share the always-open sidebar layout (§10.4).
   return (
     <>
-      <div className="flex h-screen w-screen overflow-hidden bg-[#d9d9d9]">
+      <div className="flex h-screen w-screen overflow-hidden rounded-[12px] bg-[#d9d9d9]">
         <Sidebar variant="static" />
         <main className="flex-1 overflow-auto">
           {sessionStatus === 'starting' ? <LoadingScreen /> : <WelcomeScreen />}

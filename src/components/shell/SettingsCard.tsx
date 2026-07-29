@@ -46,7 +46,7 @@ export function SettingsCard() {
   return (
     <div
       data-testid="settings-card"
-      className="flex flex-col gap-2.5 rounded-xl border border-black/10 bg-black/5 p-3 text-[13px]"
+      className="flex w-[213px] flex-col gap-2 rounded-xl border border-black/10 bg-black/5 p-3 text-[13px]"
     >
       {/* OSC target (§6.6): prefilled default, editable for external mode */}
       <div className="flex items-center justify-between gap-2">

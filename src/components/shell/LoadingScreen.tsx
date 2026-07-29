@@ -25,16 +25,18 @@ export function LoadingScreen() {
   }
 
   return (
-    <div className="flex min-h-full flex-col items-center justify-center gap-10 bg-[#d9d9d9] p-8">
+    <div className="flex min-h-full flex-col items-center bg-[#d9d9d9] p-8 pt-[24vh]">
       <h1 className="text-[28px] font-light tracking-wide text-black">
         {t('loading.title')}
       </h1>
-      <PndsLogo size={180} />
-      <p className="text-[15px] text-black/60">{phaseText}</p>
+      <div className="mt-[7vh]">
+        <PndsLogo size={190} />
+      </div>
+      <p className="mt-[6vh] text-[15px] text-black/60">{phaseText}</p>
       <Button
         variant="outline"
         size="sm"
-        className="border-black/20 bg-transparent text-black/70 hover:bg-black/5"
+        className="mt-4 border-black/20 bg-transparent text-black/70 hover:bg-black/5"
         onClick={() => void handleCancel()}
       >
         {t('loading.cancel')}
