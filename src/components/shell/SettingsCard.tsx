@@ -100,17 +100,17 @@ export function SettingsCard() {
   }
 
   const selectClass =
-    'h-6 w-full appearance-none rounded-md bg-[#e5e5e5] pl-2 pr-6 text-[12px] text-black/80 outline-none disabled:opacity-40'
+    'h-6 w-full appearance-none rounded-md bg-(--pnds-pill) pl-2 pr-6 text-[12px] text-(--pnds-text)/80 outline-none disabled:opacity-40'
 
   return (
     <div
       data-testid="settings-card"
-      className="flex w-full flex-col gap-2.5 rounded-xl bg-[#f5f5f5] p-3.5 text-[13px] shadow-sm"
+      className="flex w-full flex-col gap-2.5 rounded-xl bg-(--pnds-card) p-3.5 text-[13px] shadow-sm"
     >
       {/* OSC target (§6.6) — only visible in external mode */}
       {audioMode === 'external' && (
         <div className="flex items-center gap-2">
-          <span className="w-14 shrink-0 text-black/50">OSC</span>
+          <span className="w-14 shrink-0 text-(--pnds-text)/50">OSC</span>
           <input
             aria-label={t('sidebar.oscTarget')}
             value={oscTargetInput}
@@ -124,7 +124,7 @@ export function SettingsCard() {
               if (e.key === 'Enter') commitOscTarget()
             }}
             className={cn(
-              'h-6 w-full rounded-full bg-[#e5e5e5] px-2.5 text-center font-mono text-[11px] text-black/80 outline-none disabled:opacity-40',
+              'h-6 w-full rounded-full bg-(--pnds-pill) px-2.5 text-center font-mono text-[11px] text-(--pnds-text)/80 outline-none disabled:opacity-40',
               audioMode === 'external' &&
                 !oscTargetValid &&
                 'ring-2 ring-red-500/60'
@@ -135,7 +135,7 @@ export function SettingsCard() {
 
       {/* Audio mode */}
       <div className="flex items-center gap-2">
-        <span className="w-14 shrink-0 text-black/50">Mode</span>
+        <span className="w-14 shrink-0 text-(--pnds-text)/50">Mode</span>
         <div className="relative flex-1">
           <select
             aria-label={t('session.audioMode')}
@@ -153,16 +153,16 @@ export function SettingsCard() {
           </select>
           <ChevronDown
             size={12}
-            className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-black/50"
+            className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-(--pnds-text)/50"
           />
         </div>
       </div>
 
-      <hr className="border-black/10" />
+      <hr className="border-(--pnds-text)/10" />
 
       {/* Master volume (§6.4: internal only, dB-linear, 80% ≈ -6 dB) */}
       <div className="flex items-center gap-2">
-        <Volume2 size={14} className="shrink-0 text-black/50" />
+        <Volume2 size={14} className="shrink-0 text-(--pnds-text)/50" />
         <input
           type="range"
           aria-label={t('sidebar.volume')}
@@ -171,16 +171,16 @@ export function SettingsCard() {
           value={Math.round(volume)}
           disabled={!volumeEnabled}
           onChange={e => handleVolumeChange(Number(e.target.value))}
-          className="h-6 w-full accent-[#0088ff] disabled:opacity-40"
+          className="h-6 w-full accent-(--pnds-accent) disabled:opacity-40"
         />
-        <span className="w-8 shrink-0 text-end text-[11px] tabular-nums text-black/50">
+        <span className="w-8 shrink-0 text-end text-[11px] tabular-nums text-(--pnds-text)/50">
           {Math.round(volume)}
         </span>
       </div>
 
       {/* Output device (§6.5): preference, deferred until Change */}
       <div className="flex items-center gap-2">
-        <span className="w-14 shrink-0 text-black/50">Device</span>
+        <span className="w-14 shrink-0 text-(--pnds-text)/50">Device</span>
         <div className="relative flex-1">
           <select
             aria-label={t('sidebar.outputDevice')}
@@ -199,7 +199,7 @@ export function SettingsCard() {
           </select>
           <ChevronDown
             size={12}
-            className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-black/50"
+            className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-(--pnds-text)/50"
           />
         </div>
       </div>
@@ -207,7 +207,7 @@ export function SettingsCard() {
       {/* LAN address (replaces Figma — §7: explicit choice required) */}
       {lanAddresses.length > 1 && (
         <div className="flex items-center gap-2">
-          <span className="w-14 shrink-0 text-black/50">LAN</span>
+          <span className="w-14 shrink-0 text-(--pnds-text)/50">LAN</span>
           <div className="relative flex-1">
             <select
               aria-label={t('session.lanAddress')}
@@ -229,7 +229,7 @@ export function SettingsCard() {
             </select>
             <ChevronDown
               size={12}
-              className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-black/50"
+              className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-(--pnds-text)/50"
             />
           </div>
         </div>

@@ -29,24 +29,24 @@ export function WelcomeScreen() {
   const busy = preflightStatus === 'checking' || sessionStatus === 'starting'
 
   return (
-    <div className="flex min-h-full flex-col items-center justify-center bg-[#d9d9d9] p-8 animate-[fade-in_0.5s_ease-in]">
+    <div className="flex min-h-full flex-col items-center justify-center bg-(--pnds-bg) p-8 animate-[fade-in_0.5s_ease-in]">
       <header className="text-center">
-        <h1 className="text-[44px] font-light leading-tight tracking-wide text-black">
+        <h1 className="text-[44px] font-light leading-tight tracking-wide text-(--pnds-text)">
           {t('welcome.title')}
         </h1>
-        <p className="mt-3 text-[16px] text-black/60">
+        <p className="mt-3 text-[16px] text-(--pnds-text)/60">
           {t('welcome.subtitle')}
         </p>
       </header>
 
-      <p className="mt-[10vh] max-w-2xl text-center text-[15px] leading-8 text-black/80">
+      <p className="mt-[10vh] max-w-2xl text-center text-[15px] leading-8 text-(--pnds-text)/80">
         {t('welcome.hintStart')}
         <button
           type="button"
           onClick={() => void promptOpenProject()}
           disabled={busy}
           aria-label={t('welcome.openProject')}
-          className="mx-1 inline-flex h-6 translate-y-[-1px] items-center gap-1 rounded-full border border-black/60 px-3 align-baseline text-[12px] text-black hover:bg-black/5 disabled:opacity-50"
+          className="mx-1 inline-flex h-6 translate-y-[-1px] items-center gap-1 rounded-full border border-(--pnds-text)/60 px-3 align-baseline text-[12px] text-(--pnds-text) hover:bg-(--pnds-text)/5 disabled:opacity-50"
         >
           <Plus size={12} />
           {t('sidebar.open')}
@@ -57,7 +57,9 @@ export function WelcomeScreen() {
       </p>
 
       {preflightStatus === 'checking' && (
-        <p className="mt-6 text-sm text-black/60">{t('welcome.checking')}</p>
+        <p className="mt-6 text-sm text-(--pnds-text)/60">
+          {t('welcome.checking')}
+        </p>
       )}
 
       {preflightStatus === 'error' && preflightError && (

@@ -76,7 +76,7 @@ export function AppShell() {
   if (sessionStatus === 'error') {
     return (
       <>
-        <div className="flex h-screen w-screen overflow-hidden rounded-2xl bg-[#d9d9d9]">
+        <div className="flex h-screen w-screen overflow-hidden rounded-2xl bg-(--pnds-bg)">
           <Sidebar variant="static" />
           <main className="flex-1 overflow-auto">
             <ErrorScreen />
@@ -94,7 +94,7 @@ export function AppShell() {
   if (loadingPhase) {
     return (
       <>
-        <div className="h-screen w-screen overflow-hidden rounded-2xl bg-[#d9d9d9]">
+        <div className="h-screen w-screen overflow-hidden rounded-2xl bg-(--pnds-bg)">
           <LoadingScreen onDissolveEnd={() => setLoadingDone(true)} />
         </div>
         <Toaster position="bottom-right" />
@@ -105,7 +105,7 @@ export function AppShell() {
   // ── Welcome (sidebar always open) ──
   return (
     <>
-      <div className="flex h-screen w-screen overflow-hidden rounded-2xl bg-[#d9d9d9]">
+      <div className="flex h-screen w-screen overflow-hidden rounded-2xl bg-(--pnds-bg)">
         <Sidebar variant="static" />
         <main className="flex-1 overflow-auto">
           <WelcomeScreen />

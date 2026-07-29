@@ -104,9 +104,9 @@ export function Sidebar({ variant, onRequestClose }: SidebarProps) {
       className={cn(
         'relative flex w-[320px] flex-col overflow-hidden rounded-2xl text-sm',
         variant === 'static' &&
-          'm-3 border border-black/5 bg-[#bfbfbf] shadow-sm',
+          'm-3 border border-(--pnds-text)/5 bg-(--pnds-sidebar-bg) shadow-sm',
         variant === 'overlay' &&
-          'h-full border border-white/30 bg-[#bfbfbf]/90 shadow-2xl backdrop-blur-xl'
+          'h-full border border-white/30 bg-(--pnds-sidebar-bg)/90 shadow-2xl backdrop-blur-xl'
       )}
     >
       {/* Top row: custom traffic lights (left), share/refresh (right).
@@ -126,7 +126,7 @@ export function Sidebar({ variant, onRequestClose }: SidebarProps) {
             title={t('sidebar.shareHint')}
             disabled={!running || !lanIp || !monitorPort}
             onClick={() => void handleShare()}
-            className="rounded-md p-1.5 text-black/70 hover:bg-black/5 hover:text-black disabled:opacity-40"
+            className="rounded-md p-1.5 text-(--pnds-text)/70 hover:bg-(--pnds-text)/5 hover:text-(--pnds-text) disabled:opacity-40"
           >
             <Share size={15} />
           </button>
@@ -136,7 +136,7 @@ export function Sidebar({ variant, onRequestClose }: SidebarProps) {
             title={t('sidebar.refreshHint')}
             disabled={!running}
             onClick={() => useSessionStore.getState().bumpMonitorReload()}
-            className="rounded-md p-1.5 text-black/70 hover:bg-black/5 hover:text-black disabled:opacity-40"
+            className="rounded-md p-1.5 text-(--pnds-text)/70 hover:bg-(--pnds-text)/5 hover:text-(--pnds-text) disabled:opacity-40"
           >
             <RefreshCw size={15} />
           </button>
@@ -144,7 +144,7 @@ export function Sidebar({ variant, onRequestClose }: SidebarProps) {
       </div>
 
       {/* PNDS Projects */}
-      <h2 className="mt-2 px-9 text-[14px] font-normal text-black">
+      <h2 className="mt-2 px-9 text-[14px] font-normal text-(--pnds-text)">
         {t('sidebar.projects')}
       </h2>
 
@@ -165,7 +165,9 @@ export function Sidebar({ variant, onRequestClose }: SidebarProps) {
               }}
               className={cn(
                 'group mx-5 flex h-[57px] items-center rounded-xl px-3 transition-colors duration-150',
-                isCurrent ? 'bg-[#f5f5f5] shadow-sm' : 'hover:bg-black/5',
+                isCurrent
+                  ? 'bg-(--pnds-card) shadow-sm'
+                  : 'hover:bg-(--pnds-text)/5',
                 dragPath === path && 'opacity-50'
               )}
             >
@@ -179,7 +181,7 @@ export function Sidebar({ variant, onRequestClose }: SidebarProps) {
                 }}
                 onDragEnd={() => setDragPath(null)}
                 aria-label={t('sidebar.dragToReorder')}
-                className="w-5 shrink-0 cursor-grab text-black/40 opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing"
+                className="w-5 shrink-0 cursor-grab text-(--pnds-text)/40 opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing"
               >
                 <GripVertical size={14} />
               </span>
@@ -189,7 +191,7 @@ export function Sidebar({ variant, onRequestClose }: SidebarProps) {
                 disabled={busy || isCurrent}
                 onClick={() => handleEntryClick(path)}
                 title={path}
-                className="flex-1 truncate text-center text-[15px] text-black/85 disabled:opacity-60"
+                className="flex-1 truncate text-center text-[15px] text-(--pnds-text)/85 disabled:opacity-60"
               >
                 {isCurrent ? currentProject.manifest.name : basename(path)}
               </button>
@@ -202,7 +204,7 @@ export function Sidebar({ variant, onRequestClose }: SidebarProps) {
                   type="button"
                   aria-label={t('sidebar.removeFromHistory')}
                   onClick={() => handleRemove(path)}
-                  className="w-5 shrink-0 text-black/50 opacity-0 transition-opacity hover:text-black group-hover:opacity-100"
+                  className="w-5 shrink-0 text-(--pnds-text)/50 opacity-0 transition-opacity hover:text-(--pnds-text) group-hover:opacity-100"
                 >
                   <X size={14} />
                 </button>
@@ -212,7 +214,7 @@ export function Sidebar({ variant, onRequestClose }: SidebarProps) {
         })}
 
         {trustedPaths.length === 0 && (
-          <p className="px-9 py-3 text-center text-xs text-black/50">
+          <p className="px-9 py-3 text-center text-xs text-(--pnds-text)/50">
             {t('sidebar.noProjects')}
           </p>
         )}
@@ -223,7 +225,7 @@ export function Sidebar({ variant, onRequestClose }: SidebarProps) {
         onClick={() => void promptOpenProject()}
         disabled={busy}
         aria-label={t('welcome.openProject')}
-        className="mx-auto mt-3 inline-flex h-6 items-center gap-1 rounded-full border border-black/60 px-3 text-[12px] text-black hover:bg-black/5 disabled:opacity-50"
+        className="mx-auto mt-3 inline-flex h-6 items-center gap-1 rounded-full border border-(--pnds-text)/60 px-3 text-[12px] text-(--pnds-text) hover:bg-(--pnds-text)/5 disabled:opacity-50"
       >
         <Plus size={12} />
         {t('sidebar.open')}

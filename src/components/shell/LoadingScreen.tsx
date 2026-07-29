@@ -25,7 +25,7 @@ export function LoadingScreen({ onDissolveEnd }: Props) {
   }
 
   return (
-    <div className="flex h-full w-full flex-col items-center justify-center bg-[#d9d9d9]">
+    <div className="flex h-full w-full flex-col items-center justify-center bg-(--pnds-bg)">
       <PndsLogoCanvas
         size={380}
         ready={reallyReady}
@@ -34,7 +34,7 @@ export function LoadingScreen({ onDissolveEnd }: Props) {
       <Button
         variant="link"
         size="sm"
-        className="mt-6 text-black/40 hover:text-black/60"
+        className="mt-6 text-(--pnds-text)/40 hover:text-(--pnds-text)/60"
         onClick={() => void handleCancel()}
       >
         {t('loading.cancel')}
