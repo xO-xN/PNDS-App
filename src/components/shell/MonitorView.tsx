@@ -28,7 +28,7 @@ export function MonitorView() {
   }
 
   return (
-    <div className="relative h-screen w-screen overflow-hidden bg-black">
+    <div className="relative h-screen w-screen animate-[fade-in_0.4s_ease-in] overflow-hidden bg-black">
       <iframe
         key={reloadNonce}
         src={`http://${lanIp}:${monitorPort}/`}

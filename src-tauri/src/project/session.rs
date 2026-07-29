@@ -409,6 +409,11 @@ impl SessionManager {
                 let Some((sc_child, port)) = booted else {
                     return Err(last_err);
                 };
+                {
+                    let mut inner = self.lock();
+                    inner.startup_stage = 2;
+                }
+                self.emit(&app);
                 (
                     Some(format!("127.0.0.1:{port}")),
                     Some(sc_child),
@@ -451,6 +456,12 @@ impl SessionManager {
             entry.display()
         );
 
+        {
+            let mut inner = self.lock();
+            inner.startup_stage = 3;
+        }
+        self.emit(&app);
+
         let generation = {
             let mut inner = self.lock();
             inner.generation += 1;
@@ -462,6 +473,7 @@ impl SessionManager {
             inner.lan_ip = Some(lan_ip.clone());
             inner.osc_target = osc_target.clone();
             inner.logger = session_log;
+            inner.startup_stage = 1;
             inner.generation
         };
         self.emit(&app);
@@ -564,6 +576,7 @@ impl SessionManager {
                             // §9.1: readiness is the payload field, not HTTP 200.
                             "ready" => {
                                 guard.status = "ready".to_string();
+                                guard.startup_stage = 4;
                                 let sc_port = guard.scsynth_port;
                                 let volume = guard.volume;
                                 drop(guard);
