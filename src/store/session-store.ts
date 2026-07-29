@@ -12,6 +12,8 @@ interface SessionState {
   projectName: string | null
   /** OSC target reported by the backend (internal: dynamic; external: §6.6). */
   oscTarget: string | null
+  /** Master volume percent (§6.4; every new session starts at 80). */
+  volume: number
   /** Incremented to force the monitor iframe to reload (sidebar refresh). */
   monitorReloadNonce: number
   /** Selected audio mode; defaults to the manifest's defaultMode (§6.1). */
@@ -22,6 +24,7 @@ interface SessionState {
   setAudioMode: (mode: string) => void
   setLanIp: (ip: string) => void
   setLanAddresses: (ips: string[]) => void
+  setVolume: (percent: number) => void
   applySnapshot: (snapshot: SessionSnapshot) => void
   failLocal: (message: string) => void
   bumpMonitorReload: () => void
@@ -35,6 +38,7 @@ export const useSessionStore = create<SessionState>()(set => ({
   outputTail: [],
   projectName: null,
   oscTarget: null,
+  volume: 80,
   monitorReloadNonce: 0,
   audioMode: 'internal',
   lanIp: null,
@@ -43,6 +47,7 @@ export const useSessionStore = create<SessionState>()(set => ({
   setAudioMode: audioMode => set({ audioMode }),
   setLanIp: lanIp => set({ lanIp }),
   setLanAddresses: lanAddresses => set({ lanAddresses }),
+  setVolume: volume => set({ volume }),
 
   applySnapshot: snapshot =>
     set(state => ({
@@ -52,6 +57,7 @@ export const useSessionStore = create<SessionState>()(set => ({
       outputTail: snapshot.outputTail,
       projectName: snapshot.projectName,
       oscTarget: snapshot.oscTarget,
+      volume: snapshot.volume,
       // Backend-owned session facts; when absent (idle snapshots), keep the
       // user's pre-start selection so Welcome controls don't reset.
       lanIp: snapshot.lanIp ?? state.lanIp,
@@ -70,6 +76,7 @@ export const useSessionStore = create<SessionState>()(set => ({
       health: null,
       outputTail: [],
       projectName: null,
+      volume: 80,
       audioMode: 'internal',
       lanIp: null,
       lanAddresses: [],

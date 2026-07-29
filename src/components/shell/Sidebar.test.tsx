@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@/test/test-utils'
+import { render, screen, waitFor, within, fireEvent } from '@/test/test-utils'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { openUrl } from '@tauri-apps/plugin-opener'
@@ -243,6 +243,31 @@ describe('Sidebar', () => {
       expect(commands.stopProject).toHaveBeenCalled()
       expect(commands.preflightProject).toHaveBeenCalledWith(OTHER_PATH)
     })
+  })
+
+  it('enables the volume slider only for a running internal session (§6.4)', async () => {
+    seedLoadedProject()
+
+    const { rerender } = render(<Sidebar variant="static" />)
+    // Not running: disabled
+    expect(
+      screen.getByRole('slider', { name: /master volume/i })
+    ).toBeDisabled()
+
+    // Running internal: enabled and wired to setMasterVolume
+    useSessionStore.setState({ sessionStatus: 'ready', audioMode: 'internal' })
+    rerender(<Sidebar variant="overlay" />)
+    const slider = screen.getByRole('slider', { name: /master volume/i })
+    expect(slider).toBeEnabled()
+    fireEvent.change(slider, { target: { value: '65' } })
+    expect(commands.setMasterVolume).toHaveBeenCalledWith(65)
+
+    // External/none: disabled again (§6.4)
+    useSessionStore.setState({ audioMode: 'none' })
+    rerender(<Sidebar variant="overlay" />)
+    expect(
+      screen.getByRole('slider', { name: /master volume/i })
+    ).toBeDisabled()
   })
 
   it('does not start on LAN pick alone; Load becomes the trigger (§7)', async () => {

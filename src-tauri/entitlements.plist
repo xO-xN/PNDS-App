@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!--
+    The bundled scsynth (from SuperCollider.app, GPL-3.0) carries a hardened
+    runtime flag that requires all loaded dylibs to share its Team ID. Our
+    ad-hoc-signed Frameworks dylibs have none, so loading would fail with
+    "different Team IDs". Disabling library validation is the canonical fix
+    for shipping third-party dylibs without a Developer ID.
+  -->
+  <key>com.apple.security.cs.disable-library-validation</key>
+  <true/>
+</dict>
+</plist>

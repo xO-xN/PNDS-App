@@ -58,11 +58,13 @@ vi.mock('@/lib/tauri-bindings', () => ({
         health: null,
         error: null,
         outputTail: [],
+        volume: 80,
       },
     }),
     listLanAddresses: vi
       .fn()
       .mockResolvedValue({ status: 'ok', data: ['192.168.1.10'] }),
+    setMasterVolume: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
   },
   unwrapResult: vi.fn((result: { status: string; data?: unknown }) => {
     if (result.status === 'ok') return result.data

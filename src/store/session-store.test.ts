@@ -12,6 +12,7 @@ const snapshot = (overrides: Partial<SessionSnapshot>): SessionSnapshot => ({
   health: null,
   error: null,
   outputTail: [],
+  volume: 80,
   ...overrides,
 })
 

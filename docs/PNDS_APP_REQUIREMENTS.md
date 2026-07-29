@@ -272,11 +272,12 @@ http://<Host-LAN-IP>:<monitorPort>/     → 监视/指挥页面（App 显示）
 ```text
 -i 0                    不启用音频输入
 -o 2                    固定两个硬件输出通道
--r <sampleRate>         来自 manifest
+-S <sampleRate>         来自 manifest（注意：采样率参数是大写 -S；小写 -r 是随机种子数，与音频无关）
 -z <blockSize>          来自 manifest
 -a <audioBusChannels>   来自 manifest
 -u <dynamic port>       App 选择的可用本地 UDP 端口
 -B 127.0.0.1            OSC 仅监听本机回路，不向局域网开放控制端口
+-U <plugins path>       指向 App 内置的 UGen plugins 目录；App 不依赖宿主机器上的 SuperCollider 安装
 ```
 
 Bus 模型：

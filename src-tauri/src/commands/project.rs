@@ -93,6 +93,18 @@ pub async fn get_session_state(
     Ok(state.snapshot())
 }
 
+/// §6.4: set the master volume (0-100, dB-linear; live via OSC in internal
+/// mode). External/none modes store the value but apply nothing.
+#[tauri::command]
+#[specta::specta]
+pub async fn set_master_volume(
+    app: AppHandle,
+    state: State<'_, SessionManager>,
+    percent: f32,
+) -> Result<(), String> {
+    state.set_master_volume(&app, percent)
+}
+
 /// Usable LAN IPv4 addresses (§7). The user must choose when more than
 /// one exists; loopback is never offered.
 #[tauri::command]

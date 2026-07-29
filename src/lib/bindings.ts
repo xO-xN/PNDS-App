@@ -104,6 +104,18 @@ async getSessionState() : Promise<Result<SessionSnapshot, string>> {
 }
 },
 /**
+ * §6.4: set the master volume (0-100, dB-linear; live via OSC in internal
+ * mode). External/none modes store the value but apply nothing.
+ */
+async setMasterVolume(percent: number) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("set_master_volume", { percent }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * Usable LAN IPv4 addresses (§7). The user must choose when more than
  * one exists; loopback is never offered.
  */
@@ -169,7 +181,11 @@ export type SessionSnapshot = {
 /**
  * `idle | starting | ready | error | stopping`
  */
-status: string; projectName: string | null; projectPath: string | null; audioMode: string | null; lanIp: string | null; oscTarget: string | null; health: HealthPayload | null; error: string | null; outputTail: string[] }
+status: string; projectName: string | null; projectPath: string | null; audioMode: string | null; lanIp: string | null; oscTarget: string | null; health: HealthPayload | null; error: string | null; outputTail: string[]; 
+/**
+ * Master volume percent (§6.4; new sessions always start at 80).
+ */
+volume: number }
 
 /** tauri-specta globals **/
 

@@ -88,6 +88,8 @@ pub struct SessionSnapshot {
     pub health: Option<HealthPayload>,
     pub error: Option<String>,
     pub output_tail: Vec<String>,
+    /// Master volume percent (§6.4; new sessions always start at 80).
+    pub volume: f32,
 }
 
 // ============================================================================
@@ -224,6 +226,11 @@ fn stop_child_gracefully(child: &mut Child, pid: u32, timeout: Duration) {
 struct SessionInner {
     status: String, // idle | starting | ready | error | stopping
     child: Option<Child>,
+    /// scsynth process and its OSC port (internal mode only, §6.2).
+    scsynth: Option<Child>,
+    scsynth_port: Option<u16>,
+    /// Whether the App Master Synth has been created (§6.4).
+    master_synth_ready: bool,
     project_name: Option<String>,
     project_path: Option<String>,
     audio_mode: Option<String>,
@@ -232,6 +239,8 @@ struct SessionInner {
     health: Option<HealthPayload>,
     error: Option<String>,
     output_tail: VecDeque<String>,
+    /// Master volume percent; every new session starts at 80 (§6.4).
+    volume: f32,
     /// Incremented on every start/stop so stale supervisor threads exit.
     generation: u64,
 }
@@ -248,11 +257,15 @@ impl SessionInner {
             health: self.health.clone(),
             error: self.error.clone(),
             output_tail: self.output_tail.iter().cloned().collect(),
+            volume: self.volume,
         }
     }
 
     fn reset_run_state(&mut self) {
         self.child = None;
+        self.scsynth = None;
+        self.scsynth_port = None;
+        self.master_synth_ready = false;
         self.project_name = None;
         self.project_path = None;
         self.audio_mode = None;
@@ -261,6 +274,7 @@ impl SessionInner {
         self.health = None;
         self.error = None;
         self.output_tail.clear();
+        self.volume = crate::project::audio::DEFAULT_VOLUME_PERCENT;
     }
 }
 
@@ -274,6 +288,7 @@ impl Default for SessionManager {
         Self {
             inner: Arc::new(Mutex::new(SessionInner {
                 status: "idle".to_string(),
+                volume: crate::project::audio::DEFAULT_VOLUME_PERCENT,
                 ..Default::default()
             })),
         }
@@ -323,11 +338,44 @@ impl SessionManager {
             manifest.score_server.monitor_port,
         )?;
 
-        // OSC target per mode (§6.1). scsynth itself starts in task-4.
-        let osc_target = match mode.as_str() {
-            "internal" => Some(format!("127.0.0.1:{}", allocate_udp_port()?)),
-            "external" => Some(DEFAULT_EXTERNAL_TARGET.to_string()),
-            _ => None,
+        // §8.1: internal mode boots scsynth first (and waits for /status)
+        // before the score server starts. External/none skip this entirely.
+        let (osc_target, scsynth_child, scsynth_port) = match mode.as_str() {
+            "internal" => {
+                let sc_cfg = manifest
+                    .audio
+                    .scsynth
+                    .as_ref()
+                    .ok_or("manifest is missing audio.scsynth (required for internal mode)")?;
+                let port = allocate_udp_port()?;
+                let binary = crate::project::audio::scsynth_binary_path()?;
+                let plugins = crate::project::audio::plugins_dir()?;
+                let mut sc_child =
+                    crate::project::audio::spawn_scsynth(&binary, sc_cfg, port, &plugins)?;
+                let sc_pid = sc_child.id();
+
+                let client =
+                    crate::project::audio::OscClient::connect(&format!("127.0.0.1:{port}"))?;
+                if let Err(e) = crate::project::audio::wait_for_scsynth(&client) {
+                    stop_child_gracefully(&mut sc_child, sc_pid, SHUTDOWN_TIMEOUT);
+                    return Err(e);
+                }
+                if let Err(e) = preflight::record_session_child(
+                    &app_data_dir,
+                    sc_pid,
+                    "scsynth-aarch64-apple-darwin".to_string(),
+                ) {
+                    log::warn!("Failed to record scsynth child: {e}");
+                }
+                log::info!("scsynth ready on UDP port {port} (pid {sc_pid})");
+                (
+                    Some(format!("127.0.0.1:{port}")),
+                    Some(sc_child),
+                    Some(port),
+                )
+            }
+            "external" => (Some(DEFAULT_EXTERNAL_TARGET.to_string()), None, None),
+            _ => (None, None, None),
         };
 
         let node = node_binary_path()?;
@@ -376,28 +424,38 @@ impl SessionManager {
 
         // Pipe node stdout/stderr into the session tail (§10.3 details).
         if let Some(stdout) = child.stdout.take() {
-            self.spawn_output_reader(stdout);
+            self.spawn_output_reader(stdout, "node");
         }
         if let Some(stderr) = child.stderr.take() {
-            self.spawn_output_reader(stderr);
+            self.spawn_output_reader(stderr, "node");
         }
 
         {
             let mut inner = self.lock();
             inner.child = Some(child);
+            if let Some(mut sc) = scsynth_child {
+                if let Some(stdout) = sc.stdout.take() {
+                    self.spawn_output_reader(stdout, "scsynth");
+                }
+                if let Some(stderr) = sc.stderr.take() {
+                    self.spawn_output_reader(stderr, "scsynth");
+                }
+                inner.scsynth_port = scsynth_port;
+                inner.scsynth = Some(sc);
+            }
         }
 
         self.spawn_supervisor(app, app_data_dir, pid, manifest, generation);
         Ok(())
     }
 
-    fn spawn_output_reader<R: std::io::Read + Send + 'static>(&self, reader: R) {
+    fn spawn_output_reader<R: std::io::Read + Send + 'static>(&self, reader: R, tag: &'static str) {
         let inner = Arc::clone(&self.inner);
         std::thread::spawn(move || {
             for line in BufReader::new(reader).lines() {
                 match line {
                     Ok(line) => {
-                        log::debug!("[node] {line}");
+                        log::debug!("[{tag}] {line}");
                         let mut guard = inner.lock().unwrap_or_else(|e| e.into_inner());
                         guard.output_tail.push_back(line);
                         while guard.output_tail.len() > OUTPUT_TAIL_LINES {
@@ -449,8 +507,8 @@ impl SessionManager {
                         "Score server exited during startup ({status}). See output below."
                     ));
                     drop(guard);
+                    Self::teardown_children(&inner, &app_data_dir);
                     Self::emit_static(&app, &inner);
-                    let _ = preflight::clear_session_child(&app_data_dir, pid);
                     return;
                 }
 
@@ -462,7 +520,30 @@ impl SessionManager {
                             // §9.1: readiness is the payload field, not HTTP 200.
                             "ready" => {
                                 guard.status = "ready".to_string();
+                                let sc_port = guard.scsynth_port;
+                                let volume = guard.volume;
                                 drop(guard);
+
+                                // §8.1 step 7 (internal): the master synth goes
+                                // after the project group (§6.4). Without it the
+                                // private bus reaches nothing — fail loudly.
+                                if let Some(port) = sc_port {
+                                    if let Err(e) = Self::create_master_stage(port, volume) {
+                                        let mut guard =
+                                            inner.lock().unwrap_or_else(|e| e.into_inner());
+                                        guard.status = "error".to_string();
+                                        guard.error =
+                                            Some(format!("Audio master stage failed: {e}"));
+                                        drop(guard);
+                                        Self::teardown_children(&inner, &app_data_dir);
+                                        Self::emit_static(&app, &inner);
+                                        return;
+                                    }
+                                    let mut guard = inner.lock().unwrap_or_else(|e| e.into_inner());
+                                    guard.master_synth_ready = true;
+                                    drop(guard);
+                                }
+
                                 Self::emit_static(&app, &inner);
                                 Self::watch_running(&app, &inner, &app_data_dir, pid, generation);
                                 return;
@@ -470,12 +551,8 @@ impl SessionManager {
                             "error" => {
                                 guard.status = "error".to_string();
                                 guard.error = Some(health_error_message(&health));
-                                let mut child = guard.child.take();
                                 drop(guard);
-                                if let Some(mut c) = child.take() {
-                                    stop_child_gracefully(&mut c, pid, SHUTDOWN_TIMEOUT);
-                                }
-                                let _ = preflight::clear_session_child(&app_data_dir, pid);
+                                Self::teardown_children(&inner, &app_data_dir);
                                 Self::emit_static(&app, &inner);
                                 return;
                             }
@@ -494,12 +571,8 @@ impl SessionManager {
                                 "Timed out waiting for the project to report ready ({}s).",
                                 HEALTH_TIMEOUT.as_secs()
                             ));
-                            let mut child = guard.child.take();
                             drop(guard);
-                            if let Some(mut c) = child.take() {
-                                stop_child_gracefully(&mut c, pid, SHUTDOWN_TIMEOUT);
-                            }
-                            let _ = preflight::clear_session_child(&app_data_dir, pid);
+                            Self::teardown_children(&inner, &app_data_dir);
                             Self::emit_static(&app, &inner);
                             return;
                         }
@@ -548,7 +621,57 @@ impl SessionManager {
         }
     }
 
-    /// §8.2 stop sequence for the score server. Idempotent.
+    /// §8.1 step 7 (internal): create the App Master Synth at the tail of
+    /// the root group, applying the session's current volume (§6.4).
+    fn create_master_stage(port: u16, volume_percent: f32) -> Result<(), String> {
+        let client = crate::project::audio::OscClient::connect(&format!("127.0.0.1:{port}"))?;
+        let synthdef = crate::project::audio::master_synthdef_path()?;
+        crate::project::audio::create_master_synth(
+            &client,
+            &synthdef,
+            crate::project::audio::volume_percent_to_gain(volume_percent),
+        )
+    }
+
+    /// Stops the node score server and scsynth (§8.2): node SIGTERM with a
+    /// grace window, master synth release, scsynth quit. Both are removed
+    /// from the session-children record afterwards.
+    fn teardown_children(inner: &Arc<Mutex<SessionInner>>, app_data_dir: &Path) {
+        let (node_child, node_pid, sc_child, sc_pid, sc_port, master_ready) = {
+            let mut guard = inner.lock().unwrap_or_else(|e| e.into_inner());
+            let node_pid = guard.child.as_ref().map(|c| c.id());
+            let sc_pid = guard.scsynth.as_ref().map(|c| c.id());
+            (
+                guard.child.take(),
+                node_pid,
+                guard.scsynth.take(),
+                sc_pid,
+                guard.scsynth_port,
+                guard.master_synth_ready,
+            )
+        };
+
+        if let Some(mut c) = node_child {
+            stop_child_gracefully(&mut c, node_pid.unwrap_or(0), SHUTDOWN_TIMEOUT);
+            let _ = preflight::clear_session_child(app_data_dir, node_pid.unwrap_or(0));
+            log::info!("Score server stopped (pid {})", node_pid.unwrap_or(0));
+        }
+
+        if let Some(mut sc) = sc_child {
+            if let Some(port) = sc_port {
+                if let Ok(client) =
+                    crate::project::audio::OscClient::connect(&format!("127.0.0.1:{port}"))
+                {
+                    crate::project::audio::quit_scsynth(&client, master_ready);
+                }
+            }
+            stop_child_gracefully(&mut sc, sc_pid.unwrap_or(0), SHUTDOWN_TIMEOUT);
+            let _ = preflight::clear_session_child(app_data_dir, sc_pid.unwrap_or(0));
+            log::info!("scsynth stopped (pid {})", sc_pid.unwrap_or(0));
+        }
+    }
+
+    /// §8.2 stop sequence. Idempotent.
     ///
     /// NOTE: never call `emit` while holding the inner lock — `emit` takes a
     /// snapshot, which locks again (std Mutex is not reentrant → deadlock).
@@ -557,36 +680,57 @@ impl SessionManager {
         app: &AppHandle<R>,
         app_data_dir: &Path,
     ) -> Result<(), String> {
-        let (child, pid) = {
+        {
             let mut inner = self.lock();
             inner.generation += 1;
-            match inner.child.take() {
-                Some(child) => {
-                    inner.status = "stopping".to_string();
-                    let pid = child.id();
-                    (Some(child), pid)
-                }
-                None => {
-                    inner.reset_run_state();
-                    inner.status = "idle".to_string();
-                    (None, 0)
-                }
-            }
-        };
-        self.emit(app);
-
-        if let Some(mut c) = child {
-            stop_child_gracefully(&mut c, pid, SHUTDOWN_TIMEOUT);
-            let _ = preflight::clear_session_child(app_data_dir, pid);
-            log::info!("Score server stopped (pid {pid})");
-
-            {
-                let mut inner = self.lock();
+            if inner.child.is_none() && inner.scsynth.is_none() {
                 inner.reset_run_state();
                 inner.status = "idle".to_string();
+            } else {
+                inner.status = "stopping".to_string();
             }
-            self.emit(app);
         }
+        self.emit(app);
+
+        let inner = Arc::clone(&self.inner);
+        Self::teardown_children(&inner, app_data_dir);
+
+        {
+            let mut guard = self.lock();
+            guard.reset_run_state();
+            guard.status = "idle".to_string();
+        }
+        self.emit(app);
+        Ok(())
+    }
+
+    /// §6.4: set the master volume (percent 0-100, dB-linear). Applied live
+    /// via OSC when an internal session is running.
+    pub fn set_master_volume<R: tauri::Runtime>(
+        &self,
+        app: &AppHandle<R>,
+        percent: f32,
+    ) -> Result<(), String> {
+        let percent = percent.clamp(0.0, 100.0);
+        let (port, apply) = {
+            let mut inner = self.lock();
+            inner.volume = percent;
+            (
+                inner.scsynth_port,
+                inner.status == "ready" && inner.master_synth_ready,
+            )
+        };
+        if apply {
+            if let Some(port) = port {
+                let client =
+                    crate::project::audio::OscClient::connect(&format!("127.0.0.1:{port}"))?;
+                crate::project::audio::set_master_gain(
+                    &client,
+                    crate::project::audio::volume_percent_to_gain(percent),
+                )?;
+            }
+        }
+        self.emit(app);
         Ok(())
     }
 

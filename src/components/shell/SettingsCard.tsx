@@ -2,6 +2,8 @@ import { useTranslation } from 'react-i18next'
 import { Volume2, ChevronDown } from 'lucide-react'
 import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
+import { commands } from '@/lib/tauri-bindings'
+import { logger } from '@/lib/logger'
 import { restartSession } from '@/lib/open-project'
 
 const MODE_LABELS: Record<string, string> = {
@@ -29,11 +31,23 @@ export function SettingsCard() {
   const modes = currentProject?.manifest.audio.supportedModes ?? []
   const projectLoaded = currentProject !== null
   const running = sessionStatus !== 'idle'
+  // §6.4: the master volume applies to the internal signal path only.
+  const volumeEnabled = sessionStatus === 'ready' && audioMode === 'internal'
+  const volume = useSessionStore(state => state.volume)
 
   const handleModeChange = (mode: string) => {
     useSessionStore.getState().setAudioMode(mode)
     // §8.3: changing the mode of a live session is a full restart.
     if (running) void restartSession()
+  }
+
+  const handleVolumeChange = (percent: number) => {
+    useSessionStore.getState().setVolume(percent)
+    void commands.setMasterVolume(percent).then(result => {
+      if (result.status === 'error') {
+        logger.warn('setMasterVolume failed', { error: result.error })
+      }
+    })
   }
 
   const handleLanChange = (ip: string) => {
@@ -88,7 +102,7 @@ export function SettingsCard() {
 
       <hr className="border-black/10" />
 
-      {/* Master volume (task-4) */}
+      {/* Master volume (§6.4: internal only, dB-linear, 80% ≈ -6 dB) */}
       <div className="flex items-center gap-2">
         <Volume2 size={14} className="shrink-0 text-black/50" />
         <input
@@ -96,10 +110,14 @@ export function SettingsCard() {
           aria-label={t('sidebar.volume')}
           min={0}
           max={100}
-          defaultValue={80}
-          disabled
+          value={Math.round(volume)}
+          disabled={!volumeEnabled}
+          onChange={e => handleVolumeChange(Number(e.target.value))}
           className="h-6 w-full accent-[#0088ff] disabled:opacity-40"
         />
+        <span className="w-8 shrink-0 text-end text-[11px] tabular-nums text-black/50">
+          {Math.round(volume)}
+        </span>
       </div>
 
       {/* Output device (task-5) */}
