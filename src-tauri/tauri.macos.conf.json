@@ -19,7 +19,7 @@
         "dragDropEnabled": true,
         "windowEffects": {
           "effects": ["windowBackground"],
-          "radius": 12.0,
+          "radius": 16.0,
           "state": "active"
         }
       }
