@@ -10,6 +10,8 @@ interface SessionState {
   health: HealthPayload | null
   outputTail: string[]
   projectName: string | null
+  /** OSC target reported by the backend (internal: dynamic; external: §6.6). */
+  oscTarget: string | null
   /** Selected audio mode; defaults to the manifest's defaultMode (§6.1). */
   audioMode: string
   /** Selected LAN IPv4 (§7); null until the user chooses when multiple exist. */
@@ -29,6 +31,7 @@ export const useSessionStore = create<SessionState>()(set => ({
   health: null,
   outputTail: [],
   projectName: null,
+  oscTarget: null,
   audioMode: 'internal',
   lanIp: null,
   lanAddresses: [],
@@ -44,6 +47,7 @@ export const useSessionStore = create<SessionState>()(set => ({
       health: snapshot.health,
       outputTail: snapshot.outputTail,
       projectName: snapshot.projectName,
+      oscTarget: snapshot.oscTarget,
     }),
 
   failLocal: message => set({ sessionStatus: 'error', sessionError: message }),

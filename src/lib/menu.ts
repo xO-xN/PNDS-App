@@ -1,8 +1,9 @@
 /**
  * Application menu builder using Tauri's JavaScript API.
  *
- * This module creates native menus from JavaScript, enabling i18n support
- * through react-i18next. Menus are rebuilt when the language changes.
+ * PNDS keeps the macOS menu bar available in every state (§10.1): the app
+ * menu, plus standard File/Edit/Window submenus for ⌘W, ⌘Q, ⌘M and text
+ * editing shortcuts. All standard items are predefined (native behavior).
  */
 import {
   Menu,
@@ -11,8 +12,8 @@ import {
   PredefinedMenuItem,
 } from '@tauri-apps/api/menu'
 import { check } from '@tauri-apps/plugin-updater'
+import { message } from '@tauri-apps/plugin-dialog'
 import i18n from '@/i18n/config'
-import { useUIStore } from '@/store/ui-store'
 import { logger } from '@/lib/logger'
 import { notifications } from '@/lib/notifications'
 
@@ -25,7 +26,6 @@ export async function buildAppMenu(): Promise<Menu> {
   const t = i18n.t.bind(i18n)
 
   try {
-    // Build the main application submenu (appears as app name on macOS)
     const appSubmenu = await Submenu.new({
       text: APP_NAME,
       items: [
@@ -39,13 +39,6 @@ export async function buildAppMenu(): Promise<Menu> {
           id: 'check-updates',
           text: t('menu.checkForUpdates'),
           action: handleCheckForUpdates,
-        }),
-        await PredefinedMenuItem.new({ item: 'Separator' }),
-        await MenuItem.new({
-          id: 'preferences',
-          text: t('menu.preferences'),
-          accelerator: 'CmdOrCtrl+,',
-          action: handleOpenPreferences,
         }),
         await PredefinedMenuItem.new({ item: 'Separator' }),
         await PredefinedMenuItem.new({
@@ -68,33 +61,51 @@ export async function buildAppMenu(): Promise<Menu> {
       ],
     })
 
-    // Build the View submenu
-    const viewSubmenu = await Submenu.new({
-      text: t('menu.view'),
+    const fileSubmenu = await Submenu.new({
+      text: t('menu.file'),
       items: [
-        await MenuItem.new({
-          id: 'toggle-left-sidebar',
-          text: t('menu.toggleLeftSidebar'),
-          accelerator: 'CmdOrCtrl+1',
-          action: handleToggleLeftSidebar,
-        }),
-        await MenuItem.new({
-          id: 'toggle-right-sidebar',
-          text: t('menu.toggleRightSidebar'),
-          accelerator: 'CmdOrCtrl+2',
-          action: handleToggleRightSidebar,
+        await PredefinedMenuItem.new({
+          item: 'CloseWindow',
+          text: t('menu.closeWindow'),
         }),
       ],
     })
 
-    // Build the complete menu
-    const menu = await Menu.new({
-      items: [appSubmenu, viewSubmenu],
+    const editSubmenu = await Submenu.new({
+      text: t('menu.edit'),
+      items: [
+        await PredefinedMenuItem.new({ item: 'Undo', text: t('menu.undo') }),
+        await PredefinedMenuItem.new({ item: 'Redo', text: t('menu.redo') }),
+        await PredefinedMenuItem.new({ item: 'Separator' }),
+        await PredefinedMenuItem.new({ item: 'Cut', text: t('menu.cut') }),
+        await PredefinedMenuItem.new({ item: 'Copy', text: t('menu.copy') }),
+        await PredefinedMenuItem.new({ item: 'Paste', text: t('menu.paste') }),
+        await PredefinedMenuItem.new({
+          item: 'SelectAll',
+          text: t('menu.selectAll'),
+        }),
+      ],
     })
 
-    // Set as the application menu
-    await menu.setAsAppMenu()
+    const windowSubmenu = await Submenu.new({
+      text: t('menu.window'),
+      items: [
+        await PredefinedMenuItem.new({
+          item: 'Minimize',
+          text: t('menu.minimize'),
+        }),
+        await PredefinedMenuItem.new({
+          item: 'Maximize',
+          text: t('menu.zoom'),
+        }),
+      ],
+    })
 
+    const menu = await Menu.new({
+      items: [appSubmenu, fileSubmenu, editSubmenu, windowSubmenu],
+    })
+
+    await menu.setAsAppMenu()
     logger.info('Application menu built successfully')
     return menu
   } catch (error) {
@@ -120,12 +131,13 @@ export function setupMenuLanguageListener(): () => void {
   return () => i18n.off('languageChanged', handler)
 }
 
-// Menu action handlers
-
-function handleAbout(): void {
-  logger.info('About menu item clicked')
-  alert(
-    `${APP_NAME}\n\nVersion: ${__APP_VERSION__}\n\nBuilt with Tauri v2 + React + TypeScript`
+async function handleAbout(): Promise<void> {
+  await message(
+    `${APP_NAME} ${__APP_VERSION__}\nPlatform for Networked Digital Score`,
+    {
+      title: `About ${APP_NAME}`,
+      kind: 'info',
+    }
   )
 }
 
@@ -145,19 +157,4 @@ async function handleCheckForUpdates(): Promise<void> {
     logger.error('Update check failed', { error })
     notifications.error('Update Check Failed', 'Could not check for updates')
   }
-}
-
-function handleOpenPreferences(): void {
-  logger.info('Preferences menu item clicked')
-  useUIStore.getState().setPreferencesOpen(true)
-}
-
-function handleToggleLeftSidebar(): void {
-  logger.info('Toggle Left Sidebar menu item clicked')
-  useUIStore.getState().toggleLeftSidebar()
-}
-
-function handleToggleRightSidebar(): void {
-  logger.info('Toggle Right Sidebar menu item clicked')
-  useUIStore.getState().toggleRightSidebar()
 }

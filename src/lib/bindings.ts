@@ -9,17 +9,6 @@
 
 export const commands = {
 /**
- * Simple greeting command for demonstration purposes.
- */
-async greet(name: string) : Promise<Result<string, string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("greet", { name }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
  * Loads user preferences from disk.
  * Returns default preferences if the file doesn't exist.
  */
@@ -50,42 +39,6 @@ async savePreferences(preferences: AppPreferences) : Promise<Result<null, string
 async sendNativeNotification(title: string, body: string | null) : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("send_native_notification", { title, body }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Saves emergency data to a JSON file for later recovery.
- * Validates filename and enforces a 10MB size limit.
- */
-async saveEmergencyData(filename: string, data: JsonValue) : Promise<Result<null, RecoveryError>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("save_emergency_data", { filename, data }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Loads emergency data from a previously saved JSON file.
- * Returns FileNotFound if the file doesn't exist.
- */
-async loadEmergencyData(filename: string) : Promise<Result<JsonValue, RecoveryError>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("load_emergency_data", { filename }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Removes recovery files older than 7 days.
- * Returns the count of removed files.
- */
-async cleanupOldRecoveryFiles() : Promise<Result<number, RecoveryError>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("cleanup_old_recovery_files") };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -161,58 +114,6 @@ async listLanAddresses() : Promise<Result<string[], string>> {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
-},
-/**
- * Shows the quick pane window and makes it the key window (for keyboard input).
- */
-async showQuickPane() : Promise<Result<null, string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("show_quick_pane") };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Dismisses the quick pane window.
- * On macOS, resigns key window status before hiding to avoid activating main window.
- */
-async dismissQuickPane() : Promise<Result<null, string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("dismiss_quick_pane") };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Toggles the quick pane window visibility.
- */
-async toggleQuickPane() : Promise<Result<null, string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("toggle_quick_pane") };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Returns the default shortcut constant for frontend use.
- */
-async getDefaultQuickPaneShortcut() : Promise<string> {
-    return await TAURI_INVOKE("get_default_quick_pane_shortcut");
-},
-/**
- * Updates the global shortcut for the quick pane.
- * Pass None to reset to default.
- */
-async updateQuickPaneShortcut(shortcut: string | null) : Promise<Result<null, string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("update_quick_pane_shortcut", { shortcut }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
 }
 }
 
@@ -229,15 +130,11 @@ async updateQuickPaneShortcut(shortcut: string | null) : Promise<Result<null, st
 /**
  * Application preferences that persist to disk.
  * Only contains settings that should be saved between sessions.
+ * Audio device and per-project OSC targets arrive in task-5.
  */
 export type AppPreferences = { theme: string; 
 /**
- * Global shortcut for quick pane (e.g., "CommandOrControl+Shift+.")
- * If None, uses the default shortcut
- */
-quick_pane_shortcut: string | null; 
-/**
- * User's preferred language (e.g., "en", "es", "de")
+ * User's preferred language (V1 ships English-only)
  * If None, uses system locale detection
  */
 language: string | null }
@@ -262,32 +159,7 @@ export type HealthPayload = {
  */
 status: string; projectId?: string | null; audioMode?: string | null; audio?: HealthAudio | null; scoreServer?: HealthScoreServer | null }
 export type HealthScoreServer = { performerPort?: number | null; monitorPort?: number | null; error?: string | null }
-export type JsonValue = null | boolean | number | string | JsonValue[] | Partial<{ [key in string]: JsonValue }>
 export type Manifest = { schemaVersion: number; id: string; name: string; version: string; description: string | null; scoreServer: ScoreServer; audio: AudioConfig }
-/**
- * Error types for recovery operations (typed for frontend matching)
- */
-export type RecoveryError = 
-/**
- * File does not exist (expected case, not a failure)
- */
-{ type: "FileNotFound" } | 
-/**
- * Filename validation failed
- */
-{ type: "ValidationError"; message: string } | 
-/**
- * Data exceeds size limit
- */
-{ type: "DataTooLarge"; max_bytes: number } | 
-/**
- * File system read/write error
- */
-{ type: "IoError"; message: string } | 
-/**
- * JSON serialization/deserialization error
- */
-{ type: "ParseError"; message: string }
 export type ScoreServer = { entry: string; workingDirectory: string; performerPort: number; monitorPort: number }
 export type ScsynthConfig = { sampleRate: number; blockSize: number; audioBusChannels: number }
 /**

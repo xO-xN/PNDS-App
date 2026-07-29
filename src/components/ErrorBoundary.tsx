@@ -1,5 +1,4 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
-import { saveCrashState } from '@/lib/recovery'
 import { logger } from '@/lib/logger'
 
 interface Props {
@@ -13,10 +12,9 @@ interface State {
 }
 
 /**
- * Simple error boundary that saves app state before crashes
- *
- * Automatically saves crash data to recovery files for debugging
- * Shows a user-friendly error message instead of a blank screen
+ * Error boundary that shows a user-friendly fallback instead of a blank
+ * window when the React tree crashes. PNDS keeps no unsaved user data, so
+ * there is nothing to persist here — a reload is a full reset.
  */
 export class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
@@ -25,11 +23,7 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   static getDerivedStateFromError(error: Error): State {
-    // Update state so the next render will show the fallback UI
-    return {
-      hasError: true,
-      error,
-    }
+    return { hasError: true, error }
   }
 
   override componentDidCatch(error: Error, errorInfo: ErrorInfo) {
@@ -37,35 +31,7 @@ export class ErrorBoundary extends Component<Props, State> {
       error: error.message,
       stack: error.stack,
     })
-
     this.setState({ errorInfo })
-
-    // Save crash state asynchronously (don't block error UI)
-    this.saveCrashData(error, errorInfo)
-  }
-
-  private async saveCrashData(error: Error, errorInfo: ErrorInfo) {
-    try {
-      // Get basic app state - extend this based on your app's needs
-      const appState = {
-        url: window.location.href,
-        userAgent: navigator.userAgent,
-        timestamp: new Date().toISOString(),
-        // Add more app state here as needed:
-        // currentUser: getCurrentUser(),
-        // activeFeatures: getActiveFeatures(),
-        // etc.
-      }
-
-      await saveCrashState(appState, {
-        error: error.message,
-        stack: error.stack || 'No stack trace available',
-        componentStack: errorInfo.componentStack || undefined,
-      })
-    } catch (saveError) {
-      // Don't throw from error boundary - just log
-      logger.error('Failed to save crash data', { saveError })
-    }
   }
 
   private handleReload = () => {
@@ -82,7 +48,7 @@ export class ErrorBoundary extends Component<Props, State> {
         <div className="flex min-h-screen flex-col items-center justify-center bg-background p-8">
           <div className="w-full max-w-md text-center">
             <div className="mb-6">
-              <div className="mx-auto mb-4 h-16 w-16 rounded-full bg-destructive/10 flex items-center justify-center">
+              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-destructive/10">
                 <svg
                   className="h-8 w-8 text-destructive"
                   fill="none"
@@ -97,26 +63,25 @@ export class ErrorBoundary extends Component<Props, State> {
                   />
                 </svg>
               </div>
-              <h1 className="text-2xl font-bold text-foreground mb-2">
+              <h1 className="mb-2 text-2xl font-bold text-foreground">
                 Something went wrong
               </h1>
-              <p className="text-muted-foreground mb-6">
-                The application encountered an unexpected error. Your data has
-                been saved automatically.
+              <p className="mb-6 text-muted-foreground">
+                The application encountered an unexpected error.
               </p>
             </div>
 
             <div className="space-y-3">
               <button
                 onClick={this.handleReload}
-                className="w-full px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+                className="w-full rounded-md bg-primary px-4 py-2 text-primary-foreground transition-colors hover:bg-primary/90"
               >
                 Reload Application
               </button>
 
               <button
                 onClick={this.handleReset}
-                className="w-full px-4 py-2 bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/90 transition-colors"
+                className="w-full rounded-md bg-secondary px-4 py-2 text-secondary-foreground transition-colors hover:bg-secondary/90"
               >
                 Try Again
               </button>
@@ -127,12 +92,12 @@ export class ErrorBoundary extends Component<Props, State> {
                 <summary className="cursor-pointer text-sm text-muted-foreground hover:text-foreground">
                   Error Details (Development Only)
                 </summary>
-                <div className="mt-2 p-3 bg-muted rounded-md text-xs font-mono">
-                  <div className="text-destructive font-semibold mb-1">
+                <div className="mt-2 rounded-md bg-muted p-3 font-mono text-xs">
+                  <div className="mb-1 font-semibold text-destructive">
                     {this.state.error.name}: {this.state.error.message}
                   </div>
                   {this.state.error.stack && (
-                    <pre className="whitespace-pre-wrap text-muted-foreground overflow-auto">
+                    <pre className="overflow-auto whitespace-pre-wrap text-muted-foreground">
                       {this.state.error.stack}
                     </pre>
                   )}

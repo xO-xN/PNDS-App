@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react'
-import { open } from '@tauri-apps/plugin-dialog'
+import { useEffect } from 'react'
 import { listen } from '@tauri-apps/api/event'
 import { useTranslation } from 'react-i18next'
 import { commands, type SessionSnapshot } from '@/lib/tauri-bindings'
 import { logger } from '@/lib/logger'
 import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
+import { confirmTrustAndOpen, promptOpenProject } from '@/lib/open-project'
 import { Button } from '@/components/ui/button'
 import {
   AlertDialog,
@@ -19,24 +19,21 @@ import {
 } from '@/components/ui/alert-dialog'
 
 /**
- * Welcome screen (§10.4): no project runs automatically; the user picks a
- * project directory, confirms trust (§4), preflight validates it (§5, §7),
- * then chooses an audio mode (§6.1) and LAN address (§7) and starts the
- * score server (§8). The full window model and Figma styling arrive in task-3.
+ * Welcome main area (§10.4): hero plus, after a project passes preflight,
+ * the project card with audio mode (§6.1) / LAN address (§7) selection and
+ * the start action. Renders the trust confirmation dialog (§4) driven by
+ * `pendingTrustPath`. Loading/Running/Error states are handled by AppShell.
  */
 export function WelcomeScreen() {
   const { t } = useTranslation()
   const currentProject = useProjectStore(state => state.currentProject)
   const preflightStatus = useProjectStore(state => state.preflightStatus)
   const preflightError = useProjectStore(state => state.preflightError)
-  const sessionStatus = useSessionStore(state => state.sessionStatus)
-  const sessionError = useSessionStore(state => state.sessionError)
-  const health = useSessionStore(state => state.health)
-  const outputTail = useSessionStore(state => state.outputTail)
+  const pendingTrustPath = useProjectStore(state => state.pendingTrustPath)
+  const trustedPaths = useProjectStore(state => state.trustedPaths)
   const audioMode = useSessionStore(state => state.audioMode)
   const lanIp = useSessionStore(state => state.lanIp)
   const lanAddresses = useSessionStore(state => state.lanAddresses)
-  const [pendingPath, setPendingPath] = useState<string | null>(null)
 
   // Mirror the Rust session state: live events + initial restore on mount.
   useEffect(() => {
@@ -52,54 +49,6 @@ export function WelcomeScreen() {
       void unlisten.then(off => off())
     }
   }, [])
-
-  const runPreflight = async (path: string) => {
-    useProjectStore.getState().startPreflight()
-    useSessionStore.getState().resetSession()
-    logger.info('Running project preflight', { path })
-    const result = await commands.preflightProject(path)
-    if (result.status === 'error') {
-      useProjectStore.getState().preflightFailed(result.error)
-      logger.warn('Preflight failed', { path, error: result.error })
-      return
-    }
-    useProjectStore.getState().preflightSucceeded(path, result.data)
-    logger.info('Preflight passed', { project: result.data.name })
-
-    // Session defaults from the manifest (§6.1) and the network (§7).
-    useSessionStore.getState().setAudioMode(result.data.audio.defaultMode)
-    const addrs = await commands.listLanAddresses()
-    if (addrs.status === 'ok') {
-      useSessionStore.getState().setLanAddresses(addrs.data)
-      const [first] = addrs.data
-      if (addrs.data.length === 1 && first) {
-        useSessionStore.getState().setLanIp(first)
-      }
-    }
-  }
-
-  const handleOpenProject = async () => {
-    const selected = await open({
-      directory: true,
-      multiple: false,
-      title: t('welcome.openProject'),
-    })
-    if (!selected) return
-
-    if (useProjectStore.getState().isTrusted(selected)) {
-      void runPreflight(selected)
-    } else {
-      setPendingPath(selected)
-    }
-  }
-
-  const handleTrustConfirm = () => {
-    if (!pendingPath) return
-    useProjectStore.getState().trustProject(pendingPath)
-    const path = pendingPath
-    setPendingPath(null)
-    void runPreflight(path)
-  }
 
   const handleStart = async () => {
     if (!currentProject || !lanIp) return
@@ -118,22 +67,11 @@ export function WelcomeScreen() {
     }
   }
 
-  const handleStop = async () => {
-    const result = await commands.stopProject()
-    if (result.status === 'error') {
-      useSessionStore.getState().failLocal(result.error)
-    }
-  }
-
-  const sessionRunning = sessionStatus !== 'idle'
   const canStart =
-    preflightStatus === 'ready' &&
-    currentProject !== null &&
-    lanIp !== null &&
-    !sessionRunning
+    preflightStatus === 'ready' && currentProject !== null && lanIp !== null
 
   return (
-    <div className="flex h-screen flex-col items-center justify-center gap-6 overflow-auto p-8">
+    <div className="flex min-h-full flex-col items-center justify-center gap-6 p-8">
       <header className="text-center">
         <h1 className="text-4xl font-semibold tracking-wide">
           {t('welcome.title')}
@@ -143,8 +81,8 @@ export function WelcomeScreen() {
 
       <Button
         size="lg"
-        onClick={() => void handleOpenProject()}
-        disabled={preflightStatus === 'checking' || sessionRunning}
+        onClick={() => void promptOpenProject()}
+        disabled={preflightStatus === 'checking'}
       >
         {preflightStatus === 'checking'
           ? t('welcome.checking')
@@ -161,7 +99,7 @@ export function WelcomeScreen() {
       )}
 
       {preflightStatus === 'ready' && currentProject && (
-        <section className="w-full max-w-xl rounded-md border p-4 text-start text-sm">
+        <section className="w-full max-w-xl rounded-xl border border-white/50 bg-white/60 p-5 text-start text-sm shadow-sm backdrop-blur-md">
           <h2 className="text-base font-medium">
             {currentProject.manifest.name}
           </h2>
@@ -179,148 +117,88 @@ export function WelcomeScreen() {
             </dd>
           </dl>
 
-          {!sessionRunning && (
-            <div className="mt-4 flex flex-col gap-3 border-t pt-4">
+          <div className="mt-4 flex flex-col gap-3 border-t border-black/5 pt-4">
+            <label className="flex items-center justify-between gap-4">
+              <span className="text-muted-foreground">
+                {t('session.audioMode')}
+              </span>
+              <select
+                className="rounded-md border bg-background px-3 py-1.5"
+                value={audioMode}
+                onChange={e =>
+                  useSessionStore.getState().setAudioMode(e.target.value)
+                }
+              >
+                {currentProject.manifest.audio.supportedModes.map(mode => (
+                  <option key={mode} value={mode}>
+                    {mode}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            {lanAddresses.length > 1 && (
               <label className="flex items-center justify-between gap-4">
                 <span className="text-muted-foreground">
-                  {t('session.audioMode')}
+                  {t('session.lanAddress')}
                 </span>
                 <select
                   className="rounded-md border bg-background px-3 py-1.5"
-                  value={audioMode}
+                  value={lanIp ?? ''}
                   onChange={e =>
-                    useSessionStore.getState().setAudioMode(e.target.value)
+                    useSessionStore.getState().setLanIp(e.target.value)
                   }
                 >
-                  {currentProject.manifest.audio.supportedModes.map(mode => (
-                    <option key={mode} value={mode}>
-                      {mode}
+                  <option value="" disabled>
+                    {t('session.lanAddressHint')}
+                  </option>
+                  {lanAddresses.map(ip => (
+                    <option key={ip} value={ip}>
+                      {ip}
                     </option>
                   ))}
                 </select>
               </label>
+            )}
+            {lanAddresses.length === 0 && (
+              <p role="alert" className="text-destructive">
+                {t('session.noLan')}
+              </p>
+            )}
 
-              {lanAddresses.length > 1 && (
-                <label className="flex items-center justify-between gap-4">
-                  <span className="text-muted-foreground">
-                    {t('session.lanAddress')}
-                  </span>
-                  <select
-                    className="rounded-md border bg-background px-3 py-1.5"
-                    value={lanIp ?? ''}
-                    onChange={e =>
-                      useSessionStore.getState().setLanIp(e.target.value)
-                    }
-                  >
-                    <option value="" disabled>
-                      {t('session.lanAddressHint')}
-                    </option>
-                    {lanAddresses.map(ip => (
-                      <option key={ip} value={ip}>
-                        {ip}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              )}
-              {lanAddresses.length === 0 && (
-                <p role="alert" className="text-destructive">
-                  {t('session.noLan')}
-                </p>
-              )}
-
-              <Button onClick={() => void handleStart()} disabled={!canStart}>
-                {t('session.start')}
-              </Button>
-            </div>
-          )}
-        </section>
-      )}
-
-      {sessionRunning && (
-        <section className="w-full max-w-xl rounded-md border p-4 text-start text-sm">
-          <div className="flex items-center justify-between">
-            <h2 className="text-base font-medium">
-              {sessionStatus === 'starting' && t('session.starting')}
-              {sessionStatus === 'ready' && t('session.ready')}
-              {sessionStatus === 'stopping' && t('session.stopping')}
-              {sessionStatus === 'error' && t('session.error')}
-            </h2>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void handleStop()}
-            >
-              {t('session.stop')}
+            <Button onClick={() => void handleStart()} disabled={!canStart}>
+              {t('session.start')}
             </Button>
           </div>
-
-          {sessionStatus === 'starting' && (
-            <p className="mt-2 text-muted-foreground">
-              {t('session.waitingHealth')}
-            </p>
-          )}
-
-          {health && (
-            <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
-              <dt className="text-muted-foreground">
-                {t('session.audioStatus')}
-              </dt>
-              <dd>
-                {health.audio?.status ?? '—'}
-                {health.audio?.target ? ` (${health.audio.target})` : ''}
-              </dd>
-              {lanIp && health.scoreServer?.performerPort && (
-                <>
-                  <dt className="text-muted-foreground">
-                    {t('session.performerUrl')}
-                  </dt>
-                  <dd className="break-all">
-                    http://{lanIp}:{health.scoreServer.performerPort}/
-                  </dd>
-                </>
-              )}
-            </dl>
-          )}
-
-          {sessionStatus === 'error' && sessionError && (
-            <p
-              role="alert"
-              className="mt-3 whitespace-pre-wrap text-destructive"
-            >
-              {sessionError}
-            </p>
-          )}
-
-          {sessionStatus === 'error' && outputTail.length > 0 && (
-            <pre className="mt-3 max-h-48 overflow-auto rounded-md bg-muted p-3 text-xs">
-              {outputTail.join('\n')}
-            </pre>
-          )}
         </section>
       )}
 
       <AlertDialog
-        open={pendingPath !== null}
+        open={pendingTrustPath !== null}
         onOpenChange={openState => {
-          if (!openState) setPendingPath(null)
+          if (!openState) useProjectStore.getState().requestTrust(null)
         }}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>{t('trust.title')}</AlertDialogTitle>
             <AlertDialogDescription className="whitespace-pre-wrap break-all">
-              {t('trust.description', { path: pendingPath })}
+              {t('trust.description', { path: pendingTrustPath })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>{t('trust.cancel')}</AlertDialogCancel>
-            <AlertDialogAction onClick={handleTrustConfirm}>
+            <AlertDialogAction onClick={confirmTrustAndOpen}>
               {t('trust.confirm')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Screen-reader hint for keyboard users that trusted paths are listed in the sidebar */}
+      <span className="sr-only">
+        {trustedPaths.length > 0 ? t('sidebar.projects') : null}
+      </span>
     </div>
   )
 }

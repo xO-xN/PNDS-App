@@ -5,7 +5,7 @@
 use std::path::PathBuf;
 use tauri::{AppHandle, Manager};
 
-use crate::types::{validate_string_input, validate_theme, AppPreferences};
+use crate::types::{validate_theme, AppPreferences};
 
 /// Gets the path to the preferences file.
 fn get_preferences_path(app: &AppHandle) -> Result<PathBuf, String> {
@@ -19,36 +19,6 @@ fn get_preferences_path(app: &AppHandle) -> Result<PathBuf, String> {
         .map_err(|e| format!("Failed to create app data directory: {e}"))?;
 
     Ok(app_data_dir.join("preferences.json"))
-}
-
-/// Load the saved quick pane shortcut from preferences, returning None on any failure.
-/// Used at startup before the full preferences system is available.
-pub fn load_quick_pane_shortcut(app: &AppHandle) -> Option<String> {
-    let path = get_preferences_path(app).ok()?;
-    if !path.exists() {
-        return None;
-    }
-    let contents = std::fs::read_to_string(&path)
-        .inspect_err(|e| log::warn!("Failed to read preferences: {e}"))
-        .ok()?;
-    let prefs: AppPreferences = serde_json::from_str(&contents)
-        .inspect_err(|e| log::warn!("Failed to parse preferences: {e}"))
-        .ok()?;
-    prefs.quick_pane_shortcut
-}
-
-/// Simple greeting command for demonstration purposes.
-#[tauri::command]
-#[specta::specta]
-pub fn greet(name: &str) -> Result<String, String> {
-    // Input validation
-    validate_string_input(name, 100, "Name").map_err(|e| {
-        log::warn!("Invalid greet input: {e}");
-        e
-    })?;
-
-    log::info!("Greeting user: {name}");
-    Ok(format!("Hello, {name}! You've been greeted from Rust!"))
 }
 
 /// Loads user preferences from disk.

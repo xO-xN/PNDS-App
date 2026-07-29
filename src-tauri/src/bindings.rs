@@ -1,27 +1,18 @@
 use tauri_specta::{collect_commands, Builder};
 
 pub fn generate_bindings() -> Builder<tauri::Wry> {
-    use crate::commands::{notifications, preferences, project, quick_pane, recovery};
+    use crate::commands::{notifications, preferences, project};
 
     Builder::<tauri::Wry>::new().commands(collect_commands![
-        preferences::greet,
         preferences::load_preferences,
         preferences::save_preferences,
         notifications::send_native_notification,
-        recovery::save_emergency_data,
-        recovery::load_emergency_data,
-        recovery::cleanup_old_recovery_files,
         project::preflight_project,
         project::cleanup_orphaned_processes,
         project::start_project,
         project::stop_project,
         project::get_session_state,
         project::list_lan_addresses,
-        quick_pane::show_quick_pane,
-        quick_pane::dismiss_quick_pane,
-        quick_pane::toggle_quick_pane,
-        quick_pane::get_default_quick_pane_shortcut,
-        quick_pane::update_quick_pane_shortcut,
     ])
 }
 

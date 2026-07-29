@@ -30,7 +30,6 @@ vi.mock('@tauri-apps/plugin-updater', () => ({
 // Mock typed Tauri bindings (tauri-specta generated)
 vi.mock('@/lib/tauri-bindings', () => ({
   commands: {
-    greet: vi.fn().mockResolvedValue('Hello, test!'),
     loadPreferences: vi
       .fn()
       .mockResolvedValue({ status: 'ok', data: { theme: 'system' } }),
@@ -38,11 +37,6 @@ vi.mock('@/lib/tauri-bindings', () => ({
     sendNativeNotification: vi
       .fn()
       .mockResolvedValue({ status: 'ok', data: null }),
-    saveEmergencyData: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
-    loadEmergencyData: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
-    cleanupOldRecoveryFiles: vi
-      .fn()
-      .mockResolvedValue({ status: 'ok', data: 0 }),
     preflightProject: vi.fn().mockResolvedValue({
       status: 'error',
       error: 'preflightProject not mocked',

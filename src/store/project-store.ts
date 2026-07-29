@@ -16,10 +16,13 @@ interface ProjectState {
    * across launches is task-6 (Recent Projects).
    */
   trustedPaths: string[]
+  /** Path awaiting trust confirmation (drives the trust dialog). */
+  pendingTrustPath: string | null
   preflightStatus: PreflightStatus
   preflightError: string | null
   isTrusted: (path: string) => boolean
   trustProject: (path: string) => void
+  requestTrust: (path: string | null) => void
   startPreflight: () => void
   preflightSucceeded: (path: string, manifest: Manifest) => void
   preflightFailed: (message: string) => void
@@ -29,6 +32,7 @@ interface ProjectState {
 export const useProjectStore = create<ProjectState>()((set, get) => ({
   currentProject: null,
   trustedPaths: [],
+  pendingTrustPath: null,
   preflightStatus: 'idle',
   preflightError: null,
 
@@ -40,6 +44,8 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
         ? state.trustedPaths
         : [...state.trustedPaths, path],
     })),
+
+  requestTrust: path => set({ pendingTrustPath: path }),
 
   startPreflight: () =>
     set({ preflightStatus: 'checking', preflightError: null }),

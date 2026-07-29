@@ -170,38 +170,6 @@ src/lib/
 └── tauri-bindings.ts   # Re-exports with project conventions
 ```
 
-## Known Limitations
-
-### serde_json::Value becomes JsonValue/unknown
-
-Commands using `serde_json::Value` (like `saveEmergencyData`) have `JsonValue` typed parameters:
-
-```typescript
-type JsonValue =
-  | null
-  | boolean
-  | number
-  | string
-  | JsonValue[]
-  | Partial<{ [key in string]: JsonValue }>
-```
-
-Cast when needed:
-
-```typescript
-await commands.saveEmergencyData(filename, data as JsonValue)
-```
-
-### Bindings generated at runtime
-
-TypeScript bindings are generated when the app runs in debug mode, or via:
-
-```bash
-npm run rust:bindings
-```
-
-This must be run after changing Rust commands.
-
 ## Testing
 
 Mock the commands in tests:
@@ -221,21 +189,17 @@ vi.mock('@/lib/tauri-bindings', () => ({
 
 ## Available Commands
 
-| Command                    | Parameters                            | Returns                          | Description                        |
-| -------------------------- | ------------------------------------- | -------------------------------- | ---------------------------------- |
-| `greet`                    | `name: string`                        | `string`                         | Simple greeting                    |
-| `loadPreferences`          | none                                  | `Result<AppPreferences, string>` | Load preferences                   |
-| `savePreferences`          | `preferences: AppPreferences`         | `Result<null, string>`           | Save preferences                   |
-| `sendNativeNotification`   | `title: string, body: string \| null` | `Result<null, string>`           | System notification                |
-| `saveEmergencyData`        | `filename: string, data: JsonValue`   | `Result<null, string>`           | Save recovery data                 |
-| `loadEmergencyData`        | `filename: string`                    | `Result<JsonValue, string>`      | Load recovery data                 |
-| `cleanupOldRecoveryFiles`  | none                                  | `Result<number, string>`         | Cleanup old files                  |
-| `preflightProject`         | `path: string`                        | `Result<Manifest, string>`       | Project preflight (§5/§7/§8.2)     |
-| `cleanupOrphanedProcesses` | none | `Result<number, string>` | Kill stale session children (§8.2) |
-| `startProject` | `path, mode, lanIp: string` | `Result<null, string>` | Start score server session (§8.1) |
-| `stopProject` | none | `Result<null, string>` | Graceful session stop (§8.2) |
-| `getSessionState` | none | `Result<SessionSnapshot, string>` | Current session snapshot |
-| `listLanAddresses` | none | `Result<string[], string>` | LAN IPv4 candidates (§7) |
+| Command                    | Parameters                            | Returns                           | Description                        |
+| -------------------------- | ------------------------------------- | --------------------------------- | ---------------------------------- |
+| `loadPreferences`          | none                                  | `Result<AppPreferences, string>`  | Load preferences                   |
+| `savePreferences`          | `preferences: AppPreferences`         | `Result<null, string>`            | Save preferences                   |
+| `sendNativeNotification`   | `title: string, body: string \| null` | `Result<null, string>`            | System notification                |
+| `preflightProject`         | `path: string`                        | `Result<Manifest, string>`        | Project preflight (§5/§7/§8.2)     |
+| `cleanupOrphanedProcesses` | none                                  | `Result<number, string>`          | Kill stale session children (§8.2) |
+| `startProject`             | `path, mode, lanIp: string`           | `Result<null, string>`            | Start score server session (§8.1)  |
+| `stopProject`              | none                                  | `Result<null, string>`            | Graceful session stop (§8.2)       |
+| `getSessionState`          | none                                  | `Result<SessionSnapshot, string>` | Current session snapshot           |
+| `listLanAddresses`         | none                                  | `Result<string[], string>`        | LAN IPv4 candidates (§7)           |
 
 ## Dependencies
 

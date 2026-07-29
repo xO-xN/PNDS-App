@@ -8,8 +8,9 @@ describe('App', () => {
   it('renders the welcome screen (§10.4: no project runs automatically)', () => {
     render(<App />)
     expect(screen.getByRole('heading', { name: 'PNDS' })).toBeInTheDocument()
+    // Open Project is offered in the main area (and the always-open sidebar)
     expect(
-      screen.getByRole('button', { name: /open project/i })
-    ).toBeInTheDocument()
+      screen.getAllByRole('button', { name: /open project/i }).length
+    ).toBeGreaterThan(0)
   })
 })
