@@ -170,6 +170,12 @@
   "sidebar.loadProject": "Load",
   "sidebar.closeProject": "Close",
   "sidebar.removeFromHistory": "Remove from history",
+  "sidebar.dragToReorder": "Drag to reorder",
+
+  "switchProject.title": "Load the “{{name}}”?",
+  "switchProject.description": "This will close the current server and select “{{name}}”. You can then load it from the sidebar.",
+  "switchProject.back": "Back",
+  "switchProject.confirm": "Load",
   "sidebar.availableLater": "Available in a later development phase",
 
   "loading.title": "Loading Project ...",

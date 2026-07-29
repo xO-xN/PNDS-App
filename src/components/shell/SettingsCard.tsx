@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next'
 import { Volume2, ChevronDown } from 'lucide-react'
 import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
-import { restartSession, startIfReady } from '@/lib/open-project'
+import { restartSession } from '@/lib/open-project'
 
 const MODE_LABELS: Record<string, string> = {
   internal: 'Internal Synth',
@@ -37,9 +37,9 @@ export function SettingsCard() {
   }
 
   const handleLanChange = (ip: string) => {
+    // Choosing an address only makes the session loadable (§7); starting
+    // stays an explicit action via the Load button.
     useSessionStore.getState().setLanIp(ip)
-    // An address was the last missing piece — start can proceed now (§7).
-    void startIfReady()
   }
 
   const selectClass =

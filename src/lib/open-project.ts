@@ -25,24 +25,23 @@ export async function promptOpenProject(): Promise<void> {
   await openProject(selected)
 }
 
-/** Opens a known path: trust gate, then preflight, then start (§8.1). */
+/** Opens a known path: trust gate, then preflight. Starting is always an
+ * explicit user action via the Load button (SessionActionButton). */
 export async function openProject(path: string): Promise<void> {
   if (!useProjectStore.getState().isTrusted(path)) {
     useProjectStore.getState().requestTrust(path)
     return
   }
   await runPreflight(path)
-  await startIfReady()
 }
 
-/** Confirms trust for the pending path, then preflights and starts it. */
+/** Confirms trust for the pending path, then preflights it. */
 export async function confirmTrustAndOpen(): Promise<void> {
   const path = useProjectStore.getState().pendingTrustPath
   if (!path) return
   useProjectStore.getState().trustProject(path)
   useProjectStore.getState().requestTrust(null)
   await runPreflight(path)
-  await startIfReady()
 }
 
 /** Runs preflight and, on success, seeds session defaults (§6.1, §7). */

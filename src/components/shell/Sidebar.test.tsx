@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@/test/test-utils'
+import { render, screen, waitFor, within } from '@/test/test-utils'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { commands } from '@/lib/tauri-bindings'
@@ -28,10 +28,13 @@ const manifest: Manifest = {
   },
 }
 
+const PROJECT_PATH = '/Users/test/Inarticulate III'
+const OTHER_PATH = '/Users/test/PNDS Score 1'
+
 function seedLoadedProject() {
   useProjectStore.setState({
-    currentProject: { path: '/Users/test/Inarticulate III', manifest },
-    trustedPaths: ['/Users/test/Inarticulate III'],
+    currentProject: { path: PROJECT_PATH, manifest },
+    trustedPaths: [PROJECT_PATH],
     pendingTrustPath: null,
     preflightStatus: 'ready',
     preflightError: null,
@@ -40,6 +43,7 @@ function seedLoadedProject() {
     audioMode: 'internal',
     lanIp: '192.168.1.10',
     lanAddresses: ['192.168.1.10'],
+    sessionStatus: 'idle',
   })
 }
 
@@ -77,9 +81,9 @@ describe('Sidebar', () => {
     expect(screen.getByRole('button', { name: /refresh/i })).toBeInTheDocument()
   })
 
-  it('starts a trusted project when its entry is clicked', async () => {
+  it('selects a project on click, then starts it via the Load button', async () => {
     const user = userEvent.setup()
-    useProjectStore.getState().trustProject('/Users/test/Inarticulate III')
+    useProjectStore.getState().trustProject(PROJECT_PATH)
     vi.mocked(commands.preflightProject).mockResolvedValue({
       status: 'ok',
       data: manifest,
@@ -88,9 +92,16 @@ describe('Sidebar', () => {
     render(<Sidebar variant="static" />)
     await user.click(screen.getByText('Inarticulate III'))
 
+    // Clicking only selects (preflights) — no auto-start
+    await waitFor(() => {
+      expect(commands.preflightProject).toHaveBeenCalledWith(PROJECT_PATH)
+    })
+    expect(commands.startProject).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('button', { name: /^load$/i }))
     await waitFor(() => {
       expect(commands.startProject).toHaveBeenCalledWith(
-        '/Users/test/Inarticulate III',
+        PROJECT_PATH,
         'internal',
         '192.168.1.10'
       )
@@ -112,45 +123,10 @@ describe('Sidebar', () => {
       expect(commands.stopProject).toHaveBeenCalled()
     })
     expect(commands.startProject).toHaveBeenCalledWith(
-      '/Users/test/Inarticulate III',
+      PROJECT_PATH,
       'none',
       '192.168.1.10'
     )
-  })
-
-  it('removes the project from history via the card ✕ button', async () => {
-    const user = userEvent.setup()
-    seedLoadedProject()
-    useSessionStore.setState({ sessionStatus: 'ready' })
-
-    render(<Sidebar variant="overlay" />)
-    await user.click(
-      screen.getByRole('button', { name: /remove from history/i })
-    )
-
-    // A running project is stopped first, then dropped from the list
-    expect(commands.stopProject).toHaveBeenCalled()
-    await waitFor(() => {
-      expect(useProjectStore.getState().currentProject).toBeNull()
-      expect(useProjectStore.getState().trustedPaths).toHaveLength(0)
-    })
-  })
-
-  it('starts the selected project via the Load button', async () => {
-    const user = userEvent.setup()
-    seedLoadedProject()
-    useSessionStore.setState({ sessionStatus: 'idle' })
-
-    render(<Sidebar variant="static" />)
-    await user.click(screen.getByRole('button', { name: /^load$/i }))
-
-    await waitFor(() => {
-      expect(commands.startProject).toHaveBeenCalledWith(
-        '/Users/test/Inarticulate III',
-        'internal',
-        '192.168.1.10'
-      )
-    })
   })
 
   it('closes the running project via the Close button', async () => {
@@ -169,7 +145,55 @@ describe('Sidebar', () => {
     expect(useProjectStore.getState().trustedPaths).toHaveLength(1)
   })
 
-  it('starts once the user picks a LAN address when several exist (§7)', async () => {
+  it('removes a non-open project from history via its ✕ button', async () => {
+    const user = userEvent.setup()
+    seedLoadedProject()
+    useProjectStore.setState({
+      trustedPaths: [PROJECT_PATH, OTHER_PATH],
+    })
+
+    render(<Sidebar variant="static" />)
+    // The open project must not show a remove button
+    const currentCard = screen.getByTestId('current-project-card')
+    expect(
+      within(currentCard).queryByRole('button', {
+        name: /remove from history/i,
+      })
+    ).not.toBeInTheDocument()
+
+    await user.click(
+      screen.getByRole('button', { name: /remove from history/i })
+    )
+    expect(useProjectStore.getState().trustedPaths).toEqual([PROJECT_PATH])
+    // Removing a non-open project never touches the session
+    expect(commands.stopProject).not.toHaveBeenCalled()
+  })
+
+  it('asks for confirmation before switching projects while running (§8.3)', async () => {
+    const user = userEvent.setup()
+    seedLoadedProject()
+    useProjectStore.setState({
+      trustedPaths: [PROJECT_PATH, OTHER_PATH],
+    })
+    useSessionStore.setState({ sessionStatus: 'ready' })
+    vi.mocked(commands.preflightProject).mockResolvedValue({
+      status: 'ok',
+      data: manifest,
+    })
+
+    render(<Sidebar variant="overlay" />)
+    await user.click(screen.getByText('PNDS Score 1'))
+
+    expect(await screen.findByText(/load the “PNDS Score 1”\?/i))
+    await user.click(screen.getByRole('button', { name: /^load$/i }))
+
+    await waitFor(() => {
+      expect(commands.stopProject).toHaveBeenCalled()
+      expect(commands.preflightProject).toHaveBeenCalledWith(OTHER_PATH)
+    })
+  })
+
+  it('does not start on LAN pick alone; Load becomes the trigger (§7)', async () => {
     const user = userEvent.setup()
     seedLoadedProject()
     useSessionStore.setState({
@@ -179,15 +203,20 @@ describe('Sidebar', () => {
     })
 
     render(<Sidebar variant="static" />)
-    expect(commands.startProject).not.toHaveBeenCalled()
+    const loadButton = screen.getByRole('button', { name: /^load$/i })
+    expect(loadButton).toBeDisabled()
 
     await user.selectOptions(
       screen.getByRole('combobox', { name: /network address/i }),
       '10.0.0.5'
     )
+    expect(commands.startProject).not.toHaveBeenCalled()
+    expect(loadButton).toBeEnabled()
+
+    await user.click(loadButton)
     await waitFor(() => {
       expect(commands.startProject).toHaveBeenCalledWith(
-        '/Users/test/Inarticulate III',
+        PROJECT_PATH,
         'internal',
         '10.0.0.5'
       )

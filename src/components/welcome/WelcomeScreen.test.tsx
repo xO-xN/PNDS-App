@@ -46,7 +46,7 @@ describe('WelcomeScreen', () => {
     useSessionStore.getState().resetSession()
   })
 
-  it('asks for trust on first open, then preflights and starts (§4, §8.1)', async () => {
+  it('asks for trust on first open, then preflights without auto-starting (§4)', async () => {
     const user = userEvent.setup()
     vi.mocked(open).mockResolvedValue('/Users/test/Inarticulate III')
     vi.mocked(commands.preflightProject).mockResolvedValue({
@@ -69,14 +69,8 @@ describe('WelcomeScreen', () => {
         '/Users/test/Inarticulate III'
       )
     })
-    // Single LAN address is auto-selected → session starts right away
-    await waitFor(() => {
-      expect(commands.startProject).toHaveBeenCalledWith(
-        '/Users/test/Inarticulate III',
-        'internal',
-        '192.168.1.10'
-      )
-    })
+    // Selecting only preflights — starting is explicit via the Load button
+    expect(commands.startProject).not.toHaveBeenCalled()
   })
 
   it('does not run preflight when trust is declined', async () => {

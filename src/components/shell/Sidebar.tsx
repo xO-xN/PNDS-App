@@ -1,5 +1,6 @@
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Plus, X, Menu, Share, RefreshCw } from 'lucide-react'
+import { Plus, X, Share, RefreshCw, GripVertical } from 'lucide-react'
 import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 import { logger } from '@/lib/logger'
@@ -8,6 +9,16 @@ import {
   promptOpenProject,
   stopAndReset,
 } from '@/lib/open-project'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { SettingsCard } from './SettingsCard'
 import { SessionActionButton } from './SessionActionButton'
 import { TrafficLights } from './TrafficLights'
@@ -21,36 +32,58 @@ interface SidebarProps {
 
 /**
  * PNDS sidebar (§10.1, §10.2; Figma "PNDS UI Design"). A floating rounded
- * panel (Zen-browser style) that is always open on Welcome/Loading and
- * pops in over the monitor during a performance. Clicking a project entry
- * starts it (trust gate + preflight first, §4/§5); switching projects
- * while running asks for confirmation (§8.3, task-5).
+ * panel, always open on Welcome/Loading and popping in over the monitor
+ * during a performance. Selecting a project only preflights it; starting
+ * is explicit via the Load button (§8). Entries can be reordered with the
+ * left grip handle; the ✕ (remove from history) only appears on projects
+ * that are not currently open. Switching while a session runs asks for
+ * confirmation first (§8.3, Figma "Loading another project").
  */
 export function Sidebar({ variant, onRequestClose }: SidebarProps) {
   const { t } = useTranslation()
   const trustedPaths = useProjectStore(state => state.trustedPaths)
   const currentProject = useProjectStore(state => state.currentProject)
   const sessionStatus = useSessionStore(state => state.sessionStatus)
-  const running = variant === 'overlay'
   const busy = sessionStatus === 'starting' || sessionStatus === 'stopping'
+  const [pendingSwitchPath, setPendingSwitchPath] = useState<string | null>(
+    null
+  )
+  const [dragPath, setDragPath] = useState<string | null>(null)
+
+  const basename = (path: string) =>
+    path.split('/').filter(Boolean).pop() ?? path
 
   const handleEntryClick = (path: string) => {
-    if (busy) return
-    if (running && currentProject && path === currentProject.path) return
+    if (busy || path === currentProject?.path) return
+    if (useSessionStore.getState().sessionStatus !== 'idle') {
+      // §8.3: switching projects closes the current server — confirm first.
+      setPendingSwitchPath(path)
+      return
+    }
     void openProject(path)
   }
 
-  /** ✕ on the project card: remove the project from the history list
-   * (stopping it first if it is the loaded/running one). */
-  const handleRemove = async (path: string) => {
-    if (useProjectStore.getState().currentProject?.path === path) {
-      await stopAndReset()
-      onRequestClose?.()
-    }
+  const confirmSwitch = async () => {
+    const path = pendingSwitchPath
+    setPendingSwitchPath(null)
+    if (!path) return
+    await stopAndReset()
+    await openProject(path)
+    onRequestClose?.()
+  }
+
+  /** ✕ (remove from history) is only offered for projects that are not
+   * currently open; the Close action handles the open one. */
+  const handleRemove = (path: string) => {
     useProjectStore.getState().removeTrusted(path)
   }
 
-  const otherPaths = trustedPaths.filter(p => p !== currentProject?.path)
+  const handleDrop = (targetPath: string) => {
+    if (dragPath && dragPath !== targetPath) {
+      useProjectStore.getState().moveTrusted(dragPath, targetPath)
+    }
+    setDragPath(null)
+  }
 
   return (
     <aside
@@ -104,52 +137,68 @@ export function Sidebar({ variant, onRequestClose }: SidebarProps) {
         {t('sidebar.projects')}
       </h2>
 
-      <nav className="mt-6 flex flex-col">
-        {currentProject && (
-          <div
-            data-testid="current-project-card"
-            className="mx-5 flex h-[57px] items-center justify-between rounded-xl bg-[#f5f5f5] px-4 shadow-sm"
-          >
-            {running ? (
-              <button
-                aria-label={t('sidebar.hideSidebar')}
-                onClick={onRequestClose}
-                className="text-black/70 hover:text-black"
+      <nav className="mt-4 flex flex-col gap-1">
+        {trustedPaths.map(path => {
+          const isCurrent = path === currentProject?.path
+          return (
+            <div
+              key={path}
+              data-testid={isCurrent ? 'current-project-card' : 'project-entry'}
+              onDragOver={e => {
+                e.preventDefault()
+                e.dataTransfer.dropEffect = 'move'
+              }}
+              onDrop={e => {
+                e.preventDefault()
+                handleDrop(path)
+              }}
+              className={cn(
+                'group mx-5 flex h-[57px] items-center rounded-xl px-3 transition-colors duration-150',
+                isCurrent ? 'bg-[#f5f5f5] shadow-sm' : 'hover:bg-black/5',
+                dragPath === path && 'opacity-50'
+              )}
+            >
+              {/* Left grip: drag to reorder (visible on hover) */}
+              <span
+                draggable
+                onDragStart={e => {
+                  e.dataTransfer.effectAllowed = 'move'
+                  e.dataTransfer.setData('text/plain', path)
+                  setDragPath(path)
+                }}
+                onDragEnd={() => setDragPath(null)}
+                aria-label={t('sidebar.dragToReorder')}
+                className="w-5 shrink-0 cursor-grab text-black/40 opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing"
               >
-                <Menu size={16} />
-              </button>
-            ) : (
-              <span className="w-4" />
-            )}
-            <span className="mx-2 flex-1 truncate text-center text-[15px] text-black">
-              {currentProject.manifest.name}
-            </span>
-            {running ? (
-              <button
-                aria-label={t('sidebar.removeFromHistory')}
-                onClick={() => void handleRemove(currentProject.path)}
-                className="text-black/70 hover:text-black"
-              >
-                <X size={16} />
-              </button>
-            ) : (
-              <span className="w-4" />
-            )}
-          </div>
-        )}
+                <GripVertical size={14} />
+              </span>
 
-        {otherPaths.map(path => (
-          <button
-            key={path}
-            type="button"
-            disabled={busy}
-            onClick={() => handleEntryClick(path)}
-            title={path}
-            className="mx-5 flex h-[68px] items-center justify-center truncate rounded-xl px-4 text-[15px] text-black/85 transition-colors duration-150 hover:bg-black/5 disabled:opacity-50"
-          >
-            {path.split('/').filter(Boolean).pop() ?? path}
-          </button>
-        ))}
+              <button
+                type="button"
+                disabled={busy || isCurrent}
+                onClick={() => handleEntryClick(path)}
+                title={path}
+                className="flex-1 truncate text-center text-[15px] text-black/85 disabled:opacity-60"
+              >
+                {isCurrent ? currentProject.manifest.name : basename(path)}
+              </button>
+
+              {/* Right ✕: remove from history — never for the open project */}
+              {isCurrent ? (
+                <span className="w-5 shrink-0" />
+              ) : (
+                <button
+                  type="button"
+                  aria-label={t('sidebar.removeFromHistory')}
+                  onClick={() => handleRemove(path)}
+                  className="w-5 shrink-0 text-black/50 opacity-0 transition-opacity hover:text-black group-hover:opacity-100"
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+          )
+        })}
 
         {trustedPaths.length === 0 && (
           <p className="px-9 py-3 text-center text-xs text-black/50">
@@ -174,6 +223,35 @@ export function Sidebar({ variant, onRequestClose }: SidebarProps) {
         <SettingsCard />
         <SessionActionButton />
       </div>
+
+      {/* §8.3 switch confirmation (Figma "Loading another project") */}
+      <AlertDialog
+        open={pendingSwitchPath !== null}
+        onOpenChange={openState => {
+          if (!openState) setPendingSwitchPath(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t('switchProject.title', {
+                name: pendingSwitchPath ? basename(pendingSwitchPath) : '',
+              })}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('switchProject.description', {
+                name: pendingSwitchPath ? basename(pendingSwitchPath) : '',
+              })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t('switchProject.back')}</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void confirmSwitch()}>
+              {t('switchProject.confirm')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </aside>
   )
 }

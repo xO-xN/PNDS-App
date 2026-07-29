@@ -80,4 +80,30 @@ describe('project-store', () => {
     expect(state.preflightStatus).toBe('idle')
     expect(state.isTrusted('/p')).toBe(true)
   })
+
+  it('removeTrusted drops a path and clears it if it was current', () => {
+    useProjectStore.getState().trustProject('/a')
+    useProjectStore.getState().trustProject('/b')
+    useProjectStore.getState().preflightSucceeded('/a', manifest)
+
+    useProjectStore.getState().removeTrusted('/a')
+    const state = useProjectStore.getState()
+    expect(state.trustedPaths).toEqual(['/b'])
+    expect(state.currentProject).toBeNull()
+    expect(state.preflightStatus).toBe('idle')
+  })
+
+  it('moveTrusted reorders the history list', () => {
+    useProjectStore.getState().trustProject('/a')
+    useProjectStore.getState().trustProject('/b')
+    useProjectStore.getState().trustProject('/c')
+
+    useProjectStore.getState().moveTrusted('/c', '/a')
+    expect(useProjectStore.getState().trustedPaths).toEqual(['/c', '/a', '/b'])
+
+    // Moving to itself or unknown paths is a no-op
+    useProjectStore.getState().moveTrusted('/c', '/c')
+    useProjectStore.getState().moveTrusted('/x', '/a')
+    expect(useProjectStore.getState().trustedPaths).toEqual(['/c', '/a', '/b'])
+  })
 })

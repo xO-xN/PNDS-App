@@ -5,9 +5,10 @@ import { startIfReady, stopAndReset } from '@/lib/open-project'
 import { cn } from '@/lib/utils'
 
 /**
- * The sidebar's primary session action (§8): Load starts the selected
- * project (once preflight passed and a LAN address is chosen, §7); Close
- * stops it. Sits below the settings card.
+ * The sidebar's primary session action (§8). Selecting a project only
+ * preflights it — starting is always explicit: Load turns green once the
+ * project is preflighted and a LAN address is chosen (§7), and becomes a
+ * red Close while the session runs.
  */
 export function SessionActionButton() {
   const { t } = useTranslation()
@@ -20,19 +21,14 @@ export function SessionActionButton() {
   const canLoad =
     currentProject !== null && sessionStatus === 'idle' && lanIp !== null
 
-  if (running || busy) {
+  if (running) {
     return (
       <button
         type="button"
-        disabled={busy}
         onClick={() => void stopAndReset()}
-        className={cn(
-          'mt-3 h-9 w-full rounded-xl text-[14px] transition-colors',
-          'border border-black/10 bg-[#f5f5f5] text-black shadow-sm hover:bg-white',
-          'disabled:opacity-50'
-        )}
+        className="mt-3 h-9 w-full rounded-xl bg-[#ff3b30] text-[14px] text-white shadow-sm transition-colors hover:bg-[#ee2b20]"
       >
-        {busy ? t('session.stopping') : t('sidebar.closeProject')}
+        {t('sidebar.closeProject')}
       </button>
     )
   }
@@ -40,15 +36,16 @@ export function SessionActionButton() {
   return (
     <button
       type="button"
-      disabled={!canLoad}
+      disabled={!canLoad || busy}
       onClick={() => void startIfReady()}
       className={cn(
-        'mt-3 h-9 w-full rounded-xl text-[14px] transition-colors',
-        'bg-[#0088ff] text-white shadow-sm hover:bg-[#0077ee]',
-        'disabled:bg-black/10 disabled:text-black/40 disabled:shadow-none'
+        'mt-3 h-9 w-full rounded-xl text-[14px] shadow-sm transition-colors',
+        canLoad
+          ? 'bg-[#34c759] text-white hover:bg-[#2eb34e]'
+          : 'bg-black/10 text-black/40 shadow-none'
       )}
     >
-      {t('sidebar.loadProject')}
+      {busy ? t('session.stopping') : t('sidebar.loadProject')}
     </button>
   )
 }
