@@ -9,6 +9,7 @@ import {
   promptOpenProject,
   stopAndReset,
 } from '@/lib/open-project'
+import { saveRecentProjects } from '@/lib/audio-prefs'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -87,6 +88,7 @@ export function Sidebar({ variant, onRequestClose }: SidebarProps) {
    * currently open; the Close action handles the open one. */
   const handleRemove = (path: string) => {
     useProjectStore.getState().removeTrusted(path)
+    void saveRecentProjects(useProjectStore.getState().trustedPaths)
   }
 
   const handleDrop = (targetPath: string) => {

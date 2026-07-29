@@ -2,6 +2,7 @@
 
 pub mod audio;
 pub mod children;
+pub mod logs;
 pub mod manifest;
 pub mod preflight;
 pub mod session;

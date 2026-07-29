@@ -3,6 +3,7 @@ import { listen } from '@tauri-apps/api/event'
 import { Toaster } from 'sonner'
 import { commands, type SessionSnapshot } from '@/lib/tauri-bindings'
 import { useSessionStore } from '@/store/session-store'
+import { useProjectStore } from '@/store/project-store'
 import { loadAudioPreferences } from '@/lib/audio-prefs'
 import { WelcomeScreen } from '@/components/welcome'
 import { Sidebar } from './Sidebar'
@@ -43,6 +44,16 @@ export function AppShell() {
     void loadAudioPreferences().then(prefs => {
       if (prefs?.outputDevice) {
         useSessionStore.getState().setOutputDevice(prefs.outputDevice)
+      }
+    })
+  }, [])
+
+  // §4.1: seed trusted project paths from app-local prefs on launch.
+  useEffect(() => {
+    void loadAudioPreferences().then(prefs => {
+      if (prefs?.recentProjects?.length) {
+        const store = useProjectStore.getState()
+        for (const p of prefs.recentProjects) store.trustProject(p)
       }
     })
   }, [])

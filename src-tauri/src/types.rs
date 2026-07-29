@@ -24,6 +24,10 @@ pub struct AppPreferences {
     /// §6.6: last valid external OSC target per project id.
     #[serde(default)]
     pub osc_targets: HashMap<String, String>,
+    /// §4.1: recently-opened (and trusted) project paths. Appended on first
+    /// trust, kept across launches. Removing from the sidebar drops it here.
+    #[serde(default)]
+    pub recent_projects: Vec<String>,
 }
 
 impl Default for AppPreferences {
@@ -33,6 +37,7 @@ impl Default for AppPreferences {
             language: None, // None means use system locale
             output_device: None,
             osc_targets: HashMap::new(),
+            recent_projects: Vec::new(),
         }
     }
 }

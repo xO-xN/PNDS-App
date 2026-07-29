@@ -68,6 +68,21 @@
     --pnds-text-secondary: #555555;
   }
 
+  @keyframes spin-shrink {
+    0% {
+      transform: rotate(0deg) scale(1);
+      opacity: 1;
+    }
+    50% {
+      transform: rotate(720deg) scale(0.7);
+      opacity: 0.9;
+    }
+    100% {
+      transform: rotate(720deg) scale(0);
+      opacity: 0;
+    }
+  }
+
   /* Square corners - used on Windows/Linux when fullscreen */
   .square-corners {
     --app-corner-radius: 0px;

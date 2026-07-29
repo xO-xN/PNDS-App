@@ -87,6 +87,8 @@ pub struct SessionSnapshot {
     pub output_tail: Vec<String>,
     /// Master volume percent (§6.4; new sessions always start at 80).
     pub volume: f32,
+    /// §10.3 five-stage loading animation dot (1–5).
+    pub startup_stage: u8,
 }
 
 // ============================================================================
@@ -195,7 +197,6 @@ fn fetch_health(performer_port: u16) -> Result<HealthPayload, String> {
 // Session manager
 // ============================================================================
 
-#[derive(Default)]
 struct SessionInner {
     status: String, // idle | starting | ready | error | stopping
     child: Option<Child>,
@@ -214,8 +215,36 @@ struct SessionInner {
     output_tail: VecDeque<String>,
     /// Master volume percent; every new session starts at 80 (§6.4).
     volume: f32,
+    /// §10.3 five-stage loading progression (1–5).
+    startup_stage: u8,
     /// Incremented on every start/stop so stale supervisor threads exit.
     generation: u64,
+    /// §11: per-session log file.
+    logger: Option<crate::project::logs::SessionLogger>,
+}
+
+impl Default for SessionInner {
+    fn default() -> Self {
+        Self {
+            status: "idle".to_string(),
+            child: None,
+            scsynth: None,
+            scsynth_port: None,
+            master_synth_ready: false,
+            project_name: None,
+            project_path: None,
+            audio_mode: None,
+            lan_ip: None,
+            osc_target: None,
+            health: None,
+            error: None,
+            output_tail: VecDeque::new(),
+            volume: crate::project::audio::DEFAULT_VOLUME_PERCENT,
+            startup_stage: 0,
+            generation: 0,
+            logger: None,
+        }
+    }
 }
 
 impl SessionInner {
@@ -231,6 +260,7 @@ impl SessionInner {
             error: self.error.clone(),
             output_tail: self.output_tail.iter().cloned().collect(),
             volume: self.volume,
+            startup_stage: self.startup_stage,
         }
     }
 
@@ -337,6 +367,19 @@ impl SessionManager {
         } else {
             None
         };
+
+        // §11: open the per-session log file.
+        let mut session_log = crate::project::logs::SessionLogger::open(
+            &app_data_dir,
+            &manifest.id,
+            &manifest.name,
+            &path,
+            &mode,
+            &lan_ip,
+            osc_target.as_deref().unwrap_or("(none)"),
+            device.as_deref().unwrap_or("(system default)"),
+        )
+        .ok();
 
         // §8.1: internal mode boots scsynth first (and waits for /status)
         // before the score server starts. External/none skip this entirely.
@@ -666,7 +709,7 @@ impl SessionManager {
     /// from the session-children record afterwards.
     fn teardown_children(inner: &Arc<Mutex<SessionInner>>, app_data_dir: &Path) {
         let registry = ChildRegistry::new(app_data_dir.to_path_buf());
-        let (node_child, node_pid, sc_child, sc_pid, sc_port, master_ready) = {
+        let (node_child, node_pid, sc_child, sc_pid, sc_port, master_ready, mut logger_opt) = {
             let mut guard = inner.lock().unwrap_or_else(|e| e.into_inner());
             let node_pid = guard.child.as_ref().map(|c| c.id());
             let sc_pid = guard.scsynth.as_ref().map(|c| c.id());
@@ -677,8 +720,12 @@ impl SessionManager {
                 sc_pid,
                 guard.scsynth_port,
                 guard.master_synth_ready,
+                guard.logger.take(),
             )
         };
+        if let Some(ref mut log) = logger_opt {
+            log.write_line("Session ending — stopping processes");
+        }
 
         if let Some(mut c) = node_child {
             children::kill_escalate(
@@ -705,6 +752,11 @@ impl SessionManager {
             );
             registry.clear(sc_pid.unwrap_or(0));
             log::info!("scsynth stopped (pid {})", sc_pid.unwrap_or(0));
+        }
+
+        if let Some(ref mut log) = logger_opt {
+            log.write_line("All processes stopped");
+            log.close();
         }
     }
 

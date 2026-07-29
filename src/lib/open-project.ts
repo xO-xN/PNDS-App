@@ -4,7 +4,11 @@ import { commands } from '@/lib/tauri-bindings'
 import { logger } from '@/lib/logger'
 import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
-import { DEFAULT_OSC_TARGET, loadAudioPreferences } from '@/lib/audio-prefs'
+import {
+  DEFAULT_OSC_TARGET,
+  loadAudioPreferences,
+  saveRecentProjects,
+} from '@/lib/audio-prefs'
 
 /**
  * Shared project flows (§4, §6.1, §7, §8):
@@ -42,6 +46,7 @@ export async function confirmTrustAndOpen(): Promise<void> {
   if (!path) return
   useProjectStore.getState().trustProject(path)
   useProjectStore.getState().requestTrust(null)
+  void saveRecentPaths()
   await runPreflight(path)
 }
 
@@ -83,6 +88,10 @@ export async function runPreflight(path: string): Promise<void> {
  * after this, the project is clickable again and re-running it goes
  * through preflight as usual (§8.2, §10.4).
  */
+async function saveRecentPaths(): Promise<void> {
+  void saveRecentProjects(useProjectStore.getState().trustedPaths)
+}
+
 export async function stopAndReset(): Promise<void> {
   const result = await commands.stopProject()
   if (result.status === 'error') {

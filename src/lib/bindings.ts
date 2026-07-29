@@ -169,7 +169,12 @@ outputDevice?: string | null;
 /**
  * §6.6: last valid external OSC target per project id.
  */
-oscTargets?: Partial<{ [key in string]: string }> }
+oscTargets?: Partial<{ [key in string]: string }>; 
+/**
+ * §4.1: recently-opened (and trusted) project paths. Appended on first
+ * trust, kept across launches. Removing from the sidebar drops it here.
+ */
+recentProjects?: string[] }
 export type AudioConfig = { defaultMode: string; supportedModes: string[]; synthdefs: string[] | null; scsynth: ScsynthConfig | null; 
 /**
  * Debug-only fallback for standalone runs. The App must never use it;
@@ -213,7 +218,11 @@ status: string; projectName: string | null; projectPath: string | null; audioMod
 /**
  * Master volume percent (§6.4; new sessions always start at 80).
  */
-volume: number }
+volume: number; 
+/**
+ * §10.3 five-stage loading animation dot (1–5).
+ */
+startupStage: number }
 
 /** tauri-specta globals **/
 

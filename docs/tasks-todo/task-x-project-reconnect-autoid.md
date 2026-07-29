@@ -10,12 +10,14 @@
 
 现状：前端保留 `selectionMade`，但断线重连后新的 Socket.IO connection 不会自动重新 `selectId`——服务端不接收其事件，performer UI 看似已选角色实则失控。现场演出中手机锁屏 / WiFi 抖动必然触发，属高风险项。
 
-## 实现方向
+## 已定实现与协议
 
-- 前端：选定 player id 后持久化（如 localStorage）；socket `connect`/reconnect 时若已有选择，自动重新发送 `selectId`
-- 服务端：处理同 id 的新 socket 声明——将旧 socket 的绑定/状态移交给新 socket（接管而非拒绝），保持点位等状态连续
-- 注意区分"同一演奏者重连接管"与"两个设备同时抢一个 id"；后者可拒绝或后连接者接管，取简单可靠者
-- 按 §14：修改后同步更新 `Inarticulate III/PROJECT_HANDSOFF.md`（§7 限制 2 移除）与需求文档（如涉及协议变化）；运行该仓库的 `npm run check` 与 `npm test`
+- 前端将 player ID 与一个随机的 per-browser claim token 保存到 `localStorage`；socket 每次 `connect` 时自动发送 `selectId`；
+- 服务端以 `player ID → { socket ID, claim token }` 保存当前归属；
+- 同一 claim token 的新 socket 可以接管旧 socket。旧 socket 随后的 event 与 disconnect 不再影响新归属，避免误释放声音或清空 monitor 点位；
+- 不同 claim token 的设备抢同一仍在线 ID 会被拒绝。这样不需要在 V1 引入登录、配对或抢号确认框；
+- 浏览器存储不可用时，首次选择仍可使用；但不能保证旧 socket 尚未断开时的无缝接管；
+- 已同步移除 `Inarticulate III/PROJECT_HANDSOFF.md` §7 的旧限制；修改后必须运行该仓库的 `npm run check` 与 `npm test`。
 
 ## 验收
 

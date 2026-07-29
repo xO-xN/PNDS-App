@@ -37,6 +37,13 @@ export async function saveOscTarget(
   })
 }
 
+/** §4.1: persist trusted project paths across launches. */
+export async function saveRecentProjects(paths: string[]): Promise<void> {
+  const prefs = await loadAudioPreferences()
+  if (!prefs) return
+  await commands.savePreferences({ ...prefs, recentProjects: paths })
+}
+
 /** §6.6 validation, mirroring the Rust rule: `host:port`, port 1-65535. */
 export function isValidOscTarget(target: string): boolean {
   const idx = target.lastIndexOf(':')

@@ -31,14 +31,16 @@ interface SessionState {
   setVolume: (percent: number) => void
   setOutputDevice: (device: string) => void
   setOscTargetInput: (target: string) => void
-  /** True when the user has changed a setting since the session last
-   * committed its configuration (mode / device / LAN / OSC target).
-   * The Change button lights yellow while this is set. */
+  /** §10.3 five-stage loading animation dot (1–5, 0 = idle). */
+  startupStage: number
+  /** True when the user has changed a config setting since the session
+   * last committed; the Change button turns yellow. */
   pendingChanges: boolean
   applySnapshot: (snapshot: SessionSnapshot) => void
   failLocal: (message: string) => void
   bumpMonitorReload: () => void
   setPendingChanges: (v: boolean) => void
+  setStartupStage: (stage: number) => void
   resetSession: () => void
 }
 
@@ -56,6 +58,7 @@ export const useSessionStore = create<SessionState>()(set => ({
   lanAddresses: [],
   outputDevice: 'System default',
   oscTargetInput: '127.0.0.1:3333',
+  startupStage: 0,
   pendingChanges: false,
 
   setAudioMode: audioMode => set({ audioMode }),
@@ -78,6 +81,7 @@ export const useSessionStore = create<SessionState>()(set => ({
       // user's pre-start selection so Welcome controls don't reset.
       lanIp: snapshot.lanIp ?? state.lanIp,
       audioMode: snapshot.audioMode ?? state.audioMode,
+      startupStage: snapshot.startupStage ?? state.startupStage,
       // After a committed session event, any pending is resolved.
       pendingChanges: false,
     })),
@@ -88,6 +92,7 @@ export const useSessionStore = create<SessionState>()(set => ({
     set(state => ({ monitorReloadNonce: state.monitorReloadNonce + 1 })),
 
   setPendingChanges: (pendingChanges: boolean) => set({ pendingChanges }),
+  setStartupStage: (startupStage: number) => set({ startupStage }),
 
   resetSession: () =>
     set({
@@ -97,6 +102,7 @@ export const useSessionStore = create<SessionState>()(set => ({
       outputTail: [],
       projectName: null,
       volume: 80,
+      startupStage: 0,
       audioMode: 'internal',
       lanIp: null,
       lanAddresses: [],

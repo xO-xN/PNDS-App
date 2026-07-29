@@ -24,6 +24,7 @@ const readySnapshot: SessionSnapshot = {
   error: null,
   outputTail: [],
   volume: 80,
+  startupStage: 0,
 }
 
 /** Captured handler for the shell-level pnds:session subscription. */

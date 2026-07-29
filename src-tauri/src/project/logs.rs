@@ -1,0 +1,152 @@
+//! Session log files (§11): one file per project session, kept in
+//! `app_data_dir/logs/`. Metadata header, per-line timestamps, stdout/stderr
+//! interleaved from both children, and a stop footer. Files are rotated —
+//! the last 20 are kept; older files are removed on session start.
+
+use std::fs;
+use std::io::{BufWriter, Write};
+use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+/// Log directory relative to the app data dir.
+const LOGS_DIR: &str = "session-logs";
+/// Maximum number of session log files to retain.
+const MAX_LOG_FILES: usize = 20;
+
+pub struct SessionLogger {
+    file: Option<BufWriter<fs::File>>,
+    path: PathBuf,
+}
+
+impl SessionLogger {
+    /// Creates log directory and rotates old files. Returns a new logger
+    /// that appends one line per call.
+    pub fn open(
+        app_data_dir: &Path,
+        project_id: &str,
+        project_name: &str,
+        project_path: &str,
+        audio_mode: &str,
+        lan_ip: &str,
+        osc_target: &str,
+        output_device: &str,
+    ) -> Result<Self, String> {
+        let dir = app_data_dir.join(LOGS_DIR);
+        fs::create_dir_all(&dir).map_err(|e| format!("Failed to create session-logs dir: {e}"))?;
+
+        Self::rotate(&dir)?;
+
+        let ts = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let fname = format!("session-{ts}-{project_id}.log");
+        let path = dir.join(&fname);
+
+        let file = fs::File::create(&path)
+            .map_err(|e| format!("Failed to create session log {path:?}: {e}"))?;
+        let mut writer = BufWriter::new(file);
+
+        let _ = writeln!(
+            writer,
+            "PNDS session log | project: {project_name} ({project_id}) | path: {project_path}"
+        );
+        let _ = writeln!(
+            writer,
+            "mode={audio_mode} lan={lan_ip} osc={osc_target} device={output_device}"
+        );
+        let _ = writeln!(writer, "");
+
+        Ok(Self {
+            file: Some(writer),
+            path,
+        })
+    }
+
+    pub fn write_line(&mut self, line: &str) {
+        if let Some(ref mut f) = self.file {
+            let ts = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default();
+            let secs = ts.as_secs();
+            let ms = ts.subsec_millis();
+            let _ = writeln!(f, "[{secs}.{ms:03}] {line}");
+        }
+    }
+
+    /// Closes the log file, writing a stop marker.
+    pub fn close(&mut self) {
+        if let Some(mut f) = self.file.take() {
+            let _ = writeln!(f, "");
+            let _ = writeln!(f, "[session end]");
+        }
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    /// Removes older log files so at most MAX_LOG_FILES remain.
+    fn rotate(dir: &Path) -> Result<(), String> {
+        let mut entries: Vec<(u64, PathBuf)> = Vec::new();
+        for entry in fs::read_dir(dir).map_err(|e| format!("log rotation: {e}"))? {
+            let entry = entry.map_err(|e| format!("log rotation: {e}"))?;
+            let name = entry.file_name().to_string_lossy().to_string();
+            if !name.starts_with("session-") || !name.ends_with(".log") {
+                continue;
+            }
+            // Extract the leading time_t portion for stable ordering.
+            let secs = name
+                .strip_prefix("session-")
+                .and_then(|rest| rest.split('-').next())
+                .and_then(|s| s.parse::<u64>().ok())
+                .unwrap_or(0);
+            entries.push((secs, entry.path()));
+        }
+        entries.sort_by_key(|(s, _)| *s);
+
+        while entries.len() > MAX_LOG_FILES {
+            if let Some((_, path)) = entries.first() {
+                let _ = fs::remove_file(path);
+                entries.remove(0);
+            } else {
+                break;
+            }
+        }
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    #[test]
+    fn log_rotation_keeps_max() {
+        let dir = tempfile::tempdir().unwrap();
+        // Create MAX_LOG_FILES + 3 files; the oldest 3 should be gone.
+        for i in 1..=MAX_LOG_FILES + 3 {
+            let path = dir.path().join(format!("session-{i:06}-test.log"));
+            fs::write(&path, "body").unwrap();
+        }
+        SessionLogger::rotate(dir.path()).unwrap();
+        let remaining: Vec<_> = fs::read_dir(dir.path())
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .collect();
+        assert_eq!(remaining.len(), MAX_LOG_FILES);
+        // Oldest should be #4 (1-3 removed)
+        let min = remaining
+            .iter()
+            .filter_map(|e| {
+                e.file_name()
+                    .to_string_lossy()
+                    .strip_prefix("session-")
+                    .and_then(|r| r[..6].parse::<u64>().ok())
+            })
+            .min()
+            .unwrap();
+        assert_eq!(min, 4);
+    }
+}
