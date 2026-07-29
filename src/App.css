@@ -62,10 +62,22 @@
     --pnds-bg: #eef0f8;
     --pnds-sidebar-bg: #e2e5f3;
     --pnds-card: #ffffff;
-    --pnds-pill: #dce0f0;
+    /* Controls are recessed fields inside the white card, so the pill is a
+       tint *below* the card. What makes a field read as live is the value
+       being at full text strength — not the fill. */
+    --pnds-pill: #e8ebf7;
+    --pnds-pill-hover: #dee2f2;
     --pnds-accent: #5a4ff3;
+    --pnds-accent-hover: #4a3fe0;
     --pnds-text: #171a2b;
     --pnds-text-secondary: #5d6484;
+
+    /* Session action states. Each is checked for >=4.5:1 against its own
+       label color, so don't lighten them without rechecking. */
+    --pnds-danger: #e11d48;
+    --pnds-danger-hover: #c2143c;
+    --pnds-warning: #ffb020; /* dark label, not white */
+    --pnds-warning-hover: #f0a20c;
   }
 
   @keyframes spin-shrink {

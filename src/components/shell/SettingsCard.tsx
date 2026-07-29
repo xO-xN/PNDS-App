@@ -23,9 +23,15 @@ const MODE_LABELS: Record<string, string> = {
 let missingDeviceWarned = false
 
 /**
- * Sidebar settings card (§10.2). All changes are deferred — the new value
- * is displayed immediately but is NOT applied to the running session
- * until the user clicks the action button below (Load or Change, §8.3).
+ * Sidebar settings card (§10.2), rendered as the body of the card whose
+ * footer is the session action button.
+ *
+ * The layout encodes the one distinction that matters here: master volume
+ * is live (it hits the running master synth on drag), everything below the
+ * rule is deferred — the new value shows immediately but is NOT applied
+ * until the user presses the footer button (Load / Change, §8.3). The
+ * deferred rows therefore sit directly above the button that applies them.
+ *
  * OSC target is hidden unless the selected mode is "external" (§6.6).
  */
 export function SettingsCard() {
@@ -99,43 +105,58 @@ export function SettingsCard() {
     flagChange()
   }
 
-  const selectClass =
-    'h-6 w-full appearance-none rounded-md bg-(--pnds-pill) pl-2 pr-6 text-[12px] text-(--pnds-text)/80 outline-none disabled:opacity-40'
+  // Every row shares one label gutter, including the volume row (its icon
+  // sits in the gutter) — so the left edge of the controls never jumps.
+  const labelClass = 'w-12 shrink-0 text-[11px] text-(--pnds-text)/45'
+  // Values are data, not chrome: full text strength. Greying them is what
+  // reads as "disabled", so only the disabled state may do it.
+  const fieldClass =
+    'h-7 bg-(--pnds-pill) text-[12px] text-(--pnds-text) outline-none transition-colors hover:bg-(--pnds-pill-hover) disabled:text-(--pnds-text)/30 disabled:hover:bg-(--pnds-pill)'
+  const selectClass = `${fieldClass} w-full appearance-none rounded-lg pl-2.5 pr-6`
 
   return (
     <div
       data-testid="settings-card"
-      className="flex w-full flex-col gap-2.5 rounded-xl bg-(--pnds-card) p-3.5 text-[13px] shadow-sm"
+      className="flex flex-col gap-2 px-3.5 pb-3.5 pt-3"
     >
-      {/* OSC target (§6.6) — only visible in external mode */}
-      {audioMode === 'external' && (
-        <div className="flex items-center gap-2">
-          <span className="w-14 shrink-0 text-(--pnds-text)/50">OSC</span>
-          <input
-            aria-label={t('sidebar.oscTarget')}
-            value={oscTargetInput}
-            disabled={!projectLoaded}
-            onChange={e => {
-              useSessionStore.getState().setOscTargetInput(e.target.value)
-              // Don't flag for pending — wait until the user commits on blur/enter.
-            }}
-            onBlur={commitOscTarget}
-            onKeyDown={e => {
-              if (e.key === 'Enter') commitOscTarget()
-            }}
-            className={cn(
-              'h-6 w-full rounded-full bg-(--pnds-pill) px-2.5 text-center font-mono text-[11px] text-(--pnds-text)/80 outline-none disabled:opacity-40',
-              audioMode === 'external' &&
-                !oscTargetValid &&
-                'ring-2 ring-red-500/60'
-            )}
-          />
-        </div>
-      )}
+      {/* Master volume (§6.4: internal only, dB-linear, 80% ≈ -6 dB).
+          Live — applied on drag, never deferred. */}
+      <div className="flex items-center gap-2">
+        <span
+          className={cn(
+            labelClass,
+            'flex items-center',
+            !volumeEnabled && 'opacity-45'
+          )}
+        >
+          <Volume2 size={14} />
+        </span>
+        <input
+          type="range"
+          aria-label={t('sidebar.volume')}
+          min={0}
+          max={100}
+          value={Math.round(volume)}
+          disabled={!volumeEnabled}
+          onChange={e => handleVolumeChange(Number(e.target.value))}
+          className="h-7 w-full accent-(--pnds-accent) disabled:opacity-35"
+        />
+        <span
+          className={cn(
+            'font-manrope w-7 shrink-0 text-end text-[11px] tabular-nums',
+            volumeEnabled ? 'text-(--pnds-text)/70' : 'text-(--pnds-text)/30'
+          )}
+        >
+          {Math.round(volume)}
+        </span>
+      </div>
+
+      {/* Everything below is deferred until the footer button (§8.3). */}
+      <hr className="my-0.5 border-(--pnds-text)/10" />
 
       {/* Audio mode */}
       <div className="flex items-center gap-2">
-        <span className="w-14 shrink-0 text-(--pnds-text)/50">Mode</span>
+        <span className={labelClass}>Mode</span>
         <div className="relative flex-1">
           <select
             aria-label={t('session.audioMode')}
@@ -153,34 +174,40 @@ export function SettingsCard() {
           </select>
           <ChevronDown
             size={12}
-            className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-(--pnds-text)/50"
+            className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-(--pnds-text)/40"
           />
         </div>
       </div>
 
-      <hr className="border-(--pnds-text)/10" />
-
-      {/* Master volume (§6.4: internal only, dB-linear, 80% ≈ -6 dB) */}
-      <div className="flex items-center gap-2">
-        <Volume2 size={14} className="shrink-0 text-(--pnds-text)/50" />
-        <input
-          type="range"
-          aria-label={t('sidebar.volume')}
-          min={0}
-          max={100}
-          value={Math.round(volume)}
-          disabled={!volumeEnabled}
-          onChange={e => handleVolumeChange(Number(e.target.value))}
-          className="h-6 w-full accent-(--pnds-accent) disabled:opacity-40"
-        />
-        <span className="w-8 shrink-0 text-end text-[11px] tabular-nums text-(--pnds-text)/50">
-          {Math.round(volume)}
-        </span>
-      </div>
+      {/* OSC target (§6.6) — a sub-setting of external mode, so it follows
+          the mode row rather than leading the card. */}
+      {audioMode === 'external' && (
+        <div className="flex items-center gap-2">
+          <span className={labelClass}>OSC</span>
+          <input
+            aria-label={t('sidebar.oscTarget')}
+            value={oscTargetInput}
+            disabled={!projectLoaded}
+            onChange={e => {
+              useSessionStore.getState().setOscTargetInput(e.target.value)
+              // Don't flag for pending — wait until the user commits on blur/enter.
+            }}
+            onBlur={commitOscTarget}
+            onKeyDown={e => {
+              if (e.key === 'Enter') commitOscTarget()
+            }}
+            className={cn(
+              fieldClass,
+              'font-manrope w-full rounded-lg px-2.5',
+              !oscTargetValid && 'ring-1 ring-(--pnds-danger)'
+            )}
+          />
+        </div>
+      )}
 
       {/* Output device (§6.5): preference, deferred until Change */}
       <div className="flex items-center gap-2">
-        <span className="w-14 shrink-0 text-(--pnds-text)/50">Device</span>
+        <span className={labelClass}>Device</span>
         <div className="relative flex-1">
           <select
             aria-label={t('sidebar.outputDevice')}
@@ -199,7 +226,7 @@ export function SettingsCard() {
           </select>
           <ChevronDown
             size={12}
-            className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-(--pnds-text)/50"
+            className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-(--pnds-text)/40"
           />
         </div>
       </div>
@@ -207,7 +234,7 @@ export function SettingsCard() {
       {/* LAN address (replaces Figma — §7: explicit choice required) */}
       {lanAddresses.length > 1 && (
         <div className="flex items-center gap-2">
-          <span className="w-14 shrink-0 text-(--pnds-text)/50">LAN</span>
+          <span className={labelClass}>LAN</span>
           <div className="relative flex-1">
             <select
               aria-label={t('session.lanAddress')}
@@ -216,7 +243,7 @@ export function SettingsCard() {
                 useSessionStore.getState().setLanIp(e.target.value)
                 flagChange()
               }}
-              className={selectClass}
+              className={cn(selectClass, 'font-manrope')}
             >
               <option value="" disabled>
                 {t('session.lanAddressHint')}
@@ -229,7 +256,7 @@ export function SettingsCard() {
             </select>
             <ChevronDown
               size={12}
-              className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-(--pnds-text)/50"
+              className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-(--pnds-text)/40"
             />
           </div>
         </div>

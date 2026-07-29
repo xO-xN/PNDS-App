@@ -231,10 +231,13 @@ export function Sidebar({ variant, onRequestClose }: SidebarProps) {
         {t('sidebar.open')}
       </button>
 
-      {/* Settings card + primary action pinned to the bottom (§10.2) */}
+      {/* Deferred settings + their submit are one object (§10.2): the card
+          clips the button into a full-bleed footer. */}
       <div className="mt-auto px-5 pb-5 pt-6">
-        <SettingsCard />
-        <SessionActionButton />
+        <div className="overflow-hidden rounded-xl bg-(--pnds-card) shadow-[0_1px_3px_rgba(23,26,43,0.1)]">
+          <SettingsCard />
+          <SessionActionButton />
+        </div>
       </div>
 
       {/* §8.3 switch confirmation (Figma "Loading another project") */}

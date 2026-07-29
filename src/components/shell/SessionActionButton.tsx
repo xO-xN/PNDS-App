@@ -8,11 +8,12 @@ import { cn } from '@/lib/utils'
 /**
  * Sidebar session action (§8). Selecting a project only preflights it.
  *
- * In Welcome/Loading the button is a green Load once preflight + LAN are
- * in place (§6.1, §7). While the session runs it is a red Close — unless
- * the user has changed a setting (mode / device / LAN / OSC target),
- * which turns it into a yellow Change (§8.3). The Change button applies
- * the pending configuration with a full session restart.
+ * Rendered as the full-bleed footer of the settings card: the rows above
+ * are all deferred, and this is their submit. In Welcome/Loading it is the
+ * accent-colored Load once preflight + LAN are in place (§6.1, §7). While
+ * the session runs it is a red Close — unless the user has changed a
+ * setting (mode / device / LAN / OSC target), which turns it into an amber
+ * Change (§8.3) that applies the pending config with a full restart.
  */
 export function SessionActionButton() {
   const { t } = useTranslation()
@@ -35,13 +36,20 @@ export function SessionActionButton() {
     oscTargetInput,
   })
 
+  // Full-bleed footer: the card clips the bottom corners, so no radius
+  // and no shadow here — the card owns both.
+  const baseClass = 'h-10 w-full text-[14px] transition-colors'
+
   // Close (running, no pending change)
   if (running && !pendingChanges) {
     return (
       <button
         type="button"
         onClick={() => void stopAndReset()}
-        className="mt-3 h-9 w-full rounded-xl bg-[#ff3b30] text-[14px] text-white shadow-sm transition-colors hover:bg-[#ee2b20]"
+        className={cn(
+          baseClass,
+          'bg-(--pnds-danger) text-white hover:bg-(--pnds-danger-hover)'
+        )}
       >
         {t('sidebar.closeProject')}
       </button>
@@ -56,7 +64,10 @@ export function SessionActionButton() {
         type="button"
         disabled={busy}
         onClick={() => void restart()}
-        className="mt-3 h-9 w-full rounded-xl bg-[#f59e0b] text-[14px] text-white shadow-sm transition-colors hover:bg-[#d97706]"
+        className={cn(
+          baseClass,
+          'bg-(--pnds-warning) text-(--pnds-text) hover:bg-(--pnds-warning-hover)'
+        )}
       >
         {busy ? t('session.stopping') : t('sidebar.change')}
       </button>
@@ -77,10 +88,10 @@ export function SessionActionButton() {
       disabled={!loadable || busy}
       onClick={() => void start()}
       className={cn(
-        'mt-3 h-9 w-full rounded-xl text-[14px] shadow-sm transition-colors',
+        baseClass,
         loadable
-          ? 'bg-[#34c759] text-white hover:bg-[#2eb34e]'
-          : 'bg-black/10 text-black/40 shadow-none'
+          ? 'bg-(--pnds-accent) text-white hover:bg-(--pnds-accent-hover)'
+          : 'bg-(--pnds-text)/6 text-(--pnds-text)/30'
       )}
     >
       {label}
