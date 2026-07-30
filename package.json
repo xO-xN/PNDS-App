@@ -1,7 +1,7 @@
 {
   "name": "pnds-app",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "description": "PNDS App — 在演出现场运行 PNDS 数字乐谱工程的 macOS 桌面 Host 应用",
   "author": "xO-xN",
