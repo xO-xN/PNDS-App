@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { useSessionStore } from './session-store'
-import type { SessionSnapshot } from '@/lib/tauri-bindings'
+import { useProjectStore } from './project-store'
+import type { Manifest, SessionSnapshot } from '@/lib/tauri-bindings'
 
 const snapshot = (overrides: Partial<SessionSnapshot>): SessionSnapshot => ({
   status: 'idle',
@@ -19,6 +20,11 @@ const snapshot = (overrides: Partial<SessionSnapshot>): SessionSnapshot => ({
 
 describe('session-store', () => {
   beforeEach(() => {
+    useProjectStore.setState({
+      currentProject: null,
+      preflightStatus: 'idle',
+      preflightError: null,
+    })
     useSessionStore.getState().resetSession()
   })
 
@@ -48,6 +54,19 @@ describe('session-store', () => {
     expect(state.sessionStatus).toBe('ready')
     expect(state.health?.audio?.status).toBe('disabled')
     expect(state.projectName).toBe('Inarticulate III')
+  })
+
+  it('keeps the selected project across an idle snapshot for restart flows', () => {
+    const projectManifest = { name: 'Inarticulate III' } as Manifest
+    useProjectStore.setState({
+      currentProject: { path: '/p', manifest: projectManifest },
+      preflightStatus: 'ready',
+    })
+    useSessionStore.setState({ sessionStatus: 'ready' })
+
+    useSessionStore.getState().applySnapshot(snapshot({ status: 'idle' }))
+
+    expect(useProjectStore.getState().currentProject?.path).toBe('/p')
   })
 
   it('keeps error details and output tail for the error view (§10.3)', () => {

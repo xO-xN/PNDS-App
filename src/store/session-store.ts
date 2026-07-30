@@ -1,6 +1,5 @@
 import { create } from 'zustand'
 import type { HealthPayload, SessionSnapshot } from '@/lib/tauri-bindings'
-import { useProjectStore } from './project-store'
 
 export type SessionStatus = 'idle' | 'starting' | 'ready' | 'error' | 'stopping'
 
@@ -70,29 +69,22 @@ export const useSessionStore = create<SessionState>()(set => ({
   setOscTargetInput: oscTargetInput => set({ oscTargetInput }),
 
   applySnapshot: snapshot =>
-    set(state => {
-      // Clear the project card high-light only after the backend confirms
-      // shutdown is complete — keeps the entry clickable during graceful stop.
-      if (snapshot.status === 'idle' && state.sessionStatus !== 'idle') {
-        queueMicrotask(() => useProjectStore.getState().clearProject())
-      }
-      return {
-        sessionStatus: snapshot.status as SessionStatus,
-        sessionError: snapshot.error,
-        health: snapshot.health,
-        outputTail: snapshot.outputTail,
-        projectName: snapshot.projectName,
-        oscTarget: snapshot.oscTarget,
-        volume: snapshot.volume,
-        // Backend-owned session facts; when absent (idle snapshots), keep the
-        // user's pre-start selection so Welcome controls don't reset.
-        lanIp: snapshot.lanIp ?? state.lanIp,
-        audioMode: snapshot.audioMode ?? state.audioMode,
-        startupStage: snapshot.startupStage,
-        // After a committed session event, any pending is resolved.
-        pendingChanges: false,
-      }
-    }),
+    set(state => ({
+      sessionStatus: snapshot.status as SessionStatus,
+      sessionError: snapshot.error,
+      health: snapshot.health,
+      outputTail: snapshot.outputTail,
+      projectName: snapshot.projectName,
+      oscTarget: snapshot.oscTarget,
+      volume: snapshot.volume,
+      // Backend-owned session facts; when absent (idle snapshots), keep the
+      // user's pre-start selection so Welcome controls don't reset.
+      lanIp: snapshot.lanIp ?? state.lanIp,
+      audioMode: snapshot.audioMode ?? state.audioMode,
+      startupStage: snapshot.startupStage,
+      // After a committed session event, any pending is resolved.
+      pendingChanges: false,
+    })),
 
   failLocal: message => set({ sessionStatus: 'error', sessionError: message }),
 

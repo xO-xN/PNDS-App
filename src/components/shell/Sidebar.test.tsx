@@ -5,7 +5,7 @@ import { commands } from '@/lib/tauri-bindings'
 import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 import { Sidebar } from './Sidebar'
-import type { Manifest } from '@/lib/tauri-bindings'
+import type { Manifest, SessionSnapshot } from '@/lib/tauri-bindings'
 
 vi.mock('@tauri-apps/plugin-opener', () => ({
   openUrl: vi.fn().mockResolvedValue(undefined),
@@ -35,6 +35,20 @@ const manifest: Manifest = {
 const PROJECT_PATH = '/Users/test/Inarticulate III'
 const OTHER_PATH = '/Users/test/PNDS Score 1'
 const THIRD_PATH = '/Users/test/Another Score'
+
+const idleSnapshot: SessionSnapshot = {
+  status: 'idle',
+  projectName: null,
+  projectPath: null,
+  audioMode: null,
+  lanIp: null,
+  oscTarget: null,
+  health: null,
+  error: null,
+  outputTail: [],
+  volume: 80,
+  startupStage: 0,
+}
 
 function seedLoadedProject() {
   useProjectStore.setState({
@@ -222,13 +236,84 @@ describe('Sidebar', () => {
     render(<Sidebar variant="overlay" />)
     await user.click(screen.getByRole('button', { name: /^close$/i }))
 
-    // stopProject is called; currentProject stays set until the backend
-    // idle snapshot arrives (card keeps its highlight during shutdown)
     await waitFor(() => {
       expect(commands.stopProject).toHaveBeenCalled()
+      expect(useProjectStore.getState().currentProject).toBeNull()
     })
     expect(useProjectStore.getState().trustedPaths).toHaveLength(1)
-    expect(useProjectStore.getState().currentProject).not.toBeNull()
+  })
+
+  it('keeps the selected project when changing the output device during a restart', async () => {
+    const user = userEvent.setup()
+    seedLoadedProject()
+    useSessionStore.setState({ sessionStatus: 'ready' })
+    vi.mocked(commands.listOutputDevices).mockResolvedValue({
+      status: 'ok',
+      data: {
+        devices: ['Mac mini Speakers', 'BlackHole 16ch'],
+        default: 'Mac mini Speakers',
+      },
+    })
+    vi.mocked(commands.stopProject).mockImplementation(async () => {
+      useSessionStore.getState().applySnapshot(idleSnapshot)
+      return { status: 'ok', data: null }
+    })
+
+    render(<Sidebar variant="overlay" />)
+    await user.selectOptions(
+      await screen.findByRole('combobox', { name: /output device/i }),
+      'BlackHole 16ch'
+    )
+    await user.click(screen.getByRole('button', { name: /^change$/i }))
+
+    await waitFor(() => {
+      expect(commands.startProject).toHaveBeenCalledWith(
+        PROJECT_PATH,
+        'internal',
+        '192.168.1.10',
+        null
+      )
+      expect(useProjectStore.getState().currentProject?.path).toBe(PROJECT_PATH)
+    })
+    expect(
+      (
+        screen.getByRole('combobox', {
+          name: /audio mode/i,
+        }) as HTMLSelectElement
+      ).value
+    ).toBe('internal')
+  })
+
+  it('keeps the selected project when changing an external OSC target during a restart', async () => {
+    const user = userEvent.setup()
+    seedLoadedProject()
+    useSessionStore.setState({
+      sessionStatus: 'ready',
+      audioMode: 'external',
+      oscTargetInput: '127.0.0.1:3333',
+    })
+    vi.mocked(commands.stopProject).mockImplementation(async () => {
+      useSessionStore.getState().applySnapshot(idleSnapshot)
+      return { status: 'ok', data: null }
+    })
+
+    render(<Sidebar variant="overlay" />)
+    const oscInput = screen.getByRole('textbox', { name: /osc target/i })
+    await user.clear(oscInput)
+    await user.type(oscInput, '127.0.0.1:57120')
+    await user.keyboard('{Enter}')
+    await user.click(screen.getByRole('button', { name: /^change$/i }))
+
+    await waitFor(() => {
+      expect(commands.startProject).toHaveBeenCalledWith(
+        PROJECT_PATH,
+        'external',
+        '192.168.1.10',
+        '127.0.0.1:57120'
+      )
+      expect(useProjectStore.getState().currentProject?.path).toBe(PROJECT_PATH)
+    })
+    expect(screen.getByTestId('current-project-card')).toBeInTheDocument()
   })
 
   it('removes a non-open project from history via its ✕ button', async () => {
