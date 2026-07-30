@@ -51,16 +51,19 @@ pub fn scsynth_binary_path() -> Result<PathBuf, String> {
     const TRIPLE: &str = "aarch64-apple-darwin";
     let name = format!("scsynth-{TRIPLE}");
 
-    // 1. Next to the executable (bundled app; dev when the CLI copies it)
+    // 1. Next to the executable (bundled app; dev when `tauri dev` copies it).
+    // Tauri strips the `-{target-triple}` suffix from `externalBin` sidecars
+    // when placing them next to the executable, so the file is just `scsynth`.
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
-            let candidate = dir.join(&name);
+            let candidate = dir.join("scsynth");
             if candidate.exists() {
                 return Ok(candidate);
             }
         }
     }
-    // 2. Development fallback: src-tauri/binaries
+    // 2. Development fallback: src-tauri/binaries (raw fetched sidecar, still
+    // named with the target-triple suffix as `scripts/fetch-scsynth.sh` leaves it)
     let dev = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("binaries")
         .join(&name);

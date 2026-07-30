@@ -95,6 +95,9 @@ async function prepareRelease() {
       tauriConfigPath,
       JSON.stringify(tauriConfig, null, 2) + '\n'
     )
+    // JSON.stringify's formatting doesn't match prettier's array-wrapping
+    // rules; reformat so `npm run format:check` stays green after a release.
+    exec(`npx prettier --write ${tauriConfigPath}`)
     console.log(`   ${oldTauriVersion} → ${cleanVersion}`)
 
     // Run npm install to update lock files
