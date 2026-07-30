@@ -2,60 +2,84 @@
 
 ## Platform for Networked Digital Score
 
-PNDS 是一个面向网络化数字音乐演出的开放平台，用于创建、运行和组织多人参与的数字乐谱作品。
+[中文](README.zh-CN.md) | **English**
 
-创作者可以将一份数字乐谱、一套声音引擎和一组网络交互规则组织成一个独立的演出工程；PNDS App 负责在演出现场把它变成一个可运行的本地多人数字音乐演奏系统。
+![PNDS App - opening and running a PNDS project](./assets/readme_img/demo30.gif)
 
-PNDS 由三个部分组成。
+PNDS is an open platform for networked digital music performance, used to create, run, and organize digital score works for multiple participants.
 
-### PNDS 数字乐谱工程
+A creator packages a digital score, a sound engine, and a set of networked interaction rules into one self-contained score project.
 
-PNDS 工程（score project）是一个可以被 PNDS App 打开并运行的作品目录。
+On site you only need a Mac and a router: PNDS App opens that project and builds a local multi-player digital music performance system on the spot. Performers join by scanning a QR code with their own phone or tablet, their real-time interactions flow into the digital score, and the score drives the sound engine.
 
-一个工程通常包含：
+PNDS is made up of three parts that together form this chain.
 
-- 一个基于 Node.js 的数字乐谱服务器，提供演奏者页面与监视/指挥页面，并通过 Socket.IO 处理实时网络交互；
-- 一个或多个已编译的 SuperCollider `.scsyndef` 声音定义文件；
-- 一个 `manifest.json` 工程配置文件，声明服务器入口、页面端口、音频模式与声音资源。
+### The PNDS Score Project Framework
 
-工程自己决定乐谱视觉、演奏规则、交互方式与 OSC 参数；PNDS App 不规定这些内容。
+A PNDS score project is a work directory that PNDS App can open and run.
+One example of a PNDS project is _Inarticulate III_: https://github.com/xO-xN/inarticulate-iii
+
+A project usually contains:
+
+- A Node.js digital score server that serves the performer page and the monitor/conductor page, and handles real-time network interaction over Socket.IO
+- One or more compiled SuperCollider `.scsyndef` sound definition files
+- A `manifest.json` configuration file declaring the server entry point, page ports, audio modes, and sound assets
+
+The project itself decides the score's visuals, performance rules, interaction design, and OSC parameters. PNDS App does not prescribe any of this.
+
+Creators can also use an external sound engine (SuperCollider, Max/MSP, Pure Data, Ableton Live, and so on), in which case PNDS App only converts performer interaction into OSC messages and sends them to that engine.
 
 ### PNDS App
 
-PNDS App 是一个 macOS 桌面应用，负责在演出现场运行 PNDS 工程：
+PNDS App is a macOS desktop application that runs PNDS projects on site:
 
-- 打开本地 PNDS 工程并校验其运行资产；
-- 启动工程的数字乐谱服务器，并部署到本地网络；
-- 启动内置的 SuperCollider 声音服务器（`scsynth`），加载工程的 `.scsyndef`；
-- 管理音频模式、音频输出设备与总输出音量；
-- 显示工程自己的监视/指挥界面；
-- 在工程之间切换，并在退出时清理所有子进程。
+- Opens a local PNDS project and validates its runtime assets
+- Starts the project's digital score server and deploys it onto the local network
+- In Internal mode, starts the built-in SuperCollider sound server (`scsynth`) and loads the project's `.scsyndef` files
+- Manages the audio mode, audio output device, and master output volume
+- Displays the project's own monitor/conductor interface
+- Switches between projects, and cleans up all child processes on exit
 
 ### PNDS AI Skills
 
-PNDS AI Skills 是一组面向创作者的 AI 辅助工具，用于在 PNDS 框架下制作作品，包括数字乐谱界面与交互设计、SuperCollider 声音引擎设计，以及工程配置与文档的生成与维护。
+PNDS AI Skills is a set of AI-assisted tools for creators working within the PNDS framework, covering digital score interface and interaction design, SuperCollider sound engine design, and the generation and maintenance of project configuration and documentation.
 
-## 第一版范围
+> **Status: in development.** Not yet publicly released.
 
-当前开发中的第一版（V1）明确聚焦于：
+## V1 Scope
 
-- **macOS Apple Silicon** 桌面 Host；
-- **同一局域网内**的演出：Host 电脑 + 手机/平板演奏者；
-- 由用户主动选择并信任的**本地工程目录**；
-- 立体声输出。
+The first version (V1), now complete, deliberately focuses on:
 
-以下为**后续目标**，不属于 V1：
+- A **macOS Apple Silicon** desktop host
+- Performances **within a single local network**: the host Mac plus phone/tablet performers
+- **Local project directories** that the user explicitly selects and trusts
+- Stereo output
 
-- 跨互联网、多地实时共奏；
-- 多声道 / 环绕声输出；
-- Intel Mac、Windows、Linux；
-- 工程压缩包、在线工程库与工程下载。
+The following are **later goals** and are not part of V1:
 
-## PNDS App 如何使用
+- Distributed performance across the internet
+- Multichannel / surround output
+- Intel Mac, Windows, Linux
+- Project archives, an online project library, and project downloads
 
-### 1. 准备 PNDS 工程
+## Download & Install
 
-准备一个完整、可离线运行的工程目录，例如：
+Download the latest `.dmg` from the [Releases](https://github.com/xO-xN/PNDS-App/releases/latest) page, open it, and drag PNDS into your Applications folder.
+
+Requirements: a Mac with Apple Silicon (M-series chip).
+
+**First launch:** V1 builds are ad-hoc signed and not notarized by Apple, so macOS will block the app and report that the developer cannot be verified. Open it once using either method below and the warning will not appear again:
+
+- Right-click PNDS in Applications, choose **Open**, then click **Open** again in the dialog
+- Or go to **System Settings → Privacy & Security** and click **Open Anyway** near the bottom of the page
+
+Once installed, PNDS checks for updates automatically and notifies you in-app when a new version is available.
+
+## Using PNDS App
+
+### 1. Prepare a PNDS Project
+
+Prepare a complete project directory that can run offline, for example:
 
 ```text
 Inarticulate III/
@@ -68,70 +92,69 @@ Inarticulate III/
         └── inarticulate-iii.scsyndef
 ```
 
-工程必须自带已安装好的 Node.js 生产依赖。PNDS App 在演出时不会执行安装步骤，也不依赖网络。
+The project must ship with its Node.js production dependencies already installed. PNDS App never runs an install step during a performance, and never depends on network access.
 
-### 2. 连接本地网络演奏环境
+### 2. Set Up the Local Performance Network
 
-将运行 PNDS App 的 Host 电脑接入本地网络，建议使用有线连接。演奏者设备（手机或平板）连接到同一网络。
+Connect the host Mac running PNDS App to the local network; a wired connection is recommended. Connect the performers' devices (phones or tablets) to the same network.
 
-### 3. 打开工程
+### 3. Open a Project
 
-在 PNDS App 中选择一个本地 PNDS 工程目录。
+![PNDS App - welcome screen](./assets/readme_img/pndsapp_starting.png)
 
-App 会：
+Select a local PNDS project directory in PNDS App.
 
-- 读取并校验 `manifest.json`；
-- 检查入口文件、依赖与声音资源；
-- 让用户选择音频模式与输出设备；
-- 启动内置声音服务器（Internal 模式）；
-- 启动数字乐谱服务器；
-- 等待工程报告运行就绪。
+The app then:
 
-加载期间，App 显示 PNDS Logo 动画；就绪后动画淡出，工程的监视界面淡入。
+- Reads and validates `manifest.json`
+- Checks the entry file, dependencies, and sound assets
+- Lets you choose the audio mode and output device
+- Starts the sound engine / OSC send port as required by the project
+- Starts the digital score server
 
-### 4. 演奏者加入数字乐谱
+### 4. Performers Join the Digital Score
 
-演奏者通过手机或平板扫描监视界面上的二维码，或直接访问 Host 的局域网地址，进入演奏者页面。
+Performers reach the performer page by scanning the QR code on the monitor page with a phone or tablet, or by opening the host's local network address directly.
 
-演奏者的交互通过 Socket.IO 发送到数字乐谱服务器。
+Their interactions are sent to the digital score server over Socket.IO.
 
-### 5. 数字乐谱控制声音引擎
+### 5. The Digital Score Drives the Sound Engine
 
-数字乐谱服务器根据作品规则，将演奏者交互转换为 OSC 消息，控制声音引擎发声。
+Following the rules of the work, the digital score server turns performer interaction into OSC messages that make the sound engine sound.
 
-音频模式由用户在 App 中选择：
+You choose the audio mode in the app:
 
-| 模式           | 说明                                               |
-| -------------- | -------------------------------------------------- |
-| Internal Synth | 使用 App 内置的 `scsynth` 与工程自带的 `.scsyndef` |
-| External Synth | 将 OSC 发送到用户指定的外部合成器或设备            |
-| None           | 不使用音频，仅运行乐谱与网络交互                   |
+| Mode           | Description                                                          |
+| -------------- | -------------------------------------------------------------------- |
+| Internal Synth | Uses the app's built-in `scsynth` with the project's own `.scsyndef` |
+| External Synth | Sends OSC to an external synthesizer or device that you specify      |
+| None           | No audio at all; runs only the score and its network interaction     |
 
-### 6. 监视端 / 指挥端
+### 6. Monitor Page and Performer Page
 
-PNDS App 窗口显示的就是工程的监视/指挥界面。
+The PNDS App window shows the project's monitor/conductor page, while performers on the local network use the performer page.
 
-正常演出状态下，窗口只显示该界面：没有标题栏，也没有额外的应用控件。将鼠标移到窗口左侧边缘时，PNDS 侧栏才会浮出，用于切换工程、更改音频模式、选择输出设备与调整总音量。
+During a performance the window shows nothing but the monitor/conductor interface. Move the pointer to the left edge of the window and the PNDS sidebar slides out, where you can switch projects, change the audio mode, select the output device, and adjust the master volume.
 
-两类页面通过不同端口区分：
+The two kinds of page are separated by port:
 
-- 演奏者页面：工程 `manifest.json` 中的 `performerPort`，供手机/平板访问；
-- 监视/指挥页面：`monitorPort`，供 PNDS App 显示。
+- Performer page: `performerPort` in the project's `manifest.json`, for phones and tablets
+- Monitor/conductor page: `monitorPort`, displayed by PNDS App
 
-它们的具体端口由工程声明；例如 `Inarticulate III` 使用 `6868` 与 `6869`。
+The actual port numbers are declared by the project; _Inarticulate III_, for instance, uses `6868` and `6869`.
 
-## 开发
+## Development
 
-本仓库是 PNDS App 的实现（Tauri v2 + React + TypeScript）。
+This repository is the implementation of PNDS App (Tauri v2 + React + TypeScript).
 
 ```bash
-npm install        # 安装依赖
-npm run tauri:dev  # 开发模式运行 App
-npm run check:all  # 完整质量检查（typecheck / lint / ast-grep / prettier / clippy / tests）
+npm install        # install dependencies
+npm run tauri:dev  # run the app in development mode
+npm run check:all  # full quality gate (typecheck / lint / ast-grep / prettier / clippy / tests)
 ```
 
-开发规范与 agent 工作规则见 [`AGENTS.md`](AGENTS.md)；架构模式与详细开发文档见 [`docs/developer/`](docs/developer/README.md)。
+For development conventions and agent working rules see [`AGENTS.md`](AGENTS.md); for architecture patterns and detailed developer documentation see [`docs/developer/`](docs/developer/README.md).
 
-## 相关文档
+## Further Documentation
 
-- [`docs/PNDS_APP_REQUIREMENTS.md`](docs/PNDS_APP_REQUIREMENTS.md)：PNDS App V1 的实现规范与工程运行契约。
+- [`docs/PNDS_APP_REQUIREMENTS.md`](docs/PNDS_APP_REQUIREMENTS.md): the V1 implementation spec and the runtime contract for score projects.
