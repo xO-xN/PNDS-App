@@ -35,7 +35,7 @@ log = "0.4"
 ureq = { version = "3", default-features = false }
 if-addrs = "0.13"
 rosc = "0.11"
-cpal = "0.16"
+cpal = "0.18"
 
 # Type-safe Tauri command bindings
 specta = { version = "=2.0.0-rc.22", features = ["derive", "serde_json"] }

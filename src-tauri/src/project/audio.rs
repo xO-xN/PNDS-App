@@ -25,14 +25,14 @@ pub struct AudioDeviceList {
 
 /// §6.5: enumerate CoreAudio output devices via cpal.
 pub fn list_output_devices() -> Result<AudioDeviceList, String> {
-    use cpal::traits::{DeviceTrait, HostTrait};
+    use cpal::traits::HostTrait;
     let host = cpal::default_host();
     let devices = host
         .output_devices()
         .map_err(|e| format!("Failed to enumerate audio output devices: {e}"))?
-        .filter_map(|d| d.name().ok())
+        .map(|d| d.to_string())
         .collect();
-    let default = host.default_output_device().and_then(|d| d.name().ok());
+    let default = host.default_output_device().map(|d| d.to_string());
     Ok(AudioDeviceList { devices, default })
 }
 
