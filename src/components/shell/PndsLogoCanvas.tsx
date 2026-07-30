@@ -24,6 +24,7 @@ const DARK_CIRCLE_START = 36
 const CIRCLE_REVEAL_DURATION = 20
 const TEXT_START_OFFSET = CLOSURE_FRAMES / 2 // 45 frames into closure
 const TEXT_FADE_FRAMES = 24
+const MAX_FRAME_DELTA = 2
 
 // Spring physics
 const STIFFNESS = 200,
@@ -250,9 +251,16 @@ export function PndsLogoCanvas({ size = 190, ready, onDissolveEnd }: Props) {
   const [phase, setPhase] = useState<Phase>('entrance')
   const [dissolving, setDissolving] = useState(false)
   const frameRef = useRef(0)
+  const dissolveEndRef = useRef(onDissolveEnd)
   const colsRef = useRef(pickSessionColors())
   const bgRef = useRef(randomBgPositions())
   const canvasRef = useRef<HTMLCanvasElement>(null)
+
+  // Keep the latest parent callback without restarting the animation loop when
+  // AppShell re-renders for intermediate session snapshots.
+  useEffect(() => {
+    dissolveEndRef.current = onDissolveEnd
+  }, [onDissolveEnd])
 
   // Reset on mount (state already defaults to 'entrance' / false).
   useEffect(() => {
@@ -272,7 +280,9 @@ export function PndsLogoCanvas({ size = 190, ready, onDissolveEnd }: Props) {
 
   // Animation loop
   useEffect(() => {
-    if (phase === 'done') return
+    // The wait phase must be a true pause: its frame counter must not
+    // advance toward the closure limit before the real ready signal arrives.
+    if (phase === 'wait' || phase === 'done') return
     const canvas = canvasRef.current
     if (!canvas) return
     const ctx = canvas.getContext('2d')
@@ -283,7 +293,7 @@ export function PndsLogoCanvas({ size = 190, ready, onDissolveEnd }: Props) {
     let raf = 0
     let last = performance.now()
     const tick = (now: number) => {
-      const dt = (now - last) / (1000 / 60) // normalised to 60 fps
+      const dt = Math.min((now - last) / (1000 / 60), MAX_FRAME_DELTA) // normalised to 60 fps; cap stalls so phases remain visible
       last = now
       frameRef.current += dt
 
@@ -294,6 +304,7 @@ export function PndsLogoCanvas({ size = 190, ready, onDissolveEnd }: Props) {
         if (phase === 'entrance') {
           // entrance complete → wait or jump directly to closure if ready
           if (ready) {
+            drawFrame(ctx, ENTRANCE_FRAMES, 'wait', cols, bg)
             frameRef.current = 0
             queueMicrotask(() => setPhase('closure'))
             return
@@ -308,7 +319,7 @@ export function PndsLogoCanvas({ size = 190, ready, onDissolveEnd }: Props) {
           drawFrame(ctx, maxFrames, 'closure', cols, bg)
           setDissolving(true)
           setPhase('done')
-          setTimeout(() => onDissolveEnd?.(), 400)
+          setTimeout(() => dissolveEndRef.current?.(), 400)
           return
         }
       }
@@ -318,7 +329,7 @@ export function PndsLogoCanvas({ size = 190, ready, onDissolveEnd }: Props) {
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
-  }, [phase, ready, onDissolveEnd])
+  }, [phase, ready])
 
   return (
     <canvas

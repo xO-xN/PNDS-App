@@ -8,7 +8,7 @@
 # mNumInputs > 0, so any CoreAudio device works (§6.5).
 #
 # Everything is thinned to the arm64 slice (V1 is Apple Silicon only, §2):
-#   - scsynth            → src-tauri/binaries/ (externalBin)
+#   - scsynth            → src-tauri/binaries/ (staging source; bundled as Resources/scsynth)
 #   - libsndfile.dylib   → src-tauri/Frameworks/ (bundle Frameworks)
 #   - UGen plugins       → src-tauri/plugins/   (bundle Resources, -U flag)
 #
@@ -101,6 +101,8 @@ fi
 # Plugins resolve libsndfile via @loader_path/../../Frameworks. In the
 # bundle that maps to Contents/Frameworks (correct); in dev it maps to
 # <repo>/Frameworks — bridge it with a symlink so DiskIO_UGens loads too.
+# scsynth itself is added to the macOS bundle as a resource at
+# Contents/Resources/scsynth (see tauri.conf.json), not as an externalBin.
 ln -sfn "src-tauri/Frameworks" "$ROOT/Frameworks"
 
 # GPL-3.0 license text + source pointer (required when distributing binaries).
@@ -117,7 +119,7 @@ These binaries were extracted, unmodified, from the official
 SuperCollider-$SC_VERSION macOS dmg (arm64 slices).
 EOF
 
-echo "[pnds] sidecar ready: $SIDECAR"
+echo "[pnds] scsynth binary ready: $SIDECAR"
 lipo -info "$SIDECAR"
 echo "[pnds] verifying it runs…"
 "$SIDECAR" -v 2>&1 | head -1

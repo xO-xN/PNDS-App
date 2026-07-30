@@ -46,28 +46,28 @@ pub const DEFAULT_VOLUME_PERCENT: f32 = 80.0;
 const SCSYNTH_BOOT_TIMEOUT: Duration = Duration::from_secs(10);
 const OSC_REPLY_TIMEOUT: Duration = Duration::from_millis(1500);
 
-/// Locates the bundled scsynth sidecar. V1 is Apple Silicon only (§2).
+/// Locates the bundled scsynth binary. V1 is Apple Silicon only (§2).
 pub fn scsynth_binary_path() -> Result<PathBuf, String> {
     const TRIPLE: &str = "aarch64-apple-darwin";
     let name = format!("scsynth-{TRIPLE}");
 
-    // 1. Next to the executable (bundled app; dev when `tauri dev` copies it).
-    // Tauri strips the `-{target-triple}` suffix from `externalBin` sidecars
-    // when placing them next to the executable, so the file is just `scsynth`.
+    // 1. Bundled resource: Contents/Resources/scsynth. Keeping scsynth out
+    // of Contents/MacOS prevents LaunchServices from registering it as a
+    // second foreground application with the PNDS Dock icon.
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
-            let candidate = dir.join("scsynth");
-            if candidate.exists() {
+            let candidate = dir.join("../Resources/scsynth");
+            if candidate.is_file() {
                 return Ok(candidate);
             }
         }
     }
-    // 2. Development fallback: src-tauri/binaries (raw fetched sidecar, still
-    // named with the target-triple suffix as `scripts/fetch-scsynth.sh` leaves it)
+    // 2. Development fallback: src-tauri/binaries (raw fetched binary, still
+    // named with the target-triple suffix as `scripts/fetch-scsynth.sh` leaves it).
     let dev = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("binaries")
         .join(&name);
-    if dev.exists() {
+    if dev.is_file() {
         return Ok(dev);
     }
     Err("Embedded scsynth not found.\nRun `npm run scsynth:fetch` and try again.".to_string())
@@ -391,7 +391,7 @@ mod tests {
         let (Ok(binary), Ok(synthdef), Ok(plugins)) =
             (scsynth_binary_path(), master_synthdef_path(), plugins_dir())
         else {
-            eprintln!("skipping: scsynth sidecar, synthdef, or plugins missing");
+            eprintln!("skipping: scsynth binary, synthdef, or plugins missing");
             return;
         };
 

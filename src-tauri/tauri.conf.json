@@ -39,8 +39,9 @@
     "createUpdaterArtifacts": true,
     "active": true,
     "targets": "all",
-    "externalBin": ["binaries/node", "binaries/scsynth"],
+    "externalBin": ["binaries/node"],
     "resources": {
+      "binaries/scsynth-aarch64-apple-darwin": "scsynth",
       "resources/synthdefs/pndsMaster.scsyndef": "synthdefs/pndsMaster.scsyndef",
       "plugins": "plugins"
     },

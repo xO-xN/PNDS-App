@@ -26,7 +26,7 @@ jscpd-report
 *.sln
 *.sw?
 
-# Bundled Node.js sidecar (fetched via npm run node:fetch)
+# Generated runtime binaries (fetched via npm run node:fetch / scsynth:fetch)
 src-tauri/binaries/
 
 # Build artifact (generated via npm run synthdefs:build)

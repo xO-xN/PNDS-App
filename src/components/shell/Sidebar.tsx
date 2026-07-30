@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Plus, X, Share, RefreshCw, GripVertical } from 'lucide-react'
 import { openUrl } from '@tauri-apps/plugin-opener'
@@ -55,6 +55,11 @@ export function Sidebar({ variant, onRequestClose }: SidebarProps) {
     null
   )
   const [dragPath, setDragPath] = useState<string | null>(null)
+  const [dropPath, setDropPath] = useState<string | null>(null)
+  const [pendingPath, setPendingPath] = useState<string | null>(null)
+  const dragPathRef = useRef<string | null>(null)
+  const dropPathRef = useRef<string | null>(null)
+  const pendingPathRef = useRef<string | null>(null)
 
   const basename = (path: string) =>
     path.split('/').filter(Boolean).pop() ?? path
@@ -66,13 +71,31 @@ export function Sidebar({ variant, onRequestClose }: SidebarProps) {
   }
 
   const handleEntryClick = (path: string) => {
-    if (busy || path === currentProject?.path) return
+    if (busy) return
+    if (path === currentProject?.path) {
+      if (pendingPathRef.current === path) return
+      if (useSessionStore.getState().sessionStatus === 'idle') {
+        pendingPathRef.current = null
+        setPendingPath(null)
+        useProjectStore.getState().clearProject()
+      }
+      return
+    }
     if (useSessionStore.getState().sessionStatus !== 'idle') {
       // §8.3: switching projects closes the current server — confirm first.
       setPendingSwitchPath(path)
       return
     }
-    void openProject(path)
+    if (pendingPathRef.current === path) return
+
+    pendingPathRef.current = path
+    setPendingPath(path)
+    void openProject(path).finally(() => {
+      if (pendingPathRef.current === path) {
+        pendingPathRef.current = null
+        setPendingPath(null)
+      }
+    })
   }
 
   const confirmSwitch = async () => {
@@ -91,12 +114,54 @@ export function Sidebar({ variant, onRequestClose }: SidebarProps) {
     void saveRecentProjects(useProjectStore.getState().trustedPaths)
   }
 
-  const handleDrop = (targetPath: string) => {
-    if (dragPath && dragPath !== targetPath) {
-      useProjectStore.getState().moveTrusted(dragPath, targetPath)
+  useEffect(() => {
+    if (!dragPath) return
+
+    const clearDrag = () => {
+      dragPathRef.current = null
+      dropPathRef.current = null
+      setDragPath(null)
+      setDropPath(null)
     }
-    setDragPath(null)
-  }
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const fallbackTarget =
+        event.target instanceof Element ? event.target : null
+      const target =
+        document.elementFromPoint?.(event.clientX, event.clientY) ??
+        fallbackTarget
+      const row = target?.closest('[data-project-path]')
+      const nextPath = row?.getAttribute('data-project-path') ?? null
+      if (dropPathRef.current === nextPath) return
+      dropPathRef.current = nextPath
+      setDropPath(nextPath)
+    }
+
+    const finishDrag = () => {
+      const sourcePath = dragPathRef.current
+      const targetPath = dropPathRef.current
+      if (sourcePath && targetPath && sourcePath !== targetPath) {
+        const store = useProjectStore.getState()
+        store.moveTrusted(sourcePath, targetPath)
+        void saveRecentProjects(useProjectStore.getState().trustedPaths)
+      }
+      clearDrag()
+    }
+
+    window.addEventListener('pointermove', handlePointerMove)
+    window.addEventListener('pointerup', finishDrag)
+    window.addEventListener('pointercancel', clearDrag)
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove)
+      window.removeEventListener('pointerup', finishDrag)
+      window.removeEventListener('pointercancel', clearDrag)
+    }
+  }, [dragPath])
+
+  const dragIndex = dragPath ? trustedPaths.indexOf(dragPath) : -1
+  const dropIndex = dropPath ? trustedPaths.indexOf(dropPath) : -1
+  const showDropBefore = dragIndex > dropIndex && dropIndex >= 0
+  const showDropAfter = dragIndex >= 0 && dragIndex < dropIndex
 
   return (
     <aside
@@ -151,45 +216,64 @@ export function Sidebar({ variant, onRequestClose }: SidebarProps) {
       <nav className="mt-4 flex flex-col gap-1">
         {trustedPaths.map(path => {
           const isCurrent = path === currentProject?.path
+          const showIndicatorBefore = showDropBefore && dropPath === path
+          const showIndicatorAfter = showDropAfter && dropPath === path
           return (
             <div
               key={path}
               data-testid={isCurrent ? 'current-project-card' : 'project-entry'}
-              onDragOver={e => {
-                e.preventDefault()
-                e.dataTransfer.dropEffect = 'move'
-              }}
-              onDrop={e => {
-                e.preventDefault()
-                handleDrop(path)
-              }}
+              data-project-path={path}
+              onClick={() => handleEntryClick(path)}
               className={cn(
-                'group mx-5 flex h-[57px] items-center rounded-xl px-3 transition-colors duration-150',
-                isCurrent
+                'group relative mx-5 flex h-14.25 items-center rounded-xl px-3 transition-colors duration-150',
+                isCurrent || pendingPath === path
                   ? 'bg-(--pnds-card) shadow-sm'
                   : 'hover:bg-(--pnds-text)/5',
                 dragPath === path && 'opacity-50'
               )}
             >
+              <div
+                data-testid={
+                  showIndicatorBefore ? 'project-drop-indicator' : undefined
+                }
+                aria-hidden="true"
+                className={cn(
+                  'pointer-events-none absolute -top-0.5 left-5 right-5 h-px bg-(--pnds-text)/35 opacity-0 transition-opacity duration-200 ease-in-out',
+                  showIndicatorBefore && 'opacity-100'
+                )}
+              />
+              <div
+                data-testid={
+                  showIndicatorAfter ? 'project-drop-indicator' : undefined
+                }
+                aria-hidden="true"
+                className={cn(
+                  'pointer-events-none absolute -bottom-0.5 left-5 right-5 h-px bg-(--pnds-text)/35 opacity-0 transition-opacity duration-200 ease-in-out',
+                  showIndicatorAfter && 'opacity-100'
+                )}
+              />
+
               {/* Left grip: drag to reorder (visible on hover) */}
-              <span
-                draggable
-                onDragStart={e => {
-                  e.dataTransfer.effectAllowed = 'move'
-                  e.dataTransfer.setData('text/plain', path)
-                  setDragPath(path)
-                }}
-                onDragEnd={() => setDragPath(null)}
+              <button
+                type="button"
                 aria-label={t('sidebar.dragToReorder')}
-                className="w-5 shrink-0 cursor-grab text-(--pnds-text)/40 opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing pointer-events-none group-hover:pointer-events-auto"
+                onPointerDown={e => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  dragPathRef.current = path
+                  dropPathRef.current = null
+                  setDragPath(path)
+                  setDropPath(null)
+                }}
+                onClick={e => e.stopPropagation()}
+                className="flex w-5 shrink-0 touch-none cursor-grab items-center justify-center border-0 bg-transparent p-0 text-(--pnds-text)/40 opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing"
               >
-                <GripVertical size={14} />
-              </span>
+                <GripVertical size={14} aria-hidden="true" />
+              </button>
 
               <button
                 type="button"
-                disabled={busy || isCurrent}
-                onMouseDown={() => handleEntryClick(path)}
+                disabled={busy || (isCurrent && running)}
                 title={path}
                 className="flex-1 truncate text-center text-[15px] text-(--pnds-text)/85 disabled:opacity-60"
               >
@@ -203,7 +287,10 @@ export function Sidebar({ variant, onRequestClose }: SidebarProps) {
                 <button
                   type="button"
                   aria-label={t('sidebar.removeFromHistory')}
-                  onClick={() => handleRemove(path)}
+                  onClick={e => {
+                    e.stopPropagation()
+                    handleRemove(path)
+                  }}
                   className="w-5 shrink-0 text-(--pnds-text)/50 opacity-0 transition-opacity hover:text-(--pnds-text) group-hover:opacity-100"
                 >
                   <X size={14} />

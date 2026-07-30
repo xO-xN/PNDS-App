@@ -69,11 +69,13 @@ This will:
 
 Then GitHub Actions will:
 
-1. Provision the Node.js and scsynth sidecars (`npm run node:fetch` /
-   `npm run scsynth:fetch`) — these binaries are gitignored and not
-   committed, so CI fetches them fresh on every release build; the scsynth
-   step also compiles `pndsMaster.scsyndef` using the mounted SuperCollider
-   dmg's `sclang`
+1. Provision the Node.js runtime and scsynth (`npm run node:fetch` /
+   `npm run scsynth:fetch`) — these generated binaries are gitignored and not
+   committed, so CI fetches them fresh on every release build. Node is bundled
+   as a Tauri external binary; scsynth is bundled as the resource
+   `Contents/Resources/scsynth` so macOS does not register it as a second PNDS
+   application. The scsynth step also compiles `pndsMaster.scsyndef` using the
+   mounted SuperCollider dmg's `sclang`.
 2. Build the app for all platforms
 3. Create a draft release
 4. Generate `latest.json` for auto-updates

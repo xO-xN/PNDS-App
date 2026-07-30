@@ -27,6 +27,10 @@ const HEALTH_TIMEOUT: Duration = Duration::from_secs(30);
 const HEALTH_REQUEST_TIMEOUT: Duration = Duration::from_millis(800);
 /// Number of node stdout/stderr lines kept for error reports (§10.3).
 const OUTPUT_TAIL_LINES: usize = 50;
+/// scsynth/CoreAudio initialization can fail transiently during startup,
+/// especially immediately after another project session has been stopped.
+const SCSYNTH_BOOT_ATTEMPTS: u32 = 5;
+const SCSYNTH_RETRY_DELAY: Duration = Duration::from_millis(750);
 
 // ============================================================================
 // Types shared with the frontend
@@ -410,11 +414,15 @@ impl SessionManager {
                     .scsynth
                     .as_ref()
                     .ok_or("manifest is missing audio.scsynth (required for internal mode)")?;
-                // CoreAudio driver init can fail transiently (device still
-                // held by a previous run); retry once before giving up.
+                // scsynth's CoreAudio/Objective-C initialization can fail
+                // transiently; give the failed process and audio device a
+                // short moment to settle before retrying.
                 let mut last_err = String::new();
                 let mut booted = None;
-                for attempt in 1..=2 {
+                for attempt in 1..=SCSYNTH_BOOT_ATTEMPTS {
+                    if attempt > 1 {
+                        std::thread::sleep(SCSYNTH_RETRY_DELAY);
+                    }
                     match Self::boot_scsynth(&app_data_dir, sc_cfg, device.as_deref()) {
                         Ok(ok) => {
                             booted = Some(ok);

@@ -46,7 +46,7 @@ jobs:
       - name: Fetch Node sidecar
         run: npm run node:fetch
 
-      - name: Fetch scsynth sidecar and compile master synthdef
+      - name: Fetch scsynth binary and compile master synthdef
         run: npm run scsynth:fetch
 
       - name: Build and release

@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@/test/test-utils'
+import { fireEvent, render, screen, waitFor, within } from '@/test/test-utils'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { commands } from '@/lib/tauri-bindings'
@@ -34,6 +34,7 @@ const manifest: Manifest = {
 
 const PROJECT_PATH = '/Users/test/Inarticulate III'
 const OTHER_PATH = '/Users/test/PNDS Score 1'
+const THIRD_PATH = '/Users/test/Another Score'
 
 function seedLoadedProject() {
   useProjectStore.setState({
@@ -125,6 +126,45 @@ describe('Sidebar', () => {
     })
   })
 
+  it('shows immediate feedback while project preflight is pending', async () => {
+    useProjectStore.getState().trustProject(PROJECT_PATH)
+    let resolvePreflight!: () => void
+    const pendingPreflight = new Promise<void>(resolve => {
+      resolvePreflight = resolve
+    }).then(() => ({ status: 'ok' as const, data: manifest }))
+    vi.mocked(commands.preflightProject).mockReturnValue(pendingPreflight)
+
+    render(<Sidebar variant="static" />)
+    const projectCard = screen.getByTestId('project-entry')
+    fireEvent.click(projectCard)
+
+    expect(projectCard.className).toContain('bg-(--pnds-card)')
+    expect(commands.preflightProject).toHaveBeenCalledWith(PROJECT_PATH)
+
+    resolvePreflight()
+    await waitFor(() => {
+      expect(screen.getByTestId('current-project-card')).toBeInTheDocument()
+    })
+  })
+
+  it('clears an idle project selection when clicking the selected card again', async () => {
+    const user = userEvent.setup()
+    seedLoadedProject()
+
+    render(<Sidebar variant="static" />)
+    const currentCard = screen.getByTestId('current-project-card')
+
+    await user.click(
+      within(currentCard).getByRole('button', { name: 'Inarticulate III' })
+    )
+
+    expect(useProjectStore.getState().currentProject).toBeNull()
+    expect(useProjectStore.getState().preflightStatus).toBe('idle')
+    expect(useProjectStore.getState().trustedPaths).toEqual([PROJECT_PATH])
+    expect(screen.queryByTestId('current-project-card')).not.toBeInTheDocument()
+    expect(screen.getByTestId('project-entry')).toBeInTheDocument()
+  })
+
   it('defers mode changes: Change button appears, clicks restarts (§8.3)', async () => {
     const user = userEvent.setup()
     seedLoadedProject()
@@ -211,6 +251,41 @@ describe('Sidebar', () => {
     )
     expect(useProjectStore.getState().trustedPaths).toEqual([PROJECT_PATH])
     expect(commands.stopProject).not.toHaveBeenCalled()
+  })
+
+  it('reorders history by dragging the grip and persists the new order', async () => {
+    seedLoadedProject()
+    useProjectStore.setState({
+      trustedPaths: [PROJECT_PATH, OTHER_PATH, THIRD_PATH],
+    })
+
+    render(<Sidebar variant="static" />)
+
+    const sourceEntry = screen.getAllByTestId('project-entry')[0]
+    if (!sourceEntry) throw new Error('Expected a draggable project entry')
+    const sourceGrip = within(sourceEntry).getByRole('button', {
+      name: /drag to reorder/i,
+    })
+    const targetCard = screen.getByTestId('current-project-card')
+
+    fireEvent.pointerDown(sourceGrip, { pointerId: 1 })
+    await waitFor(() => expect(sourceEntry).toHaveClass('opacity-50'))
+    fireEvent.pointerMove(targetCard, { pointerId: 1 })
+    expect(screen.getByTestId('project-drop-indicator')).toBeInTheDocument()
+    fireEvent.pointerUp(window, { pointerId: 1 })
+
+    expect(useProjectStore.getState().trustedPaths).toEqual([
+      OTHER_PATH,
+      PROJECT_PATH,
+      THIRD_PATH,
+    ])
+    await waitFor(() => {
+      expect(commands.savePreferences).toHaveBeenCalledWith(
+        expect.objectContaining({
+          recentProjects: [OTHER_PATH, PROJECT_PATH, THIRD_PATH],
+        })
+      )
+    })
   })
 
   it('asks for confirmation before switching projects while running (§8.3)', async () => {
