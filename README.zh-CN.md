@@ -4,7 +4,7 @@
 
 **中文** | [English](README.md)
 
-![PNDS App - 打开并运行一个 PNDS 工程](./assets/readme_img/demo30.gif)
+![PNDS App - 欢迎界面](./assets/readme_img/pndsapp_starting.png)
 
 PNDS 是一个面向网络化数字音乐演出的开放平台，用于创建、运行和组织多人参与的数字乐谱作品。
 
@@ -100,7 +100,7 @@ Inarticulate III/
 
 ### 3. 打开工程
 
-![PNDS App - 欢迎界面](./assets/readme_img/pndsapp_starting.png)
+![PNDS App - 打开并运行一个 PNDS 工程](./assets/readme_img/demo30.gif)
 
 在 PNDS App 中选择一个本地 PNDS 工程目录。
 

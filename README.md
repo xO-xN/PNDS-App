@@ -4,7 +4,7 @@
 
 [中文](README.zh-CN.md) | **English**
 
-![PNDS App - opening and running a PNDS project](./assets/readme_img/demo30.gif)
+![PNDS App - welcome screen](./assets/readme_img/pndsapp_starting.png)
 
 PNDS is an open platform for networked digital music performance, used to create, run, and organize digital score works for multiple participants.
 
@@ -100,7 +100,7 @@ Connect the host Mac running PNDS App to the local network; a wired connection i
 
 ### 3. Open a Project
 
-![PNDS App - welcome screen](./assets/readme_img/pndsapp_starting.png)
+![PNDS App - opening and running a PNDS project](./assets/readme_img/demo30.gif)
 
 Select a local PNDS project directory in PNDS App.
 
