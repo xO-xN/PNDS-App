@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "multichannel-tone-test",
+  "name": "Multichannel Tone Test",
+  "version": "1.0.0",
+  "description": "PNDS utility project: 16 independent mono test tones for checking Internal multichannel routing.",
+  "scoreServer": {
+    "entry": "server.js",
+    "workingDirectory": ".",
+    "performerPort": 6868,
+    "monitorPort": 6869
+  },
+  "audio": {
+    "defaultMode": "internal",
+    "supportedModes": ["internal"],
+    "outputChannels": 16,
+    "synthdefs": ["supercollider/synthdefs/multichannel-tone-test.scsyndef"],
+    "scsynth": {
+      "sampleRate": 48000,
+      "blockSize": 64,
+      "audioBusChannels": 128
+    }
+  }
+}

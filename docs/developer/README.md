@@ -2,6 +2,12 @@
 
 Technical documentation for building and extending this app. These docs describe established patterns and are intended for both human developers and AI coding agents.
 
+Before implementation, read the applicable platform specifications:
+
+- [Score Project Specification](../PNDS_SCORE_PROJECT_SPECIFICATION.md)
+- [Runtime Contract](../PNDS_RUNTIME_CONTRACT.md)
+- [App Requirements](../PNDS_APP_REQUIREMENTS.md)
+
 ## Architecture & Patterns
 
 | Document                                      | Description                                             |

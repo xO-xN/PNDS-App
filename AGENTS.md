@@ -4,14 +4,16 @@
 
 PNDS App 是在演出现场运行 PNDS 数字乐谱工程的 macOS（Apple Silicon）桌面 Host 应用，基于 Tauri v2 + React + TypeScript。平台与工程的介绍见 `README.md`。
 
-**V1 的实现范围、运行契约与验收标准以 `docs/PNDS_APP_REQUIREMENTS.md` 为准**——开始任何功能开发前必须先读它。参考 score project 是父目录中的 `Inarticulate III`（其 `PROJECT_HANDSOFF.md` 描述工程侧契约的实际状态）。
+**当前工程格式、运行契约与 App 验收标准分别以 `docs/PNDS_SCORE_PROJECT_SPECIFICATION.md`、`docs/PNDS_RUNTIME_CONTRACT.md` 和 `docs/PNDS_APP_REQUIREMENTS.md` 为准**——开始任何功能开发前必须先读与任务相关的规范。参考 score project 是父目录中的 `Inarticulate III`。
 
 ## Core Rules
 
 ### New Sessions
 
 - Read @docs/tasks.md for task management
-- Read `docs/PNDS_APP_REQUIREMENTS.md` for the V1 scope, runtime contracts, and Definition of Done
+- Read `docs/PNDS_SCORE_PROJECT_SPECIFICATION.md` for the score-project directory and manifest contract
+- Read `docs/PNDS_RUNTIME_CONTRACT.md` for process, health, audio-bus, and shutdown behavior
+- Read `docs/PNDS_APP_REQUIREMENTS.md` for App product scope and Definition of Done
 - Review `docs/developer/architecture-guide.md` for high-level patterns
 - Check `docs/developer/README.md` for the full documentation index
 - Check git status and project structure

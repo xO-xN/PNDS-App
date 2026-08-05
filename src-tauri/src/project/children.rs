@@ -32,26 +32,30 @@ pub struct SessionChild {
 
 /// §8.2: graceful stop — SIGTERM, poll, escalate to SIGKILL on timeout.
 /// The **single** implementation of the policy.
-pub fn kill_escalate(child: &mut Child, pid: u32, timeout: Duration) {
+///
+/// Returns `true` only when the child was **reaped** — i.e. the process is
+/// provably gone. An unconfirmed kill (§9.3) means the caller must keep the
+/// registry's ownership record so the next start re-runs the targeted
+/// orphan cleanup before it checks ports.
+#[must_use]
+pub fn kill_escalate(child: &mut Child, pid: u32, timeout: Duration) -> bool {
     let _ = Command::new("/bin/kill").arg(pid.to_string()).status();
     let deadline = Instant::now() + timeout;
     loop {
         match child.try_wait() {
-            Ok(Some(_)) => return,
+            Ok(Some(_)) => return true,
             Ok(None) => {
                 if Instant::now() >= deadline {
                     log::warn!("PID {pid} ignored SIGTERM for {timeout:?}; sending SIGKILL");
                     let _ = child.kill();
-                    let _ = child.wait();
-                    return;
+                    return child.wait().is_ok();
                 }
                 std::thread::sleep(PROCESS_POLL_INTERVAL);
             }
             Err(e) => {
                 log::warn!("Failed to wait for PID {pid}: {e}; sending SIGKILL");
                 let _ = child.kill();
-                let _ = child.wait();
-                return;
+                return child.wait().is_ok();
             }
         }
     }
@@ -130,8 +134,15 @@ impl ChildRegistry {
             .map_err(|e| format!("Failed to write session children file: {e}"))
     }
 
-    /// §8.2: terminates child processes left behind by an abnormal
-    /// previous exit. Returns how many were terminated.
+    /// §8.2 / §9.3: terminates child processes left behind by an abnormal
+    /// previous exit or by a generation whose teardown could not confirm
+    /// the kill. Returns how many were terminated.
+    ///
+    /// The cleanup is **targeted**, never a blanket `pkill`: a record is
+    /// only acted on when the live pid's command line still contains the
+    /// marker recorded when the App spawned it. Records whose process
+    /// survives even SIGKILL are kept on disk so the next start tries
+    /// again before its port preflight.
     pub fn cleanup_orphans(&self) -> Result<u32, String> {
         let path = self.file();
         if !path.exists() {
@@ -144,6 +155,7 @@ impl ChildRegistry {
         });
 
         let mut terminated = 0u32;
+        let mut unresolved: Vec<SessionChild> = Vec::new();
         for child in &children {
             if !process_alive(child.pid) {
                 continue;
@@ -158,17 +170,24 @@ impl ChildRegistry {
                     let _ = Command::new("/bin/kill")
                         .arg(child.pid.to_string())
                         .status();
-                    let deadline = Instant::now() + ORPHAN_GRACE_WINDOW;
-                    while process_alive(child.pid) && Instant::now() < deadline {
-                        std::thread::sleep(PROCESS_POLL_INTERVAL);
-                    }
-                    if process_alive(child.pid) {
+                    if !wait_until_gone(child.pid, ORPHAN_GRACE_WINDOW) {
                         log::warn!("Orphan pid {} ignored SIGTERM; sending SIGKILL", child.pid);
                         let _ = Command::new("/bin/kill")
                             .args(["-9", &child.pid.to_string()])
                             .status();
                     }
-                    terminated += 1;
+                    if wait_until_gone(child.pid, ORPHAN_GRACE_WINDOW) {
+                        terminated += 1;
+                    } else {
+                        // §9.3: still alive after SIGKILL. Keep the ownership
+                        // record — the port it holds is ours, and the next
+                        // start must retry this cleanup before preflight.
+                        log::warn!(
+                            "Orphan pid {} survived SIGKILL; keeping the ownership record",
+                            child.pid
+                        );
+                        unresolved.push(child.clone());
+                    }
                 }
                 other => {
                     log::debug!(
@@ -183,16 +202,30 @@ impl ChildRegistry {
         if terminated > 0 {
             log::info!("Cleaned up {terminated} orphaned process(es) from previous session");
         }
-        if let Err(e) = std::fs::remove_file(&path) {
-            log::warn!("Failed to remove session children file: {e}");
+        if unresolved.is_empty() {
+            if let Err(e) = std::fs::remove_file(&path) {
+                log::warn!("Failed to remove session children file: {e}");
+            }
+        } else if let Err(e) = self.write(&unresolved) {
+            log::warn!("Failed to rewrite session children file: {e}");
         }
         Ok(terminated)
     }
 }
 
-/// PendingChild guard (architecture review finding #6) — defined but not
-/// yet wired. The current start()'s boot_scsynth already handles
-/// kill-on-/status-timeout; node-spawn failure is rare enough for now.
+/// Polls until `pid` is gone or `timeout` elapses. Returns whether it is gone.
+fn wait_until_gone(pid: u32, timeout: Duration) -> bool {
+    let deadline = Instant::now() + timeout;
+    loop {
+        if !process_alive(pid) {
+            return true;
+        }
+        if Instant::now() >= deadline {
+            return false;
+        }
+        std::thread::sleep(PROCESS_POLL_INTERVAL);
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -203,8 +236,46 @@ mod tests {
     fn escalate_kills_child() {
         let mut child = Command::new("sleep").arg("30").spawn().unwrap();
         let pid = child.id();
-        kill_escalate(&mut child, pid, Duration::from_secs(2));
+        assert!(kill_escalate(&mut child, pid, Duration::from_secs(2)));
         assert!(child.try_wait().unwrap().is_some());
+    }
+
+    /// §9.3: an unmatched marker never gets killed, and the record is
+    /// dropped (the pid was recycled by an unrelated process).
+    #[test]
+    fn cleanup_skips_pids_whose_command_no_longer_matches() {
+        let dir = tempfile::tempdir().unwrap();
+        let reg = ChildRegistry::new(dir.path().to_path_buf());
+        let mut child = Command::new("sleep").arg("30").spawn().unwrap();
+        let pid = child.id();
+        reg.record(pid, "definitely-not-this-command".into());
+
+        assert_eq!(reg.cleanup_orphans().unwrap(), 0);
+        assert!(child.try_wait().unwrap().is_none(), "must not be killed");
+
+        assert!(kill_escalate(&mut child, pid, Duration::from_secs(2)));
+    }
+
+    /// §9.3: a recorded, still-matching orphan is terminated and the record
+    /// file is removed once nothing is left unresolved.
+    ///
+    /// The orphan is spawned **detached** (re-parented to launchd) so it
+    /// mirrors production: a real orphan outlived the App process and is
+    /// never this test's child, so killing it leaves no zombie behind.
+    #[test]
+    fn cleanup_terminates_matching_orphan_and_clears_record() {
+        let dir = tempfile::tempdir().unwrap();
+        let reg = ChildRegistry::new(dir.path().to_path_buf());
+        let out = Command::new("/bin/sh")
+            .args(["-c", "sleep 41 >/dev/null 2>&1 & echo $!"])
+            .output()
+            .unwrap();
+        let pid: u32 = String::from_utf8_lossy(&out.stdout).trim().parse().unwrap();
+        reg.record(pid, "sleep 41".into());
+
+        assert_eq!(reg.cleanup_orphans().unwrap(), 1);
+        assert!(!process_alive(pid));
+        assert!(!reg.file().exists());
     }
 
     #[test]

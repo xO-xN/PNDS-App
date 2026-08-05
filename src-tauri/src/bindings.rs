@@ -4,6 +4,11 @@ pub fn generate_bindings() -> Builder<tauri::Wry> {
     use crate::commands::{notifications, preferences, project};
 
     Builder::<tauri::Wry>::new().commands(collect_commands![
+        crate::window::toggle_fullscreen,
+        crate::window::close_window_with_fade,
+        crate::window::fade_in_window,
+        crate::window::get_window_state,
+        crate::window::mark_quitting,
         preferences::load_preferences,
         preferences::save_preferences,
         notifications::send_native_notification,

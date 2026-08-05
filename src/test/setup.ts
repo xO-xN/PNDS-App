@@ -1,6 +1,20 @@
 import '@testing-library/jest-dom'
 import { vi } from 'vitest'
 
+// jsdom lacks pointer-capture APIs that Radix Select relies on.
+Element.prototype.hasPointerCapture ??= function (this: Element) {
+  return false
+}
+Element.prototype.setPointerCapture ??= function (this: Element) {
+  // jsdom has no pointer-capture state; Radix only needs the call to exist.
+}
+Element.prototype.releasePointerCapture ??= function (this: Element) {
+  // jsdom has no pointer-capture state; Radix only needs the call to exist.
+}
+Element.prototype.scrollIntoView ??= function (this: Element) {
+  // jsdom has no scroll layout; Radix only needs the call to exist.
+}
+
 // Mock matchMedia for tests
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
@@ -67,11 +81,28 @@ vi.mock('@/lib/tauri-bindings', () => ({
     listOutputDevices: vi.fn().mockResolvedValue({
       status: 'ok',
       data: {
-        devices: ['Mac mini Speakers', 'BlackHole 16ch', 'BlackHole 2ch'],
-        default: 'Mac mini Speakers',
+        devices: [
+          { name: 'Mac mini Speakers', isDefault: true, maxOutputChannels: 2 },
+          { name: 'BlackHole 16ch', isDefault: false, maxOutputChannels: 16 },
+          { name: 'BlackHole 2ch', isDefault: false, maxOutputChannels: 2 },
+        ],
+        sampleRate: 48000,
       },
     }),
     setMasterVolume: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
+    getWindowState: vi.fn().mockResolvedValue({
+      status: 'ok',
+      data: { fullscreen: false, showCustomTrafficLights: true, generation: 0 },
+    }),
+    toggleFullscreen: vi.fn().mockResolvedValue({
+      status: 'ok',
+      data: { fullscreen: true, showCustomTrafficLights: false, generation: 1 },
+    }),
+    closeWindowWithFade: vi
+      .fn()
+      .mockResolvedValue({ status: 'ok', data: null }),
+    fadeInWindow: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
+    markQuitting: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
   },
   unwrapResult: vi.fn((result: { status: string; data?: unknown }) => {
     if (result.status === 'ok') return result.data

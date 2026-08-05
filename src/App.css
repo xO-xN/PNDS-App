@@ -103,6 +103,24 @@
     }
   }
 
+  @keyframes dissolve-out {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0;
+    }
+  }
+
+  @keyframes dissolve-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
   /* Square corners - used on Windows/Linux when fullscreen */
   .square-corners {
     --app-corner-radius: 0px;

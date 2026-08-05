@@ -2,16 +2,17 @@
 # Fetch the Node.js runtime bundled with PNDS App (Tauri sidecar).
 #
 # The App ships an ARM64 Node.js to run score-project servers
-# (docs/PNDS_APP_REQUIREMENTS.md §2). The binary is ~100 MB and is NOT
-# committed to git; run this script once after cloning, and again whenever
-# NODE_VERSION below changes. CI does the same (task-7).
+# (docs/PNDS_APP_REQUIREMENTS.md §2, docs/PNDS_RUNTIME_CONTRACT.md §2).
+# The binary is ~100 MB and is NOT committed to git; run this script once
+# after cloning, and again whenever NODE_VERSION below changes. The release
+# workflow does the same on every build.
 #
 # Usage: npm run node:fetch
-# Override version: NODE_VERSION=22.14.0 npm run node:fetch
+# Override version: NODE_VERSION=24.18.1 npm run node:fetch
 
 set -euo pipefail
 
-NODE_VERSION="${NODE_VERSION:-22.14.0}"
+NODE_VERSION="${NODE_VERSION:-24.18.1}"
 TARBALL="node-v${NODE_VERSION}-darwin-arm64.tar.gz"
 
 # Download sources, tried in order. npmmirror is the mirror of record for

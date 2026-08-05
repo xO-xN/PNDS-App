@@ -41,6 +41,10 @@ interface Props {
   ready: boolean
   /** Called when the dissolve animation finishes. */
   onDissolveEnd?: () => void
+  /** Length of the autonomous entrance phase in 60fps frames. Internal
+   *  sessions wait for scsynth/CoreAudio boot, so their entrance runs
+   *  longer (120 frames = 2s); external/none keep the classic ~0.83s. */
+  entranceFrames?: number
 }
 
 // ── Math helpers (ported from the p5 prototype) ─────────────────────────
@@ -127,13 +131,24 @@ function drawFrame(
   f: number,
   phase: Phase,
   cols: ReturnType<typeof pickSessionColors>,
-  bg: ReturnType<typeof randomBgPositions>
+  bg: ReturnType<typeof randomBgPositions>,
+  entranceFrames = ENTRANCE_FRAMES
 ) {
   const { dotColors, textColor } = cols
   const { x1: bx1, y1: by1, x2: bx2, y2: by2 } = bg
   const { width: w } = ctx.canvas
 
   ctx.clearRect(0, 0, w, w)
+
+  // §10.3: entrance rhythm scales with entranceFrames, so a longer
+  // entrance (internal 2s) stretches the dot/circle choreography instead
+  // of finishing it early and freezing.
+  const k = entranceFrames / ENTRANCE_FRAMES
+  const revealInterval = DOT_REVEAL_INTERVAL * k
+  const revealDuration = DOT_REVEAL_DURATION * k
+  const lightCircleStart = LIGHT_CIRCLE_START * k
+  const darkCircleStart = DARK_CIRCLE_START * k
+  const circleRevealDuration = CIRCLE_REVEAL_DURATION * k
 
   let d1 = 0,
     d2 = 0 // circle diameters
@@ -149,29 +164,26 @@ function drawFrame(
     t = p
     r = (p * 225 * Math.PI) / 180
     gs = 2 + (1 - 2) * p // 2→1
-  } else if (phase === 'wait' || f >= ENTRANCE_FRAMES) {
+  } else if (phase === 'wait' || f >= entranceFrames) {
     // Wait and post-entrance: full expansion, no convergence yet
     d1 = D_LIGHT
     d2 = D_DARK
     // t=0, r=0, gs=2 already by initialiser
   } else {
-    // Entrance: circles grow
-    if (f >= LIGHT_CIRCLE_START) {
+    // Entrance: circles grow (rhythm scaled by k)
+    if (f >= lightCircleStart) {
       d1 =
         bezierOut(
           Math.min(
-            Math.max((f - LIGHT_CIRCLE_START) / CIRCLE_REVEAL_DURATION, 0),
+            Math.max((f - lightCircleStart) / circleRevealDuration, 0),
             1
           )
         ) * D_LIGHT
     }
-    if (f >= DARK_CIRCLE_START) {
+    if (f >= darkCircleStart) {
       d2 =
         bezierOut(
-          Math.min(
-            Math.max((f - DARK_CIRCLE_START) / CIRCLE_REVEAL_DURATION, 0),
-            1
-          )
+          Math.min(Math.max((f - darkCircleStart) / circleRevealDuration, 0), 1)
         ) * D_DARK
     }
   }
@@ -190,9 +202,9 @@ function drawFrame(
   ctx.arc(cx1, cy1, d1 / 2, 0, Math.PI * 2)
   ctx.fill()
 
-  // Five dots
+  // Five dots (reveal rhythm scaled by k)
   for (let i = 0; i < 5; i++) {
-    const showAt = i * DOT_REVEAL_INTERVAL
+    const showAt = i * revealInterval
     if (phase === 'entrance' && f < showAt) continue
 
     const dc = dotColors[i]
@@ -215,9 +227,9 @@ function drawFrame(
 
     // Entrance formulas only run during phase 1. In wait/closure the dots
     // are already at their final positions — no re-trigger.
-    const entering = phase === 'entrance' && f < ENTRANCE_FRAMES
+    const entering = phase === 'entrance' && f < entranceFrames
     const progress = entering
-      ? Math.min(Math.max((f - showAt) / DOT_REVEAL_DURATION, 0), 1)
+      ? Math.min(Math.max((f - showAt) / revealDuration, 0), 1)
       : 1
     const bez = entering ? bezierOut(progress) : 1
     // p5: y += lerp(50, 0, spring(t))
@@ -247,7 +259,12 @@ function drawFrame(
 /** PNDS logo animation (p5-prototype → Canvas2D). Phase 1 is autonomous
  *  dot entrance (~0.8 s); then the animation pauses until `ready` becomes
  *  true, at which point it plays the closure & dissolve. */
-export function PndsLogoCanvas({ size = 190, ready, onDissolveEnd }: Props) {
+export function PndsLogoCanvas({
+  size = 190,
+  ready,
+  onDissolveEnd,
+  entranceFrames = ENTRANCE_FRAMES,
+}: Props) {
   const [phase, setPhase] = useState<Phase>('entrance')
   const [dissolving, setDissolving] = useState(false)
   const frameRef = useRef(0)
@@ -298,25 +315,27 @@ export function PndsLogoCanvas({ size = 190, ready, onDissolveEnd }: Props) {
       frameRef.current += dt
 
       const f = frameRef.current
-      const maxFrames = phase === 'entrance' ? ENTRANCE_FRAMES : CLOSURE_FRAMES
+      const maxFrames = phase === 'entrance' ? entranceFrames : CLOSURE_FRAMES
 
       if (f >= maxFrames) {
         if (phase === 'entrance') {
-          // entrance complete → wait or jump directly to closure if ready
+          // Entrance complete. The internal-mode entrance is an explicit
+          // 2s hold (scsynth/CoreAudio boot window): ready must NOT cut
+          // it short — the full entrance always plays, then closure.
           if (ready) {
-            drawFrame(ctx, ENTRANCE_FRAMES, 'wait', cols, bg)
+            drawFrame(ctx, entranceFrames, 'wait', cols, bg, entranceFrames)
             frameRef.current = 0
             queueMicrotask(() => setPhase('closure'))
             return
           } else {
             // Paint the completed entrance frame once more, then pause
-            drawFrame(ctx, ENTRANCE_FRAMES, 'wait', cols, bg)
+            drawFrame(ctx, entranceFrames, 'wait', cols, bg, entranceFrames)
             queueMicrotask(() => setPhase('wait'))
             return
           }
         } else {
           // closure complete → stay at final frame, then dissolve
-          drawFrame(ctx, maxFrames, 'closure', cols, bg)
+          drawFrame(ctx, maxFrames, 'closure', cols, bg, entranceFrames)
           setDissolving(true)
           setPhase('done')
           setTimeout(() => dissolveEndRef.current?.(), 400)
@@ -324,12 +343,12 @@ export function PndsLogoCanvas({ size = 190, ready, onDissolveEnd }: Props) {
         }
       }
 
-      drawFrame(ctx, f, phase, cols, bg)
+      drawFrame(ctx, f, phase, cols, bg, entranceFrames)
       raf = requestAnimationFrame(tick)
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
-  }, [phase, ready])
+  }, [phase, ready, entranceFrames])
 
   return (
     <canvas

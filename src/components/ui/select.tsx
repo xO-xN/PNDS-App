@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import * as SelectPrimitive from '@radix-ui/react-select'
-import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from 'lucide-react'
+import { CheckIcon, ChevronUpIcon, ChevronDownIcon } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 
@@ -43,8 +43,14 @@ function SelectTrigger({
       {...props}
     >
       {children}
+      {/* The Icon must be pointer-transparent: Radix opens on pointerdown
+          of the trigger, and a click landing on the arrow must reach the
+          button (the outer [&_svg] rule only covers direct children). The
+          menu opens upward (side="top"), so the arrow points up. */}
       <SelectPrimitive.Icon asChild>
-        <ChevronDownIcon className="size-4 opacity-50" />
+        <span className="pointer-events-none flex shrink-0 items-center">
+          <ChevronUpIcon className="size-4 opacity-50" />
+        </span>
       </SelectPrimitive.Icon>
     </SelectPrimitive.Trigger>
   )

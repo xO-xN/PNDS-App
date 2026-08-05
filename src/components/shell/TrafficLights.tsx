@@ -1,19 +1,29 @@
 import { useTranslation } from 'react-i18next'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { X, Minus, Plus } from 'lucide-react'
+import {
+  useWindowStore,
+  closeWindowWithFade,
+  toggleFullscreen,
+} from '@/store/window-store'
 
 /**
  * Custom-drawn traffic-light buttons (Figma design). These are NOT the
- * native macOS controls — §10.1 keeps `decorations: false`; these imitate
- * their look and perform the same window actions: close (hide on macOS),
- * minimize, zoom.
+ * native macOS controls — §10.1 keeps the custom shell; these imitate
+ * their look and perform the same window actions: close (fade out then
+ * hide on macOS), minimize, and the green light toggles FULLSCREEN
+ * (mirroring the macOS green button, which enters/exits full screen on
+ * modern macOS — not maximize).
+ *
+ * §7.4: hidden while the native (unified) title bar shows its own lights
+ * during fullscreen — the two must never render at once.
  */
 const BUTTONS = [
   {
     labelKey: 'sidebar.closeWindow',
     bg: '#ff5f57',
     icon: X,
-    action: () => getCurrentWindow().close(),
+    action: () => void closeWindowWithFade(),
   },
   {
     labelKey: 'sidebar.minimizeWindow',
@@ -22,15 +32,17 @@ const BUTTONS = [
     action: () => getCurrentWindow().minimize(),
   },
   {
-    labelKey: 'sidebar.zoomWindow',
+    labelKey: 'sidebar.fullscreen',
     bg: '#28c840',
     icon: Plus,
-    action: () => getCurrentWindow().toggleMaximize(),
+    action: () => void toggleFullscreen(),
   },
 ] as const
 
 export function TrafficLights() {
   const { t } = useTranslation()
+  const visible = useWindowStore(state => state.showCustomTrafficLights)
+  if (!visible) return null
   return (
     <div className="group flex items-center gap-2">
       {BUTTONS.map(({ labelKey, bg, icon: Icon, action }) => (
@@ -38,7 +50,7 @@ export function TrafficLights() {
           key={labelKey}
           type="button"
           aria-label={t(labelKey)}
-          onClick={() => void action()}
+          onClick={action}
           className="flex h-3 w-3 items-center justify-center rounded-full text-black/60 transition-transform hover:scale-110"
           style={{ backgroundColor: bg }}
         >

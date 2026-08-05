@@ -1,6 +1,6 @@
 [package]
 name = "pnds-app"
-version = "1.0.5"
+version = "1.1.0"
 description = "在演出现场运行 PNDS 数字乐谱工程的 macOS 桌面 Host 应用"
 authors = ["xO-xN"]
 edition = "2021"
@@ -46,6 +46,13 @@ specta-typescript = "=0.0.9"
 tauri-plugin-single-instance = "2"
 tauri-plugin-updater = "2"
 tauri-plugin-window-state = "2"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+# NSWindow.alphaValue for the §7.4 whole-window fade (Tauri v2 removed
+# set_opacity; we drive AppKit directly through the NSWindow pointer).
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", features = ["std", "NSWindow"] }
+objc2-foundation = { version = "0.3", features = ["std"] }
 
 [dev-dependencies]
 tempfile = "3"

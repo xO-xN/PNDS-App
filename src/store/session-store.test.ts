@@ -15,6 +15,8 @@ const snapshot = (overrides: Partial<SessionSnapshot>): SessionSnapshot => ({
   outputTail: [],
   volume: 80,
   startupStage: 0,
+  channelPlan: null,
+  outputDevice: null,
   ...overrides,
 })
 

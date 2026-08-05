@@ -115,9 +115,14 @@ pub async fn list_lan_addresses() -> Result<Vec<String>, String> {
     crate::project::session::list_lan_addresses()
 }
 
-/// §6.5: available CoreAudio output devices and the system default.
+/// §7.6: CoreAudio output devices with their usable output channel count
+/// at the given project sample rate, plus the system default. Always
+/// re-enumerates (the settings UI must see hot-plugged devices), while
+/// session start reuses the process cache.
 #[tauri::command]
 #[specta::specta]
-pub async fn list_output_devices() -> Result<crate::project::audio::AudioDeviceList, String> {
-    crate::project::audio::list_output_devices()
+pub async fn list_output_devices(
+    sample_rate: u32,
+) -> Result<crate::project::audio::AudioDeviceCapabilities, String> {
+    crate::project::audio::refresh_output_devices(sample_rate)
 }

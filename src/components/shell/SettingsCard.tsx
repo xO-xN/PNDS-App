@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Volume2, ChevronDown } from 'lucide-react'
+import { Volume2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
@@ -12,6 +12,13 @@ import {
   saveOutputDevice,
   SYSTEM_DEFAULT_DEVICE,
 } from '@/lib/audio-prefs'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 
 const MODE_LABELS: Record<string, string> = {
@@ -34,7 +41,14 @@ let missingDeviceWarned = false
  *
  * OSC target is hidden unless the selected mode is "external" (§6.6).
  */
-export function SettingsCard() {
+export interface SettingsCardProps {
+  /** Overlay mode: report while any popup menu is open so the host can
+   * keep the floating sidebar visible (Radix portals leave the sidebar
+   * element, which would otherwise trigger its mouse-leave auto-hide). */
+  onPopupOpenChange?: (open: boolean) => void
+}
+
+export function SettingsCard({ onPopupOpenChange }: SettingsCardProps) {
   const { t } = useTranslation()
   const currentProject = useProjectStore(state => state.currentProject)
   const sessionStatus = useSessionStore(state => state.sessionStatus)
@@ -43,26 +57,54 @@ export function SettingsCard() {
   const lanAddresses = useSessionStore(state => state.lanAddresses)
   const outputDevice = useSessionStore(state => state.outputDevice)
   const oscTargetInput = useSessionStore(state => state.oscTargetInput)
-  const [devices, setDevices] = useState<string[]>([])
+  const [devices, setDevices] = useState<
+    {
+      name: string
+      isDefault: boolean
+      maxOutputChannels: number
+    }[]
+  >([])
+  // §6.3: capability failure lives in the store so canStart can gate Load.
+  const deviceError = useSessionStore(state => state.deviceError)
 
   const modes = currentProject?.manifest.audio.supportedModes ?? []
   const projectLoaded = currentProject !== null
   const running = sessionStatus !== 'idle'
-  const volumeEnabled = sessionStatus === 'ready' && audioMode === 'internal'
   const volume = useSessionStore(state => state.volume)
+  const channelPlan = useSessionStore(state => state.channelPlan)
   const oscTargetValid = isValidOscTarget(oscTargetInput)
 
+  // §3.3: outputChannels defaults to 2 when the manifest omits it.
+  const projectChannels = currentProject?.manifest.audio.outputChannels ?? 2
+  // §7.6: device capabilities are relative to the project sample rate.
+  const sampleRate = currentProject?.manifest.audio.scsynth?.sampleRate ?? null
+  // §6.3: the device list only matters for internal mode; anything else is
+  // a safe empty state (nothing to gate, nothing to show).
+  const deviceQueryActive =
+    projectLoaded && audioMode === 'internal' && sampleRate !== null
+
   useEffect(() => {
-    void commands.listOutputDevices().then(result => {
+    // §6.3: without an internal project the list is a safe empty state —
+    // the render guards below ignore any stale list, so no state reset here.
+    const rate = sampleRate
+    if (!deviceQueryActive || rate === null) return
+    let stale = false
+    void commands.listOutputDevices(rate).then(result => {
+      // §6.3: a fast project switch must not let the old sample rate's
+      // response overwrite the new selection.
+      if (stale) return
       if (result.status !== 'ok') {
         logger.warn('Failed to list output devices', { error: result.error })
+        setDevices([])
+        useSessionStore.getState().setDeviceError(result.error)
         return
       }
       setDevices(result.data.devices)
+      useSessionStore.getState().setDeviceError(null)
       const saved = useSessionStore.getState().outputDevice
       if (
         saved !== SYSTEM_DEFAULT_DEVICE &&
-        !result.data.devices.includes(saved) &&
+        !result.data.devices.some(device => device.name === saved) &&
         !missingDeviceWarned
       ) {
         missingDeviceWarned = true
@@ -73,7 +115,32 @@ export function SettingsCard() {
         )
       }
     })
-  }, [])
+    return () => {
+      stale = true
+    }
+  }, [deviceQueryActive, sampleRate])
+
+  // §6.3: capability of the currently selected entry — the system default
+  // row reflects the real default device's channels.
+  const selectedDefaultChannels = devices.find(
+    device => device.isDefault
+  )?.maxOutputChannels
+  const selectedChannels =
+    outputDevice === SYSTEM_DEFAULT_DEVICE
+      ? selectedDefaultChannels
+      : devices.find(device => device.name === outputDevice)?.maxOutputChannels
+  const insufficient =
+    deviceQueryActive &&
+    selectedChannels !== undefined &&
+    selectedChannels < projectChannels
+
+  // §7.5: N > 2 internal sessions fix the master at 100% / 0 dB.
+  const fixedGain =
+    audioMode === 'internal' &&
+    (channelPlan?.projectChannels ?? projectChannels) > 2
+  const volumeEnabled =
+    sessionStatus === 'ready' && audioMode === 'internal' && !fixedGain
+  const volumeDisplay = fixedGain ? 100 : volume
 
   const flagChange = () => {
     if (running) useSessionStore.getState().setPendingChanges(true)
@@ -113,14 +180,17 @@ export function SettingsCard() {
   const fieldClass =
     'h-7 bg-(--pnds-pill) text-[12px] text-(--pnds-text) outline-none transition-colors hover:bg-(--pnds-pill-hover) disabled:text-(--pnds-text)/30 disabled:hover:bg-(--pnds-pill)'
   const selectClass = `${fieldClass} w-full appearance-none rounded-lg pl-2.5 pr-6`
+  const hintRowClass =
+    'flex items-center gap-2 pl-14 text-[11px] leading-tight text-(--pnds-danger)'
 
   return (
     <div
       data-testid="settings-card"
       className="flex flex-col gap-2 px-3.5 pb-3.5 pt-3"
     >
-      {/* Master volume (§6.4: internal only, dB-linear, 80% ≈ -6 dB).
-          Live — applied on drag, never deferred. */}
+      {/* Master volume (§7.5: internal only; N>2 fixed at 100%/0dB — the
+          slider greys out and shows 100; N<=2 keeps the dB-linear curve and
+          80% default). Live — applied on drag, never deferred. */}
       <div className="flex items-center gap-2">
         <span
           className={cn(
@@ -133,10 +203,12 @@ export function SettingsCard() {
         </span>
         <input
           type="range"
-          aria-label={t('sidebar.volume')}
+          aria-label={
+            fixedGain ? t('sidebar.volumeFixed') : t('sidebar.volume')
+          }
           min={0}
           max={100}
-          value={Math.round(volume)}
+          value={Math.round(volumeDisplay)}
           disabled={!volumeEnabled}
           onChange={e => handleVolumeChange(Number(e.target.value))}
           className="h-7 w-full accent-(--pnds-accent) disabled:opacity-35"
@@ -147,35 +219,45 @@ export function SettingsCard() {
             volumeEnabled ? 'text-(--pnds-text)/70' : 'text-(--pnds-text)/30'
           )}
         >
-          {Math.round(volume)}
+          {Math.round(volumeDisplay)}
         </span>
       </div>
 
       {/* Everything below is deferred until the footer button (§8.3). */}
       <hr className="my-0.5 border-(--pnds-text)/10" />
 
-      {/* Audio mode */}
+      {/* Audio mode (§6.1): Radix Select like the device row. */}
       <div className="flex items-center gap-2">
-        <span className={labelClass}>Mode</span>
+        <span className={labelClass}>Synth</span>
         <div className="relative flex-1">
-          <select
-            aria-label={t('session.audioMode')}
+          <Select
             value={audioMode}
+            onValueChange={handleModeChange}
+            onOpenChange={open => onPopupOpenChange?.(open)}
             disabled={!projectLoaded}
-            onChange={e => handleModeChange(e.target.value)}
-            className={selectClass}
           >
-            {modes.length === 0 && <option value="">—</option>}
-            {modes.map(mode => (
-              <option key={mode} value={mode}>
-                {MODE_LABELS[mode] ?? mode}
-              </option>
-            ))}
-          </select>
-          <ChevronDown
-            size={12}
-            className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-(--pnds-text)/40"
-          />
+            <SelectTrigger
+              aria-label={t('session.audioMode')}
+              className={cn(
+                selectClass,
+                'border-0 shadow-none focus-visible:ring-0'
+              )}
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent side="top">
+              {modes.length === 0 && (
+                <SelectItem value="__placeholder__" disabled>
+                  —
+                </SelectItem>
+              )}
+              {modes.map(mode => (
+                <SelectItem key={mode} value={mode}>
+                  {MODE_LABELS[mode] ?? mode}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
@@ -205,62 +287,150 @@ export function SettingsCard() {
         </div>
       )}
 
-      {/* Output device (§6.5): preference, deferred until Change */}
+      {/* Output device (§6.3): each entry shows its channel count at the
+          project sample rate. Entries with fewer channels than the project
+          are greyed but stay selectable (no real disabled state), carry a
+          red ✕ and an sr-only explanation, and the persistent hint below
+          shows Nch → Hch. Preference only — deferred until Change. */}
       <div className="flex items-center gap-2">
         <span className={labelClass}>Device</span>
         <div className="relative flex-1">
-          <select
-            aria-label={t('sidebar.outputDevice')}
+          <Select
             value={outputDevice}
-            onChange={e => handleDeviceChange(e.target.value)}
-            className={selectClass}
+            onValueChange={handleDeviceChange}
+            onOpenChange={open => onPopupOpenChange?.(open)}
+            disabled={!deviceQueryActive}
           >
-            <option value={SYSTEM_DEFAULT_DEVICE}>
-              {t('sidebar.systemDefault')}
-            </option>
-            {devices.map(device => (
-              <option key={device} value={device}>
-                {device}
-              </option>
-            ))}
-          </select>
-          <ChevronDown
-            size={12}
-            className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-(--pnds-text)/40"
-          />
+            <SelectTrigger
+              aria-label={t('sidebar.outputDevice')}
+              className={cn(
+                selectClass,
+                'border-0 shadow-none focus-visible:ring-0'
+              )}
+            >
+              {outputDevice === SYSTEM_DEFAULT_DEVICE
+                ? t('sidebar.systemDefault')
+                : outputDevice}
+            </SelectTrigger>
+            <SelectContent side="top">
+              {deviceQueryActive && (
+                <>
+                  <SelectItem value={SYSTEM_DEFAULT_DEVICE}>
+                    <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                      <span className="truncate">
+                        {t('sidebar.systemDefault')}
+                      </span>
+                      {selectedDefaultChannels !== undefined && (
+                        <span className="shrink-0 text-(--pnds-text)/45">
+                          {t('sidebar.deviceChannelCount', {
+                            channels: selectedDefaultChannels,
+                          })}
+                        </span>
+                      )}
+                    </span>
+                  </SelectItem>
+                  {devices.map(device => {
+                    const insufficient =
+                      device.maxOutputChannels < projectChannels
+                    return (
+                      <SelectItem
+                        key={device.name}
+                        value={device.name}
+                        className={cn(
+                          'pr-9',
+                          insufficient && 'opacity-40 hover:opacity-60'
+                        )}
+                      >
+                        <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                          <span className="truncate">{device.name}</span>
+                          <span className="shrink-0 text-(--pnds-text)/45">
+                            {t('sidebar.deviceChannelCount', {
+                              channels: device.maxOutputChannels,
+                            })}
+                          </span>
+                          {insufficient && (
+                            <>
+                              <X
+                                data-testid="device-insufficient-marker"
+                                size={12}
+                                className="shrink-0 text-(--pnds-danger)"
+                              />
+                              <span className="sr-only">
+                                {t('sidebar.deviceInsufficientHint', {
+                                  deviceChannels: device.maxOutputChannels,
+                                  projectChannels,
+                                  loss:
+                                    projectChannels - device.maxOutputChannels,
+                                })}
+                              </span>
+                            </>
+                          )}
+                        </span>
+                      </SelectItem>
+                    )
+                  })}
+                </>
+              )}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
-      {/* LAN address (replaces Figma — §7: explicit choice required) */}
-      {lanAddresses.length > 1 && (
-        <div className="flex items-center gap-2">
-          <span className={labelClass}>LAN</span>
-          <div className="relative flex-1">
-            <select
-              aria-label={t('session.lanAddress')}
-              value={lanIp ?? ''}
-              onChange={e => {
-                useSessionStore.getState().setLanIp(e.target.value)
-                flagChange()
-              }}
-              className={cn(selectClass, 'font-manrope')}
-            >
-              <option value="" disabled>
-                {t('session.lanAddressHint')}
-              </option>
-              {lanAddresses.map(ip => (
-                <option key={ip} value={ip}>
-                  {ip}
-                </option>
-              ))}
-            </select>
-            <ChevronDown
-              size={12}
-              className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-(--pnds-text)/40"
-            />
-          </div>
+      {/* §6.3: persistent Nch → Hch while a channel-poor device is selected.
+          Only when the current project actually loses channels. */}
+      {insufficient && (
+        <div data-testid="device-insufficient-hint" className={hintRowClass}>
+          {t('sidebar.deviceInsufficient', {
+            projectChannels,
+            deviceChannels: selectedChannels,
+          })}
         </div>
       )}
+
+      {/* §6.3: capability query failed — readable inline error, Load stays
+          gated (canStart) until the query succeeds. */}
+      {deviceError && audioMode === 'internal' && projectLoaded && (
+        <div data-testid="device-error" className={hintRowClass}>
+          {t('sidebar.deviceListFailed')}
+        </div>
+      )}
+
+      {/* LAN address (replaces Figma — §7: explicit choice required).
+          Always visible: the row is shown even with a single address so
+          it never disappears between preflight states; the select is
+          disabled only when no address is known yet. */}
+      <div className="flex items-center gap-2">
+        <span className={labelClass}>LAN</span>
+        <div className="relative flex-1">
+          <Select
+            value={lanIp ?? ''}
+            onValueChange={ip => {
+              useSessionStore.getState().setLanIp(ip)
+              flagChange()
+            }}
+            onOpenChange={open => onPopupOpenChange?.(open)}
+            disabled={lanAddresses.length === 0}
+          >
+            <SelectTrigger
+              aria-label={t('session.lanAddress')}
+              className={cn(
+                selectClass,
+                'border-0 shadow-none focus-visible:ring-0',
+                'font-manrope'
+              )}
+            >
+              {lanIp ?? t('session.lanAddressHint')}
+            </SelectTrigger>
+            <SelectContent side="top">
+              {lanAddresses.map(ip => (
+                <SelectItem key={ip} value={ip}>
+                  {ip}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
     </div>
   )
 }

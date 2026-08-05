@@ -5,15 +5,25 @@ import { buildAppMenu, setupMenuLanguageListener } from './lib/menu'
 import { initializeLanguage } from './i18n/language-init'
 import { logger } from './lib/logger'
 import { commands } from './lib/tauri-bindings'
+import { initWindowState, markQuitting } from './store/window-store'
 import './App.css'
 import { AppShell } from './components/shell'
 import { ThemeProvider } from './components/ThemeProvider'
 import { ErrorBoundary } from './components/ErrorBoundary'
 
 function App() {
-  // Initialize menu, language, and updater on app startup
+  // Initialize menu, language, updater, and window state on startup
   useEffect(() => {
     logger.info('🚀 PNDS starting up')
+
+    initWindowState()
+
+    // §7.4: ⌘Q must not wait for the fade animation — mark the manager
+    // as quitting so in-flight ramps cancel and close hides immediately.
+    const onBeforeUnload = () => {
+      void markQuitting()
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
 
     const initLanguageAndMenu = async () => {
       try {
@@ -86,7 +96,10 @@ function App() {
     }
 
     const updateTimer = setTimeout(() => void checkForUpdates(), 5000)
-    return () => clearTimeout(updateTimer)
+    return () => {
+      clearTimeout(updateTimer)
+      window.removeEventListener('beforeunload', onBeforeUnload)
+    }
   }, [])
 
   return (

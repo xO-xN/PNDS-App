@@ -23,6 +23,16 @@ interface SessionState {
   lanAddresses: string[]
   /** §6.5: chosen output device name, or "System default". */
   outputDevice: string
+  /** §6.3: device capability query failed (or no device listed); Load stays
+   * gated for internal mode with an inline, readable error. */
+  deviceError: string | null
+  /** §7.1: internal channel plan (N/H/K/B) of the running session, or null. */
+  channelPlan: {
+    projectChannels: number
+    deviceChannels: number
+    bridgedChannels: number
+    privateBusStart: number
+  } | null
   /** §6.6: external OSC target input (per-project prefilled, default 3333). */
   oscTargetInput: string
   setAudioMode: (mode: string) => void
@@ -30,9 +40,16 @@ interface SessionState {
   setLanAddresses: (ips: string[]) => void
   setVolume: (percent: number) => void
   setOutputDevice: (device: string) => void
+  setDeviceError: (error: string | null) => void
+  setChannelPlan: (plan: SessionState['channelPlan'], device: string) => void
   setOscTargetInput: (target: string) => void
   /** §10.3 five-stage loading animation dot (1–5, 0 = idle). */
   startupStage: number
+  /** §9.3/§10.3: incremented every time a NEW loading session begins.
+   * Keying the loading screen by it guarantees a Retry restarts the logo
+   * animation from its first stage with fresh random colours instead of
+   * resuming the failed run's animation. */
+  runId: number
   /** True when the user has changed a config setting since the session
    * last committed; the Change button turns yellow. */
   pendingChanges: boolean
@@ -57,8 +74,11 @@ export const useSessionStore = create<SessionState>()(set => ({
   lanIp: null,
   lanAddresses: [],
   outputDevice: 'System default',
+  deviceError: null,
+  channelPlan: null,
   oscTargetInput: '127.0.0.1:3333',
   startupStage: 0,
+  runId: 0,
   pendingChanges: false,
 
   setAudioMode: audioMode => set({ audioMode }),
@@ -66,6 +86,9 @@ export const useSessionStore = create<SessionState>()(set => ({
   setLanAddresses: lanAddresses => set({ lanAddresses }),
   setVolume: volume => set({ volume }),
   setOutputDevice: outputDevice => set({ outputDevice }),
+  setDeviceError: deviceError => set({ deviceError }),
+  setChannelPlan: (channelPlan, outputDevice) =>
+    set({ channelPlan, outputDevice }),
   setOscTargetInput: oscTargetInput => set({ oscTargetInput }),
 
   applySnapshot: snapshot =>
@@ -77,11 +100,21 @@ export const useSessionStore = create<SessionState>()(set => ({
       projectName: snapshot.projectName,
       oscTarget: snapshot.oscTarget,
       volume: snapshot.volume,
+      // §7.1: backend-owned channel facts; keep the user's pre-start
+      // selection when the backend has none (idle snapshots).
+      channelPlan: snapshot.channelPlan ?? state.channelPlan,
+      outputDevice: snapshot.outputDevice ?? state.outputDevice,
       // Backend-owned session facts; when absent (idle snapshots), keep the
       // user's pre-start selection so Welcome controls don't reset.
       lanIp: snapshot.lanIp ?? state.lanIp,
       audioMode: snapshot.audioMode ?? state.audioMode,
       startupStage: snapshot.startupStage,
+      // §9.3: entering `starting` from any other state opens a new loading
+      // session (first start, restart, or a Retry out of `error`).
+      runId:
+        snapshot.status === 'starting' && state.sessionStatus !== 'starting'
+          ? state.runId + 1
+          : state.runId,
       // After a committed session event, any pending is resolved.
       pendingChanges: false,
     })),
@@ -106,6 +139,8 @@ export const useSessionStore = create<SessionState>()(set => ({
       audioMode: 'internal',
       lanIp: null,
       lanAddresses: [],
+      channelPlan: null,
+      deviceError: null,
       pendingChanges: false,
     }),
 }))

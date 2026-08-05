@@ -17,8 +17,14 @@ export function LoadingScreen({ onDissolveEnd }: Props) {
   const { t } = useTranslation()
   const health = useSessionStore(state => state.health)
   const sessionStatus = useSessionStore(state => state.sessionStatus)
+  const audioMode = useSessionStore(state => state.audioMode)
 
   const reallyReady = sessionStatus === 'ready' && health !== null
+
+  // §10.3: internal sessions wait for scsynth/CoreAudio boot, so their
+  // entrance phase runs 2s (120 frames at 60fps); external/none keep the
+  // classic ~0.83s entrance.
+  const entranceFrames = audioMode === 'internal' ? 120 : 50
 
   const handleCancel = async () => {
     await stopAndReset()
@@ -30,6 +36,7 @@ export function LoadingScreen({ onDissolveEnd }: Props) {
         size={380}
         ready={reallyReady}
         onDissolveEnd={onDissolveEnd}
+        entranceFrames={entranceFrames}
       />
       <Button
         variant="link"

@@ -7,6 +7,7 @@ mod bindings;
 mod commands;
 mod project;
 mod types;
+mod window;
 
 use tauri::{Manager, RunEvent, WindowEvent};
 
@@ -54,6 +55,8 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_notification::init())
         .manage(crate::project::session::SessionManager::default())
+        .manage(crate::window::WindowManager::default())
+        .manage(crate::commands::preferences::PreferencesCache::default())
         .plugin({
             #[allow(unused_mut)]
             let mut targets = vec![
@@ -107,6 +110,13 @@ pub fn run() {
                 }
             }
 
+            // §7.2: prewarm the audio subsystem in the background so the
+            // first real session load boots scsynth on a warm CoreAudio
+            // (coreaudiod's one-time init runs here, off the critical
+            // path, instead of during the first load).
+            #[cfg(target_os = "macos")]
+            crate::project::audio::prewarm_scsynth();
+
             // NOTE: Application menu is built from JavaScript for i18n support
             // See src/lib/menu.ts for the menu implementation
 
@@ -116,6 +126,32 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app_handle, event| match &event {
+            // §7.4: keep the cached fullscreen flag in sync regardless of
+            // how the user left fullscreen (menu/⌃⌘F/sidebar command, the
+            // native green button, or Escape). Without this, exiting via
+            // the native controls would leave the sidebar's custom traffic
+            // lights hidden forever.
+            RunEvent::WindowEvent {
+                label,
+                event: WindowEvent::Resized(_),
+                ..
+            } if label == "main" => {
+                if let Some(window) = app_handle.get_webview_window("main") {
+                    let state = app_handle.state::<crate::window::WindowManager>();
+                    let is_fs = window.is_fullscreen().unwrap_or(false);
+                    let cached = state.fullscreen.load(std::sync::atomic::Ordering::SeqCst);
+                    if is_fs != cached {
+                        state
+                            .fullscreen
+                            .store(is_fs, std::sync::atomic::Ordering::SeqCst);
+                        state.fade_gen.next();
+                        use tauri::Emitter;
+                        let _ = app_handle.emit("pnds:window", state.snapshot());
+                        log::info!("Fullscreen state synced via resize: {is_fs}");
+                    }
+                }
+            }
+
             // macOS: Hide the main window instead of quitting so the dock icon can
             // reopen it. On other platforms, the close proceeds normally.
             RunEvent::WindowEvent {
@@ -133,8 +169,27 @@ pub fn run() {
                         log::warn!("Failed to save window state: {e}");
                     }
 
+                    // §7.4: fade out, then hide — unless the app is
+                    // quitting (⌘Q), which hides immediately.
                     if let Some(window) = app_handle.get_webview_window("main") {
-                        let _ = window.hide();
+                        let quitting = {
+                            let state = app_handle.state::<crate::window::WindowManager>();
+                            state.quitting.load(std::sync::atomic::Ordering::SeqCst)
+                        };
+                        if quitting {
+                            let _ = window.hide();
+                        } else {
+                            let gen = {
+                                let state = app_handle.state::<crate::window::WindowManager>();
+                                state.fade_gen.next()
+                            };
+                            let fade_gen = {
+                                let state = app_handle.state::<crate::window::WindowManager>();
+                                std::sync::Arc::clone(&state.fade_gen)
+                            };
+                            crate::window::set_opacity_public(&window, 0.0);
+                            crate::window::spawn_ramp(window, fade_gen, gen, 0.0);
+                        }
                         log::info!("Main window hidden");
                     }
                 }
@@ -145,6 +200,9 @@ pub fn run() {
             RunEvent::Reopen { .. } => {
                 if let Some(window) = app_handle.get_webview_window("main") {
                     if !window.is_visible().unwrap_or(true) {
+                        // §7.4: fade in on reopen. Start fully transparent
+                        // so the ramp is visible, then restore state.
+                        crate::window::set_opacity_public(&window, 0.0);
                         let _ = window.show();
 
                         // The window-state plugin only auto-restores on app startup,
@@ -153,14 +211,41 @@ pub fn run() {
                         let _ = window.restore_state(StateFlags::all());
 
                         let _ = window.set_focus();
+
+                        // Fade in over the normal duration.
+                        let (gen, fade_gen) = {
+                            let state = app_handle.state::<crate::window::WindowManager>();
+                            (
+                                state.fade_gen.next(),
+                                std::sync::Arc::clone(&state.fade_gen),
+                            )
+                        };
+                        crate::window::spawn_ramp(window, fade_gen, gen, 1.0);
                         log::info!("Main window reopened from dock");
                     }
                 }
             }
 
             // Cleanup on actual exit (Cmd+Q, menu Quit, or window close on non-macOS).
-            // RunEvent::Exit fires reliably before the process exits, unlike ExitRequested
-            // which doesn't fire for Cmd+Q on macOS (tauri-apps/tauri#9198).
+            // macOS ⌘Q terminates via NSApp: tao destroys the windows, which
+            // emits ExitRequested and sets ControlFlow::Exit — RunEvent::Exit
+            // is NOT guaranteed on that path (observed: orphans left behind
+            // after ⌘Q). Clean up in ExitRequested (sync, before the loop
+            // ends) AND keep Exit as a belt-and-braces fallback.
+            RunEvent::ExitRequested { .. } => {
+                log::info!("Application exit requested — performing cleanup");
+                {
+                    let session = app_handle.state::<crate::project::session::SessionManager>();
+                    if session.has_active_session() {
+                        if let Ok(dir) = commands::project::app_data_dir(app_handle) {
+                            if let Err(e) = session.stop(app_handle, &dir) {
+                                log::warn!("Failed to stop score server on exit: {e}");
+                            }
+                        }
+                    }
+                }
+                log::info!("Cleanup complete");
+            }
             RunEvent::Exit => {
                 log::info!("Application exiting — performing cleanup");
 

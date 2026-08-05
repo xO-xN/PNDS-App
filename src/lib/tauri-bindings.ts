@@ -32,6 +32,7 @@ export type {
   ScoreServer,
   ScsynthConfig,
   SessionSnapshot,
+  WindowStateSnapshot,
 } from './bindings'
 
 /**

@@ -4,10 +4,13 @@ import { Toaster } from 'sonner'
 import { commands, type SessionSnapshot } from '@/lib/tauri-bindings'
 import { useSessionStore } from '@/store/session-store'
 import { useProjectStore } from '@/store/project-store'
+import { useWindowStore } from '@/store/window-store'
 import { loadAudioPreferences } from '@/lib/audio-prefs'
+import { cn } from '@/lib/utils'
 import { WelcomeScreen } from '@/components/welcome'
 import { Sidebar } from './Sidebar'
 import { MonitorView } from './MonitorView'
+import { HoverSidebar } from './HoverSidebar'
 import { LoadingScreen } from './LoadingScreen'
 import { ErrorScreen } from './ErrorScreen'
 
@@ -21,6 +24,11 @@ import { ErrorScreen } from './ErrorScreen'
  */
 export function AppShell() {
   const sessionStatus = useSessionStore(state => state.sessionStatus)
+  // §9.3: identifies the current loading session; a Retry bumps it so the
+  // logo canvas remounts and replays from its first stage.
+  const runId = useSessionStore(state => state.runId)
+  // §7.4: fullscreen has no rounded corners — the window fills the screen.
+  const fullscreen = useWindowStore(state => state.fullscreen)
   // loadingDone gates the dissolve; if the page renders with a ready session
   // already in store (test escape hatch — real app never does this), skip it.
   const [loadingDone, setLoadingDone] = useState(sessionStatus === 'ready')
@@ -34,6 +42,17 @@ export function AppShell() {
       if (result.status === 'ok') {
         useSessionStore.getState().applySnapshot(result.data)
       }
+    })
+    return () => {
+      void unlisten.then(off => off())
+    }
+  }, [])
+
+  // §7.4: mirror the Rust window state (fullscreen, traffic-light
+  // visibility, fade generation). Single direction: Rust → React.
+  useEffect(() => {
+    const unlisten = listen('pnds:window', event => {
+      useWindowStore.getState().applyWindowSnapshot(event.payload as never)
     })
     return () => {
       void unlisten.then(off => off())
@@ -64,8 +83,17 @@ export function AppShell() {
   if (sessionStatus === 'ready' && loadingDone) {
     return (
       <>
-        <div className="h-screen w-screen overflow-hidden rounded-2xl">
-          <MonitorView />
+        <div
+          className={cn(
+            'h-screen w-screen overflow-hidden',
+            !fullscreen && 'rounded-2xl'
+          )}
+        >
+          {/* §7.4: fullscreen toggles dissolve at the NSWindow layer
+              (Rust fades the whole window out, macOS switches, window
+              fades in). MonitorView is keyed by fullscreen so a
+              popped-out overlay sidebar is dropped instantly. */}
+          <MonitorView key={fullscreen ? 'fullscreen' : 'windowed'} />
         </div>
         <Toaster position="bottom-right" />
       </>
@@ -76,8 +104,15 @@ export function AppShell() {
   if (sessionStatus === 'error') {
     return (
       <>
-        <div className="flex h-screen w-screen overflow-hidden rounded-2xl bg-(--pnds-bg)">
-          <Sidebar variant="static" />
+        <div
+          className={cn(
+            'flex h-screen w-screen overflow-hidden bg-(--pnds-bg)',
+            !fullscreen && 'rounded-2xl'
+          )}
+        >
+          {/* §7.4: fullscreen drops the sidebar instantly (no transition);
+              the overlay sidebar in MonitorView still pops in on hover. */}
+          {!fullscreen && <Sidebar variant="static" />}
           <main className="flex-1 overflow-auto">
             <ErrorScreen />
           </main>
@@ -94,8 +129,19 @@ export function AppShell() {
   if (loadingPhase) {
     return (
       <>
-        <div className="h-screen w-screen overflow-hidden rounded-2xl bg-(--pnds-bg)">
-          <LoadingScreen onDissolveEnd={() => setLoadingDone(true)} />
+        <div
+          className={cn(
+            'relative h-screen w-screen overflow-hidden bg-(--pnds-bg)',
+            !fullscreen && 'rounded-2xl'
+          )}
+        >
+          <LoadingScreen
+            key={runId}
+            onDissolveEnd={() => setLoadingDone(true)}
+          />
+          {/* §10.1: hover-revealed sidebar stays reachable during loading,
+              including fullscreen. */}
+          <HoverSidebar />
         </div>
         <Toaster position="bottom-right" />
       </>
@@ -105,7 +151,14 @@ export function AppShell() {
   // ── Welcome (sidebar always open, full height) ──
   return (
     <>
-      <div className="flex h-screen w-screen overflow-hidden rounded-2xl bg-(--pnds-bg)">
+      <div
+        className={cn(
+          'flex h-screen w-screen overflow-hidden bg-(--pnds-bg)',
+          !fullscreen && 'rounded-2xl'
+        )}
+      >
+        {/* Start page: the sidebar stays PERMANENTLY visible, including in
+          fullscreen — only loaded sessions retract it on fullscreen. */}
         <Sidebar variant="static" />
         <main className="flex-1 overflow-auto">
           <WelcomeScreen />

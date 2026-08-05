@@ -22,6 +22,7 @@ export function canStart(input: {
   lanIp: string | null
   audioMode: string
   oscTargetInput: string
+  deviceError: string | null
 }): boolean {
   const {
     currentProject,
@@ -30,14 +31,22 @@ export function canStart(input: {
     lanIp,
     audioMode,
     oscTargetInput,
+    deviceError,
   } = input
 
   if (
     !currentProject ||
     preflightStatus !== 'ready' ||
-    sessionStatus !== 'idle' ||
+    // §9.3: Retry starts from the error state without an explicit stop —
+    // the failed generation was already cleaned up before the error
+    // snapshot was emitted.
+    (sessionStatus !== 'idle' && sessionStatus !== 'error') ||
     !lanIp
   ) {
+    return false
+  }
+  // §6.3: internal cannot start while device capability is unknown/broken.
+  if (audioMode === 'internal' && deviceError) {
     return false
   }
   // §6.6: external mode cannot start with an invalid target.
@@ -53,10 +62,24 @@ function resolveOscTarget(): string | null {
   return audioMode === 'external' ? oscTargetInput : null
 }
 
-/** §8.1: explicitly start the selected project. */
+/**
+ * §9.3: one click = one start.
+ *
+ * The backend does real work — targeted orphan cleanup, port preflight and
+ * output-device capability queries — before it publishes the `starting`
+ * snapshot. During that window `sessionStatus` is still `error`, so the
+ * Load / Retry button stays enabled and a second click would spawn a
+ * second session. This module-level latch is the submit guard: it is set
+ * synchronously, before the first `await`, and cleared in `finally`.
+ */
+let startInFlight = false
+
+/** §8.1: explicitly start the selected project. Also the §9.3 Retry path:
+ *  `error` is a legal starting point and no stop is issued first. */
 export async function start(): Promise<void> {
+  if (startInFlight) return
   const { currentProject, preflightStatus } = useProjectStore.getState()
-  const { audioMode, lanIp, sessionStatus, oscTargetInput } =
+  const { audioMode, lanIp, sessionStatus, oscTargetInput, deviceError } =
     useSessionStore.getState()
   if (
     !canStart({
@@ -66,6 +89,7 @@ export async function start(): Promise<void> {
       lanIp,
       audioMode,
       oscTargetInput,
+      deviceError,
     })
   ) {
     return
@@ -79,19 +103,25 @@ export async function start(): Promise<void> {
     mode: audioMode,
     lanIp,
   })
-  const result = await commands.startProject(
-    currentProject.path,
-    audioMode,
-    lanIp,
-    resolveOscTarget()
-  )
-  if (result.status === 'error') {
-    useSessionStore.getState().failLocal(result.error)
+  startInFlight = true
+  try {
+    const result = await commands.startProject(
+      currentProject.path,
+      audioMode,
+      lanIp,
+      resolveOscTarget()
+    )
+    if (result.status === 'error') {
+      useSessionStore.getState().failLocal(result.error)
+    }
+  } finally {
+    startInFlight = false
   }
 }
 
 /** §8.3: restart the session with the current settings. */
 export async function restart(): Promise<void> {
+  if (startInFlight) return
   const { currentProject } = useProjectStore.getState()
   const { audioMode, lanIp, oscTargetInput } = useSessionStore.getState()
   if (!currentProject || !lanIp) return
@@ -101,18 +131,23 @@ export async function restart(): Promise<void> {
     mode: audioMode,
   })
   useSessionStore.getState().setPendingChanges(false)
-  await commands.stopProject()
-  // Capture BEFORE the await — stopProject emits snapshots whose
-  // audio_mode is the PREVIOUS session's mode, and applySnapshot
-  // overwrites the user's pending selection (?? only guards null).
-  const target = audioMode === 'external' ? oscTargetInput : null
-  const result = await commands.startProject(
-    currentProject.path,
-    audioMode,
-    lanIp,
-    target
-  )
-  if (result.status === 'error') {
-    useSessionStore.getState().failLocal(result.error)
+  startInFlight = true
+  try {
+    await commands.stopProject()
+    // Capture BEFORE the await — stopProject emits snapshots whose
+    // audio_mode is the PREVIOUS session's mode, and applySnapshot
+    // overwrites the user's pending selection (?? only guards null).
+    const target = audioMode === 'external' ? oscTargetInput : null
+    const result = await commands.startProject(
+      currentProject.path,
+      audioMode,
+      lanIp,
+      target
+    )
+    if (result.status === 'error') {
+      useSessionStore.getState().failLocal(result.error)
+    }
+  } finally {
+    startInFlight = false
   }
 }

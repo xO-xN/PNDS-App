@@ -23,6 +23,7 @@ export function SessionActionButton() {
   const audioMode = useSessionStore(state => state.audioMode)
   const lanIp = useSessionStore(state => state.lanIp)
   const oscTargetInput = useSessionStore(state => state.oscTargetInput)
+  const deviceError = useSessionStore(state => state.deviceError)
   const pendingChanges = useSessionStore(state => state.pendingChanges)
 
   const running = sessionStatus === 'ready'
@@ -34,6 +35,7 @@ export function SessionActionButton() {
     lanIp,
     audioMode,
     oscTargetInput,
+    deviceError,
   })
 
   // Full-bleed footer: the card clips the bottom corners, so no radius

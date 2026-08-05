@@ -1,14 +1,25 @@
 //! Preferences management commands.
 //!
-//! Handles loading and saving user preferences to disk.
+//! Handles loading and saving user preferences to disk, with an in-memory
+//! cache: the file is read at most once per app run (the first request),
+//! everything after serves the cached copy. Startup, preflight and
+//! session start each load preferences — a cache removes those repeated
+//! disk reads from the critical path.
 
 use std::path::PathBuf;
+use std::sync::Mutex;
 use tauri::{AppHandle, Manager};
 
 use crate::types::{validate_theme, AppPreferences};
 
+/// In-memory cache of the preferences file. Managed by Tauri.
+#[derive(Default)]
+pub struct PreferencesCache {
+    cached: Mutex<Option<AppPreferences>>,
+}
+
 /// Gets the path to the preferences file.
-fn get_preferences_path(app: &AppHandle) -> Result<PathBuf, String> {
+fn get_preferences_path<R: tauri::Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
     let app_data_dir = app
         .path()
         .app_data_dir()
@@ -21,23 +32,41 @@ fn get_preferences_path(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(app_data_dir.join("preferences.json"))
 }
 
-/// Loads user preferences from disk (sync variant for internal callers).
-pub fn load_preferences_sync(app: &AppHandle) -> Result<AppPreferences, String> {
-    let prefs_path = get_preferences_path(app)?;
-
-    if !prefs_path.exists() {
-        return Ok(AppPreferences::default());
+/// Loads user preferences (sync variant for internal callers), caching
+/// the parsed value in memory so repeated reads skip the disk.
+///
+/// Generic over the runtime so session start stays testable under
+/// `tauri::test::mock_app()`.
+pub fn load_preferences_sync<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+) -> Result<AppPreferences, String> {
+    let cache = app.state::<PreferencesCache>();
+    if let Some(prefs) = cache
+        .cached
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone()
+    {
+        return Ok(prefs);
     }
 
-    let contents = std::fs::read_to_string(&prefs_path).map_err(|e| {
-        log::error!("Failed to read preferences file: {e}");
-        format!("Failed to read preferences file: {e}")
-    })?;
+    let prefs_path = get_preferences_path(app)?;
+    let prefs = if !prefs_path.exists() {
+        AppPreferences::default()
+    } else {
+        let contents = std::fs::read_to_string(&prefs_path).map_err(|e| {
+            log::error!("Failed to read preferences file: {e}");
+            format!("Failed to read preferences file: {e}")
+        })?;
 
-    serde_json::from_str(&contents).map_err(|e| {
-        log::error!("Failed to parse preferences JSON: {e}");
-        format!("Failed to parse preferences: {e}")
-    })
+        serde_json::from_str(&contents).map_err(|e| {
+            log::error!("Failed to parse preferences JSON: {e}");
+            format!("Failed to parse preferences: {e}")
+        })?
+    };
+
+    *cache.cached.lock().unwrap_or_else(|e| e.into_inner()) = Some(prefs.clone());
+    Ok(prefs)
 }
 
 /// Loads user preferences from disk.
@@ -83,6 +112,10 @@ pub async fn save_preferences(app: AppHandle, preferences: AppPreferences) -> Re
         }
         return Err(format!("Failed to finalize preferences file: {rename_err}"));
     }
+
+    // Update the in-memory cache so later reads see the new values.
+    let cache = app.state::<PreferencesCache>();
+    *cache.cached.lock().unwrap_or_else(|e| e.into_inner()) = Some(preferences.clone());
 
     log::info!("Successfully saved preferences to {prefs_path:?}");
     Ok(())

@@ -1,19 +1,54 @@
 //! Preflight checks: dependency check and port availability.
-//! See `docs/PNDS_APP_REQUIREMENTS.md` §4, §7, §8.2.
+//! See `docs/PNDS_APP_REQUIREMENTS.md` §4, §7, §8.2 and
+//! `docs/PNDS_SCORE_PROJECT_SPECIFICATION.md` §2.
 //!
 //! The child-process lifecycle (spawn, record, kill escalation, orphan
 //! cleanup) has moved to `project/children.rs`.
 
 use std::path::Path;
 
-/// §4: the project must ship its installed production dependencies.
+/// §4 + spec §2: a project with non-empty production dependencies
+/// (`dependencies` or `optionalDependencies`) must ship a usable
+/// `node_modules/`. Zero-dependency projects need none. `devDependencies`
+/// are irrelevant at runtime, `engines.node` is advisory and never affects
+/// the outcome, and the check never runs npm or touches the network.
 pub fn check_dependencies(project_root: &Path) -> Result<(), String> {
-    let node_modules = project_root.join("node_modules");
-    if !node_modules.is_dir() {
-        return Err(format!(
-            "Project dependencies are missing.\nExpected: {}",
-            node_modules.display()
-        ));
+    let package_json = project_root.join("package.json");
+    if !package_json.is_file() {
+        return Ok(());
+    }
+
+    let body = std::fs::read_to_string(&package_json)
+        .map_err(|e| format!("Failed to read {}: {e}", package_json.display()))?;
+    let parsed: serde_json::Value = serde_json::from_str(&body)
+        .map_err(|e| format!("{} is not valid JSON: {e}", package_json.display()))?;
+
+    let mut requires_node_modules = false;
+    for field in ["dependencies", "optionalDependencies"] {
+        match parsed.get(field) {
+            None | Some(serde_json::Value::Null) => {}
+            Some(serde_json::Value::Object(entries)) => {
+                if !entries.is_empty() {
+                    requires_node_modules = true;
+                }
+            }
+            Some(_) => {
+                return Err(format!(
+                    "{}: \"{field}\" must be an object mapping package names to versions.",
+                    package_json.display()
+                ));
+            }
+        }
+    }
+
+    if requires_node_modules {
+        let node_modules = project_root.join("node_modules");
+        if !node_modules.is_dir() {
+            return Err(format!(
+                "Project dependencies are missing.\nExpected: {}",
+                node_modules.display()
+            ));
+        }
     }
     Ok(())
 }
@@ -36,9 +71,40 @@ mod tests {
     use super::*;
     use std::fs;
 
+    fn write_package_json(dir: &Path, body: &str) {
+        fs::write(dir.join("package.json"), body).unwrap();
+    }
+
     #[test]
-    fn dependencies_missing_uses_contract_wording() {
+    fn no_package_json_passes_without_node_modules() {
         let dir = tempfile::tempdir().unwrap();
+        check_dependencies(dir.path()).unwrap();
+    }
+
+    #[test]
+    fn empty_production_dependencies_pass() {
+        let dir = tempfile::tempdir().unwrap();
+        write_package_json(
+            dir.path(),
+            r#"{ "dependencies": {}, "optionalDependencies": {} }"#,
+        );
+        check_dependencies(dir.path()).unwrap();
+    }
+
+    #[test]
+    fn dev_dependencies_alone_pass() {
+        let dir = tempfile::tempdir().unwrap();
+        write_package_json(
+            dir.path(),
+            r#"{ "devDependencies": { "vitest": "^4.0.0" } }"#,
+        );
+        check_dependencies(dir.path()).unwrap();
+    }
+
+    #[test]
+    fn non_empty_dependencies_require_node_modules() {
+        let dir = tempfile::tempdir().unwrap();
+        write_package_json(dir.path(), r#"{ "dependencies": { "ws": "^8.0.0" } }"#);
         let err = check_dependencies(dir.path()).unwrap_err();
         assert!(
             err.contains("Project dependencies are missing."),
@@ -48,10 +114,59 @@ mod tests {
     }
 
     #[test]
-    fn dependencies_present_passes() {
+    fn non_empty_optional_dependencies_require_node_modules() {
         let dir = tempfile::tempdir().unwrap();
+        write_package_json(
+            dir.path(),
+            r#"{ "optionalDependencies": { "fsevents": "^2.3.0" } }"#,
+        );
+        let err = check_dependencies(dir.path()).unwrap_err();
+        assert!(
+            err.contains("Project dependencies are missing."),
+            "unexpected: {err}"
+        );
+    }
+
+    #[test]
+    fn production_dependencies_with_node_modules_pass() {
+        let dir = tempfile::tempdir().unwrap();
+        write_package_json(dir.path(), r#"{ "dependencies": { "ws": "^8.0.0" } }"#);
         fs::create_dir_all(dir.path().join("node_modules")).unwrap();
         check_dependencies(dir.path()).unwrap();
+    }
+
+    #[test]
+    fn invalid_package_json_is_diagnosable() {
+        let dir = tempfile::tempdir().unwrap();
+        write_package_json(dir.path(), "{ not json");
+        let err = check_dependencies(dir.path()).unwrap_err();
+        assert!(err.contains("not valid JSON"), "unexpected: {err}");
+        assert!(err.contains("package.json"), "unexpected: {err}");
+    }
+
+    #[test]
+    fn mistyped_dependencies_field_is_diagnosable() {
+        let dir = tempfile::tempdir().unwrap();
+        write_package_json(dir.path(), r#"{ "dependencies": "ws" }"#);
+        let err = check_dependencies(dir.path()).unwrap_err();
+        assert!(err.contains("\"dependencies\""), "unexpected: {err}");
+        assert!(err.contains("package.json"), "unexpected: {err}");
+    }
+
+    #[test]
+    fn engines_node_never_affects_result() {
+        // Missing, compatible, incompatible, and non-standard engines.node
+        // values must all yield the same preflight outcome.
+        for body in [
+            r#"{ "dependencies": {} }"#,
+            r#"{ "dependencies": {}, "engines": { "node": ">=24 <25" } }"#,
+            r#"{ "dependencies": {}, "engines": { "node": ">=99" } }"#,
+            r#"{ "dependencies": {}, "engines": { "node": "banana" } }"#,
+        ] {
+            let dir = tempfile::tempdir().unwrap();
+            write_package_json(dir.path(), body);
+            check_dependencies(dir.path()).unwrap();
+        }
     }
 
     #[test]

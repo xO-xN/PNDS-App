@@ -23,10 +23,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Pin the Node 24 series to match the bundled sidecar runtime
+      # (scripts/fetch-node.sh); lts/* drifts to newer majors over time.
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 'lts/*'
+          node-version: '24.x'
           cache: 'npm'
 
       - name: Install Rust stable
@@ -42,7 +44,7 @@ jobs:
 
       # src-tauri/binaries, Frameworks, plugins, and resources/synthdefs are
       # gitignored (~100MB Node runtime + SuperCollider extraction); these
-      # scripts provision them fresh on every release build (task-7).
+      # scripts provision them fresh on every release build.
       - name: Fetch Node sidecar
         run: npm run node:fetch
 
@@ -60,6 +62,13 @@ jobs:
           releaseName: 'PNDS ${{ github.ref_name || inputs.version }}'
           releaseBody: |
             ## PNDS ${{ github.ref_name || inputs.version }}
+
+            ### What's New in V1.1
+            - **Bundled Node.js 24.18.1** — projects run without any Node install on the host Mac
+            - **Discrete multichannel output** (1–64 channels) in Internal mode, verified with the built-in 16-channel tone-test project; a channel-poor device degrades gracefully (e.g. `16ch → 2ch`) and the app shows exactly what is lost
+            - **Device capability UI** — output device and channel counts are queried at the project sample rate before launch
+            - **Fullscreen & window animation** — native fullscreen with whole-window fade, monitor resizes without reloading or reconnecting
+            - **Retry** — the error page truly restarts the session (with proper cleanup of the failed attempt); Back/Close returns to Welcome
 
             ### Installation Instructions
             - **macOS (Apple Silicon)**: Download the `.dmg` file and drag PNDS to the Applications folder

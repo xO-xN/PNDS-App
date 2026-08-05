@@ -1,9 +1,9 @@
 //! Project session: score-server (Node.js) process lifecycle and health
 //! polling. See `docs/PNDS_APP_REQUIREMENTS.md` §7, §8, §9.
 //!
-//! Startup order (§8.1): preflight → (internal: allocate OSC UDP port;
-//! scsynth itself arrives in task-4) → spawn node → poll health → ready.
-//! Shutdown (§8.2): SIGTERM → graceful wait → SIGKILL on timeout.
+//! Startup order (§8): preflight → (internal: resolve channel plan and boot
+//! scsynth) → spawn node → poll health → ready (internal: master stage).
+//! Shutdown (§11): SIGTERM → graceful wait → SIGKILL on timeout.
 
 use serde::{Deserialize, Serialize};
 use specta::Type;
@@ -31,6 +31,14 @@ const OUTPUT_TAIL_LINES: usize = 50;
 /// especially immediately after another project session has been stopped.
 const SCSYNTH_BOOT_ATTEMPTS: u32 = 5;
 const SCSYNTH_RETRY_DELAY: Duration = Duration::from_millis(750);
+/// Delay before the FIRST scsynth boot attempt when the audio subsystem
+/// was NOT prewarmed at launch (cold coreaudiod). The one-time
+/// AVAudioSession init can crash (objc cache corruption in the HAL XPC
+/// path) when the daemon is still settling; the grace period avoids the
+/// common "first load always retries" case. When the launch-time prewarm
+/// succeeded, this shrinks to PREWARMED_FIRST_BOOT_DELAY.
+const FIRST_BOOT_DELAY: Duration = Duration::from_millis(1500);
+const PREWARMED_FIRST_BOOT_DELAY: Duration = Duration::from_millis(300);
 
 // ============================================================================
 // Types shared with the frontend
@@ -89,10 +97,15 @@ pub struct SessionSnapshot {
     pub health: Option<HealthPayload>,
     pub error: Option<String>,
     pub output_tail: Vec<String>,
-    /// Master volume percent (§6.4; new sessions always start at 80).
+    /// Master volume percent (§7.5; new N<=2 sessions always start at 80,
+    /// N>2 sessions are fixed at 100).
     pub volume: f32,
     /// §10.3 five-stage loading animation dot (1–5).
     pub startup_stage: u8,
+    /// §7.1: internal channel plan (N/H/K/B), present for internal sessions.
+    pub channel_plan: Option<crate::project::audio::ChannelPlan>,
+    /// Final CoreAudio output device in use (internal sessions).
+    pub output_device: Option<String>,
 }
 
 // ============================================================================
@@ -126,13 +139,17 @@ pub fn node_binary_path() -> Result<PathBuf, String> {
     Err("Embedded Node.js runtime not found.\nRun `npm run node:fetch` and try again.".to_string())
 }
 
-/// Environment variables injected into the score server (§6.1, §6.3, §7).
-/// `none` mode receives only `PNDS_HOST_IP`.
+/// Environment variables injected into the score server (§3, §6, §7).
+/// `none` mode receives only `PNDS_HOST_IP`. Internal receives the dynamic
+/// OSC target plus the session channel plan: `PNDS_AUDIO_OUTPUT_BUS = B`
+/// (private bus start) and `PNDS_AUDIO_OUTPUT_CHANNELS = N` (declared
+/// project outputs) — never a hardcoded stereo pair.
 pub fn build_score_server_env(
     mode: &str,
     lan_ip: &str,
     osc_target: Option<&str>,
     audio_output_bus: Option<u32>,
+    audio_output_channels: Option<u32>,
 ) -> Vec<(String, String)> {
     let mut env = vec![("PNDS_HOST_IP".to_string(), lan_ip.to_string())];
     match mode {
@@ -141,9 +158,16 @@ pub fn build_score_server_env(
             env.push(("PNDS_OSC_TARGET".to_string(), target.to_string()));
             env.push((
                 "PNDS_AUDIO_OUTPUT_BUS".to_string(),
-                audio_output_bus.unwrap_or(2).to_string(),
+                audio_output_bus
+                    .expect("internal mode requires the channel plan bus start")
+                    .to_string(),
             ));
-            env.push(("PNDS_AUDIO_OUTPUT_CHANNELS".to_string(), "2".to_string()));
+            env.push((
+                "PNDS_AUDIO_OUTPUT_CHANNELS".to_string(),
+                audio_output_channels
+                    .expect("internal mode requires the project output channel count")
+                    .to_string(),
+            ));
         }
         "external" => {
             let target = osc_target.expect("external mode requires an OSC target");
@@ -154,8 +178,8 @@ pub fn build_score_server_env(
     env
 }
 
-/// Allocates a free local UDP port for scsynth (§6.2). The port is released
-/// immediately; scsynth (task-4) binds it at session start.
+/// Allocates a free local UDP port for scsynth (§7.2). The port is released
+/// immediately; scsynth binds it at session start.
 pub fn allocate_udp_port() -> Result<u16, String> {
     let socket = UdpSocket::bind(("127.0.0.1", 0))
         .map_err(|e| format!("Failed to allocate a local UDP port: {e}"))?;
@@ -222,6 +246,10 @@ struct SessionInner {
     volume: f32,
     /// §10.3 five-stage loading progression (1–5).
     startup_stage: u8,
+    /// §7.1: internal channel plan (N/H/K/B) for the running session.
+    channel_plan: Option<crate::project::audio::ChannelPlan>,
+    /// Final output device name for the running internal session.
+    output_device: Option<String>,
     /// Incremented on every start/stop so stale supervisor threads exit.
     generation: u64,
     /// §11: per-session log file.
@@ -246,6 +274,8 @@ impl Default for SessionInner {
             output_tail: VecDeque::new(),
             volume: crate::project::audio::DEFAULT_VOLUME_PERCENT,
             startup_stage: 0,
+            channel_plan: None,
+            output_device: None,
             generation: 0,
             logger: None,
         }
@@ -266,6 +296,8 @@ impl SessionInner {
             output_tail: self.output_tail.iter().cloned().collect(),
             volume: self.volume,
             startup_stage: self.startup_stage,
+            channel_plan: self.channel_plan.clone(),
+            output_device: self.output_device.clone(),
         }
     }
 
@@ -283,6 +315,9 @@ impl SessionInner {
         self.error = None;
         self.output_tail.clear();
         self.volume = crate::project::audio::DEFAULT_VOLUME_PERCENT;
+        self.channel_plan = None;
+        self.output_device = None;
+        self.startup_stage = 0;
     }
 }
 
@@ -321,10 +356,59 @@ impl SessionManager {
 
     /// Starts a score-server session (§8.1). Validation (manifest, ports)
     /// is re-run here so a stale preflight result cannot start a process.
-    pub fn start(
+    ///
+    /// §9.3: this is also the **Retry** entry point — no stop is required
+    /// first. The generation is bumped and the previous run's
+    /// error/health/output is cleared before anything else, so a retry
+    /// always begins from a clean `starting` snapshot. Every failure below
+    /// funnels through `fail_start`, which tears down whatever this
+    /// generation already spawned *before* the `error` snapshot is
+    /// published — the next Retry never inherits a live Node or scsynth.
+    pub fn start<R: tauri::Runtime>(
         &self,
-        app: AppHandle,
+        app: AppHandle<R>,
         app_data_dir: PathBuf,
+        path: String,
+        mode: String,
+        lan_ip: String,
+        osc_target: Option<String>,
+    ) -> Result<(), String> {
+        let generation = {
+            let mut inner = self.lock();
+            inner.generation += 1;
+            inner.reset_run_state();
+            inner.status = "starting".to_string();
+            inner.project_path = Some(path.clone());
+            inner.audio_mode = Some(mode.clone());
+            inner.lan_ip = Some(lan_ip.clone());
+            inner.startup_stage = 1;
+            inner.generation
+        };
+        self.emit(&app);
+
+        let result = self.start_generation(
+            &app,
+            &app_data_dir,
+            generation,
+            path,
+            mode,
+            lan_ip,
+            osc_target,
+        );
+        if let Err(message) = &result {
+            self.fail_start(&app, &app_data_dir, generation, message);
+        }
+        result
+    }
+
+    /// The body of `start` for one generation. Never called directly:
+    /// `start` owns the `starting` snapshot and the failure teardown.
+    #[allow(clippy::too_many_arguments)]
+    fn start_generation<R: tauri::Runtime>(
+        &self,
+        app: &AppHandle<R>,
+        app_data_dir: &Path,
+        generation: u64,
         path: String,
         mode: String,
         lan_ip: String,
@@ -342,40 +426,44 @@ impl SessionManager {
         if lan_ip.parse::<std::net::Ipv4Addr>().is_err() || lan_ip.starts_with("127.") {
             return Err(format!("Invalid LAN IPv4 address: \"{lan_ip}\""));
         }
-        let registry = ChildRegistry::new(app_data_dir.clone());
+        {
+            let mut inner = self.lock();
+            inner.project_name = Some(manifest.name.clone());
+        }
+
+        let registry = ChildRegistry::new(app_data_dir.to_path_buf());
+        // §9.3: a previous generation whose SIGKILL was never confirmed
+        // still owns its ports. Re-run the targeted (pid + marker) cleanup
+        // BEFORE the port preflight, so a Retry after a hard failure is
+        // not blocked by the corpse of its own last attempt.
+        match registry.cleanup_orphans() {
+            Ok(n) if n > 0 => log::info!("Start cleanup terminated {n} orphan(s) before preflight"),
+            Ok(_) => {}
+            Err(e) => log::warn!("Orphan cleanup before start failed: {e}"),
+        }
         preflight::check_ports_available(
             manifest.score_server.performer_port,
             manifest.score_server.monitor_port,
         )?;
 
-        // ---------------------------------------------------------------
-        // §10.3: signal "starting" as early as possible so the loading
-        // screen switches immediately and the logo animation begins
-        // playing while scsynth and Node are still booting below.
-        {
-            let mut inner = self.lock();
-            inner.generation += 1;
-            inner.reset_run_state();
-            inner.status = "starting".to_string();
-            inner.project_name = Some(manifest.name.clone());
-            inner.project_path = Some(path.clone());
-            inner.audio_mode = Some(mode.clone());
-            inner.lan_ip = Some(lan_ip.clone());
-        }
-        self.emit(&app);
-        // ---------------------------------------------------------------
-
-        // §6.5: the output device comes from app-local preferences (never
-        // from the project manifest). A missing saved device falls back to
-        // the system default with a warning.
-        let device = if mode == "internal" {
-            let prefs = crate::commands::preferences::load_preferences_sync(&app)?;
-            match prefs.output_device {
+        // §7.1/§7.6: for internal sessions resolve the output device and
+        // its capability at the project sample rate, then compute N/H/K/B.
+        // Unreadable capability or H = 0 fails before anything is spawned;
+        // a channel-poor device (H < N) is bridged partially, never an error.
+        let (device, channel_plan) = if mode == "internal" {
+            let sc_cfg = manifest
+                .audio
+                .scsynth
+                .as_ref()
+                .ok_or("manifest is missing audio.scsynth (required for internal mode)")?;
+            // §6.5: the output device comes from app-local preferences
+            // (never the manifest). A missing saved device falls back to
+            // the system default with a warning.
+            let prefs = crate::commands::preferences::load_preferences_sync(app)?;
+            let caps = crate::project::audio::list_output_devices(sc_cfg.sample_rate)?;
+            let device = match prefs.output_device {
                 Some(name) => {
-                    let devices = crate::project::audio::list_output_devices()
-                        .unwrap_or_default()
-                        .devices;
-                    if devices.contains(&name) {
+                    if caps.devices.iter().any(|d| d.name == name) {
                         Some(name)
                     } else {
                         log::warn!(
@@ -385,14 +473,37 @@ impl SessionManager {
                     }
                 }
                 None => None,
-            }
+            };
+            let cap = crate::project::audio::resolve_in_list(&caps, device.as_deref())?;
+            let plan =
+                crate::project::audio::channel_plan(manifest.audio.output_channels, cap.channels);
+            log::info!(
+                "Audio channel plan: N={} H={} K={} B={} (device: {})",
+                plan.project_channels,
+                plan.device_channels,
+                plan.bridged_channels,
+                plan.private_bus_start,
+                cap.name
+            );
+            (device, Some((plan, cap.name)))
         } else {
-            None
+            (None, None)
         };
 
-        // §11: open the per-session log file.
-        let session_log = crate::project::logs::SessionLogger::open(
-            &app_data_dir,
+        if let Some((plan, device_name)) = &channel_plan {
+            let mut inner = self.lock();
+            inner.channel_plan = Some(plan.clone());
+            inner.output_device = Some(device_name.clone());
+            // §7.5: multichannel masters are fixed at 100% / 0 dB.
+            if plan.project_channels > 2 {
+                inner.volume = 100.0;
+            }
+        }
+
+        // §11: open the per-session log file. The session owns it from
+        // here on, so `teardown_children` closes it on a failed start too.
+        let mut session_log = crate::project::logs::SessionLogger::open(
+            app_data_dir,
             crate::project::logs::SessionLogParams {
                 project_id: &manifest.id,
                 project_name: &manifest.name,
@@ -400,30 +511,60 @@ impl SessionManager {
                 audio_mode: &mode,
                 lan_ip: &lan_ip,
                 osc_target: osc_target.as_deref().unwrap_or("none"),
-                output_device: device.as_deref().unwrap_or("system default"),
+                output_device: channel_plan
+                    .as_ref()
+                    .map(|(_, name)| name.as_str())
+                    .unwrap_or("system default"),
             },
         )
         .ok();
+        if let (Some(log), Some((plan, device_name))) = (&mut session_log, &channel_plan) {
+            log.write_line(&format!(
+                "Audio channel plan: N={} H={} K={} B={} device=\"{device_name}\"",
+                plan.project_channels,
+                plan.device_channels,
+                plan.bridged_channels,
+                plan.private_bus_start
+            ));
+        }
+        {
+            let mut inner = self.lock();
+            inner.logger = session_log;
+        }
 
         // §8.1: internal mode boots scsynth first (and waits for /status)
         // before the score server starts. External/none skip this entirely.
-        let (osc_target, scsynth_child, scsynth_port) = match mode.as_str() {
+        let osc_target = match mode.as_str() {
             "internal" => {
                 let sc_cfg = manifest
                     .audio
                     .scsynth
                     .as_ref()
                     .ok_or("manifest is missing audio.scsynth (required for internal mode)")?;
+                // §7.2: scsynth opens exactly K hardware output channels.
+                let k = channel_plan
+                    .as_ref()
+                    .map(|(plan, _)| plan.bridged_channels)
+                    .ok_or("internal mode requires a resolved channel plan")?;
                 // scsynth's CoreAudio/Objective-C initialization can fail
                 // transiently; give the failed process and audio device a
-                // short moment to settle before retrying.
+                // short moment to settle before retrying. The very first
+                // attempt also waits for coreaudiod's one-time audio
+                // session init to settle (§ FIRST_BOOT_DELAY).
                 let mut last_err = String::new();
                 let mut booted = None;
+                let prewarmed = crate::project::audio::is_audio_prewarmed();
                 for attempt in 1..=SCSYNTH_BOOT_ATTEMPTS {
-                    if attempt > 1 {
+                    if attempt == 1 {
+                        std::thread::sleep(if prewarmed {
+                            PREWARMED_FIRST_BOOT_DELAY
+                        } else {
+                            FIRST_BOOT_DELAY
+                        });
+                    } else {
                         std::thread::sleep(SCSYNTH_RETRY_DELAY);
                     }
-                    match Self::boot_scsynth(&app_data_dir, sc_cfg, device.as_deref()) {
+                    match Self::boot_scsynth(app_data_dir, sc_cfg, k, device.as_deref()) {
                         Ok(ok) => {
                             booted = Some(ok);
                             break;
@@ -434,34 +575,50 @@ impl SessionManager {
                         }
                     }
                 }
-                let Some((sc_child, port)) = booted else {
+                let Some((mut sc_child, port)) = booted else {
                     return Err(last_err);
                 };
+                // §9.3: hand the handle to the session immediately. Every
+                // failure below this point is now covered by the teardown
+                // in `fail_start` instead of leaking a live scsynth.
+                if let Some(stdout) = sc_child.stdout.take() {
+                    self.spawn_output_reader(stdout, "scsynth", generation);
+                }
+                if let Some(stderr) = sc_child.stderr.take() {
+                    self.spawn_output_reader(stderr, "scsynth", generation);
+                }
                 {
                     let mut inner = self.lock();
+                    inner.scsynth_port = Some(port);
+                    inner.scsynth = Some(sc_child);
                     inner.startup_stage = 2;
                 }
-                self.emit(&app);
-                (
-                    Some(format!("127.0.0.1:{port}")),
-                    Some(sc_child),
-                    Some(port),
-                )
+                self.emit(app);
+                Some(format!("127.0.0.1:{port}"))
             }
             "external" => {
                 // §6.6: external mode requires a valid user-provided target.
                 let target =
                     osc_target.ok_or("External mode requires an OSC target (host:port)")?;
                 crate::project::audio::validate_osc_target(&target)?;
-                (Some(target), None, None)
+                Some(target)
             }
-            _ => (None, None, None),
+            _ => None,
         };
+
+        {
+            let mut inner = self.lock();
+            inner.osc_target = osc_target.clone();
+        }
 
         let node = node_binary_path()?;
         let working_dir = root.join(&manifest.score_server.working_directory);
         let entry = root.join(&manifest.score_server.entry);
-        let env = build_score_server_env(&mode, &lan_ip, osc_target.as_deref(), Some(2));
+        let (bus, channels) = match &channel_plan {
+            Some((plan, _)) => (Some(plan.private_bus_start), Some(plan.project_channels)),
+            None => (None, None),
+        };
+        let env = build_score_server_env(&mode, &lan_ip, osc_target.as_deref(), bus, channels);
 
         let mut cmd = Command::new(&node);
         cmd.arg(&entry)
@@ -484,56 +641,83 @@ impl SessionManager {
             entry.display()
         );
 
-        {
-            let mut inner = self.lock();
-            inner.startup_stage = 3;
-        }
-        self.emit(&app);
-
-        let generation = {
-            let mut inner = self.lock();
-            inner.generation += 1;
-            inner.reset_run_state();
-            inner.status = "starting".to_string();
-            inner.project_name = Some(manifest.name.clone());
-            inner.project_path = Some(path.clone());
-            inner.audio_mode = Some(mode.clone());
-            inner.lan_ip = Some(lan_ip.clone());
-            inner.osc_target = osc_target.clone();
-            inner.logger = session_log;
-            inner.startup_stage = 1;
-            inner.generation
-        };
-        self.emit(&app);
-
         // Pipe node stdout/stderr into the session tail (§10.3 details).
         if let Some(stdout) = child.stdout.take() {
-            self.spawn_output_reader(stdout, "node");
+            self.spawn_output_reader(stdout, "node", generation);
         }
         if let Some(stderr) = child.stderr.take() {
-            self.spawn_output_reader(stderr, "node");
+            self.spawn_output_reader(stderr, "node", generation);
         }
 
         {
             let mut inner = self.lock();
             inner.child = Some(child);
-            if let Some(mut sc) = scsynth_child {
-                if let Some(stdout) = sc.stdout.take() {
-                    self.spawn_output_reader(stdout, "scsynth");
-                }
-                if let Some(stderr) = sc.stderr.take() {
-                    self.spawn_output_reader(stderr, "scsynth");
-                }
-                inner.scsynth_port = scsynth_port;
-                inner.scsynth = Some(sc);
-            }
+            inner.startup_stage = 3;
         }
+        self.emit(app);
 
-        self.spawn_supervisor(app, app_data_dir, pid, manifest, generation);
+        self.spawn_supervisor(
+            app.clone(),
+            app_data_dir.to_path_buf(),
+            pid,
+            manifest,
+            generation,
+        );
         Ok(())
     }
 
-    fn spawn_output_reader<R: std::io::Read + Send + 'static>(&self, reader: R, tag: &'static str) {
+    /// §9.3: a synchronously failing start must leave nothing behind.
+    /// Tears down whatever this generation already spawned, clears the
+    /// handles, and only then publishes the `error` snapshot — so the
+    /// state the user retries from is provably clean.
+    fn fail_start<R: tauri::Runtime>(
+        &self,
+        app: &AppHandle<R>,
+        app_data_dir: &Path,
+        generation: u64,
+        message: &str,
+    ) {
+        let inner = Arc::clone(&self.inner);
+        Self::fail_generation(app, &inner, app_data_dir, generation, message.to_string());
+    }
+
+    /// §9.3: the **single** failure exit for a generation, shared by the
+    /// synchronous start path, the startup supervisor and the running
+    /// watchdog. Order is the contract: cleanup first, `error` snapshot
+    /// second. A superseded generation is a no-op — a dying old session
+    /// must never overwrite the retry that replaced it.
+    fn fail_generation<R: tauri::Runtime>(
+        app: &AppHandle<R>,
+        inner: &Arc<Mutex<SessionInner>>,
+        app_data_dir: &Path,
+        generation: u64,
+        message: String,
+    ) {
+        {
+            let guard = inner.lock().unwrap_or_else(|e| e.into_inner());
+            if guard.generation != generation {
+                return;
+            }
+        }
+        Self::teardown_children(inner, app_data_dir);
+        {
+            let mut guard = inner.lock().unwrap_or_else(|e| e.into_inner());
+            if guard.generation != generation {
+                return;
+            }
+            guard.status = "error".to_string();
+            guard.error = Some(message);
+            guard.startup_stage = 0;
+        }
+        Self::emit_static(app, inner);
+    }
+
+    fn spawn_output_reader<R: std::io::Read + Send + 'static>(
+        &self,
+        reader: R,
+        tag: &'static str,
+        generation: u64,
+    ) {
         let inner = Arc::clone(&self.inner);
         std::thread::spawn(move || {
             for line in BufReader::new(reader).lines() {
@@ -541,6 +725,11 @@ impl SessionManager {
                     Ok(line) => {
                         log::debug!("[{tag}] {line}");
                         let mut guard = inner.lock().unwrap_or_else(|e| e.into_inner());
+                        // §9.3: a reader still draining a dead generation's
+                        // pipe must not pollute the retry's output tail.
+                        if guard.generation != generation {
+                            return;
+                        }
                         guard.output_tail.push_back(line);
                         while guard.output_tail.len() > OUTPUT_TAIL_LINES {
                             guard.output_tail.pop_front();
@@ -552,9 +741,9 @@ impl SessionManager {
         });
     }
 
-    fn spawn_supervisor(
+    fn spawn_supervisor<R: tauri::Runtime>(
         &self,
-        app: AppHandle,
+        app: AppHandle<R>,
         app_data_dir: PathBuf,
         pid: u32,
         manifest: Manifest,
@@ -585,14 +774,13 @@ impl SessionManager {
                         .and_then(|c| c.try_wait().ok().flatten())
                 };
                 if let Some(status) = exited {
-                    let mut guard = inner.lock().unwrap_or_else(|e| e.into_inner());
-                    guard.status = "error".to_string();
-                    guard.error = Some(format!(
-                        "Score server exited during startup ({status}). See output below."
-                    ));
-                    drop(guard);
-                    Self::teardown_children(&inner, &app_data_dir);
-                    Self::emit_static(&app, &inner);
+                    Self::fail_generation(
+                        &app,
+                        &inner,
+                        &app_data_dir,
+                        generation,
+                        format!("Score server exited during startup ({status}). See output below."),
+                    );
                     return;
                 }
 
@@ -607,21 +795,33 @@ impl SessionManager {
                                 guard.startup_stage = 4;
                                 let sc_port = guard.scsynth_port;
                                 let volume = guard.volume;
+                                let plan = guard.channel_plan.clone();
                                 drop(guard);
 
-                                // §8.1 step 7 (internal): the master synth goes
-                                // after the project group (§6.4). Without it the
-                                // private bus reaches nothing — fail loudly.
-                                if let Some(port) = sc_port {
-                                    if let Err(e) = Self::create_master_stage(port, volume) {
-                                        let mut guard =
-                                            inner.lock().unwrap_or_else(|e| e.into_inner());
-                                        guard.status = "error".to_string();
-                                        guard.error =
-                                            Some(format!("Audio master stage failed: {e}"));
-                                        drop(guard);
-                                        Self::teardown_children(&inner, &app_data_dir);
-                                        Self::emit_static(&app, &inner);
+                                // §8 steps 8–10 (internal): the master stage
+                                // runs after the project group (§7.4). Without
+                                // it the private buses reach nothing — fail
+                                // loudly. N > 2 masters are fixed at unity
+                                // gain (§7.5).
+                                if let (Some(port), Some(plan)) = (sc_port, plan) {
+                                    let gain = if plan.project_channels > 2 {
+                                        1.0
+                                    } else {
+                                        crate::project::audio::volume_percent_to_gain(volume)
+                                    };
+                                    if let Err(e) = Self::create_master_stage(
+                                        port,
+                                        plan.bridged_channels,
+                                        plan.private_bus_start,
+                                        gain,
+                                    ) {
+                                        Self::fail_generation(
+                                            &app,
+                                            &inner,
+                                            &app_data_dir,
+                                            generation,
+                                            format!("Audio master stage failed: {e}"),
+                                        );
                                         return;
                                     }
                                     let mut guard = inner.lock().unwrap_or_else(|e| e.into_inner());
@@ -634,11 +834,14 @@ impl SessionManager {
                                 return;
                             }
                             "error" => {
-                                guard.status = "error".to_string();
-                                guard.error = Some(health_error_message(&health));
                                 drop(guard);
-                                Self::teardown_children(&inner, &app_data_dir);
-                                Self::emit_static(&app, &inner);
+                                Self::fail_generation(
+                                    &app,
+                                    &inner,
+                                    &app_data_dir,
+                                    generation,
+                                    health_error_message(&health),
+                                );
                                 return;
                             }
                             _ => {
@@ -650,15 +853,16 @@ impl SessionManager {
                     Err(e) => {
                         log::debug!("health not ready yet: {e}");
                         if Instant::now() >= deadline {
-                            let mut guard = inner.lock().unwrap_or_else(|e| e.into_inner());
-                            guard.status = "error".to_string();
-                            guard.error = Some(format!(
-                                "Timed out waiting for the project to report ready ({}s).",
-                                HEALTH_TIMEOUT.as_secs()
-                            ));
-                            drop(guard);
-                            Self::teardown_children(&inner, &app_data_dir);
-                            Self::emit_static(&app, &inner);
+                            Self::fail_generation(
+                                &app,
+                                &inner,
+                                &app_data_dir,
+                                generation,
+                                format!(
+                                    "Timed out waiting for the project to report ready ({}s).",
+                                    HEALTH_TIMEOUT.as_secs()
+                                ),
+                            );
                             return;
                         }
                     }
@@ -668,8 +872,8 @@ impl SessionManager {
     }
 
     /// After ready: watch for unexpected exits until stop is requested.
-    fn watch_running(
-        app: &AppHandle,
+    fn watch_running<R: tauri::Runtime>(
+        app: &AppHandle<R>,
         inner: &Arc<Mutex<SessionInner>>,
         app_data_dir: &Path,
         pid: u32,
@@ -686,17 +890,24 @@ impl SessionManager {
                 .as_mut()
                 .and_then(|c| c.try_wait().ok().flatten());
             if let Some(status) = exited {
-                guard.status = "error".to_string();
-                guard.error = Some(format!("Score server exited unexpectedly ({status})."));
                 drop(guard);
-                ChildRegistry::new(app_data_dir.to_path_buf()).clear(pid);
-                Self::emit_static(app, inner);
+                log::warn!("Score server (pid {pid}) exited unexpectedly: {status}");
+                // §9.3: the failed generation must not leave the audio
+                // engine behind — node/scsynth stop before the error
+                // snapshot is emitted, so Retry starts clean.
+                Self::fail_generation(
+                    app,
+                    inner,
+                    app_data_dir,
+                    generation,
+                    format!("Score server exited unexpectedly ({status})."),
+                );
                 return;
             }
         }
     }
 
-    fn emit_static(app: &AppHandle, inner: &Arc<Mutex<SessionInner>>) {
+    fn emit_static<R: tauri::Runtime>(app: &AppHandle<R>, inner: &Arc<Mutex<SessionInner>>) {
         let snapshot = {
             let guard = inner.lock().unwrap_or_else(|e| e.into_inner());
             guard.snapshot()
@@ -706,23 +917,30 @@ impl SessionManager {
         }
     }
 
-    /// Boots scsynth on a fresh dynamic UDP port and waits for /status
-    /// (§6.2, §8.1 step 2). On failure the child is killed before returning.
+    /// Boots scsynth on a fresh dynamic UDP port with K hardware output
+    /// channels (§7.2) and waits for /status (§8 step 4). On failure the
+    /// child is killed before returning.
     fn boot_scsynth(
         app_data_dir: &Path,
         sc_cfg: &crate::project::manifest::ScsynthConfig,
+        k: u32,
         device: Option<&str>,
     ) -> Result<(Child, u16), String> {
         let port = allocate_udp_port()?;
         let binary = crate::project::audio::scsynth_binary_path()?;
         let plugins = crate::project::audio::plugins_dir()?;
         let mut child =
-            crate::project::audio::spawn_scsynth(&binary, sc_cfg, port, &plugins, device)?;
+            crate::project::audio::spawn_scsynth(&binary, sc_cfg, k, port, &plugins, device)?;
         let pid = child.id();
 
         let client = crate::project::audio::OscClient::connect(&format!("127.0.0.1:{port}"))?;
         if let Err(e) = crate::project::audio::wait_for_scsynth(&client, &mut child) {
-            children::kill_escalate(&mut child, pid, children::SHUTDOWN_GRACE_WINDOW);
+            if !children::kill_escalate(&mut child, pid, children::SHUTDOWN_GRACE_WINDOW) {
+                // §9.3: record the unconfirmed kill so the next start's
+                // targeted orphan cleanup frees the audio device.
+                ChildRegistry::new(app_data_dir.to_path_buf())
+                    .record(pid, "scsynth-aarch64-apple-darwin".to_string());
+            }
             return Err(e);
         }
         ChildRegistry::new(app_data_dir.to_path_buf())
@@ -734,21 +952,21 @@ impl SessionManager {
         Ok((child, port))
     }
 
-    /// §8.1 step 7 (internal): create the App Master Synth at the tail of
-    /// the root group, applying the session's current volume (§6.4).
-    fn create_master_stage(port: u16, volume_percent: f32) -> Result<(), String> {
+    /// §8 steps 8–9 (internal): create the App master group with K mono
+    /// instances bridging private bus B+i to hardware bus i (§7.4).
+    fn create_master_stage(port: u16, k: u32, b: u32, gain: f32) -> Result<(), String> {
         let client = crate::project::audio::OscClient::connect(&format!("127.0.0.1:{port}"))?;
         let synthdef = crate::project::audio::master_synthdef_path()?;
-        crate::project::audio::create_master_synth(
-            &client,
-            &synthdef,
-            crate::project::audio::volume_percent_to_gain(volume_percent),
-        )
+        crate::project::audio::create_master_stage(&client, &synthdef, k, b, gain)
     }
 
     /// Stops the node score server and scsynth (§8.2): node SIGTERM with a
-    /// grace window, master synth release, scsynth quit. Both are removed
-    /// from the session-children record afterwards.
+    /// grace window, master synth release, scsynth quit. Handles are always
+    /// cleared, so the session is provably child-free afterwards (§9.3).
+    ///
+    /// The session-children record is only cleared for a **confirmed** kill;
+    /// an unconfirmed one keeps its ownership record so the next start
+    /// re-runs the targeted orphan cleanup before its port preflight.
     fn teardown_children(inner: &Arc<Mutex<SessionInner>>, app_data_dir: &Path) {
         let registry = ChildRegistry::new(app_data_dir.to_path_buf());
         let (node_child, node_pid, sc_child, sc_pid, sc_port, master_ready, mut logger_opt) = {
@@ -760,8 +978,8 @@ impl SessionManager {
                 node_pid,
                 guard.scsynth.take(),
                 sc_pid,
-                guard.scsynth_port,
-                guard.master_synth_ready,
+                guard.scsynth_port.take(),
+                std::mem::take(&mut guard.master_synth_ready),
                 guard.logger.take(),
             )
         };
@@ -770,16 +988,19 @@ impl SessionManager {
         }
 
         if let Some(mut c) = node_child {
-            children::kill_escalate(
-                &mut c,
-                node_pid.unwrap_or(0),
-                children::SHUTDOWN_GRACE_WINDOW,
-            );
-            registry.clear(node_pid.unwrap_or(0));
-            log::info!("Score server stopped (pid {})", node_pid.unwrap_or(0));
+            let pid = node_pid.unwrap_or(0);
+            if children::kill_escalate(&mut c, pid, children::SHUTDOWN_GRACE_WINDOW) {
+                registry.clear(pid);
+                log::info!("Score server stopped (pid {pid})");
+            } else {
+                log::warn!(
+                    "Score server (pid {pid}) could not be confirmed dead; keeping its ownership record for the next start"
+                );
+            }
         }
 
         if let Some(mut sc) = sc_child {
+            let pid = sc_pid.unwrap_or(0);
             if let Some(port) = sc_port {
                 if let Ok(client) =
                     crate::project::audio::OscClient::connect(&format!("127.0.0.1:{port}"))
@@ -787,13 +1008,14 @@ impl SessionManager {
                     crate::project::audio::quit_scsynth(&client, master_ready);
                 }
             }
-            children::kill_escalate(
-                &mut sc,
-                sc_pid.unwrap_or(0),
-                children::SHUTDOWN_GRACE_WINDOW,
-            );
-            registry.clear(sc_pid.unwrap_or(0));
-            log::info!("scsynth stopped (pid {})", sc_pid.unwrap_or(0));
+            if children::kill_escalate(&mut sc, pid, children::SHUTDOWN_GRACE_WINDOW) {
+                registry.clear(pid);
+                log::info!("scsynth stopped (pid {pid})");
+            } else {
+                log::warn!(
+                    "scsynth (pid {pid}) could not be confirmed dead; keeping its ownership record for the next start"
+                );
+            }
         }
 
         if let Some(ref mut log) = logger_opt {
@@ -839,14 +1061,30 @@ impl SessionManager {
         Ok(())
     }
 
-    /// §6.4: set the master volume (percent 0-100, dB-linear). Applied live
-    /// via OSC when an internal session is running.
+    /// §7.5: set the master volume (percent 0-100, dB-linear). Applied live
+    /// via OSC when an internal session is running. For N > 2 projects the
+    /// master is fixed at 100% / 0 dB: 100 is a successful no-op, anything
+    /// else is a diagnosable error.
     pub fn set_master_volume<R: tauri::Runtime>(
         &self,
         app: &AppHandle<R>,
         percent: f32,
     ) -> Result<(), String> {
         let percent = percent.clamp(0.0, 100.0);
+        {
+            let inner = self.lock();
+            if let Some(plan) = &inner.channel_plan {
+                if plan.project_channels > 2 {
+                    if (percent - 100.0).abs() > f32::EPSILON {
+                        return Err(format!(
+                            "Master volume is fixed at 100% (0 dB) for {}-channel projects; adjust the monitoring level downstream",
+                            plan.project_channels
+                        ));
+                    }
+                    return Ok(());
+                }
+            }
+        }
         let (port, apply) = {
             let mut inner = self.lock();
             inner.volume = percent;
@@ -901,23 +1139,50 @@ mod tests {
     use super::*;
 
     #[test]
-    fn env_internal_injects_osc_and_bus() {
-        let env =
-            build_score_server_env("internal", "192.168.1.10", Some("127.0.0.1:49328"), Some(2));
+    fn env_internal_injects_osc_bus_and_channels() {
+        // A 16ch project fully bridged: B = K = 16, N = 16 — never fixed 2.
+        let env = build_score_server_env(
+            "internal",
+            "192.168.1.10",
+            Some("127.0.0.1:49328"),
+            Some(16),
+            Some(16),
+        );
         let get = |k: &str| {
             env.iter()
                 .find(|(key, _)| key == k)
                 .map(|(_, v)| v.as_str())
         };
         assert_eq!(get("PNDS_OSC_TARGET"), Some("127.0.0.1:49328"));
-        assert_eq!(get("PNDS_AUDIO_OUTPUT_BUS"), Some("2"));
-        assert_eq!(get("PNDS_AUDIO_OUTPUT_CHANNELS"), Some("2"));
+        assert_eq!(get("PNDS_AUDIO_OUTPUT_BUS"), Some("16"));
+        assert_eq!(get("PNDS_AUDIO_OUTPUT_CHANNELS"), Some("16"));
         assert_eq!(get("PNDS_HOST_IP"), Some("192.168.1.10"));
+        // Channel-poor bridge: 16ch project on a 2ch device → B = K = 2, N = 16.
+        let env = build_score_server_env(
+            "internal",
+            "192.168.1.10",
+            Some("127.0.0.1:49328"),
+            Some(2),
+            Some(16),
+        );
+        let get = |k: &str| {
+            env.iter()
+                .find(|(key, _)| key == k)
+                .map(|(_, v)| v.as_str())
+        };
+        assert_eq!(get("PNDS_AUDIO_OUTPUT_BUS"), Some("2"));
+        assert_eq!(get("PNDS_AUDIO_OUTPUT_CHANNELS"), Some("16"));
     }
 
     #[test]
     fn env_external_injects_target_only() {
-        let env = build_score_server_env("external", "192.168.1.10", Some("127.0.0.1:3333"), None);
+        let env = build_score_server_env(
+            "external",
+            "192.168.1.10",
+            Some("127.0.0.1:3333"),
+            None,
+            None,
+        );
         let get = |k: &str| {
             env.iter()
                 .find(|(key, _)| key == k)
@@ -930,9 +1195,39 @@ mod tests {
 
     #[test]
     fn env_none_injects_host_only() {
-        let env = build_score_server_env("none", "192.168.1.10", None, None);
+        let env = build_score_server_env("none", "192.168.1.10", None, None, None);
         assert_eq!(env.len(), 1);
         assert_eq!(env[0].0, "PNDS_HOST_IP");
+    }
+
+    #[test]
+    fn multichannel_volume_is_fixed_at_unity() {
+        let app = tauri::test::mock_app().handle().clone();
+        let manager = SessionManager::default();
+        {
+            let mut inner = manager.lock();
+            inner.channel_plan = Some(crate::project::audio::channel_plan(16, 16));
+            inner.volume = 100.0;
+        }
+        // Non-100 is a diagnosable error.
+        let err = manager.set_master_volume(&app, 50.0).unwrap_err();
+        assert!(err.contains("fixed at 100%"), "unexpected: {err}");
+        assert!(err.contains("16"), "unexpected: {err}");
+        // 100 is a successful no-op.
+        manager.set_master_volume(&app, 100.0).unwrap();
+        assert_eq!(manager.snapshot().volume, 100.0);
+    }
+
+    #[test]
+    fn stereo_volume_updates_normally() {
+        let app = tauri::test::mock_app().handle().clone();
+        let manager = SessionManager::default();
+        {
+            let mut inner = manager.lock();
+            inner.channel_plan = Some(crate::project::audio::channel_plan(2, 2));
+        }
+        manager.set_master_volume(&app, 40.0).unwrap();
+        assert_eq!(manager.snapshot().volume, 40.0);
     }
 
     #[test]
@@ -951,7 +1246,11 @@ mod tests {
     fn graceful_stop_kills_child() {
         let mut child = Command::new("sleep").arg("30").spawn().unwrap();
         let pid = child.id();
-        children::kill_escalate(&mut child, pid, Duration::from_secs(2));
+        assert!(children::kill_escalate(
+            &mut child,
+            pid,
+            Duration::from_secs(2)
+        ));
         assert!(child.try_wait().unwrap().is_some());
     }
 
@@ -993,6 +1292,189 @@ mod tests {
             .map(|s| s.success())
             .unwrap_or(false);
         assert!(!alive);
+    }
+
+    /// §9.3: an error-state session has NO lingering children — the failed
+    /// generation was torn down before the error snapshot. Retry starts
+    /// from a clean slate.
+    #[test]
+    fn teardown_clears_children_for_retry() {
+        let manager = SessionManager::default();
+        let dir = tempfile::tempdir().unwrap();
+
+        let child = Command::new("sleep").arg("30").spawn().unwrap();
+        let pid = child.id();
+        {
+            let mut inner = manager.lock();
+            inner.child = Some(child);
+            inner.status = "error".to_string();
+        }
+
+        // Simulate the supervisor's failure path: teardown, then the
+        // error snapshot.
+        let inner = std::sync::Arc::clone(&manager.inner);
+        SessionManager::teardown_children(&inner, dir.path());
+
+        let snapshot = manager.snapshot();
+        assert_eq!(snapshot.status, "error");
+        assert!(!manager.has_active_session());
+        let alive = Command::new("/bin/kill")
+            .args(["-0", &pid.to_string()])
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        assert!(!alive, "teardown must kill the lingering node");
+    }
+
+    /// §9.3: every asynchronous failure (health timeout, health `error`,
+    /// master-stage failure, early Node/scsynth exit) funnels through
+    /// `fail_generation`. Its contract: children are gone and the handles
+    /// are cleared BEFORE the `error` snapshot becomes observable.
+    #[test]
+    fn fail_generation_cleans_up_before_publishing_error() {
+        let app = tauri::test::mock_app().handle().clone();
+        let manager = SessionManager::default();
+        let dir = tempfile::tempdir().unwrap();
+
+        let node = Command::new("sleep").arg("30").spawn().unwrap();
+        let scsynth = Command::new("sleep").arg("30").spawn().unwrap();
+        let (node_pid, sc_pid) = (node.id(), scsynth.id());
+        let generation = {
+            let mut inner = manager.lock();
+            inner.generation += 1;
+            inner.child = Some(node);
+            inner.scsynth = Some(scsynth);
+            inner.scsynth_port = Some(57110);
+            inner.status = "starting".to_string();
+            inner.startup_stage = 3;
+            inner.generation
+        };
+
+        let inner = std::sync::Arc::clone(&manager.inner);
+        SessionManager::fail_generation(
+            &app,
+            &inner,
+            dir.path(),
+            generation,
+            "Timed out waiting for the project to report ready (30s).".to_string(),
+        );
+
+        let snapshot = manager.snapshot();
+        assert_eq!(snapshot.status, "error");
+        assert_eq!(
+            snapshot.error.as_deref(),
+            Some("Timed out waiting for the project to report ready (30s).")
+        );
+        assert_eq!(snapshot.startup_stage, 0);
+        assert!(!manager.has_active_session());
+        {
+            let guard = manager.lock();
+            assert!(guard.scsynth.is_none(), "scsynth handle must be cleared");
+            assert!(guard.scsynth_port.is_none(), "scsynth port must be cleared");
+        }
+        for pid in [node_pid, sc_pid] {
+            let alive = Command::new("/bin/kill")
+                .args(["-0", &pid.to_string()])
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false);
+            assert!(!alive, "pid {pid} must be gone before the error snapshot");
+        }
+    }
+
+    /// §9.3: a dying old generation must never overwrite the retry that
+    /// replaced it — the late failure is dropped, not published.
+    #[test]
+    fn stale_generation_failure_does_not_touch_the_new_session() {
+        let app = tauri::test::mock_app().handle().clone();
+        let manager = SessionManager::default();
+        let dir = tempfile::tempdir().unwrap();
+
+        let stale_generation = {
+            let mut inner = manager.lock();
+            inner.generation = 7;
+            inner.generation
+        };
+        // A Retry bumped the generation; the new session is already starting.
+        {
+            let mut inner = manager.lock();
+            inner.generation = 8;
+            inner.status = "starting".to_string();
+            inner.startup_stage = 2;
+        }
+
+        let inner = std::sync::Arc::clone(&manager.inner);
+        SessionManager::fail_generation(
+            &app,
+            &inner,
+            dir.path(),
+            stale_generation,
+            "stale supervisor error".to_string(),
+        );
+
+        let snapshot = manager.snapshot();
+        assert_eq!(snapshot.status, "starting");
+        assert_eq!(snapshot.error, None);
+        assert_eq!(snapshot.startup_stage, 2);
+    }
+
+    /// §9.3: `start` opens a new generation before it does any work — the
+    /// previous run's error/health/output tail never bleeds into the retry,
+    /// and the very first snapshot the UI sees is `starting` at stage 1.
+    #[test]
+    fn start_failure_opens_a_clean_generation_then_reports_the_new_error() {
+        let app = tauri::test::mock_app().handle().clone();
+        let manager = SessionManager::default();
+        let dir = tempfile::tempdir().unwrap();
+
+        {
+            let mut inner = manager.lock();
+            inner.status = "error".to_string();
+            inner.error = Some("Port 6868 is already in use".to_string());
+            inner.health = Some(HealthPayload {
+                status: "error".to_string(),
+                project_id: None,
+                audio_mode: None,
+                audio: None,
+                score_server: None,
+            });
+            inner
+                .output_tail
+                .push_back("stale line from the failed run".into());
+        }
+        let before = manager.lock().generation;
+
+        // Missing project directory: fails inside start_generation, i.e.
+        // after the `starting` snapshot was already published.
+        let err = manager
+            .start(
+                app,
+                dir.path().to_path_buf(),
+                dir.path().join("missing").to_string_lossy().to_string(),
+                "none".to_string(),
+                "192.168.1.10".to_string(),
+                None,
+            )
+            .unwrap_err();
+
+        assert!(
+            manager.lock().generation > before,
+            "generation must advance"
+        );
+        let snapshot = manager.snapshot();
+        assert_eq!(snapshot.status, "error");
+        assert_eq!(snapshot.error.as_deref(), Some(err.as_str()));
+        assert_ne!(
+            snapshot.error.as_deref(),
+            Some("Port 6868 is already in use"),
+            "the retry must surface its own error, not the previous one"
+        );
+        assert!(snapshot.health.is_none(), "stale health must be cleared");
+        assert!(
+            snapshot.output_tail.is_empty(),
+            "stale output must be cleared"
+        );
+        assert!(!manager.has_active_session());
     }
 
     /// Integration: health polling against a real (fixture) score server.
@@ -1046,7 +1528,11 @@ mod tests {
         assert_eq!(health.audio.as_ref().unwrap().status, "disabled");
 
         let pid = child.id();
-        children::kill_escalate(&mut child, pid, Duration::from_secs(2));
+        assert!(children::kill_escalate(
+            &mut child,
+            pid,
+            Duration::from_secs(2)
+        ));
         assert!(child.try_wait().unwrap().is_some());
     }
 }

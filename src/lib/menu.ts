@@ -16,6 +16,7 @@ import { message } from '@tauri-apps/plugin-dialog'
 import i18n from '@/i18n/config'
 import { logger } from '@/lib/logger'
 import { notifications } from '@/lib/notifications'
+import { toggleFullscreen } from '@/store/window-store'
 
 const APP_NAME = 'PNDS'
 
@@ -97,6 +98,15 @@ export async function buildAppMenu(): Promise<Menu> {
         await PredefinedMenuItem.new({
           item: 'Maximize',
           text: t('menu.zoom'),
+        }),
+        await PredefinedMenuItem.new({ item: 'Separator' }),
+        // §7.4: the single fullscreen action — same handler as ⌃⌘F and
+        // the sidebar button.
+        await MenuItem.new({
+          id: 'toggle-fullscreen',
+          text: t('menu.enterFullScreen'),
+          accelerator: 'Ctrl+Cmd+F',
+          action: () => void toggleFullscreen(),
         }),
       ],
     })

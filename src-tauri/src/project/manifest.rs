@@ -38,11 +38,20 @@ pub struct ScoreServer {
 pub struct AudioConfig {
     pub default_mode: String,
     pub supported_modes: Vec<String>,
+    /// Discrete project output signals (spec §3.3): 1..=64, default 2.
+    /// Not a speaker layout — the App never downmixes.
+    #[serde(default = "default_output_channels")]
+    pub output_channels: u32,
     pub synthdefs: Option<Vec<String>>,
     pub scsynth: Option<ScsynthConfig>,
     /// Debug-only fallback for standalone runs. The App must never use it;
     /// internal mode OSC targets are always dynamically assigned (§5.2).
     pub standalone_target: Option<String>,
+}
+
+/// spec §3.3: `audio.outputChannels` defaults to 2 when omitted.
+fn default_output_channels() -> u32 {
+    2
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
@@ -165,6 +174,19 @@ fn validate_schema(value: &Value) -> Result<(), String> {
         ));
     }
 
+    // spec §3.3: optional, integer 1..=64, default 2.
+    let output_channels = match get(value, "audio.outputChannels") {
+        None | Some(Value::Null) => 2u64,
+        Some(v) => match v.as_u64() {
+            Some(n) if (1..=64).contains(&n) => n,
+            _ => {
+                return Err(format!(
+                    "audio.outputChannels must be an integer between 1 and 64 (declared: {v})"
+                ));
+            }
+        },
+    };
+
     // §5.2 conditional requirements for internal mode.
     if modes.contains(&"internal") {
         match get(value, "audio.synthdefs").and_then(Value::as_array) {
@@ -189,6 +211,18 @@ fn validate_schema(value: &Value) -> Result<(), String> {
                     ))
                 }
             }
+        }
+
+        // spec §3.4: bus capacity must cover hardware buses plus the N
+        // private project buses.
+        let bus_channels = get(value, "audio.scsynth.audioBusChannels")
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
+        let required = 2 * output_channels;
+        if bus_channels < required {
+            return Err(format!(
+                "audio.scsynth.audioBusChannels ({bus_channels}) is too small for audio.outputChannels ({output_channels}): at least {required} (2 × outputChannels) is required"
+            ));
         }
     }
 
@@ -277,9 +311,25 @@ mod tests {
     use super::*;
     use std::fs;
 
+    /// The shipped `examples/multichannel-tone-test` utility project must keep
+    /// passing the App parser and preflight (§11: bundled verification
+    /// project contract).
+    #[test]
+    fn tone_test_example_passes_app_parser() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../examples/multichannel-tone-test");
+        let manifest = load_manifest(&root).unwrap();
+        assert_eq!(manifest.audio.output_channels, 16);
+        assert_eq!(manifest.audio.supported_modes, vec!["internal"]);
+        assert!(manifest.audio.scsynth.as_ref().unwrap().audio_bus_channels >= 32);
+        // Zero production dependencies -> preflight must not require
+        // node_modules (spec §2).
+        crate::project::preflight::check_dependencies(&root).unwrap();
+        // (Port availability is checked at session start, not here: a
+        // running PNDS App legitimately occupies the example ports.)
+    }
+
     /// Writes a valid §5.1 manifest plus the files it references.
     fn write_valid_project(dir: &Path) {
-        fs::create_dir_all(dir.join("node_modules")).unwrap();
         fs::create_dir_all(dir.join("supercollider/synthdefs")).unwrap();
         fs::write(dir.join("server.js"), "// score server").unwrap();
         fs::write(
@@ -416,9 +466,84 @@ mod tests {
     }
 
     #[test]
+    fn output_channels_defaults_to_two() {
+        let dir = tempfile::tempdir().unwrap();
+        write_valid_project(dir.path());
+        let manifest = load_manifest(dir.path()).unwrap();
+        assert_eq!(manifest.audio.output_channels, 2);
+    }
+
+    #[test]
+    fn output_channels_accepts_1_to_64() {
+        for n in [1u32, 2, 16, 64] {
+            let dir = tempfile::tempdir().unwrap();
+            write_valid_project(dir.path());
+            write_manifest(
+                dir.path(),
+                &format!(
+                    r#"{{
+                      "schemaVersion": 1, "id": "x", "name": "X", "version": "0.1.0",
+                      "scoreServer": {{ "entry": "server.js", "workingDirectory": ".", "performerPort": 6868, "monitorPort": 6869 }},
+                      "audio": {{ "defaultMode": "none", "supportedModes": ["none"], "outputChannels": {n} }}
+                    }}"#
+                ),
+            );
+            let manifest = load_manifest(dir.path()).unwrap();
+            assert_eq!(manifest.audio.output_channels, n);
+        }
+    }
+
+    #[test]
+    fn output_channels_rejects_out_of_range_and_non_integers() {
+        for declared in ["0", "65", "2.5", "\"16\"", "-1"] {
+            let dir = tempfile::tempdir().unwrap();
+            write_valid_project(dir.path());
+            write_manifest(
+                dir.path(),
+                &format!(
+                    r#"{{
+                      "schemaVersion": 1, "id": "x", "name": "X", "version": "0.1.0",
+                      "scoreServer": {{ "entry": "server.js", "workingDirectory": ".", "performerPort": 6868, "monitorPort": 6869 }},
+                      "audio": {{ "defaultMode": "none", "supportedModes": ["none"], "outputChannels": {declared} }}
+                    }}"#
+                ),
+            );
+            let err = load_manifest(dir.path()).unwrap_err();
+            assert!(err.contains("audio.outputChannels"), "{declared}: {err}");
+        }
+    }
+
+    #[test]
+    fn internal_bus_capacity_must_cover_two_times_output_channels() {
+        for (bus, expected_ok) in [(32u32, true), (31, false)] {
+            let dir = tempfile::tempdir().unwrap();
+            write_valid_project(dir.path());
+            write_manifest(
+                dir.path(),
+                &format!(
+                    r#"{{
+                      "schemaVersion": 1, "id": "x", "name": "X", "version": "0.1.0",
+                      "scoreServer": {{ "entry": "server.js", "workingDirectory": ".", "performerPort": 6868, "monitorPort": 6869 }},
+                      "audio": {{ "defaultMode": "internal", "supportedModes": ["internal"],
+                        "outputChannels": 16,
+                        "synthdefs": ["supercollider/synthdefs/inarticulate-iii.scsyndef"],
+                        "scsynth": {{ "sampleRate": 48000, "blockSize": 64, "audioBusChannels": {bus} }} }}
+                    }}"#
+                ),
+            );
+            let result = load_manifest(dir.path());
+            assert_eq!(result.is_ok(), expected_ok, "bus={bus}");
+            if let Err(err) = result {
+                assert!(err.contains("audio.scsynth.audioBusChannels (31)"), "{err}");
+                assert!(err.contains("audio.outputChannels (16)"), "{err}");
+                assert!(err.contains("at least 32"), "{err}");
+            }
+        }
+    }
+
+    #[test]
     fn external_only_project_needs_no_synthdefs() {
         let dir = tempfile::tempdir().unwrap();
-        fs::create_dir_all(dir.path().join("node_modules")).unwrap();
         fs::write(dir.path().join("server.js"), "//").unwrap();
         write_manifest(
             dir.path(),

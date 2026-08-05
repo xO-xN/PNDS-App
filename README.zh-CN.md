@@ -53,14 +53,15 @@ PNDS AI Skills 是一组面向创作者的 AI 辅助工具，用于在 PNDS 框�
 - **macOS Apple Silicon** 桌面 Host；
 - **同一局域网内**的演出：Host 电脑 + 手机/平板演奏者；
 - 由用户主动选择并信任的**本地工程目录**；
-- 立体声输出。
+- 通过内置 SuperCollider 声音服务器实现**离散多声道输出**（1–64 路），以及 External（OSC 到自定声音引擎）与 None（仅乐谱）模式；
+- 随包 **Node.js 24** 运行时，工程无需在 Host 上另装 Node；
+- **自动更新**与 App 内提示。
 
 以下为**后续目标**，不属于 V1：
 
 - 跨互联网、多地实时共奏；
-- 多声道 / 环绕声输出；
 - Intel Mac、Windows、Linux；
-- 工程压缩包、在线工程库与工程下载。
+- 工程压缩包（`.pnds`）、在线工程库与工程下载。
 
 ## 下载与安装
 
@@ -85,7 +86,7 @@ PNDS AI Skills 是一组面向创作者的 AI 辅助工具，用于在 PNDS 框�
 Inarticulate III/
 ├── manifest.json
 ├── server.js
-├── node_modules/
+├── node_modules/                 # 仅在存在生产依赖时需要
 ├── public/
 └── supercollider/
     └── synthdefs/
@@ -157,4 +158,7 @@ npm run check:all  # 完整质量检查（typecheck / lint / ast-grep / prettier
 
 ## 相关文档
 
-- [`docs/PNDS_APP_REQUIREMENTS.md`](docs/PNDS_APP_REQUIREMENTS.md)：PNDS App V1 的实现规范与工程运行契约。
+- [`docs/PNDS_SCORE_PROJECT_SPECIFICATION.md`](docs/PNDS_SCORE_PROJECT_SPECIFICATION.md)：数字乐谱工程目录、manifest、资产与网页要求。
+- [`docs/PNDS_RUNTIME_CONTRACT.md`](docs/PNDS_RUNTIME_CONTRACT.md)：App/工程进程、health、音频总线与关闭契约。
+- [`docs/PNDS_APP_REQUIREMENTS.md`](docs/PNDS_APP_REQUIREMENTS.md)：PNDS App 的 evergreen 产品要求与 Definition of Done。
+- [`docs/README.md`](docs/README.md)：完整文档索引。

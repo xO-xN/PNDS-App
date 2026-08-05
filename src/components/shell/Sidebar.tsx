@@ -29,6 +29,8 @@ interface SidebarProps {
   /** welcome/loading: statically visible; running: floats over the monitor */
   variant: 'static' | 'overlay'
   onRequestClose?: () => void
+  /** Overlay mode: a settings popup menu is open — keep the sidebar visible. */
+  onPopupOpenChange?: (open: boolean) => void
 }
 
 /**
@@ -40,7 +42,11 @@ interface SidebarProps {
  * that are not currently open. Switching while a session runs asks for
  * confirmation first (§8.3, Figma "Loading another project").
  */
-export function Sidebar({ variant, onRequestClose }: SidebarProps) {
+export function Sidebar({
+  variant,
+  onRequestClose,
+  onPopupOpenChange,
+}: SidebarProps) {
   const { t } = useTranslation()
   const trustedPaths = useProjectStore(state => state.trustedPaths)
   const currentProject = useProjectStore(state => state.currentProject)
@@ -61,8 +67,15 @@ export function Sidebar({ variant, onRequestClose }: SidebarProps) {
   const dropPathRef = useRef<string | null>(null)
   const pendingPathRef = useRef<string | null>(null)
 
-  const basename = (path: string) =>
-    path.split('/').filter(Boolean).pop() ?? path
+  // Title-case the folder name (multichannel-tone-test → Multichannel Tone
+  // Test) so an unselected project reads the same as its manifest name.
+  const displayName = (path: string) => {
+    const base = path.split('/').filter(Boolean).pop() ?? path
+    return base
+      .split('-')
+      .map(part => (part ? part.charAt(0).toUpperCase() + part.slice(1) : part))
+      .join(' ')
+  }
 
   /** Share: open the monitor page in the default external browser. */
   const handleShare = async () => {
@@ -277,7 +290,7 @@ export function Sidebar({ variant, onRequestClose }: SidebarProps) {
                 title={path}
                 className="flex-1 truncate text-center text-[15px] text-(--pnds-text)/85 disabled:opacity-60"
               >
-                {isCurrent ? currentProject.manifest.name : basename(path)}
+                {isCurrent ? currentProject.manifest.name : displayName(path)}
               </button>
 
               {/* Right ✕: remove from history — never for the open project */}
@@ -322,7 +335,7 @@ export function Sidebar({ variant, onRequestClose }: SidebarProps) {
           clips the button into a full-bleed footer. */}
       <div className="mt-auto px-5 pb-5 pt-6">
         <div className="overflow-hidden rounded-xl bg-(--pnds-card) shadow-[0_1px_3px_rgba(23,26,43,0.1)]">
-          <SettingsCard />
+          <SettingsCard onPopupOpenChange={onPopupOpenChange} />
           <SessionActionButton />
         </div>
       </div>
@@ -338,12 +351,12 @@ export function Sidebar({ variant, onRequestClose }: SidebarProps) {
           <AlertDialogHeader>
             <AlertDialogTitle>
               {t('switchProject.title', {
-                name: pendingSwitchPath ? basename(pendingSwitchPath) : '',
+                name: pendingSwitchPath ? displayName(pendingSwitchPath) : '',
               })}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {t('switchProject.description', {
-                name: pendingSwitchPath ? basename(pendingSwitchPath) : '',
+                name: pendingSwitchPath ? displayName(pendingSwitchPath) : '',
               })}
             </AlertDialogDescription>
           </AlertDialogHeader>

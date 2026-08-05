@@ -53,14 +53,15 @@ The first version (V1), now complete, deliberately focuses on:
 - A **macOS Apple Silicon** desktop host
 - Performances **within a single local network**: the host Mac plus phone/tablet performers
 - **Local project directories** that the user explicitly selects and trusts
-- Stereo output
+- **Discrete multichannel output** (1–64 channels) through the built-in SuperCollider sound server, plus External (OSC to a sound engine you specify) and None (score only) modes
+- A bundled **Node.js 24** runtime, so projects run without requiring Node on the host machine
+- **Automatic updates** with in-app notifications
 
 The following are **later goals** and are not part of V1:
 
 - Distributed performance across the internet
-- Multichannel / surround output
 - Intel Mac, Windows, Linux
-- Project archives, an online project library, and project downloads
+- Project archives (`.pnds`), an online project library, and project downloads
 
 ## Download & Install
 
@@ -85,7 +86,7 @@ Prepare a complete project directory that can run offline, for example:
 Inarticulate III/
 ├── manifest.json
 ├── server.js
-├── node_modules/
+├── node_modules/                 # only when the project has production dependencies
 ├── public/
 └── supercollider/
     └── synthdefs/
@@ -157,4 +158,7 @@ For development conventions and agent working rules see [`AGENTS.md`](AGENTS.md)
 
 ## Further Documentation
 
-- [`docs/PNDS_APP_REQUIREMENTS.md`](docs/PNDS_APP_REQUIREMENTS.md): the V1 implementation spec and the runtime contract for score projects.
+- [`docs/PNDS_SCORE_PROJECT_SPECIFICATION.md`](docs/PNDS_SCORE_PROJECT_SPECIFICATION.md): score-project directory, manifest, assets, and web-page requirements.
+- [`docs/PNDS_RUNTIME_CONTRACT.md`](docs/PNDS_RUNTIME_CONTRACT.md): App/project process, health, audio-bus, and shutdown contract.
+- [`docs/PNDS_APP_REQUIREMENTS.md`](docs/PNDS_APP_REQUIREMENTS.md): evergreen PNDS App product requirements and Definition of Done.
+- [`docs/README.md`](docs/README.md): complete documentation index.

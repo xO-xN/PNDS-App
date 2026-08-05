@@ -24,3 +24,5 @@ src/lib/bindings.ts
 
 # SuperCollider source (prettier would mangle it as markdown)
 *.scd
+# Standalone CommonJS example projects
+examples/

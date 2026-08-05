@@ -1,7 +1,5 @@
-import { useState } from 'react'
 import { useSessionStore } from '@/store/session-store'
-import { Sidebar } from './Sidebar'
-import { cn } from '@/lib/utils'
+import { HoverSidebar } from './HoverSidebar'
 
 /**
  * Performance view (§10.1): the project's monitor page fills the whole
@@ -15,8 +13,9 @@ export function MonitorView() {
   const projectName = useSessionStore(state => state.projectName)
   const lanIp = useSessionStore(state => state.lanIp)
   const reloadNonce = useSessionStore(state => state.monitorReloadNonce)
-  const [sidebarVisible, setSidebarVisible] = useState(false)
-
+  // First mount fades in from the load-complete handoff; later remounts
+  // (fullscreen toggles) render instantly under the dissolve. The App
+  // shell passes "initial" only for the session-start instance.
   const monitorPort = health?.scoreServer?.monitorPort
   if (!lanIp || !monitorPort) {
     // Should not happen for a ready session; fail visibly rather than blank.
@@ -28,7 +27,7 @@ export function MonitorView() {
   }
 
   return (
-    <div className="relative h-screen w-screen animate-[fade-in_0.4s_ease-in] overflow-hidden bg-black">
+    <div className="relative h-screen w-screen overflow-hidden bg-black">
       <iframe
         key={reloadNonce}
         src={`http://${lanIp}:${monitorPort}/`}
@@ -44,29 +43,7 @@ export function MonitorView() {
         PNDS - {projectName}
       </div>
 
-      {/* Left-edge hover zone that pops the sidebar in */}
-      <div
-        data-testid="sidebar-hover-zone"
-        className="absolute left-0 top-0 z-40 h-full w-2"
-        onMouseEnter={() => setSidebarVisible(true)}
-      />
-
-      {/* Floating sidebar: always mounted so the slide/fade animates both ways */}
-      <div
-        data-testid="sidebar-popover"
-        className={cn(
-          'absolute bottom-3 left-3 top-3 z-50 transition-all duration-200 ease-out',
-          sidebarVisible
-            ? 'translate-x-0 opacity-100'
-            : 'pointer-events-none -translate-x-5 opacity-0'
-        )}
-        onMouseLeave={() => setSidebarVisible(false)}
-      >
-        <Sidebar
-          variant="overlay"
-          onRequestClose={() => setSidebarVisible(false)}
-        />
-      </div>
+      <HoverSidebar />
     </div>
   )
 }

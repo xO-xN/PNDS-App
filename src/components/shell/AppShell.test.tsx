@@ -1,9 +1,10 @@
-import { render, screen, act } from '@/test/test-utils'
+import { render, screen, act, fireEvent } from '@/test/test-utils'
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { listen } from '@tauri-apps/api/event'
 import { commands } from '@/lib/tauri-bindings'
 import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
+import { useWindowStore } from '@/store/window-store'
 import { AppShell } from './AppShell'
 import type { SessionSnapshot } from '@/lib/tauri-bindings'
 
@@ -25,6 +26,8 @@ const readySnapshot: SessionSnapshot = {
   outputTail: [],
   volume: 80,
   startupStage: 0,
+  channelPlan: null,
+  outputDevice: null,
 }
 
 /** Captured handler for the shell-level pnds:session subscription. */
@@ -50,9 +53,34 @@ describe('AppShell', () => {
       preflightError: null,
     })
     useSessionStore.getState().resetSession()
+    useWindowStore.setState({
+      fullscreen: false,
+      showCustomTrafficLights: true,
+      generation: 0,
+    })
   })
 
   it('shows Welcome with an always-open sidebar when idle (§10.4)', () => {
+    render(<AppShell />)
+    expect(screen.getByTestId('sidebar')).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: 'Hi! Welcome to PNDS' })
+    ).toBeInTheDocument()
+  })
+
+  it('keeps the start-page sidebar permanently visible in fullscreen (§7.4)', () => {
+    // Windowed: sidebar present.
+    const windowed = render(<AppShell />)
+    expect(screen.getByTestId('sidebar')).toBeInTheDocument()
+    windowed.unmount()
+
+    // Fullscreen: the start page KEEPS its sidebar (only loaded sessions
+    // retract it); welcome fills the rest of the window.
+    useWindowStore.setState({
+      fullscreen: true,
+      showCustomTrafficLights: false,
+      generation: 1,
+    })
     render(<AppShell />)
     expect(screen.getByTestId('sidebar')).toBeInTheDocument()
     expect(
@@ -117,6 +145,46 @@ describe('AppShell', () => {
     expect(popover.className).toContain('pointer-events-none')
   })
 
+  it('retracts a popped-out overlay sidebar when entering fullscreen (§7.4)', () => {
+    useSessionStore.setState({
+      sessionStatus: 'ready',
+      projectName: 'Inarticulate III',
+      lanIp: '192.168.1.10',
+      health: {
+        status: 'ready',
+        projectId: 'inarticulate-iii',
+        audioMode: 'none',
+        audio: { status: 'disabled', target: null, error: null },
+        scoreServer: { performerPort: 6868, monitorPort: 6869, error: null },
+      },
+    })
+    render(<AppShell />)
+    // Pop the overlay sidebar in.
+    fireEvent.mouseEnter(screen.getByTestId('sidebar-hover-zone'))
+    const popover = screen.getByTestId('sidebar-popover')
+    expect(popover.className).toContain('opacity-100')
+
+    // Enter fullscreen: the overlay sidebar retracts instantly.
+    act(() => {
+      useWindowStore.setState({
+        fullscreen: true,
+        showCustomTrafficLights: false,
+        generation: 1,
+      })
+    })
+    // The remounted instance starts collapsed.
+    const popover2 = screen.getByTestId('sidebar-popover')
+    expect(popover2.className).toContain('opacity-0')
+    expect(popover2.className).toContain('pointer-events-none')
+
+    // In fullscreen the hover zone still pops the sidebar in.
+    act(() => {
+      fireEvent.mouseEnter(screen.getByTestId('sidebar-hover-zone'))
+    })
+    const afterHover = screen.getByTestId('sidebar-popover')
+    expect(afterHover.className).toContain('opacity-100')
+  })
+
   it('shows the error page with summary and details on failure (§10.3)', () => {
     useSessionStore.setState({
       sessionStatus: 'error',
@@ -130,5 +198,49 @@ describe('AppShell', () => {
     expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /back/i })).toBeInTheDocument()
     expect(screen.getByText(/technical details/i)).toBeInTheDocument()
+  })
+
+  /// §9.3: Retry must open a NEW loading session, not resume the failed
+  /// one. The loading screen is keyed by `runId`, so the logo canvas
+  /// remounts and replays from its first stage with fresh colours.
+  it('remounts the loading screen on a Retry out of error (§9.3, §10.3)', () => {
+    render(<AppShell />)
+
+    act(() => {
+      sessionHandler?.({ payload: { ...readySnapshot, status: 'starting' } })
+    })
+    const firstRunId = useSessionStore.getState().runId
+    const firstCanvas = document.querySelector('canvas')
+    expect(firstCanvas).not.toBeNull()
+
+    act(() => {
+      sessionHandler?.({
+        payload: {
+          ...readySnapshot,
+          status: 'error',
+          health: null,
+          error: 'Timed out waiting for the project to report ready (30s).',
+          startupStage: 0,
+        },
+      })
+    })
+    expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument()
+    expect(useSessionStore.getState().runId).toBe(firstRunId)
+
+    act(() => {
+      sessionHandler?.({
+        payload: {
+          ...readySnapshot,
+          status: 'starting',
+          health: null,
+          startupStage: 1,
+        },
+      })
+    })
+    expect(useSessionStore.getState().runId).toBe(firstRunId + 1)
+    const secondCanvas = document.querySelector('canvas')
+    expect(secondCanvas).not.toBeNull()
+    expect(secondCanvas).not.toBe(firstCanvas)
+    expect(screen.getByText(/cancel/i)).toBeInTheDocument()
   })
 })

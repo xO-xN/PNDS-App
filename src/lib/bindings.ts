@@ -9,6 +9,65 @@
 
 export const commands = {
 /**
+ * §7.4: the one and only fullscreen toggle. All three entry points
+ * (menu, ⌃⌘F, sidebar button) funnel through this command.
+ */
+async toggleFullscreen() : Promise<Result<WindowStateSnapshot, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("toggle_fullscreen") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * §7.4 fade-out then hide (red light / Close Window). Interruptible:
+ * a newer request cancels the ramp and the terminal action still runs
+ * from a deterministic state.
+ */
+async closeWindowWithFade() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("close_window_with_fade") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * §7.4: first show / dock reopen — fade in from transparent.
+ */
+async fadeInWindow() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("fade_in_window") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Queries the current window snapshot (initial state on frontend mount).
+ */
+async getWindowState() : Promise<Result<WindowStateSnapshot, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_window_state") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Marks the app as quitting so in-flight fades cancel and future fade
+ * commands hide immediately (⌘Q must not wait for an animation).
+ */
+async markQuitting() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("mark_quitting") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * Loads user preferences from disk.
  * Returns default preferences if the file doesn't exist.
  */
@@ -129,11 +188,14 @@ async listLanAddresses() : Promise<Result<string[], string>> {
 }
 },
 /**
- * §6.5: available CoreAudio output devices and the system default.
+ * §7.6: CoreAudio output devices with their usable output channel count
+ * at the given project sample rate, plus the system default. Always
+ * re-enumerates (the settings UI must see hot-plugged devices), while
+ * session start reuses the process cache.
  */
-async listOutputDevices() : Promise<Result<AudioDeviceList, string>> {
+async listOutputDevices(sampleRate: number) : Promise<Result<AudioDeviceCapabilities, string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("list_output_devices") };
+    return { status: "ok", data: await TAURI_INVOKE("list_output_devices", { sampleRate }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -175,20 +237,47 @@ oscTargets?: Partial<{ [key in string]: string }>;
  * trust, kept across launches. Removing from the sidebar drops it here.
  */
 recentProjects?: string[] }
-export type AudioConfig = { defaultMode: string; supportedModes: string[]; synthdefs: string[] | null; scsynth: ScsynthConfig | null; 
+export type AudioConfig = { defaultMode: string; supportedModes: string[]; 
+/**
+ * Discrete project output signals (spec §3.3): 1..=64, default 2.
+ * Not a speaker layout — the App never downmixes.
+ */
+outputChannels?: number; synthdefs: string[] | null; scsynth: ScsynthConfig | null; 
 /**
  * Debug-only fallback for standalone runs. The App must never use it;
  * internal mode OSC targets are always dynamically assigned (§5.2).
  */
 standaloneTarget: string | null }
 /**
- * §6.5: available CoreAudio output devices (name = scsynth -H value).
+ * §7.6: sample-rate-aware device capabilities (name = scsynth -H value).
  */
-export type AudioDeviceList = { devices: string[]; 
+export type AudioDeviceCapabilities = { devices: AudioOutputDevice[]; sampleRate: number }
 /**
- * Name of the system default output device, if any.
+ * §7.6: one CoreAudio output device and what it can do at the project's
+ * sample rate. `maxOutputChannels` is 0 when no configuration of the
+ * device supports that rate.
  */
-default: string | null }
+export type AudioOutputDevice = { name: string; isDefault: boolean; maxOutputChannels: number }
+/**
+ * §7.1: the Internal channel plan computed at session start.
+ */
+export type ChannelPlan = { 
+/**
+ * N: discrete signals the project produces (manifest audio.outputChannels).
+ */
+projectChannels: number; 
+/**
+ * H: channels the output device offers at the project sample rate.
+ */
+deviceChannels: number; 
+/**
+ * K: channels actually bridged to hardware, min(N, H).
+ */
+bridgedChannels: number; 
+/**
+ * B: first private project bus; equals K.
+ */
+privateBusStart: number }
 export type HealthAudio = { 
 /**
  * `starting | ready | error | disabled` (disabled = none mode, §9.1)
@@ -216,13 +305,41 @@ export type SessionSnapshot = {
  */
 status: string; projectName: string | null; projectPath: string | null; audioMode: string | null; lanIp: string | null; oscTarget: string | null; health: HealthPayload | null; error: string | null; outputTail: string[]; 
 /**
- * Master volume percent (§6.4; new sessions always start at 80).
+ * Master volume percent (§7.5; new N<=2 sessions always start at 80,
+ * N>2 sessions are fixed at 100).
  */
 volume: number; 
 /**
  * §10.3 five-stage loading animation dot (1–5).
  */
-startupStage: number }
+startupStage: number; 
+/**
+ * §7.1: internal channel plan (N/H/K/B), present for internal sessions.
+ */
+channelPlan: ChannelPlan | null; 
+/**
+ * Final CoreAudio output device in use (internal sessions).
+ */
+outputDevice: string | null }
+/**
+ * Window state broadcast to the frontend (`pnds:window` event).
+ */
+export type WindowStateSnapshot = { 
+/**
+ * Native macOS fullscreen state.
+ */
+fullscreen: boolean; 
+/**
+ * Whether the sidebar's custom traffic lights should be visible.
+ * False while the native (unified) title bar is showing.
+ */
+showCustomTrafficLights: boolean; 
+/**
+ * Monotonic counter — bumped on every fullscreen/fade transition so
+ * the frontend can re-sync. Independent of the monitor reload nonce:
+ * fullscreen changes never reload the monitor (§7.2).
+ */
+generation: number }
 
 /** tauri-specta globals **/
 

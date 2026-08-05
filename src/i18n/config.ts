@@ -2,7 +2,7 @@ import i18n from 'i18next'
 import { initReactI18next } from 'react-i18next'
 import en from '../../locales/en.json'
 
-// V1 is English-only (see docs/PNDS_APP_REQUIREMENTS.md §10); the i18n
+// V1 UI is English-only (template-locale pruning, 2026-07-29); the i18n
 // mechanism stays in place so additional locales can be added later.
 const resources = {
   en: { translation: en },
