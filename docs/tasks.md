@@ -19,6 +19,10 @@ Completed: task-1-node24-and-preflight (2026-08-03), task-2-multichannel-runtime
 
 Task 6 was the release gate: Retry 根因修复完成，`check:all` 通过，V1.1.0 release artifact（app/dmg/updater）构建并验证，版本源已同步 `1.1.0`。剩余现场矩阵（真实工程、BlackHole/DAW、干净机安装与 updater）与提交/发布需人工在真实环境执行。
 
+## Completed: V1.1.1 (2026-08-13)
+
+All three V1.1.1 issues (#1 window shortcuts & monitor controls, #2 16px corner alignment, #3 icons & version bump) are implemented, manually run-through, and closed. Highlights: View menu (⌘= / ⌘- / ⌘0 / ⌘⇧R) with browser-style monitor zoom — fixed to scale via compositing transform (CSS `zoom` can't scale the cross-origin OOPIF in WKWebView); custom ⌘W / red-light close flow with an app-styled confirm dialog (no native alert); 16px native window corners via the content-view backing layer (NSWindow.cornerRadius is deprecated/absent on TaoWindow); icons regenerated from the full-bleed 1024² master; version 1.1.1 across npm / Cargo / Tauri config. Signing/notarization/updater release for 1.1.1 remains a human release step.
+
 Project Bundle (`.pnds`), Creator Guide, installation/update metadata, checksum, target-platform checks, and runtime-asset installation are V1.2 scope and must not enter these tasks.
 
 ## Completing Tasks
