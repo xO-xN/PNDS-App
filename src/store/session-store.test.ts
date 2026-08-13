@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { useSessionStore } from './session-store'
+import { clampZoom, shouldConfirmClose, useSessionStore } from './session-store'
 import { useProjectStore } from './project-store'
 import type { Manifest, SessionSnapshot } from '@/lib/tauri-bindings'
 
@@ -90,5 +90,70 @@ describe('session-store', () => {
     useSessionStore.getState().resetSession()
     expect(useSessionStore.getState().sessionStatus).toBe('idle')
     expect(useSessionStore.getState().outputTail).toHaveLength(0)
+  })
+
+  describe('monitor zoom (§v1.1.1)', () => {
+    it('clampZoom steps by the delta and clamps at 50–200', () => {
+      expect(clampZoom(100, 10)).toBe(110)
+      expect(clampZoom(100, -10)).toBe(90)
+      expect(clampZoom(200, 10)).toBe(200)
+      expect(clampZoom(50, -10)).toBe(50)
+      expect(clampZoom(150, 10)).toBe(160)
+    })
+
+    it('zoomIn/zoomOut act only while the monitor is showing (ready)', () => {
+      const store = useSessionStore.getState()
+      // idle: no-op
+      store.zoomIn()
+      store.zoomOut()
+      expect(useSessionStore.getState().monitorZoom).toBe(100)
+
+      useSessionStore.getState().applySnapshot(snapshot({ status: 'ready' }))
+      useSessionStore.getState().zoomIn()
+      useSessionStore.getState().zoomIn()
+      expect(useSessionStore.getState().monitorZoom).toBe(120)
+
+      useSessionStore.getState().zoomOut()
+      expect(useSessionStore.getState().monitorZoom).toBe(110)
+    })
+
+    it('zoom clamps at the 200 ceiling and 50 floor while ready', () => {
+      useSessionStore.getState().applySnapshot(snapshot({ status: 'ready' }))
+      useSessionStore.setState({ monitorZoom: 195 })
+      useSessionStore.getState().zoomIn()
+      expect(useSessionStore.getState().monitorZoom).toBe(200)
+      useSessionStore.getState().zoomIn()
+      expect(useSessionStore.getState().monitorZoom).toBe(200)
+
+      useSessionStore.setState({ monitorZoom: 55 })
+      useSessionStore.getState().zoomOut()
+      expect(useSessionStore.getState().monitorZoom).toBe(50)
+      useSessionStore.getState().zoomOut()
+      expect(useSessionStore.getState().monitorZoom).toBe(50)
+    })
+
+    it('resetZoom returns to 100', () => {
+      useSessionStore.getState().applySnapshot(snapshot({ status: 'ready' }))
+      useSessionStore.getState().zoomIn()
+      useSessionStore.getState().resetZoom()
+      expect(useSessionStore.getState().monitorZoom).toBe(100)
+    })
+
+    it('resetSession resets zoom to 100 (project switch resets it)', () => {
+      useSessionStore.getState().applySnapshot(snapshot({ status: 'ready' }))
+      useSessionStore.getState().zoomIn()
+      useSessionStore.getState().resetSession()
+      expect(useSessionStore.getState().monitorZoom).toBe(100)
+    })
+  })
+
+  describe('close-confirm predicate (§v1.1.1)', () => {
+    it('confirms for starting/ready sessions, never for idle/error/stopping', () => {
+      expect(shouldConfirmClose('starting')).toBe(true)
+      expect(shouldConfirmClose('ready')).toBe(true)
+      expect(shouldConfirmClose('idle')).toBe(false)
+      expect(shouldConfirmClose('error')).toBe(false)
+      expect(shouldConfirmClose('stopping')).toBe(false)
+    })
   })
 })

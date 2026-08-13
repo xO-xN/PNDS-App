@@ -120,6 +120,13 @@ pub fn run() {
             // NOTE: Application menu is built from JavaScript for i18n support
             // See src/lib/menu.ts for the menu implementation
 
+            // §7.4: the native window corner radius must match the shared
+            // frontend token (16px) so the window's real edge aligns with
+            // the content rounding. Fullscreen windows are square.
+            if let Some(window) = app.get_webview_window("main") {
+                crate::window::sync_corner_radius(&window);
+            }
+
             Ok(())
         })
         .invoke_handler(builder.invoke_handler())
@@ -148,6 +155,9 @@ pub fn run() {
                         use tauri::Emitter;
                         let _ = app_handle.emit("pnds:window", state.snapshot());
                         log::info!("Fullscreen state synced via resize: {is_fs}");
+                        // §7.4: square the native corners in fullscreen and
+                        // restore the 16px radius on the way back.
+                        crate::window::sync_corner_radius(&window);
                     }
                 }
             }

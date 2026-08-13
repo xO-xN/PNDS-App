@@ -180,7 +180,7 @@ export function Sidebar({
     <aside
       data-testid="sidebar"
       className={cn(
-        'relative flex w-[320px] flex-col overflow-hidden rounded-2xl text-sm',
+        'relative flex w-[320px] flex-col overflow-hidden rounded-[var(--app-corner-radius)] text-sm',
         variant === 'static' &&
           'm-3 border border-(--pnds-text)/5 bg-(--pnds-sidebar-bg) shadow-sm',
         variant === 'overlay' &&

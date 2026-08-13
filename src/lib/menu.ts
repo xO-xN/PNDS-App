@@ -16,7 +16,8 @@ import { message } from '@tauri-apps/plugin-dialog'
 import i18n from '@/i18n/config'
 import { logger } from '@/lib/logger'
 import { notifications } from '@/lib/notifications'
-import { toggleFullscreen } from '@/store/window-store'
+import { useSessionStore } from '@/store/session-store'
+import { requestClose, toggleFullscreen } from '@/store/window-store'
 
 const APP_NAME = 'PNDS'
 
@@ -65,9 +66,14 @@ export async function buildAppMenu(): Promise<Menu> {
     const fileSubmenu = await Submenu.new({
       text: t('menu.file'),
       items: [
-        await PredefinedMenuItem.new({
-          item: 'CloseWindow',
+        // §v1.1.1: custom ⌘W — the predefined Close Window is non-functional
+        // on this window. Shares the red-light close flow (confirm + stop
+        // session + fade-hide; the app keeps running).
+        await MenuItem.new({
+          id: 'close-window',
           text: t('menu.closeWindow'),
+          accelerator: 'Cmd+W',
+          action: () => void requestClose(),
         }),
       ],
     })
@@ -88,13 +94,48 @@ export async function buildAppMenu(): Promise<Menu> {
       ],
     })
 
+    // §v1.1.1: browser-style monitor controls. Zoom only acts while the
+    // session is ready (the store actions no-op otherwise).
+    const viewSubmenu = await Submenu.new({
+      text: t('menu.view'),
+      items: [
+        await MenuItem.new({
+          id: 'zoom-in',
+          text: t('menu.zoomIn'),
+          accelerator: 'Cmd+=',
+          action: () => useSessionStore.getState().zoomIn(),
+        }),
+        await MenuItem.new({
+          id: 'zoom-out',
+          text: t('menu.zoomOut'),
+          accelerator: 'Cmd+-',
+          action: () => useSessionStore.getState().zoomOut(),
+        }),
+        await MenuItem.new({
+          id: 'actual-size',
+          text: t('menu.actualSize'),
+          accelerator: 'Cmd+0',
+          action: () => useSessionStore.getState().resetZoom(),
+        }),
+        await PredefinedMenuItem.new({ item: 'Separator' }),
+        await MenuItem.new({
+          id: 'reload-monitor',
+          text: t('menu.reloadMonitor'),
+          accelerator: 'Cmd+Shift+R',
+          action: () => {
+            const session = useSessionStore.getState()
+            if (session.sessionStatus === 'ready') {
+              session.bumpMonitorReload()
+            }
+          },
+        }),
+      ],
+    })
+
     const windowSubmenu = await Submenu.new({
       text: t('menu.window'),
       items: [
-        await PredefinedMenuItem.new({
-          item: 'Minimize',
-          text: t('menu.minimize'),
-        }),
+        // §v1.1.1: the dead Minimize item is dropped (⌘H covers hiding).
         await PredefinedMenuItem.new({
           item: 'Maximize',
           text: t('menu.zoom'),
@@ -112,7 +153,7 @@ export async function buildAppMenu(): Promise<Menu> {
     })
 
     const menu = await Menu.new({
-      items: [appSubmenu, fileSubmenu, editSubmenu, windowSubmenu],
+      items: [appSubmenu, fileSubmenu, editSubmenu, viewSubmenu, windowSubmenu],
     })
 
     await menu.setAsAppMenu()

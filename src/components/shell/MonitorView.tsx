@@ -13,6 +13,8 @@ export function MonitorView() {
   const projectName = useSessionStore(state => state.projectName)
   const lanIp = useSessionStore(state => state.lanIp)
   const reloadNonce = useSessionStore(state => state.monitorReloadNonce)
+  // §v1.1.1: browser-style zoom (50–200%), session-only.
+  const monitorZoom = useSessionStore(state => state.monitorZoom)
   // First mount fades in from the load-complete handoff; later remounts
   // (fullscreen toggles) render instantly under the dissolve. The App
   // shell passes "initial" only for the session-start instance.
@@ -28,12 +30,17 @@ export function MonitorView() {
 
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-black">
-      <iframe
-        key={reloadNonce}
-        src={`http://${lanIp}:${monitorPort}/`}
-        title="Project monitor"
-        className="absolute inset-0 h-full w-full border-0"
-      />
+      {/* CSS `zoom` scales the rendered iframe from the top-left (browser
+          style); the outer overflow-hidden clips the overflow. The title
+          strip and hover sidebar stay at 100% (siblings). */}
+      <div className="h-full w-full" style={{ zoom: monitorZoom / 100 }}>
+        <iframe
+          key={reloadNonce}
+          src={`http://${lanIp}:${monitorPort}/`}
+          title="Project monitor"
+          className="block h-full w-full border-0"
+        />
+      </div>
 
       {/* Top-center title / window drag region (§10.1) */}
       <div

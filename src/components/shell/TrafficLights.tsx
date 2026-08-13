@@ -3,7 +3,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window'
 import { X, Minus, Plus } from 'lucide-react'
 import {
   useWindowStore,
-  closeWindowWithFade,
+  requestClose,
   toggleFullscreen,
 } from '@/store/window-store'
 
@@ -23,7 +23,8 @@ const BUTTONS = [
     labelKey: 'sidebar.closeWindow',
     bg: '#ff5f57',
     icon: X,
-    action: () => void closeWindowWithFade(),
+    // §v1.1.1: same close flow as ⌘W — confirm + stop session + fade-hide.
+    action: () => void requestClose(),
   },
   {
     labelKey: 'sidebar.minimizeWindow',

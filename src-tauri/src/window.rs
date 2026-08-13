@@ -30,6 +30,11 @@ const FADE_STEP: Duration = Duration::from_millis(16);
 /// transparent during it, so we fade in again only after it settles —
 /// otherwise the ramp fights the system animation (causing flicker).
 const FULLSCREEN_TRANSITION_MS: u64 = 400;
+/// Native window corner radius in windowed mode (§7.4). Matches the
+/// frontend's shared `--app-corner-radius` token so the window's real edge
+/// aligns with the content/sidebar rounding and no background leaks at the
+/// corners. Fullscreen windows are square.
+const CORNER_RADIUS: f64 = 16.0;
 
 /// Window state broadcast to the frontend (`pnds:window` event).
 #[derive(Debug, Clone, Serialize, Type)]
@@ -121,6 +126,10 @@ pub async fn toggle_fullscreen(app: AppHandle) -> Result<WindowStateSnapshot, St
         .set_fullscreen(next)
         .map_err(|e| format!("Failed to toggle fullscreen: {e}"))?;
     state.fullscreen.store(next, Ordering::SeqCst);
+
+    // §7.4: fullscreen windows are square; windowed restores the 16px
+    // corner radius so the native edge matches the content rounding.
+    sync_corner_radius(&window);
 
     // Fullscreen changes only resize the window — the monitor document
     // instance stays untouched (no reload nonce, no iframe key change,
@@ -301,6 +310,53 @@ fn set_alpha<R: Runtime>(_window: &WebviewWindow<R>, _value: f64) -> Result<(), 
     Ok(())
 }
 
+/// Re-applies the native window corner radius for the current window state
+/// (§7.4): 16px in windowed mode, 0 in fullscreen. Call on startup and on
+/// every fullscreen transition (native green button or ⌃⌘F) so the radius
+/// survives the macOS native fullscreen round-trip.
+pub fn sync_corner_radius<R: Runtime>(window: &WebviewWindow<R>) {
+    let is_fullscreen = window.is_fullscreen().unwrap_or(false);
+    let radius = window_corner_radius(is_fullscreen);
+    if let Err(e) = set_corner_radius(window, radius) {
+        log::warn!("setCornerRadius({radius}) failed: {e}");
+    }
+}
+
+/// Radius selection: square in fullscreen, 16px in windowed mode.
+fn window_corner_radius(is_fullscreen: bool) -> f64 {
+    if is_fullscreen {
+        0.0
+    } else {
+        CORNER_RADIUS
+    }
+}
+
+/// Sets the NSWindow corner radius via AppKit (NSWindow.cornerRadius).
+/// On a transparent window this masks the webview content to the rounded
+/// shape, so a black monitor background reaches the window's real edge
+/// instead of leaking the white webview background at the corners.
+#[cfg(target_os = "macos")]
+fn set_corner_radius<R: Runtime>(window: &WebviewWindow<R>, radius: f64) -> Result<(), String> {
+    use objc2::msg_send;
+    use objc2_app_kit::NSWindow;
+
+    let ns_window = window
+        .ns_window()
+        .map_err(|e| format!("ns_window failed: {e}"))?;
+    // SAFETY: ns_window() returns a BORROWED NSWindow pointer owned by
+    // Tauri (same lifetime contract as set_alpha above); msg_send only.
+    unsafe {
+        let win: *mut NSWindow = ns_window.cast();
+        let _: () = msg_send![win, setCornerRadius: radius];
+    }
+    Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn set_corner_radius<R: Runtime>(_window: &WebviewWindow<R>, _radius: f64) -> Result<(), String> {
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -359,5 +415,13 @@ mod tests {
             last = 1.0 + (0.0 - 1.0) * progress;
         }
         assert!(last.abs() < 1e-9);
+    }
+
+    /// §7.4: the native corner radius is 16px in windowed mode (matching
+    /// the frontend `--app-corner-radius` token) and square in fullscreen.
+    #[test]
+    fn corner_radius_is_square_in_fullscreen() {
+        assert_eq!(window_corner_radius(false), 16.0);
+        assert_eq!(window_corner_radius(true), 0.0);
     }
 }

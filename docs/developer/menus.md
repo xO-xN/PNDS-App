@@ -13,22 +13,34 @@ This app builds menus from **JavaScript** using Tauri's JS Menu API (`@tauri-app
 ## Current Menu Structure
 
 ```
-App Name
-├── About App Name
+PNDS
+├── About PNDS
 ├── ────────────────────
 ├── Check for Updates...
 ├── ────────────────────
-├── Preferences...           (Cmd+,)
-├── ────────────────────
-├── Hide App Name            (Cmd+H)
+├── Hide PNDS                (Cmd+H)
 ├── Hide Others              (Cmd+Alt+H)
 ├── Show All
 ├── ────────────────────
-└── Quit App Name            (Cmd+Q)
+└── Quit PNDS                (Cmd+Q)
+
+File
+└── Close Window             (Cmd+W)   (custom — confirm + stop session + fade-hide)
+
+Edit
+├── Undo / Redo / Cut / Copy / Paste / Select All   (standard text-editing)
 
 View
-├── Toggle Left Sidebar      (Cmd+1)
-└── Toggle Right Sidebar     (Cmd+2)
+├── Zoom In                  (Cmd+=)
+├── Zoom Out                 (Cmd+-)
+├── Actual Size              (Cmd+0)
+├── ────────────────────
+└── Reload Monitor           (Cmd+Shift+R)
+
+Window
+├── Zoom
+├── ────────────────────
+└── Enter Full Screen        (Ctrl+Cmd+F)
 ```
 
 ## Architecture

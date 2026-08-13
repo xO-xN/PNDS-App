@@ -56,7 +56,7 @@
 
 @layer base {
   :root {
-    --app-corner-radius: 12px;
+    --app-corner-radius: 16px;
 
     /* PNDS design tokens (from Figma "PNDS UI Design", 2026-07) */
     --pnds-bg: #eef0f8;

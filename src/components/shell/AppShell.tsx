@@ -86,7 +86,7 @@ export function AppShell() {
         <div
           className={cn(
             'h-screen w-screen overflow-hidden',
-            !fullscreen && 'rounded-2xl'
+            !fullscreen && 'rounded-[var(--app-corner-radius)]'
           )}
         >
           {/* §7.4: fullscreen toggles dissolve at the NSWindow layer
@@ -107,7 +107,7 @@ export function AppShell() {
         <div
           className={cn(
             'flex h-screen w-screen overflow-hidden bg-(--pnds-bg)',
-            !fullscreen && 'rounded-2xl'
+            !fullscreen && 'rounded-[var(--app-corner-radius)]'
           )}
         >
           {/* §7.4: fullscreen drops the sidebar instantly (no transition);
@@ -132,7 +132,7 @@ export function AppShell() {
         <div
           className={cn(
             'relative h-screen w-screen overflow-hidden bg-(--pnds-bg)',
-            !fullscreen && 'rounded-2xl'
+            !fullscreen && 'rounded-[var(--app-corner-radius)]'
           )}
         >
           <LoadingScreen

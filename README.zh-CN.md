@@ -167,10 +167,10 @@ npm run check:all  # 完整质量检查（typecheck / lint / ast-grep / prettier
 
 PNDS App 本体以 MIT 许可发布（见 [`LICENSE.md`](LICENSE.md)）。随包分发的第三方组件各自携带许可证，均随 App 安装包放入 `licenses/` 目录：
 
-| 组件 | 许可证 | 包内许可证文本 |
-| ---- | ------ | -------------- |
-| SuperCollider 声音服务器（`scsynth`）与 UGen 插件 | GPL-3.0 | `licenses/SC-GPL-3.0.txt` + `SC-SOURCE.txt`（原样提取自官方 SuperCollider 3.14.1 macOS dmg，未修改） |
-| Node.js 24 运行时 | MIT | `licenses/NODE-LICENSE.txt` |
-| Comfortaa 与 Manrope 字体 | SIL OFL-1.1 | `public/fonts/OFL-*.txt` |
+| 组件                                              | 许可证      | 包内许可证文本                                                                                       |
+| ------------------------------------------------- | ----------- | ---------------------------------------------------------------------------------------------------- |
+| SuperCollider 声音服务器（`scsynth`）与 UGen 插件 | GPL-3.0     | `licenses/SC-GPL-3.0.txt` + `SC-SOURCE.txt`（原样提取自官方 SuperCollider 3.14.1 macOS dmg，未修改） |
+| Node.js 24 运行时                                 | MIT         | `licenses/NODE-LICENSE.txt`                                                                          |
+| Comfortaa 与 Manrope 字体                         | SIL OFL-1.1 | `public/fonts/OFL-*.txt`                                                                             |
 
 SuperCollider 以独立进程运行，不与 App 本体链接。

@@ -1,11 +1,13 @@
 import i18n from 'i18next'
 import { initReactI18next } from 'react-i18next'
 import en from '../../locales/en.json'
+import zhCN from '../../locales/zh-CN.json'
 
-// V1 UI is English-only (template-locale pruning, 2026-07-29); the i18n
-// mechanism stays in place so additional locales can be added later.
+// V1 UI is English-only with a zh-CN menu set (§v1.1.1 adds localized
+// menu labels); missing keys fall back to English via fallbackLng.
 const resources = {
   en: { translation: en },
+  'zh-CN': { translation: zhCN },
 }
 
 // RTL language detection (includes languages not yet in resources for future expansion)
@@ -13,6 +15,9 @@ const rtlLanguages = ['ar', 'he', 'fa', 'ur']
 
 i18n.use(initReactI18next).init({
   resources,
+  supportedLngs: ['en', 'zh-CN'],
+  // Resolve a bare region prefix (e.g. system locale "zh" → "zh-CN").
+  nonExplicitSupportedLngs: true,
   lng: 'en',
   fallbackLng: 'en',
   interpolation: {

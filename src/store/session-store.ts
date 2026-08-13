@@ -3,6 +3,23 @@ import type { HealthPayload, SessionSnapshot } from '@/lib/tauri-bindings'
 
 export type SessionStatus = 'idle' | 'starting' | 'ready' | 'error' | 'stopping'
 
+/** Browser-style monitor zoom bounds (§v1.1.1): ±10% steps, 50–200%. */
+export const MIN_MONITOR_ZOOM = 50
+export const MAX_MONITOR_ZOOM = 200
+export const MONITOR_ZOOM_STEP = 10
+export const DEFAULT_MONITOR_ZOOM = 100
+
+/** Clamp a zoom delta (percent) into [50, 200]. */
+export function clampZoom(current: number, delta: number): number {
+  return Math.min(Math.max(current + delta, MIN_MONITOR_ZOOM), MAX_MONITOR_ZOOM)
+}
+
+/** §v1.1.1: a session is "live" while starting or running — the close flow
+ * confirms before stopping it. Idle/failed sessions close without asking. */
+export function shouldConfirmClose(status: SessionStatus): boolean {
+  return status === 'starting' || status === 'ready'
+}
+
 interface SessionState {
   /** Mirrors the Rust SessionManager via `pnds:session` events (§8, §9). */
   sessionStatus: SessionStatus
@@ -53,9 +70,15 @@ interface SessionState {
   /** True when the user has changed a config setting since the session
    * last committed; the Change button turns yellow. */
   pendingChanges: boolean
+  /** Browser-style zoom of the monitor iframe (50–200). Session-only:
+   * resets to 100% on project switch and is never persisted. */
+  monitorZoom: number
   applySnapshot: (snapshot: SessionSnapshot) => void
   failLocal: (message: string) => void
   bumpMonitorReload: () => void
+  zoomIn: () => void
+  zoomOut: () => void
+  resetZoom: () => void
   setPendingChanges: (v: boolean) => void
   setStartupStage: (stage: number) => void
   resetSession: () => void
@@ -80,6 +103,7 @@ export const useSessionStore = create<SessionState>()(set => ({
   startupStage: 0,
   runId: 0,
   pendingChanges: false,
+  monitorZoom: DEFAULT_MONITOR_ZOOM,
 
   setAudioMode: audioMode => set({ audioMode }),
   setLanIp: lanIp => set({ lanIp }),
@@ -124,6 +148,21 @@ export const useSessionStore = create<SessionState>()(set => ({
   bumpMonitorReload: () =>
     set(state => ({ monitorReloadNonce: state.monitorReloadNonce + 1 })),
 
+  // §v1.1.1: zoom only acts while the monitor is showing (session ready).
+  zoomIn: () =>
+    set(state =>
+      state.sessionStatus === 'ready'
+        ? { monitorZoom: clampZoom(state.monitorZoom, MONITOR_ZOOM_STEP) }
+        : {}
+    ),
+  zoomOut: () =>
+    set(state =>
+      state.sessionStatus === 'ready'
+        ? { monitorZoom: clampZoom(state.monitorZoom, -MONITOR_ZOOM_STEP) }
+        : {}
+    ),
+  resetZoom: () => set({ monitorZoom: DEFAULT_MONITOR_ZOOM }),
+
   setPendingChanges: (pendingChanges: boolean) => set({ pendingChanges }),
   setStartupStage: (startupStage: number) => set({ startupStage }),
 
@@ -142,5 +181,7 @@ export const useSessionStore = create<SessionState>()(set => ({
       channelPlan: null,
       deviceError: null,
       pendingChanges: false,
+      // §v1.1.1: zoom is session-only — reset on any project switch.
+      monitorZoom: DEFAULT_MONITOR_ZOOM,
     }),
 }))

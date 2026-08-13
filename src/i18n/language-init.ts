@@ -42,15 +42,25 @@ export async function initializeLanguage(
     logger.debug('Detected system locale', { systemLocale })
 
     if (systemLocale) {
-      // Extract the language code (e.g., "en-US" -> "en")
+      // Extract the language code (e.g., "en-US" -> "en"), but also match
+      // a region variant directly (e.g. system "zh-CN" / lang "zh" both
+      // resolve to the registered "zh-CN" resource).
       const parts = systemLocale.split('-')
       const langCode = (parts[0] ?? 'en').toLowerCase()
+      const fullLocale = systemLocale.toLowerCase()
 
-      if (availableLanguages.includes(langCode)) {
-        await i18n.changeLanguage(langCode)
+      const match = availableLanguages.find(
+        l =>
+          l.toLowerCase() === langCode ||
+          l.toLowerCase() === fullLocale ||
+          l.toLowerCase().startsWith(`${langCode}-`)
+      )
+
+      if (match) {
+        await i18n.changeLanguage(match)
         logger.info('Language set from system locale', {
           systemLocale,
-          language: langCode,
+          language: match,
         })
         return
       }
