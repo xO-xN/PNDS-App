@@ -15,9 +15,7 @@ export function MonitorView() {
   const reloadNonce = useSessionStore(state => state.monitorReloadNonce)
   // §v1.1.1: browser-style zoom (50–200%), session-only.
   const monitorZoom = useSessionStore(state => state.monitorZoom)
-  // First mount fades in from the load-complete handoff; later remounts
-  // (fullscreen toggles) render instantly under the dissolve. The App
-  // shell passes "initial" only for the session-start instance.
+  const scale = monitorZoom / 100
   const monitorPort = health?.scoreServer?.monitorPort
   if (!lanIp || !monitorPort) {
     // Should not happen for a ready session; fail visibly rather than blank.
@@ -30,10 +28,22 @@ export function MonitorView() {
 
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-black">
-      {/* CSS `zoom` scales the rendered iframe from the top-left (browser
-          style); the outer overflow-hidden clips the overflow. The title
-          strip and hover sidebar stay at 100% (siblings). */}
-      <div className="h-full w-full" style={{ zoom: monitorZoom / 100 }}>
+      {/* §v1.1.1: browser-style zoom. CSS `zoom` does not visually scale a
+          cross-origin iframe (rendered out-of-process) in WKWebView, so the
+          wrapper is scaled with a compositing transform and sized inversely
+          (100/scale %) — the standard extension-style zoom. transform-origin
+          top-left keeps the top-left pinned; the outer overflow-hidden clips
+          the overflow. The title strip and hover sidebar are siblings and
+          stay at 100%. */}
+      <div
+        className="h-full w-full"
+        style={{
+          width: `${100 / scale}%`,
+          height: `${100 / scale}%`,
+          transform: `scale(${scale})`,
+          transformOrigin: 'top left',
+        }}
+      >
         <iframe
           key={reloadNonce}
           src={`http://${lanIp}:${monitorPort}/`}

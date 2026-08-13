@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { ask } from '@tauri-apps/plugin-dialog'
 import { commands } from '@/lib/tauri-bindings'
 import { useSessionStore } from '@/store/session-store'
 import {
@@ -11,10 +10,6 @@ import {
   requestClose,
   useWindowStore,
 } from './window-store'
-
-vi.mock('@tauri-apps/plugin-dialog', () => ({
-  ask: vi.fn(),
-}))
 
 describe('window-store (§7.4)', () => {
   beforeEach(() => {
@@ -82,42 +77,38 @@ describe('window-store (§7.4)', () => {
   describe('requestClose (§v1.1.1 shared ⌘W / red-light close flow)', () => {
     beforeEach(() => {
       useSessionStore.setState({ sessionStatus: 'idle' })
+      useWindowStore.setState({ confirmCloseOpen: false })
     })
 
     it('closes immediately without a confirm when no session is live', async () => {
       await requestClose()
-      expect(ask).not.toHaveBeenCalled()
+      expect(useWindowStore.getState().confirmCloseOpen).toBe(false)
       expect(commands.stopProject).not.toHaveBeenCalled()
       expect(commands.closeWindowWithFade).toHaveBeenCalledTimes(1)
     })
 
-    it('a cancelled confirm leaves the session running and the window open', async () => {
+    it('opens the in-app confirm dialog instead of the native alert when live', async () => {
       useSessionStore.setState({ sessionStatus: 'ready' })
-      vi.mocked(ask).mockResolvedValue(false)
       await requestClose()
-      expect(ask).toHaveBeenCalledTimes(1)
+      expect(useWindowStore.getState().confirmCloseOpen).toBe(true)
+      // The dialog's confirm button (CloseConfirmDialog) runs the stop+fade;
+      // requestClose itself must not touch the session or the window yet.
       expect(commands.stopProject).not.toHaveBeenCalled()
       expect(commands.closeWindowWithFade).not.toHaveBeenCalled()
-      expect(useSessionStore.getState().sessionStatus).toBe('ready')
     })
 
-    it('a confirmed close stops the session, then fades and hides the window', async () => {
-      useSessionStore.setState({ sessionStatus: 'ready' })
-      vi.mocked(ask).mockResolvedValue(true)
-      await requestClose()
-      expect(ask).toHaveBeenCalledTimes(1)
-      expect(commands.stopProject).toHaveBeenCalledTimes(1)
-      expect(commands.closeWindowWithFade).toHaveBeenCalledTimes(1)
-      // stopAndReset returns the session to idle.
-      expect(useSessionStore.getState().sessionStatus).toBe('idle')
-    })
-
-    it('also confirms while a session is starting', async () => {
+    it('also opens the dialog while a session is starting', async () => {
       useSessionStore.setState({ sessionStatus: 'starting' })
-      vi.mocked(ask).mockResolvedValue(true)
       await requestClose()
-      expect(ask).toHaveBeenCalledTimes(1)
-      expect(commands.stopProject).toHaveBeenCalledTimes(1)
+      expect(useWindowStore.getState().confirmCloseOpen).toBe(true)
+      expect(commands.closeWindowWithFade).not.toHaveBeenCalled()
+    })
+
+    it('setConfirmCloseOpen closes the dialog (Esc / overlay / cancel)', () => {
+      useWindowStore.getState().setConfirmCloseOpen(true)
+      expect(useWindowStore.getState().confirmCloseOpen).toBe(true)
+      useWindowStore.getState().setConfirmCloseOpen(false)
+      expect(useWindowStore.getState().confirmCloseOpen).toBe(false)
     })
   })
 })
