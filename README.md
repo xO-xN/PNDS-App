@@ -162,3 +162,15 @@ For development conventions and agent working rules see [`AGENTS.md`](AGENTS.md)
 - [`docs/PNDS_RUNTIME_CONTRACT.md`](docs/PNDS_RUNTIME_CONTRACT.md): App/project process, health, audio-bus, and shutdown contract.
 - [`docs/PNDS_APP_REQUIREMENTS.md`](docs/PNDS_APP_REQUIREMENTS.md): evergreen PNDS App product requirements and Definition of Done.
 - [`docs/README.md`](docs/README.md): complete documentation index.
+
+## Licenses
+
+PNDS App itself is MIT licensed (see [`LICENSE.md`](LICENSE.md)). Bundled third-party components carry their own licenses, included in the app bundle under `licenses/`:
+
+| Component | License | License text in bundle |
+| --------- | ------- | ---------------------- |
+| SuperCollider sound server (`scsynth`) and UGen plugins | GPL-3.0 | `licenses/SC-GPL-3.0.txt` + `SC-SOURCE.txt` (extracted unmodified from the official SuperCollider 3.14.1 macOS dmg) |
+| Node.js 24 runtime | MIT | `licenses/NODE-LICENSE.txt` |
+| Comfortaa and Manrope fonts | SIL OFL-1.1 | `public/fonts/OFL-*.txt` |
+
+SuperCollider runs as a separate process and is not linked into the application.

@@ -19,3 +19,12 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+---
+
+Bundled third-party components are not covered by this license and retain their
+own licenses, shipped with the app bundle under `licenses/`:
+
+- SuperCollider `scsynth` and UGen plugins: GPL-3.0 (`SC-GPL-3.0.txt`, `SC-SOURCE.txt`)
+- Node.js runtime: MIT (`NODE-LICENSE.txt`)
+- Comfortaa and Manrope fonts: SIL OFL-1.1 (`public/fonts/OFL-*.txt`)
