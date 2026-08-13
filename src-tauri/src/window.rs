@@ -331,13 +331,17 @@ fn window_corner_radius(is_fullscreen: bool) -> f64 {
     }
 }
 
-/// Sets the NSWindow corner radius via AppKit (NSWindow.cornerRadius).
-/// On a transparent window this masks the webview content to the rounded
-/// shape, so a black monitor background reaches the window's real edge
-/// instead of leaking the white webview background at the corners.
+/// Rounds the window by clipping its content view's backing layer
+/// (CALayer.cornerRadius + masksToBounds) — the modern AppKit approach.
+/// NSWindow.cornerRadius is deprecated and absent on TaoWindow at runtime
+/// ("unrecognized selector"), so we cannot use it. masksToBounds clips every
+/// subview (including the WKWebView) to the rounded shape, so the monitor
+/// background reaches the window's real edge instead of leaking the white
+/// webview background at the corners. Fullscreen passes radius 0 (square).
 #[cfg(target_os = "macos")]
 fn set_corner_radius<R: Runtime>(window: &WebviewWindow<R>, radius: f64) -> Result<(), String> {
     use objc2::msg_send;
+    use objc2_app_kit::NSView;
     use objc2_app_kit::NSWindow;
 
     let ns_window = window
@@ -347,7 +351,12 @@ fn set_corner_radius<R: Runtime>(window: &WebviewWindow<R>, radius: f64) -> Resu
     // Tauri (same lifetime contract as set_alpha above); msg_send only.
     unsafe {
         let win: *mut NSWindow = ns_window.cast();
-        let _: () = msg_send![win, setCornerRadius: radius];
+        let content_view: *mut NSView = msg_send![win, contentView];
+        // Ensure the view is layer-backed so `layer` is non-nil.
+        let _: () = msg_send![content_view, setWantsLayer: true];
+        let layer: *mut objc2::runtime::AnyObject = msg_send![content_view, layer];
+        let _: () = msg_send![layer, setCornerRadius: radius];
+        let _: () = msg_send![layer, setMasksToBounds: radius > 0.0];
     }
     Ok(())
 }
