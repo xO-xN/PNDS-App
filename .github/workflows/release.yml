@@ -63,6 +63,12 @@ jobs:
           releaseBody: |
             ## PNDS ${{ github.ref_name || inputs.version }}
 
+            ### What's New in V1.1.1
+            - **Window shortcuts** — new View menu: Zoom In (⌘=), Zoom Out (⌘-), Actual Size (⌘0), and Reload Monitor (⌘⇧R), with browser-style monitor zoom (50–200%, ±10% steps, session-only)
+            - **One close flow for ⌘W and the red light** — confirm before stopping a live session, then fade-hide; the app keeps running in the Dock
+            - **16px corners everywhere** — window, sidebar, and dialogs share one corner radius; no white leak at the corners on black-background projects
+            - **New app icon** — regenerated from the full-bleed logo master
+
             ### What's New in V1.1
             - **Bundled Node.js 24.18.1** — projects run without any Node install on the host Mac
             - **Discrete multichannel output** (1–64 channels) in Internal mode, verified with the built-in 16-channel tone-test project; a channel-poor device degrades gracefully (e.g. `16ch → 2ch`) and the app shows exactly what is lost
