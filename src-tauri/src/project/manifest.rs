@@ -311,18 +311,19 @@ mod tests {
     use super::*;
     use std::fs;
 
-    /// The shipped `examples/multichannel-tone-test` utility project must keep
-    /// passing the App parser and preflight (§11: bundled verification
-    /// project contract).
+    /// The shipped `examples/Multichannel Signal Generator` utility project
+    /// must keep passing the App parser and preflight (§11: bundled
+    /// verification project contract).
     #[test]
     fn tone_test_example_passes_app_parser() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../examples/multichannel-tone-test");
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../examples/Multichannel Signal Generator");
         let manifest = load_manifest(&root).unwrap();
         assert_eq!(manifest.audio.output_channels, 16);
         assert_eq!(manifest.audio.supported_modes, vec!["internal"]);
         assert!(manifest.audio.scsynth.as_ref().unwrap().audio_bus_channels >= 32);
-        // Zero production dependencies -> preflight must not require
-        // node_modules (spec §2).
+        // One production dependency (qrcode, monitor QR endpoint) -> the
+        // preflight requires node_modules present (spec §2).
         crate::project::preflight::check_dependencies(&root).unwrap();
         // (Port availability is checked at session start, not here: a
         // running PNDS App legitimately occupies the example ports.)

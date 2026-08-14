@@ -314,7 +314,7 @@ Back/Close 返回 Welcome，不自动重启。
 仓库提供普通 score project：
 
 ```text
-examples/multichannel-tone-test/
+examples/Multichannel Signal Generator/
 ```
 
 它不是安装到 App 数据目录的“内置项目”基础设施。
@@ -322,10 +322,11 @@ examples/multichannel-tone-test/
 要求：
 
 - manifest 声明 Internal、`outputChannels: 16`；
-- 零 npm 生产依赖，使用 Node `http`、内置 `fetch` 与最小 OSC 实现；
+- 生产依赖仅 `qrcode`（monitor QR 端点），其余使用 Node `http`、内置 `fetch` 与最小 OSC 实现；
 - performer 和 monitor 两个 server 都存在；
 - performer `/` 只显示无 performer UI 的说明并提供 health；
 - monitor 提供 16 个垂直推子；
+- monitor 提供指向 performer 页的 QR 码；
 - 16 路 sine 从 110Hz 开始按半音递增；
 - 默认全部静音；
 - 每路范围为 Mute / `-60 dBFS .. -6 dBFS`；
@@ -342,7 +343,7 @@ examples/multichannel-tone-test/
 
 - manifest 缺省/边界 outputChannels；
 - `audioBusChannels >= 2N`；
-- 条件依赖检查（零依赖不要求 node_modules）；
+- 条件依赖检查（有生产依赖时要求 node_modules 随包安装）；
 - 设备能力与 `K = min(N,H)`；
 - mono master group 的创建、gain 与释放；
 - mono/stereo gain 曲线和多通道固定 100%；
@@ -358,7 +359,7 @@ examples/multichannel-tone-test/
 
 - 《Inarticulate III》Internal/External/None；
 - Node `24.18.1` sidecar；
-- `examples/multichannel-tone-test` 16ch → BlackHole/DAW；
+- `examples/Multichannel Signal Generator` 16ch → BlackHole/DAW；
 - 16ch 工程选择 2ch 设备仍 ready 并显示 `16ch → 2ch`；
 - 设备、模式、target restart；
 - 全屏进入/退出时 monitor 正确 resize 且 Socket.IO 不重连；
@@ -383,5 +384,5 @@ PNDS App 当前要求完成的判定：
 9. session restart 不丢失工程选择和待应用设置；
 10. red close、Dock reopen 与真正退出的窗口行为正确；
 11. 无残留 Node/scsynth，日志正确写入和轮转；
-12. `examples/multichannel-tone-test` 可验证 16 路路由；
+12. `examples/Multichannel Signal Generator` 可验证 16 路路由；
 13. 可产出可更新的 macOS ARM64 release artifact。
