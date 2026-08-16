@@ -697,6 +697,18 @@ describe('Sidebar', () => {
       PROJECT_PATH,
       THIRD_PATH,
     ])
+    // The DOM reorder and the clearing of the yield transforms share one
+    // commit: for that frame the card that yielded must not animate from
+    // its stale offset (the wrong-way slide) — transitions are paused...
+    expect(screen.getByTestId('current-project-card')).toHaveClass(
+      'transition-none'
+    )
+    // ...and return once the snap frame has painted.
+    await waitFor(() =>
+      expect(screen.getByTestId('current-project-card')).not.toHaveClass(
+        'transition-none'
+      )
+    )
     await waitFor(() => {
       expect(commands.savePreferences).toHaveBeenCalledWith(
         expect.objectContaining({

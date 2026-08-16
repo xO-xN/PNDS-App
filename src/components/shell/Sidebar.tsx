@@ -125,6 +125,15 @@ export function Sidebar({
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null)
   /** Clone origin/stride snapshot; mirrors dragGhostRef for render. */
   const [dragGhost, setDragGhost] = useState<DragGhost | null>(null)
+  /**
+   * True for one frame after a committed drop. The DOM reorder and the
+   * clearing of the yield transforms land in the same commit, so without
+   * this the yielding cards — already visually at their final spots —
+   * would animate from their stale offsets back to zero and slide the
+   * wrong way for a card-stride. Suppressing transitions for that single
+   * frame makes them snap invisibly into place.
+   */
+  const [suppressTransition, setSuppressTransition] = useState(false)
   /** Folder being inline-named (creation gesture: Enter commits, Esc cancels). */
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null)
   const editingFolderNameRef = useRef('')
@@ -292,6 +301,7 @@ export function Sidebar({
           if (next !== visible) {
             store.applyVisibleReorder(next)
             persistIndex()
+            setSuppressTransition(true)
           }
         }
       }
@@ -307,6 +317,21 @@ export function Sidebar({
       window.removeEventListener('pointercancel', clearDrag)
     }
   }, [dragPath])
+
+  // Re-enable card transitions only once the snap frame has painted;
+  // cancelled drags (pointercancel, no-commit drops) never pass through
+  // here and keep their smooth return animation.
+  useEffect(() => {
+    if (!suppressTransition) return
+    let second = 0
+    const first = requestAnimationFrame(() => {
+      second = requestAnimationFrame(() => setSuppressTransition(false))
+    })
+    return () => {
+      cancelAnimationFrame(first)
+      cancelAnimationFrame(second)
+    }
+  }, [suppressTransition])
 
   // Report dialog visibility so the hover sidebar keeps peeking while a
   // confirm flow is open (spec issue #4: 确认框期间松开 Cmd 不收回).
@@ -450,7 +475,10 @@ export function Sidebar({
                   : undefined
               }
               className={cn(
-                'group relative mx-5 flex h-14.25 items-center rounded-xl px-3 transition-[background-color,transform] duration-200',
+                'group relative mx-5 flex h-14.25 items-center rounded-xl px-3',
+                suppressTransition
+                  ? 'transition-none'
+                  : 'transition-[background-color,transform] duration-200',
                 isCurrent || pendingPreflightPath === path
                   ? 'bg-(--pnds-card) shadow-sm'
                   : 'hover:bg-(--pnds-text)/5',
