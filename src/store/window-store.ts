@@ -17,8 +17,12 @@ interface WindowState {
    * a live session). Rendered by CloseConfirmDialog — replaces the native
    * macOS alert so the prompt matches the app's design system. */
   confirmCloseOpen: boolean
+  /** v1.1.2 T7: the in-app quit-confirm dialog is open (⌘Q with a live
+   * session). Rendered by QuitConfirmDialog, same design system. */
+  quitConfirmOpen: boolean
   applyWindowSnapshot: (snapshot: WindowStateSnapshot) => void
   setConfirmCloseOpen: (open: boolean) => void
+  setQuitConfirmOpen: (open: boolean) => void
 }
 
 export const useWindowStore = create<WindowState>()(set => ({
@@ -26,6 +30,7 @@ export const useWindowStore = create<WindowState>()(set => ({
   showCustomTrafficLights: true,
   generation: 0,
   confirmCloseOpen: false,
+  quitConfirmOpen: false,
 
   applyWindowSnapshot: snapshot =>
     set({
@@ -35,6 +40,8 @@ export const useWindowStore = create<WindowState>()(set => ({
     }),
 
   setConfirmCloseOpen: confirmCloseOpen => set({ confirmCloseOpen }),
+
+  setQuitConfirmOpen: quitConfirmOpen => set({ quitConfirmOpen }),
 }))
 
 /** Initial sync on app mount. */
@@ -94,5 +101,33 @@ export async function markQuitting(): Promise<void> {
   const result = await commands.markQuitting()
   if (result.status === 'error') {
     console.error('markQuitting failed:', result.error)
+  }
+}
+
+/**
+ * v1.1.2 T7 (spec issue #11): the ⌘Q flow. The macOS menu item is custom
+ * (not the predefined Quit) so this runs first: with a live session the
+ * in-app confirm dialog opens (QuitConfirmDialog); without one the app
+ * exits immediately.
+ */
+export async function requestQuit(): Promise<void> {
+  const { sessionStatus } = useSessionStore.getState()
+  if (shouldConfirmClose(sessionStatus)) {
+    useWindowStore.getState().setQuitConfirmOpen(true)
+    return
+  }
+  await quitNow()
+}
+
+/**
+ * The actual exit: mark quitting (⌘Q never waits for a fade — §7.4), then
+ * terminate the process. Rust's ExitRequested handler stops any session
+ * that is still alive, so this path never orphans a score server.
+ */
+export async function quitNow(): Promise<void> {
+  await markQuitting()
+  const result = await commands.quitApp()
+  if (result.status === 'error') {
+    console.error('quitApp failed:', result.error)
   }
 }

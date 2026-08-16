@@ -8,6 +8,7 @@ import {
   fadeInWindow,
   markQuitting,
   requestClose,
+  requestQuit,
   useWindowStore,
 } from './window-store'
 
@@ -109,6 +110,45 @@ describe('window-store (§7.4)', () => {
       expect(useWindowStore.getState().confirmCloseOpen).toBe(true)
       useWindowStore.getState().setConfirmCloseOpen(false)
       expect(useWindowStore.getState().confirmCloseOpen).toBe(false)
+    })
+  })
+
+  describe('requestQuit (v1.1.2 T7 ⌘Q flow)', () => {
+    beforeEach(() => {
+      useSessionStore.setState({ sessionStatus: 'idle' })
+      useWindowStore.setState({ quitConfirmOpen: false })
+    })
+
+    it('quits immediately — no dialog — when no session is live', async () => {
+      await requestQuit()
+      expect(useWindowStore.getState().quitConfirmOpen).toBe(false)
+      expect(commands.stopProject).not.toHaveBeenCalled()
+      expect(commands.markQuitting).toHaveBeenCalledTimes(1)
+      expect(commands.quitApp).toHaveBeenCalledTimes(1)
+    })
+
+    it('quits immediately from the error state too', async () => {
+      useSessionStore.setState({ sessionStatus: 'error' })
+      await requestQuit()
+      expect(useWindowStore.getState().quitConfirmOpen).toBe(false)
+      expect(commands.quitApp).toHaveBeenCalledTimes(1)
+    })
+
+    it('opens the in-app confirm dialog while a session runs', async () => {
+      useSessionStore.setState({ sessionStatus: 'ready' })
+      await requestQuit()
+      expect(useWindowStore.getState().quitConfirmOpen).toBe(true)
+      // The dialog's confirm button (QuitConfirmDialog) runs the stop+exit;
+      // requestQuit itself must not quit underneath the prompt.
+      expect(commands.stopProject).not.toHaveBeenCalled()
+      expect(commands.quitApp).not.toHaveBeenCalled()
+    })
+
+    it('also opens the dialog while a session is starting', async () => {
+      useSessionStore.setState({ sessionStatus: 'starting' })
+      await requestQuit()
+      expect(useWindowStore.getState().quitConfirmOpen).toBe(true)
+      expect(commands.quitApp).not.toHaveBeenCalled()
     })
   })
 })

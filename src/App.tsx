@@ -7,7 +7,11 @@ import { logger } from './lib/logger'
 import { commands } from './lib/tauri-bindings'
 import { initWindowState, markQuitting } from './store/window-store'
 import './App.css'
-import { AppShell, CloseConfirmDialog } from './components/shell'
+import {
+  AppShell,
+  CloseConfirmDialog,
+  QuitConfirmDialog,
+} from './components/shell'
 import { ThemeProvider } from './components/ThemeProvider'
 import { ErrorBoundary } from './components/ErrorBoundary'
 
@@ -109,6 +113,8 @@ function App() {
         {/* §v1.1.1: close-confirm is app-styled, mounted outside AppShell
             so it's reachable in every window state (welcome/loading/monitor). */}
         <CloseConfirmDialog />
+        {/* v1.1.2 T7: quit-confirm (⌘Q with a live session) — same rule. */}
+        <QuitConfirmDialog />
       </ThemeProvider>
     </ErrorBoundary>
   )

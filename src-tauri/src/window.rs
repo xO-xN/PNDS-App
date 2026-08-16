@@ -226,6 +226,21 @@ pub async fn mark_quitting(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// v1.1.2 T7: the actual process exit behind ⌘Q. The macOS menu item is a
+/// custom MenuItem (not the predefined Quit) so React can confirm with a
+/// live session first; once confirmed (or with no live session) this
+/// marks quitting — no fade, per §7.4 — and exits. Session teardown runs
+/// in the `ExitRequested` handler.
+#[tauri::command]
+#[specta::specta]
+pub async fn quit_app(app: AppHandle) -> Result<(), String> {
+    let state = app.state::<WindowManager>();
+    state.quitting.store(true, Ordering::SeqCst);
+    state.fade_gen.next(); // cancel any in-flight ramp
+    app.exit(0);
+    Ok(())
+}
+
 /// Runs the opacity ramp to `target` for `generation`. Cancels itself if
 /// a newer generation supersedes it. Terminal state: fade-out hides the
 /// window and resets opacity to 1.0; fade-in ends at exactly 1.0 — the

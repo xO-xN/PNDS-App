@@ -68,6 +68,21 @@ async markQuitting() : Promise<Result<null, string>> {
 }
 },
 /**
+ * v1.1.2 T7: the actual process exit behind ⌘Q. The macOS menu item is a
+ * custom MenuItem (not the predefined Quit) so React can confirm with a
+ * live session first; once confirmed (or with no live session) this
+ * marks quitting — no fade, per §7.4 — and exits. Session teardown runs
+ * in the `ExitRequested` handler.
+ */
+async quitApp() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("quit_app") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * Loads user preferences from disk.
  * Returns default preferences if the file doesn't exist.
  */
@@ -196,6 +211,19 @@ async listLanAddresses() : Promise<Result<string[], string>> {
 async listOutputDevices(sampleRate: number) : Promise<Result<AudioDeviceCapabilities, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("list_output_devices", { sampleRate }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * v1.1.2 T7: absolute paths of the bundled example projects that make up
+ * the Utilities folder. Empty when none are installed — the frontend then
+ * seeds nothing.
+ */
+async bundledExampleProjects() : Promise<Result<string[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("bundled_example_projects") };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };

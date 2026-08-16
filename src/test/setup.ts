@@ -103,6 +103,12 @@ vi.mock('@/lib/tauri-bindings', () => ({
       .mockResolvedValue({ status: 'ok', data: null }),
     fadeInWindow: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
     markQuitting: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
+    quitApp: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
+    // Default: no bundled examples installed (Utilities seeding is a no-op;
+    // tests that exercise it override this mock).
+    bundledExampleProjects: vi
+      .fn()
+      .mockResolvedValue({ status: 'ok', data: [] }),
   },
   unwrapResult: vi.fn((result: { status: string; data?: unknown }) => {
     if (result.status === 'ok') return result.data

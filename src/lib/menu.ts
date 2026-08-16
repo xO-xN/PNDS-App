@@ -2,8 +2,9 @@
  * Application menu builder using Tauri's JavaScript API.
  *
  * PNDS keeps the macOS menu bar available in every state (§10.1): the app
- * menu, plus standard File/Edit/Window submenus for ⌘W, ⌘Q, ⌘M and text
- * editing shortcuts. All standard items are predefined (native behavior).
+ * menu, plus standard File/Edit/Window submenus for text editing
+ * shortcuts. ⌘W and ⌘Q are custom items (their flows confirm with a live
+ * session first); the remaining standard items stay predefined.
  */
 import {
   Menu,
@@ -17,7 +18,11 @@ import i18n from '@/i18n/config'
 import { logger } from '@/lib/logger'
 import { notifications } from '@/lib/notifications'
 import { useSessionStore } from '@/store/session-store'
-import { requestClose, toggleFullscreen } from '@/store/window-store'
+import {
+  requestClose,
+  requestQuit,
+  toggleFullscreen,
+} from '@/store/window-store'
 import { startRename } from '@/lib/project-rename'
 import { hasOpenOverlay, isEditableTarget } from '@/hooks/use-command-keyboard'
 
@@ -58,9 +63,15 @@ export async function buildAppMenu(): Promise<Menu> {
           text: t('menu.showAll'),
         }),
         await PredefinedMenuItem.new({ item: 'Separator' }),
-        await PredefinedMenuItem.new({
-          item: 'Quit',
+        // v1.1.2 T7 (spec issue #11): custom ⌘Q — the predefined Quit item
+        // cannot be intercepted, so it is replaced. With a live session an
+        // app-styled confirm dialog opens first; otherwise the app exits
+        // immediately (no fade — §7.4).
+        await MenuItem.new({
+          id: 'quit-app',
           text: t('menu.quit', { appName: APP_NAME }),
+          accelerator: 'Cmd+Q',
+          action: () => void requestQuit(),
         }),
       ],
     })
