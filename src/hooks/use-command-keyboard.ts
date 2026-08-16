@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { useKeyboardStore } from '@/store/keyboard-store'
 import { visibleProjectPaths, useProjectStore } from '@/store/project-store'
-import { selectProject } from '@/lib/project-select'
+import { moveProjectSelection, selectProject } from '@/lib/project-select'
 import { startRename } from '@/lib/project-rename'
 
 /**
@@ -37,6 +37,9 @@ export function hasOpenOverlay(): boolean {
  * - ⌘ held → `commandKeyPressed` (badges + running-state sidebar peek)
  * - ⌘R → rename the selected project (folder name inside a folder view
  *   with nothing selected) via the same entry as the Edit-menu item
+ * - ⌘↓/⌘↑ → move the selection along the visible order (clamped, no
+ *   wrap; auto-drills into the current project's folder) via the same
+ *   entry as a click
  * - ⌘1..9 → select the Nth visible project via the same entry as a click,
  *   folder-aware (a drilled-in view numbers only the folder's members);
  *   Cmd+0 stays the native "Actual Size" menu accelerator and is never
@@ -55,6 +58,14 @@ export function useCommandKeyboard(): void {
         if (isEditableTarget(event.target) || hasOpenOverlay()) return
         event.preventDefault()
         startRename()
+        return
+      }
+      // v1.1.2 T7 (spec issue #4/#11): ⌘↓/⌘↑ next/previous project. Must
+      // not fall through to the webview's scroll-to-end/beginning.
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        if (isEditableTarget(event.target) || hasOpenOverlay()) return
+        event.preventDefault()
+        moveProjectSelection(event.key === 'ArrowDown' ? 1 : -1)
         return
       }
       if (!/^[1-9]$/.test(event.key)) return

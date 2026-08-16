@@ -1,4 +1,4 @@
-import { useProjectStore } from '@/store/project-store'
+import { useProjectStore, visibleProjectPaths } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 import { openProject } from '@/lib/open-project'
 
@@ -65,4 +65,69 @@ export function setActiveFolderView(folderId: string | null): void {
     project.clearProject()
   }
   project.setActiveFolderId(folderId)
+}
+
+/**
+ * v1.1.2 T7 (spec issue #4/#11): ⌘↓/⌘↑ — move the selection one project
+ * along the current visible order, with the same semantics as clicking a
+ * card (idle selects, a live session goes through the switch confirmation).
+ * The ends clamp — the selection never wraps.
+ *
+ * When the current project sits inside a folder and the user is at the top
+ * level, the move drills into that folder first and continues inside it
+ * ("下一首曲子" mental model), so the target is computed from the folder's
+ * own order before the drill resets an idle selection.
+ */
+export function moveProjectSelection(direction: 1 | -1): void {
+  const status = useSessionStore.getState().sessionStatus
+  if (status === 'starting' || status === 'stopping') return
+
+  const project = useProjectStore.getState()
+  const currentPath = project.currentProject?.path ?? null
+
+  // Auto-drill: the move follows the current project into its folder.
+  let viewFolderId = project.activeFolderId
+  if (viewFolderId === null && currentPath !== null) {
+    viewFolderId =
+      project.projectFolders.find(folder =>
+        folder.projectPaths.includes(currentPath)
+      )?.id ?? null
+  }
+  const drilledIn =
+    viewFolderId !== null && viewFolderId !== project.activeFolderId
+  if (drilledIn) setActiveFolderView(viewFolderId)
+
+  const visible = visibleProjectPaths(
+    project.trustedPaths,
+    project.projectFolders,
+    viewFolderId
+  )
+  if (visible.length === 0) return
+
+  // No current project in this view: enter from the corresponding end.
+  const currentIndex = currentPath !== null ? visible.indexOf(currentPath) : -1
+  const nextIndex =
+    currentIndex === -1
+      ? direction === 1
+        ? 0
+        : visible.length - 1
+      : Math.min(Math.max(currentIndex + direction, 0), visible.length - 1)
+  const nextPath = visible[nextIndex]
+  if (nextPath === undefined) return
+
+  if (nextPath === currentPath) {
+    // Clamped at the end of the list — the selection does not move. But
+    // the drill above reset an idle selection; restore it so following
+    // the current project into its folder keeps it selected.
+    if (
+      drilledIn &&
+      status === 'idle' &&
+      useProjectStore.getState().currentProject === null
+    ) {
+      selectProject(nextPath, 'keyboard')
+    }
+    return
+  }
+
+  selectProject(nextPath, 'keyboard')
 }
