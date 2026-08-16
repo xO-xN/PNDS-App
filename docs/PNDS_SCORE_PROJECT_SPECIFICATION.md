@@ -4,7 +4,7 @@
 
 运行时进程、环境变量、health、音频 bus 与关闭协议见 [`PNDS_RUNTIME_CONTRACT.md`](./PNDS_RUNTIME_CONTRACT.md)。PNDS App 自身的产品与验收要求见 [`PNDS_APP_REQUIREMENTS.md`](./PNDS_APP_REQUIREMENTS.md)。
 
-本文档是 evergreen specification，不绑定 App release 版本。版本阶段与实施顺序只记录在 `docs/tasks-todo/`。
+本文档是 evergreen specification，不绑定 App release 版本。版本阶段与实施顺序只记录在 [GitHub issues](https://github.com/xO-xN/PNDS-App/issues)（milestone 分组）。
 
 ---
 

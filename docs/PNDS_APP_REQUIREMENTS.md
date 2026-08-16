@@ -6,7 +6,7 @@
 
 - score project 静态格式：[`PNDS_SCORE_PROJECT_SPECIFICATION.md`](./PNDS_SCORE_PROJECT_SPECIFICATION.md)
 - App 与工程运行协议：[`PNDS_RUNTIME_CONTRACT.md`](./PNDS_RUNTIME_CONTRACT.md)
-- 实施阶段与 release scope：`docs/tasks-todo/`
+- 实施阶段与 release scope：[GitHub issues](https://github.com/xO-xN/PNDS-App/issues)（milestone 分组）
 
 规范发生冲突时：工程格式以 Score Project Specification 为准，进程/环境变量/health/audio bus 以 Runtime Contract 为准，App 产品行为以本文档为准。
 

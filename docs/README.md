@@ -10,8 +10,6 @@
 
 - `developer/` — developer documentation for human and AI coders
 - `agents/` — AI agent workflows
-- [`tasks.md`](./tasks.md) — task management conventions
-- `tasks-done/` — completed tasks
-- `tasks-todo/` — prioritized implementation tasks
+- [`tasks.md`](./tasks.md) — task tracking conventions (GitHub issues + milestones) and release history
 - [`CONTRIBUTING.md`](./CONTRIBUTING.md) — contribution guidelines
 - [`SECURITY.md`](./SECURITY.md) — security policy
