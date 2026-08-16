@@ -39,3 +39,6 @@ src-tauri/plugins/
 # dependencies and nested VCS history stay out of this repository.
 examples/*/node_modules/
 examples/*/.git/
+
+# Staged copy of examples/ for release bundling (npm run examples:install)
+src-tauri/examples/

@@ -26,3 +26,4 @@ src/lib/bindings.ts
 *.scd
 # Standalone CommonJS example projects
 examples/
+src-tauri/examples/

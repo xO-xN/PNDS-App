@@ -75,7 +75,13 @@ Then GitHub Actions will:
    as a Tauri external binary; scsynth is bundled as the resource
    `Contents/Resources/scsynth` so macOS does not register it as a second PNDS
    application. The scsynth step also compiles `pndsMaster.scsyndef` using the
-   mounted SuperCollider dmg's `sclang`.
+   mounted SuperCollider dmg's `sclang`. The bundled example projects are
+   staged the same way by `npm run examples:install`, which copies
+   `examples/` into the gitignored `src-tauri/examples/` with production
+   dependencies (`npm ci --omit=dev`) — it is chained into
+   `beforeBuildCommand`, so every `tauri build` (local or CI) ships them under
+   `Contents/Resources/examples`, where `bundledExampleProjects` finds them
+   for the Utilities folder.
 2. Build the app for all platforms
 3. Create a draft release
 4. Generate `latest.json` for auto-updates

@@ -44,7 +44,9 @@ jobs:
 
       # src-tauri/binaries, Frameworks, plugins, and resources/synthdefs are
       # gitignored (~100MB Node runtime + SuperCollider extraction); these
-      # scripts provision them fresh on every release build.
+      # scripts provision them fresh on every release build. The bundled
+      # example projects (src-tauri/examples) are staged automatically by
+      # the build's beforeBuildCommand (npm run examples:install).
       - name: Fetch Node sidecar
         run: npm run node:fetch
 
@@ -70,6 +72,7 @@ jobs:
             - **Rebuilt drag & drop** — drag anywhere on a card: the card lifts as a floating clone, the list yields a gap at the drop slot, and the drop lands at the midpoint-judged position.
             - **Custom display names** — ⌘R (or Edit → Rename Project) renames a selected project or the open folder in place; Enter commits, Esc cancels, empty falls back to the folder name. Names persist across launches.
             - **Safer close & quit** — Esc opens a confirmation before closing the running project; ⌘Q now confirms before quitting while a session is live.
+            - **Built-in Utilities folder** — two utility projects (Local Network Diagnostics, Multichannel Signal Generator) ship inside the app and appear in a default Utilities folder on first launch; the folder itself can't be renamed or deleted.
             - **Refreshed starting page** — the hint is plain copy now; adding a project lives in the sidebar's Projects header "+".
 
             ### What's New in V1.1.1

@@ -1,9 +1,11 @@
 //! Bundled example score projects (v1.1.2 T7, spec issue #11): the two
 //! utility projects the app seeds into the default Utilities folder.
 //!
-//! A release bundle installs them under the resources directory (V1.2
-//! bundling scope); development resolves them from the repository checkout
-//! next to `src-tauri`, so the folder works in `tauri dev` today.
+//! Release bundles install them under the resources directory as
+//! `examples/<name>` — `npm run examples:install` (chained into
+//! beforeBuildCommand) stages that tree with production dependencies.
+//! Development resolves them from the repository checkout next to
+//! `src-tauri`, so the folder works in `tauri dev` today.
 
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Manager};

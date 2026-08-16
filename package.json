@@ -37,6 +37,7 @@
     "synthdefs:build": "bash scripts/build-synthdefs.sh",
     "node:fetch": "bash scripts/fetch-node.sh",
     "scsynth:fetch": "bash scripts/fetch-scsynth.sh",
+    "examples:install": "bash scripts/install-examples.sh",
     "tauri": "tauri",
     "tauri:dev": "source ~/.cargo/env && npm run tauri dev",
     "tauri:build": "npm run tauri build",
