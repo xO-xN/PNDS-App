@@ -2,7 +2,7 @@ import { render, screen, fireEvent, waitFor, within } from '@/test/test-utils'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { commands } from '@/lib/tauri-bindings'
-import { useProjectStore } from '@/store/project-store'
+import { useProjectStore, UTILITIES_FOLDER_ID } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 import { Sidebar } from './Sidebar'
 
@@ -165,5 +165,74 @@ describe('Sidebar folders (v1.1.2)', () => {
         })
       )
     })
+  })
+})
+
+describe('Utilities folder protection (v1.1.2 T7, spec issue #11)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useProjectStore.setState({
+      currentProject: null,
+      trustedPaths: [PROJECT_PATH, OTHER_PATH],
+      projectFolders: [
+        {
+          id: UTILITIES_FOLDER_ID,
+          name: 'Utilities',
+          projectPaths: [PROJECT_PATH, OTHER_PATH],
+        },
+      ],
+      pendingTrustPath: null,
+      pendingPreflightPath: null,
+      pendingSwitchPath: null,
+      activeFolderId: null,
+      renameTarget: null,
+      preflightStatus: 'idle',
+      preflightError: null,
+    })
+    useSessionStore.getState().resetSession()
+  })
+
+  it('renders the folder card without a delete affordance', () => {
+    render(<Sidebar variant="static" />)
+
+    const card = screen
+      .getAllByTestId('folder-card')
+      .find(card => card.textContent?.includes('Utilities'))
+    expect(card).toBeDefined()
+    expect(
+      within(card as HTMLElement).queryByRole('button', {
+        name: 'Delete folder',
+      })
+    ).not.toBeInTheDocument()
+  })
+
+  it('⌘R never starts a rename of the drilled-in Utilities folder', () => {
+    useProjectStore.setState({ activeFolderId: UTILITIES_FOLDER_ID })
+    render(<Sidebar variant="static" />)
+
+    fireEvent.keyDown(window, {
+      key: 'r',
+      code: 'KeyR',
+      metaKey: true,
+    })
+
+    expect(useProjectStore.getState().renameTarget).toBeNull()
+    expect(screen.queryByTestId('folder-name-input')).not.toBeInTheDocument()
+    expect(screen.getByTestId('breadcrumb-folder-name')).toHaveTextContent(
+      'Utilities'
+    )
+  })
+
+  it('still drills in and shows the bundled examples like any folder', () => {
+    render(<Sidebar variant="static" />)
+
+    const utilitiesCard = screen
+      .getAllByTestId('folder-card')
+      .find(card => card.textContent?.includes('Utilities'))
+    if (!utilitiesCard) throw new Error('Expected the Utilities folder card')
+    fireEvent.click(utilitiesCard)
+
+    expect(screen.getByTestId('breadcrumb-bar')).toBeInTheDocument()
+    expect(screen.getAllByTestId('project-entry')).toHaveLength(2)
   })
 })

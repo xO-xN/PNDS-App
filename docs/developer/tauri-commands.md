@@ -189,17 +189,26 @@ vi.mock('@/lib/tauri-bindings', () => ({
 
 ## Available Commands
 
-| Command                    | Parameters                            | Returns                           | Description                        |
-| -------------------------- | ------------------------------------- | --------------------------------- | ---------------------------------- |
-| `loadPreferences`          | none                                  | `Result<AppPreferences, string>`  | Load preferences                   |
-| `savePreferences`          | `preferences: AppPreferences`         | `Result<null, string>`            | Save preferences                   |
-| `sendNativeNotification`   | `title: string, body: string \| null` | `Result<null, string>`            | System notification                |
-| `preflightProject`         | `path: string`                        | `Result<Manifest, string>`        | Project preflight (§5/§7/§8.2)     |
-| `cleanupOrphanedProcesses` | none                                  | `Result<number, string>`          | Kill stale session children (§8.2) |
-| `startProject`             | `path, mode, lanIp: string`           | `Result<null, string>`            | Start score server session (§8.1)  |
-| `stopProject`              | none                                  | `Result<null, string>`            | Graceful session stop (§8.2)       |
-| `getSessionState`          | none                                  | `Result<SessionSnapshot, string>` | Current session snapshot           |
-| `listLanAddresses`         | none                                  | `Result<string[], string>`        | LAN IPv4 candidates (§7)           |
+| Command                    | Parameters                            | Returns                               | Description                                           |
+| -------------------------- | ------------------------------------- | ------------------------------------- | ----------------------------------------------------- |
+| `loadPreferences`          | none                                  | `Result<AppPreferences, string>`      | Load preferences                                      |
+| `savePreferences`          | `preferences: AppPreferences`         | `Result<null, string>`                | Save preferences                                      |
+| `sendNativeNotification`   | `title: string, body: string \| null` | `Result<null, string>`                | System notification                                   |
+| `preflightProject`         | `path: string`                        | `Result<Manifest, string>`            | Project preflight (§5/§7/§8.2)                        |
+| `cleanupOrphanedProcesses` | none                                  | `Result<number, string>`              | Kill stale session children (§8.2)                    |
+| `startProject`             | `path, mode, lanIp: string`           | `Result<null, string>`                | Start score server session (§8.1)                     |
+| `stopProject`              | none                                  | `Result<null, string>`                | Graceful session stop (§8.2)                          |
+| `getSessionState`          | none                                  | `Result<SessionSnapshot, string>`     | Current session snapshot                              |
+| `listLanAddresses`         | none                                  | `Result<string[], string>`            | LAN IPv4 candidates (§7)                              |
+| `listOutputDevices`        | none                                  | `Result<OutputDevices, string>`       | CoreAudio devices + sample rate                       |
+| `setMasterVolume`          | `percent: number`                     | `Result<null, string>`                | Master gain (§6.4)                                    |
+| `getWindowState`           | none                                  | `Result<WindowStateSnapshot, string>` | Fullscreen/fade mirror (§7.4)                         |
+| `toggleFullscreen`         | none                                  | `Result<WindowStateSnapshot, string>` | The one fullscreen action (§7.4)                      |
+| `closeWindowWithFade`      | none                                  | `Result<null, string>`                | Fade out then hide (§7.4)                             |
+| `fadeInWindow`             | none                                  | `Result<null, string>`                | First show / dock reopen fade (§7.4)                  |
+| `markQuitting`             | none                                  | `Result<null, string>`                | Cancel in-flight fades (⌘Q, §7.4)                     |
+| `quitApp`                  | none                                  | `Result<null, string>`                | Process exit behind ⌘Q (v1.1.2 T7)                    |
+| `bundledExampleProjects`   | none                                  | `Result<string[], string>`            | Bundled examples for the Utilities folder (v1.1.2 T7) |
 
 ## Dependencies
 

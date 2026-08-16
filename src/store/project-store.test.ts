@@ -3,6 +3,8 @@ import {
   useProjectStore,
   ungroupedProjectPaths,
   visibleProjectPaths,
+  isProtectedFolder,
+  UTILITIES_FOLDER_ID,
 } from './project-store'
 import type { Manifest } from '@/lib/tauri-bindings'
 
@@ -388,5 +390,58 @@ describe('folder reorder from drags (v1.1.2 T5, spec issue #9)', () => {
     expect(
       useProjectStore.getState().projectFolders.map(folder => folder.id)
     ).toEqual([first, second])
+  })
+})
+
+describe('protected folders (v1.1.2 T7, spec issue #11)', () => {
+  beforeEach(() => {
+    useProjectStore.setState({
+      currentProject: null,
+      trustedPaths: ['/a', '/b'],
+      projectFolders: [
+        {
+          id: UTILITIES_FOLDER_ID,
+          name: 'Utilities',
+          projectPaths: ['/a', '/b'],
+        },
+      ],
+      pendingTrustPath: null,
+      pendingPreflightPath: null,
+      pendingSwitchPath: null,
+      activeFolderId: null,
+      preflightStatus: 'idle',
+      preflightError: null,
+    })
+  })
+
+  it('never renames the Utilities folder', () => {
+    useProjectStore.getState().renameFolder(UTILITIES_FOLDER_ID, 'Renamed')
+    expect(useProjectStore.getState().projectFolders[0]?.name).toBe('Utilities')
+  })
+
+  it('never deletes the Utilities folder', () => {
+    useProjectStore.getState().deleteFolder(UTILITIES_FOLDER_ID)
+    expect(useProjectStore.getState().projectFolders).toHaveLength(1)
+  })
+
+  it('still allows editing the Utilities membership (files like any folder)', () => {
+    useProjectStore
+      .getState()
+      .removeProjectFromFolder(UTILITIES_FOLDER_ID, '/b')
+    expect(useProjectStore.getState().projectFolders[0]?.projectPaths).toEqual([
+      '/a',
+    ])
+
+    useProjectStore.getState().moveProjectToFolder(UTILITIES_FOLDER_ID, '/b')
+    expect(useProjectStore.getState().projectFolders[0]?.projectPaths).toEqual([
+      '/a',
+      '/b',
+    ])
+  })
+
+  it('flags only the reserved id as protected', () => {
+    expect(isProtectedFolder(UTILITIES_FOLDER_ID)).toBe(true)
+    expect(isProtectedFolder('utilities-2')).toBe(false)
+    expect(isProtectedFolder(crypto.randomUUID())).toBe(false)
   })
 })

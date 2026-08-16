@@ -7,6 +7,7 @@ import { useProjectStore } from '@/store/project-store'
 import { useWindowStore } from '@/store/window-store'
 import { useCommandKeyboard } from '@/hooks/use-command-keyboard'
 import { loadAudioPreferences } from '@/lib/audio-prefs'
+import { ensureUtilitiesFolder } from '@/lib/utilities-folder'
 import { cn } from '@/lib/utils'
 import { WelcomeScreen } from '@/components/welcome'
 import { Sidebar } from './Sidebar'
@@ -66,7 +67,7 @@ export function AppShell() {
 
   // §6.5 / §4.1: restore saved preferences on mount.
   useEffect(() => {
-    void loadAudioPreferences().then(prefs => {
+    void loadAudioPreferences().then(async prefs => {
       if (prefs?.outputDevice) {
         useSessionStore.getState().setOutputDevice(prefs.outputDevice)
       }
@@ -89,6 +90,9 @@ export function AppShell() {
         }
         useProjectStore.getState().setProjectDisplayNames(names)
       }
+      // v1.1.2 T7: after the restore, seed the default Utilities folder
+      // (spec issue #11) — a no-op whenever the folder already exists.
+      await ensureUtilitiesFolder()
     })
   }, [])
 

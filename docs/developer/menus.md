@@ -22,7 +22,7 @@ PNDS
 ├── Hide Others              (Cmd+Alt+H)
 ├── Show All
 ├── ────────────────────
-└── Quit PNDS                (Cmd+Q)
+└── Quit PNDS                (Cmd+Q)   (custom — confirm with a live session + exit, v1.1.2 T7)
 
 File
 └── Close Window             (Cmd+W)   (custom — confirm + stop session + fade-hide)
@@ -126,6 +126,11 @@ await PredefinedMenuItem.new({ item: 'Quit', text: t('menu.quit') })
 await PredefinedMenuItem.new({ item: 'Copy' })
 await PredefinedMenuItem.new({ item: 'Paste' })
 ```
+
+Note: the app's own ⌘Q item is NOT the predefined Quit — a predefined item
+cannot be intercepted, and the flow needs to confirm with a live session
+first (v1.1.2 T7). It is a custom `MenuItem` whose action calls
+`requestQuit()` (`src/store/window-store.ts`).
 
 ### Submenus
 

@@ -1,4 +1,4 @@
-import { useProjectStore } from '@/store/project-store'
+import { isProtectedFolder, useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 
 /**
@@ -8,7 +8,8 @@ import { useSessionStore } from '@/store/session-store'
  * Resolves what "rename the selected thing" means:
  * - session running (or stopping) → forbidden, silent no-op
  * - a selected project → that project, even inside a folder view
- * - no selection but drilled into a folder → the folder's name
+ * - no selection but drilled into a folder → the folder's name, unless it
+ *   is protected (the Utilities folder keeps its name — v1.1.2 T7)
  * - nothing selected → silent no-op (no prompt, no action)
  */
 export function startRename(): void {
@@ -23,7 +24,7 @@ export function startRename(): void {
     })
     return
   }
-  if (project.activeFolderId) {
+  if (project.activeFolderId && !isProtectedFolder(project.activeFolderId)) {
     project.setRenameTarget({ kind: 'folder', id: project.activeFolderId })
   }
 }

@@ -303,4 +303,24 @@ describe('AppShell', () => {
     expect(screen.queryByTestId('folder-card')).not.toBeInTheDocument()
     expect(useProjectStore.getState().projectFolders).toEqual([])
   })
+
+  it('seeds the default Utilities folder from the bundled examples on a fresh index', async () => {
+    const EXAMPLES = [
+      '/repo/examples/Local Network Diagnostics',
+      '/repo/examples/Multichannel Signal Generator',
+    ]
+    vi.mocked(commands.bundledExampleProjects).mockResolvedValue({
+      status: 'ok',
+      data: EXAMPLES,
+    })
+
+    render(<AppShell />)
+
+    // The folder appears ahead of everything, holding the two examples.
+    await screen.findByTestId('folder-card')
+    expect(screen.getByTestId('folder-name')).toHaveTextContent('Utilities')
+    // Both examples are folder members, so the top segment stays empty.
+    expect(screen.queryByTestId('project-entry')).not.toBeInTheDocument()
+    expect(useProjectStore.getState().trustedPaths).toEqual(EXAMPLES)
+  })
 })

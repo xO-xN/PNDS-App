@@ -6,17 +6,20 @@ Keyboard input reaches the app through two layers: native menu accelerators
 
 ## Current Shortcuts
 
-| Shortcut      | Action                                     | Layer                             |
-| ------------- | ------------------------------------------ | --------------------------------- |
-| Cmd+W         | Close-confirm flow (v1.1.1)                | Menu (`menu.ts`)                  |
-| Cmd+= / Cmd+- | Monitor zoom in/out (v1.1.1)               | Menu (`menu.ts`)                  |
-| Cmd+0         | Monitor zoom: actual size (v1.1.1)         | Menu (`menu.ts`)                  |
-| Cmd+Shift+R   | Reload monitor (v1.1.1)                    | Menu (`menu.ts`)                  |
-| Cmd+R         | Rename selected project / folder (v1.1.2)  | Menu + Web (shared `startRename`) |
-| Ctrl+Cmd+F    | Toggle fullscreen (§7.4)                   | Menu (`menu.ts`)                  |
-| Cmd (hold)    | Number badges + sidebar peek while running | Web (`use-command-keyboard.ts`)   |
-| Cmd+1..9      | Select the Nth visible project (v1.1.2)    | Web (`use-command-keyboard.ts`)   |
-| Enter         | Load (idle) / Change-restart (pending)     | Web (`SessionActionButton.tsx`)   |
+| Shortcut      | Action                                                 | Layer                             |
+| ------------- | ------------------------------------------------------ | --------------------------------- |
+| Cmd+W         | Close-confirm flow (v1.1.1)                            | Menu (`menu.ts`)                  |
+| Cmd+Q         | Quit-confirm flow with a live session (v1.1.2 T7)      | Menu (`menu.ts`)                  |
+| Cmd+= / Cmd+- | Monitor zoom in/out (v1.1.1)                           | Menu (`menu.ts`)                  |
+| Cmd+0         | Monitor zoom: actual size (v1.1.1)                     | Menu (`menu.ts`)                  |
+| Cmd+Shift+R   | Reload monitor (v1.1.1)                                | Menu (`menu.ts`)                  |
+| Cmd+R         | Rename selected project / folder (v1.1.2)              | Menu + Web (shared `startRename`) |
+| Ctrl+Cmd+F    | Toggle fullscreen (§7.4)                               | Menu (`menu.ts`)                  |
+| Cmd (hold)    | Number badges + sidebar peek while running             | Web (`use-command-keyboard.ts`)   |
+| Cmd+1..9      | Select the Nth visible project (v1.1.2)                | Web (`use-command-keyboard.ts`)   |
+| Cmd+↓ / Cmd+↑ | Next/previous project in the visible order (v1.1.2 T7) | Web (`use-command-keyboard.ts`)   |
+| Enter         | Load (idle) / Change-restart (pending)                 | Web (`SessionActionButton.tsx`)   |
+| Esc           | Close the running project (red Close alias, v1.1.2 T7) | Web (`SessionActionButton.tsx`)   |
 
 ## Web Cmd Layer (v1.1.2)
 
@@ -30,17 +33,25 @@ It owns three behaviors (spec issue #4):
 - **Cmd+1..9** → selects the Nth visible project through `selectProject`
   (`src/lib/project-select.ts`) — the same unified entry the card click
   uses, so semantics can never drift between mouse and keyboard.
+- **Cmd+↓/Cmd+↑** → moves the selection one project along the visible
+  order through `moveProjectSelection` (`src/lib/project-select.ts`), with
+  the same click-equal semantics as Cmd+1..9 (idle selects, a running
+  session goes through the §8.3 switch confirmation). The ends clamp —
+  never wrap — and when the current project sits inside a folder while the
+  user is at the top level, the move drills into that folder first and
+  continues inside it ("下一首曲子" mental model, v1.1.2 T7).
 - **Cmd+R** → starts the inline rename through `startRename`
   (`src/lib/project-rename.ts`): the selected project's card (or the
   drilled-in folder's breadcrumb name when nothing is selected). The Edit
   menu's "Rename Project" item fires the same function behind the same
   accelerator — the native accelerator consumes the key before the webview,
   so both paths apply the same text-input/open-overlay guards. Forbidden
-  while a session runs; silent no-op with nothing selected.
+  while a session runs; silent no-op with nothing selected (and never
+  offered for the protected Utilities folder).
 - **Cmd+0** is deliberately NOT consumed here; it stays the native
   "Actual Size" menu accelerator.
 
-## Enter Session Action (v1.1.2)
+## Enter Session Action / Esc Close (v1.1.2)
 
 Enter is a keyboard alias for the sidebar's session-action footer, handled
 where its state lives (`SessionActionButton.tsx`) so key and click share
@@ -48,12 +59,24 @@ one set of conditions:
 
 - **idle/error + loadable** → `start()` (same gate as the Load button)
 - **running + pending config change** → `restart()` (the amber Change)
-- **running, no pending change** → deliberately NOT mapped — the red Close
-  stays mouse-only so a stray Enter can never stop a live show
+- **running, no pending change** → Enter deliberately NOT mapped — but Esc
+  IS the red Close's alias (v1.1.2 T7, spec issue #11): it runs the exact
+  `stopAndReset()` the button runs, and nothing else
 
-Guards: text inputs own their Enter (`isEditableTarget`), and while a
-Radix dialog or select popup is open (`hasOpenOverlay`) Enter belongs to
-the overlay — the global layer never fires underneath a confirm flow.
+Guards: text inputs own their keys (`isEditableTarget`), and while a
+Radix dialog or select popup is open (`hasOpenOverlay`) Enter/Esc belong
+to the overlay — the global layer never fires underneath a confirm flow.
+
+## Cmd+Q Quit Flow (v1.1.2 T7)
+
+The predefined macOS Quit item cannot be intercepted, so `menu.ts`
+replaces it with a custom `quit-app` MenuItem that calls `requestQuit()`
+(`src/store/window-store.ts`): with a live session (starting/ready — the
+same `shouldConfirmClose` gate as ⌘W) the app-styled `QuitConfirmDialog`
+opens; its confirm stops the session and then exits. Without a live
+session the app exits immediately — `markQuitting()` first so the exit
+never waits for a fade (§7.4), then the `quitApp` Rust command, whose
+`ExitRequested` handler performs the session teardown.
 
 ```typescript
 // src/hooks/use-command-keyboard.ts (shape)

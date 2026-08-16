@@ -11,6 +11,18 @@ export interface CurrentProject {
 export type PreflightStatus = 'idle' | 'checking' | 'ready' | 'error'
 
 /**
+ * v1.1.2 T7 (spec issue #11): reserved id of the default Utilities folder
+ * seeded from the bundled example projects. It can be reordered and its
+ * membership edited, but never renamed or deleted.
+ */
+export const UTILITIES_FOLDER_ID = 'utilities'
+
+/** True for folders the sidebar must keep as-is (no rename, no delete). */
+export function isProtectedFolder(id: string): boolean {
+  return id === UTILITIES_FOLDER_ID
+}
+
+/**
  * v1.1.2 T6: what ⌘R is currently renaming (spec issue #10) — the selected
  * project card, or the drilled-in folder when nothing is selected.
  */
@@ -219,14 +231,22 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
 
   renameFolder: (id, name) =>
     set(state => ({
-      projectFolders: state.projectFolders.map(folder =>
-        folder.id === id ? { ...folder, name } : folder
-      ),
+      // Protected folders keep their name (v1.1.2 T7) — the guard makes
+      // every entry point (inline commit, ⌘R, Edit menu) a silent no-op.
+      projectFolders: isProtectedFolder(id)
+        ? state.projectFolders
+        : state.projectFolders.map(folder =>
+            folder.id === id ? { ...folder, name } : folder
+          ),
     })),
 
   deleteFolder: id =>
     set(state => ({
-      projectFolders: state.projectFolders.filter(folder => folder.id !== id),
+      // Protected folders are never deleted; membership edits are the
+      // only structural lever on them (v1.1.2 T7).
+      projectFolders: isProtectedFolder(id)
+        ? state.projectFolders
+        : state.projectFolders.filter(folder => folder.id !== id),
       // Deleting the folder the sidebar is drilled into exits to the top.
       activeFolderId: state.activeFolderId === id ? null : state.activeFolderId,
     })),

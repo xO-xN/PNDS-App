@@ -12,7 +12,11 @@ import {
   ChevronLeft,
 } from 'lucide-react'
 import { openUrl } from '@tauri-apps/plugin-opener'
-import { useProjectStore, visibleProjectPaths } from '@/store/project-store'
+import {
+  isProtectedFolder,
+  useProjectStore,
+  visibleProjectPaths,
+} from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 import { useKeyboardStore } from '@/store/keyboard-store'
 import {
@@ -930,6 +934,9 @@ export function Sidebar({
             </div>
             {projectFolders.map((folder, folderIndex) => {
               const isEditing = editingFolderId === folder.id
+              // v1.1.2 T7: the Utilities folder is permanent — no delete
+              // affordance (rename/⌘R are already blocked upstream).
+              const isProtected = isProtectedFolder(folder.id)
               const inUse =
                 sessionLive &&
                 currentProject !== null &&
@@ -1020,17 +1027,21 @@ export function Sidebar({
                       >
                         {folder.name}
                       </span>
-                      <button
-                        type="button"
-                        aria-label={t('sidebar.deleteFolder')}
-                        onClick={e => {
-                          e.stopPropagation()
-                          setPendingDeleteFolderId(folder.id)
-                        }}
-                        className="w-5 shrink-0 text-(--pnds-text)/50 opacity-0 transition-opacity hover:text-(--pnds-text) group-hover:opacity-100"
-                      >
-                        <X size={14} />
-                      </button>
+                      {isProtected ? (
+                        <span className="w-5 shrink-0" aria-hidden="true" />
+                      ) : (
+                        <button
+                          type="button"
+                          aria-label={t('sidebar.deleteFolder')}
+                          onClick={e => {
+                            e.stopPropagation()
+                            setPendingDeleteFolderId(folder.id)
+                          }}
+                          className="w-5 shrink-0 text-(--pnds-text)/50 opacity-0 transition-opacity hover:text-(--pnds-text) group-hover:opacity-100"
+                        >
+                          <X size={14} />
+                        </button>
+                      )}
                     </>
                   )}
                 </div>
