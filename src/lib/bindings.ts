@@ -242,7 +242,12 @@ recentProjects?: string[];
  * the trusted list above stays the master list, so deleting a folder
  * merely returns its projects to the ungrouped section.
  */
-projectFolders?: ProjectFolder[] }
+projectFolders?: ProjectFolder[]; 
+/**
+ * v1.1.2 T6: user-chosen display name per project path (spec issue #10).
+ * Absent entry = derived path-basename name. Never touches manifests.
+ */
+projectDisplayNames?: Partial<{ [key in string]: string }> }
 export type AudioConfig = { defaultMode: string; supportedModes: string[]; 
 /**
  * Discrete project output signals (spec §3.3): 1..=64, default 2.

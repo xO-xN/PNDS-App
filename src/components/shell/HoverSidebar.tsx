@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Sidebar } from './Sidebar'
 import { useSessionStore } from '@/store/session-store'
 import { useKeyboardStore } from '@/store/keyboard-store'
+import { useProjectStore } from '@/store/project-store'
 import { cn } from '@/lib/utils'
 
 /**
@@ -24,9 +25,14 @@ export function HoverSidebar() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const commandKeyPressed = useKeyboardStore(state => state.commandKeyPressed)
   const running = useSessionStore(state => state.sessionStatus === 'ready')
+  // v1.1.2 T6: ⌘R reveals the sidebar straight into the inline edit, and
+  // the edit must outlast the Cmd key / hover that summoned it (spec
+  // issue #10: 编辑聚焦期间侧栏保持显现).
+  const renaming = useProjectStore(state => state.renameTarget !== null)
 
   const peeking = commandKeyPressed && running
-  const sidebarVisible = hoverVisible || popupOpen || dialogOpen || peeking
+  const sidebarVisible =
+    hoverVisible || popupOpen || dialogOpen || peeking || renaming
 
   return (
     <>

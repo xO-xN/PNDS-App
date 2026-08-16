@@ -6,16 +6,17 @@ Keyboard input reaches the app through two layers: native menu accelerators
 
 ## Current Shortcuts
 
-| Shortcut      | Action                                     | Layer                           |
-| ------------- | ------------------------------------------ | ------------------------------- |
-| Cmd+W         | Close-confirm flow (v1.1.1)                | Menu (`menu.ts`)                |
-| Cmd+= / Cmd+- | Monitor zoom in/out (v1.1.1)               | Menu (`menu.ts`)                |
-| Cmd+0         | Monitor zoom: actual size (v1.1.1)         | Menu (`menu.ts`)                |
-| Cmd+Shift+R   | Reload monitor (v1.1.1)                    | Menu (`menu.ts`)                |
-| Ctrl+Cmd+F    | Toggle fullscreen (§7.4)                   | Menu (`menu.ts`)                |
-| Cmd (hold)    | Number badges + sidebar peek while running | Web (`use-command-keyboard.ts`) |
-| Cmd+1..9      | Select the Nth visible project (v1.1.2)    | Web (`use-command-keyboard.ts`) |
-| Enter         | Load (idle) / Change-restart (pending)     | Web (`SessionActionButton.tsx`) |
+| Shortcut      | Action                                     | Layer                             |
+| ------------- | ------------------------------------------ | --------------------------------- |
+| Cmd+W         | Close-confirm flow (v1.1.1)                | Menu (`menu.ts`)                  |
+| Cmd+= / Cmd+- | Monitor zoom in/out (v1.1.1)               | Menu (`menu.ts`)                  |
+| Cmd+0         | Monitor zoom: actual size (v1.1.1)         | Menu (`menu.ts`)                  |
+| Cmd+Shift+R   | Reload monitor (v1.1.1)                    | Menu (`menu.ts`)                  |
+| Cmd+R         | Rename selected project / folder (v1.1.2)  | Menu + Web (shared `startRename`) |
+| Ctrl+Cmd+F    | Toggle fullscreen (§7.4)                   | Menu (`menu.ts`)                  |
+| Cmd (hold)    | Number badges + sidebar peek while running | Web (`use-command-keyboard.ts`)   |
+| Cmd+1..9      | Select the Nth visible project (v1.1.2)    | Web (`use-command-keyboard.ts`)   |
+| Enter         | Load (idle) / Change-restart (pending)     | Web (`SessionActionButton.tsx`)   |
 
 ## Web Cmd Layer (v1.1.2)
 
@@ -29,6 +30,13 @@ It owns three behaviors (spec issue #4):
 - **Cmd+1..9** → selects the Nth visible project through `selectProject`
   (`src/lib/project-select.ts`) — the same unified entry the card click
   uses, so semantics can never drift between mouse and keyboard.
+- **Cmd+R** → starts the inline rename through `startRename`
+  (`src/lib/project-rename.ts`): the selected project's card (or the
+  drilled-in folder's breadcrumb name when nothing is selected). The Edit
+  menu's "Rename Project" item fires the same function behind the same
+  accelerator — the native accelerator consumes the key before the webview,
+  so both paths apply the same text-input/open-overlay guards. Forbidden
+  while a session runs; silent no-op with nothing selected.
 - **Cmd+0** is deliberately NOT consumed here; it stays the native
   "Actual Size" menu accelerator.
 

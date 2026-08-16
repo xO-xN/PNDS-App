@@ -33,6 +33,10 @@ pub struct AppPreferences {
     /// merely returns its projects to the ungrouped section.
     #[serde(default)]
     pub project_folders: Vec<ProjectFolder>,
+    /// v1.1.2 T6: user-chosen display name per project path (spec issue #10).
+    /// Absent entry = derived path-basename name. Never touches manifests.
+    #[serde(default)]
+    pub project_display_names: HashMap<String, String>,
 }
 
 /// A named one-level group of project paths (spec issue #4).
@@ -53,6 +57,7 @@ impl Default for AppPreferences {
             osc_targets: HashMap::new(),
             recent_projects: Vec::new(),
             project_folders: Vec::new(),
+            project_display_names: HashMap::new(),
         }
     }
 }
@@ -101,13 +106,41 @@ mod tests {
             ]
         }"#;
         let prefs: AppPreferences = serde_json::from_str(modern).expect("modern prefs parse");
+        assert_eq!(prefs.project_folders.len(), 1);
+        assert!(prefs.project_display_names.is_empty());
+    }
+
+    /// v1.1.2 T6: preference files written before `projectDisplayNames`
+    /// existed must load losslessly (serde default fills the field in).
+    #[test]
+    fn deserializes_preferences_without_project_display_names() {
+        let legacy = r#"{
+            "theme": "dark",
+            "language": null,
+            "recentProjects": ["/Users/test/Inarticulate III"],
+            "projectFolders": [
+                { "id": "f1", "name": "Gig", "projectPaths": ["/Users/test/Inarticulate III"] }
+            ]
+        }"#;
+        let prefs: AppPreferences = serde_json::from_str(legacy).expect("legacy prefs parse");
+        assert!(prefs.project_display_names.is_empty());
+        assert_eq!(prefs.project_folders.len(), 1);
+    }
+
+    #[test]
+    fn roundtrips_project_display_names() {
+        let modern = r#"{
+            "theme": "system",
+            "language": null,
+            "recentProjects": ["/a", "/b"],
+            "projectDisplayNames": { "/a": "Opening Set" }
+        }"#;
+        let prefs: AppPreferences = serde_json::from_str(modern).expect("modern prefs parse");
         assert_eq!(
-            prefs.project_folders,
-            vec![ProjectFolder {
-                id: "f1".to_string(),
-                name: "Gig".to_string(),
-                project_paths: vec!["/a".to_string()],
-            }]
+            prefs.project_display_names.get("/a").map(String::as_str),
+            Some("Opening Set")
         );
+        let reserialized = serde_json::to_string(&prefs).expect("prefs serialize");
+        assert!(reserialized.contains("\"projectDisplayNames\""));
     }
 }

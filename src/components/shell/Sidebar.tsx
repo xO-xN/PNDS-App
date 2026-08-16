@@ -22,7 +22,7 @@ import {
   stopAndReset,
 } from '@/lib/open-project'
 import { selectProject } from '@/lib/project-select'
-import { saveProjectIndex } from '@/lib/audio-prefs'
+import { saveProjectDisplayName, saveProjectIndex } from '@/lib/audio-prefs'
 import {
   cardShift,
   folderDropAt,
@@ -128,6 +128,62 @@ function rectOf(element: HTMLElement | null): Rect | null {
   }
 }
 
+/** Title-cases a path's last segment (multichannel-tone-test → Multichannel
+ * Tone Test) — the fallback name for projects without an override. */
+function titleCasePath(path: string): string {
+  const base = path.split('/').filter(Boolean).pop() ?? path
+  return base
+    .split('-')
+    .map(part => (part ? part.charAt(0).toUpperCase() + part.slice(1) : part))
+    .join(' ')
+}
+
+interface InlineNameInputProps {
+  testId: string
+  value: string
+  className: string
+  onCommit: (name: string) => void
+  onCancel: () => void
+}
+
+/**
+ * v1.1.2 T6: the inline name editor behind ⌘R and the new-folder gesture
+ * (spec issue #10) — autofocus with the current name selected, Enter or
+ * blur commits, Esc cancels. The draft is seeded on mount, so Enter
+ * without typing is a no-op.
+ */
+function InlineNameInput({
+  testId,
+  value,
+  className,
+  onCommit,
+  onCancel,
+}: InlineNameInputProps) {
+  const draftRef = useRef(value)
+  return (
+    <input
+      data-testid={testId}
+      autoFocus
+      defaultValue={value}
+      ref={node => {
+        if (node) draftRef.current = node.value
+      }}
+      onClick={e => e.stopPropagation()}
+      onFocus={e => e.target.select()}
+      onChange={e => {
+        draftRef.current = e.target.value
+      }}
+      onKeyDown={e => {
+        e.stopPropagation()
+        if (e.key === 'Enter') onCommit(draftRef.current)
+        if (e.key === 'Escape') onCancel()
+      }}
+      onBlur={() => onCommit(draftRef.current)}
+      className={className}
+    />
+  )
+}
+
 /**
  * PNDS sidebar (§10.1, §10.2; Figma "PNDS UI Design"). A floating rounded
  * panel, always open on Welcome/Loading and popping in over the monitor
@@ -152,6 +208,12 @@ function rectOf(element: HTMLElement | null): Rect | null {
  * the breadcrumb bar returns it to ungrouped, and folder cards reorder
  * within their section by the same drag gesture. Every structural change
  * persists via the project index.
+ *
+ * v1.1.2 T6 (spec issue #10): ⌘R renames in place — the selected project
+ * card's title becomes an input (Enter/blur commit, Esc cancel, empty
+ * falls back to the path basename) and with nothing selected inside a
+ * folder view the breadcrumb's folder name does. Overrides persist in
+ * preferences (`projectDisplayNames`) and every name display follows them.
  */
 export function Sidebar({
   variant,
@@ -169,6 +231,10 @@ export function Sidebar({
   const pendingSwitchPath = useProjectStore(state => state.pendingSwitchPath)
   const activeFolderId = useProjectStore(state => state.activeFolderId)
   const setActiveFolderId = useProjectStore(state => state.setActiveFolderId)
+  const projectDisplayNames = useProjectStore(
+    state => state.projectDisplayNames
+  )
+  const renameTarget = useProjectStore(state => state.renameTarget)
   const sessionStatus = useSessionStore(state => state.sessionStatus)
   const commandKeyPressed = useKeyboardStore(state => state.commandKeyPressed)
   const lanIp = useSessionStore(state => state.lanIp)
@@ -195,7 +261,6 @@ export function Sidebar({
   const [suppressTransition, setSuppressTransition] = useState(false)
   /** Folder being inline-named (creation gesture: Enter commits, Esc cancels). */
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null)
-  const editingFolderNameRef = useRef('')
   const [pendingDeleteFolderId, setPendingDeleteFolderId] = useState<
     string | null
   >(null)
@@ -225,19 +290,15 @@ export function Sidebar({
     folder => folder.id === pendingDeleteFolderId
   )
 
-  // Title-case the folder name (multichannel-tone-test → Multichannel Tone
-  // Test) so an unselected project reads the same as its manifest name.
-  const displayName = (path: string) => {
-    const base = path.split('/').filter(Boolean).pop() ?? path
-    return base
-      .split('-')
-      .map(part => (part ? part.charAt(0).toUpperCase() + part.slice(1) : part))
-      .join(' ')
-  }
+  // Title-case the path basename so an unselected project reads the same
+  // as its manifest name; a v1.1.2 T6 display-name override (spec issue
+  // #10) always wins.
+  const displayName = (path: string) =>
+    projectDisplayNames[path] ?? titleCasePath(path)
 
   /** The name a project card (and its drag clone) shows for `path`. */
   const cardName = (path: string) =>
-    path === currentProject?.path
+    path === currentProject?.path && !projectDisplayNames[path]
       ? currentProject.manifest.name
       : displayName(path)
 
@@ -274,32 +335,56 @@ export function Sidebar({
   const handleNewFolder = () => {
     const store = useProjectStore.getState()
     const id = store.createFolder(t('sidebar.folderDefaultName'))
-    editingFolderNameRef.current = t('sidebar.folderDefaultName')
     setEditingFolderId(id)
     persistIndex()
   }
 
-  const commitFolderName = () => {
-    const id = editingFolderId
+  const commitFolderName = (rawName: string) => {
+    const target = useProjectStore.getState().renameTarget
+    const id = editingFolderId ?? (target?.kind === 'folder' ? target.id : null)
     if (!id) return
-    const name = editingFolderNameRef.current.trim()
+    const name = rawName.trim()
     const store = useProjectStore.getState()
     if (name) store.renameFolder(id, name)
     setEditingFolderId(null)
+    store.setRenameTarget(null)
     persistIndex()
   }
 
   const cancelFolderName = () => {
-    const id = editingFolderId
+    const target = useProjectStore.getState().renameTarget
+    const id = editingFolderId ?? (target?.kind === 'folder' ? target.id : null)
     if (!id) return
     setEditingFolderId(null)
-    // Esc during creation discards the empty folder.
+    // Esc during creation discards the empty folder; a ⌘R rename of an
+    // existing folder just cancels (spec issue #10).
     const store = useProjectStore.getState()
+    store.setRenameTarget(null)
     const folder = store.projectFolders.find(f => f.id === id)
-    if (folder && folder.projectPaths.length === 0) {
+    if (editingFolderId === id && folder && folder.projectPaths.length === 0) {
       store.deleteFolder(id)
       persistIndex()
     }
+  }
+
+  /**
+   * v1.1.2 T6: commits the inline project rename — Enter and blur land
+   * here, and the store guard makes the Enter→blur double fire a no-op.
+   * An empty trimmed name removes the override, so the card falls back to
+   * the path-basename name (spec issue #10: 空串回退).
+   */
+  const commitProjectName = (rawName: string) => {
+    const target = useProjectStore.getState().renameTarget
+    if (target?.kind !== 'project') return
+    const name = rawName.trim()
+    const store = useProjectStore.getState()
+    store.setRenameTarget(null)
+    store.setProjectDisplayName(target.path, name)
+    void saveProjectDisplayName(target.path, name)
+  }
+
+  const cancelProjectName = () => {
+    useProjectStore.getState().setRenameTarget(null)
   }
 
   const confirmDeleteFolder = () => {
@@ -592,12 +677,25 @@ export function Sidebar({
           <span aria-hidden="true" className="shrink-0 text-(--pnds-text)/30">
             /
           </span>
-          <span
-            data-testid="breadcrumb-folder-name"
-            className="truncate text-(--pnds-text)"
-          >
-            {activeFolder.name}
-          </span>
+          {renameTarget?.kind === 'folder' &&
+          renameTarget.id === activeFolder.id ? (
+            /* v1.1.2 T6: ⌘R renames the drilled-in folder in place —
+             * Enter/blur commit, Esc cancel (spec issue #10). */
+            <InlineNameInput
+              testId="folder-name-input"
+              value={activeFolder.name}
+              className="min-w-0 flex-1 truncate rounded-lg border border-(--pnds-text)/15 bg-(--pnds-text)/5 px-2 py-0.5 text-[14px] text-(--pnds-text) outline-none"
+              onCommit={commitFolderName}
+              onCancel={cancelFolderName}
+            />
+          ) : (
+            <span
+              data-testid="breadcrumb-folder-name"
+              className="truncate text-(--pnds-text)"
+            >
+              {activeFolder.name}
+            </span>
+          )}
           <button
             type="button"
             data-testid="add-project-button"
@@ -633,6 +731,8 @@ export function Sidebar({
         {visiblePaths.map((path, index) => {
           const isCurrent = path === currentProject?.path
           const isDragged = drag?.kind === 'project' && drag.path === path
+          const renamingProject =
+            renameTarget?.kind === 'project' && renameTarget.path === path
           const cardOffset =
             projectInsertionIndex === null || dragProjectIndex < 0
               ? 0
@@ -684,14 +784,26 @@ export function Sidebar({
                 <GripVertical size={14} aria-hidden="true" />
               </button>
 
-              <button
-                type="button"
-                disabled={busy || (isCurrent && running)}
-                title={path}
-                className="flex-1 truncate text-center text-[15px] text-(--pnds-text)/85 disabled:opacity-60"
-              >
-                {cardName(path)}
-              </button>
+              {renamingProject ? (
+                /* v1.1.2 T6: ⌘R inline rename — autofocus, select-all,
+                 * Enter/blur commit, Esc cancel (spec issue #10). */
+                <InlineNameInput
+                  testId="project-name-input"
+                  value={cardName(path)}
+                  className="flex-1 truncate rounded-lg border border-(--pnds-text)/15 bg-(--pnds-text)/5 px-2 py-1 text-center text-[15px] text-(--pnds-text) outline-none"
+                  onCommit={commitProjectName}
+                  onCancel={cancelProjectName}
+                />
+              ) : (
+                <button
+                  type="button"
+                  disabled={busy || (isCurrent && running)}
+                  title={path}
+                  className="flex-1 truncate text-center text-[15px] text-(--pnds-text)/85 disabled:opacity-60"
+                >
+                  {cardName(path)}
+                </button>
+              )}
 
               {/* Right slot: ⌘N hint while Cmd is held (v1.1.2), else ✕
                   remove from history — never for the open project */}
@@ -804,21 +916,12 @@ export function Sidebar({
                   )}
                 >
                   {isEditing ? (
-                    <input
-                      data-testid="folder-name-input"
-                      autoFocus
-                      defaultValue={folder.name}
-                      onFocus={e => e.target.select()}
-                      onChange={e => {
-                        editingFolderNameRef.current = e.target.value
-                      }}
-                      onKeyDown={e => {
-                        e.stopPropagation()
-                        if (e.key === 'Enter') commitFolderName()
-                        if (e.key === 'Escape') cancelFolderName()
-                      }}
-                      onBlur={commitFolderName}
+                    <InlineNameInput
+                      testId="folder-name-input"
+                      value={folder.name}
                       className="flex-1 truncate rounded-lg border border-(--pnds-text)/15 bg-(--pnds-text)/5 px-2 py-1 text-center text-[15px] text-(--pnds-text) outline-none"
+                      onCommit={commitFolderName}
+                      onCancel={cancelFolderName}
                     />
                   ) : (
                     <>

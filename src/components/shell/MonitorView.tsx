@@ -1,4 +1,5 @@
 import { useSessionStore } from '@/store/session-store'
+import { useProjectStore } from '@/store/project-store'
 import { HoverSidebar } from './HoverSidebar'
 
 /**
@@ -11,6 +12,12 @@ import { HoverSidebar } from './HoverSidebar'
 export function MonitorView() {
   const health = useSessionStore(state => state.health)
   const projectName = useSessionStore(state => state.projectName)
+  const currentPath = useProjectStore(state => state.currentProject?.path)
+  // v1.1.2 T6: a custom display name (spec issue #10) wins over the
+  // manifest name the session reports.
+  const displayOverride = useProjectStore(state =>
+    currentPath ? state.projectDisplayNames[currentPath] : undefined
+  )
   const lanIp = useSessionStore(state => state.lanIp)
   const reloadNonce = useSessionStore(state => state.monitorReloadNonce)
   // §v1.1.1: browser-style zoom (50–200%), session-only.
@@ -57,7 +64,7 @@ export function MonitorView() {
         data-tauri-drag-region
         className="absolute left-1/2 top-0 z-40 -translate-x-1/2 cursor-default select-none rounded-b-xl bg-black/30 px-5 py-1.5 text-xs font-medium tracking-wide text-white/85 backdrop-blur-md"
       >
-        PNDS - {projectName}
+        PNDS - {displayOverride ?? projectName}
       </div>
 
       <HoverSidebar />

@@ -4,6 +4,7 @@ import {
   type ProjectFolder,
 } from '@/lib/tauri-bindings'
 import { logger } from '@/lib/logger'
+import { upsertDisplayName } from '@/lib/display-names'
 
 /**
  * App-local audio preferences (§6.5, §6.6): output device and per-project
@@ -76,6 +77,29 @@ export async function saveProjectIndex(
       ...prefs,
       recentProjects: paths,
       projectFolders: folders,
+    })
+  })
+}
+
+/**
+ * v1.1.2 T6: persist one project display-name override (spec issue #10).
+ * An empty name removes the entry — the card falls back to the
+ * path-basename name.
+ */
+export async function saveProjectDisplayName(
+  path: string,
+  name: string
+): Promise<void> {
+  return enqueueSave(async () => {
+    const prefs = await loadAudioPreferences()
+    if (!prefs) return
+    await commands.savePreferences({
+      ...prefs,
+      projectDisplayNames: upsertDisplayName(
+        prefs.projectDisplayNames,
+        path,
+        name
+      ),
     })
   })
 }

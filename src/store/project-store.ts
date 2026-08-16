@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { Manifest, ProjectFolder } from '@/lib/tauri-bindings'
 import { masterWithUngroupedOrder, sameMemberSet } from '@/lib/drag-reorder'
+import { upsertDisplayName } from '@/lib/display-names'
 
 export interface CurrentProject {
   path: string
@@ -8,6 +9,14 @@ export interface CurrentProject {
 }
 
 export type PreflightStatus = 'idle' | 'checking' | 'ready' | 'error'
+
+/**
+ * v1.1.2 T6: what ⌘R is currently renaming (spec issue #10) — the selected
+ * project card, or the drilled-in folder when nothing is selected.
+ */
+export type RenameTarget =
+  | { kind: 'project'; path: string }
+  | { kind: 'folder'; id: string }
 
 interface ProjectState {
   /** Project that passed preflight and is ready to start (starting is task-2). */
@@ -38,6 +47,13 @@ interface ProjectState {
    * level. Session-memory view state — never persisted (spec issue #4).
    */
   activeFolderId: string | null
+  /**
+   * v1.1.2 T6: user-chosen display name per project path (spec issue #10).
+   * Absent entry = derived path-basename name. Persisted in preferences.
+   */
+  projectDisplayNames: Record<string, string>
+  /** Card currently in inline rename; drives the sidebar's edit state. */
+  renameTarget: RenameTarget | null
   preflightStatus: PreflightStatus
   preflightError: string | null
   isTrusted: (path: string) => boolean
@@ -49,6 +65,14 @@ interface ProjectState {
   clearSwitchRequest: () => void
   /** Drills the sidebar into a folder, or back to the top level (null). */
   setActiveFolderId: (id: string | null) => void
+  /** Restores display-name overrides from persisted preferences. */
+  setProjectDisplayNames: (names: Record<string, string>) => void
+  /**
+   * Sets one override. An empty name removes the entry — the card falls
+   * back to the path-basename name (spec issue #10: 空串回退).
+   */
+  setProjectDisplayName: (path: string, name: string) => void
+  setRenameTarget: (target: RenameTarget | null) => void
   setProjectFolders: (folders: ProjectFolder[]) => void
   /** Creates a folder and returns its id (caller drives inline naming). */
   createFolder: (name: string) => string
@@ -130,6 +154,8 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
   pendingPreflightPath: null,
   pendingSwitchPath: null,
   activeFolderId: null,
+  projectDisplayNames: {},
+  renameTarget: null,
   preflightStatus: 'idle',
   preflightError: null,
 
@@ -164,6 +190,19 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
   clearSwitchRequest: () => set({ pendingSwitchPath: null }),
 
   setActiveFolderId: id => set({ activeFolderId: id }),
+
+  setProjectDisplayNames: names => set({ projectDisplayNames: names }),
+
+  setProjectDisplayName: (path, name) =>
+    set(state => ({
+      projectDisplayNames: upsertDisplayName(
+        state.projectDisplayNames,
+        path,
+        name
+      ),
+    })),
+
+  setRenameTarget: target => set({ renameTarget: target }),
 
   setProjectFolders: folders => set({ projectFolders: folders }),
 

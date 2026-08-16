@@ -29,6 +29,8 @@ File
 
 Edit
 ├── Undo / Redo / Cut / Copy / Paste / Select All   (standard text-editing)
+├── ────────────────────
+└── Rename Project          (Cmd+R)   (custom — inline rename, v1.1.2 T6)
 
 View
 ├── Zoom In                  (Cmd+=)

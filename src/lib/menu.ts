@@ -18,6 +18,8 @@ import { logger } from '@/lib/logger'
 import { notifications } from '@/lib/notifications'
 import { useSessionStore } from '@/store/session-store'
 import { requestClose, toggleFullscreen } from '@/store/window-store'
+import { startRename } from '@/lib/project-rename'
+import { hasOpenOverlay, isEditableTarget } from '@/hooks/use-command-keyboard'
 
 const APP_NAME = 'PNDS'
 
@@ -90,6 +92,21 @@ export async function buildAppMenu(): Promise<Menu> {
         await PredefinedMenuItem.new({
           item: 'SelectAll',
           text: t('menu.selectAll'),
+        }),
+        await PredefinedMenuItem.new({ item: 'Separator' }),
+        // v1.1.2 T6: ⌘R rename — same action and guards as the keyboard
+        // entry (spec issue #10: 同加速键、单一触发源). The native
+        // accelerator consumes ⌘R before the webview, so the menu path
+        // needs the same text-input / open-overlay escapes.
+        await MenuItem.new({
+          id: 'rename-project',
+          text: t('menu.renameProject'),
+          accelerator: 'Cmd+R',
+          action: () => {
+            if (hasOpenOverlay() || isEditableTarget(document.activeElement))
+              return
+            startRename()
+          },
         }),
       ],
     })

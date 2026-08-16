@@ -79,6 +79,16 @@ export function AppShell() {
       if (prefs?.projectFolders?.length) {
         useProjectStore.getState().setProjectFolders(prefs.projectFolders)
       }
+      // v1.1.2 T6: custom display names (spec issue #10) — same serde
+      // default, so old files restore as no overrides. The generated
+      // binding type is Partial, so drop undefined entries on the way in.
+      if (prefs?.projectDisplayNames) {
+        const names: Record<string, string> = {}
+        for (const [path, name] of Object.entries(prefs.projectDisplayNames)) {
+          if (name) names[path] = name
+        }
+        useProjectStore.getState().setProjectDisplayNames(names)
+      }
     })
   }, [])
 

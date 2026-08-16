@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { useKeyboardStore } from '@/store/keyboard-store'
 import { visibleProjectPaths, useProjectStore } from '@/store/project-store'
 import { selectProject } from '@/lib/project-select'
+import { startRename } from '@/lib/project-rename'
 
 /**
  * True when a keyboard event originates from a text-editing target —
@@ -34,6 +35,8 @@ export function hasOpenOverlay(): boolean {
  * sidebar visibility.
  *
  * - ⌘ held → `commandKeyPressed` (badges + running-state sidebar peek)
+ * - ⌘R → rename the selected project (folder name inside a folder view
+ *   with nothing selected) via the same entry as the Edit-menu item
  * - ⌘1..9 → select the Nth visible project via the same entry as a click,
  *   folder-aware (a drilled-in view numbers only the folder's members);
  *   Cmd+0 stays the native "Actual Size" menu accelerator and is never
@@ -47,6 +50,13 @@ export function useCommandKeyboard(): void {
         return
       }
       if (!event.metaKey || event.repeat) return
+      // ⌘R must never fall through to the webview's page reload.
+      if (event.code === 'KeyR') {
+        if (isEditableTarget(event.target) || hasOpenOverlay()) return
+        event.preventDefault()
+        startRename()
+        return
+      }
       if (!/^[1-9]$/.test(event.key)) return
       if (isEditableTarget(event.target)) return
       event.preventDefault()

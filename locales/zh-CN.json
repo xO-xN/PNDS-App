@@ -24,6 +24,7 @@
   "menu.copy": "拷贝",
   "menu.paste": "粘贴",
   "menu.selectAll": "全选",
+  "menu.renameProject": "重命名工程",
   "close.confirmTitle": "停止会话？",
   "close.confirmMessage": "正在运行一个会话。停止它并关闭窗口吗？",
   "close.stopAndHide": "停止并关闭",

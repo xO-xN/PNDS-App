@@ -24,6 +24,7 @@
   "menu.copy": "Copy",
   "menu.paste": "Paste",
   "menu.selectAll": "Select All",
+  "menu.renameProject": "Rename Project",
   "close.confirmTitle": "Stop the Session?",
   "close.confirmMessage": "A session is running. Stop it and close the window?",
   "close.stopAndHide": "Stop & Close",
