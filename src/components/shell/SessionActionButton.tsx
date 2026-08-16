@@ -18,8 +18,9 @@ import { cn } from '@/lib/utils'
  * Change (§8.3) that applies the pending config with a full restart.
  *
  * v1.1.2: Enter is a keyboard alias for the submit — Load when idle and
- * loadable, Change/restart while a pending config change waits. The red
- * Close stays mouse-only: a stray Enter must never stop a live show. The
+ * loadable, Change/restart while a pending config change waits. v1.1.2 T7
+ * (spec issue #11): Esc is a keyboard alias for the red Close — it stops
+ * a running, change-free session exactly like clicking the button. The
  * listener reuses the exact conditions below, so key and click can never
  * drift apart.
  */
@@ -48,13 +49,24 @@ export function SessionActionButton() {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Enter' || event.repeat) return
+      if (event.repeat) return
       if (event.metaKey || event.ctrlKey || event.altKey) return
       if (isEditableTarget(event.target)) return
-      // Radix owns Enter while a dialog or select popup is open.
+      // Radix owns the keys while a dialog or select popup is open.
       if (hasOpenOverlay()) return
       if (busy) return
-      // Close (running, no pending change) is deliberately not mapped.
+      // v1.1.2 T7: Esc mirrors the red Close button — the running,
+      // change-free state only. Escaping an edit or a dialog belongs to
+      // that element (the guards above already handed it over).
+      if (event.key === 'Escape') {
+        if (running && !pendingChanges) {
+          event.preventDefault()
+          void stopAndReset()
+        }
+        return
+      }
+      if (event.key !== 'Enter') return
+      // Enter never stops a live show — Close stays Esc/mouse-only.
       if (running && !pendingChanges) return
       if (running || loadable) {
         event.preventDefault()
