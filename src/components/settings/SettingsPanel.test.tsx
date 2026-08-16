@@ -132,6 +132,14 @@ describe('SettingsPanel (v1.2.0 issue #13)', () => {
     expect(useSettingsStore.getState().settingsOpen).toBe(false)
   })
 
+  it('the macOS-style top-left close button closes the panel', () => {
+    useSettingsStore.getState().openSettings()
+    render(<SettingsPanel />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(useSettingsStore.getState().settingsOpen).toBe(false)
+  })
+
   it('⌘, toggles the panel open and closed via the keyboard layer', () => {
     render(<KeyboardHarness />)
 

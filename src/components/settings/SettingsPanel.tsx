@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
+import { X } from 'lucide-react'
 import i18n from '@/i18n/config'
 import { applyLanguageSetting } from '@/i18n/language-init'
 import { logger } from '@/lib/logger'
@@ -14,8 +15,8 @@ import {
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
+  DialogClose,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
@@ -59,11 +60,31 @@ export function SettingsPanel() {
     >
       <DialogContent
         data-settings-panel
+        showCloseButton={false}
         className="top-[50%] max-h-[85vh] gap-0 overflow-y-auto sm:max-w-xl"
       >
-        <DialogHeader className="text-start">
+        {/* macOS-style close: the app's red traffic-light dot at the top-LEFT
+            corner (same look as the window controls in TrafficLights.tsx) —
+            12px dot, × appears on hover, padded to a 24px hit area. */}
+        <DialogClose
+          aria-label={t('settings.close')}
+          className="ring-offset-background focus:ring-ring group absolute top-4 left-4 z-10 rounded-full p-1.5 focus:ring-2 focus:ring-offset-2 focus:outline-hidden"
+        >
+          <span
+            className="text-black/60 flex h-3 w-3 items-center justify-center rounded-full transition-transform group-hover:scale-110"
+            style={{ backgroundColor: '#ff5f57' }}
+          >
+            <X
+              size={8}
+              strokeWidth={3}
+              className="opacity-0 transition-opacity group-hover:opacity-100"
+            />
+          </span>
+        </DialogClose>
+
+        {/* ps-4 clears the close dot so the title never runs under it. */}
+        <DialogHeader className="text-start ps-4">
           <DialogTitle>{t('settings.title')}</DialogTitle>
-          <DialogDescription>{t('settings.description')}</DialogDescription>
         </DialogHeader>
 
         <Separator className="mt-4" />

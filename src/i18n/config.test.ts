@@ -28,4 +28,14 @@ describe('i18n config (v1.2.0 issue #13)', () => {
     // sidebar.noProjects has no zh-CN entry — fallbackLng must serve it.
     expect(i18n.t('sidebar.noProjects')).toBe('No projects opened yet')
   })
+
+  it('serves the zh-CN welcome copy (v1.2.0 review feedback)', async () => {
+    await i18n.changeLanguage('zh-CN')
+    expect(i18n.t('welcome.title')).toBe('你好！欢迎来到 PNDS 池谱')
+    expect(i18n.t('welcome.subtitle')).toBe('网络数字乐谱演奏平台')
+    // The two hint lines read as one sentence across the UI's two blocks.
+    expect(
+      `${i18n.t('welcome.hintAdd')}，${i18n.t('welcome.hintSelect')}`
+    ).toBe('添加一个 PNDS 池谱，或是从左侧栏选取一个进行演出')
+  })
 })

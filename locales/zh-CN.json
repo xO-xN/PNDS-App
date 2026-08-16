@@ -34,7 +34,7 @@
   "quit.stopAndQuit": "停止并退出",
   "quit.cancel": "取消",
   "settings.title": "设置",
-  "settings.description": "App 级选项",
+  "settings.close": "关闭",
   "settings.general": "通用",
   "settings.language": "语言",
   "settings.languageSystem": "跟随系统",
@@ -65,6 +65,8 @@
   "closeProject.confirmMessage": "正在运行一个会话。停止它并关闭工程吗？",
   "closeProject.confirm": "关闭",
   "closeProject.cancel": "取消",
-  "welcome.hintAdd": "添加一个新工程，开始一场 PNDS 数字乐谱",
-  "welcome.hintSelect": "或在左侧栏选择一个工程"
+  "welcome.title": "你好！欢迎来到 PNDS 池谱",
+  "welcome.subtitle": "网络数字乐谱演奏平台",
+  "welcome.hintAdd": "添加一个 PNDS 池谱",
+  "welcome.hintSelect": "或是从左侧栏选取一个进行演出"
 }

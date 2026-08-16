@@ -34,7 +34,7 @@
   "quit.stopAndQuit": "Stop & Quit",
   "quit.cancel": "Cancel",
   "settings.title": "Settings",
-  "settings.description": "App-level options",
+  "settings.close": "Close",
   "settings.general": "General",
   "settings.language": "Language",
   "settings.languageSystem": "Follow System",
