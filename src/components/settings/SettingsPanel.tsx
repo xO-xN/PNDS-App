@@ -63,27 +63,15 @@ export function SettingsPanel() {
         showCloseButton={false}
         className="top-[50%] max-h-[85vh] gap-0 overflow-y-auto sm:max-w-xl"
       >
-        {/* macOS-style close: the app's red traffic-light dot at the top-LEFT
-            corner (same look as the window controls in TrafficLights.tsx) —
-            12px dot, × appears on hover, padded to a 24px hit area. */}
-        <DialogClose
-          aria-label={t('settings.close')}
-          className="ring-offset-background focus:ring-ring group absolute top-4 left-4 z-10 rounded-full p-1.5 focus:ring-2 focus:ring-offset-2 focus:outline-hidden"
-        >
-          <span
-            className="text-black/60 flex h-3 w-3 items-center justify-center rounded-full transition-transform group-hover:scale-110"
-            style={{ backgroundColor: '#ff5f57' }}
-          >
-            <X
-              size={8}
-              strokeWidth={3}
-              className="opacity-0 transition-opacity group-hover:opacity-100"
-            />
-          </span>
+        {/* Close at the top-LEFT corner: the standard ghost X from the
+            design system (dialog.tsx), just mirrored to the left side. */}
+        <DialogClose className="ring-offset-background focus:ring-ring absolute top-4 left-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4">
+          <X />
+          <span className="sr-only">{t('settings.close')}</span>
         </DialogClose>
 
-        {/* ps-4 clears the close dot so the title never runs under it. */}
-        <DialogHeader className="text-start ps-4">
+        {/* ps-5 clears the corner X so the title never runs under it. */}
+        <DialogHeader className="text-start ps-5">
           <DialogTitle>{t('settings.title')}</DialogTitle>
         </DialogHeader>
 
