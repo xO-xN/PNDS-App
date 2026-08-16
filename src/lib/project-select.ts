@@ -46,23 +46,23 @@ export function selectProject(path: string, source: SelectSource): void {
 }
 
 /**
- * v1.1.2 T6: drills the sidebar into a folder (the folder-card click).
- * A selection that would be invisible there — the project is not a member
- * of the folder — is dropped, so ⌘R and the number badges, which read the
- * visible view, can never act on a hidden card. A member selection stays
- * (renaming it inside the folder is the intended priority), and a running
- * session keeps its project so the top-level "current" marker survives
- * (rename is blocked while running anyway).
+ * v1.1.2 T6: enters a folder view (folder-card click) or returns to the
+ * top level (breadcrumb back, `null`). Folder views are exclusive — the
+ * collapsed sidebar never shows outside projects — so opening or closing
+ * one resets the selection: a card the view no longer shows must not stay
+ * the ⌘R target. A live session keeps its project (it is not a selection
+ * — the in-use dot and the top-level current marker read it, and rename
+ * is blocked while running anyway).
  */
-export function drillIntoFolder(folderId: string): void {
+export function setActiveFolderView(folderId: string | null): void {
   const project = useProjectStore.getState()
   const status = useSessionStore.getState().sessionStatus
-  const folder = project.projectFolders.find(f => f.id === folderId)
-  const selectionHidden =
+  if (
     status !== 'ready' &&
     status !== 'stopping' &&
-    project.currentProject !== null &&
-    !folder?.projectPaths.includes(project.currentProject.path)
-  if (selectionHidden) project.clearProject()
+    project.currentProject !== null
+  ) {
+    project.clearProject()
+  }
   project.setActiveFolderId(folderId)
 }

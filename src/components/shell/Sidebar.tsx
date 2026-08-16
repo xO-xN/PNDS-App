@@ -21,7 +21,7 @@ import {
   promptOpenProject,
   stopAndReset,
 } from '@/lib/open-project'
-import { selectProject, drillIntoFolder } from '@/lib/project-select'
+import { selectProject, setActiveFolderView } from '@/lib/project-select'
 import { saveProjectDisplayName, saveProjectIndex } from '@/lib/audio-prefs'
 import {
   cardShift,
@@ -230,7 +230,6 @@ export function Sidebar({
   )
   const pendingSwitchPath = useProjectStore(state => state.pendingSwitchPath)
   const activeFolderId = useProjectStore(state => state.activeFolderId)
-  const setActiveFolderId = useProjectStore(state => state.setActiveFolderId)
   const projectDisplayNames = useProjectStore(
     state => state.projectDisplayNames
   )
@@ -668,7 +667,7 @@ export function Sidebar({
             data-testid="breadcrumb-back"
             aria-label={t('sidebar.backToAllProjects')}
             title={t('sidebar.backToAllProjects')}
-            onClick={() => setActiveFolderId(null)}
+            onClick={() => setActiveFolderView(null)}
             className="flex shrink-0 items-center gap-0.5 rounded-md px-1 py-0.5 text-(--pnds-text)/55 hover:bg-(--pnds-text)/5 hover:text-(--pnds-text)"
           >
             <ChevronLeft size={14} aria-hidden="true" />
@@ -895,7 +894,7 @@ export function Sidebar({
                   data-folder-id={folder.id}
                   data-drop-active={isDropHover ? 'true' : undefined}
                   onClick={() => {
-                    if (!isEditing) drillIntoFolder(folder.id)
+                    if (!isEditing) setActiveFolderView(folder.id)
                   }}
                   style={
                     cardOffset !== 0

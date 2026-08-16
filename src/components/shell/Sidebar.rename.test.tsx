@@ -314,9 +314,11 @@ describe('⌘R project rename (v1.1.2 T6)', () => {
     expect(screen.queryByTestId('folder-name-input')).not.toBeInTheDocument()
   })
 
-  it('drilling into a folder drops a selection that is not a member there', () => {
-    // The bug: an ungrouped project stayed selected inside a folder view,
-    // so ⌘R renamed a card the view doesn't show.
+  it('entering or leaving a folder view resets the selection', () => {
+    // Folder views are exclusive (the collapsed sidebar shows only one
+    // side), so navigation must not leave an invisible card as the ⌘R
+    // target. Covers the reported bug: an ungrouped project staying
+    // selected inside a folder view.
     useProjectStore.setState({
       trustedPaths: [FIRST_PATH, SECOND_PATH],
       currentProject: { path: FIRST_PATH, manifest },
@@ -327,6 +329,7 @@ describe('⌘R project rename (v1.1.2 T6)', () => {
     store.moveProjectToFolder(id, SECOND_PATH)
     render(<AppShell />)
 
+    // Enter: selection resets, ⌘R falls through to the folder name.
     fireEvent.click(screen.getByTestId('folder-card'))
     expect(screen.getByTestId('breadcrumb-bar')).toBeInTheDocument()
     expect(useProjectStore.getState().currentProject).toBeNull()
@@ -334,25 +337,30 @@ describe('⌘R project rename (v1.1.2 T6)', () => {
     pressCmdR()
     expect(screen.getByTestId('folder-name-input')).toBeInTheDocument()
     expect(screen.queryByTestId('project-name-input')).not.toBeInTheDocument()
-  })
 
-  it('drilling in keeps a member selection as the ⌘R target', () => {
-    // A member is still visible inside the folder, so it stays selected.
+    // Leave: a selection made inside the folder resets at the top too.
     useProjectStore.setState({
-      trustedPaths: [FIRST_PATH, SECOND_PATH],
       currentProject: { path: SECOND_PATH, manifest: secondManifest },
       preflightStatus: 'ready',
     })
+    fireEvent.click(screen.getByTestId('breadcrumb-back'))
+    expect(useProjectStore.getState().currentProject).toBeNull()
+  })
+
+  it('a running session keeps its project through folder navigation', () => {
+    // During a live session currentProject is not a selection — the
+    // in-use dot and the top-level current marker read it — so folder
+    // navigation must not clear it (rename is blocked while running).
+    seedRunningSession(FIRST_PATH)
     const store = useProjectStore.getState()
-    const id = store.createFolder('Gig')
-    store.moveProjectToFolder(id, SECOND_PATH)
+    store.createFolder('Gig')
     render(<AppShell />)
 
     fireEvent.click(screen.getByTestId('folder-card'))
-    expect(useProjectStore.getState().currentProject?.path).toBe(SECOND_PATH)
+    expect(useProjectStore.getState().currentProject?.path).toBe(FIRST_PATH)
 
-    pressCmdR()
-    expect(screen.getByTestId('project-name-input')).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('breadcrumb-back'))
+    expect(useProjectStore.getState().currentProject?.path).toBe(FIRST_PATH)
   })
 
   it('the switch confirmation follows the display-name override', async () => {
