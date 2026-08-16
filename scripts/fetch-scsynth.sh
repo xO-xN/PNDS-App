@@ -106,9 +106,15 @@ fi
 ln -sfn "src-tauri/Frameworks" "$ROOT/Frameworks"
 
 # GPL-3.0 license text + source pointer (required when distributing binaries).
-curl -fsSL --connect-timeout 15 \
-  "https://www.gnu.org/licenses/gpl-3.0.txt" -o "$BIN_DIR/SC-GPL-3.0.txt" \
-  || echo "warning: could not download GPL-3.0 text; add it manually" >&2
+# The canonical text is vendored at src-tauri/licenses/GPL-3.0.txt so release
+# builds never depend on gnu.org being reachable (observed CI flake: the
+# v1.1.2 tag run timed out on the download and the bundle step then failed
+# on the missing resource).
+cp "$ROOT/src-tauri/licenses/GPL-3.0.txt" "$BIN_DIR/SC-GPL-3.0.txt"
+if [ ! -s "$BIN_DIR/SC-GPL-3.0.txt" ]; then
+  echo "error: vendored GPL-3.0 text missing or empty at src-tauri/licenses/GPL-3.0.txt" >&2
+  exit 1
+fi
 cat > "$BIN_DIR/SC-SOURCE.txt" <<EOF
 scsynth, libsndfile, and the bundled UGen plugins are part of SuperCollider
 (https://supercollider.github.io), licensed under GPL-3.0
