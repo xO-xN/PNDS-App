@@ -50,5 +50,7 @@
   "closeProject.confirmTitle": "关闭工程？",
   "closeProject.confirmMessage": "正在运行一个会话。停止它并关闭工程吗？",
   "closeProject.confirm": "关闭",
-  "closeProject.cancel": "取消"
+  "closeProject.cancel": "取消",
+  "welcome.hintAdd": "添加一个新工程，开始一场 PNDS 数字乐谱",
+  "welcome.hintSelect": "或在左侧栏选择一个工程"
 }

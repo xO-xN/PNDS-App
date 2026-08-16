@@ -24,7 +24,7 @@ export async function promptOpenProject(): Promise<void> {
   const selected = await open({
     directory: true,
     multiple: false,
-    title: i18n.t('welcome.openProject'),
+    title: i18n.t('sidebar.addProject'),
   })
   if (!selected) return
   await openProject(selected)

@@ -10,9 +10,11 @@ describe('App', () => {
     expect(
       screen.getByRole('heading', { name: 'Hi! Welcome to PNDS' })
     ).toBeInTheDocument()
-    // Open Project is offered in the hint text (and the sidebar)
+    // v1.1.2 T7: the hint is plain copy — adding a project is the
+    // sidebar's "+" button, not an inline pill.
     expect(
-      screen.getAllByRole('button', { name: /open project/i }).length
-    ).toBeGreaterThan(0)
+      screen.getByText('Start a PNDS Digital Score by adding a new project')
+    ).toBeInTheDocument()
+    expect(screen.getByTestId('add-project-button')).toBeInTheDocument()
   })
 })

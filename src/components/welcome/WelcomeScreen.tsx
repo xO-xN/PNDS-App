@@ -1,8 +1,6 @@
 import { useTranslation } from 'react-i18next'
-import { Plus } from 'lucide-react'
 import { useProjectStore } from '@/store/project-store'
-import { confirmTrustAndOpen, promptOpenProject } from '@/lib/open-project'
-import { useSessionStore } from '@/store/session-store'
+import { confirmTrustAndOpen } from '@/lib/open-project'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -15,18 +13,17 @@ import {
 } from '@/components/ui/alert-dialog'
 
 /**
- * Welcome main area (§10.4; Figma "Starting Page"): hero text plus the hint
- * with an inline "+ Open" pill. Projects start by clicking a sidebar entry
- * or opening a folder — after trust (§4) and preflight (§5), the
- * session starts automatically. Renders the trust confirmation dialog.
+ * Welcome main area (§10.4; Figma "Starting Page"): hero text plus the
+ * plain hint. Adding a project is the sidebar's "+" button (v1.1.2 moved
+ * it into the Projects header); projects start by clicking a sidebar
+ * entry — after trust (§4) and preflight (§5), starting is explicit via
+ * the Load button. Renders the trust confirmation dialog.
  */
 export function WelcomeScreen() {
   const { t } = useTranslation()
   const preflightStatus = useProjectStore(state => state.preflightStatus)
   const preflightError = useProjectStore(state => state.preflightError)
   const pendingTrustPath = useProjectStore(state => state.pendingTrustPath)
-  const sessionStatus = useSessionStore(state => state.sessionStatus)
-  const busy = preflightStatus === 'checking' || sessionStatus === 'starting'
 
   return (
     <div className="flex min-h-full flex-col items-center justify-center bg-(--pnds-bg) p-8 animate-[fade-in_0.8s_ease-in]">
@@ -40,20 +37,8 @@ export function WelcomeScreen() {
       </header>
 
       <p className="mt-[10vh] max-w-2xl text-center text-[15px] leading-8 text-(--pnds-text)/80">
-        {t('welcome.hintStart')}
-        <button
-          type="button"
-          onClick={() => void promptOpenProject()}
-          disabled={busy}
-          aria-label={t('welcome.openProject')}
-          className="mx-1 inline-flex h-6 translate-y-[-1px] items-center gap-1 rounded-full border border-(--pnds-text)/60 px-3 align-baseline text-[12px] text-(--pnds-text) hover:bg-(--pnds-text)/5 disabled:opacity-50"
-        >
-          <Plus size={12} />
-          {t('sidebar.open')}
-        </button>
-        {t('welcome.hintEnd')}
-        <br />
-        {t('welcome.hintSelect')}
+        <span className="block">{t('welcome.hintAdd')}</span>
+        <span className="block">{t('welcome.hintSelect')}</span>
       </p>
 
       {preflightStatus === 'checking' && (
