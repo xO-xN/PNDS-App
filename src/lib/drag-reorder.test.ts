@@ -7,6 +7,10 @@ import {
   reorderedList,
   cardShift,
   masterWithUngroupedOrder,
+  pointInRect,
+  projectDropAt,
+  folderDropAt,
+  sameDropTarget,
 } from './drag-reorder'
 import type { ProjectFolder } from '@/lib/tauri-bindings'
 
@@ -93,6 +97,8 @@ describe('drag-reorder (v1.1.2 T4, spec issue #8)', () => {
       expect(sameMemberSet(['/a'], ['/a', '/b'])).toBe(false)
       expect(sameMemberSet(['/a', '/b'], ['/a', '/c'])).toBe(false)
       expect(sameMemberSet([], [])).toBe(true)
+      // A duplicate member is not the same member set, whatever the length.
+      expect(sameMemberSet(['/a', '/b'], ['/a', '/a'])).toBe(false)
     })
   })
 
@@ -214,6 +220,149 @@ describe('drag-reorder (v1.1.2 T4, spec issue #8)', () => {
       expect(
         masterWithUngroupedOrder(master, folders, ['/a', '/c', '/x'])
       ).toBe(master)
+    })
+  })
+
+  describe('folder drop targets (v1.1.2 T5, spec issue #9)', () => {
+    // Two project cards pitched 61px from top 100, then the folder cards
+    // further down (three, pitched the same).
+    const listSpace = {
+      top: 100,
+      left: 20,
+      right: 300,
+      cardHeight: 57,
+      stride: 61,
+      count: 2,
+    }
+    const folderSpace = {
+      top: 400,
+      left: 20,
+      right: 300,
+      cardHeight: 57,
+      stride: 61,
+      count: 3,
+    }
+    const breadcrumb = { top: 0, left: 10, right: 310, bottom: 24 }
+
+    describe('pointInRect', () => {
+      it('includes the edges and rejects either axis outside', () => {
+        expect(pointInRect(10, 0, breadcrumb)).toBe(true)
+        expect(pointInRect(310, 24, breadcrumb)).toBe(true)
+        expect(pointInRect(9, 12, breadcrumb)).toBe(false)
+        expect(pointInRect(150, 25, breadcrumb)).toBe(false)
+      })
+    })
+
+    describe('projectDropAt — one resolution for a project drag', () => {
+      it('over the project cards keeps the list (reorder) target', () => {
+        expect(
+          projectDropAt(150, 129, {
+            list: listSpace,
+            folders: folderSpace,
+            breadcrumb: null,
+          })
+        ).toEqual({
+          kind: 'list',
+          index: 0,
+          half: 'after',
+        })
+      })
+
+      it('below the list, over a folder card, resolves to that folder', () => {
+        // Folder slot 1 spans 461..522.
+        expect(
+          projectDropAt(150, 500, {
+            list: listSpace,
+            folders: folderSpace,
+            breadcrumb: null,
+          })
+        ).toEqual({
+          kind: 'folder',
+          index: 1,
+        })
+      })
+
+      it('a folder hit still wins with the list space absent (folder view)', () => {
+        expect(
+          projectDropAt(150, 410, {
+            list: null,
+            folders: folderSpace,
+            breadcrumb: null,
+          })
+        ).toEqual({
+          kind: 'folder',
+          index: 0,
+        })
+      })
+
+      it('inside the folder view the breadcrumb bar outranks everything', () => {
+        expect(
+          projectDropAt(150, 12, { list: listSpace, folders: null, breadcrumb })
+        ).toEqual({
+          kind: 'breadcrumb',
+        })
+      })
+
+      it('between the segments, or with no spaces, there is no target', () => {
+        // The folder header row sits at ~350: outside both hit spaces.
+        expect(
+          projectDropAt(150, 350, {
+            list: listSpace,
+            folders: folderSpace,
+            breadcrumb: null,
+          })
+        ).toBeNull()
+        expect(
+          projectDropAt(150, 500, {
+            list: null,
+            folders: null,
+            breadcrumb: null,
+          })
+        ).toBeNull()
+      })
+    })
+
+    describe('folderDropAt — folder drags only reorder the folder area', () => {
+      it('hits inside the folder space become list targets', () => {
+        expect(folderDropAt(150, 500, folderSpace)).toEqual({
+          kind: 'list',
+          index: 1,
+          half: 'after',
+        })
+      })
+
+      it('the project list never reacts to a folder drag', () => {
+        expect(folderDropAt(150, 129, folderSpace)).toBeNull()
+        expect(folderDropAt(150, 400, null)).toBeNull()
+      })
+    })
+
+    describe('sameDropTarget', () => {
+      it('matches on kind and payload', () => {
+        expect(sameDropTarget(null, null)).toBe(true)
+        expect(
+          sameDropTarget(
+            { kind: 'folder', index: 1 },
+            { kind: 'folder', index: 1 }
+          )
+        ).toBe(true)
+        expect(
+          sameDropTarget({ kind: 'breadcrumb' }, { kind: 'breadcrumb' })
+        ).toBe(true)
+        expect(
+          sameDropTarget(
+            { kind: 'list', index: 1, half: 'after' },
+            { kind: 'list', index: 1, half: 'before' }
+          )
+        ).toBe(false)
+        expect(
+          sameDropTarget(
+            { kind: 'folder', index: 1 },
+            { kind: 'list', index: 1, half: 'after' }
+          )
+        ).toBe(false)
+        expect(sameDropTarget(null, { kind: 'breadcrumb' })).toBe(false)
+      })
     })
   })
 })

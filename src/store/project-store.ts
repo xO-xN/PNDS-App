@@ -67,6 +67,11 @@ interface ProjectState {
    * ignored.
    */
   applyVisibleReorder: (newVisiblePaths: string[]) => void
+  /**
+   * v1.1.2 T5: applies a drag-reorder of the folder cards (their ids in the
+   * new order). An id set that is not the current folder set is ignored.
+   */
+  applyFolderReorder: (orderedFolderIds: string[]) => void
   startPreflight: () => void
   preflightSucceeded: (path: string, manifest: Manifest) => void
   preflightFailed: (message: string) => void
@@ -230,6 +235,25 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
           newVisiblePaths
         ),
       }
+    }),
+
+  applyFolderReorder: orderedFolderIds =>
+    set(state => {
+      if (
+        !sameMemberSet(
+          state.projectFolders.map(folder => folder.id),
+          orderedFolderIds
+        )
+      ) {
+        return {}
+      }
+      const byId = new Map(
+        state.projectFolders.map(folder => [folder.id, folder] as const)
+      )
+      const reordered = orderedFolderIds
+        .map(id => byId.get(id))
+        .filter((folder): folder is ProjectFolder => folder !== undefined)
+      return { projectFolders: reordered }
     }),
 
   startPreflight: () =>

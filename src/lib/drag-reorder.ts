@@ -41,8 +41,14 @@ export interface DragHitSpace {
 /** True when both lists hold exactly the same members, any order. */
 export function sameMemberSet(a: string[], b: string[]): boolean {
   if (a.length !== b.length) return false
-  const members = new Set(a)
-  return b.every(item => members.has(item))
+  const aMembers = new Set(a)
+  const bMembers = new Set(b)
+  // A duplicate on either side is not the same member set.
+  return (
+    aMembers.size === a.length &&
+    bMembers.size === b.length &&
+    b.every(item => aMembers.has(item))
+  )
 }
 
 /**
@@ -166,4 +172,107 @@ export function masterWithUngroupedOrder(
     // Unreachable after the set check, but never corrupt the master list.
     return replacement ?? path
   })
+}
+
+/**
+ * v1.1.2 T5 (spec issue #9): the drop zones a drag can resolve to beyond
+ * the visible-list reorder — dropping a project on a folder card (join it)
+ * or on the breadcrumb bar (leave the folder). All rects are the static
+ * snapshots taken at drag start, like DragHitSpace.
+ */
+export interface Rect {
+  top: number
+  left: number
+  right: number
+  bottom: number
+}
+
+/** True for points inside or on the edge of `rect`. */
+export function pointInRect(
+  pointerX: number,
+  pointerY: number,
+  rect: Rect
+): boolean {
+  return (
+    pointerX >= rect.left &&
+    pointerX <= rect.right &&
+    pointerY >= rect.top &&
+    pointerY <= rect.bottom
+  )
+}
+
+/**
+ * Where a dragged project card would land. The zones are disjoint in
+ * practice (breadcrumb above the list, folder cards below it), so the
+ * precedence here only guards against overlap: breadcrumb, then folder
+ * cards, then the in-list reorder slot.
+ */
+export type ProjectDropTarget =
+  | { kind: 'list'; index: number; half: DropHalf }
+  | { kind: 'folder'; index: number }
+  | { kind: 'breadcrumb' }
+
+/** The drop zones snapshotted at drag start; null where not rendered. */
+export interface DragSpaces {
+  /** Visible project cards (top-level ungrouped or one folder's members). */
+  list: DragHitSpace | null
+  /** Folder cards — top level only, hidden while drilled in. */
+  folders: DragHitSpace | null
+  /** The breadcrumb bar — folder view only. */
+  breadcrumb: Rect | null
+}
+
+export function projectDropAt(
+  pointerX: number,
+  pointerY: number,
+  spaces: DragSpaces
+): ProjectDropTarget | null {
+  if (spaces.breadcrumb && pointInRect(pointerX, pointerY, spaces.breadcrumb)) {
+    return { kind: 'breadcrumb' }
+  }
+  if (spaces.folders) {
+    const folderHit = hoveredCardAt(pointerX, pointerY, spaces.folders)
+    if (folderHit) return { kind: 'folder', index: folderHit.index }
+  }
+  const listHit = spaces.list
+    ? hoveredCardAt(pointerX, pointerY, spaces.list)
+    : null
+  return listHit
+    ? { kind: 'list', index: listHit.index, half: listHit.half }
+    : null
+}
+
+/**
+ * Where a dragged folder card would land: folders only ever reorder within
+ * the folder area (spec issue #9: 文件夹卡在文件夹区内可拖拽排序), so the
+ * project list is never consulted.
+ */
+export interface FolderDropTarget {
+  kind: 'list'
+  index: number
+  half: DropHalf
+}
+
+export function folderDropAt(
+  pointerX: number,
+  pointerY: number,
+  space: DragHitSpace | null
+): FolderDropTarget | null {
+  const hit = space ? hoveredCardAt(pointerX, pointerY, space) : null
+  return hit ? { kind: 'list', index: hit.index, half: hit.half } : null
+}
+
+/** Structural equality for any mix of the drop-target unions. */
+export function sameDropTarget(
+  a: ProjectDropTarget | FolderDropTarget | null,
+  b: ProjectDropTarget | FolderDropTarget | null
+): boolean {
+  if (a === b) return true
+  if (!a || !b) return false
+  if (a.kind !== b.kind) return false
+  if (a.kind === 'list' && b.kind === 'list') {
+    return a.index === b.index && a.half === b.half
+  }
+  if (a.kind === 'folder' && b.kind === 'folder') return a.index === b.index
+  return true
 }

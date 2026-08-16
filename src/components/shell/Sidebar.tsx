@@ -25,11 +25,16 @@ import { selectProject } from '@/lib/project-select'
 import { saveProjectIndex } from '@/lib/audio-prefs'
 import {
   cardShift,
-  hoveredCardAt,
+  folderDropAt,
   insertionIndexFor,
+  projectDropAt,
   reorderedList,
+  sameDropTarget,
   type DragHitSpace,
-  type DropTarget,
+  type DragSpaces,
+  type FolderDropTarget,
+  type ProjectDropTarget,
+  type Rect,
 } from '@/lib/drag-reorder'
 import {
   AlertDialog,
@@ -76,6 +81,54 @@ interface DragGhost {
 }
 
 /**
+ * v1.1.2 T5 (spec issue #9): one drag source — a visible project card or a
+ * top-level folder card.
+ */
+type DragSource =
+  | { kind: 'project'; path: string }
+  | { kind: 'folder'; id: string }
+
+/** Any drop target the sidebar resolves while a drag is live. */
+type ActiveDropTarget = ProjectDropTarget | FolderDropTarget
+
+/**
+ * Static slot layout of a uniform card column: the first card's rect plus
+ * the pitch measured to the second. Null when the column has no cards.
+ */
+function hitSpaceOf(
+  cards: NodeListOf<Element> | undefined
+): DragHitSpace | null {
+  const first = cards?.[0]
+  if (!(first instanceof HTMLElement)) return null
+  const firstRect = first.getBoundingClientRect()
+  const second = cards?.[1]
+  const stride =
+    second instanceof HTMLElement
+      ? second.getBoundingClientRect().top - firstRect.top
+      : firstRect.height + 4
+  return {
+    top: firstRect.top,
+    left: firstRect.left,
+    right: firstRect.right,
+    cardHeight: firstRect.height,
+    stride,
+    count: cards?.length ?? 0,
+  }
+}
+
+/** Rect snapshot for point hit-testing (the breadcrumb bar). */
+function rectOf(element: HTMLElement | null): Rect | null {
+  if (!element) return null
+  const rect = element.getBoundingClientRect()
+  return {
+    top: rect.top,
+    left: rect.left,
+    right: rect.right,
+    bottom: rect.bottom,
+  }
+}
+
+/**
  * PNDS sidebar (§10.1, §10.2; Figma "PNDS UI Design"). A floating rounded
  * panel, always open on Welcome/Loading and popping in over the monitor
  * during a performance. Selecting a project only preflights it; starting
@@ -93,6 +146,12 @@ interface DragGhost {
  * FOLDERS row reveals the new-folder button on hover. Clicking a folder
  * card drills into it (breadcrumb returns to the top), and holding Cmd
  * numbers the first nine projects of the current view.
+ *
+ * v1.1.2 T5 (spec issue #9): folder drag interactions — dropping a card
+ * on a folder card files it into that folder's end, dropping a member on
+ * the breadcrumb bar returns it to ungrouped, and folder cards reorder
+ * within their section by the same drag gesture. Every structural change
+ * persists via the project index.
  */
 export function Sidebar({
   variant,
@@ -121,8 +180,8 @@ export function Sidebar({
   // v1.1.2 T3: the folder card shows its "in use" dot from the moment the
   // session starts, not only once ready (spec issue #4: 使用中指示点).
   const sessionLive = sessionStatus === 'starting' || sessionStatus === 'ready'
-  const [dragPath, setDragPath] = useState<string | null>(null)
-  const [dropTarget, setDropTarget] = useState<DropTarget | null>(null)
+  const [drag, setDrag] = useState<DragSource | null>(null)
+  const [dropTarget, setDropTarget] = useState<ActiveDropTarget | null>(null)
   /** Clone origin/stride snapshot; mirrors dragGhostRef for render. */
   const [dragGhost, setDragGhost] = useState<DragGhost | null>(null)
   /**
@@ -140,10 +199,15 @@ export function Sidebar({
   const [pendingDeleteFolderId, setPendingDeleteFolderId] = useState<
     string | null
   >(null)
-  const dragPathRef = useRef<string | null>(null)
-  const dropTargetRef = useRef<DropTarget | null>(null)
+  const dragRef = useRef<DragSource | null>(null)
+  const dropTargetRef = useRef<ActiveDropTarget | null>(null)
   const dragGhostRef = useRef<DragGhost | null>(null)
-  const hitSpaceRef = useRef<DragHitSpace | null>(null)
+  const dragSpacesRef = useRef<DragSpaces>({
+    list: null,
+    folders: null,
+    breadcrumb: null,
+  })
+  const breadcrumbBarRef = useRef<HTMLDivElement | null>(null)
   const cloneRef = useRef<HTMLDivElement | null>(null)
 
   // v1.1.2 T3: one folder-aware derivation drives the list, the number
@@ -246,15 +310,62 @@ export function Sidebar({
     persistIndex()
   }
 
+  /**
+   * Grip press on any card (project or folder): snapshot the clone anchor
+   * and the static drop zones — the visible project column, the folder
+   * cards (top level) and the breadcrumb bar (folder view) — then start
+   * the drag. Every pointer move is judged against this snapshot.
+   */
+  const beginCardDrag = (
+    source: DragSource,
+    event: React.PointerEvent<HTMLButtonElement>,
+    cardSelector: string
+  ) => {
+    event.preventDefault()
+    event.stopPropagation()
+    const card = event.currentTarget.closest(cardSelector)
+    const rect = card?.getBoundingClientRect()
+    if (rect) {
+      // Pitch between cards (height + list gap) measured from the next
+      // sibling in the same column drives the yield transforms.
+      const next = card?.nextElementSibling
+      const stride =
+        next && next.matches(cardSelector)
+          ? next.getBoundingClientRect().top - rect.top
+          : rect.height + 4
+      const ghost: DragGhost = {
+        x: rect.left,
+        y: rect.top,
+        width: rect.width,
+        height: rect.height,
+        offsetX: event.clientX - rect.left,
+        offsetY: event.clientY - rect.top,
+        stride,
+      }
+      dragGhostRef.current = ghost
+      setDragGhost(ghost)
+      const nav = card?.closest('nav')
+      dragSpacesRef.current = {
+        list: hitSpaceOf(nav?.querySelectorAll('[data-project-path]')),
+        folders: hitSpaceOf(nav?.querySelectorAll('[data-folder-id]')),
+        breadcrumb: rectOf(breadcrumbBarRef.current),
+      }
+    }
+    dragRef.current = source
+    dropTargetRef.current = null
+    setDrag(source)
+    setDropTarget(null)
+  }
+
   useEffect(() => {
-    if (!dragPath) return
+    if (!drag) return
 
     const clearDrag = () => {
-      dragPathRef.current = null
+      dragRef.current = null
       dropTargetRef.current = null
       dragGhostRef.current = null
-      hitSpaceRef.current = null
-      setDragPath(null)
+      dragSpacesRef.current = { list: null, folders: null, breadcrumb: null }
+      setDrag(null)
       setDropTarget(null)
       setDragGhost(null)
     }
@@ -266,40 +377,75 @@ export function Sidebar({
       if (cloneRef.current && ghost) {
         cloneRef.current.style.transform = `translate(${event.clientX - ghost.offsetX}px, ${event.clientY - ghost.offsetY}px)`
       }
-      // Hit-test the static slot layout snapshotted at drag start: the
-      // yielding cards slide under the pointer, so live rects would make
-      // the target flicker as the gap opens and closes.
-      const next = hitSpaceRef.current
-        ? hoveredCardAt(event.clientX, event.clientY, hitSpaceRef.current)
-        : null
-      const current = dropTargetRef.current
-      if (current?.index === next?.index && current?.half === next?.half) return
+      // Folder cards only ever reorder among themselves; a project drag
+      // resolves against breadcrumb → folder cards → the list slots. All
+      // zones are the static snapshots taken at drag start: the yielding
+      // cards slide under the pointer, so live rects would make the
+      // target flicker as the gap opens and closes.
+      const source = dragRef.current
+      const spaces = dragSpacesRef.current
+      const next =
+        source?.kind === 'folder'
+          ? folderDropAt(event.clientX, event.clientY, spaces.folders)
+          : projectDropAt(event.clientX, event.clientY, spaces)
+      if (sameDropTarget(dropTargetRef.current, next)) return
       dropTargetRef.current = next
       setDropTarget(next)
     }
 
     const finishDrag = () => {
-      const sourcePath = dragPathRef.current
+      const source = dragRef.current
       const target = dropTargetRef.current
-      if (sourcePath && target) {
-        const store = useProjectStore.getState()
-        // Reordering follows the active view: inside a folder it is the
-        // set order, at the top level the master list (spec issue #7).
-        const visible = visibleProjectPaths(
-          store.trustedPaths,
-          store.projectFolders,
-          store.activeFolderId
-        )
-        const fromIndex = visible.indexOf(sourcePath)
+      const store = useProjectStore.getState()
+      if (source?.kind === 'project' && target) {
+        if (target.kind === 'folder') {
+          // Dropping on a folder card files the project at that folder's
+          // end (spec issue #9: 释放后工程入夹末尾).
+          const folder = store.projectFolders[target.index]
+          if (folder) {
+            store.moveProjectToFolder(folder.id, source.path)
+            persistIndex()
+          }
+        } else if (target.kind === 'breadcrumb') {
+          // Dropping on the breadcrumb returns the project to ungrouped.
+          if (store.activeFolderId) {
+            store.removeProjectFromFolder(store.activeFolderId, source.path)
+            persistIndex()
+          }
+        } else {
+          // Reordering follows the active view: inside a folder it is the
+          // set order, at the top level the master list (spec issue #7).
+          const visible = visibleProjectPaths(
+            store.trustedPaths,
+            store.projectFolders,
+            store.activeFolderId
+          )
+          const fromIndex = visible.indexOf(source.path)
+          if (fromIndex >= 0) {
+            const next = reorderedList(
+              visible,
+              fromIndex,
+              insertionIndexFor(target.index, target.half)
+            )
+            // reorderedList keeps its input reference for no-move drops.
+            if (next !== visible) {
+              store.applyVisibleReorder(next)
+              persistIndex()
+              setSuppressTransition(true)
+            }
+          }
+        }
+      } else if (source?.kind === 'folder' && target?.kind === 'list') {
+        const folderIds = store.projectFolders.map(folder => folder.id)
+        const fromIndex = folderIds.indexOf(source.id)
         if (fromIndex >= 0) {
           const next = reorderedList(
-            visible,
+            folderIds,
             fromIndex,
             insertionIndexFor(target.index, target.half)
           )
-          // reorderedList keeps its input reference for no-move drops.
-          if (next !== visible) {
-            store.applyVisibleReorder(next)
+          if (next !== folderIds) {
+            store.applyFolderReorder(next)
             persistIndex()
             setSuppressTransition(true)
           }
@@ -316,7 +462,7 @@ export function Sidebar({
       window.removeEventListener('pointerup', finishDrag)
       window.removeEventListener('pointercancel', clearDrag)
     }
-  }, [dragPath])
+  }, [drag])
 
   // Re-enable card transitions only once the snap frame has painted;
   // cancelled drags (pointercancel, no-commit drops) never pass through
@@ -341,14 +487,33 @@ export function Sidebar({
     onDialogOpenChange?.(dialogOpen)
   }, [dialogOpen, onDialogOpenChange])
 
-  // v1.1.2 T4: drag geometry — the dragged card hides behind its floating
+  // v1.1.2 T4/T5: drag geometry — the dragged card hides behind its floating
   // clone while the remaining cards yield one card-stride to open the gap
-  // at the midpoint-derived insertion slot (spec issue #8).
-  const dragIndex = dragPath ? visiblePaths.indexOf(dragPath) : -1
-  const insertionIndex =
-    dropTarget && dragIndex >= 0
-      ? insertionIndexFor(dropTarget.index, dropTarget.half)
+  // at the midpoint-derived insertion slot (spec issues #8, #9). Folder
+  // drops highlight instead of yielding: the project joins the hovered
+  // folder's end, the breadcrumb returns it to ungrouped.
+  const dragProjectIndex =
+    drag?.kind === 'project' ? visiblePaths.indexOf(drag.path) : -1
+  const dragFolderIndex =
+    drag?.kind === 'folder'
+      ? projectFolders.findIndex(folder => folder.id === drag.id)
+      : -1
+  const listDrop = dropTarget?.kind === 'list' ? dropTarget : null
+  const projectInsertionIndex =
+    drag?.kind === 'project' && listDrop
+      ? insertionIndexFor(listDrop.index, listDrop.half)
       : null
+  const folderInsertionIndex =
+    drag?.kind === 'folder' && listDrop
+      ? insertionIndexFor(listDrop.index, listDrop.half)
+      : null
+  /** Hovered folder card while a project drag hovers it (join gesture). */
+  const folderDropIndex =
+    drag?.kind === 'project' && dropTarget?.kind === 'folder'
+      ? dropTarget.index
+      : null
+  const breadcrumbDropping =
+    drag?.kind === 'project' && dropTarget?.kind === 'breadcrumb'
   // Card pitch fallback: h-14.25 (57px) + gap-1 (4px). Real drags measure it.
   const stride = dragGhost?.stride ?? 61
 
@@ -400,9 +565,19 @@ export function Sidebar({
       {/* v1.1.2 T3: folder view replaces the header with the breadcrumb
           (‹ 全部工程 / 文件夹名). Both views keep an add-project "+" on the
           header row — in a folder view the import lands inside that folder
-          (spec issue #7 新导入落点). */}
+          (spec issue #7 新导入落点). Dropping a dragged member on the bar
+          returns it to the ungrouped section (spec issue #9). */}
       {activeFolder ? (
-        <div className="mt-2 flex min-w-0 items-center gap-1 pr-8 pl-9 text-[14px]">
+        <div
+          ref={breadcrumbBarRef}
+          data-testid="breadcrumb-bar"
+          data-drop-active={breadcrumbDropping ? 'true' : undefined}
+          className={cn(
+            'mt-2 flex min-w-0 items-center gap-1 rounded-md pr-8 pl-9 text-[14px] transition-colors duration-200',
+            breadcrumbDropping &&
+              'bg-(--pnds-accent)/15 ring-1 ring-(--pnds-accent)/50'
+          )}
+        >
           <button
             type="button"
             data-testid="breadcrumb-back"
@@ -457,11 +632,16 @@ export function Sidebar({
       <nav className="mt-4 flex min-h-0 flex-1 flex-col gap-1">
         {visiblePaths.map((path, index) => {
           const isCurrent = path === currentProject?.path
-          const isDragged = dragPath === path
+          const isDragged = drag?.kind === 'project' && drag.path === path
           const cardOffset =
-            insertionIndex === null || dragIndex < 0
+            projectInsertionIndex === null || dragProjectIndex < 0
               ? 0
-              : cardShift(dragIndex, insertionIndex, index, stride)
+              : cardShift(
+                  dragProjectIndex,
+                  projectInsertionIndex,
+                  index,
+                  stride
+                )
           const showBadge = commandKeyPressed && index < 9
           return (
             <div
@@ -491,56 +671,13 @@ export function Sidebar({
               <button
                 type="button"
                 aria-label={t('sidebar.dragToReorder')}
-                onPointerDown={e => {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  const card = e.currentTarget.closest('[data-project-path]')
-                  const rect = card?.getBoundingClientRect()
-                  if (rect) {
-                    // Pitch between cards (height + list gap) measured from
-                    // the next sibling drives the yield transforms.
-                    const next = card?.nextElementSibling
-                    const nextTop =
-                      next instanceof HTMLElement &&
-                      next.hasAttribute('data-project-path')
-                        ? next.getBoundingClientRect().top
-                        : null
-                    const stride =
-                      nextTop !== null ? nextTop - rect.top : rect.height + 4
-                    const ghost: DragGhost = {
-                      x: rect.left,
-                      y: rect.top,
-                      width: rect.width,
-                      height: rect.height,
-                      offsetX: e.clientX - rect.left,
-                      offsetY: e.clientY - rect.top,
-                      stride,
-                    }
-                    dragGhostRef.current = ghost
-                    setDragGhost(ghost)
-                    // The static slot layout every pointer move is judged
-                    // against: first card's rect plus the uniform pitch.
-                    const firstCard = card?.parentElement?.querySelector(
-                      '[data-project-path]'
-                    )
-                    const firstRect =
-                      firstCard instanceof HTMLElement
-                        ? firstCard.getBoundingClientRect()
-                        : rect
-                    hitSpaceRef.current = {
-                      top: firstRect.top,
-                      left: firstRect.left,
-                      right: firstRect.right,
-                      cardHeight: firstRect.height,
-                      stride,
-                      count: visiblePaths.length,
-                    }
-                  }
-                  dragPathRef.current = path
-                  dropTargetRef.current = null
-                  setDragPath(path)
-                  setDropTarget(null)
-                }}
+                onPointerDown={e =>
+                  beginCardDrag(
+                    { kind: 'project', path },
+                    e,
+                    '[data-project-path]'
+                  )
+                }
                 onClick={e => e.stopPropagation()}
                 className="flex w-5 shrink-0 touch-none cursor-grab items-center justify-center border-0 bg-transparent p-0 text-(--pnds-text)/40 opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing"
               >
@@ -619,20 +756,52 @@ export function Sidebar({
                 <FolderPlus size={14} />
               </button>
             </div>
-            {projectFolders.map(folder => {
+            {projectFolders.map((folder, folderIndex) => {
               const isEditing = editingFolderId === folder.id
               const inUse =
                 sessionLive &&
                 currentProject !== null &&
                 folder.projectPaths.includes(currentProject.path)
+              // A folder drag yields its siblings exactly like a project
+              // drag (spec issue #9: 文件夹卡在文件夹区内可拖拽排序).
+              const isDraggedCard =
+                drag?.kind === 'folder' && drag.id === folder.id
+              const isDropHover = folderDropIndex === folderIndex
+              const cardOffset =
+                folderInsertionIndex === null || dragFolderIndex < 0
+                  ? 0
+                  : cardShift(
+                      dragFolderIndex,
+                      folderInsertionIndex,
+                      folderIndex,
+                      stride
+                    )
               return (
                 <div
                   key={folder.id}
                   data-testid="folder-card"
+                  data-folder-id={folder.id}
+                  data-drop-active={isDropHover ? 'true' : undefined}
                   onClick={() => {
                     if (!isEditing) setActiveFolderId(folder.id)
                   }}
-                  className="group relative mx-5 flex h-14.25 cursor-pointer items-center rounded-xl px-3 hover:bg-(--pnds-text)/5"
+                  style={
+                    cardOffset !== 0
+                      ? { transform: `translateY(${cardOffset}px)` }
+                      : undefined
+                  }
+                  className={cn(
+                    'group relative mx-5 flex h-14.25 cursor-pointer items-center rounded-xl px-3 hover:bg-(--pnds-text)/5',
+                    suppressTransition
+                      ? 'transition-none'
+                      : 'transition-[background-color,transform] duration-200',
+                    // Hidden, not removed: its slot is what the yielding
+                    // folder cards slide over while the clone represents it.
+                    isDraggedCard && 'invisible',
+                    // Project-over-folder drop hint (spec issue #9: 高亮提示).
+                    isDropHover &&
+                      'bg-(--pnds-accent)/15 ring-1 ring-(--pnds-accent)/50'
+                  )}
                 >
                   {isEditing ? (
                     <input
@@ -653,8 +822,26 @@ export function Sidebar({
                     />
                   ) : (
                     <>
-                      <span className="flex w-5 shrink-0 items-center justify-center text-(--pnds-text)/40">
+                      {/* The folder icon slot doubles as the drag grip
+                          (revealed on hover) so the card's geometry never
+                          shifts between its two roles. */}
+                      <span className="relative flex w-5 shrink-0 items-center justify-center text-(--pnds-text)/40">
                         <Folder size={15} aria-hidden="true" />
+                        <button
+                          type="button"
+                          aria-label={t('sidebar.dragToReorder')}
+                          onPointerDown={e =>
+                            beginCardDrag(
+                              { kind: 'folder', id: folder.id },
+                              e,
+                              '[data-folder-id]'
+                            )
+                          }
+                          onClick={e => e.stopPropagation()}
+                          className="absolute inset-0 flex cursor-grab touch-none items-center justify-center border-0 bg-transparent p-0 opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing"
+                        >
+                          <GripVertical size={14} aria-hidden="true" />
+                        </button>
                       </span>
                       {/* "使用中" indicator: the running project lives in
                           this folder (spec issue #4). */}
@@ -701,13 +888,14 @@ export function Sidebar({
         </div>
       </div>
 
-      {/* v1.1.2 T4: the dragged card's semi-transparent floating clone
-          (spec issue #8). Portaled to the body — the overlay sidebar's
-          backdrop-blur forms a containing block that would otherwise pin
-          a fixed-position child inside the panel. Pointer moves update
-          its transform imperatively; pointer-events keeps it out of the
+      {/* v1.1.2 T4/T5: the dragged card's semi-transparent floating clone
+          (spec issues #8, #9) — a project card or a folder card. Portaled
+          to the body — the overlay sidebar's backdrop-blur forms a
+          containing block that would otherwise pin a fixed-position child
+          inside the panel. Pointer moves update its transform
+          imperatively; pointer-events keeps it out of the
           elementFromPoint hit test. */}
-      {dragPath &&
+      {drag &&
         dragGhost &&
         createPortal(
           <div
@@ -721,12 +909,25 @@ export function Sidebar({
               transform: `translate(${dragGhost.x}px, ${dragGhost.y}px)`,
             }}
           >
-            <span className="flex w-5 shrink-0 items-center justify-center text-(--pnds-text)/40">
-              <GripVertical size={14} aria-hidden="true" />
-            </span>
-            <span className="flex-1 truncate text-center text-[15px] text-(--pnds-text)/85">
-              {cardName(dragPath)}
-            </span>
+            {drag.kind === 'folder' ? (
+              <>
+                <span className="flex w-5 shrink-0 items-center justify-center text-(--pnds-text)/40">
+                  <Folder size={15} aria-hidden="true" />
+                </span>
+                <span className="flex-1 truncate text-center text-[15px] text-(--pnds-text)/85">
+                  {projectFolders.find(folder => folder.id === drag.id)?.name}
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="flex w-5 shrink-0 items-center justify-center text-(--pnds-text)/40">
+                  <GripVertical size={14} aria-hidden="true" />
+                </span>
+                <span className="flex-1 truncate text-center text-[15px] text-(--pnds-text)/85">
+                  {cardName(drag.path)}
+                </span>
+              </>
+            )}
             <span className="w-5 shrink-0" />
           </div>,
           document.body

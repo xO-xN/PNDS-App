@@ -342,3 +342,51 @@ describe('visible reorder from drags (v1.1.2 T4, spec issue #8)', () => {
     ])
   })
 })
+
+describe('folder reorder from drags (v1.1.2 T5, spec issue #9)', () => {
+  beforeEach(() => {
+    useProjectStore.setState({
+      currentProject: null,
+      trustedPaths: ['/a'],
+      projectFolders: [],
+      pendingTrustPath: null,
+      pendingPreflightPath: null,
+      pendingSwitchPath: null,
+      activeFolderId: null,
+      preflightStatus: 'idle',
+      preflightError: null,
+    })
+  })
+
+  it('reorders the folder cards by id, memberships untouched', () => {
+    const store = useProjectStore.getState()
+    const first = store.createFolder('Friday')
+    const second = store.createFolder('Saturday')
+    const third = store.createFolder('Sunday')
+
+    useProjectStore.getState().applyFolderReorder([third, first, second])
+
+    expect(
+      useProjectStore.getState().projectFolders.map(folder => folder.id)
+    ).toEqual([third, first, second])
+    expect(
+      useProjectStore.getState().projectFolders.map(folder => folder.name)
+    ).toEqual(['Sunday', 'Friday', 'Saturday'])
+  })
+
+  it('ignores an id set that is not the current folder set', () => {
+    const store = useProjectStore.getState()
+    const first = store.createFolder('Friday')
+    const second = store.createFolder('Saturday')
+    const before = useProjectStore.getState().projectFolders
+
+    // Missing, foreign and duplicated ids are all rejected.
+    useProjectStore.getState().applyFolderReorder([first])
+    useProjectStore.getState().applyFolderReorder([first, 'nope'])
+    useProjectStore.getState().applyFolderReorder([first, first])
+    expect(useProjectStore.getState().projectFolders).toBe(before)
+    expect(
+      useProjectStore.getState().projectFolders.map(folder => folder.id)
+    ).toEqual([first, second])
+  })
+})
