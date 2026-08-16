@@ -3,12 +3,28 @@ import { useKeyboardStore } from '@/store/keyboard-store'
 import { ungroupedProjectPaths, useProjectStore } from '@/store/project-store'
 import { selectProject } from '@/lib/project-select'
 
-function isEditableTarget(target: EventTarget | null): boolean {
+/**
+ * True when a keyboard event originates from a text-editing target —
+ * global shortcuts must not fight text input.
+ */
+export function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false
   return (
     target.tagName === 'INPUT' ||
     target.tagName === 'TEXTAREA' ||
     target.isContentEditable
+  )
+}
+
+/**
+ * True while a Radix dialog or popup overlays the page — global Enter must
+ * not fire underneath a confirm flow or select menu.
+ */
+export function hasOpenOverlay(): boolean {
+  return Boolean(
+    document.querySelector(
+      '[role="alertdialog"], [role="dialog"], [role="listbox"], [role="menu"]'
+    )
   )
 }
 

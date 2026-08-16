@@ -70,6 +70,10 @@ function seedRunningSession(currentPath: string) {
     sessionStatus: 'ready',
     projectName: 'Inarticulate III',
     lanIp: '192.168.1.10',
+    audioMode: 'internal',
+    oscTargetInput: '127.0.0.1:3333',
+    deviceError: null,
+    pendingChanges: false,
     health: readyHealth,
   })
   vi.mocked(commands.getSessionState).mockResolvedValue({
@@ -275,6 +279,100 @@ describe('Cmd keyboard layer (v1.1.2)', () => {
 
       fireEvent.mouseLeave(popover)
       expect(popover.className).toContain('opacity-0')
+    })
+  })
+
+  describe('Enter as the session-action shortcut', () => {
+    /** Idle + selected + preflighted + LAN picked → the Load button is live. */
+    function seedLoadableIdle() {
+      useProjectStore.setState({
+        trustedPaths: [FIRST_PATH, SECOND_PATH],
+        currentProject: { path: FIRST_PATH, manifest },
+        preflightStatus: 'ready',
+      })
+      useSessionStore.setState({
+        sessionStatus: 'idle',
+        audioMode: 'internal',
+        lanIp: '192.168.1.10',
+        oscTargetInput: '127.0.0.1:3333',
+        deviceError: null,
+      })
+    }
+
+    it('Enter loads the selected idle project', () => {
+      seedLoadableIdle()
+      render(<AppShell />)
+
+      fireEvent.keyDown(window, { key: 'Enter' })
+
+      expect(commands.startProject).toHaveBeenCalledWith(
+        FIRST_PATH,
+        'internal',
+        '192.168.1.10',
+        null
+      )
+    })
+
+    it('Enter does nothing without a loadable selection', () => {
+      useProjectStore.setState({ trustedPaths: [FIRST_PATH] })
+      render(<AppShell />)
+
+      fireEvent.keyDown(window, { key: 'Enter' })
+
+      expect(commands.startProject).not.toHaveBeenCalled()
+    })
+
+    it('Enter never stops a running session — Close stays mouse-only', () => {
+      seedRunningSession(FIRST_PATH)
+      render(<AppShell />)
+
+      fireEvent.keyDown(window, { key: 'Enter' })
+
+      expect(commands.stopProject).not.toHaveBeenCalled()
+      expect(commands.startProject).not.toHaveBeenCalled()
+    })
+
+    it('Enter applies a pending config change (restart flow)', async () => {
+      seedRunningSession(FIRST_PATH)
+      useSessionStore.setState({ pendingChanges: true })
+      render(<AppShell />)
+
+      fireEvent.keyDown(window, { key: 'Enter' })
+
+      await waitFor(() => {
+        expect(commands.stopProject).toHaveBeenCalled()
+        expect(commands.startProject).toHaveBeenCalledWith(
+          FIRST_PATH,
+          'internal',
+          '192.168.1.10',
+          null
+        )
+      })
+      expect(useSessionStore.getState().pendingChanges).toBe(false)
+    })
+
+    it('Enter is inert while the switch confirmation dialog is open', async () => {
+      seedRunningSession(FIRST_PATH)
+      render(<AppShell />)
+
+      pressCmdDigit('2')
+      await screen.findByRole('alertdialog')
+      fireEvent.keyDown(window, { key: 'Enter' })
+
+      // Radix owns Enter inside the dialog; the global layer must not
+      // start anything underneath it.
+      expect(commands.startProject).not.toHaveBeenCalled()
+    })
+
+    it('Enter is inert while typing in the OSC target input', () => {
+      seedLoadableIdle()
+      useSessionStore.setState({ audioMode: 'external' })
+      render(<AppShell />)
+
+      const oscInput = screen.getByRole('textbox', { name: /osc target/i })
+      fireEvent.keyDown(oscInput, { key: 'Enter' })
+
+      expect(commands.startProject).not.toHaveBeenCalled()
     })
   })
 })

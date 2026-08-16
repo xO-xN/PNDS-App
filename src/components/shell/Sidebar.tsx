@@ -8,6 +8,7 @@ import {
   GripVertical,
   Folder,
   FolderPlus,
+  Command,
 } from 'lucide-react'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { useProjectStore, ungroupedProjectPaths } from '@/store/project-store'
@@ -363,14 +364,15 @@ export function Sidebar({
                 {isCurrent ? currentProject.manifest.name : displayName(path)}
               </button>
 
-              {/* Right slot: Cmd number badge (v1.1.2), else ✕ remove from
-                  history — never for the open project */}
+              {/* Right slot: ⌘N hint while Cmd is held (v1.1.2), else ✕
+                  remove from history — never for the open project */}
               {showBadge ? (
                 <span
                   data-testid="project-number-badge"
-                  className="flex w-5 shrink-0 items-center justify-center"
+                  className="flex w-5 shrink-0 items-center justify-center gap-0.5 text-(--pnds-text)/45"
                 >
-                  <span className="rounded-md bg-(--pnds-text)/85 px-1 py-0.5 text-[10px] leading-none font-semibold text-(--pnds-sidebar-bg)">
+                  <Command size={10} strokeWidth={2.5} aria-hidden="true" />
+                  <span className="text-[10px] leading-none font-semibold">
                     {index + 1}
                   </span>
                 </span>

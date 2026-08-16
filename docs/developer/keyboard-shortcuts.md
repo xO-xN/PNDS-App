@@ -15,6 +15,7 @@ Keyboard input reaches the app through two layers: native menu accelerators
 | Ctrl+Cmd+F    | Toggle fullscreen (§7.4)                   | Menu (`menu.ts`)                |
 | Cmd (hold)    | Number badges + sidebar peek while running | Web (`use-command-keyboard.ts`) |
 | Cmd+1..9      | Select the Nth visible project (v1.1.2)    | Web (`use-command-keyboard.ts`) |
+| Enter         | Load (idle) / Change-restart (pending)     | Web (`SessionActionButton.tsx`) |
 
 ## Web Cmd Layer (v1.1.2)
 
@@ -30,6 +31,21 @@ It owns three behaviors (spec issue #4):
   uses, so semantics can never drift between mouse and keyboard.
 - **Cmd+0** is deliberately NOT consumed here; it stays the native
   "Actual Size" menu accelerator.
+
+## Enter Session Action (v1.1.2)
+
+Enter is a keyboard alias for the sidebar's session-action footer, handled
+where its state lives (`SessionActionButton.tsx`) so key and click share
+one set of conditions:
+
+- **idle/error + loadable** → `start()` (same gate as the Load button)
+- **running + pending config change** → `restart()` (the amber Change)
+- **running, no pending change** → deliberately NOT mapped — the red Close
+  stays mouse-only so a stray Enter can never stop a live show
+
+Guards: text inputs own their Enter (`isEditableTarget`), and while a
+Radix dialog or select popup is open (`hasOpenOverlay`) Enter belongs to
+the overlay — the global layer never fires underneath a confirm flow.
 
 ```typescript
 // src/hooks/use-command-keyboard.ts (shape)
