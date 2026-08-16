@@ -291,8 +291,8 @@ describe('Cmd+↑/↓ project navigation and Esc close (v1.1.2 T7)', () => {
     })
   })
 
-  describe('Esc / ⌘Esc close the open project', () => {
-    it('a lone Esc opens the close-project confirmation, not a direct stop', async () => {
+  describe('Esc opens the close-project confirmation', () => {
+    it('a lone Esc opens the confirmation, never a direct stop', async () => {
       seedRunningSession(FIRST_PATH)
       render(<AppShell />)
 
@@ -339,23 +339,7 @@ describe('Cmd+↑/↓ project navigation and Esc close (v1.1.2 T7)', () => {
       expect(useProjectStore.getState().currentProject?.path).toBe(FIRST_PATH)
     })
 
-    it('⌘Esc stops a running session directly, exactly like the Close button', async () => {
-      seedRunningSession(FIRST_PATH)
-      render(<AppShell />)
-
-      fireEvent.keyDown(window, { key: 'Escape', metaKey: true })
-
-      await waitFor(() => {
-        expect(commands.stopProject).toHaveBeenCalledTimes(1)
-      })
-      expect(useProjectStore.getState().confirmCloseProjectOpen).toBe(false)
-      await waitFor(() => {
-        expect(useProjectStore.getState().currentProject).toBeNull()
-        expect(useSessionStore.getState().sessionStatus).toBe('idle')
-      })
-    })
-
-    it('does nothing while idle — Esc is not Load (with or without ⌘)', () => {
+    it('does nothing while idle — Esc is not Load', () => {
       useProjectStore.setState({
         currentProject: { path: FIRST_PATH, manifest },
         preflightStatus: 'ready',
@@ -363,7 +347,6 @@ describe('Cmd+↑/↓ project navigation and Esc close (v1.1.2 T7)', () => {
       render(<AppShell />)
 
       pressEscape()
-      fireEvent.keyDown(window, { key: 'Escape', metaKey: true })
 
       expect(commands.stopProject).not.toHaveBeenCalled()
       expect(commands.startProject).not.toHaveBeenCalled()
@@ -411,7 +394,6 @@ describe('Cmd+↑/↓ project navigation and Esc close (v1.1.2 T7)', () => {
       render(<AppShell />)
 
       pressEscape()
-      fireEvent.keyDown(window, { key: 'Escape', metaKey: true })
 
       expect(commands.stopProject).not.toHaveBeenCalled()
       expect(commands.startProject).not.toHaveBeenCalled()
