@@ -44,3 +44,25 @@ export function selectProject(path: string, source: SelectSource): void {
     }
   })
 }
+
+/**
+ * v1.1.2 T6: drills the sidebar into a folder (the folder-card click).
+ * A selection that would be invisible there — the project is not a member
+ * of the folder — is dropped, so ⌘R and the number badges, which read the
+ * visible view, can never act on a hidden card. A member selection stays
+ * (renaming it inside the folder is the intended priority), and a running
+ * session keeps its project so the top-level "current" marker survives
+ * (rename is blocked while running anyway).
+ */
+export function drillIntoFolder(folderId: string): void {
+  const project = useProjectStore.getState()
+  const status = useSessionStore.getState().sessionStatus
+  const folder = project.projectFolders.find(f => f.id === folderId)
+  const selectionHidden =
+    status !== 'ready' &&
+    status !== 'stopping' &&
+    project.currentProject !== null &&
+    !folder?.projectPaths.includes(project.currentProject.path)
+  if (selectionHidden) project.clearProject()
+  project.setActiveFolderId(folderId)
+}

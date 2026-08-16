@@ -314,6 +314,47 @@ describe('⌘R project rename (v1.1.2 T6)', () => {
     expect(screen.queryByTestId('folder-name-input')).not.toBeInTheDocument()
   })
 
+  it('drilling into a folder drops a selection that is not a member there', () => {
+    // The bug: an ungrouped project stayed selected inside a folder view,
+    // so ⌘R renamed a card the view doesn't show.
+    useProjectStore.setState({
+      trustedPaths: [FIRST_PATH, SECOND_PATH],
+      currentProject: { path: FIRST_PATH, manifest },
+      preflightStatus: 'ready',
+    })
+    const store = useProjectStore.getState()
+    const id = store.createFolder('Gig')
+    store.moveProjectToFolder(id, SECOND_PATH)
+    render(<AppShell />)
+
+    fireEvent.click(screen.getByTestId('folder-card'))
+    expect(screen.getByTestId('breadcrumb-bar')).toBeInTheDocument()
+    expect(useProjectStore.getState().currentProject).toBeNull()
+
+    pressCmdR()
+    expect(screen.getByTestId('folder-name-input')).toBeInTheDocument()
+    expect(screen.queryByTestId('project-name-input')).not.toBeInTheDocument()
+  })
+
+  it('drilling in keeps a member selection as the ⌘R target', () => {
+    // A member is still visible inside the folder, so it stays selected.
+    useProjectStore.setState({
+      trustedPaths: [FIRST_PATH, SECOND_PATH],
+      currentProject: { path: SECOND_PATH, manifest: secondManifest },
+      preflightStatus: 'ready',
+    })
+    const store = useProjectStore.getState()
+    const id = store.createFolder('Gig')
+    store.moveProjectToFolder(id, SECOND_PATH)
+    render(<AppShell />)
+
+    fireEvent.click(screen.getByTestId('folder-card'))
+    expect(useProjectStore.getState().currentProject?.path).toBe(SECOND_PATH)
+
+    pressCmdR()
+    expect(screen.getByTestId('project-name-input')).toBeInTheDocument()
+  })
+
   it('the switch confirmation follows the display-name override', async () => {
     seedRunningSession(FIRST_PATH)
     useProjectStore.setState({

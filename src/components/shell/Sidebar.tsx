@@ -21,7 +21,7 @@ import {
   promptOpenProject,
   stopAndReset,
 } from '@/lib/open-project'
-import { selectProject } from '@/lib/project-select'
+import { selectProject, drillIntoFolder } from '@/lib/project-select'
 import { saveProjectDisplayName, saveProjectIndex } from '@/lib/audio-prefs'
 import {
   cardShift,
@@ -895,7 +895,7 @@ export function Sidebar({
                   data-folder-id={folder.id}
                   data-drop-active={isDropHover ? 'true' : undefined}
                   onClick={() => {
-                    if (!isEditing) setActiveFolderId(folder.id)
+                    if (!isEditing) drillIntoFolder(folder.id)
                   }}
                   style={
                     cardOffset !== 0
