@@ -63,6 +63,15 @@ jobs:
           releaseBody: |
             ## PNDS ${{ github.ref_name || inputs.version }}
 
+            ### What's New in V1.1.2 — the performer-ready sidebar
+            - **Performance folders (set lists)** — group projects into one-level folders; click to drill in with a breadcrumb, an "in use" dot marks the folder holding the running project. Dropping a project on a folder files it in; dropping a member on the breadcrumb returns it to the ungrouped list; folders sort by dragging.
+            - **⌘ number selection** — hold Cmd to reveal ⌘1..⌘9 badges over the visible projects and pick one by number; a folder view numbers only that folder's members. While a session runs, holding Cmd also peeks the sidebar out over the monitor.
+            - **⌘↓ / ⌘↑ next & previous project** — walk the visible list like a set list ("next song"): clamped at both ends, and if the current project lives in a folder you left, the move drills back into it first. While a session runs, switching goes through the same confirmation as clicking a card.
+            - **Rebuilt drag & drop** — drag anywhere on a card: the card lifts as a floating clone, the list yields a gap at the drop slot, and the drop lands at the midpoint-judged position.
+            - **Custom display names** — ⌘R (or Edit → Rename Project) renames a selected project or the open folder in place; Enter commits, Esc cancels, empty falls back to the folder name. Names persist across launches.
+            - **Safer close & quit** — Esc opens a confirmation before closing the running project; ⌘Q now confirms before quitting while a session is live.
+            - **Refreshed starting page** — the hint is plain copy now; adding a project lives in the sidebar's Projects header "+".
+
             ### What's New in V1.1.1
             - **Window shortcuts** — new View menu: Zoom In (⌘=), Zoom Out (⌘-), Actual Size (⌘0), and Reload Monitor (⌘⇧R), with browser-style monitor zoom (50–200%, ±10% steps, session-only)
             - **One close flow for ⌘W and the red light** — confirm before stopping a live session, then fade-hide; the app keeps running in the Dock
