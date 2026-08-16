@@ -34,3 +34,8 @@ src-tauri/resources/synthdefs/*.scsyndef
 src-tauri/Frameworks/
 src-tauri/plugins/
 /Frameworks
+
+# Bundled example score projects (Utilities folder, v1.1.2 T7): their
+# dependencies and nested VCS history stay out of this repository.
+examples/*/node_modules/
+examples/*/.git/
