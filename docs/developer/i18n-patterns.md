@@ -155,6 +155,21 @@ If the language is RTL, add it to the `rtlLanguages` array:
 const rtlLanguages = ['ar', 'he', 'fa', 'ur'] // Add your RTL language
 ```
 
+### Step 4: Add It to the Settings Panel
+
+The General section of the settings panel (`/src/components/settings/SettingsPanel.tsx`) lists the selectable languages. Add an `<NativeSelectOption>` and extend the `LanguageSetting` union in `/src/store/settings-store.ts`.
+
+## Runtime Language Switching
+
+The settings panel's General section switches the language at runtime (v1.2.0, issue #13):
+
+- `applyLanguageSetting()` in `/src/i18n/language-init.ts` is the single entry point: it calls `i18n.changeLanguage` (the native menu rebuilds itself via the existing `languageChanged` listener) and persists the choice to `preferences.language` (`null` = follow the system locale).
+- The panel's selection state lives in `useSettingsStore.languageSetting`; it is seeded once at app startup from the same preferences read that initializes the language (`App.tsx`).
+
+### Gotcha: `nonExplicitSupportedLngs` must stay OFF
+
+With `supportedLngs` containing region-qualified tags (e.g. `zh-CN`), i18next's `nonExplicitSupportedLngs` option reduces every candidate code to its language part (`zh-CN` → `zh`) for the supported check — while `supportedLngs` keeps the full tag — so the candidate is rejected and the app silently falls back to English. Bare system locales (`zh`) are instead normalized to a registered full tag by `initializeLanguage()` before they ever reach i18next. `src/i18n/config.test.ts` pins this regression.
+
 ## RTL Language Support
 
 ### Automatic Direction Switching

@@ -16,8 +16,11 @@ const rtlLanguages = ['ar', 'he', 'fa', 'ur']
 i18n.use(initReactI18next).init({
   resources,
   supportedLngs: ['en', 'zh-CN'],
-  // Resolve a bare region prefix (e.g. system locale "zh" → "zh-CN").
-  nonExplicitSupportedLngs: true,
+  // NOTE: nonExplicitSupportedLngs must stay OFF — with this i18next major
+  // it reduces candidate codes to their language part ("zh-CN" → "zh")
+  // while supportedLngs keeps the full tag, so zh-CN gets rejected and the
+  // app silently falls back to English. Bare system locales ("zh") are
+  // normalized to a registered full tag by initializeLanguage() instead.
   lng: 'en',
   fallbackLng: 'en',
   interpolation: {

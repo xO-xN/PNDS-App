@@ -5,6 +5,11 @@
  * menu, plus standard File/Edit/Window submenus for text editing
  * shortcuts. ⌘W and ⌘Q are custom items (their flows confirm with a live
  * session first); the remaining standard items stay predefined.
+ *
+ * v1.2.0 (issue #13): Settings… ⌘, toggles the in-app settings panel,
+ * File > Add Project… ⌘O opens the project folder picker, About routes to
+ * the panel's About section (the native dialog is retired), and the dead
+ * Window > Zoom item is gone.
  */
 import {
   Menu,
@@ -12,11 +17,11 @@ import {
   Submenu,
   PredefinedMenuItem,
 } from '@tauri-apps/api/menu'
-import { check } from '@tauri-apps/plugin-updater'
-import { message } from '@tauri-apps/plugin-dialog'
 import i18n from '@/i18n/config'
 import { logger } from '@/lib/logger'
-import { notifications } from '@/lib/notifications'
+import { promptOpenProject } from '@/lib/open-project'
+import { checkForUpdates } from '@/lib/updater'
+import { useSettingsStore } from '@/store/settings-store'
 import { useSessionStore } from '@/store/session-store'
 import {
   requestClose,
@@ -24,7 +29,11 @@ import {
   toggleFullscreen,
 } from '@/store/window-store'
 import { startRename } from '@/lib/project-rename'
-import { hasOpenOverlay, isEditableTarget } from '@/hooks/use-command-keyboard'
+import {
+  hasOpenOverlay,
+  hasOpenOverlayBesidesSettings,
+  isEditableTarget,
+} from '@/hooks/use-command-keyboard'
 
 const APP_NAME = 'PNDS'
 
@@ -38,16 +47,32 @@ export async function buildAppMenu(): Promise<Menu> {
     const appSubmenu = await Submenu.new({
       text: APP_NAME,
       items: [
+        // v1.2.0 (issue #13): About routes to the settings panel's About
+        // section — one version surface, app-styled. The native message
+        // dialog is retired.
         await MenuItem.new({
           id: 'about',
           text: t('menu.about', { appName: APP_NAME }),
-          action: handleAbout,
+          action: () => useSettingsStore.getState().openSettings('about'),
+        }),
+        // v1.2.0 (issue #13): macOS-conventional Settings entry; same
+        // toggle as the ⌘, keyboard shortcut.
+        await MenuItem.new({
+          id: 'settings',
+          text: t('menu.settings'),
+          accelerator: 'Cmd+Comma',
+          // Same overlay guard as the ⌘, keyboard entry: never stack the
+          // panel on another modal (close/quit confirms).
+          action: () => {
+            if (hasOpenOverlayBesidesSettings()) return
+            useSettingsStore.getState().toggleSettings()
+          },
         }),
         await PredefinedMenuItem.new({ item: 'Separator' }),
         await MenuItem.new({
           id: 'check-updates',
           text: t('menu.checkForUpdates'),
-          action: handleCheckForUpdates,
+          action: () => void checkForUpdates(),
         }),
         await PredefinedMenuItem.new({ item: 'Separator' }),
         await PredefinedMenuItem.new({
@@ -79,6 +104,14 @@ export async function buildAppMenu(): Promise<Menu> {
     const fileSubmenu = await Submenu.new({
       text: t('menu.file'),
       items: [
+        // v1.2.0 (issue #13): ⌘O opens the add-project folder picker — the
+        // same flow as the sidebar "+" button.
+        await MenuItem.new({
+          id: 'add-project',
+          text: t('menu.addProject'),
+          accelerator: 'Cmd+O',
+          action: () => void promptOpenProject(),
+        }),
         // §v1.1.1: custom ⌘W — the predefined Close Window is non-functional
         // on this window. Shares the red-light close flow (confirm + stop
         // session + fade-hide; the app keeps running).
@@ -163,12 +196,8 @@ export async function buildAppMenu(): Promise<Menu> {
     const windowSubmenu = await Submenu.new({
       text: t('menu.window'),
       items: [
-        // §v1.1.1: the dead Minimize item is dropped (⌘H covers hiding).
-        await PredefinedMenuItem.new({
-          item: 'Maximize',
-          text: t('menu.zoom'),
-        }),
-        await PredefinedMenuItem.new({ item: 'Separator' }),
+        // v1.2.0 (issue #13): the predefined Maximize ("Zoom") item is
+        // dropped — it does nothing on this undecorated window.
         // §7.4: the single fullscreen action — same handler as ⌃⌘F and
         // the sidebar button.
         await MenuItem.new({
@@ -208,32 +237,4 @@ export function setupMenuLanguageListener(): () => void {
   }
   i18n.on('languageChanged', handler)
   return () => i18n.off('languageChanged', handler)
-}
-
-async function handleAbout(): Promise<void> {
-  await message(
-    `${APP_NAME} ${__APP_VERSION__}\nPlatform for Networked Digital Score`,
-    {
-      title: `About ${APP_NAME}`,
-      kind: 'info',
-    }
-  )
-}
-
-async function handleCheckForUpdates(): Promise<void> {
-  logger.info('Check for Updates menu item clicked')
-  try {
-    const update = await check()
-    if (update) {
-      notifications.info(
-        'Update Available',
-        `Version ${update.version} is available`
-      )
-    } else {
-      notifications.success('Up to Date', 'You are running the latest version')
-    }
-  } catch (error) {
-    logger.error('Update check failed', { error })
-    notifications.error('Update Check Failed', 'Could not check for updates')
-  }
 }

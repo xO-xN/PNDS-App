@@ -104,6 +104,20 @@ export async function saveProjectDisplayName(
   })
 }
 
+/**
+ * v1.2.0 (issue #13): persist the General-section language choice. `null`
+ * means "follow the system locale" — the pre-selection default.
+ */
+export async function saveLanguagePreference(
+  language: string | null
+): Promise<void> {
+  return enqueueSave(async () => {
+    const prefs = await loadAudioPreferences()
+    if (!prefs) return
+    await commands.savePreferences({ ...prefs, language })
+  })
+}
+
 /** §6.6 validation, mirroring the Rust rule: `host:port`, port 1-65535. */
 export function isValidOscTarget(target: string): boolean {
   const idx = target.lastIndexOf(':')

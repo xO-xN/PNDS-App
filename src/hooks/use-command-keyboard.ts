@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useKeyboardStore } from '@/store/keyboard-store'
+import { useSettingsStore } from '@/store/settings-store'
 import { visibleProjectPaths, useProjectStore } from '@/store/project-store'
 import { moveProjectSelection, selectProject } from '@/lib/project-select'
 import { startRename } from '@/lib/project-rename'
@@ -17,14 +18,27 @@ export function isEditableTarget(target: EventTarget | null): boolean {
   )
 }
 
+/** Overlay roles that block global shortcuts (any Radix modal/popup). */
+const OVERLAY_ROLES = '[role="alertdialog"], [role="listbox"], [role="menu"]'
+
 /**
  * True while a Radix dialog or popup overlays the page — global Enter must
  * not fire underneath a confirm flow or select menu.
  */
 export function hasOpenOverlay(): boolean {
+  return Boolean(document.querySelector(`[role="dialog"], ${OVERLAY_ROLES}`))
+}
+
+/**
+ * v1.2.0 (issue #13): true while an overlay OTHER than the settings panel
+ * is open. ⌘, may toggle the settings panel itself (it must be closable
+ * with ⌘, again) but must not stack it on top of another modal such as
+ * the close/quit confirms.
+ */
+export function hasOpenOverlayBesidesSettings(): boolean {
   return Boolean(
     document.querySelector(
-      '[role="alertdialog"], [role="dialog"], [role="listbox"], [role="menu"]'
+      `[role="dialog"]:not([data-settings-panel]), ${OVERLAY_ROLES}`
     )
   )
 }
@@ -35,6 +49,7 @@ export function hasOpenOverlay(): boolean {
  * sidebar visibility.
  *
  * - ⌘ held → `commandKeyPressed` (badges + running-state sidebar peek)
+ * - ⌘, → toggle the in-app settings panel (v1.2.0, issue #13)
  * - ⌘R → rename the selected project (folder name inside a folder view
  *   with nothing selected) via the same entry as the Edit-menu item
  * - ⌘↓/⌘↑ → move the selection along the visible order (clamped, no
@@ -53,6 +68,16 @@ export function useCommandKeyboard(): void {
         return
       }
       if (!event.metaKey || event.repeat) return
+      // v1.2.0 (issue #13): ⌘, toggles the settings panel — closable with
+      // ⌘, again, never stacked on another modal. Once the app menu is
+      // built its accelerator consumes the key first; this handler covers
+      // the moments before that (and the jsdom tests).
+      if (event.key === ',') {
+        if (hasOpenOverlayBesidesSettings()) return
+        event.preventDefault()
+        useSettingsStore.getState().toggleSettings()
+        return
+      }
       // ⌘R must never fall through to the webview's page reload.
       if (event.code === 'KeyR') {
         if (isEditableTarget(event.target) || hasOpenOverlay()) return

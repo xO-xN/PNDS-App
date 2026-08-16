@@ -81,6 +81,10 @@ pub fn run() {
                 } else {
                     log::LevelFilter::Info
                 })
+                // v1.2.0 (issue #13): the default 40KB cap rotated away most
+                // of a gig's logs. ~2MB keeps a whole performance day on disk
+                // while staying bounded.
+                .max_file_size(2 * 1024 * 1024)
                 .targets(targets)
                 .build()
         });

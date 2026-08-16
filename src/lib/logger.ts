@@ -1,9 +1,21 @@
 /**
- * Simple logging utility for the frontend
+ * Logging utility for the frontend.
  *
- * In development: logs to browser console
- * In production: can optionally send to Tauri backend for system logging
+ * Every entry is forwarded to tauri-plugin-log (v1.2.0, issue #13), which
+ * owns the on-disk targets — stdout, the app log file (~2MB rotation) and
+ * the webview console. The production log level on the Rust side is Info,
+ * so trace/debug entries only reach disk in development builds. In
+ * development this logger additionally prints to the browser console with
+ * the raw, expandable context object.
  */
+
+import {
+  trace as pluginTrace,
+  debug as pluginDebug,
+  info as pluginInfo,
+  warn as pluginWarn,
+  error as pluginError,
+} from '@tauri-apps/plugin-log'
 
 type LogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error'
 
@@ -12,6 +24,14 @@ interface LogEntry {
   message: string
   timestamp: Date
   context?: Record<string, unknown>
+}
+
+const pluginSenders: Record<LogLevel, (line: string) => Promise<void>> = {
+  trace: pluginTrace,
+  debug: pluginDebug,
+  info: pluginInfo,
+  warn: pluginWarn,
+  error: pluginError,
 }
 
 class Logger {
@@ -69,13 +89,7 @@ class Logger {
       this.logToConsole(entry)
     }
 
-    // In production, you could optionally send logs to Tauri backend
-    // This is commented out to keep it simple, but here's how you might do it:
-    /*
-    if (!this.isDevelopment && (level === 'warn' || level === 'error')) {
-      this.logToBackend(entry)
-    }
-    */
+    this.logToBackend(entry)
   }
 
   private logToConsole(entry: LogEntry): void {
@@ -103,21 +117,30 @@ class Logger {
     }
   }
 
-  /*
-  // Optional: Send logs to Tauri backend for system logging
-  private async logToBackend(entry: LogEntry): Promise<void> {
-    try {
-      await invoke('log_from_frontend', {
-        level: entry.level,
-        message: entry.message,
-        timestamp: entry.timestamp.toISOString(),
-        context: entry.context,
-      })
-    } catch (error) {
-      console.warn('Failed to send log to backend:', error)
-    }
+  /**
+   * Forward the entry to tauri-plugin-log. Fire-and-forget: logging must
+   * never block callers, and a dropped line (e.g. IPC unavailable in a
+   * non-Tauri test environment) is not worth surfacing.
+   */
+  private logToBackend(entry: LogEntry): void {
+    const line =
+      entry.context !== undefined
+        ? `${entry.message} ${formatContext(entry.context)}`
+        : entry.message
+    pluginSenders[entry.level](line).catch(() => {
+      /* IPC unavailable (unit tests / pre-Tauri shell) — nothing to do */
+    })
   }
-  */
+}
+
+/** Serialize a context object onto the log line; never throws, even for
+ * cyclic or exotic values. */
+function formatContext(context: Record<string, unknown>): string {
+  try {
+    return JSON.stringify(context)
+  } catch {
+    return '[unserializable context]'
+  }
 }
 
 // Export a singleton logger instance

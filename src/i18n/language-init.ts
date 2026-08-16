@@ -5,6 +5,8 @@
 import { locale } from '@tauri-apps/plugin-os'
 import i18n, { availableLanguages } from './config'
 import { logger } from '@/lib/logger'
+import { saveLanguagePreference } from '@/lib/audio-prefs'
+import { useSettingsStore, type LanguageSetting } from '@/store/settings-store'
 
 /**
  * Initialize the application language.
@@ -79,5 +81,40 @@ export async function initializeLanguage(
     logger.error('Failed to initialize language', { error })
     // Ensure we have some language set
     await i18n.changeLanguage('en')
+  }
+}
+
+/**
+ * v1.2.0 (issue #13): map the persisted preference to the General section's
+ * selection. `null` (or any unknown value) reads as "follow the system".
+ */
+export function languageSettingFromPrefs(
+  saved: string | null
+): LanguageSetting {
+  return saved === 'en' || saved === 'zh-CN' ? saved : 'system'
+}
+
+/**
+ * v1.2.0 (issue #13): apply a General-section language selection — switch
+ * i18n immediately (the menu rebuilds itself via the existing
+ * `languageChanged` listener) and persist it so the choice survives a
+ * restart. The store updates only after the switch succeeds, so a failed
+ * switch leaves the select on the previous value. Failures to persist are
+ * logged but do not revert the UI.
+ */
+export async function applyLanguageSetting(
+  setting: LanguageSetting
+): Promise<void> {
+  try {
+    if (setting === 'system') {
+      await initializeLanguage(null)
+    } else {
+      await i18n.changeLanguage(setting)
+    }
+    useSettingsStore.getState().setLanguageSetting(setting)
+    await saveLanguagePreference(setting === 'system' ? null : setting)
+    logger.info('Language setting applied', { setting })
+  } catch (error) {
+    logger.error('Failed to apply language setting', { error, setting })
   }
 }

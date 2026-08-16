@@ -228,6 +228,30 @@ async bundledExampleProjects() : Promise<Result<string[], string>> {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+/**
+ * Reveals the app data directory in Finder, creating it if needed.
+ */
+async openAppDataDir() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("open_app_data_dir") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Reveals the app log directory in Finder. This is the root the log plugin
+ * writes to (macOS: `~/Library/Logs/<bundle-id>`); it is created on demand
+ * because a fresh install may not have logged anything yet.
+ */
+async openAppLogDir() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("open_app_log_dir") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 

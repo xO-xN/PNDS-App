@@ -12,6 +12,7 @@ rule:
   any:
     - pattern: const { $$$PROPS } = useUIStore($$$ARGS)
     - pattern: const { $$$PROPS } = useKeyboardStore($$$ARGS)
+    - pattern: const { $$$PROPS } = useSettingsStore($$$ARGS)
 note: |
   Destructuring causes render cascades - every store update triggers re-renders
   even if destructured values haven't changed.

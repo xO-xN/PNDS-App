@@ -2,16 +2,21 @@ import { useEffect } from 'react'
 import { check } from '@tauri-apps/plugin-updater'
 import { relaunch } from '@tauri-apps/plugin-process'
 import { buildAppMenu, setupMenuLanguageListener } from './lib/menu'
-import { initializeLanguage } from './i18n/language-init'
+import {
+  initializeLanguage,
+  languageSettingFromPrefs,
+} from './i18n/language-init'
 import { logger } from './lib/logger'
 import { commands } from './lib/tauri-bindings'
 import { initWindowState, markQuitting } from './store/window-store'
+import { useSettingsStore } from './store/settings-store'
 import './App.css'
 import {
   AppShell,
   CloseConfirmDialog,
   QuitConfirmDialog,
 } from './components/shell'
+import { SettingsPanel } from './components/settings'
 import { ThemeProvider } from './components/ThemeProvider'
 import { ErrorBoundary } from './components/ErrorBoundary'
 
@@ -36,6 +41,12 @@ function App() {
           result.status === 'ok' ? result.data.language : null
 
         await initializeLanguage(savedLanguage)
+        // Seed the settings panel's General-section selection from the same
+        // preferences read (v1.2.0 issue #13); afterwards the store is the
+        // single source for that control.
+        useSettingsStore
+          .getState()
+          .setLanguageSetting(languageSettingFromPrefs(savedLanguage))
         await buildAppMenu()
         logger.debug('Application menu built')
         setupMenuLanguageListener()
@@ -115,6 +126,9 @@ function App() {
         <CloseConfirmDialog />
         {/* v1.1.2 T7: quit-confirm (⌘Q with a live session) — same rule. */}
         <QuitConfirmDialog />
+        {/* v1.2.0 (issue #13): the settings panel — reachable in every
+            window state, like the confirm dialogs above. */}
+        <SettingsPanel />
       </ThemeProvider>
     </ErrorBoundary>
   )

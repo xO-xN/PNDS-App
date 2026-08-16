@@ -30,6 +30,10 @@ Object.defineProperty(window, 'matchMedia', {
   })),
 })
 
+// vite.config defines __APP_VERSION__ for the app build; provide one here
+// so components under test can render it.
+;(globalThis as Record<string, unknown>).__APP_VERSION__ ??= '0.0.0-test'
+
 // Mock Tauri APIs for tests
 vi.mock('@tauri-apps/api/event', () => ({
   listen: vi.fn().mockResolvedValue(() => {
@@ -39,6 +43,15 @@ vi.mock('@tauri-apps/api/event', () => ({
 
 vi.mock('@tauri-apps/plugin-updater', () => ({
   check: vi.fn().mockResolvedValue(null),
+}))
+
+// v1.2.0: frontend logger forwards to the log plugin — keep tests IPC-free
+vi.mock('@tauri-apps/plugin-log', () => ({
+  trace: vi.fn().mockResolvedValue(undefined),
+  debug: vi.fn().mockResolvedValue(undefined),
+  info: vi.fn().mockResolvedValue(undefined),
+  warn: vi.fn().mockResolvedValue(undefined),
+  error: vi.fn().mockResolvedValue(undefined),
 }))
 
 // Mock typed Tauri bindings (tauri-specta generated)
@@ -109,6 +122,9 @@ vi.mock('@/lib/tauri-bindings', () => ({
     bundledExampleProjects: vi
       .fn()
       .mockResolvedValue({ status: 'ok', data: [] }),
+    // v1.2.0 (issue #13): Settings About section reveal buttons
+    openAppDataDir: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
+    openAppLogDir: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
   },
   unwrapResult: vi.fn((result: { status: string; data?: unknown }) => {
     if (result.status === 'ok') return result.data
