@@ -372,7 +372,7 @@ export function Sidebar({
                   className="flex w-5 shrink-0 items-center justify-center gap-0.5 text-(--pnds-text)/45"
                 >
                   <Command size={10} strokeWidth={2.5} aria-hidden="true" />
-                  <span className="text-[10px] leading-none font-semibold">
+                  <span className="translate-y-[0.5px] text-[10px] leading-none font-semibold">
                     {index + 1}
                   </span>
                 </span>
