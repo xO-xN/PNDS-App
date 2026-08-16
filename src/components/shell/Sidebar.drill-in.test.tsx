@@ -1,4 +1,12 @@
-import { render, screen, fireEvent, within, act } from '@/test/test-utils'
+import {
+  render,
+  screen,
+  fireEvent,
+  within,
+  act,
+  waitFor,
+  mockBoundingClientRect,
+} from '@/test/test-utils'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { commands } from '@/lib/tauri-bindings'
@@ -158,6 +166,57 @@ describe('Sidebar folder drill-in (v1.1.2 T3)', () => {
     expect(screen.queryByTestId('folder-in-use-dot')).not.toBeInTheDocument()
   })
 
+  it('drag-reorders inside the folder view and persists the set order (v1.1.2 T4)', async () => {
+    const user = userEvent.setup()
+    seedFolder()
+    render(<AppShell />)
+
+    await user.click(screen.getByTestId('folder-card'))
+
+    const entries = screen.getAllByTestId('project-entry')
+    const first = entries[0]
+    const second = entries[1]
+    if (!first || !second) throw new Error('Expected two folder members')
+    // jsdom lays out nothing: pin the rects the drag derives geometry from
+    // (the two members pitch 61px apart). The drop hit-test is pure math
+    // over this static layout.
+    mockBoundingClientRect(first, { top: 0 })
+    mockBoundingClientRect(second, { top: 61 })
+    const grip = within(first).getByRole('button', {
+      name: /drag to reorder/i,
+    })
+
+    // Drag the first member over the second's bottom half → insert after.
+    fireEvent.pointerDown(grip, { pointerId: 1, clientX: 40, clientY: 20 })
+    await waitFor(() =>
+      expect(screen.getByTestId('drag-clone')).toBeInTheDocument()
+    )
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 40, clientY: 100 })
+    fireEvent.pointerUp(window, { pointerId: 1 })
+
+    // The folder's set order swaps; the master list is untouched.
+    expect(useProjectStore.getState().projectFolders[0]?.projectPaths).toEqual([
+      THIRD_PATH,
+      SECOND_PATH,
+    ])
+    expect(useProjectStore.getState().trustedPaths).toEqual([
+      FIRST_PATH,
+      SECOND_PATH,
+      THIRD_PATH,
+    ])
+    await waitFor(() => {
+      expect(commands.savePreferences).toHaveBeenCalledWith(
+        expect.objectContaining({
+          projectFolders: [
+            expect.objectContaining({
+              projectPaths: [THIRD_PATH, SECOND_PATH],
+            }),
+          ],
+        })
+      )
+    })
+  })
+
   describe('folder-aware number badges and Cmd+number', () => {
     function pressCmd() {
       fireEvent.keyDown(window, { key: 'Meta' })
@@ -225,7 +284,7 @@ describe('Sidebar folder drill-in (v1.1.2 T3)', () => {
 
     it('reordering inside the folder re-numbers the badges in real time', async () => {
       const user = userEvent.setup()
-      const id = seedFolder()
+      seedFolder()
       render(<AppShell />)
 
       await user.click(screen.getByTestId('folder-card'))
@@ -235,9 +294,11 @@ describe('Sidebar folder drill-in (v1.1.2 T3)', () => {
         [THIRD_PATH, '2'],
       ])
 
-      // A reorder inside the folder view (drag lands on moveWithinFolder).
+      // A reorder inside the folder view (what a drag commits).
       act(() => {
-        useProjectStore.getState().moveWithinFolder(id, THIRD_PATH, SECOND_PATH)
+        useProjectStore
+          .getState()
+          .applyVisibleReorder([THIRD_PATH, SECOND_PATH])
       })
       expect(badgeNumbersByPath()).toEqual([
         [THIRD_PATH, '1'],

@@ -60,5 +60,29 @@ const customRender = (
   options?: Omit<RenderOptions, 'wrapper'>
 ) => render(ui, { wrapper: AllTheProviders, ...options })
 
+/**
+ * Pin an element's bounding rect. jsdom performs no layout, so tests that
+ * derive geometry from rects (e.g. the sidebar drag) must state the boxes
+ * they mean.
+ */
+export function mockBoundingClientRect(
+  element: Element,
+  rect: { top: number; left?: number; height?: number; width?: number }
+): void {
+  const { top, left = 20, height = 57, width = 280 } = rect
+  element.getBoundingClientRect = () =>
+    ({
+      top,
+      height,
+      bottom: top + height,
+      left,
+      right: left + width,
+      width,
+      x: left,
+      y: top,
+      toJSON: () => ({}),
+    }) as DOMRect
+}
+
 export * from '@testing-library/react'
 export { customRender as render }

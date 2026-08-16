@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { Manifest, ProjectFolder } from '@/lib/tauri-bindings'
+import { masterWithUngroupedOrder, sameMemberSet } from '@/lib/drag-reorder'
 
 export interface CurrentProject {
   path: string
@@ -42,7 +43,6 @@ interface ProjectState {
   isTrusted: (path: string) => boolean
   trustProject: (path: string) => void
   removeTrusted: (path: string) => void
-  moveTrusted: (fromPath: string, toPath: string) => void
   requestTrust: (path: string | null) => void
   setPendingPreflight: (path: string | null) => void
   requestSwitch: (path: string) => void
@@ -59,8 +59,14 @@ interface ProjectState {
   moveProjectToFolder: (folderId: string, path: string) => void
   /** Returns a path to the ungrouped section. */
   removeProjectFromFolder: (folderId: string, path: string) => void
-  /** Reorders within a folder (drag handle). */
-  moveWithinFolder: (folderId: string, fromPath: string, toPath: string) => void
+  /**
+   * v1.1.2 T4: applies a drag-reorder of the visible list (computed by the
+   * drag-reorder pure helpers). Inside a folder it replaces that folder's
+   * member order; at the top level the master list is remapped so folder
+   * members keep their slots. A set that is not the current visible list is
+   * ignored.
+   */
+  applyVisibleReorder: (newVisiblePaths: string[]) => void
   startPreflight: () => void
   preflightSucceeded: (path: string, manifest: Manifest) => void
   preflightFailed: (message: string) => void
@@ -144,18 +150,6 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
         : {}),
     })),
 
-  moveTrusted: (fromPath, toPath) =>
-    set(state => {
-      const paths = [...state.trustedPaths]
-      const from = paths.indexOf(fromPath)
-      const to = paths.indexOf(toPath)
-      if (from === -1 || to === -1 || from === to) return {}
-      const [moved] = paths.splice(from, 1)
-      if (moved === undefined) return {}
-      paths.splice(to, 0, moved)
-      return { trustedPaths: paths }
-    }),
-
   requestTrust: path => set({ pendingTrustPath: path }),
 
   setPendingPreflight: path => set({ pendingPreflightPath: path }),
@@ -217,20 +211,26 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       ),
     })),
 
-  moveWithinFolder: (folderId, fromPath, toPath) =>
-    set(state => ({
-      projectFolders: state.projectFolders.map(folder => {
-        if (folder.id !== folderId) return folder
-        const paths = [...folder.projectPaths]
-        const from = paths.indexOf(fromPath)
-        const to = paths.indexOf(toPath)
-        if (from === -1 || to === -1 || from === to) return folder
-        const [moved] = paths.splice(from, 1)
-        if (moved === undefined) return folder
-        paths.splice(to, 0, moved)
-        return { ...folder, projectPaths: paths }
-      }),
-    })),
+  applyVisibleReorder: newVisiblePaths =>
+    set(state => {
+      if (state.activeFolderId !== null) {
+        return {
+          projectFolders: state.projectFolders.map(folder =>
+            folder.id === state.activeFolderId &&
+            sameMemberSet(folder.projectPaths, newVisiblePaths)
+              ? { ...folder, projectPaths: newVisiblePaths }
+              : folder
+          ),
+        }
+      }
+      return {
+        trustedPaths: masterWithUngroupedOrder(
+          state.trustedPaths,
+          state.projectFolders,
+          newVisiblePaths
+        ),
+      }
+    }),
 
   startPreflight: () =>
     set({ preflightStatus: 'checking', preflightError: null }),

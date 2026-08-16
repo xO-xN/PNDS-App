@@ -141,6 +141,21 @@ test('toggles sidebar visibility', () => {
 })
 ```
 
+### Testing Pointer-Drag Geometry (e.g. Sidebar Reorder)
+
+jsdom has no layout and no hit-testing, so pointer dragging cannot be
+simulated end-to-end. Split the work at that seam (see the sidebar's
+`src/lib/drag-reorder.ts`, v1.1.2 T4):
+
+- All drop/yield decisions — midpoint halves, insertion index, per-card
+  yield offsets, static hit-testing — are pure functions, unit-tested with
+  plain numbers.
+- The component only measures rects and mutates the floating clone
+  imperatively on `pointermove`; its tests pin the rects it derives
+  geometry from via `mockBoundingClientRect` (`src/test/test-utils.tsx`)
+  and fire pointer events with explicit coordinates. The drag "feel"
+  remains a manual acceptance step.
+
 ## Rust Testing
 
 ### Unit Tests

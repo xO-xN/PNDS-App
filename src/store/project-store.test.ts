@@ -101,20 +101,6 @@ describe('project-store', () => {
     expect(state.currentProject).toBeNull()
     expect(state.preflightStatus).toBe('idle')
   })
-
-  it('moveTrusted reorders the history list', () => {
-    useProjectStore.getState().trustProject('/a')
-    useProjectStore.getState().trustProject('/b')
-    useProjectStore.getState().trustProject('/c')
-
-    useProjectStore.getState().moveTrusted('/c', '/a')
-    expect(useProjectStore.getState().trustedPaths).toEqual(['/c', '/a', '/b'])
-
-    // Moving to itself or unknown paths is a no-op
-    useProjectStore.getState().moveTrusted('/c', '/c')
-    useProjectStore.getState().moveTrusted('/x', '/a')
-    expect(useProjectStore.getState().trustedPaths).toEqual(['/c', '/a', '/b'])
-  })
 })
 
 describe('project-store folders (v1.1.2, spec issue #4)', () => {
@@ -204,36 +190,12 @@ describe('project-store folders (v1.1.2, spec issue #4)', () => {
     expect(state.projectFolders).toHaveLength(1) // empty folder survives
   })
 
-  it('moveWithinFolder reorders the in-folder order and persists it', () => {
-    const store = useProjectStore.getState()
-    const id = store.createFolder('Set list')
-    store.moveProjectToFolder(id, '/a')
-    store.moveProjectToFolder(id, '/b')
-    store.moveProjectToFolder(id, '/c')
-
-    store.moveWithinFolder(id, '/c', '/a')
-    expect(useProjectStore.getState().projectFolders[0]?.projectPaths).toEqual([
-      '/c',
-      '/a',
-      '/b',
-    ])
-
-    // Unknown paths or same path are no-ops
-    store.moveWithinFolder(id, '/x', '/a')
-    store.moveWithinFolder(id, '/a', '/a')
-    expect(useProjectStore.getState().projectFolders[0]?.projectPaths).toEqual([
-      '/c',
-      '/a',
-      '/b',
-    ])
-  })
-
   it('folder cards never take a number: ungrouped derives from the master list', () => {
     const store = useProjectStore.getState()
     const id = store.createFolder('Set list')
     store.moveProjectToFolder(id, '/b')
-    // Master-list reorder is reflected in the ungrouped order.
-    store.moveTrusted('/c', '/a')
+    // Master-list order is reflected in the ungrouped order.
+    useProjectStore.setState({ trustedPaths: ['/c', '/a', '/b'] })
     expect(
       ungroupedProjectPaths(
         useProjectStore.getState().trustedPaths,
@@ -285,7 +247,7 @@ describe('folder-aware view derivation (v1.1.2 T3, spec issue #7)', () => {
 
   it('reordering inside the folder re-derives immediately (badge source)', () => {
     useProjectStore.getState().setActiveFolderId(folderId)
-    useProjectStore.getState().moveWithinFolder(folderId, '/d', '/b')
+    useProjectStore.getState().applyVisibleReorder(['/d', '/b'])
     expect(visible()).toEqual(['/d', '/b'])
 
     // Leaving the folder restores the flat top-level numbering source.
@@ -313,5 +275,70 @@ describe('folder-aware view derivation (v1.1.2 T3, spec issue #7)', () => {
   it('an unknown folder id derives an empty view, never the top level', () => {
     useProjectStore.getState().setActiveFolderId('does-not-exist')
     expect(visible()).toEqual([])
+  })
+})
+
+describe('visible reorder from drags (v1.1.2 T4, spec issue #8)', () => {
+  let folderId: string
+
+  beforeEach(() => {
+    // Master [a, b, c, d, e] with b and d filed away; ungrouped [a, c, e].
+    useProjectStore.setState({
+      currentProject: null,
+      trustedPaths: ['/a', '/b', '/c', '/d', '/e'],
+      projectFolders: [],
+      pendingTrustPath: null,
+      pendingPreflightPath: null,
+      pendingSwitchPath: null,
+      activeFolderId: null,
+      preflightStatus: 'idle',
+      preflightError: null,
+    })
+    folderId = useProjectStore.getState().createFolder('Set list')
+    const store = useProjectStore.getState()
+    store.moveProjectToFolder(folderId, '/b')
+    store.moveProjectToFolder(folderId, '/d')
+  })
+
+  it('a top-level drop remaps the master list, folder members keep their slots', () => {
+    useProjectStore.getState().applyVisibleReorder(['/c', '/e', '/a'])
+    const state = useProjectStore.getState()
+    expect(state.trustedPaths).toEqual(['/c', '/b', '/e', '/d', '/a'])
+    expect(
+      state.projectFolders.find(f => f.id === folderId)?.projectPaths
+    ).toEqual(['/b', '/d'])
+    // The ungrouped view now derives the dragged order.
+    expect(
+      visibleProjectPaths(state.trustedPaths, state.projectFolders, null)
+    ).toEqual(['/c', '/e', '/a'])
+  })
+
+  it('a folder-view drop replaces the member order only', () => {
+    useProjectStore.getState().setActiveFolderId(folderId)
+    useProjectStore.getState().applyVisibleReorder(['/d', '/b'])
+    const state = useProjectStore.getState()
+    expect(
+      state.projectFolders.find(f => f.id === folderId)?.projectPaths
+    ).toEqual(['/d', '/b'])
+    // The master list is untouched at the top level.
+    expect(state.trustedPaths).toEqual(['/a', '/b', '/c', '/d', '/e'])
+  })
+
+  it('ignores a set that is not the current visible list', () => {
+    useProjectStore.getState().applyVisibleReorder(['/a', '/c'])
+    expect(useProjectStore.getState().trustedPaths).toEqual([
+      '/a',
+      '/b',
+      '/c',
+      '/d',
+      '/e',
+    ])
+
+    useProjectStore.getState().setActiveFolderId(folderId)
+    useProjectStore.getState().applyVisibleReorder(['/b', '/x'])
+    expect(useProjectStore.getState().projectFolders[0]?.projectPaths).toEqual([
+      '/b',
+      '/d',
+    ])
   })
 })

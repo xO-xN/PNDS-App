@@ -1,4 +1,11 @@
-import { fireEvent, render, screen, waitFor, within } from '@/test/test-utils'
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+  mockBoundingClientRect,
+} from '@/test/test-utils'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { commands } from '@/lib/tauri-bindings'
@@ -653,10 +660,36 @@ describe('Sidebar', () => {
     })
     const targetCard = screen.getByTestId('current-project-card')
 
-    fireEvent.pointerDown(sourceGrip, { pointerId: 1 })
-    await waitFor(() => expect(sourceEntry).toHaveClass('opacity-50'))
-    fireEvent.pointerMove(targetCard, { pointerId: 1 })
-    expect(screen.getByTestId('project-drop-indicator')).toBeInTheDocument()
+    // jsdom lays out nothing: pin the rects the drag derives geometry from
+    // (cards pitch 61px apart — the top card at 0, the source at 61). The
+    // drop hit-test is pure math over this static layout.
+    mockBoundingClientRect(targetCard, { top: 0 })
+    mockBoundingClientRect(sourceEntry, { top: 61 })
+    const strideEntry = screen.getAllByTestId('project-entry')[1]
+    if (!strideEntry) throw new Error('Expected a second draggable entry')
+    mockBoundingClientRect(strideEntry, { top: 122 })
+
+    fireEvent.pointerDown(sourceGrip, {
+      pointerId: 1,
+      clientX: 40,
+      clientY: 80,
+    })
+    const clone = await waitFor(() => screen.getByTestId('drag-clone'))
+    // The 1px indicator is gone; the source card hides behind its clone.
+    expect(
+      screen.queryByTestId('project-drop-indicator')
+    ).not.toBeInTheDocument()
+    await waitFor(() => expect(sourceEntry).toHaveClass('invisible'))
+
+    // The clone follows the pointer while the hovered top card yields a
+    // full-card gap (the pointer sits in its top half → drop before).
+    const initialTransform = clone.style.transform
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 45, clientY: 10 })
+    expect(clone.style.transform).not.toBe(initialTransform)
+    expect(targetCard.style.transform).toMatch(
+      /^translateY\(-?\d+(\.\d+)?px\)$/
+    )
+
     fireEvent.pointerUp(window, { pointerId: 1 })
 
     expect(useProjectStore.getState().trustedPaths).toEqual([

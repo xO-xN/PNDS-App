@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import {
   Plus,
@@ -22,6 +23,14 @@ import {
 } from '@/lib/open-project'
 import { selectProject } from '@/lib/project-select'
 import { saveProjectIndex } from '@/lib/audio-prefs'
+import {
+  cardShift,
+  hoveredCardAt,
+  insertionIndexFor,
+  reorderedList,
+  type DragHitSpace,
+  type DropTarget,
+} from '@/lib/drag-reorder'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -49,13 +58,34 @@ interface SidebarProps {
 }
 
 /**
+ * Geometry captured when a grip press starts (v1.1.2 T4, spec issue #8).
+ * It anchors the floating clone to the pointer and carries the card stride
+ * the yielding cards translate by.
+ */
+interface DragGhost {
+  /** Card top-left in viewport coordinates; the clone starts exactly there. */
+  x: number
+  y: number
+  width: number
+  height: number
+  /** Grab offset inside the card so the clone tracks the pointer 1:1. */
+  offsetX: number
+  offsetY: number
+  /** Card pitch (height + list gap) the yielding cards translate by. */
+  stride: number
+}
+
+/**
  * PNDS sidebar (§10.1, §10.2; Figma "PNDS UI Design"). A floating rounded
  * panel, always open on Welcome/Loading and popping in over the monitor
  * during a performance. Selecting a project only preflights it; starting
  * is explicit via the Load button (§8). Entries can be reordered with the
- * left grip handle; the ✕ (remove from history) only appears on projects
- * that are not currently open. Switching while a session runs asks for
- * confirmation first (§8.3, Figma "Loading another project").
+ * left grip handle — the dragged card becomes a semi-transparent floating
+ * clone while the remaining cards yield a full-card-sized gap at the
+ * midpoint-judged drop slot (v1.1.2 T4); the ✕ (remove from history) only
+ * appears on projects that are not currently open. Switching while a
+ * session runs asks for confirmation first (§8.3, Figma "Loading another
+ * project").
  *
  * v1.1.2: the list is two-segment (spec issue #4) — projects at the top,
  * folders (set lists) pinned directly above the footer controls; an
@@ -92,7 +122,9 @@ export function Sidebar({
   // session starts, not only once ready (spec issue #4: 使用中指示点).
   const sessionLive = sessionStatus === 'starting' || sessionStatus === 'ready'
   const [dragPath, setDragPath] = useState<string | null>(null)
-  const [dropPath, setDropPath] = useState<string | null>(null)
+  const [dropTarget, setDropTarget] = useState<DropTarget | null>(null)
+  /** Clone origin/stride snapshot; mirrors dragGhostRef for render. */
+  const [dragGhost, setDragGhost] = useState<DragGhost | null>(null)
   /** Folder being inline-named (creation gesture: Enter commits, Esc cancels). */
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null)
   const editingFolderNameRef = useRef('')
@@ -100,7 +132,10 @@ export function Sidebar({
     string | null
   >(null)
   const dragPathRef = useRef<string | null>(null)
-  const dropPathRef = useRef<string | null>(null)
+  const dropTargetRef = useRef<DropTarget | null>(null)
+  const dragGhostRef = useRef<DragGhost | null>(null)
+  const hitSpaceRef = useRef<DragHitSpace | null>(null)
+  const cloneRef = useRef<HTMLDivElement | null>(null)
 
   // v1.1.2 T3: one folder-aware derivation drives the list, the number
   // badges and the drag indices (spec issue #7: 可见列表与序号派生).
@@ -126,6 +161,12 @@ export function Sidebar({
       .map(part => (part ? part.charAt(0).toUpperCase() + part.slice(1) : part))
       .join(' ')
   }
+
+  /** The name a project card (and its drag clone) shows for `path`. */
+  const cardName = (path: string) =>
+    path === currentProject?.path
+      ? currentProject.manifest.name
+      : displayName(path)
 
   /** Persists the app-side project index — trust list and folder
    * membership change together, so they always save atomically. */
@@ -201,38 +242,58 @@ export function Sidebar({
 
     const clearDrag = () => {
       dragPathRef.current = null
-      dropPathRef.current = null
+      dropTargetRef.current = null
+      dragGhostRef.current = null
+      hitSpaceRef.current = null
       setDragPath(null)
-      setDropPath(null)
+      setDropTarget(null)
+      setDragGhost(null)
     }
 
     const handlePointerMove = (event: PointerEvent) => {
-      const fallbackTarget =
-        event.target instanceof Element ? event.target : null
-      const target =
-        document.elementFromPoint?.(event.clientX, event.clientY) ??
-        fallbackTarget
-      const row = target?.closest('[data-project-path]')
-      const nextPath = row?.getAttribute('data-project-path') ?? null
-      if (dropPathRef.current === nextPath) return
-      dropPathRef.current = nextPath
-      setDropPath(nextPath)
+      // The clone tracks the pointer imperatively — a state update per
+      // move would re-render the whole list (performance pattern).
+      const ghost = dragGhostRef.current
+      if (cloneRef.current && ghost) {
+        cloneRef.current.style.transform = `translate(${event.clientX - ghost.offsetX}px, ${event.clientY - ghost.offsetY}px)`
+      }
+      // Hit-test the static slot layout snapshotted at drag start: the
+      // yielding cards slide under the pointer, so live rects would make
+      // the target flicker as the gap opens and closes.
+      const next = hitSpaceRef.current
+        ? hoveredCardAt(event.clientX, event.clientY, hitSpaceRef.current)
+        : null
+      const current = dropTargetRef.current
+      if (current?.index === next?.index && current?.half === next?.half) return
+      dropTargetRef.current = next
+      setDropTarget(next)
     }
 
     const finishDrag = () => {
       const sourcePath = dragPathRef.current
-      const targetPath = dropPathRef.current
-      if (sourcePath && targetPath && sourcePath !== targetPath) {
+      const target = dropTargetRef.current
+      if (sourcePath && target) {
         const store = useProjectStore.getState()
         // Reordering follows the active view: inside a folder it is the
         // set order, at the top level the master list (spec issue #7).
-        if (store.activeFolderId) {
-          store.moveWithinFolder(store.activeFolderId, sourcePath, targetPath)
-        } else {
-          store.moveTrusted(sourcePath, targetPath)
+        const visible = visibleProjectPaths(
+          store.trustedPaths,
+          store.projectFolders,
+          store.activeFolderId
+        )
+        const fromIndex = visible.indexOf(sourcePath)
+        if (fromIndex >= 0) {
+          const next = reorderedList(
+            visible,
+            fromIndex,
+            insertionIndexFor(target.index, target.half)
+          )
+          // reorderedList keeps its input reference for no-move drops.
+          if (next !== visible) {
+            store.applyVisibleReorder(next)
+            persistIndex()
+          }
         }
-        const { trustedPaths, projectFolders } = useProjectStore.getState()
-        void saveProjectIndex(trustedPaths, projectFolders)
       }
       clearDrag()
     }
@@ -255,10 +316,16 @@ export function Sidebar({
     onDialogOpenChange?.(dialogOpen)
   }, [dialogOpen, onDialogOpenChange])
 
+  // v1.1.2 T4: drag geometry — the dragged card hides behind its floating
+  // clone while the remaining cards yield one card-stride to open the gap
+  // at the midpoint-derived insertion slot (spec issue #8).
   const dragIndex = dragPath ? visiblePaths.indexOf(dragPath) : -1
-  const dropIndex = dropPath ? visiblePaths.indexOf(dropPath) : -1
-  const showDropBefore = dragIndex > dropIndex && dropIndex >= 0
-  const showDropAfter = dragIndex >= 0 && dragIndex < dropIndex
+  const insertionIndex =
+    dropTarget && dragIndex >= 0
+      ? insertionIndexFor(dropTarget.index, dropTarget.half)
+      : null
+  // Card pitch fallback: h-14.25 (57px) + gap-1 (4px). Real drags measure it.
+  const stride = dragGhost?.stride ?? 61
 
   return (
     <aside
@@ -365,8 +432,11 @@ export function Sidebar({
       <nav className="mt-4 flex min-h-0 flex-1 flex-col gap-1">
         {visiblePaths.map((path, index) => {
           const isCurrent = path === currentProject?.path
-          const showIndicatorBefore = showDropBefore && dropPath === path
-          const showIndicatorAfter = showDropAfter && dropPath === path
+          const isDragged = dragPath === path
+          const cardOffset =
+            insertionIndex === null || dragIndex < 0
+              ? 0
+              : cardShift(dragIndex, insertionIndex, index, stride)
           const showBadge = commandKeyPressed && index < 9
           return (
             <div
@@ -374,35 +444,21 @@ export function Sidebar({
               data-testid={isCurrent ? 'current-project-card' : 'project-entry'}
               data-project-path={path}
               onClick={() => selectProject(path, 'click')}
+              style={
+                cardOffset !== 0
+                  ? { transform: `translateY(${cardOffset}px)` }
+                  : undefined
+              }
               className={cn(
-                'group relative mx-5 flex h-14.25 items-center rounded-xl px-3 transition-colors duration-150',
+                'group relative mx-5 flex h-14.25 items-center rounded-xl px-3 transition-[background-color,transform] duration-200',
                 isCurrent || pendingPreflightPath === path
                   ? 'bg-(--pnds-card) shadow-sm'
                   : 'hover:bg-(--pnds-text)/5',
-                dragPath === path && 'opacity-50'
+                // Hidden, not removed: its slot is what the yielding cards
+                // slide over while the floating clone represents it.
+                isDragged && 'invisible'
               )}
             >
-              <div
-                data-testid={
-                  showIndicatorBefore ? 'project-drop-indicator' : undefined
-                }
-                aria-hidden="true"
-                className={cn(
-                  'pointer-events-none absolute -top-0.5 left-5 right-5 h-px bg-(--pnds-text)/35 opacity-0 transition-opacity duration-200 ease-in-out',
-                  showIndicatorBefore && 'opacity-100'
-                )}
-              />
-              <div
-                data-testid={
-                  showIndicatorAfter ? 'project-drop-indicator' : undefined
-                }
-                aria-hidden="true"
-                className={cn(
-                  'pointer-events-none absolute -bottom-0.5 left-5 right-5 h-px bg-(--pnds-text)/35 opacity-0 transition-opacity duration-200 ease-in-out',
-                  showIndicatorAfter && 'opacity-100'
-                )}
-              />
-
               {/* Left grip: drag to reorder (visible on hover) */}
               <button
                 type="button"
@@ -410,10 +466,52 @@ export function Sidebar({
                 onPointerDown={e => {
                   e.preventDefault()
                   e.stopPropagation()
+                  const card = e.currentTarget.closest('[data-project-path]')
+                  const rect = card?.getBoundingClientRect()
+                  if (rect) {
+                    // Pitch between cards (height + list gap) measured from
+                    // the next sibling drives the yield transforms.
+                    const next = card?.nextElementSibling
+                    const nextTop =
+                      next instanceof HTMLElement &&
+                      next.hasAttribute('data-project-path')
+                        ? next.getBoundingClientRect().top
+                        : null
+                    const stride =
+                      nextTop !== null ? nextTop - rect.top : rect.height + 4
+                    const ghost: DragGhost = {
+                      x: rect.left,
+                      y: rect.top,
+                      width: rect.width,
+                      height: rect.height,
+                      offsetX: e.clientX - rect.left,
+                      offsetY: e.clientY - rect.top,
+                      stride,
+                    }
+                    dragGhostRef.current = ghost
+                    setDragGhost(ghost)
+                    // The static slot layout every pointer move is judged
+                    // against: first card's rect plus the uniform pitch.
+                    const firstCard = card?.parentElement?.querySelector(
+                      '[data-project-path]'
+                    )
+                    const firstRect =
+                      firstCard instanceof HTMLElement
+                        ? firstCard.getBoundingClientRect()
+                        : rect
+                    hitSpaceRef.current = {
+                      top: firstRect.top,
+                      left: firstRect.left,
+                      right: firstRect.right,
+                      cardHeight: firstRect.height,
+                      stride,
+                      count: visiblePaths.length,
+                    }
+                  }
                   dragPathRef.current = path
-                  dropPathRef.current = null
+                  dropTargetRef.current = null
                   setDragPath(path)
-                  setDropPath(null)
+                  setDropTarget(null)
                 }}
                 onClick={e => e.stopPropagation()}
                 className="flex w-5 shrink-0 touch-none cursor-grab items-center justify-center border-0 bg-transparent p-0 text-(--pnds-text)/40 opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing"
@@ -427,7 +525,7 @@ export function Sidebar({
                 title={path}
                 className="flex-1 truncate text-center text-[15px] text-(--pnds-text)/85 disabled:opacity-60"
               >
-                {isCurrent ? currentProject.manifest.name : displayName(path)}
+                {cardName(path)}
               </button>
 
               {/* Right slot: ⌘N hint while Cmd is held (v1.1.2), else ✕
@@ -574,6 +672,37 @@ export function Sidebar({
           <SessionActionButton />
         </div>
       </div>
+
+      {/* v1.1.2 T4: the dragged card's semi-transparent floating clone
+          (spec issue #8). Portaled to the body — the overlay sidebar's
+          backdrop-blur forms a containing block that would otherwise pin
+          a fixed-position child inside the panel. Pointer moves update
+          its transform imperatively; pointer-events keeps it out of the
+          elementFromPoint hit test. */}
+      {dragPath &&
+        dragGhost &&
+        createPortal(
+          <div
+            ref={cloneRef}
+            data-testid="drag-clone"
+            aria-hidden="true"
+            className="pointer-events-none fixed top-0 left-0 z-50 flex items-center rounded-xl border border-(--pnds-text)/10 bg-(--pnds-sidebar-bg) px-3 opacity-75 shadow-lg"
+            style={{
+              width: dragGhost.width,
+              height: dragGhost.height,
+              transform: `translate(${dragGhost.x}px, ${dragGhost.y}px)`,
+            }}
+          >
+            <span className="flex w-5 shrink-0 items-center justify-center text-(--pnds-text)/40">
+              <GripVertical size={14} aria-hidden="true" />
+            </span>
+            <span className="flex-1 truncate text-center text-[15px] text-(--pnds-text)/85">
+              {cardName(dragPath)}
+            </span>
+            <span className="w-5 shrink-0" />
+          </div>,
+          document.body
+        )}
 
       {/* §8.3 switch confirmation (Figma "Loading another project") */}
       <AlertDialog
