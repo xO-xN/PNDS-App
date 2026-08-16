@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { X } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 import i18n from '@/i18n/config'
 import { applyLanguageSetting } from '@/i18n/language-init'
 import { logger } from '@/lib/logger'
@@ -61,18 +61,23 @@ export function SettingsPanel() {
       <DialogContent
         data-settings-panel
         showCloseButton={false}
+        // Don't auto-focus the first control on open — no highlight frame
+        // around the back button when the panel appears. Keyboard focus is
+        // still available by Tabbing into the dialog.
+        onOpenAutoFocus={event => event.preventDefault()}
         className="top-[50%] max-h-[85vh] gap-0 overflow-y-auto sm:max-w-xl"
       >
-        {/* Close at the top-LEFT corner: the standard ghost X from the
-            design system (dialog.tsx), just mirrored to the left side. */}
-        <DialogClose className="ring-offset-background focus:ring-ring absolute top-4 left-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4">
-          <X />
-          <span className="sr-only">{t('settings.close')}</span>
-        </DialogClose>
-
-        {/* ps-5 clears the corner X so the title never runs under it. */}
-        <DialogHeader className="text-start ps-5">
-          <DialogTitle>{t('settings.title')}</DialogTitle>
+        {/* Back-arrow close, inline to the left of the title. The ring is
+            focus-visible only, so deliberate keyboard navigation still
+            shows it but entry never does. */}
+        <DialogHeader className="text-start">
+          <div className="flex items-center gap-2">
+            <DialogClose className="ring-offset-background focus-visible:ring-ring rounded-xs opacity-70 transition-opacity hover:opacity-100 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-hidden disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4">
+              <ArrowLeft />
+              <span className="sr-only">{t('settings.close')}</span>
+            </DialogClose>
+            <DialogTitle>{t('settings.title')}</DialogTitle>
+          </div>
         </DialogHeader>
 
         <Separator className="mt-4" />
