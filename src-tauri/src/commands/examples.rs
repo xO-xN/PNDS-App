@@ -61,37 +61,22 @@ mod tests {
     /// manifest; entries without one are skipped, not seeded dead.
     #[test]
     fn resolves_only_manifest_carrying_examples() {
-        let base = std::env::temp_dir().join(format!(
-            "pnds-examples-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
-        let _ = std::fs::remove_dir_all(&base);
-        let with_manifest = base.join("examples").join(EXAMPLE_NAMES[0]);
-        let without_manifest = base.join("examples").join(EXAMPLE_NAMES[1]);
+        let base = tempfile::tempdir().unwrap();
+        let with_manifest = base.path().join("examples").join(EXAMPLE_NAMES[0]);
+        let without_manifest = base.path().join("examples").join(EXAMPLE_NAMES[1]);
         std::fs::create_dir_all(&with_manifest).unwrap();
         std::fs::create_dir_all(&without_manifest).unwrap();
         std::fs::write(with_manifest.join("manifest.json"), "{}").unwrap();
 
-        let resolved = resolve_from_base(&base);
+        let resolved = resolve_from_base(base.path());
         assert_eq!(resolved, vec![with_manifest]);
-
-        let _ = std::fs::remove_dir_all(&base);
     }
 
     /// A base without any installed example resolves to nothing.
     #[test]
     fn resolves_nothing_without_examples() {
-        let base = std::env::temp_dir().join(format!(
-            "pnds-examples-empty-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
-        let _ = std::fs::remove_dir_all(&base);
-        std::fs::create_dir_all(&base).unwrap();
+        let base = tempfile::tempdir().unwrap();
 
-        assert!(resolve_from_base(&base).is_empty());
-
-        let _ = std::fs::remove_dir_all(&base);
+        assert!(resolve_from_base(base.path()).is_empty());
     }
 }
