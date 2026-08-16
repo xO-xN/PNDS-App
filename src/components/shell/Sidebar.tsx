@@ -1139,7 +1139,10 @@ export function Sidebar({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>{t('switchProject.back')}</AlertDialogCancel>
-            <AlertDialogAction onClick={() => void confirmSwitch()}>
+            {/* autoFocus makes the primary (filled) action the Enter
+                default — Radix would otherwise focus the first tabbable,
+                which is Cancel. */}
+            <AlertDialogAction autoFocus onClick={() => void confirmSwitch()}>
               {t('switchProject.confirm')}
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -1168,7 +1171,10 @@ export function Sidebar({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>{t('closeProject.cancel')}</AlertDialogCancel>
-            <AlertDialogAction onClick={() => void confirmCloseProject()}>
+            <AlertDialogAction
+              autoFocus
+              onClick={() => void confirmCloseProject()}
+            >
               {t('closeProject.confirm')}
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -1198,7 +1204,7 @@ export function Sidebar({
             <AlertDialogCancel>
               {t('sidebar.deleteFolderCancel')}
             </AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDeleteFolder}>
+            <AlertDialogAction autoFocus onClick={confirmDeleteFolder}>
               {t('sidebar.deleteFolderConfirm')}
             </AlertDialogAction>
           </AlertDialogFooter>

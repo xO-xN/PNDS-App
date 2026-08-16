@@ -71,6 +71,23 @@ Guards: text inputs own their keys (`isEditableTarget`), and while a
 Radix dialog or select popup is open (`hasOpenOverlay`) Enter/Esc belong
 to the overlay — the global layer never fires underneath a confirm flow.
 
+In every confirmation dialog the primary (filled/dark) action carries
+`autoFocus`, so Enter activates it and Esc cancels. Radix's FocusScope
+would otherwise focus the first tabbable element, which is the Cancel
+button in our footer order.
+
+## Monitor Keyboard Focus (v1.1.2 fix)
+
+WKWebView hands a freshly loaded out-of-process iframe the keyboard
+first responder when no element in the main frame holds focus — most
+visibly on the first project opened after launch, the only session
+entered without any host element ever being focused. The shell's
+window-level shortcuts (⌘ layer, Esc) then go dead until the next click.
+`MonitorView` prevents this by focusing its host root (`tabIndex={-1}`)
+on mount and on every iframe `onLoad` (project switches and monitor
+reloads included); the monitor page is display-only, so nothing usable
+loses focus.
+
 ## Cmd+Q Quit Flow (v1.1.2 T7)
 
 The predefined macOS Quit item cannot be intercepted, so `menu.ts`

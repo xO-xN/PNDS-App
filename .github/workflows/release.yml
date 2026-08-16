@@ -71,7 +71,8 @@ jobs:
             - **⌘↓ / ⌘↑ next & previous project** — walk the visible list like a set list ("next song"): clamped at both ends, and if the current project lives in a folder you left, the move drills back into it first. While a session runs, switching goes through the same confirmation as clicking a card.
             - **Rebuilt drag & drop** — drag anywhere on a card: the card lifts as a floating clone, the list yields a gap at the drop slot, and the drop lands at the midpoint-judged position.
             - **Custom display names** — ⌘R (or Edit → Rename Project) renames a selected project or the open folder in place; Enter commits, Esc cancels, empty falls back to the folder name. Names persist across launches.
-            - **Safer close & quit** — Esc opens a confirmation before closing the running project; ⌘Q now confirms before quitting while a session is live.
+            - **Safer close & quit** — Esc opens a confirmation before closing the running project; ⌘Q now confirms before quitting while a session is live. In every confirmation dialog Enter activates the primary (dark) action and Esc cancels.
+            - **Keyboard focus fix** — the monitor page could take keyboard focus when it loaded, killing the ⌘ shortcuts and Esc on the first project opened after launch until the next click; the host now reclaims focus on every monitor load.
             - **Built-in Utilities folder** — two utility projects (Local Network Diagnostics, Multichannel Signal Generator) ship inside the app and appear in a default Utilities folder on first launch; the folder itself can't be renamed or deleted.
             - **Refreshed starting page** — the hint is plain copy now; adding a project lives in the sidebar's Projects header "+".
 

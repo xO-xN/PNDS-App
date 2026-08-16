@@ -85,6 +85,27 @@ describe('WelcomeScreen', () => {
     expect(commands.startProject).not.toHaveBeenCalled()
   })
 
+  it('Enter confirms the trust dialog — the primary action is the Enter default', async () => {
+    const user = userEvent.setup()
+    vi.mocked(commands.preflightProject).mockResolvedValue({
+      status: 'ok',
+      data: manifest,
+    })
+    useProjectStore.getState().requestTrust(PENDING_PATH)
+
+    render(<WelcomeScreen />)
+
+    const confirm = await screen.findByRole('button', {
+      name: /trust and continue/i,
+    })
+    expect(document.activeElement).toBe(confirm)
+
+    await user.keyboard('{Enter}')
+    await waitFor(() => {
+      expect(commands.preflightProject).toHaveBeenCalledWith(PENDING_PATH)
+    })
+  })
+
   it('does not run preflight when trust is declined', async () => {
     const user = userEvent.setup()
     useProjectStore.getState().requestTrust(PENDING_PATH)

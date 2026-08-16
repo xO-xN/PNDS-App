@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@/test/test-utils'
+import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { commands } from '@/lib/tauri-bindings'
 import { useSessionStore } from '@/store/session-store'
@@ -28,6 +29,23 @@ describe('CloseConfirmDialog (§v1.1.1)', () => {
       screen.getByRole('button', { name: 'Stop & Close' })
     ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
+    // The primary (dark) action is the Enter default.
+    expect(document.activeElement).toBe(
+      screen.getByRole('button', { name: 'Stop & Close' })
+    )
+  })
+
+  it('Enter confirms via the focused primary action — the dark button is the default', async () => {
+    const user = userEvent.setup()
+    useWindowStore.getState().setConfirmCloseOpen(true)
+    render(<CloseConfirmDialog />)
+
+    await user.keyboard('{Enter}')
+
+    await waitFor(() => {
+      expect(commands.stopProject).toHaveBeenCalledTimes(1)
+      expect(commands.closeWindowWithFade).toHaveBeenCalledTimes(1)
+    })
   })
 
   it('cancel closes the dialog and leaves the session running', async () => {

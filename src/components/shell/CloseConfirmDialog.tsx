@@ -48,7 +48,10 @@ export function CloseConfirmDialog() {
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>{t('close.cancel')}</AlertDialogCancel>
-          <AlertDialogAction onClick={() => void confirmClose()}>
+          {/* autoFocus makes the primary (filled) action the Enter
+              default — Radix would otherwise focus the first tabbable,
+              which is Cancel. */}
+          <AlertDialogAction autoFocus onClick={() => void confirmClose()}>
             {t('close.stopAndHide')}
           </AlertDialogAction>
         </AlertDialogFooter>

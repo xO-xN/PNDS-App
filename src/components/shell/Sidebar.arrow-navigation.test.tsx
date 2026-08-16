@@ -265,6 +265,25 @@ describe('Cmd+↑/↓ project navigation and Esc close (v1.1.2 T7)', () => {
       })
     })
 
+    it('Enter confirms the switch dialog — the primary (dark) button is the default', async () => {
+      const user = userEvent.setup()
+      seedRunningSession(FIRST_PATH)
+      render(<AppShell />)
+
+      pressCmdArrow('ArrowDown')
+
+      const dialog = await screen.findByRole('alertdialog')
+      expect(document.activeElement).toBe(
+        within(dialog).getByRole('button', { name: /^load$/i })
+      )
+
+      await user.keyboard('{Enter}')
+      await waitFor(() => {
+        expect(commands.stopProject).toHaveBeenCalled()
+        expect(commands.preflightProject).toHaveBeenCalledWith(SECOND_PATH)
+      })
+    })
+
     it('drills a live session into its folder and confirms the in-folder next', async () => {
       const user = userEvent.setup()
       seedRunningSession(SECOND_PATH)
@@ -319,6 +338,24 @@ describe('Cmd+↑/↓ project navigation and Esc close (v1.1.2 T7)', () => {
         expect(useSessionStore.getState().sessionStatus).toBe('idle')
       })
       expect(useProjectStore.getState().confirmCloseProjectOpen).toBe(false)
+    })
+
+    it('Enter confirms via the focused primary action — the dark button is the default', async () => {
+      const user = userEvent.setup()
+      seedRunningSession(FIRST_PATH)
+      render(<AppShell />)
+
+      pressEscape()
+      const dialog = await screen.findByRole('alertdialog')
+      expect(document.activeElement).toBe(
+        within(dialog).getByRole('button', { name: /^close$/i })
+      )
+
+      await user.keyboard('{Enter}')
+      await waitFor(() => {
+        expect(commands.stopProject).toHaveBeenCalledTimes(1)
+        expect(useProjectStore.getState().currentProject).toBeNull()
+      })
     })
 
     it('canceling the dialog leaves the session running', async () => {

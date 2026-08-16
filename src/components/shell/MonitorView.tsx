@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { useSessionStore } from '@/store/session-store'
 import { useProjectStore } from '@/store/project-store'
 import { HoverSidebar } from './HoverSidebar'
@@ -6,10 +7,11 @@ import { HoverSidebar } from './HoverSidebar'
  * Performance view (§10.1): the project's monitor page fills the whole
  * window; the top-center title strip shows "PNDS - <project>" and is the
  * window drag region (§10.1, §9.3 reserves that area in the monitor).
- * The floating sidebar pops in from the left edge (Zen-browser style
+ * The floating sidebar pops in from the left edge (Zen-browser-style
  * slide + fade) and slides back out when the pointer leaves.
  */
 export function MonitorView() {
+  const hostRef = useRef<HTMLDivElement>(null)
   const health = useSessionStore(state => state.health)
   const projectName = useSessionStore(state => state.projectName)
   const currentPath = useProjectStore(state => state.currentProject?.path)
@@ -24,6 +26,23 @@ export function MonitorView() {
   const monitorZoom = useSessionStore(state => state.monitorZoom)
   const scale = monitorZoom / 100
   const monitorPort = health?.scoreServer?.monitorPort
+
+  // WKWebView hands the keyboard first responder to a freshly loaded
+  // out-of-process iframe when no element in the main frame holds focus.
+  // The window-level shortcuts (⌘ layer, Esc) then go dead until the next
+  // click — most visibly on the first project opened after launch, the
+  // only session entered without a host element ever being focused.
+  // Focusing the host root on mount and after every monitor load/reload
+  // keeps the shell's keyboard layer alive; the monitor page is
+  // display-only here, so nothing usable loses focus.
+  const reclaimKeyboardFocus = () => {
+    window.focus()
+    hostRef.current?.focus()
+  }
+  useEffect(() => {
+    reclaimKeyboardFocus()
+  }, [])
+
   if (!lanIp || !monitorPort) {
     // Should not happen for a ready session; fail visibly rather than blank.
     return (
@@ -34,7 +53,12 @@ export function MonitorView() {
   }
 
   return (
-    <div className="relative h-screen w-screen overflow-hidden bg-black">
+    <div
+      ref={hostRef}
+      tabIndex={-1}
+      data-testid="monitor-host"
+      className="relative h-screen w-screen overflow-hidden bg-black outline-none"
+    >
       {/* §v1.1.1: browser-style zoom. CSS `zoom` does not visually scale a
           cross-origin iframe (rendered out-of-process) in WKWebView, so the
           wrapper is scaled with a compositing transform and sized inversely
@@ -56,6 +80,7 @@ export function MonitorView() {
           src={`http://${lanIp}:${monitorPort}/`}
           title="Project monitor"
           className="block h-full w-full border-0"
+          onLoad={reclaimKeyboardFocus}
         />
       </div>
 

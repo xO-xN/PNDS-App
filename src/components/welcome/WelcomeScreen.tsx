@@ -71,7 +71,13 @@ export function WelcomeScreen() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>{t('trust.cancel')}</AlertDialogCancel>
-            <AlertDialogAction onClick={() => void confirmTrustAndOpen()}>
+            {/* autoFocus makes the primary (filled) action the Enter
+                default — Radix would otherwise focus the first tabbable,
+                which is Cancel. */}
+            <AlertDialogAction
+              autoFocus
+              onClick={() => void confirmTrustAndOpen()}
+            >
               {t('trust.confirm')}
             </AlertDialogAction>
           </AlertDialogFooter>

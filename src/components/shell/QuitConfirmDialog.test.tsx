@@ -30,6 +30,10 @@ describe('QuitConfirmDialog (v1.1.2 T7 ⌘Q)', () => {
       screen.getByRole('button', { name: 'Stop & Quit' })
     ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
+    // The primary (dark) action is the Enter default.
+    expect(document.activeElement).toBe(
+      screen.getByRole('button', { name: 'Stop & Quit' })
+    )
   })
 
   it('cancel closes the dialog and leaves the app running', async () => {
