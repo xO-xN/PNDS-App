@@ -655,9 +655,6 @@ describe('Sidebar', () => {
 
     const sourceEntry = screen.getAllByTestId('project-entry')[0]
     if (!sourceEntry) throw new Error('Expected a draggable project entry')
-    const sourceGrip = within(sourceEntry).getByRole('button', {
-      name: /drag to reorder/i,
-    })
     const targetCard = screen.getByTestId('current-project-card')
 
     // jsdom lays out nothing: pin the rects the drag derives geometry from
@@ -669,11 +666,13 @@ describe('Sidebar', () => {
     if (!strideEntry) throw new Error('Expected a second draggable entry')
     mockBoundingClientRect(strideEntry, { top: 122 })
 
-    fireEvent.pointerDown(sourceGrip, {
+    // The press activates into a drag only past the click slack.
+    fireEvent.pointerDown(sourceEntry, {
       pointerId: 1,
       clientX: 40,
       clientY: 80,
     })
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 44, clientY: 76 })
     const clone = await waitFor(() => screen.getByTestId('drag-clone'))
     // The 1px indicator is gone; the source card hides behind its clone.
     expect(
@@ -716,6 +715,67 @@ describe('Sidebar', () => {
         })
       )
     })
+  })
+
+  it('the click that follows a drag drop is not a selection', async () => {
+    seedLoadedProject()
+    useProjectStore.setState({
+      trustedPaths: [PROJECT_PATH, OTHER_PATH, THIRD_PATH],
+    })
+
+    render(<Sidebar variant="static" />)
+
+    const sourceEntry = screen.getAllByTestId('project-entry')[0]
+    const targetCard = screen.getByTestId('current-project-card')
+    if (!sourceEntry) throw new Error('Expected a draggable project entry')
+    mockBoundingClientRect(targetCard, { top: 0 })
+    mockBoundingClientRect(sourceEntry, { top: 61 })
+    const strideEntry = screen.getAllByTestId('project-entry')[1]
+    if (!strideEntry) throw new Error('Expected a second draggable entry')
+    mockBoundingClientRect(strideEntry, { top: 122 })
+
+    fireEvent.pointerDown(sourceEntry, {
+      pointerId: 1,
+      clientX: 40,
+      clientY: 80,
+    })
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 44, clientY: 76 })
+    await waitFor(() =>
+      expect(screen.getByTestId('drag-clone')).toBeInTheDocument()
+    )
+    fireEvent.pointerUp(window, { pointerId: 1 })
+
+    // A real browser fires a click on the card right after the drop's
+    // pointerup — it must not select or clear anything underneath.
+    const draggedCard = screen
+      .getAllByTestId(/project-entry|current-project-card/)
+      .find(card => card.getAttribute('data-project-path') === OTHER_PATH)
+    if (!draggedCard) throw new Error('Expected the dragged card')
+    fireEvent.click(draggedCard)
+    expect(commands.preflightProject).not.toHaveBeenCalled()
+    expect(useProjectStore.getState().currentProject).not.toBeNull()
+  })
+
+  it('a press released inside the click slack never becomes a drag', async () => {
+    seedLoadedProject()
+    useProjectStore.setState({ trustedPaths: [PROJECT_PATH, OTHER_PATH] })
+    render(<Sidebar variant="static" />)
+
+    const sourceEntry = screen.getAllByTestId('project-entry')[0]
+    if (!sourceEntry) throw new Error('Expected a draggable project entry')
+    fireEvent.pointerDown(sourceEntry, {
+      pointerId: 1,
+      clientX: 40,
+      clientY: 80,
+    })
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 42, clientY: 80 })
+    fireEvent.pointerUp(window, { pointerId: 1 })
+
+    expect(screen.queryByTestId('drag-clone')).not.toBeInTheDocument()
+    expect(useProjectStore.getState().trustedPaths).toEqual([
+      PROJECT_PATH,
+      OTHER_PATH,
+    ])
   })
 
   it('asks for confirmation before switching projects while running (§8.3)', async () => {

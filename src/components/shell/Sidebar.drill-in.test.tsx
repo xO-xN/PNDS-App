@@ -182,12 +182,11 @@ describe('Sidebar folder drill-in (v1.1.2 T3)', () => {
     // over this static layout.
     mockBoundingClientRect(first, { top: 0 })
     mockBoundingClientRect(second, { top: 61 })
-    const grip = within(first).getByRole('button', {
-      name: /drag to reorder/i,
-    })
 
     // Drag the first member over the second's bottom half → insert after.
-    fireEvent.pointerDown(grip, { pointerId: 1, clientX: 40, clientY: 20 })
+    // The press activates into a drag only past the click slack.
+    fireEvent.pointerDown(first, { pointerId: 1, clientX: 40, clientY: 20 })
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 60, clientY: 30 })
     await waitFor(() =>
       expect(screen.getByTestId('drag-clone')).toBeInTheDocument()
     )

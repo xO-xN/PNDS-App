@@ -2,7 +2,6 @@ import {
   render,
   screen,
   fireEvent,
-  within,
   waitFor,
   mockBoundingClientRect,
 } from '@/test/test-utils'
@@ -51,15 +50,12 @@ describe('Sidebar folder drags (v1.1.2 T5)', () => {
     useSessionStore.getState().resetSession()
   })
 
-  /** Grab the drag grip inside a card and drag it to (x, y), then drop. */
-  async function dragCardTo(
-    card: HTMLElement,
-    gripLabel: RegExp,
-    x: number,
-    y: number
-  ) {
-    const grip = within(card).getByRole('button', { name: gripLabel })
-    fireEvent.pointerDown(grip, { pointerId: 1, clientX: 40, clientY: 80 })
+  /** Press a card anywhere, move past the click slack to arm the drag,
+   * then drag it to (x, y). */
+  async function dragCardTo(card: HTMLElement, x: number, y: number) {
+    fireEvent.pointerDown(card, { pointerId: 1, clientX: 40, clientY: 80 })
+    // The drag activates only after the pointer leaves the slack radius.
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 60, clientY: 90 })
     await waitFor(() =>
       expect(screen.getByTestId('drag-clone')).toBeInTheDocument()
     )
@@ -79,7 +75,7 @@ describe('Sidebar folder drags (v1.1.2 T5)', () => {
     mockBoundingClientRect(second, { top: 61 })
     mockBoundingClientRect(folderCard, { top: 200 })
 
-    await dragCardTo(second, /drag to reorder/i, 150, 220)
+    await dragCardTo(second, 150, 220)
 
     // Hovering the folder card highlights it as the drop zone.
     expect(folderCard).toHaveAttribute('data-drop-active', 'true')
@@ -129,7 +125,7 @@ describe('Sidebar folder drags (v1.1.2 T5)', () => {
     mockBoundingClientRect(first, { top: 100 })
     mockBoundingClientRect(second, { top: 161 })
 
-    await dragCardTo(first, /drag to reorder/i, 150, 10)
+    await dragCardTo(first, 150, 10)
 
     expect(breadcrumb).toHaveAttribute('data-drop-active', 'true')
     fireEvent.pointerUp(window, { pointerId: 1 })
@@ -170,7 +166,7 @@ describe('Sidebar folder drags (v1.1.2 T5)', () => {
     mockBoundingClientRect(cards[2] as HTMLElement, { top: 422 })
 
     // Drag Friday over Saturday's bottom half → insert after it.
-    await dragCardTo(cards[0] as HTMLElement, /drag to reorder/i, 150, 400)
+    await dragCardTo(cards[0] as HTMLElement, 150, 400)
     // Saturday yields one stride up, opening Friday's landing slot.
     expect(cards[1]).toHaveStyle({ transform: 'translateY(-61px)' })
 
@@ -211,7 +207,7 @@ describe('Sidebar folder drags (v1.1.2 T5)', () => {
     mockBoundingClientRect(folderCard, { top: 200 })
 
     // Hover the folder, then retreat to the list and drop on a no-move slot.
-    await dragCardTo(second, /drag to reorder/i, 150, 220)
+    await dragCardTo(second, 150, 220)
     fireEvent.pointerMove(window, { pointerId: 1, clientX: 150, clientY: 100 })
     fireEvent.pointerUp(window, { pointerId: 1 })
 

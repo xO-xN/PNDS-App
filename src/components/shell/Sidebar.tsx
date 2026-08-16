@@ -6,7 +6,6 @@ import {
   X,
   Share,
   RefreshCw,
-  GripVertical,
   Folder,
   FolderPlus,
   Command,
@@ -63,7 +62,8 @@ interface SidebarProps {
 }
 
 /**
- * Geometry captured when a grip press starts (v1.1.2 T4, spec issue #8).
+ * Geometry captured when a card press activates into a drag
+ * (v1.1.2 T4, spec issue #8).
  * It anchors the floating clone to the pointer and carries the card stride
  * the yielding cards translate by.
  */
@@ -90,6 +90,10 @@ type DragSource =
 
 /** Any drop target the sidebar resolves while a drag is live. */
 type ActiveDropTarget = ProjectDropTarget | FolderDropTarget
+
+/** The pointer must travel this far (px, manhattan) before a card press
+ * becomes a drag — below it the gesture stays a click. */
+const DRAG_ACTIVATION_SLACK = 4
 
 /**
  * Static slot layout of a uniform card column: the first card's rect plus
@@ -188,13 +192,13 @@ function InlineNameInput({
  * PNDS sidebar (§10.1, §10.2; Figma "PNDS UI Design"). A floating rounded
  * panel, always open on Welcome/Loading and popping in over the monitor
  * during a performance. Selecting a project only preflights it; starting
- * is explicit via the Load button (§8). Entries can be reordered with the
- * left grip handle — the dragged card becomes a semi-transparent floating
- * clone while the remaining cards yield a full-card-sized gap at the
- * midpoint-judged drop slot (v1.1.2 T4); the ✕ (remove from history) only
- * appears on projects that are not currently open. Switching while a
- * session runs asks for confirmation first (§8.3, Figma "Loading another
- * project").
+ * is explicit via the Load button (§8). Entries can be reordered by
+ * dragging anywhere on the card — the dragged card becomes a
+ * semi-transparent floating clone while the remaining cards yield a
+ * full-card-sized gap at the midpoint-judged drop slot (v1.1.2 T4); the ✕
+ * (remove from history) only appears on projects that are not currently
+ * open. Switching while a session runs asks for confirmation first
+ * (§8.3, Figma "Loading another project").
  *
  * v1.1.2: the list is two-segment (spec issue #4) — projects at the top,
  * folders (set lists) pinned directly above the footer controls; an
@@ -249,6 +253,8 @@ export function Sidebar({
   const [dropTarget, setDropTarget] = useState<ActiveDropTarget | null>(null)
   /** Clone origin/stride snapshot; mirrors dragGhostRef for render. */
   const [dragGhost, setDragGhost] = useState<DragGhost | null>(null)
+  /** Card press armed by pointerdown, not yet a drag (slack not passed). */
+  const [press, setPress] = useState<DragSource | null>(null)
   /**
    * True for one frame after a committed drop. The DOM reorder and the
    * clearing of the yield transforms land in the same commit, so without
@@ -266,6 +272,18 @@ export function Sidebar({
   const dragRef = useRef<DragSource | null>(null)
   const dropTargetRef = useRef<ActiveDropTarget | null>(null)
   const dragGhostRef = useRef<DragGhost | null>(null)
+  /** Armed press source, geometry anchor and origin point. */
+  const pressRef = useRef<{
+    source: DragSource
+    cardSelector: string
+    card: HTMLElement | null
+    nav: HTMLElement | null
+    x: number
+    y: number
+  } | null>(null)
+  /** True for the one click right after a real drag — the drop's pointerup
+   * must not turn into a selection. Reset on every fresh press. */
+  const suppressClickRef = useRef(false)
   const dragSpacesRef = useRef<DragSpaces>({
     list: null,
     folders: null,
@@ -395,26 +413,50 @@ export function Sidebar({
   }
 
   /**
-   * Grip press on any card (project or folder): snapshot the clone anchor
-   * and the static drop zones — the visible project column, the folder
-   * cards (top level) and the breadcrumb bar (folder view) — then start
-   * the drag. Every pointer move is judged against this snapshot.
+   * v1.1.2 T4/T5 drag initiation (spec issues #8, #9): a pointer press
+   * anywhere on a card (project or folder) arms the drag; it activates —
+   * snapshotting the clone anchor and the static drop zones (the visible
+   * project column, the folder cards, the breadcrumb bar) — only once the
+   * pointer travels past the click slack, so a plain click still selects.
    */
   const beginCardDrag = (
     source: DragSource,
-    event: React.PointerEvent<HTMLButtonElement>,
+    event: React.PointerEvent<HTMLElement>,
     cardSelector: string
   ) => {
-    event.preventDefault()
-    event.stopPropagation()
+    suppressClickRef.current = false
     const card = event.currentTarget.closest(cardSelector)
-    const rect = card?.getBoundingClientRect()
-    if (rect) {
+    pressRef.current = {
+      source,
+      cardSelector,
+      card: card instanceof HTMLElement ? card : null,
+      nav: card?.closest('nav') ?? null,
+      x: event.clientX,
+      y: event.clientY,
+    }
+    setPress(source)
+  }
+
+  // The armed press: past the slack it becomes a real drag (the [drag]
+  // effect's listeners take over); released before that, it was a click
+  // and the card's own onClick runs unsuppressed.
+  useEffect(() => {
+    if (!press) return
+
+    const activate = (event: PointerEvent) => {
+      const p = pressRef.current
+      if (!p?.card) return
+      if (
+        Math.abs(event.clientX - p.x) + Math.abs(event.clientY - p.y) <=
+        DRAG_ACTIVATION_SLACK
+      )
+        return
+      const rect = p.card.getBoundingClientRect()
       // Pitch between cards (height + list gap) measured from the next
       // sibling in the same column drives the yield transforms.
-      const next = card?.nextElementSibling
+      const next = p.card.nextElementSibling
       const stride =
-        next && next.matches(cardSelector)
+        next instanceof HTMLElement && next.matches(p.cardSelector)
           ? next.getBoundingClientRect().top - rect.top
           : rect.height + 4
       const ghost: DragGhost = {
@@ -428,18 +470,32 @@ export function Sidebar({
       }
       dragGhostRef.current = ghost
       setDragGhost(ghost)
-      const nav = card?.closest('nav')
       dragSpacesRef.current = {
-        list: hitSpaceOf(nav?.querySelectorAll('[data-project-path]')),
-        folders: hitSpaceOf(nav?.querySelectorAll('[data-folder-id]')),
+        list: hitSpaceOf(p.nav?.querySelectorAll('[data-project-path]')),
+        folders: hitSpaceOf(p.nav?.querySelectorAll('[data-folder-id]')),
         breadcrumb: rectOf(breadcrumbBarRef.current),
       }
+      dragRef.current = p.source
+      dropTargetRef.current = null
+      setDrag(p.source)
+      setDropTarget(null)
+      setPress(null)
     }
-    dragRef.current = source
-    dropTargetRef.current = null
-    setDrag(source)
-    setDropTarget(null)
-  }
+
+    const release = () => {
+      pressRef.current = null
+      setPress(null)
+    }
+
+    window.addEventListener('pointermove', activate)
+    window.addEventListener('pointerup', release)
+    window.addEventListener('pointercancel', release)
+    return () => {
+      window.removeEventListener('pointermove', activate)
+      window.removeEventListener('pointerup', release)
+      window.removeEventListener('pointercancel', release)
+    }
+  }, [press])
 
   useEffect(() => {
     if (!drag) return
@@ -478,6 +534,9 @@ export function Sidebar({
     }
 
     const finishDrag = () => {
+      // The ensuing click on the card is the drop's own pointerup — the
+      // card's onClick must not treat it as a selection.
+      suppressClickRef.current = true
       const source = dragRef.current
       const target = dropTargetRef.current
       const store = useProjectStore.getState()
@@ -747,14 +806,29 @@ export function Sidebar({
               key={path}
               data-testid={isCurrent ? 'current-project-card' : 'project-entry'}
               data-project-path={path}
-              onClick={() => selectProject(path, 'click')}
+              onPointerDown={e => {
+                // Renaming owns the card; the drag must not steal focus.
+                if (renamingProject) return
+                beginCardDrag(
+                  { kind: 'project', path },
+                  e,
+                  '[data-project-path]'
+                )
+              }}
+              onClick={() => {
+                if (suppressClickRef.current) {
+                  suppressClickRef.current = false
+                  return
+                }
+                selectProject(path, 'click')
+              }}
               style={
                 cardOffset !== 0
                   ? { transform: `translateY(${cardOffset}px)` }
                   : undefined
               }
               className={cn(
-                'group relative mx-5 flex h-14.25 items-center rounded-xl px-3',
+                'group relative mx-5 flex h-14.25 select-none items-center rounded-xl px-3',
                 suppressTransition
                   ? 'transition-none'
                   : 'transition-[background-color,transform] duration-200',
@@ -766,22 +840,9 @@ export function Sidebar({
                 isDragged && 'invisible'
               )}
             >
-              {/* Left grip: drag to reorder (visible on hover) */}
-              <button
-                type="button"
-                aria-label={t('sidebar.dragToReorder')}
-                onPointerDown={e =>
-                  beginCardDrag(
-                    { kind: 'project', path },
-                    e,
-                    '[data-project-path]'
-                  )
-                }
-                onClick={e => e.stopPropagation()}
-                className="flex w-5 shrink-0 touch-none cursor-grab items-center justify-center border-0 bg-transparent p-0 text-(--pnds-text)/40 opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing"
-              >
-                <GripVertical size={14} aria-hidden="true" />
-              </button>
+              {/* Left slot keeps the centered title's optical axis; the
+                  whole card is the drag trigger (v1.1.2 T5). */}
+              <span className="w-5 shrink-0" aria-hidden="true" />
 
               {renamingProject ? (
                 /* v1.1.2 T6: ⌘R inline rename — autofocus, select-all,
@@ -893,8 +954,22 @@ export function Sidebar({
                   data-testid="folder-card"
                   data-folder-id={folder.id}
                   data-drop-active={isDropHover ? 'true' : undefined}
+                  onPointerDown={e => {
+                    // Inline naming owns the card; no drag while editing.
+                    if (isEditing) return
+                    beginCardDrag(
+                      { kind: 'folder', id: folder.id },
+                      e,
+                      '[data-folder-id]'
+                    )
+                  }}
                   onClick={() => {
-                    if (!isEditing) setActiveFolderView(folder.id)
+                    if (isEditing) return
+                    if (suppressClickRef.current) {
+                      suppressClickRef.current = false
+                      return
+                    }
+                    setActiveFolderView(folder.id)
                   }}
                   style={
                     cardOffset !== 0
@@ -902,7 +977,7 @@ export function Sidebar({
                       : undefined
                   }
                   className={cn(
-                    'group relative mx-5 flex h-14.25 cursor-pointer items-center rounded-xl px-3 hover:bg-(--pnds-text)/5',
+                    'group relative mx-5 flex h-14.25 cursor-pointer select-none items-center rounded-xl px-3 hover:bg-(--pnds-text)/5',
                     suppressTransition
                       ? 'transition-none'
                       : 'transition-[background-color,transform] duration-200',
@@ -924,26 +999,10 @@ export function Sidebar({
                     />
                   ) : (
                     <>
-                      {/* The folder icon slot doubles as the drag grip
-                          (revealed on hover) so the card's geometry never
-                          shifts between its two roles. */}
-                      <span className="relative flex w-5 shrink-0 items-center justify-center text-(--pnds-text)/40">
+                      {/* The plain folder icon keeps the card's geometry;
+                          the whole card is the drag trigger (v1.1.2 T5). */}
+                      <span className="flex w-5 shrink-0 items-center justify-center text-(--pnds-text)/40">
                         <Folder size={15} aria-hidden="true" />
-                        <button
-                          type="button"
-                          aria-label={t('sidebar.dragToReorder')}
-                          onPointerDown={e =>
-                            beginCardDrag(
-                              { kind: 'folder', id: folder.id },
-                              e,
-                              '[data-folder-id]'
-                            )
-                          }
-                          onClick={e => e.stopPropagation()}
-                          className="absolute inset-0 flex cursor-grab touch-none items-center justify-center border-0 bg-transparent p-0 opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing"
-                        >
-                          <GripVertical size={14} aria-hidden="true" />
-                        </button>
                       </span>
                       {/* "使用中" indicator: the running project lives in
                           this folder (spec issue #4). */}
@@ -1022,9 +1081,7 @@ export function Sidebar({
               </>
             ) : (
               <>
-                <span className="flex w-5 shrink-0 items-center justify-center text-(--pnds-text)/40">
-                  <GripVertical size={14} aria-hidden="true" />
-                </span>
+                <span className="w-5 shrink-0" aria-hidden="true" />
                 <span className="flex-1 truncate text-center text-[15px] text-(--pnds-text)/85">
                   {cardName(drag.path)}
                 </span>
