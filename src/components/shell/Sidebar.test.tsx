@@ -144,7 +144,10 @@ describe('Sidebar', () => {
     useProjectStore.setState({
       currentProject: null,
       trustedPaths: [],
+      projectFolders: [],
       pendingTrustPath: null,
+      pendingPreflightPath: null,
+      pendingSwitchPath: null,
       preflightStatus: 'idle',
       preflightError: null,
     })

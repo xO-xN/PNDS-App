@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Manifest } from '@/lib/tauri-bindings'
+import type { Manifest, ProjectFolder } from '@/lib/tauri-bindings'
 
 export interface CurrentProject {
   path: string
@@ -16,8 +16,22 @@ interface ProjectState {
    * across launches is task-6 (Recent Projects).
    */
   trustedPaths: string[]
+  /**
+   * v1.1.2: one-level performance folders (set lists). Membership only —
+   * `trustedPaths` stays the master list, so deleting a folder merely
+   * returns its projects to the ungrouped section (spec issue #4).
+   */
+  projectFolders: ProjectFolder[]
   /** Path awaiting trust confirmation (drives the trust dialog). */
   pendingTrustPath: string | null
+  /** Path whose preflight is in flight (drives the entry highlight). */
+  pendingPreflightPath: string | null
+  /**
+   * Path awaiting §8.3 switch confirmation while a session runs. Lives in
+   * the store (not the Sidebar) so the keyboard layer can request the same
+   * dialog (spec issue #4: 单一选中语义源).
+   */
+  pendingSwitchPath: string | null
   preflightStatus: PreflightStatus
   preflightError: string | null
   isTrusted: (path: string) => boolean
@@ -25,16 +39,59 @@ interface ProjectState {
   removeTrusted: (path: string) => void
   moveTrusted: (fromPath: string, toPath: string) => void
   requestTrust: (path: string | null) => void
+  setPendingPreflight: (path: string | null) => void
+  requestSwitch: (path: string) => void
+  clearSwitchRequest: () => void
+  setProjectFolders: (folders: ProjectFolder[]) => void
+  /** Creates a folder and returns its id (caller drives inline naming). */
+  createFolder: (name: string) => string
+  renameFolder: (id: string, name: string) => void
+  /** Deletes the grouping; member projects return to ungrouped. */
+  deleteFolder: (id: string) => void
+  /** Moves a path into a folder (appended last), out of any other folder. */
+  moveProjectToFolder: (folderId: string, path: string) => void
+  /** Returns a path to the ungrouped section. */
+  removeProjectFromFolder: (folderId: string, path: string) => void
+  /** Reorders within a folder (drag handle). */
+  moveWithinFolder: (folderId: string, fromPath: string, toPath: string) => void
   startPreflight: () => void
   preflightSucceeded: (path: string, manifest: Manifest) => void
   preflightFailed: (message: string) => void
   clearProject: () => void
 }
 
+/** Drops `path` from every folder's membership list. Empty folders stay. */
+function withoutFolderMember(
+  folders: ProjectFolder[],
+  path: string
+): ProjectFolder[] {
+  return folders.map(folder =>
+    folder.projectPaths.includes(path)
+      ? { ...folder, projectPaths: folder.projectPaths.filter(p => p !== path) }
+      : folder
+  )
+}
+
+/**
+ * Projects visible at the sidebar's top level: trusted paths that are not
+ * in any folder, in master-list order. Folders render below them and never
+ * take a number badge (spec issue #4: 两段式布局).
+ */
+export function ungroupedProjectPaths(
+  trustedPaths: string[],
+  folders: ProjectFolder[]
+): string[] {
+  const grouped = new Set(folders.flatMap(folder => folder.projectPaths))
+  return trustedPaths.filter(path => !grouped.has(path))
+}
+
 export const useProjectStore = create<ProjectState>()((set, get) => ({
   currentProject: null,
   trustedPaths: [],
+  projectFolders: [],
   pendingTrustPath: null,
+  pendingPreflightPath: null,
+  pendingSwitchPath: null,
   preflightStatus: 'idle',
   preflightError: null,
 
@@ -50,6 +107,9 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
   removeTrusted: path =>
     set(state => ({
       trustedPaths: state.trustedPaths.filter(p => p !== path),
+      // Removing the app-side index also drops folder membership — the
+      // on-disk project is untouched (spec issue #4: 删除语义).
+      projectFolders: withoutFolderMember(state.projectFolders, path),
       currentProject:
         state.currentProject?.path === path ? null : state.currentProject,
       ...(state.currentProject?.path === path
@@ -70,6 +130,76 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
     }),
 
   requestTrust: path => set({ pendingTrustPath: path }),
+
+  setPendingPreflight: path => set({ pendingPreflightPath: path }),
+
+  requestSwitch: path => set({ pendingSwitchPath: path }),
+
+  clearSwitchRequest: () => set({ pendingSwitchPath: null }),
+
+  setProjectFolders: folders => set({ projectFolders: folders }),
+
+  createFolder: name => {
+    const id =
+      typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID()
+        : `folder-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    set(state => ({
+      projectFolders: [...state.projectFolders, { id, name, projectPaths: [] }],
+    }))
+    return id
+  },
+
+  renameFolder: (id, name) =>
+    set(state => ({
+      projectFolders: state.projectFolders.map(folder =>
+        folder.id === id ? { ...folder, name } : folder
+      ),
+    })),
+
+  deleteFolder: id =>
+    set(state => ({
+      projectFolders: state.projectFolders.filter(folder => folder.id !== id),
+    })),
+
+  moveProjectToFolder: (folderId, path) =>
+    set(state => {
+      const folders = withoutFolderMember(state.projectFolders, path).map(
+        folder =>
+          folder.id === folderId && !folder.projectPaths.includes(path)
+            ? { ...folder, projectPaths: [...folder.projectPaths, path] }
+            : folder
+      )
+      return { projectFolders: folders }
+    }),
+
+  removeProjectFromFolder: (folderId, path) =>
+    set(state => ({
+      projectFolders: withoutFolderMember(state.projectFolders, path).map(
+        folder =>
+          folder.id === folderId
+            ? {
+                ...folder,
+                projectPaths: folder.projectPaths.filter(p => p !== path),
+              }
+            : folder
+      ),
+    })),
+
+  moveWithinFolder: (folderId, fromPath, toPath) =>
+    set(state => ({
+      projectFolders: state.projectFolders.map(folder => {
+        if (folder.id !== folderId) return folder
+        const paths = [...folder.projectPaths]
+        const from = paths.indexOf(fromPath)
+        const to = paths.indexOf(toPath)
+        if (from === -1 || to === -1 || from === to) return folder
+        const [moved] = paths.splice(from, 1)
+        if (moved === undefined) return folder
+        paths.splice(to, 0, moved)
+        return { ...folder, projectPaths: paths }
+      }),
+    })),
 
   startPreflight: () =>
     set({ preflightStatus: 'checking', preflightError: null }),

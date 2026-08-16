@@ -163,9 +163,11 @@ This app uses React Compiler which automatically handles memoization. You do **n
 
 ## Adding a New Store
 
-1. Create store file in `src/store/`
-2. Follow the pattern with `devtools` middleware
-3. Add no-destructure rule to `.ast-grep/rules/zustand/no-destructure.yml`
+1. Create store file in `src/store/`, following the plain `create` pattern
+   of the existing stores (`project-store.ts`, `session-store.ts`,
+   `window-store.ts`, `keyboard-store.ts`)
+2. Add a no-destructure rule entry to
+   `.ast-grep/rules/zustand/no-destructure.yml`
 
 ```yaml
 rule:

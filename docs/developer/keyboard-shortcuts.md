@@ -1,74 +1,75 @@
 # Keyboard Shortcuts
 
-Centralized keyboard shortcut management using native DOM event listeners.
+Keyboard input reaches the app through two layers: native menu accelerators
+(built in `src/lib/menu.ts`) and a web-level Cmd keyboard layer
+(`src/hooks/use-command-keyboard.ts`, mounted once by `AppShell`).
 
 ## Current Shortcuts
 
-| Shortcut             | Mac   | Windows/Linux | Action                |
-| -------------------- | ----- | ------------- | --------------------- |
-| Open Preferences     | Cmd+, | Ctrl+,        | Opens settings dialog |
-| Command Palette      | Cmd+K | Ctrl+K        | Opens command search  |
-| Toggle Left Sidebar  | Cmd+1 | Ctrl+1        | Show/hide left panel  |
-| Toggle Right Sidebar | Cmd+2 | Ctrl+2        | Show/hide right panel |
+| Shortcut      | Action                                     | Layer                           |
+| ------------- | ------------------------------------------ | ------------------------------- |
+| Cmd+W         | Close-confirm flow (v1.1.1)                | Menu (`menu.ts`)                |
+| Cmd+= / Cmd+- | Monitor zoom in/out (v1.1.1)               | Menu (`menu.ts`)                |
+| Cmd+0         | Monitor zoom: actual size (v1.1.1)         | Menu (`menu.ts`)                |
+| Cmd+Shift+R   | Reload monitor (v1.1.1)                    | Menu (`menu.ts`)                |
+| Ctrl+Cmd+F    | Toggle fullscreen (§7.4)                   | Menu (`menu.ts`)                |
+| Cmd (hold)    | Number badges + sidebar peek while running | Web (`use-command-keyboard.ts`) |
+| Cmd+1..9      | Select the Nth visible project (v1.1.2)    | Web (`use-command-keyboard.ts`) |
 
-## Architecture
+## Web Cmd Layer (v1.1.2)
 
-All shortcuts are handled in `src/hooks/useMainWindowEventListeners.ts`:
+`useCommandKeyboard` is registered once in `AppShell`, so it is active in
+every window state — the shortcuts must not depend on sidebar visibility.
+It owns three behaviors (spec issue #4):
+
+- **Cmd held** → `commandKeyPressed` in `useKeyboardStore` drives the number
+  badges on project cards and the running-state hover-sidebar peek. Window
+  blur resets it so a Cmd+Tab away can't leave the app stuck in peek mode.
+- **Cmd+1..9** → selects the Nth visible project through `selectProject`
+  (`src/lib/project-select.ts`) — the same unified entry the card click
+  uses, so semantics can never drift between mouse and keyboard.
+- **Cmd+0** is deliberately NOT consumed here; it stays the native
+  "Actual Size" menu accelerator.
 
 ```typescript
-export function useMainWindowEventListeners() {
-  const commandContext = useCommandContext()
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.metaKey || e.ctrlKey) {
-        switch (e.key) {
-          case ',': {
-            e.preventDefault()
-            commandContext.openPreferences()
-            break
-          }
-          case '1': {
-            e.preventDefault()
-            const { leftSidebarVisible, setLeftSidebarVisible } =
-              useUIStore.getState()
-            setLeftSidebarVisible(!leftSidebarVisible)
-            break
-          }
-        }
-      }
-    }
-
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [commandContext])
+// src/hooks/use-command-keyboard.ts (shape)
+const handleKeyDown = (event: KeyboardEvent) => {
+  if (event.key === 'Meta') {
+    useKeyboardStore.getState().setCommandKeyPressed(true)
+    return
+  }
+  if (!event.metaKey || event.repeat) return
+  if (!/^[1-9]$/.test(event.key)) return
+  if (isEditableTarget(event.target)) return // don't fight text inputs
+  event.preventDefault()
+  const { trustedPaths, projectFolders } = useProjectStore.getState()
+  const path = ungroupedProjectPaths(trustedPaths, projectFolders)[
+    Number(event.key) - 1
+  ]
+  if (path) selectProject(path, 'keyboard')
 }
 ```
 
-**Critical**: Use `getState()` to access store data in event handlers to avoid render cascades. See [State Management](./state-management.md#the-getstate-pattern).
+**Critical**: Use `getState()` to access store data in event handlers to
+avoid render cascades. See [State Management](./state-management.md#the-getstate-pattern).
 
 ## Adding New Shortcuts
 
-### 1. Add to event handler
+### 1. Web-level (state-dependent, not a menu item)
 
-```typescript
-// src/hooks/useMainWindowEventListeners.ts
-case '3': {
-  e.preventDefault()
-  commandContext.myNewAction()
-  break
-}
-```
+Add the key handling to `useCommandKeyboard` (or a sibling hook registered
+in `AppShell`) and route the action through stores/lib functions — never
+component state, so the shortcut works regardless of what is mounted.
 
-### 2. Add to native menu (if applicable)
+### 2. Native menu (appears in the menu bar)
 
 ```typescript
 // src/lib/menu.ts
 await MenuItem.new({
   id: 'my-action',
   text: t('menu.myAction'),
-  accelerator: 'CmdOrCtrl+3',
-  action: handleMyAction,
+  accelerator: 'Cmd+Shift+M',
+  action: () => myStore.getState().myAction(),
 })
 ```
 
@@ -77,40 +78,29 @@ See [Menus](./menus.md) for full menu integration details.
 ## Modifier Keys
 
 ```typescript
-// Cross-platform modifier (Cmd on Mac, Ctrl elsewhere)
-if (e.metaKey || e.ctrlKey) {
+// macOS-only Cmd layer (this is a macOS Apple Silicon app)
+if (event.metaKey) {
 }
 
 // With Shift
-if ((e.metaKey || e.ctrlKey) && e.shiftKey) {
-}
-
-// Function keys (no modifier needed)
-if (e.key === 'F1') {
+if (event.metaKey && event.shiftKey) {
 }
 ```
 
-**Always call `e.preventDefault()`** to prevent browser defaults (like Cmd+, opening browser settings).
+**Always call `event.preventDefault()`** on consumed keys to prevent
+browser defaults.
 
 ## Why Native DOM Events
 
-Native DOM event listeners are used instead of libraries like `react-hotkeys-hook` because they provide more reliable execution in the Tauri environment.
-
-## Conventions
-
-| Pattern         | Keys                |
-| --------------- | ------------------- |
-| Preferences     | Cmd/Ctrl + ,        |
-| Search/Command  | Cmd/Ctrl + K        |
-| Panel toggles   | Cmd/Ctrl + 1,2,3... |
-| File operations | Cmd/Ctrl + N,O,S    |
-| Undo            | Cmd/Ctrl + Z        |
-| Redo            | Cmd/Ctrl + Shift+Z  |
+Native DOM event listeners are used instead of libraries like
+`react-hotkeys-hook` because they provide more reliable execution in the
+Tauri environment.
 
 ## Troubleshooting
 
-| Issue                             | Check                                              |
-| --------------------------------- | -------------------------------------------------- |
-| Shortcuts not firing              | `useMainWindowEventListeners` called in MainWindow |
-| Browser intercepts shortcut       | Add `e.preventDefault()`                           |
-| Different behavior Mac vs Windows | Test `e.metaKey \|\| e.ctrlKey`                    |
+| Issue                             | Check                                          |
+| --------------------------------- | ---------------------------------------------- |
+| Shortcuts not firing              | Hook registered in `AppShell` / menu action    |
+| Browser intercepts shortcut       | Add `event.preventDefault()`                   |
+| Shortcut fires while typing       | Guard with an editable-target check            |
+| Sidebar hidden but shortcut works | By design — the layer is shell-level (spec #4) |

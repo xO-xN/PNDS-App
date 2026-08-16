@@ -5,6 +5,7 @@ import { commands, type SessionSnapshot } from '@/lib/tauri-bindings'
 import { useSessionStore } from '@/store/session-store'
 import { useProjectStore } from '@/store/project-store'
 import { useWindowStore } from '@/store/window-store'
+import { useCommandKeyboard } from '@/hooks/use-command-keyboard'
 import { loadAudioPreferences } from '@/lib/audio-prefs'
 import { cn } from '@/lib/utils'
 import { WelcomeScreen } from '@/components/welcome'
@@ -32,6 +33,10 @@ export function AppShell() {
   // loadingDone gates the dissolve; if the page renders with a ready session
   // already in store (test escape hatch — real app never does this), skip it.
   const [loadingDone, setLoadingDone] = useState(sessionStatus === 'ready')
+
+  // v1.1.2: shell-level Cmd keyboard layer (badges, Cmd+1..9, sidebar
+  // peek) — registered once, active in every window state (spec issue #4).
+  useCommandKeyboard()
 
   // Mirror the Rust session state: live events + initial restore on mount.
   useEffect(() => {
@@ -68,6 +73,11 @@ export function AppShell() {
       if (prefs?.recentProjects?.length) {
         const store = useProjectStore.getState()
         for (const p of prefs.recentProjects) store.trustProject(p)
+      }
+      // v1.1.2: folder structure; old preference files simply lack the
+      // field (Rust serde default) and restore as no folders.
+      if (prefs?.projectFolders?.length) {
+        useProjectStore.getState().setProjectFolders(prefs.projectFolders)
       }
     })
   }, [])

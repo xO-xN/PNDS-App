@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { Sidebar } from './Sidebar'
+import { useSessionStore } from '@/store/session-store'
+import { useKeyboardStore } from '@/store/keyboard-store'
 import { cn } from '@/lib/utils'
 
 /**
@@ -7,12 +9,24 @@ import { cn } from '@/lib/utils'
  * the overlay sidebar in; mouse-leave slides it back out. Used in the
  * running monitor and the loading screen so the sidebar stays reachable
  * in fullscreen (keyed remounts by the host reset the pop state).
+ *
+ * v1.1.2 Cmd peek (spec issue #4): while a session runs, holding Cmd
+ * reveals the sidebar regardless of the mouse and keeps it open until
+ * Cmd is released — unless a dialog or settings popup is open, or the
+ * pointer is still hovering, in which case it stays.
  */
 export function HoverSidebar() {
-  const [sidebarVisible, setSidebarVisible] = useState(false)
+  const [hoverVisible, setHoverVisible] = useState(false)
   // While a settings popup is open (Radix portals live outside the sidebar
   // element), mouse-leave auto-hide must not dismiss the sidebar.
   const [popupOpen, setPopupOpen] = useState(false)
+  // Same guard for sidebar dialogs (§8.3 switch confirm, folder delete).
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const commandKeyPressed = useKeyboardStore(state => state.commandKeyPressed)
+  const running = useSessionStore(state => state.sessionStatus === 'ready')
+
+  const peeking = commandKeyPressed && running
+  const sidebarVisible = hoverVisible || popupOpen || dialogOpen || peeking
 
   return (
     <>
@@ -22,7 +36,7 @@ export function HoverSidebar() {
       <div
         data-testid="sidebar-hover-zone"
         className="absolute -top-2 -bottom-2 left-0 z-40 w-3.5"
-        onMouseEnter={() => setSidebarVisible(true)}
+        onMouseEnter={() => setHoverVisible(true)}
       />
 
       {/* Floating sidebar: always mounted so the slide/fade animates both
@@ -37,13 +51,14 @@ export function HoverSidebar() {
             : 'pointer-events-none -translate-x-5 opacity-0'
         )}
         onMouseLeave={() => {
-          if (!popupOpen) setSidebarVisible(false)
+          if (!popupOpen && !dialogOpen) setHoverVisible(false)
         }}
       >
         <Sidebar
           variant="overlay"
-          onRequestClose={() => setSidebarVisible(false)}
+          onRequestClose={() => setHoverVisible(false)}
           onPopupOpenChange={setPopupOpen}
+          onDialogOpenChange={setDialogOpen}
         />
       </div>
     </>

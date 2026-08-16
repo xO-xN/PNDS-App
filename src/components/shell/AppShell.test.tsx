@@ -48,7 +48,10 @@ describe('AppShell', () => {
     useProjectStore.setState({
       currentProject: null,
       trustedPaths: [],
+      projectFolders: [],
       pendingTrustPath: null,
+      pendingPreflightPath: null,
+      pendingSwitchPath: null,
       preflightStatus: 'idle',
       preflightError: null,
     })
@@ -242,5 +245,62 @@ describe('AppShell', () => {
     expect(secondCanvas).not.toBeNull()
     expect(secondCanvas).not.toBe(firstCanvas)
     expect(screen.getByText(/cancel/i)).toBeInTheDocument()
+  })
+
+  // ── v1.1.2: projectFolders preference restore (spec issue #4) ──
+
+  it('restores the folder structure and membership from saved preferences', async () => {
+    vi.mocked(commands.loadPreferences).mockResolvedValueOnce({
+      status: 'ok',
+      data: {
+        theme: 'system',
+        language: null,
+        outputDevice: null,
+        oscTargets: {},
+        recentProjects: [
+          '/Users/test/Inarticulate III',
+          '/Users/test/PNDS Score 1',
+        ],
+        projectFolders: [
+          {
+            id: 'f1',
+            name: 'Gig Friday',
+            projectPaths: ['/Users/test/PNDS Score 1'],
+          },
+        ],
+      },
+    })
+
+    render(<AppShell />)
+
+    // The grouped project is hidden from the top segment; the folder card
+    // renders below it with the persisted name.
+    await screen.findByTestId('folder-card')
+    expect(screen.getByTestId('folder-name')).toHaveTextContent('Gig Friday')
+    const entries = screen.getAllByTestId('project-entry')
+    expect(entries).toHaveLength(1)
+    expect(entries[0]).toHaveAttribute(
+      'data-project-path',
+      '/Users/test/Inarticulate III'
+    )
+  })
+
+  it('loads a legacy preferences file (no projectFolders) without error', async () => {
+    vi.mocked(commands.loadPreferences).mockResolvedValueOnce({
+      status: 'ok',
+      data: {
+        theme: 'system',
+        language: null,
+        outputDevice: null,
+        oscTargets: {},
+        recentProjects: ['/Users/test/Inarticulate III'],
+      },
+    })
+
+    render(<AppShell />)
+
+    await screen.findByTestId('project-entry')
+    expect(screen.queryByTestId('folder-card')).not.toBeInTheDocument()
+    expect(useProjectStore.getState().projectFolders).toEqual([])
   })
 })

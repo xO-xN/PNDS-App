@@ -1,0 +1,280 @@
+import { render, screen, fireEvent, waitFor, within } from '@/test/test-utils'
+import userEvent from '@testing-library/user-event'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { commands } from '@/lib/tauri-bindings'
+import { useProjectStore } from '@/store/project-store'
+import { useSessionStore } from '@/store/session-store'
+import { useKeyboardStore } from '@/store/keyboard-store'
+import { AppShell } from './AppShell'
+import type { Manifest } from '@/lib/tauri-bindings'
+
+vi.mock('@tauri-apps/plugin-opener', () => ({
+  openUrl: vi.fn().mockResolvedValue(undefined),
+}))
+
+vi.mock('sonner', () => ({
+  toast: { info: vi.fn(), error: vi.fn() },
+  Toaster: () => null,
+}))
+
+const manifest: Manifest = {
+  schemaVersion: 1,
+  id: 'inarticulate-iii',
+  name: 'Inarticulate III',
+  version: '0.1.0',
+  description: null,
+  scoreServer: {
+    entry: 'server.js',
+    workingDirectory: '.',
+    performerPort: 6868,
+    monitorPort: 6869,
+  },
+  audio: {
+    defaultMode: 'internal',
+    supportedModes: ['internal', 'external', 'none'],
+    synthdefs: ['supercollider/synthdefs/inarticulate-iii.scsyndef'],
+    scsynth: { sampleRate: 48000, blockSize: 64, audioBusChannels: 128 },
+    standaloneTarget: null,
+  },
+}
+
+const FIRST_PATH = '/Users/test/Inarticulate III'
+const SECOND_PATH = '/Users/test/PNDS Score 1'
+
+/** The health block MonitorView needs to render a ready session. */
+const readyHealth = {
+  status: 'ready' as const,
+  projectId: 'inarticulate-iii',
+  audioMode: 'internal' as const,
+  audio: { status: 'running' as const, target: null, error: null },
+  scoreServer: { performerPort: 6868, monitorPort: 6869, error: null },
+}
+
+const TEN_PATHS = Array.from(
+  { length: 10 },
+  (_, i) => `/Users/test/Score ${i + 1}`
+)
+
+/**
+ * Seeds a stable running session: stores say "ready" AND the shell's
+ * initial `getSessionState` restore agrees (the global mock returns idle,
+ * which would otherwise clobber the seeded state right after mount).
+ */
+function seedRunningSession(currentPath: string) {
+  useProjectStore.setState({
+    trustedPaths: [FIRST_PATH, SECOND_PATH],
+    currentProject: { path: currentPath, manifest },
+    preflightStatus: 'ready',
+  })
+  useSessionStore.setState({
+    sessionStatus: 'ready',
+    projectName: 'Inarticulate III',
+    lanIp: '192.168.1.10',
+    health: readyHealth,
+  })
+  vi.mocked(commands.getSessionState).mockResolvedValue({
+    status: 'ok',
+    data: {
+      status: 'ready',
+      projectName: 'Inarticulate III',
+      projectPath: currentPath,
+      audioMode: 'internal',
+      lanIp: '192.168.1.10',
+      oscTarget: null,
+      health: readyHealth,
+      error: null,
+      outputTail: [],
+      volume: 80,
+      startupStage: 0,
+      channelPlan: null,
+      outputDevice: null,
+    },
+  })
+}
+
+function pressCmd() {
+  fireEvent.keyDown(window, { key: 'Meta' })
+}
+
+function releaseCmd() {
+  fireEvent.keyUp(window, { key: 'Meta' })
+}
+
+function pressCmdDigit(digit: string) {
+  fireEvent.keyDown(window, { key: digit, metaKey: true })
+}
+
+/**
+ * v1.1.2 T2 (issue #6): the Cmd keyboard layer — number badges, Cmd+1..9
+ * selection through the unified entry, and the running-state sidebar peek.
+ * The listener is registered by AppShell, so every test mounts the shell.
+ */
+describe('Cmd keyboard layer (v1.1.2)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useKeyboardStore.getState().setCommandKeyPressed(false)
+    useProjectStore.setState({
+      currentProject: null,
+      trustedPaths: [],
+      projectFolders: [],
+      pendingTrustPath: null,
+      pendingPreflightPath: null,
+      pendingSwitchPath: null,
+      preflightStatus: 'idle',
+      preflightError: null,
+    })
+    useSessionStore.getState().resetSession()
+  })
+
+  describe('number badges', () => {
+    it('badges the first nine visible projects while Cmd is held', () => {
+      useProjectStore.setState({ trustedPaths: TEN_PATHS })
+      render(<AppShell />)
+
+      pressCmd()
+      const badges = screen.getAllByTestId('project-number-badge')
+      expect(badges).toHaveLength(9)
+      expect(badges.map(b => b.textContent)).toEqual([
+        '1',
+        '2',
+        '3',
+        '4',
+        '5',
+        '6',
+        '7',
+        '8',
+        '9',
+      ])
+
+      releaseCmd()
+      expect(
+        screen.queryByTestId('project-number-badge')
+      ).not.toBeInTheDocument()
+    })
+
+    it('never badges a project that sits inside a folder (flat list)', () => {
+      useProjectStore.setState({ trustedPaths: TEN_PATHS })
+      const store = useProjectStore.getState()
+      const id = store.createFolder('Set list')
+      const groupedPath = TEN_PATHS[9]
+      if (!groupedPath) throw new Error('Expected a grouped path')
+      store.moveProjectToFolder(id, groupedPath)
+
+      render(<AppShell />)
+      pressCmd()
+
+      // Ten trusted projects, one grouped: nine ungrouped cards, all badged.
+      expect(screen.getAllByTestId('project-number-badge')).toHaveLength(9)
+    })
+  })
+
+  describe('Cmd+digit selection', () => {
+    it('Cmd+1 selects and preflights the first visible project (idle)', () => {
+      vi.mocked(commands.preflightProject).mockResolvedValue({
+        status: 'ok',
+        data: manifest,
+      })
+      useProjectStore.setState({ trustedPaths: [FIRST_PATH, SECOND_PATH] })
+      render(<AppShell />)
+
+      pressCmdDigit('1')
+
+      expect(commands.preflightProject).toHaveBeenCalledWith(FIRST_PATH)
+      expect(commands.startProject).not.toHaveBeenCalled()
+    })
+
+    it('Cmd+0 selects nothing — it stays the zoom accelerator', () => {
+      useProjectStore.setState({ trustedPaths: [FIRST_PATH] })
+      render(<AppShell />)
+
+      pressCmdDigit('0')
+
+      expect(commands.preflightProject).not.toHaveBeenCalled()
+    })
+
+    it('a digit on the current project never clears the selection', () => {
+      useProjectStore.setState({
+        trustedPaths: [FIRST_PATH, SECOND_PATH],
+        currentProject: { path: FIRST_PATH, manifest },
+        preflightStatus: 'ready',
+      })
+      render(<AppShell />)
+
+      pressCmdDigit('1')
+
+      expect(useProjectStore.getState().currentProject).not.toBeNull()
+      expect(commands.preflightProject).not.toHaveBeenCalled()
+    })
+
+    it('runs the §8.3 switch confirmation while a session runs, then stops and opens the target', async () => {
+      const user = userEvent.setup()
+      vi.mocked(commands.preflightProject).mockResolvedValue({
+        status: 'ok',
+        data: manifest,
+      })
+      seedRunningSession(FIRST_PATH)
+      render(<AppShell />)
+
+      // Sidebar hidden, session running: the shortcut still fires.
+      pressCmdDigit('2')
+
+      const dialog = await screen.findByRole('alertdialog')
+      expect(dialog).toHaveTextContent(/PNDS Score 1/)
+      await user.click(within(dialog).getByRole('button', { name: /^load$/i }))
+
+      await waitFor(() => {
+        expect(commands.stopProject).toHaveBeenCalled()
+        expect(commands.preflightProject).toHaveBeenCalledWith(SECOND_PATH)
+      })
+    })
+  })
+
+  describe('Cmd peek at the hover sidebar', () => {
+    it('holding Cmd reveals the sidebar while running; releasing retracts it', () => {
+      seedRunningSession(FIRST_PATH)
+      render(<AppShell />)
+      const popover = screen.getByTestId('sidebar-popover')
+      expect(popover.className).toContain('opacity-0')
+
+      pressCmd()
+      expect(popover.className).toContain('opacity-100')
+
+      releaseCmd()
+      expect(popover.className).toContain('opacity-0')
+    })
+
+    it('keeps the sidebar while a switch confirmation is open, even after Cmd is released', async () => {
+      const user = userEvent.setup()
+      seedRunningSession(FIRST_PATH)
+      render(<AppShell />)
+      const popover = screen.getByTestId('sidebar-popover')
+
+      pressCmdDigit('2')
+      await screen.findByRole('alertdialog')
+      releaseCmd()
+      expect(popover.className).toContain('opacity-100')
+
+      // Closing the dialog retracts it again (nothing else holds it open).
+      await user.click(screen.getByRole('button', { name: /^back$/i }))
+      await waitFor(() => {
+        expect(popover.className).toContain('opacity-0')
+      })
+    })
+
+    it('a hover-revealed sidebar ignores Cmd press and release', () => {
+      seedRunningSession(FIRST_PATH)
+      render(<AppShell />)
+      const popover = screen.getByTestId('sidebar-popover')
+
+      fireEvent.mouseEnter(screen.getByTestId('sidebar-hover-zone'))
+      expect(popover.className).toContain('opacity-100')
+
+      pressCmd()
+      releaseCmd()
+      expect(popover.className).toContain('opacity-100')
+
+      fireEvent.mouseLeave(popover)
+      expect(popover.className).toContain('opacity-0')
+    })
+  })
+})

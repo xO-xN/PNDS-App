@@ -1,15 +1,25 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Plus, X, Share, RefreshCw, GripVertical } from 'lucide-react'
+import {
+  Plus,
+  X,
+  Share,
+  RefreshCw,
+  GripVertical,
+  Folder,
+  FolderPlus,
+} from 'lucide-react'
 import { openUrl } from '@tauri-apps/plugin-opener'
-import { useProjectStore } from '@/store/project-store'
+import { useProjectStore, ungroupedProjectPaths } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
+import { useKeyboardStore } from '@/store/keyboard-store'
 import {
   openProject,
   promptOpenProject,
   stopAndReset,
 } from '@/lib/open-project'
-import { saveRecentProjects } from '@/lib/audio-prefs'
+import { selectProject } from '@/lib/project-select'
+import { saveProjectIndex } from '@/lib/audio-prefs'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -31,6 +41,9 @@ interface SidebarProps {
   onRequestClose?: () => void
   /** Overlay mode: a settings popup menu is open — keep the sidebar visible. */
   onPopupOpenChange?: (open: boolean) => void
+  /** Overlay mode: a sidebar dialog (switch / folder delete) is open —
+   * releasing Cmd must not retract the peeked sidebar. */
+  onDialogOpenChange?: (open: boolean) => void
 }
 
 /**
@@ -41,31 +54,48 @@ interface SidebarProps {
  * left grip handle; the ✕ (remove from history) only appears on projects
  * that are not currently open. Switching while a session runs asks for
  * confirmation first (§8.3, Figma "Loading another project").
+ *
+ * v1.1.2: the list is two-segment (spec issue #4) — ungrouped projects on
+ * top, folders (set lists) below; holding Cmd numbers the first nine
+ * visible projects.
  */
 export function Sidebar({
   variant,
   onRequestClose,
   onPopupOpenChange,
+  onDialogOpenChange,
 }: SidebarProps) {
   const { t } = useTranslation()
   const trustedPaths = useProjectStore(state => state.trustedPaths)
+  const projectFolders = useProjectStore(state => state.projectFolders)
   const currentProject = useProjectStore(state => state.currentProject)
+  const pendingPreflightPath = useProjectStore(
+    state => state.pendingPreflightPath
+  )
+  const pendingSwitchPath = useProjectStore(state => state.pendingSwitchPath)
   const sessionStatus = useSessionStore(state => state.sessionStatus)
+  const commandKeyPressed = useKeyboardStore(state => state.commandKeyPressed)
   const lanIp = useSessionStore(state => state.lanIp)
   const monitorPort = useSessionStore(
     state => state.health?.scoreServer?.monitorPort
   )
   const busy = sessionStatus === 'starting' || sessionStatus === 'stopping'
   const running = sessionStatus === 'ready'
-  const [pendingSwitchPath, setPendingSwitchPath] = useState<string | null>(
-    null
-  )
   const [dragPath, setDragPath] = useState<string | null>(null)
   const [dropPath, setDropPath] = useState<string | null>(null)
-  const [pendingPath, setPendingPath] = useState<string | null>(null)
+  /** Folder being inline-named (creation gesture: Enter commits, Esc cancels). */
+  const [editingFolderId, setEditingFolderId] = useState<string | null>(null)
+  const editingFolderNameRef = useRef('')
+  const [pendingDeleteFolderId, setPendingDeleteFolderId] = useState<
+    string | null
+  >(null)
   const dragPathRef = useRef<string | null>(null)
   const dropPathRef = useRef<string | null>(null)
-  const pendingPathRef = useRef<string | null>(null)
+
+  const ungroupedPaths = ungroupedProjectPaths(trustedPaths, projectFolders)
+  const pendingDeleteFolder = projectFolders.find(
+    folder => folder.id === pendingDeleteFolderId
+  )
 
   // Title-case the folder name (multichannel-tone-test → Multichannel Tone
   // Test) so an unselected project reads the same as its manifest name.
@@ -77,43 +107,22 @@ export function Sidebar({
       .join(' ')
   }
 
+  /** Persists the app-side project index — trust list and folder
+   * membership change together, so they always save atomically. */
+  const persistIndex = () => {
+    const store = useProjectStore.getState()
+    void saveProjectIndex(store.trustedPaths, store.projectFolders)
+  }
+
   /** Share: open the monitor page in the default external browser. */
   const handleShare = async () => {
     if (!running || !lanIp || !monitorPort) return
     await openUrl(`http://${lanIp}:${monitorPort}/`)
   }
 
-  const handleEntryClick = (path: string) => {
-    if (busy) return
-    if (path === currentProject?.path) {
-      if (pendingPathRef.current === path) return
-      if (useSessionStore.getState().sessionStatus === 'idle') {
-        pendingPathRef.current = null
-        setPendingPath(null)
-        useProjectStore.getState().clearProject()
-      }
-      return
-    }
-    if (useSessionStore.getState().sessionStatus !== 'idle') {
-      // §8.3: switching projects closes the current server — confirm first.
-      setPendingSwitchPath(path)
-      return
-    }
-    if (pendingPathRef.current === path) return
-
-    pendingPathRef.current = path
-    setPendingPath(path)
-    void openProject(path).finally(() => {
-      if (pendingPathRef.current === path) {
-        pendingPathRef.current = null
-        setPendingPath(null)
-      }
-    })
-  }
-
   const confirmSwitch = async () => {
-    const path = pendingSwitchPath
-    setPendingSwitchPath(null)
+    const path = useProjectStore.getState().pendingSwitchPath
+    useProjectStore.getState().clearSwitchRequest()
     if (!path) return
     await stopAndReset()
     await openProject(path)
@@ -121,10 +130,50 @@ export function Sidebar({
   }
 
   /** ✕ (remove from history) is only offered for projects that are not
-   * currently open; the Close action handles the open one. */
+   * currently open; the Close action handles the open one. Removing the
+   * app-side index never touches the on-disk project (spec issue #4). */
   const handleRemove = (path: string) => {
     useProjectStore.getState().removeTrusted(path)
-    void saveRecentProjects(useProjectStore.getState().trustedPaths)
+    persistIndex()
+  }
+
+  const handleNewFolder = () => {
+    const store = useProjectStore.getState()
+    const id = store.createFolder(t('sidebar.folderDefaultName'))
+    editingFolderNameRef.current = t('sidebar.folderDefaultName')
+    setEditingFolderId(id)
+    persistIndex()
+  }
+
+  const commitFolderName = () => {
+    const id = editingFolderId
+    if (!id) return
+    const name = editingFolderNameRef.current.trim()
+    const store = useProjectStore.getState()
+    if (name) store.renameFolder(id, name)
+    setEditingFolderId(null)
+    persistIndex()
+  }
+
+  const cancelFolderName = () => {
+    const id = editingFolderId
+    if (!id) return
+    setEditingFolderId(null)
+    // Esc during creation discards the empty folder.
+    const store = useProjectStore.getState()
+    const folder = store.projectFolders.find(f => f.id === id)
+    if (folder && folder.projectPaths.length === 0) {
+      store.deleteFolder(id)
+      persistIndex()
+    }
+  }
+
+  const confirmDeleteFolder = () => {
+    const id = pendingDeleteFolderId
+    setPendingDeleteFolderId(null)
+    if (!id) return
+    useProjectStore.getState().deleteFolder(id)
+    persistIndex()
   }
 
   useEffect(() => {
@@ -154,9 +203,9 @@ export function Sidebar({
       const sourcePath = dragPathRef.current
       const targetPath = dropPathRef.current
       if (sourcePath && targetPath && sourcePath !== targetPath) {
-        const store = useProjectStore.getState()
-        store.moveTrusted(sourcePath, targetPath)
-        void saveRecentProjects(useProjectStore.getState().trustedPaths)
+        useProjectStore.getState().moveTrusted(sourcePath, targetPath)
+        const { trustedPaths, projectFolders } = useProjectStore.getState()
+        void saveProjectIndex(trustedPaths, projectFolders)
       }
       clearDrag()
     }
@@ -171,8 +220,16 @@ export function Sidebar({
     }
   }, [dragPath])
 
-  const dragIndex = dragPath ? trustedPaths.indexOf(dragPath) : -1
-  const dropIndex = dropPath ? trustedPaths.indexOf(dropPath) : -1
+  // Report dialog visibility so the hover sidebar keeps peeking while a
+  // confirm flow is open (spec issue #4: 确认框期间松开 Cmd 不收回).
+  const dialogOpen =
+    pendingSwitchPath !== null || pendingDeleteFolderId !== null
+  useEffect(() => {
+    onDialogOpenChange?.(dialogOpen)
+  }, [dialogOpen, onDialogOpenChange])
+
+  const dragIndex = dragPath ? ungroupedPaths.indexOf(dragPath) : -1
+  const dropIndex = dropPath ? ungroupedPaths.indexOf(dropPath) : -1
   const showDropBefore = dragIndex > dropIndex && dropIndex >= 0
   const showDropAfter = dragIndex >= 0 && dragIndex < dropIndex
 
@@ -221,25 +278,38 @@ export function Sidebar({
         </div>
       </div>
 
-      {/* PNDS Projects */}
-      <h2 className="mt-2 px-9 text-[14px] font-normal text-(--pnds-text)">
-        {t('sidebar.projects')}
-      </h2>
+      {/* PNDS Projects + new-folder (v1.1.2) */}
+      <div className="mt-2 flex items-center justify-between pr-8 pl-9">
+        <h2 className="text-[14px] font-normal text-(--pnds-text)">
+          {t('sidebar.projects')}
+        </h2>
+        <button
+          type="button"
+          data-testid="new-folder-button"
+          aria-label={t('sidebar.newFolder')}
+          title={t('sidebar.newFolder')}
+          onClick={handleNewFolder}
+          className="rounded-md p-1 text-(--pnds-text)/70 hover:bg-(--pnds-text)/5 hover:text-(--pnds-text)"
+        >
+          <FolderPlus size={14} />
+        </button>
+      </div>
 
       <nav className="mt-4 flex flex-col gap-1">
-        {trustedPaths.map(path => {
+        {ungroupedPaths.map((path, index) => {
           const isCurrent = path === currentProject?.path
           const showIndicatorBefore = showDropBefore && dropPath === path
           const showIndicatorAfter = showDropAfter && dropPath === path
+          const showBadge = commandKeyPressed && index < 9
           return (
             <div
               key={path}
               data-testid={isCurrent ? 'current-project-card' : 'project-entry'}
               data-project-path={path}
-              onClick={() => handleEntryClick(path)}
+              onClick={() => selectProject(path, 'click')}
               className={cn(
                 'group relative mx-5 flex h-14.25 items-center rounded-xl px-3 transition-colors duration-150',
-                isCurrent || pendingPath === path
+                isCurrent || pendingPreflightPath === path
                   ? 'bg-(--pnds-card) shadow-sm'
                   : 'hover:bg-(--pnds-text)/5',
                 dragPath === path && 'opacity-50'
@@ -293,8 +363,18 @@ export function Sidebar({
                 {isCurrent ? currentProject.manifest.name : displayName(path)}
               </button>
 
-              {/* Right ✕: remove from history — never for the open project */}
-              {isCurrent ? (
+              {/* Right slot: Cmd number badge (v1.1.2), else ✕ remove from
+                  history — never for the open project */}
+              {showBadge ? (
+                <span
+                  data-testid="project-number-badge"
+                  className="flex w-5 shrink-0 items-center justify-center"
+                >
+                  <span className="rounded-md bg-(--pnds-text)/85 px-1 py-0.5 text-[10px] leading-none font-semibold text-(--pnds-sidebar-bg)">
+                    {index + 1}
+                  </span>
+                </span>
+              ) : isCurrent ? (
                 <span className="w-5 shrink-0" />
               ) : (
                 <button
@@ -318,6 +398,62 @@ export function Sidebar({
             {t('sidebar.noProjects')}
           </p>
         )}
+
+        {/* Folders (set lists) — second segment, below ungrouped projects */}
+        {projectFolders.length > 0 && (
+          <p className="mt-3 px-9 text-[11px] font-medium tracking-wider text-(--pnds-text)/40 uppercase">
+            {t('sidebar.folders')}
+          </p>
+        )}
+        {projectFolders.map(folder => {
+          const isEditing = editingFolderId === folder.id
+          return (
+            <div
+              key={folder.id}
+              data-testid="folder-card"
+              className="group relative mx-5 flex h-14.25 items-center rounded-xl px-3 hover:bg-(--pnds-text)/5"
+            >
+              {isEditing ? (
+                <input
+                  data-testid="folder-name-input"
+                  autoFocus
+                  defaultValue={folder.name}
+                  onFocus={e => e.target.select()}
+                  onChange={e => {
+                    editingFolderNameRef.current = e.target.value
+                  }}
+                  onKeyDown={e => {
+                    e.stopPropagation()
+                    if (e.key === 'Enter') commitFolderName()
+                    if (e.key === 'Escape') cancelFolderName()
+                  }}
+                  onBlur={commitFolderName}
+                  className="flex-1 truncate rounded-lg border border-(--pnds-text)/15 bg-(--pnds-text)/5 px-2 py-1 text-center text-[15px] text-(--pnds-text) outline-none"
+                />
+              ) : (
+                <>
+                  <span className="flex w-5 shrink-0 items-center justify-center text-(--pnds-text)/40">
+                    <Folder size={15} aria-hidden="true" />
+                  </span>
+                  <span
+                    data-testid="folder-name"
+                    className="flex-1 truncate text-center text-[15px] text-(--pnds-text)/85"
+                  >
+                    {folder.name}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label={t('sidebar.deleteFolder')}
+                    onClick={() => setPendingDeleteFolderId(folder.id)}
+                    className="w-5 shrink-0 text-(--pnds-text)/50 opacity-0 transition-opacity hover:text-(--pnds-text) group-hover:opacity-100"
+                  >
+                    <X size={14} />
+                  </button>
+                </>
+              )}
+            </div>
+          )
+        })}
       </nav>
 
       <button
@@ -344,7 +480,9 @@ export function Sidebar({
       <AlertDialog
         open={pendingSwitchPath !== null}
         onOpenChange={openState => {
-          if (!openState) setPendingSwitchPath(null)
+          if (!openState) {
+            useProjectStore.getState().clearSwitchRequest()
+          }
         }}
       >
         <AlertDialogContent>
@@ -364,6 +502,36 @@ export function Sidebar({
             <AlertDialogCancel>{t('switchProject.back')}</AlertDialogCancel>
             <AlertDialogAction onClick={() => void confirmSwitch()}>
               {t('switchProject.confirm')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* v1.1.2: folder deletion — children return to ungrouped, nothing
+          on disk is touched (spec issue #4). */}
+      <AlertDialog
+        open={pendingDeleteFolderId !== null}
+        onOpenChange={openState => {
+          if (!openState) setPendingDeleteFolderId(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t('sidebar.deleteFolderTitle')}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('sidebar.deleteFolderMessage', {
+                name: pendingDeleteFolder?.name ?? '',
+              })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>
+              {t('sidebar.deleteFolderCancel')}
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDeleteFolder}>
+              {t('sidebar.deleteFolderConfirm')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

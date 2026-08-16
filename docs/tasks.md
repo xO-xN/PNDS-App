@@ -25,6 +25,10 @@ All three V1.1.1 issues (#1 window shortcuts & monitor controls, #2 16px corner 
 
 Project Bundle (`.pnds`), Creator Guide, installation/update metadata, checksum, target-platform checks, and runtime-asset installation are V1.2 scope and must not enter these tasks.
 
+## Active V1.1.2 Plan — 优化左侧栏的使用
+
+Scope is locked by spec issue [#4](https://github.com/xO-xN/PNDS-App/issues/4)（Cmd+数字选中与序号徽标、Cmd 唤出侧栏、Cmd+↑/↓、拖拽视觉重做、演出文件夹、自定义显示名）. Follow the spec's Implementation Decisions; the two existing test seams (store 单测 + Sidebar/AppShell 组件测试) apply as stated there.
+
 ## Completing Tasks
 
 When you finish a task, use the completion script.

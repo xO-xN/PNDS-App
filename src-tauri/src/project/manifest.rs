@@ -316,8 +316,8 @@ mod tests {
     /// verification project contract).
     #[test]
     fn tone_test_example_passes_app_parser() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../examples/Multichannel Signal Generator");
+        let root =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../examples/Multichannel Signal Generator");
         let manifest = load_manifest(&root).unwrap();
         assert_eq!(manifest.audio.output_channels, 16);
         assert_eq!(manifest.audio.supported_modes, vec!["internal"]);

@@ -27,5 +27,13 @@
   "close.confirmTitle": "停止会话？",
   "close.confirmMessage": "正在运行一个会话。停止它并关闭窗口吗？",
   "close.stopAndHide": "停止并关闭",
-  "close.cancel": "取消"
+  "close.cancel": "取消",
+  "sidebar.newFolder": "新建文件夹",
+  "sidebar.folderDefaultName": "新建文件夹",
+  "sidebar.folders": "文件夹",
+  "sidebar.deleteFolder": "删除文件夹",
+  "sidebar.deleteFolderTitle": "删除文件夹？",
+  "sidebar.deleteFolderMessage": "文件夹“{{name}}”将被删除，内部工程将退回未分组列表——不会删除磁盘上的任何内容。",
+  "sidebar.deleteFolderCancel": "取消",
+  "sidebar.deleteFolderConfirm": "删除"
 }

@@ -29,6 +29,7 @@ export type {
   HealthPayload,
   HealthScoreServer,
   Manifest,
+  ProjectFolder,
   ScoreServer,
   ScsynthConfig,
   SessionSnapshot,

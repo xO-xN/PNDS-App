@@ -236,7 +236,13 @@ oscTargets?: Partial<{ [key in string]: string }>;
  * §4.1: recently-opened (and trusted) project paths. Appended on first
  * trust, kept across launches. Removing from the sidebar drops it here.
  */
-recentProjects?: string[] }
+recentProjects?: string[]; 
+/**
+ * v1.1.2: one-level performance folders (set lists). Membership only —
+ * the trusted list above stays the master list, so deleting a folder
+ * merely returns its projects to the ungrouped section.
+ */
+projectFolders?: ProjectFolder[] }
 export type AudioConfig = { defaultMode: string; supportedModes: string[]; 
 /**
  * Discrete project output signals (spec §3.3): 1..=64, default 2.
@@ -294,6 +300,10 @@ export type HealthPayload = {
 status: string; projectId?: string | null; audioMode?: string | null; audio?: HealthAudio | null; scoreServer?: HealthScoreServer | null }
 export type HealthScoreServer = { performerPort?: number | null; monitorPort?: number | null; error?: string | null }
 export type Manifest = { schemaVersion: number; id: string; name: string; version: string; description: string | null; scoreServer: ScoreServer; audio: AudioConfig }
+/**
+ * A named one-level group of project paths (spec issue #4).
+ */
+export type ProjectFolder = { id: string; name: string; projectPaths: string[] }
 export type ScoreServer = { entry: string; workingDirectory: string; performerPort: number; monitorPort: number }
 export type ScsynthConfig = { sampleRate: number; blockSize: number; audioBusChannels: number }
 /**
