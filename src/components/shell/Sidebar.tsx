@@ -57,10 +57,12 @@ interface SidebarProps {
  * that are not currently open. Switching while a session runs asks for
  * confirmation first (§8.3, Figma "Loading another project").
  *
- * v1.1.2: the list is two-segment (spec issue #4) — ungrouped projects on
- * top, folders (set lists) below; clicking a folder card drills into it
- * (breadcrumb returns to the top), and holding Cmd numbers the first nine
- * projects of the current view.
+ * v1.1.2: the list is two-segment (spec issue #4) — projects at the top,
+ * folders (set lists) pinned directly above the footer controls; an
+ * always-visible "+" beside the Projects label imports a project, the
+ * FOLDERS row reveals the new-folder button on hover. Clicking a folder
+ * card drills into it (breadcrumb returns to the top), and holding Cmd
+ * numbers the first nine projects of the current view.
  */
 export function Sidebar({
   variant,
@@ -304,8 +306,9 @@ export function Sidebar({
       </div>
 
       {/* v1.1.2 T3: folder view replaces the header with the breadcrumb
-          (‹ 全部工程 / 文件夹名); the new-folder button only exists at the
-          top level (spec issue #7). */}
+          (‹ 全部工程 / 文件夹名). Both views keep an add-project "+" on the
+          header row — in a folder view the import lands inside that folder
+          (spec issue #7 新导入落点). */}
       {activeFolder ? (
         <div className="mt-2 flex min-w-0 items-center gap-1 pr-8 pl-9 text-[14px]">
           <button
@@ -328,26 +331,38 @@ export function Sidebar({
           >
             {activeFolder.name}
           </span>
+          <button
+            type="button"
+            data-testid="add-project-button"
+            aria-label={t('sidebar.addProject')}
+            title={t('sidebar.addProject')}
+            onClick={() => void promptOpenProject()}
+            disabled={busy}
+            className="ml-auto shrink-0 rounded-md p-1 text-(--pnds-text)/70 hover:bg-(--pnds-text)/5 hover:text-(--pnds-text) disabled:opacity-50"
+          >
+            <Plus size={14} />
+          </button>
         </div>
       ) : (
         <div className="mt-2 flex items-center justify-between pr-8 pl-9">
-          <h2 className="text-[14px] font-normal text-(--pnds-text)">
+          <h2 className="text-[11px] font-medium tracking-wider text-(--pnds-text)/40 uppercase">
             {t('sidebar.projects')}
           </h2>
           <button
             type="button"
-            data-testid="new-folder-button"
-            aria-label={t('sidebar.newFolder')}
-            title={t('sidebar.newFolder')}
-            onClick={handleNewFolder}
-            className="rounded-md p-1 text-(--pnds-text)/70 hover:bg-(--pnds-text)/5 hover:text-(--pnds-text)"
+            data-testid="add-project-button"
+            aria-label={t('sidebar.addProject')}
+            title={t('sidebar.addProject')}
+            onClick={() => void promptOpenProject()}
+            disabled={busy}
+            className="rounded-md p-1 text-(--pnds-text)/70 hover:bg-(--pnds-text)/5 hover:text-(--pnds-text) disabled:opacity-50"
           >
-            <FolderPlus size={14} />
+            <Plus size={14} />
           </button>
         </div>
       )}
 
-      <nav className="mt-4 flex flex-col gap-1">
+      <nav className="mt-4 flex min-h-0 flex-1 flex-col gap-1">
         {visiblePaths.map((path, index) => {
           const isCurrent = path === currentProject?.path
           const showIndicatorBefore = showDropBefore && dropPath === path
@@ -457,99 +472,103 @@ export function Sidebar({
           </p>
         )}
 
-        {/* Folders (set lists) — second segment, below ungrouped projects.
-            Hidden while drilled in: the folder view lists members only. */}
-        {!activeFolder && projectFolders.length > 0 && (
-          <p className="mt-3 px-9 text-[11px] font-medium tracking-wider text-(--pnds-text)/40 uppercase">
-            {t('sidebar.folders')}
-          </p>
-        )}
-        {!activeFolder &&
-          projectFolders.map(folder => {
-            const isEditing = editingFolderId === folder.id
-            const inUse =
-              sessionLive &&
-              currentProject !== null &&
-              folder.projectPaths.includes(currentProject.path)
-            return (
-              <div
-                key={folder.id}
-                data-testid="folder-card"
-                onClick={() => {
-                  if (!isEditing) setActiveFolderId(folder.id)
-                }}
-                className="group relative mx-5 flex h-14.25 cursor-pointer items-center rounded-xl px-3 hover:bg-(--pnds-text)/5"
+        {/* Folders (set lists) — pinned directly above the footer controls.
+            The FOLDERS row always renders at the top level: its
+            hover-revealed button is the only entry for creating the first
+            folder. Hidden while drilled in. */}
+        {!activeFolder && (
+          <div className="mt-auto flex flex-col gap-1">
+            <div className="group mt-3 flex items-center justify-between pr-8 pl-9">
+              <p className="text-[11px] font-medium tracking-wider text-(--pnds-text)/40 uppercase">
+                {t('sidebar.folders')}
+              </p>
+              <button
+                type="button"
+                data-testid="new-folder-button"
+                aria-label={t('sidebar.newFolder')}
+                title={t('sidebar.newFolder')}
+                onClick={handleNewFolder}
+                className="rounded-md p-1 text-(--pnds-text)/70 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-(--pnds-text)/5 hover:text-(--pnds-text)"
               >
-                {isEditing ? (
-                  <input
-                    data-testid="folder-name-input"
-                    autoFocus
-                    defaultValue={folder.name}
-                    onFocus={e => e.target.select()}
-                    onChange={e => {
-                      editingFolderNameRef.current = e.target.value
-                    }}
-                    onKeyDown={e => {
-                      e.stopPropagation()
-                      if (e.key === 'Enter') commitFolderName()
-                      if (e.key === 'Escape') cancelFolderName()
-                    }}
-                    onBlur={commitFolderName}
-                    className="flex-1 truncate rounded-lg border border-(--pnds-text)/15 bg-(--pnds-text)/5 px-2 py-1 text-center text-[15px] text-(--pnds-text) outline-none"
-                  />
-                ) : (
-                  <>
-                    <span className="flex w-5 shrink-0 items-center justify-center text-(--pnds-text)/40">
-                      <Folder size={15} aria-hidden="true" />
-                    </span>
-                    {/* "使用中" indicator: the running project lives in
-                        this folder (spec issue #4). */}
-                    {inUse && (
-                      <span
-                        data-testid="folder-in-use-dot"
-                        aria-label={t('sidebar.folderInUse')}
-                        title={t('sidebar.folderInUse')}
-                        className="h-1.5 w-1.5 shrink-0 rounded-full bg-(--pnds-accent)"
-                      />
-                    )}
-                    <span
-                      data-testid="folder-name"
-                      className="flex-1 truncate text-center text-[15px] text-(--pnds-text)/85"
-                    >
-                      {folder.name}
-                    </span>
-                    <button
-                      type="button"
-                      aria-label={t('sidebar.deleteFolder')}
-                      onClick={e => {
-                        e.stopPropagation()
-                        setPendingDeleteFolderId(folder.id)
+                <FolderPlus size={14} />
+              </button>
+            </div>
+            {projectFolders.map(folder => {
+              const isEditing = editingFolderId === folder.id
+              const inUse =
+                sessionLive &&
+                currentProject !== null &&
+                folder.projectPaths.includes(currentProject.path)
+              return (
+                <div
+                  key={folder.id}
+                  data-testid="folder-card"
+                  onClick={() => {
+                    if (!isEditing) setActiveFolderId(folder.id)
+                  }}
+                  className="group relative mx-5 flex h-14.25 cursor-pointer items-center rounded-xl px-3 hover:bg-(--pnds-text)/5"
+                >
+                  {isEditing ? (
+                    <input
+                      data-testid="folder-name-input"
+                      autoFocus
+                      defaultValue={folder.name}
+                      onFocus={e => e.target.select()}
+                      onChange={e => {
+                        editingFolderNameRef.current = e.target.value
                       }}
-                      className="w-5 shrink-0 text-(--pnds-text)/50 opacity-0 transition-opacity hover:text-(--pnds-text) group-hover:opacity-100"
-                    >
-                      <X size={14} />
-                    </button>
-                  </>
-                )}
-              </div>
-            )
-          })}
+                      onKeyDown={e => {
+                        e.stopPropagation()
+                        if (e.key === 'Enter') commitFolderName()
+                        if (e.key === 'Escape') cancelFolderName()
+                      }}
+                      onBlur={commitFolderName}
+                      className="flex-1 truncate rounded-lg border border-(--pnds-text)/15 bg-(--pnds-text)/5 px-2 py-1 text-center text-[15px] text-(--pnds-text) outline-none"
+                    />
+                  ) : (
+                    <>
+                      <span className="flex w-5 shrink-0 items-center justify-center text-(--pnds-text)/40">
+                        <Folder size={15} aria-hidden="true" />
+                      </span>
+                      {/* "使用中" indicator: the running project lives in
+                          this folder (spec issue #4). */}
+                      {inUse && (
+                        <span
+                          data-testid="folder-in-use-dot"
+                          aria-label={t('sidebar.folderInUse')}
+                          title={t('sidebar.folderInUse')}
+                          className="h-1.5 w-1.5 shrink-0 rounded-full bg-(--pnds-accent)"
+                        />
+                      )}
+                      <span
+                        data-testid="folder-name"
+                        className="flex-1 truncate text-center text-[15px] text-(--pnds-text)/85"
+                      >
+                        {folder.name}
+                      </span>
+                      <button
+                        type="button"
+                        aria-label={t('sidebar.deleteFolder')}
+                        onClick={e => {
+                          e.stopPropagation()
+                          setPendingDeleteFolderId(folder.id)
+                        }}
+                        className="w-5 shrink-0 text-(--pnds-text)/50 opacity-0 transition-opacity hover:text-(--pnds-text) group-hover:opacity-100"
+                      >
+                        <X size={14} />
+                      </button>
+                    </>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
       </nav>
-
-      <button
-        type="button"
-        onClick={() => void promptOpenProject()}
-        disabled={busy}
-        aria-label={t('welcome.openProject')}
-        className="mx-auto mt-3 inline-flex h-6 items-center gap-1 rounded-full border border-(--pnds-text)/60 px-3 text-[12px] text-(--pnds-text) hover:bg-(--pnds-text)/5 disabled:opacity-50"
-      >
-        <Plus size={12} />
-        {t('sidebar.open')}
-      </button>
 
       {/* Deferred settings + their submit are one object (§10.2): the card
           clips the button into a full-bleed footer. */}
-      <div className="mt-auto px-5 pb-5 pt-6">
+      <div className="px-5 pb-5 pt-6">
         <div className="overflow-hidden rounded-xl bg-(--pnds-card) shadow-[0_1px_3px_rgba(23,26,43,0.1)]">
           <SettingsCard onPopupOpenChange={onPopupOpenChange} />
           <SessionActionButton />

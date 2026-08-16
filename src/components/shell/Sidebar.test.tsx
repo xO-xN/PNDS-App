@@ -154,10 +154,18 @@ describe('Sidebar', () => {
     useSessionStore.getState().resetSession()
   })
 
-  it('shows the projects label and the settings card', () => {
+  it('shows the section labels, the header buttons and the settings card', () => {
     render(<Sidebar variant="static" />)
-    expect(screen.getByText('PNDS Projects')).toBeInTheDocument()
+    expect(screen.getByText('Projects')).toBeInTheDocument()
     expect(screen.getByTestId('settings-card')).toBeInTheDocument()
+
+    // Add-project lives beside the Projects label (the bottom "Open" pill
+    // is gone); the FOLDERS row always renders and carries the
+    // new-folder button even before any folder exists.
+    expect(screen.getByTestId('add-project-button')).toBeInTheDocument()
+    expect(screen.getByText('Folders')).toBeInTheDocument()
+    expect(screen.getByTestId('new-folder-button')).toBeInTheDocument()
+    expect(screen.queryByText('Open')).not.toBeInTheDocument()
   })
 
   it('shows custom traffic lights and top-right action buttons', () => {

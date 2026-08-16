@@ -92,6 +92,9 @@ describe('Sidebar folder drill-in (v1.1.2 T3)', () => {
     expect(screen.getByTestId('breadcrumb-folder-name')).toHaveTextContent(
       'Set list'
     )
+    // The add-project "+" stays reachable — inside a folder view it is
+    // the import entry that lands projects in this folder.
+    expect(screen.getByTestId('add-project-button')).toBeInTheDocument()
     expect(screen.queryByTestId('folder-card')).not.toBeInTheDocument()
     expect(screen.queryByTestId('new-folder-button')).not.toBeInTheDocument()
   })
