@@ -43,7 +43,7 @@ export function QuitConfirmDialog() {
         <AlertDialogHeader>
           <AlertDialogTitle>{t('quit.confirmTitle')}</AlertDialogTitle>
           <AlertDialogDescription>
-            {t('quit.confirmMessage', { appName: 'PNDS' })}
+            {t('quit.confirmMessage', { appName: t('app.name') })}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
