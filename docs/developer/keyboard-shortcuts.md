@@ -19,7 +19,8 @@ Keyboard input reaches the app through two layers: native menu accelerators
 | Cmd+1..9      | Select the Nth visible project (v1.1.2)                | Web (`use-command-keyboard.ts`)   |
 | Cmd+↓ / Cmd+↑ | Next/previous project in the visible order (v1.1.2 T7) | Web (`use-command-keyboard.ts`)   |
 | Enter         | Load (idle) / Change-restart (pending)                 | Web (`SessionActionButton.tsx`)   |
-| Esc           | Close the running project (red Close alias, v1.1.2 T7) | Web (`SessionActionButton.tsx`)   |
+| Esc           | Close-project confirmation (v1.1.2 T7)                 | Web (`SessionActionButton.tsx`)   |
+| Cmd+Esc       | Close the running project directly (v1.1.2 T7)         | Web (`SessionActionButton.tsx`)   |
 
 ## Web Cmd Layer (v1.1.2)
 
@@ -59,9 +60,12 @@ one set of conditions:
 
 - **idle/error + loadable** → `start()` (same gate as the Load button)
 - **running + pending config change** → `restart()` (the amber Change)
-- **running, no pending change** → Enter deliberately NOT mapped — but Esc
-  IS the red Close's alias (v1.1.2 T7, spec issue #11): it runs the exact
-  `stopAndReset()` the button runs, and nothing else
+- **running, no pending change** → Enter deliberately NOT mapped; **⌘Esc**
+  is the red Close's direct alias (v1.1.2 T7, spec issue #11) — the exact
+  `stopAndReset()` the button runs. A **lone Esc** only opens the
+  close-project confirmation (`confirmCloseProjectOpen` in the project
+  store, rendered in the Sidebar like the switch confirm), so a stray
+  press can never stop a live show.
 
 Guards: text inputs own their keys (`isEditableTarget`), and while a
 Radix dialog or select popup is open (`hasOpenOverlay`) Enter/Esc belong

@@ -19,10 +19,11 @@ import { cn } from '@/lib/utils'
  *
  * v1.1.2: Enter is a keyboard alias for the submit — Load when idle and
  * loadable, Change/restart while a pending config change waits. v1.1.2 T7
- * (spec issue #11): Esc is a keyboard alias for the red Close — it stops
- * a running, change-free session exactly like clicking the button. The
- * listener reuses the exact conditions below, so key and click can never
- * drift apart.
+ * (spec issue #11): ⌘Esc is a keyboard alias for the red Close — it stops
+ * a running, change-free session exactly like clicking the button. A lone
+ * Esc only opens the close-project confirmation, so a stray press can
+ * never stop a live show. The listener reuses the exact conditions below,
+ * so key and click can never drift apart.
  */
 export function SessionActionButton() {
   const { t } = useTranslation()
@@ -50,23 +51,29 @@ export function SessionActionButton() {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.repeat) return
-      if (event.metaKey || event.ctrlKey || event.altKey) return
+      if (event.ctrlKey || event.altKey) return
       if (isEditableTarget(event.target)) return
       // Radix owns the keys while a dialog or select popup is open.
       if (hasOpenOverlay()) return
       if (busy) return
-      // v1.1.2 T7: Esc mirrors the red Close button — the running,
-      // change-free state only. Escaping an edit or a dialog belongs to
-      // that element (the guards above already handed it over).
+      // v1.1.2 T7: ⌘Esc mirrors the red Close button — the running,
+      // change-free state only. A lone Esc asks for confirmation instead
+      // (the dialog renders in the Sidebar). Escaping an edit or a dialog
+      // belongs to that element (the guards above already handed it over).
       if (event.key === 'Escape') {
         if (running && !pendingChanges) {
           event.preventDefault()
-          void stopAndReset()
+          if (event.metaKey) {
+            void stopAndReset()
+          } else {
+            useProjectStore.getState().setConfirmCloseProjectOpen(true)
+          }
         }
         return
       }
+      if (event.metaKey) return
       if (event.key !== 'Enter') return
-      // Enter never stops a live show — Close stays Esc/mouse-only.
+      // Enter never stops a live show — Close stays ⌘Esc/mouse-only.
       if (running && !pendingChanges) return
       if (running || loadable) {
         event.preventDefault()

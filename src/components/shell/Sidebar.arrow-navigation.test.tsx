@@ -115,6 +115,7 @@ describe('Cmd+↑/↓ project navigation and Esc close (v1.1.2 T7)', () => {
       pendingTrustPath: null,
       pendingPreflightPath: null,
       pendingSwitchPath: null,
+      confirmCloseProjectOpen: false,
       activeFolderId: null,
       renameTarget: null,
       preflightStatus: 'idle',
@@ -290,23 +291,71 @@ describe('Cmd+↑/↓ project navigation and Esc close (v1.1.2 T7)', () => {
     })
   })
 
-  describe('Esc closes the open project', () => {
-    it('stops a running session exactly like the Close button', async () => {
+  describe('Esc / ⌘Esc close the open project', () => {
+    it('a lone Esc opens the close-project confirmation, not a direct stop', async () => {
       seedRunningSession(FIRST_PATH)
       render(<AppShell />)
 
       pressEscape()
 
+      const dialog = await screen.findByRole('alertdialog')
+      expect(dialog).toHaveTextContent('Close the Project?')
+      expect(commands.stopProject).not.toHaveBeenCalled()
+      expect(useProjectStore.getState().currentProject?.path).toBe(FIRST_PATH)
+    })
+
+    it('confirming the dialog stops the session like the Close button', async () => {
+      const user = userEvent.setup()
+      seedRunningSession(FIRST_PATH)
+      render(<AppShell />)
+
+      pressEscape()
+      const dialog = await screen.findByRole('alertdialog')
+      await user.click(within(dialog).getByRole('button', { name: /^close$/i }))
+
+      await waitFor(() => {
+        expect(commands.stopProject).toHaveBeenCalledTimes(1)
+        expect(useProjectStore.getState().currentProject).toBeNull()
+        expect(useSessionStore.getState().sessionStatus).toBe('idle')
+      })
+      expect(useProjectStore.getState().confirmCloseProjectOpen).toBe(false)
+    })
+
+    it('canceling the dialog leaves the session running', async () => {
+      const user = userEvent.setup()
+      seedRunningSession(FIRST_PATH)
+      render(<AppShell />)
+
+      pressEscape()
+      const dialog = await screen.findByRole('alertdialog')
+      await user.click(
+        within(dialog).getByRole('button', { name: /^cancel$/i })
+      )
+
+      await waitFor(() => {
+        expect(useProjectStore.getState().confirmCloseProjectOpen).toBe(false)
+      })
+      expect(commands.stopProject).not.toHaveBeenCalled()
+      expect(useProjectStore.getState().currentProject?.path).toBe(FIRST_PATH)
+    })
+
+    it('⌘Esc stops a running session directly, exactly like the Close button', async () => {
+      seedRunningSession(FIRST_PATH)
+      render(<AppShell />)
+
+      fireEvent.keyDown(window, { key: 'Escape', metaKey: true })
+
       await waitFor(() => {
         expect(commands.stopProject).toHaveBeenCalledTimes(1)
       })
+      expect(useProjectStore.getState().confirmCloseProjectOpen).toBe(false)
       await waitFor(() => {
         expect(useProjectStore.getState().currentProject).toBeNull()
         expect(useSessionStore.getState().sessionStatus).toBe('idle')
       })
     })
 
-    it('does nothing while idle — Esc is not Load', () => {
+    it('does nothing while idle — Esc is not Load (with or without ⌘)', () => {
       useProjectStore.setState({
         currentProject: { path: FIRST_PATH, manifest },
         preflightStatus: 'ready',
@@ -314,10 +363,12 @@ describe('Cmd+↑/↓ project navigation and Esc close (v1.1.2 T7)', () => {
       render(<AppShell />)
 
       pressEscape()
+      fireEvent.keyDown(window, { key: 'Escape', metaKey: true })
 
       expect(commands.stopProject).not.toHaveBeenCalled()
       expect(commands.startProject).not.toHaveBeenCalled()
       expect(useProjectStore.getState().currentProject).not.toBeNull()
+      expect(useProjectStore.getState().confirmCloseProjectOpen).toBe(false)
     })
 
     it('cancels the switch dialog instead of stopping the session', async () => {
@@ -360,9 +411,11 @@ describe('Cmd+↑/↓ project navigation and Esc close (v1.1.2 T7)', () => {
       render(<AppShell />)
 
       pressEscape()
+      fireEvent.keyDown(window, { key: 'Escape', metaKey: true })
 
       expect(commands.stopProject).not.toHaveBeenCalled()
       expect(commands.startProject).not.toHaveBeenCalled()
+      expect(useProjectStore.getState().confirmCloseProjectOpen).toBe(false)
     })
   })
 })

@@ -237,6 +237,9 @@ export function Sidebar({
     state => state.pendingPreflightPath
   )
   const pendingSwitchPath = useProjectStore(state => state.pendingSwitchPath)
+  const confirmCloseProjectOpen = useProjectStore(
+    state => state.confirmCloseProjectOpen
+  )
   const activeFolderId = useProjectStore(state => state.activeFolderId)
   const projectDisplayNames = useProjectStore(
     state => state.projectDisplayNames
@@ -343,6 +346,13 @@ export function Sidebar({
     await stopAndReset()
     await openProject(path)
     onRequestClose?.()
+  }
+
+  /** v1.1.2 T7: the lone-Esc close confirmation's submit — same teardown
+   * as the Close button / ⌘Esc, just behind an explicit OK. */
+  const confirmCloseProject = async () => {
+    useProjectStore.getState().setConfirmCloseProjectOpen(false)
+    await stopAndReset()
   }
 
   /** ✕ (remove from history) is only offered for projects that are not
@@ -629,7 +639,9 @@ export function Sidebar({
   // Report dialog visibility so the hover sidebar keeps peeking while a
   // confirm flow is open (spec issue #4: 确认框期间松开 Cmd 不收回).
   const dialogOpen =
-    pendingSwitchPath !== null || pendingDeleteFolderId !== null
+    pendingSwitchPath !== null ||
+    pendingDeleteFolderId !== null ||
+    confirmCloseProjectOpen
   useEffect(() => {
     onDialogOpenChange?.(dialogOpen)
   }, [dialogOpen, onDialogOpenChange])
@@ -1129,6 +1141,35 @@ export function Sidebar({
             <AlertDialogCancel>{t('switchProject.back')}</AlertDialogCancel>
             <AlertDialogAction onClick={() => void confirmSwitch()}>
               {t('switchProject.confirm')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* v1.1.2 T7: lone-Esc close confirmation (spec issue #11). ⌘Esc and
+          the Close button close directly; a plain Esc asks first so a
+          stray press never stops a live show. */}
+      <AlertDialog
+        open={confirmCloseProjectOpen}
+        onOpenChange={openState => {
+          if (!openState) {
+            useProjectStore.getState().setConfirmCloseProjectOpen(false)
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t('closeProject.confirmTitle')}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('closeProject.confirmMessage')}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t('closeProject.cancel')}</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void confirmCloseProject()}>
+              {t('closeProject.confirm')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

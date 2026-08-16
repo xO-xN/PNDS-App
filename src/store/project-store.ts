@@ -55,6 +55,12 @@ interface ProjectState {
    */
   pendingSwitchPath: string | null
   /**
+   * v1.1.2 T7: the plain-Esc close-project confirmation is open. Cmd+Esc
+   * and the Close button close directly; a lone Esc must confirm first.
+   * In the store for the same reason as `pendingSwitchPath`.
+   */
+  confirmCloseProjectOpen: boolean
+  /**
    * v1.1.2 T3: the folder the sidebar is drilled into, null at the top
    * level. Session-memory view state — never persisted (spec issue #4).
    */
@@ -75,6 +81,7 @@ interface ProjectState {
   setPendingPreflight: (path: string | null) => void
   requestSwitch: (path: string) => void
   clearSwitchRequest: () => void
+  setConfirmCloseProjectOpen: (open: boolean) => void
   /** Drills the sidebar into a folder, or back to the top level (null). */
   setActiveFolderId: (id: string | null) => void
   /** Restores display-name overrides from persisted preferences. */
@@ -165,6 +172,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
   pendingTrustPath: null,
   pendingPreflightPath: null,
   pendingSwitchPath: null,
+  confirmCloseProjectOpen: false,
   activeFolderId: null,
   projectDisplayNames: {},
   renameTarget: null,
@@ -200,6 +208,9 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
   requestSwitch: path => set({ pendingSwitchPath: path }),
 
   clearSwitchRequest: () => set({ pendingSwitchPath: null }),
+
+  setConfirmCloseProjectOpen: confirmCloseProjectOpen =>
+    set({ confirmCloseProjectOpen }),
 
   setActiveFolderId: id => set({ activeFolderId: id }),
 
