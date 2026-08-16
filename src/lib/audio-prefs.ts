@@ -60,15 +60,6 @@ export async function saveOscTarget(
   })
 }
 
-/** §4.1: persist trusted project paths across launches. */
-export async function saveRecentProjects(paths: string[]): Promise<void> {
-  return enqueueSave(async () => {
-    const prefs = await loadAudioPreferences()
-    if (!prefs) return
-    await commands.savePreferences({ ...prefs, recentProjects: paths })
-  })
-}
-
 /**
  * v1.1.2: persist the app-side project index — trust list and folder
  * structure — in a single save. Removing a card changes both (the master

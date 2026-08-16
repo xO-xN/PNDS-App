@@ -9,9 +9,10 @@ import {
   Folder,
   FolderPlus,
   Command,
+  ChevronLeft,
 } from 'lucide-react'
 import { openUrl } from '@tauri-apps/plugin-opener'
-import { useProjectStore, ungroupedProjectPaths } from '@/store/project-store'
+import { useProjectStore, visibleProjectPaths } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 import { useKeyboardStore } from '@/store/keyboard-store'
 import {
@@ -57,8 +58,9 @@ interface SidebarProps {
  * confirmation first (§8.3, Figma "Loading another project").
  *
  * v1.1.2: the list is two-segment (spec issue #4) — ungrouped projects on
- * top, folders (set lists) below; holding Cmd numbers the first nine
- * visible projects.
+ * top, folders (set lists) below; clicking a folder card drills into it
+ * (breadcrumb returns to the top), and holding Cmd numbers the first nine
+ * projects of the current view.
  */
 export function Sidebar({
   variant,
@@ -74,6 +76,8 @@ export function Sidebar({
     state => state.pendingPreflightPath
   )
   const pendingSwitchPath = useProjectStore(state => state.pendingSwitchPath)
+  const activeFolderId = useProjectStore(state => state.activeFolderId)
+  const setActiveFolderId = useProjectStore(state => state.setActiveFolderId)
   const sessionStatus = useSessionStore(state => state.sessionStatus)
   const commandKeyPressed = useKeyboardStore(state => state.commandKeyPressed)
   const lanIp = useSessionStore(state => state.lanIp)
@@ -82,6 +86,9 @@ export function Sidebar({
   )
   const busy = sessionStatus === 'starting' || sessionStatus === 'stopping'
   const running = sessionStatus === 'ready'
+  // v1.1.2 T3: the folder card shows its "in use" dot from the moment the
+  // session starts, not only once ready (spec issue #4: 使用中指示点).
+  const sessionLive = sessionStatus === 'starting' || sessionStatus === 'ready'
   const [dragPath, setDragPath] = useState<string | null>(null)
   const [dropPath, setDropPath] = useState<string | null>(null)
   /** Folder being inline-named (creation gesture: Enter commits, Esc cancels). */
@@ -93,7 +100,17 @@ export function Sidebar({
   const dragPathRef = useRef<string | null>(null)
   const dropPathRef = useRef<string | null>(null)
 
-  const ungroupedPaths = ungroupedProjectPaths(trustedPaths, projectFolders)
+  // v1.1.2 T3: one folder-aware derivation drives the list, the number
+  // badges and the drag indices (spec issue #7: 可见列表与序号派生).
+  const visiblePaths = visibleProjectPaths(
+    trustedPaths,
+    projectFolders,
+    activeFolderId
+  )
+  const activeFolder =
+    activeFolderId === null
+      ? null
+      : (projectFolders.find(folder => folder.id === activeFolderId) ?? null)
   const pendingDeleteFolder = projectFolders.find(
     folder => folder.id === pendingDeleteFolderId
   )
@@ -204,7 +221,14 @@ export function Sidebar({
       const sourcePath = dragPathRef.current
       const targetPath = dropPathRef.current
       if (sourcePath && targetPath && sourcePath !== targetPath) {
-        useProjectStore.getState().moveTrusted(sourcePath, targetPath)
+        const store = useProjectStore.getState()
+        // Reordering follows the active view: inside a folder it is the
+        // set order, at the top level the master list (spec issue #7).
+        if (store.activeFolderId) {
+          store.moveWithinFolder(store.activeFolderId, sourcePath, targetPath)
+        } else {
+          store.moveTrusted(sourcePath, targetPath)
+        }
         const { trustedPaths, projectFolders } = useProjectStore.getState()
         void saveProjectIndex(trustedPaths, projectFolders)
       }
@@ -229,8 +253,8 @@ export function Sidebar({
     onDialogOpenChange?.(dialogOpen)
   }, [dialogOpen, onDialogOpenChange])
 
-  const dragIndex = dragPath ? ungroupedPaths.indexOf(dragPath) : -1
-  const dropIndex = dropPath ? ungroupedPaths.indexOf(dropPath) : -1
+  const dragIndex = dragPath ? visiblePaths.indexOf(dragPath) : -1
+  const dropIndex = dropPath ? visiblePaths.indexOf(dropPath) : -1
   const showDropBefore = dragIndex > dropIndex && dropIndex >= 0
   const showDropAfter = dragIndex >= 0 && dragIndex < dropIndex
 
@@ -279,25 +303,52 @@ export function Sidebar({
         </div>
       </div>
 
-      {/* PNDS Projects + new-folder (v1.1.2) */}
-      <div className="mt-2 flex items-center justify-between pr-8 pl-9">
-        <h2 className="text-[14px] font-normal text-(--pnds-text)">
-          {t('sidebar.projects')}
-        </h2>
-        <button
-          type="button"
-          data-testid="new-folder-button"
-          aria-label={t('sidebar.newFolder')}
-          title={t('sidebar.newFolder')}
-          onClick={handleNewFolder}
-          className="rounded-md p-1 text-(--pnds-text)/70 hover:bg-(--pnds-text)/5 hover:text-(--pnds-text)"
-        >
-          <FolderPlus size={14} />
-        </button>
-      </div>
+      {/* v1.1.2 T3: folder view replaces the header with the breadcrumb
+          (‹ 全部工程 / 文件夹名); the new-folder button only exists at the
+          top level (spec issue #7). */}
+      {activeFolder ? (
+        <div className="mt-2 flex min-w-0 items-center gap-1 pr-8 pl-9 text-[14px]">
+          <button
+            type="button"
+            data-testid="breadcrumb-back"
+            aria-label={t('sidebar.backToAllProjects')}
+            title={t('sidebar.backToAllProjects')}
+            onClick={() => setActiveFolderId(null)}
+            className="flex shrink-0 items-center gap-0.5 rounded-md px-1 py-0.5 text-(--pnds-text)/55 hover:bg-(--pnds-text)/5 hover:text-(--pnds-text)"
+          >
+            <ChevronLeft size={14} aria-hidden="true" />
+            {t('sidebar.allProjects')}
+          </button>
+          <span aria-hidden="true" className="shrink-0 text-(--pnds-text)/30">
+            /
+          </span>
+          <span
+            data-testid="breadcrumb-folder-name"
+            className="truncate text-(--pnds-text)"
+          >
+            {activeFolder.name}
+          </span>
+        </div>
+      ) : (
+        <div className="mt-2 flex items-center justify-between pr-8 pl-9">
+          <h2 className="text-[14px] font-normal text-(--pnds-text)">
+            {t('sidebar.projects')}
+          </h2>
+          <button
+            type="button"
+            data-testid="new-folder-button"
+            aria-label={t('sidebar.newFolder')}
+            title={t('sidebar.newFolder')}
+            onClick={handleNewFolder}
+            className="rounded-md p-1 text-(--pnds-text)/70 hover:bg-(--pnds-text)/5 hover:text-(--pnds-text)"
+          >
+            <FolderPlus size={14} />
+          </button>
+        </div>
+      )}
 
       <nav className="mt-4 flex flex-col gap-1">
-        {ungroupedPaths.map((path, index) => {
+        {visiblePaths.map((path, index) => {
           const isCurrent = path === currentProject?.path
           const showIndicatorBefore = showDropBefore && dropPath === path
           const showIndicatorAfter = showDropAfter && dropPath === path
@@ -395,67 +446,94 @@ export function Sidebar({
           )
         })}
 
-        {trustedPaths.length === 0 && (
+        {!activeFolder && trustedPaths.length === 0 && (
           <p className="px-9 py-3 text-center text-xs text-(--pnds-text)/50">
             {t('sidebar.noProjects')}
           </p>
         )}
+        {activeFolder && visiblePaths.length === 0 && (
+          <p className="px-9 py-3 text-center text-xs text-(--pnds-text)/50">
+            {t('sidebar.folderEmpty')}
+          </p>
+        )}
 
-        {/* Folders (set lists) — second segment, below ungrouped projects */}
-        {projectFolders.length > 0 && (
+        {/* Folders (set lists) — second segment, below ungrouped projects.
+            Hidden while drilled in: the folder view lists members only. */}
+        {!activeFolder && projectFolders.length > 0 && (
           <p className="mt-3 px-9 text-[11px] font-medium tracking-wider text-(--pnds-text)/40 uppercase">
             {t('sidebar.folders')}
           </p>
         )}
-        {projectFolders.map(folder => {
-          const isEditing = editingFolderId === folder.id
-          return (
-            <div
-              key={folder.id}
-              data-testid="folder-card"
-              className="group relative mx-5 flex h-14.25 items-center rounded-xl px-3 hover:bg-(--pnds-text)/5"
-            >
-              {isEditing ? (
-                <input
-                  data-testid="folder-name-input"
-                  autoFocus
-                  defaultValue={folder.name}
-                  onFocus={e => e.target.select()}
-                  onChange={e => {
-                    editingFolderNameRef.current = e.target.value
-                  }}
-                  onKeyDown={e => {
-                    e.stopPropagation()
-                    if (e.key === 'Enter') commitFolderName()
-                    if (e.key === 'Escape') cancelFolderName()
-                  }}
-                  onBlur={commitFolderName}
-                  className="flex-1 truncate rounded-lg border border-(--pnds-text)/15 bg-(--pnds-text)/5 px-2 py-1 text-center text-[15px] text-(--pnds-text) outline-none"
-                />
-              ) : (
-                <>
-                  <span className="flex w-5 shrink-0 items-center justify-center text-(--pnds-text)/40">
-                    <Folder size={15} aria-hidden="true" />
-                  </span>
-                  <span
-                    data-testid="folder-name"
-                    className="flex-1 truncate text-center text-[15px] text-(--pnds-text)/85"
-                  >
-                    {folder.name}
-                  </span>
-                  <button
-                    type="button"
-                    aria-label={t('sidebar.deleteFolder')}
-                    onClick={() => setPendingDeleteFolderId(folder.id)}
-                    className="w-5 shrink-0 text-(--pnds-text)/50 opacity-0 transition-opacity hover:text-(--pnds-text) group-hover:opacity-100"
-                  >
-                    <X size={14} />
-                  </button>
-                </>
-              )}
-            </div>
-          )
-        })}
+        {!activeFolder &&
+          projectFolders.map(folder => {
+            const isEditing = editingFolderId === folder.id
+            const inUse =
+              sessionLive &&
+              currentProject !== null &&
+              folder.projectPaths.includes(currentProject.path)
+            return (
+              <div
+                key={folder.id}
+                data-testid="folder-card"
+                onClick={() => {
+                  if (!isEditing) setActiveFolderId(folder.id)
+                }}
+                className="group relative mx-5 flex h-14.25 cursor-pointer items-center rounded-xl px-3 hover:bg-(--pnds-text)/5"
+              >
+                {isEditing ? (
+                  <input
+                    data-testid="folder-name-input"
+                    autoFocus
+                    defaultValue={folder.name}
+                    onFocus={e => e.target.select()}
+                    onChange={e => {
+                      editingFolderNameRef.current = e.target.value
+                    }}
+                    onKeyDown={e => {
+                      e.stopPropagation()
+                      if (e.key === 'Enter') commitFolderName()
+                      if (e.key === 'Escape') cancelFolderName()
+                    }}
+                    onBlur={commitFolderName}
+                    className="flex-1 truncate rounded-lg border border-(--pnds-text)/15 bg-(--pnds-text)/5 px-2 py-1 text-center text-[15px] text-(--pnds-text) outline-none"
+                  />
+                ) : (
+                  <>
+                    <span className="flex w-5 shrink-0 items-center justify-center text-(--pnds-text)/40">
+                      <Folder size={15} aria-hidden="true" />
+                    </span>
+                    {/* "使用中" indicator: the running project lives in
+                        this folder (spec issue #4). */}
+                    {inUse && (
+                      <span
+                        data-testid="folder-in-use-dot"
+                        aria-label={t('sidebar.folderInUse')}
+                        title={t('sidebar.folderInUse')}
+                        className="h-1.5 w-1.5 shrink-0 rounded-full bg-(--pnds-accent)"
+                      />
+                    )}
+                    <span
+                      data-testid="folder-name"
+                      className="flex-1 truncate text-center text-[15px] text-(--pnds-text)/85"
+                    >
+                      {folder.name}
+                    </span>
+                    <button
+                      type="button"
+                      aria-label={t('sidebar.deleteFolder')}
+                      onClick={e => {
+                        e.stopPropagation()
+                        setPendingDeleteFolderId(folder.id)
+                      }}
+                      className="w-5 shrink-0 text-(--pnds-text)/50 opacity-0 transition-opacity hover:text-(--pnds-text) group-hover:opacity-100"
+                    >
+                      <X size={14} />
+                    </button>
+                  </>
+                )}
+              </div>
+            )
+          })}
       </nav>
 
       <button

@@ -35,5 +35,9 @@
   "sidebar.deleteFolderTitle": "删除文件夹？",
   "sidebar.deleteFolderMessage": "文件夹“{{name}}”将被删除，内部工程将退回未分组列表——不会删除磁盘上的任何内容。",
   "sidebar.deleteFolderCancel": "取消",
-  "sidebar.deleteFolderConfirm": "删除"
+  "sidebar.deleteFolderConfirm": "删除",
+  "sidebar.allProjects": "全部工程",
+  "sidebar.backToAllProjects": "返回全部工程",
+  "sidebar.folderInUse": "使用中",
+  "sidebar.folderEmpty": "此文件夹为空"
 }

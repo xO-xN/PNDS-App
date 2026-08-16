@@ -7,7 +7,7 @@ import { useSessionStore } from '@/store/session-store'
 import {
   DEFAULT_OSC_TARGET,
   loadAudioPreferences,
-  saveRecentProjects,
+  saveProjectIndex,
 } from '@/lib/audio-prefs'
 
 /**
@@ -40,13 +40,25 @@ export async function openProject(path: string): Promise<void> {
   await runPreflight(path)
 }
 
-/** Confirms trust for the pending path, then preflights it. */
+/**
+ * Confirms trust for the pending path, then preflights it. v1.1.2 T3: the
+ * newly imported project lands by the current view (spec issue #4 新导入
+ * 落点) — drilled into a folder it joins that folder's end, at the top
+ * level it stays ungrouped. Both import entries (open dialog / share a
+ * directory) funnel through here, so the rule lives in one place.
+ */
 export async function confirmTrustAndOpen(): Promise<void> {
   const path = useProjectStore.getState().pendingTrustPath
   if (!path) return
-  useProjectStore.getState().trustProject(path)
-  useProjectStore.getState().requestTrust(null)
-  void saveRecentPaths()
+  const store = useProjectStore.getState()
+  store.trustProject(path)
+  store.requestTrust(null)
+  if (store.activeFolderId) {
+    store.moveProjectToFolder(store.activeFolderId, path)
+  }
+  // Trust list and folder membership change together — save atomically.
+  const { trustedPaths, projectFolders } = useProjectStore.getState()
+  void saveProjectIndex(trustedPaths, projectFolders)
   await runPreflight(path)
 }
 
@@ -88,10 +100,6 @@ export async function runPreflight(path: string): Promise<void> {
  * after this, the project is clickable again and re-running it goes
  * through preflight as usual (§8.2, §10.4).
  */
-async function saveRecentPaths(): Promise<void> {
-  void saveRecentProjects(useProjectStore.getState().trustedPaths)
-}
-
 export async function stopAndReset(): Promise<void> {
   const result = await commands.stopProject()
   if (result.status === 'error') {

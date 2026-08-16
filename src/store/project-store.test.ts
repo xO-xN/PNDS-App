@@ -1,5 +1,9 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { useProjectStore, ungroupedProjectPaths } from './project-store'
+import {
+  useProjectStore,
+  ungroupedProjectPaths,
+  visibleProjectPaths,
+} from './project-store'
 import type { Manifest } from '@/lib/tauri-bindings'
 
 const manifest: Manifest = {
@@ -32,6 +36,7 @@ describe('project-store', () => {
       pendingTrustPath: null,
       pendingPreflightPath: null,
       pendingSwitchPath: null,
+      activeFolderId: null,
       preflightStatus: 'idle',
       preflightError: null,
     })
@@ -121,6 +126,7 @@ describe('project-store folders (v1.1.2, spec issue #4)', () => {
       pendingTrustPath: null,
       pendingPreflightPath: null,
       pendingSwitchPath: null,
+      activeFolderId: null,
       preflightStatus: 'idle',
       preflightError: null,
     })
@@ -234,5 +240,78 @@ describe('project-store folders (v1.1.2, spec issue #4)', () => {
         useProjectStore.getState().projectFolders
       )
     ).toEqual(['/c', '/a'])
+  })
+})
+
+describe('folder-aware view derivation (v1.1.2 T3, spec issue #7)', () => {
+  let folderId: string
+
+  beforeEach(() => {
+    useProjectStore.setState({
+      currentProject: null,
+      trustedPaths: ['/a', '/b', '/c', '/d'],
+      projectFolders: [],
+      pendingTrustPath: null,
+      pendingPreflightPath: null,
+      pendingSwitchPath: null,
+      activeFolderId: null,
+      preflightStatus: 'idle',
+      preflightError: null,
+    })
+    folderId = useProjectStore.getState().createFolder('Set list')
+    const store = useProjectStore.getState()
+    store.moveProjectToFolder(folderId, '/b')
+    store.moveProjectToFolder(folderId, '/d')
+  })
+
+  /** The derivation under the store's current view state. */
+  const visible = () => {
+    const state = useProjectStore.getState()
+    return visibleProjectPaths(
+      state.trustedPaths,
+      state.projectFolders,
+      state.activeFolderId
+    )
+  }
+
+  it('top level shows only ungrouped projects, in master-list order', () => {
+    expect(visible()).toEqual(['/a', '/c'])
+  })
+
+  it('folder view shows only members, in set order (not master order)', () => {
+    useProjectStore.getState().setActiveFolderId(folderId)
+    expect(visible()).toEqual(['/b', '/d'])
+  })
+
+  it('reordering inside the folder re-derives immediately (badge source)', () => {
+    useProjectStore.getState().setActiveFolderId(folderId)
+    useProjectStore.getState().moveWithinFolder(folderId, '/d', '/b')
+    expect(visible()).toEqual(['/d', '/b'])
+
+    // Leaving the folder restores the flat top-level numbering source.
+    useProjectStore.getState().setActiveFolderId(null)
+    expect(visible()).toEqual(['/a', '/c'])
+  })
+
+  it('deleting the drilled-in folder exits back to the top level', () => {
+    useProjectStore.getState().setActiveFolderId(folderId)
+    useProjectStore.getState().deleteFolder(folderId)
+    expect(useProjectStore.getState().activeFolderId).toBeNull()
+    expect(visible()).toEqual(['/a', '/b', '/c', '/d'])
+  })
+
+  it('a folder with more than nine members still derives the full list', () => {
+    const store = useProjectStore.getState()
+    for (let i = 0; i < 8; i++) {
+      store.trustProject(`/extra-${i}`)
+      store.moveProjectToFolder(folderId, `/extra-${i}`)
+    }
+    store.setActiveFolderId(folderId)
+    expect(visible()).toHaveLength(10) // the 1..9 cap is presentation
+  })
+
+  it('an unknown folder id derives an empty view, never the top level', () => {
+    useProjectStore.getState().setActiveFolderId('does-not-exist')
+    expect(visible()).toEqual([])
   })
 })

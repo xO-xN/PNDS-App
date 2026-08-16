@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { useKeyboardStore } from '@/store/keyboard-store'
-import { ungroupedProjectPaths, useProjectStore } from '@/store/project-store'
+import { visibleProjectPaths, useProjectStore } from '@/store/project-store'
 import { selectProject } from '@/lib/project-select'
 
 /**
@@ -34,9 +34,10 @@ export function hasOpenOverlay(): boolean {
  * sidebar visibility.
  *
  * - ⌘ held → `commandKeyPressed` (badges + running-state sidebar peek)
- * - ⌘1..9 → select the Nth visible project via the same entry as a click
- *   (Cmd+0 stays the native "Actual Size" menu accelerator and is never
- *   consumed here)
+ * - ⌘1..9 → select the Nth visible project via the same entry as a click,
+ *   folder-aware (a drilled-in view numbers only the folder's members);
+ *   Cmd+0 stays the native "Actual Size" menu accelerator and is never
+ *   consumed here
  */
 export function useCommandKeyboard(): void {
   useEffect(() => {
@@ -49,10 +50,13 @@ export function useCommandKeyboard(): void {
       if (!/^[1-9]$/.test(event.key)) return
       if (isEditableTarget(event.target)) return
       event.preventDefault()
-      const { trustedPaths, projectFolders } = useProjectStore.getState()
-      const path = ungroupedProjectPaths(trustedPaths, projectFolders)[
-        Number(event.key) - 1
-      ]
+      const { trustedPaths, projectFolders, activeFolderId } =
+        useProjectStore.getState()
+      const path = visibleProjectPaths(
+        trustedPaths,
+        projectFolders,
+        activeFolderId
+      )[Number(event.key) - 1]
       if (path) selectProject(path, 'keyboard')
     }
 

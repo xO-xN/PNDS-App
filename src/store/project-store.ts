@@ -32,6 +32,11 @@ interface ProjectState {
    * dialog (spec issue #4: 单一选中语义源).
    */
   pendingSwitchPath: string | null
+  /**
+   * v1.1.2 T3: the folder the sidebar is drilled into, null at the top
+   * level. Session-memory view state — never persisted (spec issue #4).
+   */
+  activeFolderId: string | null
   preflightStatus: PreflightStatus
   preflightError: string | null
   isTrusted: (path: string) => boolean
@@ -42,6 +47,8 @@ interface ProjectState {
   setPendingPreflight: (path: string | null) => void
   requestSwitch: (path: string) => void
   clearSwitchRequest: () => void
+  /** Drills the sidebar into a folder, or back to the top level (null). */
+  setActiveFolderId: (id: string | null) => void
   setProjectFolders: (folders: ProjectFolder[]) => void
   /** Creates a folder and returns its id (caller drives inline naming). */
   createFolder: (name: string) => string
@@ -85,6 +92,25 @@ export function ungroupedProjectPaths(
   return trustedPaths.filter(path => !grouped.has(path))
 }
 
+/**
+ * v1.1.2 T3: projects visible in the current view (spec issue #4: 可见列
+ * 表与序号派生). The top level shows the ungrouped segment (folder cards
+ * never take a number); a folder view shows that folder's members in their
+ * set order. Badges and Cmd+1..9 both consume this single derivation, so
+ * they can never disagree.
+ */
+export function visibleProjectPaths(
+  trustedPaths: string[],
+  folders: ProjectFolder[],
+  activeFolderId: string | null
+): string[] {
+  if (activeFolderId !== null) {
+    const folder = folders.find(folder => folder.id === activeFolderId)
+    return folder ? folder.projectPaths : []
+  }
+  return ungroupedProjectPaths(trustedPaths, folders)
+}
+
 export const useProjectStore = create<ProjectState>()((set, get) => ({
   currentProject: null,
   trustedPaths: [],
@@ -92,6 +118,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
   pendingTrustPath: null,
   pendingPreflightPath: null,
   pendingSwitchPath: null,
+  activeFolderId: null,
   preflightStatus: 'idle',
   preflightError: null,
 
@@ -137,6 +164,8 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
 
   clearSwitchRequest: () => set({ pendingSwitchPath: null }),
 
+  setActiveFolderId: id => set({ activeFolderId: id }),
+
   setProjectFolders: folders => set({ projectFolders: folders }),
 
   createFolder: name => {
@@ -160,6 +189,8 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
   deleteFolder: id =>
     set(state => ({
       projectFolders: state.projectFolders.filter(folder => folder.id !== id),
+      // Deleting the folder the sidebar is drilled into exits to the top.
+      activeFolderId: state.activeFolderId === id ? null : state.activeFolderId,
     })),
 
   moveProjectToFolder: (folderId, path) =>
