@@ -290,8 +290,10 @@ export function SettingsCard({ onPopupOpenChange }: SettingsCardProps) {
       {/* Output device (§6.3): each entry shows its channel count at the
           project sample rate. Entries with fewer channels than the project
           are greyed but stay selectable (no real disabled state), carry a
-          red ✕ and an sr-only explanation, and the persistent hint below
-          shows Nch → Hch. Preference only — deferred until Change. */}
+          red ✕ and an sr-only explanation. The persistent Nch → Hch loss
+          is a red badge INSIDE the Device row's trigger (v1.2.0, spec
+          issue #15) — a conditional extra row used to push the whole
+          settings card taller. Preference only — deferred until Change. */}
       <div className="flex items-center gap-2">
         <span className={labelClass}>Device</span>
         <div className="relative flex-1">
@@ -308,9 +310,24 @@ export function SettingsCard({ onPopupOpenChange }: SettingsCardProps) {
                 'border-0 shadow-none focus-visible:ring-0'
               )}
             >
-              {outputDevice === SYSTEM_DEFAULT_DEVICE
-                ? t('sidebar.systemDefault')
-                : outputDevice}
+              <span className="flex min-w-0 flex-1 items-center justify-between gap-1.5 text-start">
+                <span className="truncate">
+                  {outputDevice === SYSTEM_DEFAULT_DEVICE
+                    ? t('sidebar.systemDefault')
+                    : outputDevice}
+                </span>
+                {insufficient && (
+                  <span
+                    data-testid="device-insufficient-hint"
+                    className="font-manrope shrink-0 text-[10px] leading-none font-semibold text-(--pnds-danger)"
+                  >
+                    {t('sidebar.deviceInsufficient', {
+                      projectChannels,
+                      deviceChannels: selectedChannels,
+                    })}
+                  </span>
+                )}
+              </span>
             </SelectTrigger>
             <SelectContent side="top">
               {deviceQueryActive && (
@@ -375,17 +392,6 @@ export function SettingsCard({ onPopupOpenChange }: SettingsCardProps) {
           </Select>
         </div>
       </div>
-
-      {/* §6.3: persistent Nch → Hch while a channel-poor device is selected.
-          Only when the current project actually loses channels. */}
-      {insufficient && (
-        <div data-testid="device-insufficient-hint" className={hintRowClass}>
-          {t('sidebar.deviceInsufficient', {
-            projectChannels,
-            deviceChannels: selectedChannels,
-          })}
-        </div>
-      )}
 
       {/* §6.3: capability query failed — readable inline error, Load stays
           gated (canStart) until the query succeeds. */}

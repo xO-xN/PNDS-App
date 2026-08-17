@@ -34,8 +34,7 @@ const PROJECT_PATH = '/Users/test/Inarticulate III'
 function seedErrorState() {
   useProjectStore.setState({
     currentProject: { path: PROJECT_PATH, manifest },
-    trustedPaths: [PROJECT_PATH],
-    pendingTrustPath: null,
+    recentProjectPaths: [PROJECT_PATH],
     preflightStatus: 'ready',
     preflightError: null,
   })
@@ -155,5 +154,129 @@ describe('Error Page Retry (§9.3, §10.3)', () => {
     expect(useProjectStore.getState().currentProject).toBeNull()
     expect(commands.stopProject).toHaveBeenCalledTimes(1)
     expect(commands.startProject).not.toHaveBeenCalled()
+  })
+})
+
+/** v1.2.0 (issue #14): a port-conflict failure shows the occupant and a
+ * one-interaction [Release and Retry] that clears the port, then restarts. */
+describe('Error Page port-conflict linkage (v1.2.0 issue #14)', () => {
+  const CONFLICT_ERROR =
+    'Port 6868 is already in use.\nClose the application using it (find it with: lsof -i :6868) and try again.'
+  const occupant = {
+    pid: 4242,
+    name: 'node',
+    commandLine: '/usr/local/bin/node /Users/test/rogue/server.js',
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useSessionStore.getState().resetSession()
+    vi.mocked(commands.startProject).mockResolvedValue({
+      status: 'ok',
+      data: null,
+    })
+    vi.mocked(commands.stopProject).mockResolvedValue({
+      status: 'ok',
+      data: null,
+    })
+    seedErrorState()
+    useSessionStore.setState({ sessionError: CONFLICT_ERROR })
+  })
+
+  it('shows the occupant identity for the conflicting port', async () => {
+    vi.mocked(commands.checkPortStatus).mockResolvedValue({
+      status: 'ok',
+      data: { port: 6868, occupant },
+    })
+
+    render(<ErrorScreen />)
+
+    const block = await screen.findByTestId('port-conflict-block')
+    expect(block).toHaveTextContent('Port 6868 is held by:')
+    expect(block).toHaveTextContent('4242')
+    expect(block).toHaveTextContent(
+      '/usr/local/bin/node /Users/test/rogue/server.js'
+    )
+  })
+
+  it('no conflict block for non-port errors', () => {
+    useSessionStore.setState({
+      sessionError: 'Timed out waiting for the project to report ready (30s).',
+    })
+
+    render(<ErrorScreen />)
+
+    expect(screen.queryByTestId('port-conflict-block')).not.toBeInTheDocument()
+    expect(commands.checkPortStatus).not.toHaveBeenCalled()
+  })
+
+  it('Release and Retry clears the port and restarts in one interaction', async () => {
+    vi.mocked(commands.checkPortStatus).mockResolvedValue({
+      status: 'ok',
+      data: { port: 6868, occupant },
+    })
+    vi.mocked(commands.releasePort).mockResolvedValue({
+      status: 'ok',
+      data: { port: 6868, occupant: null },
+    })
+
+    render(<ErrorScreen />)
+    // The button enables only once the occupant identity has loaded.
+    await screen.findByText('/usr/local/bin/node /Users/test/rogue/server.js')
+    const releaseAndRetry = screen.getByRole('button', {
+      name: 'Release and Retry',
+    })
+    expect(releaseAndRetry).toBeEnabled()
+
+    await act(async () => {
+      fireEvent.click(releaseAndRetry)
+    })
+
+    expect(commands.releasePort).toHaveBeenCalledWith(6868)
+    expect(commands.stopProject).not.toHaveBeenCalled()
+    expect(commands.startProject).toHaveBeenCalledTimes(1)
+    expect(commands.startProject).toHaveBeenCalledWith(
+      PROJECT_PATH,
+      'internal',
+      '192.168.1.10',
+      null
+    )
+  })
+
+  it('a failed release surfaces the error and does not start', async () => {
+    vi.mocked(commands.checkPortStatus).mockResolvedValue({
+      status: 'ok',
+      data: { port: 6868, occupant },
+    })
+    vi.mocked(commands.releasePort).mockResolvedValue({
+      status: 'error',
+      error: 'signal permission denied',
+    })
+
+    render(<ErrorScreen />)
+    await screen.findByText('/usr/local/bin/node /Users/test/rogue/server.js')
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Release and Retry' }))
+    })
+
+    expect(commands.releasePort).toHaveBeenCalledWith(6868)
+    expect(commands.startProject).not.toHaveBeenCalled()
+  })
+
+  it('a freed port keeps plain Retry as the path (no occupant to release)', async () => {
+    // The port freed itself while the error page was open: no identity to
+    // show — the occupant line reads "Checking…" until resolution lands,
+    // and the ordinary Retry button stays the enabled way forward.
+    vi.mocked(commands.checkPortStatus).mockResolvedValue({
+      status: 'ok',
+      data: { port: 6868, occupant: null },
+    })
+
+    render(<ErrorScreen />)
+
+    await waitFor(() => {
+      expect(commands.checkPortStatus).toHaveBeenCalledWith(6868)
+    })
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeEnabled()
   })
 })

@@ -13,8 +13,8 @@ use std::time::{Duration, Instant};
 
 /// Default escalation window (§8.2). Overridable per call.
 pub const SHUTDOWN_GRACE_WINDOW: Duration = Duration::from_secs(5);
-/// Orphan cleanup uses a shorter window.
-const ORPHAN_GRACE_WINDOW: Duration = Duration::from_secs(2);
+/// Orphan cleanup and port release use a shorter window.
+pub(crate) const ORPHAN_GRACE_WINDOW: Duration = Duration::from_secs(2);
 const PROCESS_POLL_INTERVAL: Duration = Duration::from_millis(100);
 
 const SESSION_CHILDREN_FILE: &str = "session-children.json";
@@ -31,7 +31,8 @@ pub struct SessionChild {
 // ---------------------------------------------------------------------------
 
 /// §8.2: graceful stop — SIGTERM, poll, escalate to SIGKILL on timeout.
-/// The **single** implementation of the policy.
+/// The **single** implementation of the policy for processes the App owns
+/// (a live `Child` handle).
 ///
 /// Returns `true` only when the child was **reaped** — i.e. the process is
 /// provably gone. An unconfirmed kill (§9.3) means the caller must keep the
@@ -61,6 +62,22 @@ pub fn kill_escalate(child: &mut Child, pid: u32, timeout: Duration) -> bool {
     }
 }
 
+/// The same §8.2 escalation for a pid the App does NOT own a handle of
+/// (port release, and the orphan cleanup below): SIGTERM → poll → SIGKILL.
+/// The orphan cleanup inlines this flow only because it also rewrites the
+/// record file between the two signals; everything else goes through here.
+pub(crate) fn terminate_pid_escalate(pid: u32, timeout: Duration) -> bool {
+    let _ = Command::new("/bin/kill").arg(pid.to_string()).status();
+    if wait_until_gone(pid, timeout) {
+        return true;
+    }
+    log::warn!("PID {pid} ignored SIGTERM; sending SIGKILL");
+    let _ = Command::new("/bin/kill")
+        .args(["-9", &pid.to_string()])
+        .status();
+    wait_until_gone(pid, timeout)
+}
+
 fn process_alive(pid: u32) -> bool {
     Command::new("/bin/kill")
         .args(["-0", &pid.to_string()])
@@ -69,7 +86,9 @@ fn process_alive(pid: u32) -> bool {
         .unwrap_or(false)
 }
 
-fn process_command_line(pid: u32) -> Option<String> {
+/// Full command line of a live pid (`ps -p <pid> -o command=`), or None when
+/// the process is gone or unreadable. Shared with the port-release service.
+pub(crate) fn process_command_line(pid: u32) -> Option<String> {
     let output = Command::new("/bin/ps")
         .args(["-p", &pid.to_string(), "-o", "command="])
         .output()
@@ -214,7 +233,7 @@ impl ChildRegistry {
 }
 
 /// Polls until `pid` is gone or `timeout` elapses. Returns whether it is gone.
-fn wait_until_gone(pid: u32, timeout: Duration) -> bool {
+pub(crate) fn wait_until_gone(pid: u32, timeout: Duration) -> bool {
     let deadline = Instant::now() + timeout;
     loop {
         if !process_alive(pid) {

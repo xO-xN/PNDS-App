@@ -59,7 +59,7 @@ const readyHealth = {
 /** Seeds a running session the shell's restore agrees with (see T2 tests). */
 function seedRunningSession(currentPath: string) {
   useProjectStore.setState({
-    trustedPaths: [FIRST_PATH, SECOND_PATH],
+    recentProjectPaths: [FIRST_PATH, SECOND_PATH],
     currentProject: { path: currentPath, manifest },
     preflightStatus: 'ready',
   })
@@ -108,9 +108,8 @@ describe('⌘R project rename (v1.1.2 T6)', () => {
     vi.clearAllMocks()
     useProjectStore.setState({
       currentProject: null,
-      trustedPaths: [],
+      recentProjectPaths: [],
       projectFolders: [],
-      pendingTrustPath: null,
       pendingPreflightPath: null,
       pendingSwitchPath: null,
       activeFolderId: null,
@@ -124,7 +123,7 @@ describe('⌘R project rename (v1.1.2 T6)', () => {
 
   it('enters inline edit on the selected project, focused with the name selected', () => {
     useProjectStore.setState({
-      trustedPaths: [FIRST_PATH],
+      recentProjectPaths: [FIRST_PATH],
       currentProject: { path: FIRST_PATH, manifest },
       preflightStatus: 'ready',
     })
@@ -142,7 +141,7 @@ describe('⌘R project rename (v1.1.2 T6)', () => {
 
   it('Enter commits the typed name to the card and preferences', async () => {
     useProjectStore.setState({
-      trustedPaths: [FIRST_PATH],
+      recentProjectPaths: [FIRST_PATH],
       currentProject: { path: FIRST_PATH, manifest },
       preflightStatus: 'ready',
     })
@@ -174,7 +173,7 @@ describe('⌘R project rename (v1.1.2 T6)', () => {
 
   it('blur commits just like Enter', async () => {
     useProjectStore.setState({
-      trustedPaths: [FIRST_PATH],
+      recentProjectPaths: [FIRST_PATH],
       currentProject: { path: FIRST_PATH, manifest },
       preflightStatus: 'ready',
     })
@@ -196,7 +195,7 @@ describe('⌘R project rename (v1.1.2 T6)', () => {
 
   it('Esc cancels: nothing saves and the name is untouched', async () => {
     useProjectStore.setState({
-      trustedPaths: [FIRST_PATH],
+      recentProjectPaths: [FIRST_PATH],
       currentProject: { path: FIRST_PATH, manifest },
       preflightStatus: 'ready',
     })
@@ -219,7 +218,7 @@ describe('⌘R project rename (v1.1.2 T6)', () => {
 
   it('an empty commit removes the override and falls back to the path basename', async () => {
     useProjectStore.setState({
-      trustedPaths: [SECOND_PATH],
+      recentProjectPaths: [SECOND_PATH],
       currentProject: { path: SECOND_PATH, manifest: secondManifest },
       preflightStatus: 'ready',
       projectDisplayNames: { [SECOND_PATH]: 'Old Custom Name' },
@@ -248,7 +247,7 @@ describe('⌘R project rename (v1.1.2 T6)', () => {
   })
 
   it('is a silent no-op with no selected project at the top level', () => {
-    useProjectStore.setState({ trustedPaths: [FIRST_PATH] })
+    useProjectStore.setState({ recentProjectPaths: [FIRST_PATH] })
     render(<AppShell />)
 
     pressCmdR()
@@ -269,7 +268,7 @@ describe('⌘R project rename (v1.1.2 T6)', () => {
   })
 
   it('renames the drilled-in folder when nothing is selected inside it', async () => {
-    useProjectStore.setState({ trustedPaths: [SECOND_PATH] })
+    useProjectStore.setState({ recentProjectPaths: [SECOND_PATH] })
     const store = useProjectStore.getState()
     const id = store.createFolder('Gig')
     store.moveProjectToFolder(id, SECOND_PATH)
@@ -298,7 +297,7 @@ describe('⌘R project rename (v1.1.2 T6)', () => {
 
   it('a selected project wins over the folder while drilled in', () => {
     useProjectStore.setState({
-      trustedPaths: [FIRST_PATH, SECOND_PATH],
+      recentProjectPaths: [FIRST_PATH, SECOND_PATH],
       currentProject: { path: SECOND_PATH, manifest: secondManifest },
       preflightStatus: 'ready',
     })
@@ -320,7 +319,7 @@ describe('⌘R project rename (v1.1.2 T6)', () => {
     // target. Covers the reported bug: an ungrouped project staying
     // selected inside a folder view.
     useProjectStore.setState({
-      trustedPaths: [FIRST_PATH, SECOND_PATH],
+      recentProjectPaths: [FIRST_PATH, SECOND_PATH],
       currentProject: { path: FIRST_PATH, manifest },
       preflightStatus: 'ready',
     })
@@ -398,7 +397,7 @@ describe('⌘R project rename (v1.1.2 T6)', () => {
     // Loading screen: sidebar retracted, rename still allowed (the
     // session is not running yet — only ready blocks it).
     useProjectStore.setState({
-      trustedPaths: [FIRST_PATH],
+      recentProjectPaths: [FIRST_PATH],
       currentProject: { path: FIRST_PATH, manifest },
       preflightStatus: 'ready',
     })

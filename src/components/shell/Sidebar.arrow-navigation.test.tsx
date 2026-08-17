@@ -52,7 +52,7 @@ const readyHealth = {
 /** Seeds a stable running session (stores + the shell's initial restore). */
 function seedRunningSession(currentPath: string) {
   useProjectStore.setState({
-    trustedPaths: [FIRST_PATH, SECOND_PATH, THIRD_PATH],
+    recentProjectPaths: [FIRST_PATH, SECOND_PATH, THIRD_PATH],
     currentProject: { path: currentPath, manifest },
     preflightStatus: 'ready',
   })
@@ -110,9 +110,8 @@ describe('Cmd+↑/↓ project navigation and Esc close (v1.1.2 T7)', () => {
     })
     useProjectStore.setState({
       currentProject: null,
-      trustedPaths: [FIRST_PATH, SECOND_PATH, THIRD_PATH],
+      recentProjectPaths: [FIRST_PATH, SECOND_PATH, THIRD_PATH],
       projectFolders: [],
-      pendingTrustPath: null,
       pendingPreflightPath: null,
       pendingSwitchPath: null,
       confirmCloseProjectOpen: false,

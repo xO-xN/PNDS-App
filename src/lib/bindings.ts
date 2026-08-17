@@ -217,6 +217,32 @@ async listOutputDevices(sampleRate: number) : Promise<Result<AudioDeviceCapabili
 }
 },
 /**
+ * v1.2.0 (issue #14): occupancy of one TCP port — the listening process's
+ * pid, name and full command line, or None when free. The Settings port
+ * section queries this on open / manual refresh (no polling).
+ */
+async checkPortStatus(port: number) : Promise<Result<PortStatus, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("check_port_status", { port }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * v1.2.0 (issue #14): release an occupied port — SIGTERM → grace → SIGKILL
+ * on the freshly-resolved occupant (same escalation as §8.2 child cleanup).
+ * Returns the port's post-release status; the caller refreshes from it.
+ */
+async releasePort(port: number) : Promise<Result<PortStatus, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("release_port", { port }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * v1.1.2 T7: absolute paths of the bundled example projects that make up
  * the Utilities folder. Empty when none are installed — the frontend then
  * seeds nothing.
@@ -357,6 +383,22 @@ export type HealthPayload = {
 status: string; projectId?: string | null; audioMode?: string | null; audio?: HealthAudio | null; scoreServer?: HealthScoreServer | null }
 export type HealthScoreServer = { performerPort?: number | null; monitorPort?: number | null; error?: string | null }
 export type Manifest = { schemaVersion: number; id: string; name: string; version: string; description: string | null; scoreServer: ScoreServer; audio: AudioConfig }
+/**
+ * Who is listening on a project port.
+ */
+export type PortOccupant = { pid: number; 
+/**
+ * Short process name — the first token of the full command line.
+ */
+name: string; 
+/**
+ * Full command line, for the confirm dialog and the error page.
+ */
+commandLine: string }
+/**
+ * Occupancy of one TCP port.
+ */
+export type PortStatus = { port: number; occupant: PortOccupant | null }
 /**
  * A named one-level group of project paths (spec issue #4).
  */

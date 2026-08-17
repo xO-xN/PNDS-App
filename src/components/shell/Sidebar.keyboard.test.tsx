@@ -62,7 +62,7 @@ const TEN_PATHS = Array.from(
  */
 function seedRunningSession(currentPath: string) {
   useProjectStore.setState({
-    trustedPaths: [FIRST_PATH, SECOND_PATH],
+    recentProjectPaths: [FIRST_PATH, SECOND_PATH],
     currentProject: { path: currentPath, manifest },
     preflightStatus: 'ready',
   })
@@ -119,9 +119,8 @@ describe('Cmd keyboard layer (v1.1.2)', () => {
     useKeyboardStore.getState().setCommandKeyPressed(false)
     useProjectStore.setState({
       currentProject: null,
-      trustedPaths: [],
+      recentProjectPaths: [],
       projectFolders: [],
-      pendingTrustPath: null,
       pendingPreflightPath: null,
       pendingSwitchPath: null,
       preflightStatus: 'idle',
@@ -132,7 +131,7 @@ describe('Cmd keyboard layer (v1.1.2)', () => {
 
   describe('number badges', () => {
     it('badges the first nine visible projects while Cmd is held', () => {
-      useProjectStore.setState({ trustedPaths: TEN_PATHS })
+      useProjectStore.setState({ recentProjectPaths: TEN_PATHS })
       render(<AppShell />)
 
       pressCmd()
@@ -157,7 +156,7 @@ describe('Cmd keyboard layer (v1.1.2)', () => {
     })
 
     it('never badges a project that sits inside a folder (flat list)', () => {
-      useProjectStore.setState({ trustedPaths: TEN_PATHS })
+      useProjectStore.setState({ recentProjectPaths: TEN_PATHS })
       const store = useProjectStore.getState()
       const id = store.createFolder('Set list')
       const groupedPath = TEN_PATHS[9]
@@ -178,7 +177,9 @@ describe('Cmd keyboard layer (v1.1.2)', () => {
         status: 'ok',
         data: manifest,
       })
-      useProjectStore.setState({ trustedPaths: [FIRST_PATH, SECOND_PATH] })
+      useProjectStore.setState({
+        recentProjectPaths: [FIRST_PATH, SECOND_PATH],
+      })
       render(<AppShell />)
 
       pressCmdDigit('1')
@@ -188,7 +189,7 @@ describe('Cmd keyboard layer (v1.1.2)', () => {
     })
 
     it('Cmd+0 selects nothing — it stays the zoom accelerator', () => {
-      useProjectStore.setState({ trustedPaths: [FIRST_PATH] })
+      useProjectStore.setState({ recentProjectPaths: [FIRST_PATH] })
       render(<AppShell />)
 
       pressCmdDigit('0')
@@ -198,7 +199,7 @@ describe('Cmd keyboard layer (v1.1.2)', () => {
 
     it('a digit on the current project never clears the selection', () => {
       useProjectStore.setState({
-        trustedPaths: [FIRST_PATH, SECOND_PATH],
+        recentProjectPaths: [FIRST_PATH, SECOND_PATH],
         currentProject: { path: FIRST_PATH, manifest },
         preflightStatus: 'ready',
       })
@@ -286,7 +287,7 @@ describe('Cmd keyboard layer (v1.1.2)', () => {
     /** Idle + selected + preflighted + LAN picked → the Load button is live. */
     function seedLoadableIdle() {
       useProjectStore.setState({
-        trustedPaths: [FIRST_PATH, SECOND_PATH],
+        recentProjectPaths: [FIRST_PATH, SECOND_PATH],
         currentProject: { path: FIRST_PATH, manifest },
         preflightStatus: 'ready',
       })
@@ -314,7 +315,7 @@ describe('Cmd keyboard layer (v1.1.2)', () => {
     })
 
     it('Enter does nothing without a loadable selection', () => {
-      useProjectStore.setState({ trustedPaths: [FIRST_PATH] })
+      useProjectStore.setState({ recentProjectPaths: [FIRST_PATH] })
       render(<AppShell />)
 
       fireEvent.keyDown(window, { key: 'Enter' })

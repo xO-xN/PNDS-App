@@ -27,9 +27,8 @@ describe('Sidebar folders (v1.1.2)', () => {
     vi.clearAllMocks()
     useProjectStore.setState({
       currentProject: null,
-      trustedPaths: [PROJECT_PATH, OTHER_PATH, THIRD_PATH],
+      recentProjectPaths: [PROJECT_PATH, OTHER_PATH, THIRD_PATH],
       projectFolders: [],
-      pendingTrustPath: null,
       pendingPreflightPath: null,
       pendingSwitchPath: null,
       preflightStatus: 'idle',
@@ -124,7 +123,7 @@ describe('Sidebar folders (v1.1.2)', () => {
     expect(useProjectStore.getState().projectFolders).toEqual([])
     // All three projects are back as ungrouped entries; trust is untouched.
     expect(screen.getAllByTestId('project-entry')).toHaveLength(3)
-    expect(useProjectStore.getState().trustedPaths).toEqual([
+    expect(useProjectStore.getState().recentProjectPaths).toEqual([
       PROJECT_PATH,
       OTHER_PATH,
       THIRD_PATH,
@@ -151,7 +150,7 @@ describe('Sidebar folders (v1.1.2)', () => {
     )
 
     const state = useProjectStore.getState()
-    expect(state.trustedPaths).toEqual([OTHER_PATH, THIRD_PATH])
+    expect(state.recentProjectPaths).toEqual([OTHER_PATH, THIRD_PATH])
     // The folder and its member are untouched — removing one index never
     // regroups anything else.
     expect(state.projectFolders[0]?.projectPaths).toEqual([OTHER_PATH])
@@ -173,7 +172,7 @@ describe('Utilities folder protection (v1.1.2 T7, spec issue #11)', () => {
     vi.clearAllMocks()
     useProjectStore.setState({
       currentProject: null,
-      trustedPaths: [PROJECT_PATH, OTHER_PATH],
+      recentProjectPaths: [PROJECT_PATH, OTHER_PATH],
       projectFolders: [
         {
           id: UTILITIES_FOLDER_ID,
@@ -181,7 +180,6 @@ describe('Utilities folder protection (v1.1.2 T7, spec issue #11)', () => {
           projectPaths: [PROJECT_PATH, OTHER_PATH],
         },
       ],
-      pendingTrustPath: null,
       pendingPreflightPath: null,
       pendingSwitchPath: null,
       activeFolderId: null,

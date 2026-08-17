@@ -55,15 +55,25 @@ pub fn check_dependencies(project_root: &Path) -> Result<(), String> {
 
 /// §7: both HTTP ports must be free. No auto-rebinding, no manifest edits —
 /// a conflict fails preflight with an actionable message.
+///
+/// FORMAT CONTRACT: the ErrorScreen port-conflict linkage (v1.2.0, issue
+/// #14) matches this message with `/^Port (\d+) is already in use\./m` to
+/// offer [Release and Retry]. The first line's wording is load-bearing;
+/// `port_conflict_message_is_parseable` pins it.
 pub fn check_ports_available(performer_port: u16, monitor_port: u16) -> Result<(), String> {
     for port in [performer_port, monitor_port] {
         if std::net::TcpListener::bind(("0.0.0.0", port)).is_err() {
-            return Err(format!(
-                "Port {port} is already in use.\nClose the application using it (find it with: lsof -i :{port}) and try again."
-            ));
+            return Err(port_conflict_message(port));
         }
     }
     Ok(())
+}
+
+/// The single producer of the port-conflict error string.
+pub(crate) fn port_conflict_message(port: u16) -> String {
+    format!(
+        "Port {port} is already in use.\nClose the application using it (find it with: lsof -i :{port}) and try again."
+    )
 }
 
 #[cfg(test)]
@@ -181,5 +191,23 @@ mod tests {
         // No rebind-after-drop assertion: tests run in parallel, and another
         // test may legitimately grab the freed ephemeral port first (a
         // 127.0.0.1 bind collides with a 0.0.0.0 wildcard bind on macOS).
+    }
+
+    /// v1.2.0 (issue #14): the ErrorScreen port-conflict linkage parses the
+    /// FIRST line with the regex `/^Port (\d+) is already in use\./m` — this
+    /// pins the exact shape the frontend depends on.
+    #[test]
+    fn port_conflict_message_is_parseable() {
+        let message = port_conflict_message(6868);
+        let re = regex_lite_expect(&message);
+        assert_eq!(re, Some(6868));
+    }
+
+    /// Minimal mirror of the frontend regex — no regex crate dependency.
+    fn regex_lite_expect(message: &str) -> Option<u16> {
+        let first = message.lines().next()?;
+        let rest = first.strip_prefix("Port ")?;
+        let number = rest.strip_suffix(" is already in use.")?;
+        number.parse().ok()
     }
 }

@@ -38,9 +38,8 @@ describe('Sidebar folder drags (v1.1.2 T5)', () => {
     useKeyboardStore.getState().setCommandKeyPressed(false)
     useProjectStore.setState({
       currentProject: null,
-      trustedPaths: [FIRST_PATH, SECOND_PATH, THIRD_PATH],
+      recentProjectPaths: [FIRST_PATH, SECOND_PATH, THIRD_PATH],
       projectFolders: [],
-      pendingTrustPath: null,
       pendingPreflightPath: null,
       pendingSwitchPath: null,
       activeFolderId: null,
@@ -93,7 +92,11 @@ describe('Sidebar folder drags (v1.1.2 T5)', () => {
       THIRD_PATH,
       SECOND_PATH,
     ])
-    expect(state.trustedPaths).toEqual([FIRST_PATH, SECOND_PATH, THIRD_PATH])
+    expect(state.recentProjectPaths).toEqual([
+      FIRST_PATH,
+      SECOND_PATH,
+      THIRD_PATH,
+    ])
     // Only FIRST remains ungrouped at the top level.
     expect(screen.getAllByTestId('project-entry')).toHaveLength(1)
     await waitFor(() => {
@@ -133,7 +136,11 @@ describe('Sidebar folder drags (v1.1.2 T5)', () => {
     // SECOND left the folder; the master list keeps every project.
     const state = useProjectStore.getState()
     expect(state.projectFolders[0]?.projectPaths).toEqual([THIRD_PATH])
-    expect(state.trustedPaths).toEqual([FIRST_PATH, SECOND_PATH, THIRD_PATH])
+    expect(state.recentProjectPaths).toEqual([
+      FIRST_PATH,
+      SECOND_PATH,
+      THIRD_PATH,
+    ])
     // The folder view now lists a single member.
     expect(screen.getAllByTestId('project-entry')).toHaveLength(1)
     await waitFor(() => {

@@ -52,7 +52,7 @@ The first version (V1), now complete, deliberately focuses on:
 
 - A **macOS Apple Silicon** desktop host
 - Performances **within a single local network**: the host Mac plus phone/tablet performers
-- **Local project directories** that the user explicitly selects and trusts
+- **Local project directories** that the user explicitly selects
 - **Discrete multichannel output** (1–64 channels) through the built-in SuperCollider sound server, plus External (OSC to a sound engine you specify) and None (score only) modes
 - A bundled **Node.js 24** runtime, so projects run without requiring Node on the host machine
 - **Automatic updates** with in-app notifications

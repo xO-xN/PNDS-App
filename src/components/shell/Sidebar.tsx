@@ -26,6 +26,7 @@ import {
 } from '@/lib/open-project'
 import { selectProject, setActiveFolderView } from '@/lib/project-select'
 import { saveProjectDisplayName, saveProjectIndex } from '@/lib/audio-prefs'
+import { projectDisplayName, titleCasePath } from '@/lib/display-names'
 import {
   cardShift,
   folderDropAt,
@@ -136,16 +137,6 @@ function rectOf(element: HTMLElement | null): Rect | null {
   }
 }
 
-/** Title-cases a path's last segment (multichannel-tone-test → Multichannel
- * Tone Test) — the fallback name for projects without an override. */
-function titleCasePath(path: string): string {
-  const base = path.split('/').filter(Boolean).pop() ?? path
-  return base
-    .split('-')
-    .map(part => (part ? part.charAt(0).toUpperCase() + part.slice(1) : part))
-    .join(' ')
-}
-
 interface InlineNameInputProps {
   testId: string
   value: string
@@ -230,7 +221,7 @@ export function Sidebar({
   onDialogOpenChange,
 }: SidebarProps) {
   const { t } = useTranslation()
-  const trustedPaths = useProjectStore(state => state.trustedPaths)
+  const recentProjectPaths = useProjectStore(state => state.recentProjectPaths)
   const projectFolders = useProjectStore(state => state.projectFolders)
   const currentProject = useProjectStore(state => state.currentProject)
   const pendingPreflightPath = useProjectStore(
@@ -302,7 +293,7 @@ export function Sidebar({
   // v1.1.2 T3: one folder-aware derivation drives the list, the number
   // badges and the drag indices (spec issue #7: 可见列表与序号派生).
   const visiblePaths = visibleProjectPaths(
-    trustedPaths,
+    recentProjectPaths,
     projectFolders,
     activeFolderId
   )
@@ -320,17 +311,16 @@ export function Sidebar({
   const displayName = (path: string) =>
     projectDisplayNames[path] ?? titleCasePath(path)
 
-  /** The name a project card (and its drag clone) shows for `path`. */
+  /** The name a project card (and its drag clone) shows for `path` —
+   * the shared listing rule (display-names.ts). */
   const cardName = (path: string) =>
-    path === currentProject?.path && !projectDisplayNames[path]
-      ? currentProject.manifest.name
-      : displayName(path)
+    projectDisplayName(path, projectDisplayNames, currentProject)
 
-  /** Persists the app-side project index — trust list and folder
+  /** Persists the app-side project index — history list and folder
    * membership change together, so they always save atomically. */
   const persistIndex = () => {
     const store = useProjectStore.getState()
-    void saveProjectIndex(store.trustedPaths, store.projectFolders)
+    void saveProjectIndex(store.recentProjectPaths, store.projectFolders)
   }
 
   /** Share: open the monitor page in the default external browser. */
@@ -359,7 +349,7 @@ export function Sidebar({
    * currently open; the Close action handles the open one. Removing the
    * app-side index never touches the on-disk project (spec issue #4). */
   const handleRemove = (path: string) => {
-    useProjectStore.getState().removeTrusted(path)
+    useProjectStore.getState().removeRecentProject(path)
     persistIndex()
   }
 
@@ -573,7 +563,7 @@ export function Sidebar({
           // Reordering follows the active view: inside a folder it is the
           // set order, at the top level the master list (spec issue #7).
           const visible = visibleProjectPaths(
-            store.trustedPaths,
+            store.recentProjectPaths,
             store.projectFolders,
             store.activeFolderId
           )
@@ -912,7 +902,7 @@ export function Sidebar({
           )
         })}
 
-        {!activeFolder && trustedPaths.length === 0 && (
+        {!activeFolder && recentProjectPaths.length === 0 && (
           <p className="px-9 py-3 text-center text-xs text-(--pnds-text)/50">
             {t('sidebar.noProjects')}
           </p>

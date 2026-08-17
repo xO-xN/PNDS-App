@@ -34,18 +34,17 @@ interface ProjectState {
   /** Project that passed preflight and is ready to start (starting is task-2). */
   currentProject: CurrentProject | null
   /**
-   * Paths the user has explicitly trusted this session (§4). Persistence
-   * across launches is task-6 (Recent Projects).
+   * The project history master list (persisted as Recent Projects). The
+   * v1.2.0 trust gate was removed (spec issue #15): opening a path adds it
+   * here directly, with no confirmation step.
    */
-  trustedPaths: string[]
+  recentProjectPaths: string[]
   /**
    * v1.1.2: one-level performance folders (set lists). Membership only —
-   * `trustedPaths` stays the master list, so deleting a folder merely
+   * `recentProjectPaths` stays the master list, so deleting a folder merely
    * returns its projects to the ungrouped section (spec issue #4).
    */
   projectFolders: ProjectFolder[]
-  /** Path awaiting trust confirmation (drives the trust dialog). */
-  pendingTrustPath: string | null
   /** Path whose preflight is in flight (drives the entry highlight). */
   pendingPreflightPath: string | null
   /**
@@ -74,10 +73,10 @@ interface ProjectState {
   renameTarget: RenameTarget | null
   preflightStatus: PreflightStatus
   preflightError: string | null
-  isTrusted: (path: string) => boolean
-  trustProject: (path: string) => void
-  removeTrusted: (path: string) => void
-  requestTrust: (path: string | null) => void
+  addRecentProject: (path: string) => void
+  removeRecentProject: (path: string) => void
+  /** Empties the history; folder memberships go with it (folders stay). */
+  clearRecentProjects: () => void
   setPendingPreflight: (path: string | null) => void
   requestSwitch: (path: string) => void
   clearSwitchRequest: () => void
@@ -134,16 +133,16 @@ function withoutFolderMember(
 }
 
 /**
- * Projects visible at the sidebar's top level: trusted paths that are not
+ * Projects visible at the sidebar's top level: history entries that are not
  * in any folder, in master-list order. Folders render below them and never
  * take a number badge (spec issue #4: 两段式布局).
  */
 export function ungroupedProjectPaths(
-  trustedPaths: string[],
+  recentProjectPaths: string[],
   folders: ProjectFolder[]
 ): string[] {
   const grouped = new Set(folders.flatMap(folder => folder.projectPaths))
-  return trustedPaths.filter(path => !grouped.has(path))
+  return recentProjectPaths.filter(path => !grouped.has(path))
 }
 
 /**
@@ -154,7 +153,7 @@ export function ungroupedProjectPaths(
  * they can never disagree.
  */
 export function visibleProjectPaths(
-  trustedPaths: string[],
+  recentProjectPaths: string[],
   folders: ProjectFolder[],
   activeFolderId: string | null
 ): string[] {
@@ -162,14 +161,13 @@ export function visibleProjectPaths(
     const folder = folders.find(folder => folder.id === activeFolderId)
     return folder ? folder.projectPaths : []
   }
-  return ungroupedProjectPaths(trustedPaths, folders)
+  return ungroupedProjectPaths(recentProjectPaths, folders)
 }
 
-export const useProjectStore = create<ProjectState>()((set, get) => ({
+export const useProjectStore = create<ProjectState>()(set => ({
   currentProject: null,
-  trustedPaths: [],
+  recentProjectPaths: [],
   projectFolders: [],
-  pendingTrustPath: null,
   pendingPreflightPath: null,
   pendingSwitchPath: null,
   confirmCloseProjectOpen: false,
@@ -179,18 +177,16 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
   preflightStatus: 'idle',
   preflightError: null,
 
-  isTrusted: path => get().trustedPaths.includes(path),
-
-  trustProject: path =>
+  addRecentProject: path =>
     set(state => ({
-      trustedPaths: state.trustedPaths.includes(path)
-        ? state.trustedPaths
-        : [...state.trustedPaths, path],
+      recentProjectPaths: state.recentProjectPaths.includes(path)
+        ? state.recentProjectPaths
+        : [...state.recentProjectPaths, path],
     })),
 
-  removeTrusted: path =>
+  removeRecentProject: path =>
     set(state => ({
-      trustedPaths: state.trustedPaths.filter(p => p !== path),
+      recentProjectPaths: state.recentProjectPaths.filter(p => p !== path),
       // Removing the app-side index also drops folder membership — the
       // on-disk project is untouched (spec issue #4: 删除语义).
       projectFolders: withoutFolderMember(state.projectFolders, path),
@@ -201,7 +197,21 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
         : {}),
     })),
 
-  requestTrust: path => set({ pendingTrustPath: path }),
+  clearRecentProjects: () =>
+    set(state => ({
+      recentProjectPaths: [],
+      // Members are gone with the list; the folders themselves (and the
+      // protected Utilities folder) stay as empty shells.
+      projectFolders: state.projectFolders.map(folder => ({
+        ...folder,
+        projectPaths: [],
+      })),
+      currentProject:
+        state.currentProject !== null ? null : state.currentProject,
+      ...(state.currentProject !== null
+        ? { preflightStatus: 'idle' as const, preflightError: null }
+        : {}),
+    })),
 
   setPendingPreflight: path => set({ pendingPreflightPath: path }),
 
@@ -299,8 +309,8 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
         }
       }
       return {
-        trustedPaths: masterWithUngroupedOrder(
-          state.trustedPaths,
+        recentProjectPaths: masterWithUngroupedOrder(
+          state.recentProjectPaths,
           state.projectFolders,
           newVisiblePaths
         ),

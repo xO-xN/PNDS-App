@@ -23,13 +23,16 @@ import {
 import { Label } from '@/components/ui/label'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { Separator } from '@/components/ui/separator'
+import { PortsSection } from './PortsSection'
+import { ProjectsSection } from './ProjectsSection'
 
 /**
  * v1.2.0 (issue #13): the in-app settings panel — a single scrolling page
  * with five sections (spec issue #12). This ticket ships General (language)
- * and About live; Ports, Projects and Developer Tools are placeholders
- * until their own tickets land. Opened by ⌘, / the menu item, closed by Esc
- * or ⌘, again. The About menu item routes here with `focusSection`.
+ * and About live; Projects (history management, issue #15) and Ports
+ * (issue #14) landed in their own tickets; Developer Tools stays a
+ * placeholder until its ticket lands. Opened by ⌘, / the menu item, closed
+ * by Esc or ⌘, again. The About menu item routes here with `focusSection`.
  */
 export function SettingsPanel() {
   const { t } = useTranslation()
@@ -111,10 +114,10 @@ export function SettingsPanel() {
 
         <Separator />
 
-        {/* ── Ports / Projects / Developer Tools (placeholders) ── */}
-        <PlaceholderSection section="ports" title={t('settings.ports')} />
+        {/* ── Ports / Projects / Developer Tools ── */}
+        <PortsSection section="ports" />
         <Separator />
-        <PlaceholderSection section="projects" title={t('settings.projects')} />
+        <ProjectsSection section="projects" />
         <Separator />
         <PlaceholderSection
           section="developer"

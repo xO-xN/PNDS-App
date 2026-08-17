@@ -27,11 +27,11 @@ export async function ensureUtilitiesFolder(): Promise<void> {
   const examplePaths = result.data
   if (examplePaths.length === 0) return
 
-  // Trust and membership change together — the folder only ever holds
+  // History and membership change together — the folder only ever holds
   // projects the sidebar can show (they are first-party bundled examples,
-  // so the §4 trust prompt does not apply; preflight still runs on open).
-  for (const path of examplePaths) store.trustProject(path)
-  const { trustedPaths, projectFolders } = useProjectStore.getState()
+  // so opening them adds them to the history; preflight still runs on open).
+  for (const path of examplePaths) store.addRecentProject(path)
+  const { recentProjectPaths, projectFolders } = useProjectStore.getState()
   useProjectStore.getState().setProjectFolders([
     {
       id: UTILITIES_FOLDER_ID,
@@ -40,5 +40,8 @@ export async function ensureUtilitiesFolder(): Promise<void> {
     },
     ...projectFolders,
   ])
-  void saveProjectIndex(trustedPaths, useProjectStore.getState().projectFolders)
+  void saveProjectIndex(
+    recentProjectPaths,
+    useProjectStore.getState().projectFolders
+  )
 }

@@ -47,9 +47,8 @@ describe('AppShell', () => {
     })
     useProjectStore.setState({
       currentProject: null,
-      trustedPaths: [],
+      recentProjectPaths: [],
       projectFolders: [],
-      pendingTrustPath: null,
       pendingPreflightPath: null,
       pendingSwitchPath: null,
       preflightStatus: 'idle',
@@ -198,7 +197,14 @@ describe('AppShell', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(
       'Port 6868 is already in use.'
     )
-    expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument()
+    // v1.2.0 (issue #14): a port conflict additionally surfaces the occupant
+    // block — the plain Retry stays exactly one, Release and Retry is its
+    // own control.
+    expect(screen.getByTestId('port-conflict-block')).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: /^retry$/i })).toHaveLength(1)
+    expect(
+      screen.getByRole('button', { name: /release and retry/i })
+    ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /back/i })).toBeInTheDocument()
     expect(screen.getByText(/technical details/i)).toBeInTheDocument()
   })
@@ -321,6 +327,6 @@ describe('AppShell', () => {
     expect(screen.getByTestId('folder-name')).toHaveTextContent('Utilities')
     // Both examples are folder members, so the top segment stays empty.
     expect(screen.queryByTestId('project-entry')).not.toBeInTheDocument()
-    expect(useProjectStore.getState().trustedPaths).toEqual(EXAMPLES)
+    expect(useProjectStore.getState().recentProjectPaths).toEqual(EXAMPLES)
   })
 })

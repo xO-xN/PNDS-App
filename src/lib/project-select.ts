@@ -98,7 +98,7 @@ export function moveProjectSelection(direction: 1 | -1): void {
   if (drilledIn) setActiveFolderView(viewFolderId)
 
   const visible = visibleProjectPaths(
-    project.trustedPaths,
+    project.recentProjectPaths,
     project.projectFolders,
     viewFolderId
   )

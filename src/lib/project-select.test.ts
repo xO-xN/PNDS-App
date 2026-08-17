@@ -35,9 +35,8 @@ describe('selectProject', () => {
     vi.clearAllMocks()
     useProjectStore.setState({
       currentProject: null,
-      trustedPaths: ['/a', '/b'],
+      recentProjectPaths: ['/a', '/b'],
       projectFolders: [],
-      pendingTrustPath: null,
       pendingPreflightPath: null,
       pendingSwitchPath: null,
       preflightStatus: 'idle',
@@ -136,9 +135,8 @@ describe('moveProjectSelection', () => {
     })
     useProjectStore.setState({
       currentProject: null,
-      trustedPaths: ['/a', '/b', '/c'],
+      recentProjectPaths: ['/a', '/b', '/c'],
       projectFolders: [],
-      pendingTrustPath: null,
       pendingPreflightPath: null,
       pendingSwitchPath: null,
       activeFolderId: null,
@@ -268,7 +266,7 @@ describe('moveProjectSelection', () => {
   })
 
   it('does nothing when the current view shows no projects', () => {
-    useProjectStore.setState({ trustedPaths: [] })
+    useProjectStore.setState({ recentProjectPaths: [] })
 
     moveProjectSelection(1)
     moveProjectSelection(-1)

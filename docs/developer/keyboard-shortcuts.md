@@ -110,8 +110,8 @@ const handleKeyDown = (event: KeyboardEvent) => {
   if (!/^[1-9]$/.test(event.key)) return
   if (isEditableTarget(event.target)) return // don't fight text inputs
   event.preventDefault()
-  const { trustedPaths, projectFolders } = useProjectStore.getState()
-  const path = ungroupedProjectPaths(trustedPaths, projectFolders)[
+  const { recentProjectPaths, projectFolders } = useProjectStore.getState()
+  const path = ungroupedProjectPaths(recentProjectPaths, projectFolders)[
     Number(event.key) - 1
   ]
   if (path) selectProject(path, 'keyboard')

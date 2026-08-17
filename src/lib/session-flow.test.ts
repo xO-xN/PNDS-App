@@ -68,8 +68,7 @@ describe('session-flow Retry (§9.3)', () => {
     vi.clearAllMocks()
     useProjectStore.setState({
       currentProject: { path: '/p', manifest },
-      trustedPaths: ['/p'],
-      pendingTrustPath: null,
+      recentProjectPaths: ['/p'],
       preflightStatus: 'ready',
       preflightError: null,
     })

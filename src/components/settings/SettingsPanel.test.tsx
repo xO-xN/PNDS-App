@@ -1,12 +1,22 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor, cleanup } from '@/test/test-utils'
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  cleanup,
+  within,
+} from '@/test/test-utils'
 import { check } from '@tauri-apps/plugin-updater'
 import { locale } from '@tauri-apps/plugin-os'
 import { commands } from '@/lib/tauri-bindings'
 import i18n from '@/i18n/config'
 import { useSettingsStore } from '@/store/settings-store'
+import { useProjectStore } from '@/store/project-store'
+import { useSessionStore } from '@/store/session-store'
 import { useCommandKeyboard } from '@/hooks/use-command-keyboard'
 import { SettingsPanel } from './SettingsPanel'
+import type { Manifest } from '@/lib/tauri-bindings'
 
 // applyLanguageSetting('system') re-detects the OS locale — keep it fixed.
 vi.mock('@tauri-apps/plugin-os', () => ({
@@ -161,5 +171,305 @@ describe('SettingsPanel (v1.2.0 issue #13)', () => {
       expect(about).not.toBeNull()
       expect(scrollIntoView).toHaveBeenCalled()
     })
+  })
+})
+
+const manifest: Manifest = {
+  schemaVersion: 1,
+  id: 'inarticulate-iii',
+  name: 'Inarticulate III',
+  version: '0.1.0',
+  description: null,
+  scoreServer: {
+    entry: 'server.js',
+    workingDirectory: '.',
+    performerPort: 6868,
+    monitorPort: 6869,
+  },
+  audio: {
+    defaultMode: 'internal',
+    supportedModes: ['internal', 'external', 'none'],
+    synthdefs: null,
+    scsynth: { sampleRate: 48000, blockSize: 64, audioBusChannels: 128 },
+    standaloneTarget: null,
+  },
+}
+
+/** v1.2.0 (issue #15): the Projects section is history management — the
+ * full list, per-item removal with sidebar-✕ semantics, and Clear all. */
+describe('SettingsPanel Projects section (v1.2.0 issue #15)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useProjectStore.setState({
+      currentProject: null,
+      recentProjectPaths: ['/Users/test/Score 4', '/Users/test/Utility Tool'],
+      projectFolders: [],
+      activeFolderId: null,
+      projectDisplayNames: {},
+      pendingPreflightPath: null,
+      preflightStatus: 'idle',
+      preflightError: null,
+    })
+  })
+
+  afterEach(() => {
+    cleanup()
+    useProjectStore.setState({
+      currentProject: null,
+      recentProjectPaths: [],
+      projectFolders: [],
+      activeFolderId: null,
+      projectDisplayNames: {},
+    })
+  })
+
+  it('lists the full history with display names and paths', () => {
+    useSettingsStore.getState().openSettings()
+    render(<SettingsPanel />)
+
+    const rows = screen.getAllByTestId('settings-project-row')
+    expect(rows).toHaveLength(2)
+    expect(rows[0]).toHaveTextContent('Score 4')
+    expect(rows[0]).toHaveTextContent('/Users/test/Score 4')
+    expect(rows[1]).toHaveTextContent('Utility Tool')
+  })
+
+  it('shows the empty state and a disabled Clear All when no projects exist', () => {
+    useProjectStore.setState({ recentProjectPaths: [] })
+    useSettingsStore.getState().openSettings()
+    render(<SettingsPanel />)
+
+    expect(
+      screen.getByText('No projects in the history yet')
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Clear All' })).toBeDisabled()
+  })
+
+  it('Clear All is disabled while a session runs (sidebar ✕ never faces this)', () => {
+    useSessionStore.setState({ sessionStatus: 'ready' })
+    useSettingsStore.getState().openSettings()
+    render(<SettingsPanel />)
+
+    expect(screen.getByRole('button', { name: 'Clear All' })).toBeDisabled()
+    useSessionStore.setState({ sessionStatus: 'idle' })
+  })
+
+  it('removes one project with sidebar-✕ semantics and persists the index', async () => {
+    useSettingsStore.getState().openSettings()
+    render(<SettingsPanel />)
+
+    const removeButtons = screen.getAllByTestId('settings-remove-project')
+    fireEvent.click(removeButtons[0] as HTMLElement)
+
+    expect(useProjectStore.getState().recentProjectPaths).toEqual([
+      '/Users/test/Utility Tool',
+    ])
+    await waitFor(() => {
+      expect(commands.savePreferences).toHaveBeenCalledWith(
+        expect.objectContaining({
+          recentProjects: ['/Users/test/Utility Tool'],
+        })
+      )
+    })
+  })
+
+  it('offers no removal for the selected project (same as the sidebar ✕)', () => {
+    useProjectStore.setState({
+      currentProject: { path: '/Users/test/Score 4', manifest },
+      preflightStatus: 'ready',
+    })
+    useSettingsStore.getState().openSettings()
+    render(<SettingsPanel />)
+
+    const rows = screen.getAllByTestId('settings-project-row')
+    expect(
+      within(rows[0] as HTMLElement).queryByTestId('settings-remove-project')
+    ).not.toBeInTheDocument()
+    expect(
+      within(rows[1] as HTMLElement).getByTestId('settings-remove-project')
+    ).toBeInTheDocument()
+    expect(rows[0]).toHaveTextContent('Inarticulate III')
+    expect(screen.getByTestId('settings-project-current')).toHaveTextContent(
+      'selected'
+    )
+  })
+
+  it('Clear All empties the history in one click and persists it', async () => {
+    useSettingsStore.getState().openSettings()
+    render(<SettingsPanel />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear All' }))
+
+    expect(useProjectStore.getState().recentProjectPaths).toEqual([])
+    expect(
+      screen.getByText('No projects in the history yet')
+    ).toBeInTheDocument()
+    await waitFor(() => {
+      expect(commands.savePreferences).toHaveBeenCalledWith(
+        expect.objectContaining({
+          recentProjects: [],
+          projectFolders: [],
+        })
+      )
+    })
+  })
+})
+
+/** v1.2.0 (issue #14): the Ports section watches the selected project's
+ * manifest ports (6868/6869 fallback), shows occupant identity, releases
+ * behind a confirm dialog, and queries only on open + manual refresh. */
+describe('SettingsPanel Ports section (v1.2.0 issue #14)', () => {
+  const manifestCustomPorts: Manifest = {
+    ...manifest,
+    scoreServer: {
+      entry: 'server.js',
+      workingDirectory: '.',
+      performerPort: 7000,
+      monitorPort: 7001,
+    },
+  }
+
+  const occupant = {
+    pid: 4242,
+    name: 'node',
+    commandLine: '/usr/local/bin/node /Users/test/rogue/server.js',
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useProjectStore.setState({
+      currentProject: null,
+      recentProjectPaths: [],
+      projectFolders: [],
+      activeFolderId: null,
+      projectDisplayNames: {},
+      preflightStatus: 'idle',
+      preflightError: null,
+    })
+  })
+
+  afterEach(() => {
+    cleanup()
+  })
+
+  it('queries the selected project’s manifest ports once on open, no polling', async () => {
+    useProjectStore.setState({
+      currentProject: { path: '/Users/test/p', manifest: manifestCustomPorts },
+      preflightStatus: 'ready',
+    })
+    useSettingsStore.getState().openSettings()
+    render(<SettingsPanel />)
+
+    await waitFor(() => {
+      expect(commands.checkPortStatus).toHaveBeenCalledWith(7000)
+      expect(commands.checkPortStatus).toHaveBeenCalledWith(7001)
+    })
+    const callsAfterOpen = vi.mocked(commands.checkPortStatus).mock.calls.length
+    // No timer, no interval: the count stays put without user action.
+    await new Promise(resolve => setTimeout(resolve, 120))
+    expect(vi.mocked(commands.checkPortStatus).mock.calls.length).toBe(
+      callsAfterOpen
+    )
+
+    const rows = screen.getAllByTestId('port-row')
+    expect(rows.map(row => row.dataset.port)).toEqual(['7000', '7001'])
+    expect(screen.getAllByTestId('port-available')).toHaveLength(2)
+  })
+
+  it('falls back to 6868/6869 with the hint when no project is selected', async () => {
+    useSettingsStore.getState().openSettings()
+    render(<SettingsPanel />)
+
+    await waitFor(() => {
+      expect(commands.checkPortStatus).toHaveBeenCalledWith(6868)
+      expect(commands.checkPortStatus).toHaveBeenCalledWith(6869)
+    })
+    expect(
+      screen.getByText('Default ports (no project selected)')
+    ).toBeInTheDocument()
+  })
+
+  it('shows the occupant identity and releases after a full-identity confirm', async () => {
+    vi.mocked(commands.checkPortStatus).mockImplementation(port =>
+      Promise.resolve(
+        port === 6868
+          ? { status: 'ok', data: { port, occupant } }
+          : { status: 'ok', data: { port, occupant: null } }
+      )
+    )
+    vi.mocked(commands.releasePort).mockResolvedValue({
+      status: 'ok',
+      data: { port: 6868, occupant: null },
+    })
+    useSettingsStore.getState().openSettings()
+    render(<SettingsPanel />)
+
+    expect(await screen.findByTestId('port-in-use')).toHaveTextContent('In use')
+    expect(screen.getByTestId('port-occupant')).toHaveTextContent('4242')
+    expect(screen.getByTestId('port-occupant')).toHaveTextContent(
+      '/usr/local/bin/node /Users/test/rogue/server.js'
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Release' }))
+
+    // The confirm dialog repeats the full identity before anything dies.
+    const dialog = await screen.findByRole('alertdialog')
+    expect(dialog).toHaveTextContent('Release port 6868?')
+    expect(dialog).toHaveTextContent('4242')
+    expect(dialog).toHaveTextContent(
+      '/usr/local/bin/node /Users/test/rogue/server.js'
+    )
+    expect(commands.releasePort).not.toHaveBeenCalled()
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Release' }))
+
+    await waitFor(() => {
+      expect(commands.releasePort).toHaveBeenCalledWith(6868)
+    })
+    await waitFor(() => {
+      // Both rows read available — 6868 after the release, 6869 all along.
+      expect(screen.getAllByTestId('port-available')).toHaveLength(2)
+    })
+    expect(screen.queryByTestId('port-occupant')).not.toBeInTheDocument()
+  })
+
+  it('the Refresh button re-queries both ports on demand', async () => {
+    useSettingsStore.getState().openSettings()
+    render(<SettingsPanel />)
+
+    await waitFor(() => {
+      expect(commands.checkPortStatus).toHaveBeenCalledTimes(2)
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+    await waitFor(() => {
+      expect(commands.checkPortStatus).toHaveBeenCalledTimes(4)
+    })
+  })
+
+  it('shows “this project is running” and offers no release while the session is live', async () => {
+    vi.mocked(commands.checkPortStatus).mockImplementation(port =>
+      Promise.resolve({
+        status: 'ok',
+        data: { port, occupant },
+      })
+    )
+    useProjectStore.setState({
+      currentProject: { path: '/Users/test/p', manifest },
+      preflightStatus: 'ready',
+    })
+    useSessionStore.setState({ sessionStatus: 'ready' })
+    useSettingsStore.getState().openSettings()
+    render(<SettingsPanel />)
+
+    expect(await screen.findAllByTestId('port-running')).toHaveLength(2)
+    expect(
+      screen.getAllByText('Close the project to release its ports.')
+    ).toHaveLength(2)
+    // Our own session holds the ports — no occupant dump, no Release.
+    expect(screen.queryByTestId('port-occupant')).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Release' })
+    ).not.toBeInTheDocument()
+    useSessionStore.setState({ sessionStatus: 'idle' })
   })
 })

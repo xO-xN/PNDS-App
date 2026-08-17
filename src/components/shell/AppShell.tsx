@@ -73,7 +73,7 @@ export function AppShell() {
       }
       if (prefs?.recentProjects?.length) {
         const store = useProjectStore.getState()
-        for (const p of prefs.recentProjects) store.trustProject(p)
+        for (const p of prefs.recentProjects) store.addRecentProject(p)
       }
       // v1.1.2: folder structure; old preference files simply lack the
       // field (Rust serde default) and restore as no folders.

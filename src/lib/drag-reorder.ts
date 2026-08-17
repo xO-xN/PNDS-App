@@ -150,7 +150,7 @@ export function cardShift(
 }
 
 /**
- * Top-level drops reorder only the ungrouped segment, but `trustedPaths`
+ * Top-level drops reorder only the ungrouped segment, but `recentProjectPaths`
  * stays the master list: rebuild it by swapping each ungrouped slot for the
  * next path of the new order, leaving every folder member in place. A
  * `newUngrouped` that is not a reorder of the current ungrouped set returns

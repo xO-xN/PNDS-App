@@ -33,9 +33,8 @@ describe('project-store', () => {
   beforeEach(() => {
     useProjectStore.setState({
       currentProject: null,
-      trustedPaths: [],
+      recentProjectPaths: [],
       projectFolders: [],
-      pendingTrustPath: null,
       pendingPreflightPath: null,
       pendingSwitchPath: null,
       activeFolderId: null,
@@ -44,20 +43,20 @@ describe('project-store', () => {
     })
   })
 
-  it('starts untrusted and idle', () => {
-    expect(useProjectStore.getState().isTrusted('/any/path')).toBe(false)
+  it('starts with an empty history and idle preflight', () => {
+    expect(useProjectStore.getState().recentProjectPaths).toEqual([])
     expect(useProjectStore.getState().preflightStatus).toBe('idle')
   })
 
-  it('trusts a project path once confirmed (§4)', () => {
-    useProjectStore.getState().trustProject('/Users/test/Project')
-    expect(useProjectStore.getState().isTrusted('/Users/test/Project')).toBe(
-      true
+  it('adds a project path to the history without duplication', () => {
+    useProjectStore.getState().addRecentProject('/Users/test/Project')
+    expect(useProjectStore.getState().recentProjectPaths).toContain(
+      '/Users/test/Project'
     )
 
-    // Trusting again must not duplicate the entry
-    useProjectStore.getState().trustProject('/Users/test/Project')
-    expect(useProjectStore.getState().trustedPaths).toHaveLength(1)
+    // Adding again must not duplicate the entry
+    useProjectStore.getState().addRecentProject('/Users/test/Project')
+    expect(useProjectStore.getState().recentProjectPaths).toHaveLength(1)
   })
 
   it('tracks the preflight lifecycle', () => {
@@ -82,24 +81,41 @@ describe('project-store', () => {
     expect(state.currentProject).toBeNull()
   })
 
-  it('clearProject resets the session state but keeps trust', () => {
-    useProjectStore.getState().trustProject('/p')
+  it('clearProject resets the session state but keeps the history', () => {
+    useProjectStore.getState().addRecentProject('/p')
     useProjectStore.getState().preflightSucceeded('/p', manifest)
     useProjectStore.getState().clearProject()
     const state = useProjectStore.getState()
     expect(state.currentProject).toBeNull()
     expect(state.preflightStatus).toBe('idle')
-    expect(state.isTrusted('/p')).toBe(true)
+    expect(state.recentProjectPaths).toEqual(['/p'])
   })
 
-  it('removeTrusted drops a path and clears it if it was current', () => {
-    useProjectStore.getState().trustProject('/a')
-    useProjectStore.getState().trustProject('/b')
+  it('removeRecentProject drops a path and clears it if it was current', () => {
+    useProjectStore.getState().addRecentProject('/a')
+    useProjectStore.getState().addRecentProject('/b')
     useProjectStore.getState().preflightSucceeded('/a', manifest)
 
-    useProjectStore.getState().removeTrusted('/a')
+    useProjectStore.getState().removeRecentProject('/a')
     const state = useProjectStore.getState()
-    expect(state.trustedPaths).toEqual(['/b'])
+    expect(state.recentProjectPaths).toEqual(['/b'])
+    expect(state.currentProject).toBeNull()
+    expect(state.preflightStatus).toBe('idle')
+  })
+
+  it('clearRecentProjects empties the history, memberships and selection (v1.2.0)', () => {
+    useProjectStore.getState().addRecentProject('/a')
+    useProjectStore.getState().addRecentProject('/b')
+    useProjectStore.getState().preflightSucceeded('/a', manifest)
+    const folderId = useProjectStore.getState().createFolder('Set list')
+    useProjectStore.getState().moveProjectToFolder(folderId, '/b')
+
+    useProjectStore.getState().clearRecentProjects()
+    const state = useProjectStore.getState()
+    expect(state.recentProjectPaths).toEqual([])
+    // Folders survive as empty shells (the Utilities folder stays, too).
+    expect(state.projectFolders).toHaveLength(1)
+    expect(state.projectFolders[0]?.projectPaths).toEqual([])
     expect(state.currentProject).toBeNull()
     expect(state.preflightStatus).toBe('idle')
   })
@@ -109,9 +125,8 @@ describe('project-store folders (v1.1.2, spec issue #4)', () => {
   beforeEach(() => {
     useProjectStore.setState({
       currentProject: null,
-      trustedPaths: ['/a', '/b', '/c'],
+      recentProjectPaths: ['/a', '/b', '/c'],
       projectFolders: [],
-      pendingTrustPath: null,
       pendingPreflightPath: null,
       pendingSwitchPath: null,
       activeFolderId: null,
@@ -133,14 +148,14 @@ describe('project-store folders (v1.1.2, spec issue #4)', () => {
     ])
   })
 
-  it('deleting a folder returns its projects to ungrouped (never untrusted)', () => {
+  it('deleting a folder returns its projects to ungrouped (never removed from history)', () => {
     const store = useProjectStore.getState()
     const id = store.createFolder('Set list')
     store.moveProjectToFolder(id, '/a')
     store.moveProjectToFolder(id, '/b')
     expect(
       ungroupedProjectPaths(
-        useProjectStore.getState().trustedPaths,
+        useProjectStore.getState().recentProjectPaths,
         useProjectStore.getState().projectFolders
       )
     ).toEqual(['/c'])
@@ -148,9 +163,9 @@ describe('project-store folders (v1.1.2, spec issue #4)', () => {
     store.deleteFolder(id)
     const state = useProjectStore.getState()
     expect(state.projectFolders).toEqual([])
-    expect(state.trustedPaths).toEqual(['/a', '/b', '/c'])
+    expect(state.recentProjectPaths).toEqual(['/a', '/b', '/c'])
     expect(
-      ungroupedProjectPaths(state.trustedPaths, state.projectFolders)
+      ungroupedProjectPaths(state.recentProjectPaths, state.projectFolders)
     ).toEqual(['/a', '/b', '/c'])
   })
 
@@ -176,18 +191,21 @@ describe('project-store folders (v1.1.2, spec issue #4)', () => {
     const folders = useProjectStore.getState().projectFolders
     expect(folders.find(f => f.id === id)?.projectPaths).toEqual(['/b'])
     expect(
-      ungroupedProjectPaths(useProjectStore.getState().trustedPaths, folders)
+      ungroupedProjectPaths(
+        useProjectStore.getState().recentProjectPaths,
+        folders
+      )
     ).toEqual(['/a', '/c'])
   })
 
-  it('removeTrusted drops folder membership too (index-only delete)', () => {
+  it('removeRecentProject drops folder membership too (index-only delete)', () => {
     const store = useProjectStore.getState()
     const id = store.createFolder('Set list')
     store.moveProjectToFolder(id, '/b')
 
-    store.removeTrusted('/b')
+    store.removeRecentProject('/b')
     const state = useProjectStore.getState()
-    expect(state.trustedPaths).toEqual(['/a', '/c'])
+    expect(state.recentProjectPaths).toEqual(['/a', '/c'])
     expect(state.projectFolders[0]?.projectPaths).toEqual([])
     expect(state.projectFolders).toHaveLength(1) // empty folder survives
   })
@@ -197,10 +215,10 @@ describe('project-store folders (v1.1.2, spec issue #4)', () => {
     const id = store.createFolder('Set list')
     store.moveProjectToFolder(id, '/b')
     // Master-list order is reflected in the ungrouped order.
-    useProjectStore.setState({ trustedPaths: ['/c', '/a', '/b'] })
+    useProjectStore.setState({ recentProjectPaths: ['/c', '/a', '/b'] })
     expect(
       ungroupedProjectPaths(
-        useProjectStore.getState().trustedPaths,
+        useProjectStore.getState().recentProjectPaths,
         useProjectStore.getState().projectFolders
       )
     ).toEqual(['/c', '/a'])
@@ -213,9 +231,8 @@ describe('folder-aware view derivation (v1.1.2 T3, spec issue #7)', () => {
   beforeEach(() => {
     useProjectStore.setState({
       currentProject: null,
-      trustedPaths: ['/a', '/b', '/c', '/d'],
+      recentProjectPaths: ['/a', '/b', '/c', '/d'],
       projectFolders: [],
-      pendingTrustPath: null,
       pendingPreflightPath: null,
       pendingSwitchPath: null,
       activeFolderId: null,
@@ -232,7 +249,7 @@ describe('folder-aware view derivation (v1.1.2 T3, spec issue #7)', () => {
   const visible = () => {
     const state = useProjectStore.getState()
     return visibleProjectPaths(
-      state.trustedPaths,
+      state.recentProjectPaths,
       state.projectFolders,
       state.activeFolderId
     )
@@ -267,7 +284,7 @@ describe('folder-aware view derivation (v1.1.2 T3, spec issue #7)', () => {
   it('a folder with more than nine members still derives the full list', () => {
     const store = useProjectStore.getState()
     for (let i = 0; i < 8; i++) {
-      store.trustProject(`/extra-${i}`)
+      store.addRecentProject(`/extra-${i}`)
       store.moveProjectToFolder(folderId, `/extra-${i}`)
     }
     store.setActiveFolderId(folderId)
@@ -287,9 +304,8 @@ describe('visible reorder from drags (v1.1.2 T4, spec issue #8)', () => {
     // Master [a, b, c, d, e] with b and d filed away; ungrouped [a, c, e].
     useProjectStore.setState({
       currentProject: null,
-      trustedPaths: ['/a', '/b', '/c', '/d', '/e'],
+      recentProjectPaths: ['/a', '/b', '/c', '/d', '/e'],
       projectFolders: [],
-      pendingTrustPath: null,
       pendingPreflightPath: null,
       pendingSwitchPath: null,
       activeFolderId: null,
@@ -305,13 +321,13 @@ describe('visible reorder from drags (v1.1.2 T4, spec issue #8)', () => {
   it('a top-level drop remaps the master list, folder members keep their slots', () => {
     useProjectStore.getState().applyVisibleReorder(['/c', '/e', '/a'])
     const state = useProjectStore.getState()
-    expect(state.trustedPaths).toEqual(['/c', '/b', '/e', '/d', '/a'])
+    expect(state.recentProjectPaths).toEqual(['/c', '/b', '/e', '/d', '/a'])
     expect(
       state.projectFolders.find(f => f.id === folderId)?.projectPaths
     ).toEqual(['/b', '/d'])
     // The ungrouped view now derives the dragged order.
     expect(
-      visibleProjectPaths(state.trustedPaths, state.projectFolders, null)
+      visibleProjectPaths(state.recentProjectPaths, state.projectFolders, null)
     ).toEqual(['/c', '/e', '/a'])
   })
 
@@ -323,12 +339,12 @@ describe('visible reorder from drags (v1.1.2 T4, spec issue #8)', () => {
       state.projectFolders.find(f => f.id === folderId)?.projectPaths
     ).toEqual(['/d', '/b'])
     // The master list is untouched at the top level.
-    expect(state.trustedPaths).toEqual(['/a', '/b', '/c', '/d', '/e'])
+    expect(state.recentProjectPaths).toEqual(['/a', '/b', '/c', '/d', '/e'])
   })
 
   it('ignores a set that is not the current visible list', () => {
     useProjectStore.getState().applyVisibleReorder(['/a', '/c'])
-    expect(useProjectStore.getState().trustedPaths).toEqual([
+    expect(useProjectStore.getState().recentProjectPaths).toEqual([
       '/a',
       '/b',
       '/c',
@@ -349,9 +365,8 @@ describe('folder reorder from drags (v1.1.2 T5, spec issue #9)', () => {
   beforeEach(() => {
     useProjectStore.setState({
       currentProject: null,
-      trustedPaths: ['/a'],
+      recentProjectPaths: ['/a'],
       projectFolders: [],
-      pendingTrustPath: null,
       pendingPreflightPath: null,
       pendingSwitchPath: null,
       activeFolderId: null,
@@ -397,7 +412,7 @@ describe('protected folders (v1.1.2 T7, spec issue #11)', () => {
   beforeEach(() => {
     useProjectStore.setState({
       currentProject: null,
-      trustedPaths: ['/a', '/b'],
+      recentProjectPaths: ['/a', '/b'],
       projectFolders: [
         {
           id: UTILITIES_FOLDER_ID,
@@ -405,7 +420,6 @@ describe('protected folders (v1.1.2 T7, spec issue #11)', () => {
           projectPaths: ['/a', '/b'],
         },
       ],
-      pendingTrustPath: null,
       pendingPreflightPath: null,
       pendingSwitchPath: null,
       activeFolderId: null,

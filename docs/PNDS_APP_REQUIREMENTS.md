@@ -19,7 +19,7 @@ PNDS App 是运行 PNDS 数字乐谱工程的 macOS 现场 Host。
 App 负责：
 
 - 打开用户选择的本地工程目录；
-- 建立信任并执行 preflight；
+- 执行 preflight；
 - 使用随包 Node 启动工程 score server；
 - 在 Internal 模式启动和管理随包 scsynth；
 - 管理音频模式、CoreAudio 输出设备、External target 与适用的 master gain；
@@ -59,19 +59,20 @@ App 不是：
 
 ---
 
-## 3. 工程选择、信任与历史
+## 3. 工程选择与历史
 
 必须实现：
 
 - 通过目录选择器打开工程；
-- 首次打开路径时明确提示将执行本地 Node 代码；
-- 用户确认后将绝对路径保存为本机 Recent Projects；
+- 打开路径即保存为本机 Recent Projects（工程历史），并直接进入 preflight；
 - 点击历史条目重新 preflight；
 - 支持拖拽排序和移除历史记录；
 - 失效路径显示可读错误；
 - App 启动进入 Welcome，不自动运行历史工程。
 
-App 不复制、修改、上传或安装工程内容。设备、OSC target 与 recent paths 是 App 本机偏好，不写入 manifest。
+v1.2.0 移除了首次打开路径的信任确认：PNDS App 是"操作者即机主"的演出工具，打开的工程由操作者本人放入本机，运行前再弹一次本地代码确认是纯摩擦；工程历史的增删与数据格式（`recentProjects`）保持不变。
+
+运行时 App 不复制、修改、上传或安装工程内容。开发者工具的显式操作除外（编译写入 synthdefs 产物、打包只读源工程）；App 自管数据目录内的解压副本随历史移除回收。设备、OSC target 与 recent paths 是 App 本机偏好，不写入 manifest。
 
 Preflight 必须包含：
 

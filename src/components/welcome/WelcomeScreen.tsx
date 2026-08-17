@@ -1,29 +1,17 @@
 import { useTranslation } from 'react-i18next'
 import { useProjectStore } from '@/store/project-store'
-import { confirmTrustAndOpen } from '@/lib/open-project'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
 
 /**
  * Welcome main area (§10.4; Figma "Starting Page"): hero text plus the
  * plain hint. Adding a project is the sidebar's "+" button (v1.1.2 moved
  * it into the Projects header); projects start by clicking a sidebar
- * entry — after trust (§4) and preflight (§5), starting is explicit via
- * the Load button. Renders the trust confirmation dialog.
+ * entry — preflight runs directly (v1.2.0 removed the trust gate, spec
+ * issue #15) and starting is explicit via the Load button.
  */
 export function WelcomeScreen() {
   const { t } = useTranslation()
   const preflightStatus = useProjectStore(state => state.preflightStatus)
   const preflightError = useProjectStore(state => state.preflightError)
-  const pendingTrustPath = useProjectStore(state => state.pendingTrustPath)
 
   return (
     <div className="flex min-h-full flex-col items-center justify-center bg-(--pnds-bg) p-8 animate-[fade-in_0.8s_ease-in]">
@@ -55,34 +43,6 @@ export function WelcomeScreen() {
           {preflightError}
         </div>
       )}
-
-      <AlertDialog
-        open={pendingTrustPath !== null}
-        onOpenChange={openState => {
-          if (!openState) useProjectStore.getState().requestTrust(null)
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t('trust.title')}</AlertDialogTitle>
-            <AlertDialogDescription className="whitespace-pre-wrap break-all">
-              {t('trust.description', { path: pendingTrustPath })}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{t('trust.cancel')}</AlertDialogCancel>
-            {/* autoFocus makes the primary (filled) action the Enter
-                default — Radix would otherwise focus the first tabbable,
-                which is Cancel. */}
-            <AlertDialogAction
-              autoFocus
-              onClick={() => void confirmTrustAndOpen()}
-            >
-              {t('trust.confirm')}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   )
 }

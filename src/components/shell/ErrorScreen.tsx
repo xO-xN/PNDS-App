@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { writeText } from '@tauri-apps/plugin-clipboard-manager'
 import { toast } from 'sonner'
@@ -7,12 +7,27 @@ import { useSessionStore } from '@/store/session-store'
 import { logger } from '@/lib/logger'
 import { stopAndReset } from '@/lib/open-project'
 import { start } from '@/lib/session-flow'
+import { commands, type PortOccupant } from '@/lib/tauri-bindings'
 import { Button } from '@/components/ui/button'
+import { PortOccupantDetails } from '@/components/settings/PortOccupantDetails'
+
+/**
+ * Rust preflight/start port-conflict message (see preflight.rs — the shape
+ * is pinned there by `port_conflict_message_is_parseable`).
+ */
+const PORT_CONFLICT_PATTERN = /^Port (\d+) is already in use\./m
 
 /**
  * Error Page (§10.3): concise summary + Retry + Back, with expandable,
  * copyable technical details. Retry starts a fresh loading session;
  * Back returns to Welcome without auto-restarting.
+ *
+ * v1.2.0 (issue #14): when the failure is a port conflict, the page also
+ * shows who holds the port and offers [Release and Retry] — one interaction
+ * that clears the occupant (same SIGTERM→grace→SIGKILL semantics as the
+ * settings panel) and restarts the session. If the occupant can't be
+ * resolved (query failed, or the port was already freed elsewhere) the
+ * block hides and plain Retry carries the case.
  */
 export function ErrorScreen() {
   const { t } = useTranslation()
@@ -24,6 +39,28 @@ export function ErrorScreen() {
   const lanIp = useSessionStore(state => state.lanIp)
   const oscTarget = useSessionStore(state => state.oscTarget)
   const [isRetrying, setIsRetrying] = useState(false)
+  const [isReleasing, setIsReleasing] = useState(false)
+
+  const conflictMatch = sessionError?.match(PORT_CONFLICT_PATTERN)
+  const conflictPort = conflictMatch ? Number(conflictMatch[1]) : null
+
+  // null = not resolved yet, false = resolution failed or port already
+  // free, occupant = a live holder of the port.
+  const [conflictOccupant, setConflictOccupant] = useState<
+    PortOccupant | false | null
+  >(null)
+  useEffect(() => {
+    setConflictOccupant(null)
+    if (conflictPort === null) return
+    let stale = false
+    void commands.checkPortStatus(conflictPort).then(result => {
+      if (stale) return
+      setConflictOccupant(result.status === 'ok' ? result.data.occupant : false)
+    })
+    return () => {
+      stale = true
+    }
+  }, [conflictPort])
 
   const handleRetry = async () => {
     if (!currentProject || !lanIp || isRetrying) return
@@ -37,6 +74,26 @@ export function ErrorScreen() {
     } finally {
       setIsRetrying(false)
     }
+  }
+
+  const handleReleaseAndRetry = async () => {
+    if (conflictPort === null || isReleasing || isRetrying) return
+    setIsReleasing(true)
+    logger.info('Releasing conflicting port before retry', {
+      port: conflictPort,
+    })
+    const result = await commands.releasePort(conflictPort)
+    if (result.status === 'error') {
+      logger.error('Failed to release conflicting port', {
+        port: conflictPort,
+        error: result.error,
+      })
+      toast.error(t('error.releaseFailed'))
+      setIsReleasing(false)
+      return
+    }
+    setIsReleasing(false)
+    await handleRetry()
   }
 
   const handleBack = async () => {
@@ -75,6 +132,32 @@ export function ErrorScreen() {
       >
         {sessionError ?? t('toast.error.generic')}
       </p>
+
+      {conflictPort !== null && conflictOccupant !== false && (
+        <div
+          data-testid="port-conflict-block"
+          className="w-full max-w-xl rounded-xl border border-(--pnds-text)/10 bg-(--pnds-card) p-4 text-sm"
+        >
+          <p className="font-medium text-(--pnds-text)">
+            {t('error.portConflictOccupant', { port: conflictPort })}
+          </p>
+          {conflictOccupant ? (
+            <PortOccupantDetails occupant={conflictOccupant} className="mt-2" />
+          ) : (
+            <p className="text-muted-foreground mt-2 text-xs">
+              {t('settings.portChecking')}
+            </p>
+          )}
+          <Button
+            size="sm"
+            className="mt-3"
+            onClick={() => void handleReleaseAndRetry()}
+            disabled={isReleasing || isRetrying || !currentProject || !lanIp}
+          >
+            {isReleasing ? t('error.releasing') : t('error.releaseAndRetry')}
+          </Button>
+        </div>
+      )}
 
       <div className="flex gap-3">
         <Button

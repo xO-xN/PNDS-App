@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use tauri::{AppHandle, Manager, State};
 
 use crate::project::manifest::{load_manifest, Manifest};
+use crate::project::ports::PortStatus;
 use crate::project::preflight;
 use crate::project::session::{SessionManager, SessionSnapshot};
 
@@ -125,4 +126,22 @@ pub async fn list_output_devices(
     sample_rate: u32,
 ) -> Result<crate::project::audio::AudioDeviceCapabilities, String> {
     crate::project::audio::refresh_output_devices(sample_rate)
+}
+
+/// v1.2.0 (issue #14): occupancy of one TCP port — the listening process's
+/// pid, name and full command line, or None when free. The Settings port
+/// section queries this on open / manual refresh (no polling).
+#[tauri::command]
+#[specta::specta]
+pub async fn check_port_status(port: u16) -> Result<PortStatus, String> {
+    Ok(crate::project::ports::port_status(port))
+}
+
+/// v1.2.0 (issue #14): release an occupied port — SIGTERM → grace → SIGKILL
+/// on the freshly-resolved occupant (same escalation as §8.2 child cleanup).
+/// Returns the port's post-release status; the caller refreshes from it.
+#[tauri::command]
+#[specta::specta]
+pub async fn release_port(port: u16) -> Result<PortStatus, String> {
+    Ok(crate::project::ports::release_port(port))
 }

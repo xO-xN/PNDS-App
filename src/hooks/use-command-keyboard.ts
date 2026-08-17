@@ -96,10 +96,10 @@ export function useCommandKeyboard(): void {
       if (!/^[1-9]$/.test(event.key)) return
       if (isEditableTarget(event.target)) return
       event.preventDefault()
-      const { trustedPaths, projectFolders, activeFolderId } =
+      const { recentProjectPaths, projectFolders, activeFolderId } =
         useProjectStore.getState()
       const path = visibleProjectPaths(
-        trustedPaths,
+        recentProjectPaths,
         projectFolders,
         activeFolderId
       )[Number(event.key) - 1]

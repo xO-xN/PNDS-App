@@ -4,6 +4,8 @@
  * never disagree.
  */
 
+import type { CurrentProject } from '@/store/project-store'
+
 /**
  * Rebuilds a display-name map with `path`'s entry upserted. An empty name
  * removes the entry — the card falls back to the path-basename name — and
@@ -20,4 +22,35 @@ export function upsertDisplayName(
   }
   if (name) next[path] = name
   return next
+}
+
+/**
+ * Title-cases a path's last segment (multichannel-tone-test → Multichannel
+ * Tone Test) — the fallback name for projects without an override. Shared
+ * by the sidebar cards and the settings Projects section so both listings
+ * agree on what a project is called.
+ */
+export function titleCasePath(path: string): string {
+  const base = path.split('/').filter(Boolean).pop() ?? path
+  return base
+    .split('-')
+    .map(part => (part ? part.charAt(0).toUpperCase() + part.slice(1) : part))
+    .join(' ')
+}
+
+/**
+ * v1.2.0 (spec issue #15): the one naming rule for project listings — an
+ * explicit display-name override wins, then the selected project's manifest
+ * name, then the title-cased path basename. Shared by the sidebar cards and
+ * the settings Projects section so both always agree.
+ */
+export function projectDisplayName(
+  path: string,
+  overrides: Readonly<Record<string, string>>,
+  currentProject: CurrentProject | null
+): string {
+  if (path === currentProject?.path && !overrides[path]) {
+    return currentProject.manifest.name
+  }
+  return overrides[path] ?? titleCasePath(path)
 }

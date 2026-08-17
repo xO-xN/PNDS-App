@@ -25,8 +25,25 @@ describe('i18n config (v1.2.0 issue #13)', () => {
 
   it('falls back to English for missing zh-CN keys', async () => {
     await i18n.changeLanguage('zh-CN')
-    // sidebar.noProjects has no zh-CN entry — fallbackLng must serve it.
-    expect(i18n.t('sidebar.noProjects')).toBe('No projects opened yet')
+    // A key the zh-CN bundle genuinely lacks resolves through fallbackLng.
+    expect(i18n.t('__no.such.key__')).toBe('__no.such.key__')
+    expect(i18n.options.fallbackLng).toEqual(['en'])
+  })
+
+  it('keeps the zh-CN bundle at full parity with en (v1.2.0 issue #15)', async () => {
+    // The device badge and the settings sections must never render English
+    // on a Chinese UI: every en key carries a zh-CN entry, and vice versa.
+    const en = i18n.getResourceBundle('en', 'translation')
+    const zh = i18n.getResourceBundle('zh-CN', 'translation')
+    expect(Object.keys(en).filter(key => !(key in zh))).toEqual([])
+    expect(Object.keys(zh).filter(key => !(key in en))).toEqual([])
+    expect(
+      i18n.t('sidebar.deviceInsufficient', {
+        lng: 'zh-CN',
+        projectChannels: 16,
+        deviceChannels: 2,
+      })
+    ).toBe('16ch → 2ch')
   })
 
   it('serves the zh-CN welcome copy (v1.2.0 review feedback)', async () => {

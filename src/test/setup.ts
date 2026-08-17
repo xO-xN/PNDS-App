@@ -125,6 +125,19 @@ vi.mock('@/lib/tauri-bindings', () => ({
     // v1.2.0 (issue #13): Settings About section reveal buttons
     openAppDataDir: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
     openAppLogDir: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
+    // v1.2.0 (issue #14): port occupancy — default: both ports free.
+    checkPortStatus: vi.fn().mockImplementation((port: number) =>
+      Promise.resolve({
+        status: 'ok',
+        data: { port, occupant: null },
+      })
+    ),
+    releasePort: vi.fn().mockImplementation((port: number) =>
+      Promise.resolve({
+        status: 'ok',
+        data: { port, occupant: null },
+      })
+    ),
   },
   unwrapResult: vi.fn((result: { status: string; data?: unknown }) => {
     if (result.status === 'ok') return result.data

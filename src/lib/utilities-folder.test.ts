@@ -21,7 +21,7 @@ describe('ensureUtilitiesFolder', () => {
     })
     useProjectStore.setState({
       currentProject: null,
-      trustedPaths: [],
+      recentProjectPaths: [],
       projectFolders: [],
       activeFolderId: null,
     })
@@ -38,7 +38,7 @@ describe('ensureUtilitiesFolder', () => {
         projectPaths: EXAMPLE_PATHS,
       },
     ])
-    expect(state.trustedPaths).toEqual(EXAMPLE_PATHS)
+    expect(state.recentProjectPaths).toEqual(EXAMPLE_PATHS)
     // saveProjectIndex runs through the serialized save queue.
     await vi.waitFor(() => {
       expect(commands.savePreferences).toHaveBeenCalledWith(
@@ -82,13 +82,13 @@ describe('ensureUtilitiesFolder', () => {
     if (!second) throw new Error('Expected two example paths')
     const store = useProjectStore.getState()
     store.removeProjectFromFolder(UTILITIES_FOLDER_ID, second)
-    store.removeTrusted(second)
+    store.removeRecentProject(second)
     vi.mocked(commands.savePreferences).mockClear()
 
     await ensureUtilitiesFolder()
 
     const state = useProjectStore.getState()
-    expect(state.trustedPaths).toEqual([EXAMPLE_PATHS[0]])
+    expect(state.recentProjectPaths).toEqual([EXAMPLE_PATHS[0]])
     expect(state.projectFolders[0]?.projectPaths).toEqual([EXAMPLE_PATHS[0]])
     expect(commands.savePreferences).not.toHaveBeenCalled()
   })
@@ -102,7 +102,7 @@ describe('ensureUtilitiesFolder', () => {
     await ensureUtilitiesFolder()
 
     expect(useProjectStore.getState().projectFolders).toEqual([])
-    expect(useProjectStore.getState().trustedPaths).toEqual([])
+    expect(useProjectStore.getState().recentProjectPaths).toEqual([])
     expect(commands.savePreferences).not.toHaveBeenCalled()
   })
 

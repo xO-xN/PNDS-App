@@ -12,13 +12,14 @@ import {
 
 /**
  * Shared project flows (§4, §6.1, §7, §8):
- * - promptOpenProject: folder picker → trust gate → preflight → start
- * - openProject: click a known path → trust gate → preflight → start
+ * - promptOpenProject: folder picker → open
+ * - openProject: open a path → history add → preflight
  * - startIfReady: starts when preflight passed and LAN is chosen
  * - restartSession: §8.3 full restart (used when mode/device/target change)
  *
- * The trust confirmation dialog is rendered by WelcomeScreen, driven by
- * `pendingTrustPath` in the project store.
+ * v1.2.0 (spec issue #15): the first-open trust confirmation was removed —
+ * the operator is the machine's owner, so opening a path goes straight to
+ * preflight and lands in the project history.
  */
 export async function promptOpenProject(): Promise<void> {
   const selected = await open({
@@ -30,35 +31,25 @@ export async function promptOpenProject(): Promise<void> {
   await openProject(selected)
 }
 
-/** Opens a known path: trust gate, then preflight. Starting is always an
- * explicit user action via the Load button (SessionActionButton). */
+/** Opens a path: new entries join the history, then preflight runs.
+ * Starting is always an explicit user action via the Load button
+ * (SessionActionButton). */
 export async function openProject(path: string): Promise<void> {
-  if (!useProjectStore.getState().isTrusted(path)) {
-    useProjectStore.getState().requestTrust(path)
-    return
-  }
-  await runPreflight(path)
-}
-
-/**
- * Confirms trust for the pending path, then preflights it. v1.1.2 T3: the
- * newly imported project lands by the current view (spec issue #4 新导入
- * 落点) — drilled into a folder it joins that folder's end, at the top
- * level it stays ungrouped. Both import entries (open dialog / share a
- * directory) funnel through here, so the rule lives in one place.
- */
-export async function confirmTrustAndOpen(): Promise<void> {
-  const path = useProjectStore.getState().pendingTrustPath
-  if (!path) return
   const store = useProjectStore.getState()
-  store.trustProject(path)
-  store.requestTrust(null)
-  if (store.activeFolderId) {
-    store.moveProjectToFolder(store.activeFolderId, path)
+  if (!store.recentProjectPaths.includes(path)) {
+    // v1.1.2 T3: a newly imported project lands by the current view (spec
+    // issue #4 新导入落点) — drilled into a folder it joins that folder's
+    // end, at the top level it stays ungrouped. Every import entry (open
+    // dialog / share a directory) funnels through here, so the rule lives
+    // in one place.
+    store.addRecentProject(path)
+    if (store.activeFolderId) {
+      store.moveProjectToFolder(store.activeFolderId, path)
+    }
+    // History and folder membership change together — save atomically.
+    const { recentProjectPaths, projectFolders } = useProjectStore.getState()
+    void saveProjectIndex(recentProjectPaths, projectFolders)
   }
-  // Trust list and folder membership change together — save atomically.
-  const { trustedPaths, projectFolders } = useProjectStore.getState()
-  void saveProjectIndex(trustedPaths, projectFolders)
   await runPreflight(path)
 }
 

@@ -29,6 +29,8 @@ export type {
   HealthPayload,
   HealthScoreServer,
   Manifest,
+  PortOccupant,
+  PortStatus,
   ProjectFolder,
   ScoreServer,
   ScsynthConfig,

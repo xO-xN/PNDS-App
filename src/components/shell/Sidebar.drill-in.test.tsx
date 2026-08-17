@@ -62,9 +62,8 @@ describe('Sidebar folder drill-in (v1.1.2 T3)', () => {
     useKeyboardStore.getState().setCommandKeyPressed(false)
     useProjectStore.setState({
       currentProject: null,
-      trustedPaths: [FIRST_PATH, SECOND_PATH, THIRD_PATH],
+      recentProjectPaths: [FIRST_PATH, SECOND_PATH, THIRD_PATH],
       projectFolders: [],
-      pendingTrustPath: null,
       pendingPreflightPath: null,
       pendingSwitchPath: null,
       activeFolderId: null,
@@ -198,7 +197,7 @@ describe('Sidebar folder drill-in (v1.1.2 T3)', () => {
       THIRD_PATH,
       SECOND_PATH,
     ])
-    expect(useProjectStore.getState().trustedPaths).toEqual([
+    expect(useProjectStore.getState().recentProjectPaths).toEqual([
       FIRST_PATH,
       SECOND_PATH,
       THIRD_PATH,
@@ -269,7 +268,7 @@ describe('Sidebar folder drill-in (v1.1.2 T3)', () => {
 
     it('a folder deeper than nine members still caps badges at nine', () => {
       const paths = Array.from({ length: 10 }, (_, i) => `/Users/test/S${i}`)
-      useProjectStore.setState({ trustedPaths: [FIRST_PATH, ...paths] })
+      useProjectStore.setState({ recentProjectPaths: [FIRST_PATH, ...paths] })
       const id = useProjectStore.getState().createFolder('Big set')
       for (const p of paths) {
         useProjectStore.getState().moveProjectToFolder(id, p)

@@ -99,8 +99,7 @@ const idleSnapshot: SessionSnapshot = {
 function seedLoadedProject() {
   useProjectStore.setState({
     currentProject: { path: PROJECT_PATH, manifest },
-    trustedPaths: [PROJECT_PATH],
-    pendingTrustPath: null,
+    recentProjectPaths: [PROJECT_PATH],
     preflightStatus: 'ready',
     preflightError: null,
   })
@@ -119,8 +118,7 @@ function seedLoadedProject() {
 function seedLoadedProject16() {
   useProjectStore.setState({
     currentProject: { path: PROJECT_PATH, manifest: manifest16 },
-    trustedPaths: [PROJECT_PATH],
-    pendingTrustPath: null,
+    recentProjectPaths: [PROJECT_PATH],
     preflightStatus: 'ready',
     preflightError: null,
   })
@@ -150,9 +148,8 @@ describe('Sidebar', () => {
     vi.clearAllMocks()
     useProjectStore.setState({
       currentProject: null,
-      trustedPaths: [],
+      recentProjectPaths: [],
       projectFolders: [],
-      pendingTrustPath: null,
       pendingPreflightPath: null,
       pendingSwitchPath: null,
       preflightStatus: 'idle',
@@ -221,7 +218,7 @@ describe('Sidebar', () => {
 
   it('selects a project on click, then starts it via the Load button', async () => {
     const user = userEvent.setup()
-    useProjectStore.getState().trustProject(PROJECT_PATH)
+    useProjectStore.getState().addRecentProject(PROJECT_PATH)
     vi.mocked(commands.preflightProject).mockResolvedValue({
       status: 'ok',
       data: manifest,
@@ -253,7 +250,7 @@ describe('Sidebar', () => {
   })
 
   it('shows immediate feedback while project preflight is pending', async () => {
-    useProjectStore.getState().trustProject(PROJECT_PATH)
+    useProjectStore.getState().addRecentProject(PROJECT_PATH)
     let resolvePreflight!: () => void
     const pendingPreflight = new Promise<void>(resolve => {
       resolvePreflight = resolve
@@ -286,7 +283,9 @@ describe('Sidebar', () => {
 
     expect(useProjectStore.getState().currentProject).toBeNull()
     expect(useProjectStore.getState().preflightStatus).toBe('idle')
-    expect(useProjectStore.getState().trustedPaths).toEqual([PROJECT_PATH])
+    expect(useProjectStore.getState().recentProjectPaths).toEqual([
+      PROJECT_PATH,
+    ])
     expect(screen.queryByTestId('current-project-card')).not.toBeInTheDocument()
     expect(screen.getByTestId('project-entry')).toBeInTheDocument()
   })
@@ -380,9 +379,13 @@ describe('Sidebar', () => {
     render(<Sidebar variant="static" />)
     await pickOutputDevice(user, /Mac mini Speakers/)
 
-    expect(screen.getByTestId('device-insufficient-hint')).toHaveTextContent(
-      '16ch → 2ch'
-    )
+    const hint = screen.getByTestId('device-insufficient-hint')
+    expect(hint).toHaveTextContent('16ch → 2ch')
+    // v1.2.0 (spec issue #15): the loss reads as a red badge INSIDE the
+    // Device row trigger, not a conditional extra row — the settings card
+    // height never changes when the hint appears or disappears.
+    const trigger = screen.getByRole('combobox', { name: /output device/i })
+    expect(trigger).toContainElement(hint)
     expect(toast.info).not.toHaveBeenCalled()
   })
 
@@ -403,8 +406,7 @@ describe('Sidebar', () => {
     const user = userEvent.setup()
     useProjectStore.setState({
       currentProject: { path: PROJECT_PATH, manifest: manifest96 },
-      trustedPaths: [PROJECT_PATH],
-      pendingTrustPath: null,
+      recentProjectPaths: [PROJECT_PATH],
       preflightStatus: 'ready',
       preflightError: null,
     })
@@ -560,7 +562,7 @@ describe('Sidebar', () => {
       expect(commands.stopProject).toHaveBeenCalled()
       expect(useProjectStore.getState().currentProject).toBeNull()
     })
-    expect(useProjectStore.getState().trustedPaths).toHaveLength(1)
+    expect(useProjectStore.getState().recentProjectPaths).toHaveLength(1)
   })
 
   it('keeps the selected project when changing the output device during a restart', async () => {
@@ -627,7 +629,7 @@ describe('Sidebar', () => {
     const user = userEvent.setup()
     seedLoadedProject()
     useProjectStore.setState({
-      trustedPaths: [PROJECT_PATH, OTHER_PATH],
+      recentProjectPaths: [PROJECT_PATH, OTHER_PATH],
     })
 
     render(<Sidebar variant="static" />)
@@ -641,14 +643,16 @@ describe('Sidebar', () => {
     await user.click(
       screen.getByRole('button', { name: /remove from history/i })
     )
-    expect(useProjectStore.getState().trustedPaths).toEqual([PROJECT_PATH])
+    expect(useProjectStore.getState().recentProjectPaths).toEqual([
+      PROJECT_PATH,
+    ])
     expect(commands.stopProject).not.toHaveBeenCalled()
   })
 
   it('reorders history by dragging the grip and persists the new order', async () => {
     seedLoadedProject()
     useProjectStore.setState({
-      trustedPaths: [PROJECT_PATH, OTHER_PATH, THIRD_PATH],
+      recentProjectPaths: [PROJECT_PATH, OTHER_PATH, THIRD_PATH],
     })
 
     render(<Sidebar variant="static" />)
@@ -691,7 +695,7 @@ describe('Sidebar', () => {
 
     fireEvent.pointerUp(window, { pointerId: 1 })
 
-    expect(useProjectStore.getState().trustedPaths).toEqual([
+    expect(useProjectStore.getState().recentProjectPaths).toEqual([
       OTHER_PATH,
       PROJECT_PATH,
       THIRD_PATH,
@@ -720,7 +724,7 @@ describe('Sidebar', () => {
   it('the click that follows a drag drop is not a selection', async () => {
     seedLoadedProject()
     useProjectStore.setState({
-      trustedPaths: [PROJECT_PATH, OTHER_PATH, THIRD_PATH],
+      recentProjectPaths: [PROJECT_PATH, OTHER_PATH, THIRD_PATH],
     })
 
     render(<Sidebar variant="static" />)
@@ -758,7 +762,7 @@ describe('Sidebar', () => {
 
   it('a press released inside the click slack never becomes a drag', async () => {
     seedLoadedProject()
-    useProjectStore.setState({ trustedPaths: [PROJECT_PATH, OTHER_PATH] })
+    useProjectStore.setState({ recentProjectPaths: [PROJECT_PATH, OTHER_PATH] })
     render(<Sidebar variant="static" />)
 
     const sourceEntry = screen.getAllByTestId('project-entry')[0]
@@ -772,7 +776,7 @@ describe('Sidebar', () => {
     fireEvent.pointerUp(window, { pointerId: 1 })
 
     expect(screen.queryByTestId('drag-clone')).not.toBeInTheDocument()
-    expect(useProjectStore.getState().trustedPaths).toEqual([
+    expect(useProjectStore.getState().recentProjectPaths).toEqual([
       PROJECT_PATH,
       OTHER_PATH,
     ])
@@ -781,7 +785,7 @@ describe('Sidebar', () => {
   it('asks for confirmation before switching projects while running (§8.3)', async () => {
     seedLoadedProject()
     const user = userEvent.setup()
-    useProjectStore.setState({ trustedPaths: [PROJECT_PATH, OTHER_PATH] })
+    useProjectStore.setState({ recentProjectPaths: [PROJECT_PATH, OTHER_PATH] })
     useSessionStore.setState({ sessionStatus: 'ready' })
     vi.mocked(commands.preflightProject).mockResolvedValue({
       status: 'ok',
