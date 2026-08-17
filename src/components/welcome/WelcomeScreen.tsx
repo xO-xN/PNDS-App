@@ -29,22 +29,20 @@ export function WelcomeScreen() {
         <span className="block">{t('welcome.hintSelect')}</span>
       </p>
 
-      {/* Stable status slot, always one line tall: the column is
-          vertically centered, so a conditionally appearing "Checking
-          project…" would briefly re-center and shift every element above
-          it on each sidebar switch (the starting page "shook"). */}
-      <p
-        data-testid="welcome-status-slot"
-        className="mt-6 min-h-5 text-sm text-(--pnds-text)/60"
-      >
-        {preflightStatus === 'checking' ? t('welcome.checking') : ''}
-      </p>
-
-      {/* Bottom-docked preflight errors, out of the centered column: an
-          appearing/disappearing alert (any height) must never re-center
-          the content above — same rule as the status slot, which a
-          fixed-height reserve cannot honor for a multi-line error. */}
+      {/* Bottom-docked status, out of the centered column: an appearing
+          or disappearing box (any height) must never re-center the content
+          above. The transient "Checking project…" state uses the same
+          docked rounded box as preflight errors, in the neutral gray
+          variant; only one of the two can show at a time. */}
       <div className="absolute inset-x-8 bottom-8 flex justify-center">
+        {preflightStatus === 'checking' && (
+          <div
+            data-testid="welcome-checking"
+            className="font-manrope max-w-xl rounded-xl border border-(--pnds-text)/10 bg-(--pnds-pill) p-4 text-sm text-(--pnds-text)/60"
+          >
+            {t('welcome.checking')}
+          </div>
+        )}
         {preflightStatus === 'error' && preflightError && (
           <div
             role="alert"
