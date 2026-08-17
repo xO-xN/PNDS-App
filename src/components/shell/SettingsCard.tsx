@@ -290,10 +290,12 @@ export function SettingsCard({ onPopupOpenChange }: SettingsCardProps) {
       {/* Output device (§6.3): each entry shows its channel count at the
           project sample rate. Entries with fewer channels than the project
           are greyed but stay selectable (no real disabled state), carry a
-          red ✕ and an sr-only explanation. The persistent Nch → Hch loss
-          is a red badge INSIDE the Device row's trigger (v1.2.0, spec
-          issue #15) — a conditional extra row used to push the whole
-          settings card taller. Preference only — deferred until Change. */}
+          red ✕ and an sr-only explanation. The persistent loss indicator in
+          the CLOSED trigger is just a small red dot (v1.2.0: a full
+          "Nch → Hch" badge used to widen the trigger's right side and crowd
+          the device name) — the specifics live in the dot's tooltip/sr-only
+          text and in every opened list entry. Preference only — deferred
+          until Change. */}
       <div className="flex items-center gap-2">
         <span className={labelClass}>Device</span>
         <div className="relative flex-1">
@@ -319,12 +321,22 @@ export function SettingsCard({ onPopupOpenChange }: SettingsCardProps) {
                 {insufficient && (
                   <span
                     data-testid="device-insufficient-hint"
-                    className="font-manrope shrink-0 text-[10px] leading-none font-semibold text-(--pnds-danger)"
-                  >
-                    {t('sidebar.deviceInsufficient', {
+                    title={t('sidebar.deviceInsufficient', {
                       projectChannels,
                       deviceChannels: selectedChannels,
                     })}
+                    className="flex shrink-0 items-center"
+                  >
+                    <span
+                      aria-hidden="true"
+                      className="size-1.5 rounded-full bg-(--pnds-danger)"
+                    />
+                    <span className="sr-only">
+                      {t('sidebar.deviceInsufficient', {
+                        projectChannels,
+                        deviceChannels: selectedChannels,
+                      })}
+                    </span>
                   </span>
                 )}
               </span>

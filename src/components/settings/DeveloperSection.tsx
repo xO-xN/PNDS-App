@@ -188,8 +188,13 @@ export function DeveloperSection({ section }: { section: SettingsSection }) {
       </h3>
 
       <div className="flex flex-col gap-2 rounded-lg border border-(--pnds-text)/10 px-3 py-2">
-        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="text-sm">{t('settings.developerPackTarget')}</span>
+        {/* Row 1: the target — label plus the path (or selection guidance).
+            Row 2: the actions — a single line of path + three buttons used
+            to cram everything into one wrapping row. */}
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="shrink-0 text-sm">
+            {t('settings.developerPackTarget')}
+          </span>
           {targetPath ? (
             <span
               className="text-muted-foreground min-w-0 flex-1 truncate font-mono text-xs"
@@ -203,47 +208,47 @@ export function DeveloperSection({ section }: { section: SettingsSection }) {
               {t('settings.developerNoProject')}
             </span>
           )}
-          <span className="ml-auto flex shrink-0 items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={busy}
-              onClick={() => void handleBrowse()}
-            >
-              <FolderOpen size={12} aria-hidden="true" />
-              {t('settings.developerBrowse')}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!targetPath || busy}
-              onClick={() => void handlePack()}
-            >
-              <RefreshCw
-                size={12}
-                aria-hidden="true"
-                className={packing ? 'animate-spin' : undefined}
-              />
-              {packing
-                ? t('settings.developerPacking')
-                : t('settings.developerPackProject')}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!targetPath || busy}
-              onClick={() => void handleCompile()}
-            >
-              <AudioWaveform
-                size={12}
-                aria-hidden="true"
-                className={compiling ? 'animate-pulse' : undefined}
-              />
-              {compiling
-                ? t('settings.developerCompiling')
-                : t('settings.developerCompileSynthdef')}
-            </Button>
-          </span>
+        </div>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={busy}
+            onClick={() => void handleBrowse()}
+          >
+            <FolderOpen size={12} aria-hidden="true" />
+            {t('settings.developerBrowse')}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!targetPath || busy}
+            onClick={() => void handlePack()}
+          >
+            <RefreshCw
+              size={12}
+              aria-hidden="true"
+              className={packing ? 'animate-spin' : undefined}
+            />
+            {packing
+              ? t('settings.developerPacking')
+              : t('settings.developerPackProject')}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!targetPath || busy}
+            onClick={() => void handleCompile()}
+          >
+            <AudioWaveform
+              size={12}
+              aria-hidden="true"
+              className={compiling ? 'animate-pulse' : undefined}
+            />
+            {compiling
+              ? t('settings.developerCompiling')
+              : t('settings.developerCompileSynthdef')}
+          </Button>
         </div>
 
         {compileResult && (

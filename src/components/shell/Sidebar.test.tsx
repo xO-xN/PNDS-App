@@ -380,10 +380,12 @@ describe('Sidebar', () => {
     await pickOutputDevice(user, /Mac mini Speakers/)
 
     const hint = screen.getByTestId('device-insufficient-hint')
+    // v1.2.0: the closed trigger shows only a small red dot — the full
+    // "16ch → 2ch" loss rides along as sr-only text (kept assertable and
+    // screen-reader visible) plus the dot's hover tooltip; the opened list
+    // spells out every entry's channel count.
     expect(hint).toHaveTextContent('16ch → 2ch')
-    // v1.2.0 (spec issue #15): the loss reads as a red badge INSIDE the
-    // Device row trigger, not a conditional extra row — the settings card
-    // height never changes when the hint appears or disappears.
+    expect(hint.querySelector('span[aria-hidden="true"]')).toBeInTheDocument()
     const trigger = screen.getByRole('combobox', { name: /output device/i })
     expect(trigger).toContainElement(hint)
     expect(toast.info).not.toHaveBeenCalled()
