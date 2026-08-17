@@ -103,7 +103,7 @@ Connect the host Mac running PNDS App to the local network; a wired connection i
 
 ![PNDS App - opening and running a PNDS project](./assets/readme_img/demo30.gif)
 
-Select a local PNDS project directory in PNDS App. A project can also arrive as a single-file `.pnds` bundle — double-click it, drop it on the app window, or pick it via ⌘O; PNDS validates, installs and opens it like a directory (see `docs/PNDS_PROJECT_BUNDLE_SPECIFICATION.md`; bundles are packed from the Settings → Developer Tools section).
+Select a local PNDS project directory in PNDS App. A project can also arrive as a single-file `.pnds` bundle — double-click it, drop it on the app window, or pick it via ⌘O; PNDS validates, installs and opens it like a directory (see `docs/PNDS_PROJECT_BUNDLE_SPECIFICATION.md`; bundles are packed from the Settings → Developer Tools section, and the full creation-to-distribution workflow is covered in `docs/PNDS_CREATOR_GUIDE.md`).
 
 The app then:
 

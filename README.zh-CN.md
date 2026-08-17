@@ -61,7 +61,7 @@ PNDS AI Skills 是一组面向创作者的 AI 辅助工具，用于在 PNDS 框�
 
 - 跨互联网、多地实时共奏；
 - Intel Mac、Windows、Linux；
-- 工程压缩包（`.pnds`）、在线工程库与工程下载。
+- 在线工程库与工程下载。
 
 ## 下载与安装
 
@@ -103,7 +103,7 @@ Inarticulate III/
 
 ![PNDS App - 打开并运行一个 PNDS 工程](./assets/readme_img/demo30.gif)
 
-在 PNDS App 中选择一个本地 PNDS 工程目录。
+在 PNDS App 中选择一个本地 PNDS 工程目录。工程也可以是单一文件的 `.pnds` 压缩包——双击、拖到 App 窗口或用 ⌘O 选中均可；App 会校验、安装并像目录工程一样打开（格式见 `docs/PNDS_PROJECT_BUNDLE_SPECIFICATION.md`；打包入口在设置的开发者工具区，从创建到分发的完整流程见 `docs/PNDS_CREATOR_GUIDE.md`）。
 
 App 会：
 
