@@ -312,15 +312,21 @@ describe('Cmd+↑/↓ project navigation and Esc close (v1.1.2 T7)', () => {
     })
   })
 
-  describe('Esc opens the close-project confirmation', () => {
-    it('a lone Esc opens the confirmation, never a direct stop', async () => {
+  describe('close-project confirmation (⌘W since v1.2.0)', () => {
+    /** The ⌘W menu action's entry point (menu.ts) — the v1.1.2 lone-Esc
+     * trigger was retired; Esc has no app function anymore. */
+    const openCloseConfirm = () => {
+      useProjectStore.getState().setConfirmCloseProjectOpen(true)
+    }
+
+    it('a plain Esc does nothing anymore — no dialog, no stop', async () => {
       seedRunningSession(FIRST_PATH)
       render(<AppShell />)
 
       pressEscape()
 
-      const dialog = await screen.findByRole('alertdialog')
-      expect(dialog).toHaveTextContent('Close the Project?')
+      await new Promise(resolve => setTimeout(resolve, 50))
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
       expect(commands.stopProject).not.toHaveBeenCalled()
       expect(useProjectStore.getState().currentProject?.path).toBe(FIRST_PATH)
     })
@@ -330,8 +336,9 @@ describe('Cmd+↑/↓ project navigation and Esc close (v1.1.2 T7)', () => {
       seedRunningSession(FIRST_PATH)
       render(<AppShell />)
 
-      pressEscape()
+      openCloseConfirm()
       const dialog = await screen.findByRole('alertdialog')
+      expect(dialog).toHaveTextContent('Close the Project?')
       await user.click(within(dialog).getByRole('button', { name: /^close$/i }))
 
       await waitFor(() => {
@@ -347,7 +354,7 @@ describe('Cmd+↑/↓ project navigation and Esc close (v1.1.2 T7)', () => {
       seedRunningSession(FIRST_PATH)
       render(<AppShell />)
 
-      pressEscape()
+      openCloseConfirm()
       const dialog = await screen.findByRole('alertdialog')
       expect(document.activeElement).toBe(
         within(dialog).getByRole('button', { name: /^close$/i })
@@ -365,7 +372,7 @@ describe('Cmd+↑/↓ project navigation and Esc close (v1.1.2 T7)', () => {
       seedRunningSession(FIRST_PATH)
       render(<AppShell />)
 
-      pressEscape()
+      openCloseConfirm()
       const dialog = await screen.findByRole('alertdialog')
       await user.click(
         within(dialog).getByRole('button', { name: /^cancel$/i })
@@ -378,7 +385,7 @@ describe('Cmd+↑/↓ project navigation and Esc close (v1.1.2 T7)', () => {
       expect(useProjectStore.getState().currentProject?.path).toBe(FIRST_PATH)
     })
 
-    it('does nothing while idle — Esc is not Load', () => {
+    it('Esc is not Load — nothing happens while idle', () => {
       useProjectStore.setState({
         currentProject: { path: FIRST_PATH, manifest },
         preflightStatus: 'ready',
@@ -400,8 +407,8 @@ describe('Cmd+↑/↓ project navigation and Esc close (v1.1.2 T7)', () => {
       pressCmdArrow('ArrowDown')
       const dialog = await screen.findByRole('alertdialog')
 
-      // Esc is delivered on the dialog — Radix owns it there; the global
-      // Close alias must not stop the show underneath the open dialog.
+      // Esc is delivered on the dialog — Radix owns it there; the key
+      // must never stop the show underneath the open dialog.
       fireEvent.keyDown(dialog, { key: 'Escape' })
 
       await waitFor(() => {

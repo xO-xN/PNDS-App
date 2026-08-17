@@ -57,7 +57,7 @@ describe('SettingsPanel (v1.2.0 issue #13)', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
-  it('renders the five sections of the single-page panel', () => {
+  it('renders the four sections of the single-page panel', () => {
     useSettingsStore.getState().openSettings()
     render(<SettingsPanel />)
 
@@ -65,12 +65,14 @@ describe('SettingsPanel (v1.2.0 issue #13)', () => {
     expect(screen.getByRole('heading', { name: 'General' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Ports' })).toBeInTheDocument()
     expect(
-      screen.getByRole('heading', { name: 'Projects' })
-    ).toBeInTheDocument()
-    expect(
       screen.getByRole('heading', { name: 'Developer Tools' })
     ).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'About' })).toBeInTheDocument()
+    // The Projects history section (#15) was removed after user review —
+    // history management lives in the sidebar alone.
+    expect(
+      screen.queryByRole('heading', { name: 'Projects' })
+    ).not.toBeInTheDocument()
     // The developer section packs .pnds bundles (issue #16) — its action is
     // present even with no project selected.
     expect(
@@ -197,126 +199,6 @@ const manifest: Manifest = {
     standaloneTarget: null,
   },
 }
-
-/** v1.2.0 (issue #15): the Projects section is history management — the
- * full list, per-item removal with sidebar-✕ semantics, and Clear all. */
-describe('SettingsPanel Projects section (v1.2.0 issue #15)', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    useProjectStore.setState({
-      currentProject: null,
-      recentProjectPaths: ['/Users/test/Score 4', '/Users/test/Utility Tool'],
-      projectFolders: [],
-      activeFolderId: null,
-      projectDisplayNames: {},
-      pendingPreflightPath: null,
-      preflightStatus: 'idle',
-      preflightError: null,
-    })
-  })
-
-  afterEach(() => {
-    cleanup()
-    useProjectStore.setState({
-      currentProject: null,
-      recentProjectPaths: [],
-      projectFolders: [],
-      activeFolderId: null,
-      projectDisplayNames: {},
-    })
-  })
-
-  it('lists the full history with display names and paths', () => {
-    useSettingsStore.getState().openSettings()
-    render(<SettingsPanel />)
-
-    const rows = screen.getAllByTestId('settings-project-row')
-    expect(rows).toHaveLength(2)
-    expect(rows[0]).toHaveTextContent('Score 4')
-    expect(rows[0]).toHaveTextContent('/Users/test/Score 4')
-    expect(rows[1]).toHaveTextContent('Utility Tool')
-  })
-
-  it('shows the empty state and a disabled Clear All when no projects exist', () => {
-    useProjectStore.setState({ recentProjectPaths: [] })
-    useSettingsStore.getState().openSettings()
-    render(<SettingsPanel />)
-
-    expect(
-      screen.getByText('No projects in the history yet')
-    ).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Clear All' })).toBeDisabled()
-  })
-
-  it('Clear All is disabled while a session runs (sidebar ✕ never faces this)', () => {
-    useSessionStore.setState({ sessionStatus: 'ready' })
-    useSettingsStore.getState().openSettings()
-    render(<SettingsPanel />)
-
-    expect(screen.getByRole('button', { name: 'Clear All' })).toBeDisabled()
-    useSessionStore.setState({ sessionStatus: 'idle' })
-  })
-
-  it('removes one project with sidebar-✕ semantics and persists the index', async () => {
-    useSettingsStore.getState().openSettings()
-    render(<SettingsPanel />)
-
-    const removeButtons = screen.getAllByTestId('settings-remove-project')
-    fireEvent.click(removeButtons[0] as HTMLElement)
-
-    expect(useProjectStore.getState().recentProjectPaths).toEqual([
-      '/Users/test/Utility Tool',
-    ])
-    await waitFor(() => {
-      expect(commands.savePreferences).toHaveBeenCalledWith(
-        expect.objectContaining({
-          recentProjects: ['/Users/test/Utility Tool'],
-        })
-      )
-    })
-  })
-
-  it('offers no removal for the selected project (same as the sidebar ✕)', () => {
-    useProjectStore.setState({
-      currentProject: { path: '/Users/test/Score 4', manifest },
-      preflightStatus: 'ready',
-    })
-    useSettingsStore.getState().openSettings()
-    render(<SettingsPanel />)
-
-    const rows = screen.getAllByTestId('settings-project-row')
-    expect(
-      within(rows[0] as HTMLElement).queryByTestId('settings-remove-project')
-    ).not.toBeInTheDocument()
-    expect(
-      within(rows[1] as HTMLElement).getByTestId('settings-remove-project')
-    ).toBeInTheDocument()
-    expect(rows[0]).toHaveTextContent('Inarticulate III')
-    expect(screen.getByTestId('settings-project-current')).toHaveTextContent(
-      'selected'
-    )
-  })
-
-  it('Clear All empties the history in one click and persists it', async () => {
-    useSettingsStore.getState().openSettings()
-    render(<SettingsPanel />)
-
-    fireEvent.click(screen.getByRole('button', { name: 'Clear All' }))
-
-    expect(useProjectStore.getState().recentProjectPaths).toEqual([])
-    expect(
-      screen.getByText('No projects in the history yet')
-    ).toBeInTheDocument()
-    await waitFor(() => {
-      expect(commands.savePreferences).toHaveBeenCalledWith(
-        expect.objectContaining({
-          recentProjects: [],
-          projectFolders: [],
-        })
-      )
-    })
-  })
-})
 
 /** v1.2.0 (issue #14): the Ports section watches the selected project's
  * manifest ports (6868/6869 fallback), shows occupant identity, releases

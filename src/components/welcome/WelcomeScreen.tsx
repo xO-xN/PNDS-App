@@ -29,11 +29,16 @@ export function WelcomeScreen() {
         <span className="block">{t('welcome.hintSelect')}</span>
       </p>
 
-      {preflightStatus === 'checking' && (
-        <p className="mt-6 text-sm text-(--pnds-text)/60">
-          {t('welcome.checking')}
-        </p>
-      )}
+      {/* Stable status slot, always one line tall: the column is
+          vertically centered, so a conditionally appearing "Checking
+          project…" would briefly re-center and shift every element above
+          it on each sidebar switch (the starting page "shook"). */}
+      <p
+        data-testid="welcome-status-slot"
+        className="mt-6 min-h-5 text-sm text-(--pnds-text)/60"
+      >
+        {preflightStatus === 'checking' ? t('welcome.checking') : ''}
+      </p>
 
       {preflightStatus === 'error' && preflightError && (
         <div

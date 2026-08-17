@@ -57,8 +57,9 @@ export function hasOpenOverlayBesidesSettings(): boolean {
  *   entry as a click
  * - ⌘1..9 → select the Nth visible project via the same entry as a click,
  *   folder-aware (a drilled-in view numbers only the folder's members);
- *   Cmd+0 stays the native "Actual Size" menu accelerator and is never
- *   consumed here
+ *   pressing the selected project's number deselects it (v1.2.0, same
+ *   as clicking the card). Cmd+0 stays the native "Actual Size" menu
+ *   accelerator and is never consumed here
  */
 export function useCommandKeyboard(): void {
   useEffect(() => {
@@ -103,7 +104,7 @@ export function useCommandKeyboard(): void {
         projectFolders,
         activeFolderId
       )[Number(event.key) - 1]
-      if (path) selectProject(path, 'keyboard')
+      if (path) selectProject(path)
     }
 
     const handleKeyUp = (event: KeyboardEvent) => {

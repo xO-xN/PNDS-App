@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { commands } from '@/lib/tauri-bindings'
+import { useProjectStore } from '@/store/project-store'
+import { useSessionStore } from '@/store/session-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { buildAppMenu } from './menu'
 
@@ -132,6 +135,30 @@ describe('buildAppMenu (v1.2.0 issue #13)', () => {
     const closeWindow = item('close-window')
     expect(closeWindow.accelerator).toBe('Cmd+W')
     expect(submenuItems('File')).toContain(closeWindow)
+  })
+
+  it('⌘W opens the close-project confirm while a session runs (v1.2.0)', () => {
+    useProjectStore.setState({ confirmCloseProjectOpen: false })
+    useSessionStore.setState({ sessionStatus: 'ready' })
+
+    item('close-window').action?.()
+
+    expect(useProjectStore.getState().confirmCloseProjectOpen).toBe(true)
+    expect(commands.closeWindowWithFade).not.toHaveBeenCalled()
+    useSessionStore.setState({ sessionStatus: 'idle' })
+    useProjectStore.setState({ confirmCloseProjectOpen: false })
+  })
+
+  it('⌘W keeps closing the window on the start page', async () => {
+    useProjectStore.setState({ confirmCloseProjectOpen: false })
+    useSessionStore.setState({ sessionStatus: 'idle' })
+
+    item('close-window').action?.()
+
+    expect(useProjectStore.getState().confirmCloseProjectOpen).toBe(false)
+    await vi.waitFor(() =>
+      expect(commands.closeWindowWithFade).toHaveBeenCalled()
+    )
   })
 
   it('removes the dead Window > Zoom item but keeps ⌃⌘F fullscreen', () => {

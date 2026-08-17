@@ -1,14 +1,9 @@
 import { create } from 'zustand'
 
-/** The five sections of the settings panel (spec issue #12, single-page
- * scroll layout; v1.2.0 A ships General and About, the rest are
- * placeholders until their own tickets land). */
-export type SettingsSection =
-  | 'general'
-  | 'ports'
-  | 'projects'
-  | 'developer'
-  | 'about'
+/** The four sections of the settings panel (spec issue #12, single-page
+ * scroll layout). The Projects history section (#15) was removed after
+ * user review — history management lives in the sidebar alone. */
+export type SettingsSection = 'general' | 'ports' | 'developer' | 'about'
 
 /** Language choices in the General section. 'system' follows the OS locale
  * and corresponds to `preferences.language === null` on disk. */

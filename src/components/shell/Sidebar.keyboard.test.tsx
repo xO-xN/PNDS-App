@@ -197,7 +197,7 @@ describe('Cmd keyboard layer (v1.1.2)', () => {
       expect(commands.preflightProject).not.toHaveBeenCalled()
     })
 
-    it('a digit on the current project never clears the selection', () => {
+    it('a digit on the current project deselects it (v1.2.0)', () => {
       useProjectStore.setState({
         recentProjectPaths: [FIRST_PATH, SECOND_PATH],
         currentProject: { path: FIRST_PATH, manifest },
@@ -207,7 +207,8 @@ describe('Cmd keyboard layer (v1.1.2)', () => {
 
       pressCmdDigit('1')
 
-      expect(useProjectStore.getState().currentProject).not.toBeNull()
+      expect(useProjectStore.getState().currentProject).toBeNull()
+      expect(useProjectStore.getState().preflightStatus).toBe('idle')
       expect(commands.preflightProject).not.toHaveBeenCalled()
     })
 

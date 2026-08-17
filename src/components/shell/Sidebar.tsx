@@ -8,6 +8,7 @@ import {
   RefreshCw,
   Folder,
   FolderPlus,
+  Wrench,
   Command,
   ChevronLeft,
 } from 'lucide-react'
@@ -834,7 +835,7 @@ export function Sidebar({
                   suppressClickRef.current = false
                   return
                 }
-                selectProject(path, 'click')
+                selectProject(path)
               }}
               style={
                 cardOffset !== 0
@@ -1016,10 +1017,16 @@ export function Sidebar({
                     />
                   ) : (
                     <>
-                      {/* The plain folder icon keeps the card's geometry;
-                          the whole card is the drag trigger (v1.1.2 T5). */}
+                      {/* The folder icon keeps the card's geometry; the
+                          whole card is the drag trigger (v1.1.2 T5). The
+                          protected Utilities folder carries a wrench —
+                          the default toolbox, not a user set list. */}
                       <span className="flex w-5 shrink-0 items-center justify-center text-(--pnds-text)/40">
-                        <Folder size={15} aria-hidden="true" />
+                        {isProtectedFolder(folder.id) ? (
+                          <Wrench size={15} aria-hidden="true" />
+                        ) : (
+                          <Folder size={15} aria-hidden="true" />
+                        )}
                       </span>
                       {/* "使用中" indicator: the running project lives in
                           this folder (spec issue #4). */}
@@ -1094,7 +1101,11 @@ export function Sidebar({
             {drag.kind === 'folder' ? (
               <>
                 <span className="flex w-5 shrink-0 items-center justify-center text-(--pnds-text)/40">
-                  <Folder size={15} aria-hidden="true" />
+                  {isProtectedFolder(drag.id) ? (
+                    <Wrench size={15} aria-hidden="true" />
+                  ) : (
+                    <Folder size={15} aria-hidden="true" />
+                  )}
                 </span>
                 <span className="flex-1 truncate text-center text-[15px] text-(--pnds-text)/85">
                   {projectFolders.find(folder => folder.id === drag.id)?.name}
@@ -1147,9 +1158,9 @@ export function Sidebar({
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* v1.1.2 T7: lone-Esc close confirmation (spec issue #11). ⌘Esc and
-          the Close button close directly; a plain Esc asks first so a
-          stray press never stops a live show. */}
+      {/* v1.2.0: the close-project confirmation — opened by ⌘W while a
+          session runs (the v1.1.2 lone-Esc entry was retired; Esc has no
+          app function anymore). The Close button closes directly. */}
       <AlertDialog
         open={confirmCloseProjectOpen}
         onOpenChange={openState => {

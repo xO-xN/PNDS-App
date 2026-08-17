@@ -18,13 +18,10 @@ import { cn } from '@/lib/utils'
  * Change (§8.3) that applies the pending config with a full restart.
  *
  * v1.1.2: Enter is a keyboard alias for the submit — Load when idle and
- * loadable, Change/restart while a pending config change waits. v1.1.2 T7
- * (spec issue #11): a lone Esc opens the close-project confirmation; the
- * confirm (or the Close button itself) is the only way a keypress stops
- * a running, change-free session. A ⌘Esc direct alias was tried and
- * dropped — macOS owns that chord (Siri/dictation), so the webview never
- * sees it reliably. The listener reuses the exact conditions below, so
- * key and click can never drift apart.
+ * loadable, Change/restart while a pending config change waits. v1.2.0:
+ * the plain-Esc close-project alias was retired — Esc has no app
+ * function; ⌘W opens the close-project confirmation while a session
+ * runs (see menu.ts).
  */
 export function SessionActionButton() {
   const { t } = useTranslation()
@@ -57,17 +54,8 @@ export function SessionActionButton() {
       // Radix owns the keys while a dialog or select popup is open.
       if (hasOpenOverlay()) return
       if (busy) return
-      // v1.1.2 T7: Esc opens the close-project confirmation — the running,
-      // change-free state only. Escaping an edit or a dialog belongs to
-      // that element (the guards above already handed it over); closing
-      // the show stays behind the explicit OK / the Close button.
-      if (event.key === 'Escape') {
-        if (running && !pendingChanges) {
-          event.preventDefault()
-          useProjectStore.getState().setConfirmCloseProjectOpen(true)
-        }
-        return
-      }
+      // v1.2.0: Esc no longer does anything app-level — closing the
+      // project behind a confirm is ⌘W's job (menu.ts).
       if (event.key !== 'Enter') return
       // Enter never stops a live show — Close stays dialog/mouse-only.
       if (running && !pendingChanges) return

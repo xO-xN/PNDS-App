@@ -21,6 +21,7 @@ import i18n from '@/i18n/config'
 import { logger } from '@/lib/logger'
 import { promptOpenProject } from '@/lib/open-project'
 import { checkForUpdates } from '@/lib/updater'
+import { useProjectStore } from '@/store/project-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { useSessionStore } from '@/store/session-store'
 import {
@@ -113,13 +114,20 @@ export async function buildAppMenu(): Promise<Menu> {
           action: () => void promptOpenProject(),
         }),
         // §v1.1.1: custom ⌘W — the predefined Close Window is non-functional
-        // on this window. Shares the red-light close flow (confirm + stop
-        // session + fade-hide; the app keeps running).
+        // on this window. v1.2.0: with a running project ⌘W closes the
+        // project behind the app-styled confirm (the retired plain-Esc
+        // flow); everywhere else it keeps the red-light window-close flow.
         await MenuItem.new({
           id: 'close-window',
           text: t('menu.closeWindow'),
           accelerator: 'Cmd+W',
-          action: () => void requestClose(),
+          action: () => {
+            if (useSessionStore.getState().sessionStatus === 'ready') {
+              useProjectStore.getState().setConfirmCloseProjectOpen(true)
+              return
+            }
+            void requestClose()
+          },
         }),
       ],
     })

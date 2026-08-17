@@ -51,24 +51,21 @@ describe('selectProject', () => {
       data: manifest,
     })
 
-    selectProject('/a', 'click')
+    selectProject('/a')
 
     expect(commands.preflightProject).toHaveBeenCalledWith('/a')
     expect(commands.startProject).not.toHaveBeenCalled()
     expect(useProjectStore.getState().pendingPreflightPath).toBe('/a')
   })
 
-  it('a click clears the current idle project; the keyboard never does', () => {
+  it('deselects the current idle project — click and Cmd+N alike (v1.2.0)', () => {
     useProjectStore.setState({
       currentProject: { path: '/a', manifest },
       preflightStatus: 'ready',
     })
     useSessionStore.setState({ sessionStatus: 'idle' })
 
-    selectProject('/a', 'keyboard')
-    expect(useProjectStore.getState().currentProject).not.toBeNull()
-
-    selectProject('/a', 'click')
+    selectProject('/a')
     expect(useProjectStore.getState().currentProject).toBeNull()
     expect(useProjectStore.getState().preflightStatus).toBe('idle')
   })
@@ -80,8 +77,7 @@ describe('selectProject', () => {
     })
     useSessionStore.setState({ sessionStatus: 'ready' })
 
-    selectProject('/a', 'click')
-    selectProject('/a', 'keyboard')
+    selectProject('/a')
     expect(useProjectStore.getState().currentProject).not.toBeNull()
     expect(useProjectStore.getState().pendingSwitchPath).toBeNull()
   })
@@ -93,7 +89,7 @@ describe('selectProject', () => {
     })
     useSessionStore.setState({ sessionStatus: 'ready' })
 
-    selectProject('/b', 'keyboard')
+    selectProject('/b')
 
     expect(commands.preflightProject).not.toHaveBeenCalled()
     expect(useProjectStore.getState().pendingSwitchPath).toBe('/b')
@@ -102,7 +98,7 @@ describe('selectProject', () => {
   it('ignores everything while the session is busy', () => {
     useSessionStore.setState({ sessionStatus: 'starting' })
 
-    selectProject('/b', 'click')
+    selectProject('/b')
 
     expect(commands.preflightProject).not.toHaveBeenCalled()
     expect(useProjectStore.getState().pendingSwitchPath).toBeNull()
@@ -114,7 +110,7 @@ describe('selectProject', () => {
       new Promise(() => undefined)
     )
 
-    selectProject('/b', 'click')
+    selectProject('/b')
 
     expect(commands.preflightProject).not.toHaveBeenCalled()
     expect(useProjectStore.getState().pendingPreflightPath).toBe('/b')
