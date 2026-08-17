@@ -69,6 +69,13 @@ interface ProjectState {
    * Absent entry = derived path-basename name. Persisted in preferences.
    */
   projectDisplayNames: Record<string, string>
+  /**
+   * v1.2.0 (issue #16): manifest-declared name per project path, learned on
+   * every successful preflight and restored from preferences. The listings
+   * show it (user overrides still win) so a bundle install reads as its
+   * manifest name, not its `<id>-<version>` directory.
+   */
+  manifestProjectNames: Record<string, string>
   /** Card currently in inline rename; drives the sidebar's edit state. */
   renameTarget: RenameTarget | null
   preflightStatus: PreflightStatus
@@ -85,6 +92,8 @@ interface ProjectState {
   setActiveFolderId: (id: string | null) => void
   /** Restores display-name overrides from persisted preferences. */
   setProjectDisplayNames: (names: Record<string, string>) => void
+  /** Restores the learned manifest names from persisted preferences. */
+  setManifestProjectNames: (names: Record<string, string>) => void
   /**
    * Sets one override. An empty name removes the entry — the card falls
    * back to the path-basename name (spec issue #10: 空串回退).
@@ -173,6 +182,7 @@ export const useProjectStore = create<ProjectState>()(set => ({
   confirmCloseProjectOpen: false,
   activeFolderId: null,
   projectDisplayNames: {},
+  manifestProjectNames: {},
   renameTarget: null,
   preflightStatus: 'idle',
   preflightError: null,
@@ -225,6 +235,8 @@ export const useProjectStore = create<ProjectState>()(set => ({
   setActiveFolderId: id => set({ activeFolderId: id }),
 
   setProjectDisplayNames: names => set({ projectDisplayNames: names }),
+
+  setManifestProjectNames: names => set({ manifestProjectNames: names }),
 
   setProjectDisplayName: (path, name) =>
     set(state => ({
@@ -340,11 +352,18 @@ export const useProjectStore = create<ProjectState>()(set => ({
     set({ preflightStatus: 'checking', preflightError: null }),
 
   preflightSucceeded: (path, manifest) =>
-    set({
+    set(state => ({
       currentProject: { path, manifest },
       preflightStatus: 'ready',
       preflightError: null,
-    }),
+      // v1.2.0 (issue #16): learn the manifest-declared name so every
+      // listing shows it, not just the selected project.
+      manifestProjectNames: upsertDisplayName(
+        state.manifestProjectNames,
+        path,
+        manifest.name
+      ),
+    })),
 
   preflightFailed: message =>
     set({

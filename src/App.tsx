@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { listen } from '@tauri-apps/api/event'
+import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { check } from '@tauri-apps/plugin-updater'
 import { relaunch } from '@tauri-apps/plugin-process'
 import { buildAppMenu, setupMenuLanguageListener } from './lib/menu'
@@ -10,6 +11,7 @@ import {
 import { logger } from './lib/logger'
 import { commands } from './lib/tauri-bindings'
 import { drainPendingBundleOpens } from './lib/bundle-project'
+import { handleDroppedPaths } from './lib/drag-drop'
 import { initWindowState, markQuitting } from './store/window-store'
 import { useSettingsStore } from './store/settings-store'
 import './App.css'
@@ -130,6 +132,21 @@ function App() {
       void drainPendingBundleOpens()
     })
     void unlisten.then(() => drainPendingBundleOpens())
+    return () => {
+      void unlisten.then(unlistenFn => unlistenFn())
+    }
+  }, [])
+
+  // v1.2.0 (issue #16): Finder drag-and-drop — dropping a project folder or
+  // a `.pnds` file on the window imports it through the same flows as the
+  // ⌘O picker (dragDropEnabled is on; the sidebar's reorder gesture is
+  // pointer-based, so the native drop events conflict with nothing).
+  useEffect(() => {
+    const unlisten = getCurrentWebviewWindow().onDragDropEvent(event => {
+      if (event.payload.type === 'drop') {
+        void handleDroppedPaths(event.payload.paths)
+      }
+    })
     return () => {
       void unlisten.then(unlistenFn => unlistenFn())
     }

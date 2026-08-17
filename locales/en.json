@@ -71,6 +71,8 @@
   "settings.developerPacking": "Packing…",
   "settings.developerPackFailed": "Could not pack the project",
   "settings.developerCopy": "Copy",
+  "settings.developerOutputLabel": "Bundle file",
+  "settings.developerShaLabel": "SHA-256 checksum",
   "settings.developerOverwriteTitle": "Overwrite existing bundle?",
   "settings.developerOverwriteDescription": "A bundle file already exists and will be replaced:",
   "settings.developerOverwriteConfirm": "Overwrite",

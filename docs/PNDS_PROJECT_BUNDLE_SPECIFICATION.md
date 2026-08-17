@@ -95,6 +95,8 @@ pnds-bundle.json            # bundle 元数据（位于归档顶层，不在工�
 4. 解压后对安装目录执行完整 manifest 校验；
 5. 随即走与目录工程完全相同的 openProject → preflight → session 流程。
 
+列表命名：工程列表（侧栏与设置 Projects）显示 manifest 的 `name`（App 在每次 preflight 成功后学习并持久化该名字），而非安装目录名 `<id>-<version>`；用户手动改名（⌘R）仍优先。Finder 拖拽工程目录或 `.pnds` 文件到 App 窗口等同于 ⌘O 选中；拖到 Dock 图标等同于双击。
+
 ### 4.2 覆盖重装
 
 - 安装目录名由 `<id>-<version>` 决定；同 `id`+`version` 重复打开**总是覆盖重装**（先删除旧目录再解压）；

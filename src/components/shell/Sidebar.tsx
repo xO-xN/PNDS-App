@@ -27,7 +27,7 @@ import {
 import { selectProject, setActiveFolderView } from '@/lib/project-select'
 import { reclaimIfManagedBundle } from '@/lib/bundle-project'
 import { saveProjectDisplayName, saveProjectIndex } from '@/lib/audio-prefs'
-import { projectDisplayName, titleCasePath } from '@/lib/display-names'
+import { projectDisplayName } from '@/lib/display-names'
 import {
   cardShift,
   folderDropAt,
@@ -236,6 +236,9 @@ export function Sidebar({
   const projectDisplayNames = useProjectStore(
     state => state.projectDisplayNames
   )
+  const manifestProjectNames = useProjectStore(
+    state => state.manifestProjectNames
+  )
   const renameTarget = useProjectStore(state => state.renameTarget)
   const sessionStatus = useSessionStore(state => state.sessionStatus)
   const commandKeyPressed = useKeyboardStore(state => state.commandKeyPressed)
@@ -306,16 +309,17 @@ export function Sidebar({
     folder => folder.id === pendingDeleteFolderId
   )
 
-  // Title-case the path basename so an unselected project reads the same
-  // as its manifest name; a v1.1.2 T6 display-name override (spec issue
-  // #10) always wins.
-  const displayName = (path: string) =>
-    projectDisplayNames[path] ?? titleCasePath(path)
-
-  /** The name a project card (and its drag clone) shows for `path` —
-   * the shared listing rule (display-names.ts). */
+  // v1.2.0 (issue #16): the one listing name for `path` (display-names.ts)
+  // — a v1.1.2 T6 display-name override (spec issue #10) wins, then the
+  // manifest-declared name learned at preflight, then the title-cased path
+  // basename. Cards, the drag clone and the switch dialog all read this.
   const cardName = (path: string) =>
-    projectDisplayName(path, projectDisplayNames, currentProject)
+    projectDisplayName(
+      path,
+      projectDisplayNames,
+      manifestProjectNames,
+      currentProject
+    )
 
   /** Persists the app-side project index — history list and folder
    * membership change together, so they always save atomically. */
@@ -1122,12 +1126,12 @@ export function Sidebar({
           <AlertDialogHeader>
             <AlertDialogTitle>
               {t('switchProject.title', {
-                name: pendingSwitchPath ? displayName(pendingSwitchPath) : '',
+                name: pendingSwitchPath ? cardName(pendingSwitchPath) : '',
               })}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {t('switchProject.description', {
-                name: pendingSwitchPath ? displayName(pendingSwitchPath) : '',
+                name: pendingSwitchPath ? cardName(pendingSwitchPath) : '',
               })}
             </AlertDialogDescription>
           </AlertDialogHeader>

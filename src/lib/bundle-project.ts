@@ -11,6 +11,14 @@ import { openProject } from '@/lib/open-project'
  * directory goes through the exact same open flow as a directory project.
  */
 
+/**
+ * True for `.pnds` bundle files (case-insensitive extension) — the routing
+ * check shared by the ⌘O picker and the Finder drag-and-drop.
+ */
+export function isBundlePath(path: string): boolean {
+  return path.toLowerCase().endsWith('.pnds')
+}
+
 /** Installs a `.pnds` into `bundles/` and opens the extracted project. */
 export async function installAndOpenBundle(bundlePath: string): Promise<void> {
   logger.info('Installing .pnds bundle', { path: bundlePath })

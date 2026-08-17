@@ -4,11 +4,12 @@ import { logger } from '@/lib/logger'
 import { notifications } from '@/lib/notifications'
 import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
-import { installAndOpenBundle } from '@/lib/bundle-project'
+import { installAndOpenBundle, isBundlePath } from '@/lib/bundle-project'
 import {
   DEFAULT_OSC_TARGET,
   loadAudioPreferences,
   saveProjectIndex,
+  saveProjectManifestName,
 } from '@/lib/audio-prefs'
 
 /**
@@ -39,7 +40,7 @@ export async function promptOpenProject(): Promise<void> {
   }
   const selected = result.data
   if (!selected) return
-  if (selected.toLowerCase().endsWith('.pnds')) {
+  if (isBundlePath(selected)) {
     await installAndOpenBundle(selected)
     return
   }
@@ -79,7 +80,13 @@ export async function runPreflight(path: string): Promise<void> {
     logger.warn('Preflight failed', { path, error: result.error })
     return
   }
+  // v1.2.0 (issue #16): learn the manifest name before the store records
+  // it, so a reopen of an already-known name saves nothing.
+  const knownName = useProjectStore.getState().manifestProjectNames[path]
   useProjectStore.getState().preflightSucceeded(path, result.data)
+  if (knownName !== result.data.name) {
+    void saveProjectManifestName(path, result.data.name)
+  }
   logger.info('Preflight passed', { project: result.data.name })
 
   useSessionStore.getState().setAudioMode(result.data.audio.defaultMode)

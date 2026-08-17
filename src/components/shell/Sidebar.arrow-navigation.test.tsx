@@ -54,6 +54,9 @@ function seedRunningSession(currentPath: string) {
   useProjectStore.setState({
     recentProjectPaths: [FIRST_PATH, SECOND_PATH, THIRD_PATH],
     currentProject: { path: currentPath, manifest },
+    // v1.2.0 (issue #16): preflight-learned names must not leak between
+    // tests — the card names would follow the stale entries.
+    manifestProjectNames: {},
     preflightStatus: 'ready',
   })
   useSessionStore.setState({

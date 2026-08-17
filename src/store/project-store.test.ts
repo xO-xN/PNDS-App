@@ -38,6 +38,7 @@ describe('project-store', () => {
       pendingPreflightPath: null,
       pendingSwitchPath: null,
       activeFolderId: null,
+      manifestProjectNames: {},
       preflightStatus: 'idle',
       preflightError: null,
     })
@@ -68,6 +69,32 @@ describe('project-store', () => {
     expect(state.preflightStatus).toBe('ready')
     expect(state.currentProject?.manifest.name).toBe('Inarticulate III')
     expect(state.preflightError).toBeNull()
+  })
+
+  it('learns the manifest name on every successful preflight (issue #16)', () => {
+    useProjectStore
+      .getState()
+      .preflightSucceeded('/bundles/inarticulate-iii-0.1.0', manifest)
+    // A later preflight of another project keeps the first entry.
+    useProjectStore.getState().preflightSucceeded('/other', {
+      ...manifest,
+      name: 'Other Score',
+    })
+
+    expect(useProjectStore.getState().manifestProjectNames).toEqual({
+      '/bundles/inarticulate-iii-0.1.0': 'Inarticulate III',
+      '/other': 'Other Score',
+    })
+  })
+
+  it('restores the learned manifest names from preferences', () => {
+    useProjectStore
+      .getState()
+      .setManifestProjectNames({ '/p': 'Inarticulate III' })
+
+    expect(useProjectStore.getState().manifestProjectNames).toEqual({
+      '/p': 'Inarticulate III',
+    })
   })
 
   it('records a readable error and clears the project on failure', () => {

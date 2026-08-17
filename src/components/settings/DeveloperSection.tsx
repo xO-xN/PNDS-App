@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { FolderOpen, Package, RefreshCw } from 'lucide-react'
+import { FolderOpen, RefreshCw } from 'lucide-react'
 import { open } from '@tauri-apps/plugin-dialog'
 import { writeText } from '@tauri-apps/plugin-clipboard-manager'
 import { toast } from 'sonner'
@@ -173,11 +173,9 @@ export function DeveloperSection({ section }: { section: SettingsSection }) {
             className="bg-muted/50 mt-1 flex flex-col gap-1.5 rounded-md p-2"
           >
             <div className="flex min-w-0 items-center gap-2">
-              <Package
-                size={12}
-                aria-hidden="true"
-                className="text-muted-foreground shrink-0"
-              />
+              <span className="text-muted-foreground shrink-0 text-xs">
+                {t('settings.developerOutputLabel')}
+              </span>
               <span
                 className="text-muted-foreground min-w-0 flex-1 truncate font-mono text-xs"
                 title={result.outputPath}
@@ -195,8 +193,8 @@ export function DeveloperSection({ section }: { section: SettingsSection }) {
               </Button>
             </div>
             <div className="flex min-w-0 items-center gap-2">
-              <span className="text-muted-foreground shrink-0 font-mono text-xs">
-                sha256
+              <span className="text-muted-foreground shrink-0 text-xs">
+                {t('settings.developerShaLabel')}
               </span>
               <span
                 className="text-muted-foreground min-w-0 flex-1 truncate font-mono text-xs"

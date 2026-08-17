@@ -40,17 +40,20 @@ export function titleCasePath(path: string): string {
 
 /**
  * v1.2.0 (spec issue #15): the one naming rule for project listings — an
- * explicit display-name override wins, then the selected project's manifest
- * name, then the title-cased path basename. Shared by the sidebar cards and
- * the settings Projects section so both always agree.
+ * explicit display-name override wins, then the manifest-declared name
+ * learned at preflight (issue #16: a bundle install reads as its manifest
+ * name, not its `<id>-<version>` directory), then the selected project's
+ * manifest name, then the title-cased path basename. Shared by the sidebar
+ * cards and the settings Projects section so both always agree.
  */
 export function projectDisplayName(
   path: string,
   overrides: Readonly<Record<string, string>>,
+  manifestNames: Readonly<Record<string, string>>,
   currentProject: CurrentProject | null
 ): string {
-  if (path === currentProject?.path && !overrides[path]) {
-    return currentProject.manifest.name
-  }
-  return overrides[path] ?? titleCasePath(path)
+  if (overrides[path]) return overrides[path]
+  if (manifestNames[path]) return manifestNames[path]
+  if (path === currentProject?.path) return currentProject.manifest.name
+  return titleCasePath(path)
 }

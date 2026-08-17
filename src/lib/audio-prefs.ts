@@ -105,6 +105,29 @@ export async function saveProjectDisplayName(
 }
 
 /**
+ * v1.2.0 (issue #16): persist the manifest-declared name learned at a
+ * successful preflight. It becomes the listing name for every history
+ * entry (a user override always wins; see display-names.ts).
+ */
+export async function saveProjectManifestName(
+  path: string,
+  name: string
+): Promise<void> {
+  return enqueueSave(async () => {
+    const prefs = await loadAudioPreferences()
+    if (!prefs) return
+    await commands.savePreferences({
+      ...prefs,
+      projectManifestNames: upsertDisplayName(
+        prefs.projectManifestNames,
+        path,
+        name
+      ),
+    })
+  })
+}
+
+/**
  * v1.2.0 (issue #13): persist the General-section language choice. `null`
  * means "follow the system locale" — the pre-selection default.
  */

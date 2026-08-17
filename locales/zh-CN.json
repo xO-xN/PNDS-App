@@ -75,6 +75,8 @@
   "settings.developerPacking": "正在打包…",
   "settings.developerPackFailed": "无法打包工程",
   "settings.developerCopy": "复制",
+  "settings.developerOutputLabel": "Bundle 文件",
+  "settings.developerShaLabel": "SHA-256 校验和",
   "settings.developerOverwriteTitle": "覆盖已有的 bundle？",
   "settings.developerOverwriteDescription": "该路径已存在 bundle 文件，将被替换：",
   "settings.developerOverwriteConfirm": "覆盖",

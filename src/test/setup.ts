@@ -41,6 +41,17 @@ vi.mock('@tauri-apps/api/event', () => ({
   }),
 }))
 
+// v1.2.0 (issue #16): window-level drag-and-drop wiring in App.tsx — no
+// native drop events in jsdom; tests that exercise routing use the
+// handleDroppedPaths unit tests instead.
+vi.mock('@tauri-apps/api/webviewWindow', () => ({
+  getCurrentWebviewWindow: vi.fn(() => ({
+    onDragDropEvent: vi.fn().mockResolvedValue(() => {
+      // Mock unlisten function
+    }),
+  })),
+}))
+
 vi.mock('@tauri-apps/plugin-updater', () => ({
   check: vi.fn().mockResolvedValue(null),
 }))

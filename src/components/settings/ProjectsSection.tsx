@@ -23,6 +23,12 @@ export function ProjectsSection({ section }: { section: SettingsSection }) {
   const { t } = useTranslation()
   const recentProjectPaths = useProjectStore(state => state.recentProjectPaths)
   const currentProject = useProjectStore(state => state.currentProject)
+  const projectDisplayNames = useProjectStore(
+    state => state.projectDisplayNames
+  )
+  const manifestProjectNames = useProjectStore(
+    state => state.manifestProjectNames
+  )
   const sessionStatus = useSessionStore(state => state.sessionStatus)
   const sessionLive = sessionStatus === 'starting' || sessionStatus === 'ready'
 
@@ -90,7 +96,8 @@ export function ProjectsSection({ section }: { section: SettingsSection }) {
                     <span className="truncate">
                       {projectDisplayName(
                         path,
-                        useProjectStore.getState().projectDisplayNames,
+                        projectDisplayNames,
+                        manifestProjectNames,
                         currentProject
                       )}
                     </span>

@@ -61,6 +61,7 @@ describe('openProject (no trust gate)', () => {
       pendingPreflightPath: null,
       pendingSwitchPath: null,
       activeFolderId: null,
+      manifestProjectNames: {},
       preflightStatus: 'idle',
       preflightError: null,
     })
@@ -118,8 +119,39 @@ describe('openProject (no trust gate)', () => {
 
     const state = useProjectStore.getState()
     expect(state.recentProjectPaths).toEqual(['/a', '/b'])
-    expect(commands.savePreferences).not.toHaveBeenCalled()
+    // No project-index re-save (the manifest-name learn below is a separate
+    // preference field, asserted in its own test).
+    expect(commands.savePreferences).not.toHaveBeenCalledWith(
+      expect.objectContaining({ recentProjects: expect.anything() })
+    )
     expect(commands.preflightProject).toHaveBeenCalledWith('/a')
+  })
+
+  it('persists the manifest-declared name on a successful preflight', async () => {
+    await openProject(NEW_PATH)
+
+    await vi.waitFor(() => {
+      expect(commands.savePreferences).toHaveBeenCalledWith(
+        expect.objectContaining({
+          projectManifestNames: { [NEW_PATH]: 'Inarticulate III' },
+        })
+      )
+    })
+    expect(useProjectStore.getState().manifestProjectNames[NEW_PATH]).toBe(
+      'Inarticulate III'
+    )
+  })
+
+  it('saves nothing when the manifest name is already known', async () => {
+    // '/a' is already in the history, so no index save either — a known
+    // name must make the whole open a no-op on the preferences file.
+    useProjectStore
+      .getState()
+      .setManifestProjectNames({ '/a': 'Inarticulate III' })
+
+    await openProject('/a')
+
+    expect(commands.savePreferences).not.toHaveBeenCalled()
   })
 })
 

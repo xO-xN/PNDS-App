@@ -90,6 +90,15 @@ export function AppShell() {
         }
         useProjectStore.getState().setProjectDisplayNames(names)
       }
+      // v1.2.0 (issue #16): manifest-declared names learned at preflight —
+      // same serde default and Partial-entry discipline as the overrides.
+      if (prefs?.projectManifestNames) {
+        const names: Record<string, string> = {}
+        for (const [path, name] of Object.entries(prefs.projectManifestNames)) {
+          if (name) names[path] = name
+        }
+        useProjectStore.getState().setManifestProjectNames(names)
+      }
       // v1.1.2 T7: after the restore, seed the default Utilities folder
       // (spec issue #11) — a no-op whenever the folder already exists.
       await ensureUtilitiesFolder()

@@ -37,6 +37,12 @@ pub struct AppPreferences {
     /// Absent entry = derived path-basename name. Never touches manifests.
     #[serde(default)]
     pub project_display_names: HashMap<String, String>,
+    /// v1.2.0 (issue #16): manifest-declared project name per path, learned
+    /// on every successful preflight. The project listings show it (a user
+    /// override above always wins) so a bundle install reads as its manifest
+    /// name, not its `<id>-<version>` directory. Never touches manifests.
+    #[serde(default)]
+    pub project_manifest_names: HashMap<String, String>,
 }
 
 /// A named one-level group of project paths (spec issue #4).
@@ -58,6 +64,7 @@ impl Default for AppPreferences {
             recent_projects: Vec::new(),
             project_folders: Vec::new(),
             project_display_names: HashMap::new(),
+            project_manifest_names: HashMap::new(),
         }
     }
 }
@@ -142,5 +149,40 @@ mod tests {
         );
         let reserialized = serde_json::to_string(&prefs).expect("prefs serialize");
         assert!(reserialized.contains("\"projectDisplayNames\""));
+    }
+
+    /// v1.2.0 (issue #16): preference files written before
+    /// `projectManifestNames` existed must load losslessly (serde default).
+    #[test]
+    fn deserializes_preferences_without_project_manifest_names() {
+        let legacy = r#"{
+            "theme": "dark",
+            "language": null,
+            "recentProjects": ["/a"],
+            "projectDisplayNames": { "/a": "Opening Set" }
+        }"#;
+        let prefs: AppPreferences = serde_json::from_str(legacy).expect("legacy prefs parse");
+        assert!(prefs.project_manifest_names.is_empty());
+        assert_eq!(prefs.project_display_names.len(), 1);
+    }
+
+    #[test]
+    fn roundtrips_project_manifest_names() {
+        let modern = r#"{
+            "theme": "system",
+            "language": null,
+            "recentProjects": ["/bundles/inarticulate-iii-0.1.0"],
+            "projectManifestNames": { "/bundles/inarticulate-iii-0.1.0": "Inarticulate III" }
+        }"#;
+        let prefs: AppPreferences = serde_json::from_str(modern).expect("modern prefs parse");
+        assert_eq!(
+            prefs
+                .project_manifest_names
+                .get("/bundles/inarticulate-iii-0.1.0")
+                .map(String::as_str),
+            Some("Inarticulate III")
+        );
+        let reserialized = serde_json::to_string(&prefs).expect("prefs serialize");
+        assert!(reserialized.contains("\"projectManifestNames\""));
     }
 }
