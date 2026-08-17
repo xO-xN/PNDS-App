@@ -62,7 +62,8 @@ pub struct BuiltinTool {
 /// once; a malformed committed registry is an authoring error and surfaces
 /// as a command error rather than a panic.
 pub fn builtin_tool_registry() -> Result<&'static [ToolEntry], String> {
-    static REGISTRY: std::sync::OnceLock<Result<Vec<ToolEntry>, String>> = std::sync::OnceLock::new();
+    static REGISTRY: std::sync::OnceLock<Result<Vec<ToolEntry>, String>> =
+        std::sync::OnceLock::new();
     REGISTRY
         .get_or_init(|| {
             let json = include_str!("../../../builtin-tools.json");
@@ -80,7 +81,11 @@ pub fn builtin_tool_registry() -> Result<&'static [ToolEntry], String> {
 fn validate_registry(tools: &[ToolEntry]) -> Result<(), String> {
     let mut seen: Vec<&str> = Vec::new();
     for entry in tools {
-        if entry.id.is_empty() || entry.repo.is_empty() || entry.tag.is_empty() {
+        if entry.id.is_empty()
+            || entry.repo.is_empty()
+            || entry.tag.is_empty()
+            || entry.artifact.is_empty()
+        {
             return Err(format!(
                 "builtin-tools.json: every field of tool \"{id}\" must be non-empty",
                 id = entry.id
@@ -93,7 +98,10 @@ fn validate_registry(tools: &[ToolEntry]) -> Result<(), String> {
             ));
         }
         if seen.contains(&entry.id.as_str()) {
-            return Err(format!("builtin-tools.json: duplicate tool id \"{id}\"", id = entry.id));
+            return Err(format!(
+                "builtin-tools.json: duplicate tool id \"{id}\"",
+                id = entry.id
+            ));
         }
         seen.push(&entry.id);
     }
@@ -187,7 +195,10 @@ fn sync_one_tool(staged: &Path, bundles_root: &Path) -> Result<BuiltinTool, Stri
 fn dir_manifest_id(dir: &Path) -> Option<String> {
     let body = fs::read_to_string(dir.join("manifest.json")).ok()?;
     let manifest = serde_json::from_str::<serde_json::Value>(&body).ok()?;
-    manifest.get("id").and_then(|v| v.as_str()).map(String::from)
+    manifest
+        .get("id")
+        .and_then(|v| v.as_str())
+        .map(String::from)
 }
 
 /// The manifest name of an installed tool, falling back to its id when the
@@ -270,9 +281,7 @@ pub async fn sync_builtin_tools(app: AppHandle) -> Result<Vec<BuiltinTool>, Stri
         // Staged resources exist but nothing installed — a corrupted or
         // registry-mismatched app bundle. Loud beats silently hiding the
         // Utilities folder (the per-tool warnings carry the causes).
-        return Err(
-            "The built-in tools could not be installed from the app resources".to_string(),
-        );
+        return Err("The built-in tools could not be installed from the app resources".to_string());
     }
     // Nothing staged (a dev checkout without `npm run tools:fetch`): fall
     // back to the repository mirrors so `tauri dev` still has a Utilities
@@ -399,9 +408,15 @@ mod tests {
         stage_fixture_tool(work.path(), "fixture-tool", "2.0.0");
         let tools = sync_tools_from_staging(&registry, &staged_dir, &bundles);
 
-        assert_eq!(tools[0].path, bundles.join("fixture-tool-2.0.0").to_string_lossy());
+        assert_eq!(
+            tools[0].path,
+            bundles.join("fixture-tool-2.0.0").to_string_lossy()
+        );
         assert!(!old.exists(), "stale version dir must be reclaimed");
-        assert_eq!(tools[0].superseded_paths, vec![old.to_string_lossy().into_owned()]);
+        assert_eq!(
+            tools[0].superseded_paths,
+            vec![old.to_string_lossy().into_owned()]
+        );
     }
 
     #[test]

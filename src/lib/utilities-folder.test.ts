@@ -62,8 +62,13 @@ describe('ensureUtilitiesFolder', () => {
     expect(state.recentProjectPaths).toEqual(TOOL_PATHS)
     // The manifest names are learned up front, so the entries read by
     // name on a clean install before their first preflight.
-    expect(state.manifestProjectNames[TOOL_PATHS[0]]).toBe(TOOL_NAMES[0])
-    expect(state.manifestProjectNames[TOOL_PATHS[1]]).toBe(TOOL_NAMES[1])
+    const [lndPath, msgPath] = TOOL_PATHS
+    const [lndName, msgName] = TOOL_NAMES
+    if (!lndPath || !msgPath || !lndName || !msgName) {
+      throw new Error('Expected two tools')
+    }
+    expect(state.manifestProjectNames[lndPath]).toBe(lndName)
+    expect(state.manifestProjectNames[msgPath]).toBe(msgName)
     // saveProjectIndex runs through the serialized save queue.
     await vi.waitFor(() => {
       expect(commands.savePreferences).toHaveBeenCalledWith(
@@ -151,10 +156,7 @@ describe('ensureUtilitiesFolder', () => {
     const [lnd, msg] = TOOL_PATHS
     if (!lnd || !msg) throw new Error('Expected two tool paths')
     const bumped = `${BUNDLES}/local-network-diagnostics-1.1.0`
-    mockTools([
-      { path: bumped, supersededPaths: [lnd] },
-      { path: msg },
-    ])
+    mockTools([{ path: bumped, supersededPaths: [lnd] }, { path: msg }])
     vi.mocked(commands.savePreferences).mockClear()
 
     await ensureUtilitiesFolder()
@@ -189,8 +191,8 @@ describe('ensureUtilitiesFolder', () => {
     })
 
     // The user removed the first tool entirely.
-    const first = TOOL_PATHS[0]
-    if (!first) throw new Error('Expected two tool paths')
+    const [first, second] = TOOL_PATHS
+    if (!first || !second) throw new Error('Expected two tool paths')
     const store = useProjectStore.getState()
     store.removeProjectFromFolder(UTILITIES_FOLDER_ID, first)
     store.removeRecentProject(first)
@@ -198,21 +200,16 @@ describe('ensureUtilitiesFolder', () => {
     // Later the registry bumps it — no member of that tool remains, so the
     // new version must NOT be re-added.
     const bumped = `${BUNDLES}/local-network-diagnostics-1.1.0`
-    mockTools([
-      { path: bumped, supersededPaths: [first] },
-      { path: TOOL_PATHS[1] },
-    ])
+    mockTools([{ path: bumped, supersededPaths: [first] }, { path: second }])
     vi.mocked(commands.savePreferences).mockClear()
 
     await ensureUtilitiesFolder()
 
-    const utilities = useProjectStore.getState().projectFolders.find(
-      folder => folder.id === UTILITIES_FOLDER_ID
-    )
+    const utilities = useProjectStore
+      .getState()
+      .projectFolders.find(folder => folder.id === UTILITIES_FOLDER_ID)
     expect(utilities?.projectPaths).toEqual([TOOL_PATHS[1]])
-    expect(useProjectStore.getState().recentProjectPaths).not.toContain(
-      bumped
-    )
+    expect(useProjectStore.getState().recentProjectPaths).not.toContain(bumped)
   })
 
   it('seeds nothing when no built-in tool is available', async () => {

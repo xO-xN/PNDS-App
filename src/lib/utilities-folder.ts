@@ -1,9 +1,6 @@
 import { commands } from '@/lib/tauri-bindings'
 import { logger } from '@/lib/logger'
-import {
-  saveProjectIndex,
-  saveProjectManifestNames,
-} from '@/lib/audio-prefs'
+import { saveProjectIndex, saveProjectManifestNames } from '@/lib/audio-prefs'
 import { useProjectStore, UTILITIES_FOLDER_ID } from '@/store/project-store'
 import { upsertDisplayName } from '@/lib/display-names'
 
@@ -86,7 +83,9 @@ export async function ensureUtilitiesFolder(): Promise<void> {
   // current ones, then pin the folder to the bottom when an older install
   // still has it elsewhere (it used to be seeded first).
   const stalePaths = new Set(tools.flatMap(tool => tool.supersededPaths))
-  const folderPaths = existing.projectPaths.filter(path => !stalePaths.has(path))
+  const folderPaths = existing.projectPaths.filter(
+    path => !stalePaths.has(path)
+  )
   let membershipChanged = stalePaths.size > 0
   for (const tool of tools) {
     const wasMember =

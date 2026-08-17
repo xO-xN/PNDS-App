@@ -130,7 +130,9 @@ export function readZipManifestIdentity(zipPath) {
   if (!listing.includes(manifestName)) {
     throw new Error(`the archive's project is missing manifest.json`)
   }
-  const manifest = JSON.parse(runCapture('unzip', ['-p', zipPath, manifestName]))
+  const manifest = JSON.parse(
+    runCapture('unzip', ['-p', zipPath, manifestName])
+  )
   const { id, version } = manifest
   if (typeof id !== 'string' || id.length === 0) {
     throw new Error('the manifest is missing the "id" field')
@@ -175,7 +177,9 @@ async function download(url) {
 async function main(argv) {
   const options = parseArgs(argv)
   const tools = parseRegistry(fs.readFileSync(options.registry, 'utf8'))
-  const packageJson = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'))
+  const packageJson = JSON.parse(
+    fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')
+  )
   const metadata = bundleMetadata(
     packageJson.version,
     new Date().toISOString(),
@@ -214,7 +218,11 @@ async function main(argv) {
           `registry/tool mismatch: registry declares "${tool.id}" but the artifact contains "${identity.id}"`
         )
       }
-      stageBundle(downloaded, path.join(options.out, `${tool.id}.pnds`), metadata)
+      stageBundle(
+        downloaded,
+        path.join(options.out, `${tool.id}.pnds`),
+        metadata
+      )
       process.stdout.write(
         `staged ${tool.id}-${identity.version}.pnds (${(bytes.length / 1024 / 1024).toFixed(1)} MB)\n`
       )
@@ -222,7 +230,9 @@ async function main(argv) {
       fs.rmSync(tmp, { recursive: true, force: true })
     }
   }
-  process.stdout.write(`✓ ${tools.length} built-in tool(s) staged in ${options.out}\n`)
+  process.stdout.write(
+    `✓ ${tools.length} built-in tool(s) staged in ${options.out}\n`
+  )
 }
 
 function parseArgs(argv) {

@@ -34,7 +34,10 @@ function tempdir() {
 }
 
 /** A minimal release zip: one project root with a manifest + server file. */
-function buildReleaseZip(dir, { root = 'Fixture Tool', id = 'fixture-tool', version = '1.0.0' } = {}) {
+function buildReleaseZip(
+  dir,
+  { root = 'Fixture Tool', id = 'fixture-tool', version = '1.0.0' } = {}
+) {
   const project = path.join(dir, root)
   fs.mkdirSync(project, { recursive: true })
   fs.writeFileSync(
@@ -189,7 +192,10 @@ describe('verifyArtifact', () => {
 describe('zip staging helpers', () => {
   it('reads the manifest identity and enforces a single root', () => {
     const dir = tempdir()
-    const zipPath = buildReleaseZip(dir, { id: 'fixture-tool', version: '0.4.1' })
+    const zipPath = buildReleaseZip(dir, {
+      id: 'fixture-tool',
+      version: '0.4.1',
+    })
     expect(readZipManifestIdentity(zipPath)).toMatchObject({
       id: 'fixture-tool',
       version: '0.4.1',
@@ -201,7 +207,10 @@ describe('zip staging helpers', () => {
     const dir = tempdir()
     const zipPath = buildReleaseZip(dir)
     fs.writeFileSync(path.join(dir, 'stray.txt'), 'junk')
-    spawnSync('zip', ['-q', '-j', zipPath, 'stray.txt'], { cwd: dir, stdio: 'ignore' })
+    spawnSync('zip', ['-q', '-j', zipPath, 'stray.txt'], {
+      cwd: dir,
+      stdio: 'ignore',
+    })
     expect(() => readZipManifestIdentity(zipPath)).toThrow(/top-level file/)
   })
 
@@ -248,7 +257,9 @@ describe('fetch script end-to-end (child process)', () => {
 
   beforeAll(async () => {
     workdir = tempdir()
-    artifactBytes = fs.readFileSync(buildReleaseZip(workdir, { root: 'Fixture Tool' }))
+    artifactBytes = fs.readFileSync(
+      buildReleaseZip(workdir, { root: 'Fixture Tool' })
+    )
     server = http.createServer((request, response) => {
       response.end(artifactBytes)
     })
@@ -282,7 +293,9 @@ describe('fetch script end-to-end (child process)', () => {
       let stderr = ''
       child.stdout.on('data', chunk => (stdout += chunk))
       child.stderr.on('data', chunk => (stderr += chunk))
-      child.on('error', error => resolve({ status: 1, stdout, stderr: String(error) }))
+      child.on('error', error =>
+        resolve({ status: 1, stdout, stderr: String(error) })
+      )
       child.on('close', status => resolve({ status, stdout, stderr }))
     })
   }

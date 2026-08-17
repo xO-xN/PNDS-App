@@ -70,7 +70,9 @@ export default tseslint.config(
     },
   },
   {
-    files: ['scripts/**/*.js'],
+    // Node-side scripts and their vitest harness (.mjs) — plain Node
+    // globals, no browser/DOM assumptions.
+    files: ['scripts/**/*.{js,mjs}', 'src/lib/*.test.mjs'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'module',
@@ -78,6 +80,7 @@ export default tseslint.config(
         console: 'readonly',
         process: 'readonly',
         Buffer: 'readonly',
+        fetch: 'readonly',
         __dirname: 'readonly',
         __filename: 'readonly',
         global: 'readonly',

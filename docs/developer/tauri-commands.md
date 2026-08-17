@@ -208,7 +208,7 @@ vi.mock('@/lib/tauri-bindings', () => ({
 | `fadeInWindow`             | none                                  | `Result<null, string>`                  | First show / dock reopen fade (§7.4)                                               |
 | `markQuitting`             | none                                  | `Result<null, string>`                  | Cancel in-flight fades (⌘Q, §7.4)                                                  |
 | `quitApp`                  | none                                  | `Result<null, string>`                  | Process exit behind ⌘Q (v1.1.2 T7)                                                 |
-| `syncBuiltinTools`         | none                                  | `Result<BuiltinTool[], string>`         | Install/sync built-in utility tools for the Utilities folder (v1.2.0 #18)           |
+| `syncBuiltinTools`         | none                                  | `Result<BuiltinTool[], string>`         | Install/sync built-in utility tools for the Utilities folder (v1.2.0 #18)          |
 | `openAppDataDir`           | none                                  | `Result<null, string>`                  | Reveal app data dir in Finder (settings About, v1.2.0)                             |
 | `openAppLogDir`            | none                                  | `Result<null, string>`                  | Reveal app log dir in Finder (settings About, v1.2.0)                              |
 | `checkPortStatus`          | `port: number`                        | `Result<PortStatus, string>`            | Occupancy of one TCP port (settings Ports, v1.2.0)                                 |
