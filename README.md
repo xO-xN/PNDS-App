@@ -61,7 +61,7 @@ The following are **later goals** and are not part of V1:
 
 - Distributed performance across the internet
 - Intel Mac, Windows, Linux
-- Project archives (`.pnds`), an online project library, and project downloads
+- An online project library, and project downloads
 
 ## Download & Install
 
@@ -103,7 +103,7 @@ Connect the host Mac running PNDS App to the local network; a wired connection i
 
 ![PNDS App - opening and running a PNDS project](./assets/readme_img/demo30.gif)
 
-Select a local PNDS project directory in PNDS App.
+Select a local PNDS project directory in PNDS App. A project can also arrive as a single-file `.pnds` bundle — double-click it, drop it on the app window, or pick it via ⌘O; PNDS validates, installs and opens it like a directory (see `docs/PNDS_PROJECT_BUNDLE_SPECIFICATION.md`; bundles are packed from the Settings → Developer Tools section).
 
 The app then:
 

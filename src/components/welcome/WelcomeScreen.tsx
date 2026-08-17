@@ -14,7 +14,7 @@ export function WelcomeScreen() {
   const preflightError = useProjectStore(state => state.preflightError)
 
   return (
-    <div className="flex min-h-full flex-col items-center justify-center bg-(--pnds-bg) p-8 animate-[fade-in_0.8s_ease-in]">
+    <div className="relative flex min-h-full flex-col items-center justify-center bg-(--pnds-bg) p-8 animate-[fade-in_0.8s_ease-in]">
       <header className="text-center">
         <h1 className="text-[44px] font-light leading-tight tracking-wide text-(--pnds-text)">
           {t('welcome.title')}
@@ -40,14 +40,20 @@ export function WelcomeScreen() {
         {preflightStatus === 'checking' ? t('welcome.checking') : ''}
       </p>
 
-      {preflightStatus === 'error' && preflightError && (
-        <div
-          role="alert"
-          className="font-manrope mt-6 max-w-xl whitespace-pre-wrap rounded-xl border border-red-800/20 bg-red-500/10 p-4 text-start text-sm text-red-900"
-        >
-          {preflightError}
-        </div>
-      )}
+      {/* Bottom-docked preflight errors, out of the centered column: an
+          appearing/disappearing alert (any height) must never re-center
+          the content above — same rule as the status slot, which a
+          fixed-height reserve cannot honor for a multi-line error. */}
+      <div className="absolute inset-x-8 bottom-8 flex justify-center">
+        {preflightStatus === 'error' && preflightError && (
+          <div
+            role="alert"
+            className="font-manrope max-w-xl whitespace-pre-wrap rounded-xl border border-red-800/20 bg-red-500/10 p-4 text-start text-sm text-red-900"
+          >
+            {preflightError}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

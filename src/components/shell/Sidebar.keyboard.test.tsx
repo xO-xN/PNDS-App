@@ -315,6 +315,20 @@ describe('Cmd keyboard layer (v1.1.2)', () => {
       )
     })
 
+    it('⌘Enter runs the same submit as Enter (v1.2.0)', () => {
+      seedLoadableIdle()
+      render(<AppShell />)
+
+      fireEvent.keyDown(window, { key: 'Enter', metaKey: true })
+
+      expect(commands.startProject).toHaveBeenCalledWith(
+        FIRST_PATH,
+        'internal',
+        '192.168.1.10',
+        null
+      )
+    })
+
     it('Enter does nothing without a loadable selection', () => {
       useProjectStore.setState({ recentProjectPaths: [FIRST_PATH] })
       render(<AppShell />)

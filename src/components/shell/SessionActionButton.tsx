@@ -19,9 +19,9 @@ import { cn } from '@/lib/utils'
  *
  * v1.1.2: Enter is a keyboard alias for the submit — Load when idle and
  * loadable, Change/restart while a pending config change waits. v1.2.0:
- * the plain-Esc close-project alias was retired — Esc has no app
- * function; ⌘W opens the close-project confirmation while a session
- * runs (see menu.ts).
+ * ⌘Enter is the same alias (no macOS system conflict), the plain-Esc
+ * close-project alias was retired — Esc has no app function; ⌘W opens
+ * the close-project confirmation while a session runs (see menu.ts).
  */
 export function SessionActionButton() {
   const { t } = useTranslation()
@@ -49,7 +49,11 @@ export function SessionActionButton() {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.repeat) return
-      if (event.metaKey || event.ctrlKey || event.altKey) return
+      // v1.2.0: ⌘Enter aliases the Enter submit — macOS reserves no
+      // system-wide ⌘Enter chord and no app-menu accelerator here claims
+      // it, so the webview receives it. Ctrl/Alt+Enter stay rejected.
+      const enter = event.key === 'Enter' && !event.ctrlKey && !event.altKey
+      if ((event.metaKey || event.ctrlKey || event.altKey) && !enter) return
       if (isEditableTarget(event.target)) return
       // Radix owns the keys while a dialog or select popup is open.
       if (hasOpenOverlay()) return
