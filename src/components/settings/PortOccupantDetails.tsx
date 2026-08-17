@@ -20,16 +20,16 @@ export function PortOccupantDetails({
     <dl
       data-testid="port-occupant"
       className={cn(
-        'text-muted-foreground grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs',
+        'text-muted-foreground grid min-w-0 grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs',
         className
       )}
     >
       <dt>{t('settings.portPidLabel')}</dt>
-      <dd className="font-manrope">{occupant.pid}</dd>
+      <dd className="font-manrope min-w-0">{occupant.pid}</dd>
       <dt>{t('settings.portProcessLabel')}</dt>
-      <dd className="break-all">{occupant.name}</dd>
+      <dd className="min-w-0 break-all">{occupant.name}</dd>
       <dt>{t('settings.portCommandLabel')}</dt>
-      <dd className="break-all">{occupant.commandLine}</dd>
+      <dd className="min-w-0 break-all">{occupant.commandLine}</dd>
     </dl>
   )
 }

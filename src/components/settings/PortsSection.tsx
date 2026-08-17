@@ -190,7 +190,9 @@ export function PortsSection({ section }: { section: SettingsSection }) {
               data-port={port}
               className="flex flex-col gap-1 rounded-lg border border-(--pnds-text)/10 px-3 py-2"
             >
-              <div className="flex items-center gap-3">
+              {/* Wrap (not overflow) when the status cluster can't fit —
+                  the dialog pages vertically only. */}
+              <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
                 <span className="text-sm">{label}</span>
                 <span className="font-manrope text-muted-foreground text-sm">
                   {port}

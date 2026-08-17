@@ -68,7 +68,10 @@ export function SettingsPanel() {
         // around the back button when the panel appears. Keyboard focus is
         // still available by Tabbing into the dialog.
         onOpenAutoFocus={event => event.preventDefault()}
-        className="top-[50%] max-h-[85vh] gap-0 overflow-y-auto sm:max-w-xl"
+        // Vertical paging only: overflow-y forces overflow-x to compute to
+        // auto (a stray wide child would enable horizontal panning), so
+        // clamp it — the sections wrap their long content instead.
+        className="top-[50%] max-h-[85vh] gap-0 overflow-x-hidden overflow-y-auto sm:max-w-xl"
       >
         {/* Back-arrow close, inline to the left of the title. The ring is
             focus-visible only, so deliberate keyboard navigation still
