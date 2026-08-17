@@ -191,12 +191,16 @@ describe('Error Page port-conflict linkage (v1.2.0 issue #14)', () => {
 
     render(<ErrorScreen />)
 
-    const block = await screen.findByTestId('port-conflict-block')
-    expect(block).toHaveTextContent('Port 6868 is held by:')
-    expect(block).toHaveTextContent('4242')
-    expect(block).toHaveTextContent(
+    // The identity loads asynchronously — wait for it before asserting.
+    const block = await screen.findByText(
       '/usr/local/bin/node /Users/test/rogue/server.js'
     )
+    expect(
+      block.closest('[data-testid="port-conflict-block"]')
+    ).toHaveTextContent('Port 6868 is held by:')
+    expect(
+      block.closest('[data-testid="port-conflict-block"]')
+    ).toHaveTextContent('4242')
   })
 
   it('no conflict block for non-port errors', () => {

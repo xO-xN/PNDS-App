@@ -56,13 +56,27 @@ pub fn check_dependencies(project_root: &Path) -> Result<(), String> {
 /// §7: both HTTP ports must be free. No auto-rebinding, no manifest edits —
 /// a conflict fails preflight with an actionable message.
 ///
+/// Detection is layered, because a plain wildcard bind is NOT enough on
+/// macOS: Rust's TcpListener sets SO_REUSEADDR, and BSD semantics let a
+/// wildcard bind succeed even while another process listens on a specific
+/// address of the same port (e.g. 127.0.0.1:6868). The score server then
+/// can't actually serve and the session dies as an opaque 30s health
+/// timeout instead of a readable conflict. So:
+/// 1. lsof LISTEN check — authoritative, sees every bind address, and
+///    agrees with what the settings Ports section reports;
+/// 2. wildcard bind — catches listeners lsof couldn't be asked about;
+/// 3. loopback bind — catches the specific-address case if lsof failed.
+///
 /// FORMAT CONTRACT: the ErrorScreen port-conflict linkage (v1.2.0, issue
 /// #14) matches this message with `/^Port (\d+) is already in use\./m` to
 /// offer [Release and Retry]. The first line's wording is load-bearing;
 /// `port_conflict_message_is_parseable` pins it.
 pub fn check_ports_available(performer_port: u16, monitor_port: u16) -> Result<(), String> {
     for port in [performer_port, monitor_port] {
-        if std::net::TcpListener::bind(("0.0.0.0", port)).is_err() {
+        if crate::project::ports::port_has_listener(port)
+            || std::net::TcpListener::bind(("0.0.0.0", port)).is_err()
+            || std::net::TcpListener::bind(("127.0.0.1", port)).is_err()
+        {
             return Err(port_conflict_message(port));
         }
     }
@@ -191,6 +205,22 @@ mod tests {
         // No rebind-after-drop assertion: tests run in parallel, and another
         // test may legitimately grab the freed ephemeral port first (a
         // 127.0.0.1 bind collides with a 0.0.0.0 wildcard bind on macOS).
+    }
+
+    /// Regression (found in live testing): a listener bound to a SPECIFIC
+    /// address (127.0.0.1) must fail preflight. The wildcard bind used to
+    /// succeed over it (SO_REUSEADDR + BSD semantics), the score server
+    /// then never actually served, and the session died as an opaque 30s
+    /// health timeout instead of a readable port conflict.
+    #[test]
+    fn loopback_bound_listener_is_reported() {
+        let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let err = check_ports_available(port, 0).unwrap_err();
+        assert!(
+            err.contains(&format!("Port {port} is already in use")),
+            "unexpected: {err}"
+        );
     }
 
     /// v1.2.0 (issue #14): the ErrorScreen port-conflict linkage parses the

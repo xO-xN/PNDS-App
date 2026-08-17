@@ -70,8 +70,12 @@ export function SettingsPanel() {
         onOpenAutoFocus={event => event.preventDefault()}
         // Vertical paging only: overflow-y forces overflow-x to compute to
         // auto (a stray wide child would enable horizontal panning), so
-        // clamp it — the sections wrap their long content instead.
-        className="top-[50%] max-h-[85vh] gap-0 overflow-x-hidden overflow-y-auto sm:max-w-xl"
+        // clamp it. The single grid column must be minmax(0,1fr): a plain
+        // auto track sizes to the largest item's intrinsic min-content,
+        // and one nowrap `truncate` path row was demanding ~656px inside
+        // the 576px panel — min-w-0 chains do not lower intrinsic
+        // contributions, only the track floor does.
+        className="top-[50%] max-h-[85vh] gap-0 grid-cols-[minmax(0,1fr)] overflow-x-hidden overflow-y-auto sm:max-w-xl"
       >
         {/* Back-arrow close, inline to the left of the title. The ring is
             focus-visible only, so deliberate keyboard navigation still

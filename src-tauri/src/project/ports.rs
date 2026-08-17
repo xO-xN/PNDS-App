@@ -78,6 +78,14 @@ fn occupant_identity(pid: u32) -> Option<PortOccupant> {
     })
 }
 
+/// Whether any process is LISTENing on `port`, regardless of bind address
+/// (wildcard, loopback, or a specific interface). The authoritative signal
+/// for port conflicts — a plain wildcard bind misses specific-address
+/// holders on macOS (SO_REUSEADDR lets it succeed anyway).
+pub(crate) fn port_has_listener(port: u16) -> bool {
+    !lsof_listening_pids(port).is_empty()
+}
+
 /// Occupancy of `port`: the first listener's full identity, or None when the
 /// port is free (or lsof is unavailable — the status then reads "available",
 /// and the authoritative check remains the preflight bind).
