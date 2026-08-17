@@ -320,6 +320,19 @@ async pickProjectOrBundle(title: string) : Promise<Result<string | null, string>
 }
 },
 /**
+ * Compiles the project's SynthDef sources and verifies the manifest's
+ * artifact references (contract: def name = artifact file name = manifest
+ * reference). Fails with the sclang output when compilation fails.
+ */
+async compileProjectSynthdefs(path: string) : Promise<Result<SynthdefCompileResult, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("compile_project_synthdefs", { path }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * v1.1.2 T7: absolute paths of the bundled example projects that make up
  * the Utilities folder. Empty when none are installed — the frontend then
  * seeds nothing.
@@ -516,6 +529,21 @@ channelPlan: ChannelPlan | null;
  * Final CoreAudio output device in use (internal sessions).
  */
 outputDevice: string | null }
+export type SynthdefCompileResult = { 
+/**
+ * The sclang binary this run used (standard app path or PATH hit).
+ */
+sclangPath: string; 
+/**
+ * Basenames of the `.scsyndef` artifacts written during this run
+ * (modified within the run window), sorted.
+ */
+produced: string[]; 
+/**
+ * The `manifest.audio.synthdefs` references confirmed on disk after
+ * the compile (empty for projects that do not support internal mode).
+ */
+verified: string[] }
 /**
  * Window state broadcast to the frontend (`pnds:window` event).
  */

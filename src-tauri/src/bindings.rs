@@ -1,7 +1,9 @@
 use tauri_specta::{collect_commands, Builder};
 
 pub fn generate_bindings() -> Builder<tauri::Wry> {
-    use crate::commands::{bundle, examples, notifications, preferences, project, system};
+    use crate::commands::{
+        bundle, examples, notifications, preferences, project, synthdef, system,
+    };
 
     Builder::<tauri::Wry>::new().commands(collect_commands![
         crate::window::toggle_fullscreen,
@@ -29,6 +31,7 @@ pub fn generate_bindings() -> Builder<tauri::Wry> {
         bundle::reclaim_project_bundle,
         bundle::take_pending_bundle_opens,
         bundle::pick_project_or_bundle,
+        synthdef::compile_project_synthdefs,
         examples::bundled_example_projects,
         system::open_app_data_dir,
         system::open_app_log_dir,

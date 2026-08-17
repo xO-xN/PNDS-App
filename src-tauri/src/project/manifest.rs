@@ -64,20 +64,24 @@ pub struct ScsynthConfig {
 
 /// Loads and fully validates the manifest of the project at `project_root`.
 pub fn load_manifest(project_root: &Path) -> Result<Manifest, String> {
+    let manifest = load_manifest_lenient(project_root)?;
+    validate_paths(&manifest, project_root)?;
+    Ok(manifest)
+}
+
+/// Loads and validates the manifest schema without the filesystem checks
+/// of [`load_manifest`]. Used by the SynthDef compile runner (issue #17),
+/// whose whole purpose is to (re)create the `audio.synthdefs` artifacts
+/// whose absence `load_manifest` would reject.
+pub fn load_manifest_lenient(project_root: &Path) -> Result<Manifest, String> {
     let path = project_root.join("manifest.json");
     let raw = std::fs::read_to_string(&path)
         .map_err(|_| format!("manifest.json not found or unreadable: {}", path.display()))?;
-
     let value: Value =
         serde_json::from_str(&raw).map_err(|e| format!("manifest.json is not valid JSON: {e}"))?;
-
     validate_schema(&value)?;
-
-    let manifest: Manifest = serde_json::from_value(value)
-        .map_err(|e| format!("manifest.json does not match the schema: {e}"))?;
-
-    validate_paths(&manifest, project_root)?;
-    Ok(manifest)
+    serde_json::from_value(value)
+        .map_err(|e| format!("manifest.json does not match the schema: {e}"))
 }
 
 /// Returns true if a dotted field path exists and is not null.

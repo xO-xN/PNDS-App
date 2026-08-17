@@ -1,11 +1,15 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { FolderOpen, RefreshCw } from 'lucide-react'
+import { AudioWaveform, FolderOpen, RefreshCw } from 'lucide-react'
 import { open } from '@tauri-apps/plugin-dialog'
 import { writeText } from '@tauri-apps/plugin-clipboard-manager'
 import { toast } from 'sonner'
 import i18n from '@/i18n/config'
-import { commands, type PackResult } from '@/lib/tauri-bindings'
+import {
+  commands,
+  type PackResult,
+  type SynthdefCompileResult,
+} from '@/lib/tauri-bindings'
 import { logger } from '@/lib/logger'
 import { notifications } from '@/lib/notifications'
 import { useProjectStore } from '@/store/project-store'
@@ -22,24 +26,54 @@ import {
 } from '@/components/ui/alert-dialog'
 import type { SettingsSection } from '@/store/settings-store'
 
+/** One "label: monospace value" line of a tool result panel. */
+function DetailRow({
+  label,
+  value,
+  testId,
+}: {
+  label: string
+  value: string
+  testId: string
+}) {
+  return (
+    <div className="flex min-w-0 items-center gap-2">
+      <span className="text-muted-foreground shrink-0 text-xs">{label}</span>
+      <span
+        className="text-muted-foreground min-w-0 flex-1 truncate font-mono text-xs"
+        title={value}
+        data-testid={testId}
+      >
+        {value}
+      </span>
+    </div>
+  )
+}
+
 /**
- * v1.2.0 (issue #16): the settings Developer Tools section — `.pnds` bundle
- * packing. The target defaults to the selected project (browsable to any
- * folder); packing stages in a temp dir, validates the manifest, synthdef
- * artifacts and node_modules presence, never runs npm, and leaves the source
- * tree untouched. Output lands next to the project as
- * `<name>-<version>.pnds` (an existing file is confirmed before the
- * overwrite) and the result shows the path plus a copyable sha256.
+ * v1.2.0 (issues #16 + #17): the settings Developer Tools section. Both
+ * tools share one target — the selected project, browsable to any folder:
+ *
+ * - Pack Bundle stages in a temp dir, validates the manifest, synthdef
+ *   artifacts and node_modules presence, never runs npm, and leaves the
+ *   source tree untouched. Output lands next to the project as
+ *   `<name>-<version>.pnds` (an existing file is confirmed before the
+ *   overwrite) and the result shows the path plus a copyable sha256.
+ * - Compile SynthDef runs the App's generic sclang runner over
+ *   `supercollider/source/*.scd` (contract: def name = artifact file name =
+ *   manifest reference), then verifies every manifest reference exists.
+ *   Failures surface the sclang output; a missing SuperCollider gets
+ *   install guidance.
  *
  * Query discipline: one backend round-trip per user action; no pre-warming
- * (the panel may mount for months of packing sessions without a pack).
+ * (the panel may mount for months of sessions without a click).
  */
 export function DeveloperSection({ section }: { section: SettingsSection }) {
   const { t } = useTranslation()
   const currentProject = useProjectStore(state => state.currentProject)
 
   // The explicit browse override survives selection changes — a creator
-  // packing "that other folder" stays on it while clicking around.
+  // working on "that other folder" stays on it while clicking around.
   const [browsedPath, setBrowsedPath] = useState<string | null>(null)
   const [packing, setPacking] = useState(false)
   const [result, setResult] = useState<PackResult | null>(null)
@@ -48,7 +82,12 @@ export function DeveloperSection({ section }: { section: SettingsSection }) {
     string | null
   >(null)
 
+  const [compiling, setCompiling] = useState(false)
+  const [compileResult, setCompileResult] =
+    useState<SynthdefCompileResult | null>(null)
+
   const targetPath = browsedPath ?? currentProject?.path ?? null
+  const busy = packing || compiling
 
   const handleBrowse = async () => {
     const selected = await open({
@@ -59,11 +98,12 @@ export function DeveloperSection({ section }: { section: SettingsSection }) {
     if (selected) {
       setBrowsedPath(selected)
       setResult(null)
+      setCompileResult(null)
     }
   }
 
   const runPack = async (overwrite: boolean) => {
-    if (!targetPath || packing) return
+    if (!targetPath || busy) return
     setPacking(true)
     const packResult = await commands.packProjectBundle(targetPath, overwrite)
     setPacking(false)
@@ -87,7 +127,7 @@ export function DeveloperSection({ section }: { section: SettingsSection }) {
   }
 
   const handlePack = async () => {
-    if (!targetPath || packing) return
+    if (!targetPath || busy) return
     setResult(null)
     // Packability + overwrite probe in one shot: a missing synthdef or
     // absent node_modules fails here with the same readable error the pack
@@ -106,6 +146,30 @@ export function DeveloperSection({ section }: { section: SettingsSection }) {
       return
     }
     await runPack(false)
+  }
+
+  const handleCompile = async () => {
+    if (!targetPath || busy) return
+    setCompileResult(null)
+    setCompiling(true)
+    const compiled = await commands.compileProjectSynthdefs(targetPath)
+    setCompiling(false)
+    if (compiled.status === 'error') {
+      logger.error('SynthDef compile failed', {
+        path: targetPath,
+        error: compiled.error,
+      })
+      notifications.error(
+        i18n.t('settings.developerCompileFailed'),
+        compiled.error
+      )
+      return
+    }
+    setCompileResult(compiled.data)
+    logger.info('SynthDefs compiled', {
+      path: targetPath,
+      produced: compiled.data.produced,
+    })
   }
 
   const copyValue = async (value: string) => {
@@ -130,7 +194,7 @@ export function DeveloperSection({ section }: { section: SettingsSection }) {
             <span
               className="text-muted-foreground min-w-0 flex-1 truncate font-mono text-xs"
               title={targetPath}
-              data-testid="developer-pack-target"
+              data-testid="developer-target"
             >
               {targetPath}
             </span>
@@ -143,7 +207,7 @@ export function DeveloperSection({ section }: { section: SettingsSection }) {
             <Button
               variant="outline"
               size="sm"
-              disabled={packing}
+              disabled={busy}
               onClick={() => void handleBrowse()}
             >
               <FolderOpen size={12} aria-hidden="true" />
@@ -152,7 +216,7 @@ export function DeveloperSection({ section }: { section: SettingsSection }) {
             <Button
               variant="outline"
               size="sm"
-              disabled={!targetPath || packing}
+              disabled={!targetPath || busy}
               onClick={() => void handlePack()}
             >
               <RefreshCw
@@ -164,8 +228,48 @@ export function DeveloperSection({ section }: { section: SettingsSection }) {
                 ? t('settings.developerPacking')
                 : t('settings.developerPackProject')}
             </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!targetPath || busy}
+              onClick={() => void handleCompile()}
+            >
+              <AudioWaveform
+                size={12}
+                aria-hidden="true"
+                className={compiling ? 'animate-pulse' : undefined}
+              />
+              {compiling
+                ? t('settings.developerCompiling')
+                : t('settings.developerCompileSynthdef')}
+            </Button>
           </span>
         </div>
+
+        {compileResult && (
+          <div
+            data-testid="developer-compile-result"
+            className="bg-muted/50 mt-1 flex flex-col gap-1.5 rounded-md p-2"
+          >
+            <DetailRow
+              label={t('settings.developerCompiledLabel')}
+              value={compileResult.produced.join(', ')}
+              testId="developer-compile-produced"
+            />
+            {compileResult.verified.length > 0 && (
+              <DetailRow
+                label={t('settings.developerVerifiedLabel')}
+                value={compileResult.verified.join(', ')}
+                testId="developer-compile-verified"
+              />
+            )}
+            <DetailRow
+              label={t('settings.developerSclangLabel')}
+              value={compileResult.sclangPath}
+              testId="developer-compile-sclang"
+            />
+          </div>
+        )}
 
         {result && (
           <div
