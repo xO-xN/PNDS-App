@@ -357,8 +357,10 @@ describe('Sidebar', () => {
     expect(
       within(enough).queryByTestId('device-insufficient-marker')
     ).not.toBeInTheDocument()
-    // Channel counts are shown per entry.
+    // Channel counts are shown per entry — sufficient entries keep the
+    // bare count, insufficient ones spell out the loss (16ch → 2ch).
     expect(screen.getByText('16ch')).toBeInTheDocument()
+    expect(within(option).getByText('16ch → 2ch')).toBeInTheDocument()
 
     // Keyboard: arrow keys move through the insufficient option (no
     // HTML disabled state blocks it), Enter selects it.

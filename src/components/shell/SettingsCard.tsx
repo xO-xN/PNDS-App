@@ -288,14 +288,14 @@ export function SettingsCard({ onPopupOpenChange }: SettingsCardProps) {
       )}
 
       {/* Output device (§6.3): each entry shows its channel count at the
-          project sample rate. Entries with fewer channels than the project
-          are greyed but stay selectable (no real disabled state), carry a
-          red ✕ and an sr-only explanation. The persistent loss indicator in
-          the CLOSED trigger is just a small red dot (v1.2.0: a full
-          "Nch → Hch" badge used to widen the trigger's right side and crowd
-          the device name) — the specifics live in the dot's tooltip/sr-only
-          text and in every opened list entry. Preference only — deferred
-          until Change. */}
+          project sample rate; entries with fewer channels than the project
+          instead carry the red "Nch → Hch" loss text, stay selectable (no
+          real disabled state) and get a red ✕ plus an sr-only explanation.
+          The persistent loss indicator in the CLOSED trigger is just a
+          small red dot (v1.2.0: a full badge used to widen the trigger's
+          right side and crowd the device name) — the specifics live in the
+          dot's tooltip/sr-only text and in the opened list. Preference
+          only — deferred until Change. */}
       <div className="flex items-center gap-2">
         <span className={labelClass}>Device</span>
         <div className="relative flex-1">
@@ -372,10 +372,22 @@ export function SettingsCard({ onPopupOpenChange }: SettingsCardProps) {
                       >
                         <span className="flex min-w-0 flex-1 items-center gap-1.5">
                           <span className="truncate">{device.name}</span>
-                          <span className="shrink-0 text-(--pnds-text)/45">
-                            {t('sidebar.deviceChannelCount', {
-                              channels: device.maxOutputChannels,
-                            })}
+                          <span
+                            className={cn(
+                              'shrink-0',
+                              insufficient
+                                ? 'font-manrope text-[10px] leading-none font-semibold text-(--pnds-danger)'
+                                : 'text-(--pnds-text)/45'
+                            )}
+                          >
+                            {insufficient
+                              ? t('sidebar.deviceInsufficient', {
+                                  projectChannels,
+                                  deviceChannels: device.maxOutputChannels,
+                                })
+                              : t('sidebar.deviceChannelCount', {
+                                  channels: device.maxOutputChannels,
+                                })}
                           </span>
                           {insufficient && (
                             <>
