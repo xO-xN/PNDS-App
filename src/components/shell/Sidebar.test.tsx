@@ -331,7 +331,7 @@ describe('Sidebar', () => {
     )
   })
 
-  it('marks a 16ch project’s 2ch device as greyed-but-selectable with a red ✕ (§6.3)', async () => {
+  it('marks a 16ch project’s 2ch device as greyed-but-selectable with the red loss text (§6.3)', async () => {
     const user = userEvent.setup()
     seedLoadedProject16()
     vi.mocked(commands.listOutputDevices).mockResolvedValue(deviceList)
@@ -346,17 +346,15 @@ describe('Sidebar', () => {
       name: /Mac mini Speakers/,
     })
     // Greyed but NOT a real disabled state: the option stays focusable
-    // and clickable, with the red ✕ marker present.
+    // and clickable; the red loss text is the marker (no ✕ glyph).
     expect(option.className).toContain('opacity-40')
     expect(
-      within(option).getByTestId('device-insufficient-marker')
-    ).toBeInTheDocument()
-    // Enough-channels device shows no ✕.
+      within(option).queryByTestId('device-insufficient-marker')
+    ).not.toBeInTheDocument()
+    // Enough-channels device shows neither grey nor the loss text.
     const enough = screen.getByRole('option', { name: /BlackHole 16ch/ })
     expect(enough.className).not.toContain('opacity-40')
-    expect(
-      within(enough).queryByTestId('device-insufficient-marker')
-    ).not.toBeInTheDocument()
+    expect(within(enough).queryByText('16ch → 2ch')).not.toBeInTheDocument()
     // Channel counts are shown per entry — sufficient entries keep the
     // bare count, insufficient ones spell out the loss (16ch → 2ch).
     expect(screen.getByText('16ch')).toBeInTheDocument()

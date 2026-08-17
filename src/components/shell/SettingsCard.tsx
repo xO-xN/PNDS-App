@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Volume2, X } from 'lucide-react'
+import { Volume2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
@@ -289,8 +289,8 @@ export function SettingsCard({ onPopupOpenChange }: SettingsCardProps) {
 
       {/* Output device (§6.3): each entry shows its channel count at the
           project sample rate; entries with fewer channels than the project
-          instead carry the red "Nch → Hch" loss text, stay selectable (no
-          real disabled state) and get a red ✕ plus an sr-only explanation.
+          instead carry the red "Nch → Hch" loss text as their marker, stay
+          selectable (no real disabled state) and get an sr-only explanation.
           The persistent loss indicator in the CLOSED trigger is just a
           small red dot (v1.2.0: a full badge used to widen the trigger's
           right side and crowd the device name) — the specifics live in the
@@ -390,21 +390,14 @@ export function SettingsCard({ onPopupOpenChange }: SettingsCardProps) {
                                 })}
                           </span>
                           {insufficient && (
-                            <>
-                              <X
-                                data-testid="device-insufficient-marker"
-                                size={12}
-                                className="shrink-0 text-(--pnds-danger)"
-                              />
-                              <span className="sr-only">
-                                {t('sidebar.deviceInsufficientHint', {
-                                  deviceChannels: device.maxOutputChannels,
-                                  projectChannels,
-                                  loss:
-                                    projectChannels - device.maxOutputChannels,
-                                })}
-                              </span>
-                            </>
+                            <span className="sr-only">
+                              {t('sidebar.deviceInsufficientHint', {
+                                deviceChannels: device.maxOutputChannels,
+                                projectChannels,
+                                loss:
+                                  projectChannels - device.maxOutputChannels,
+                              })}
+                            </span>
                           )}
                         </span>
                       </SelectItem>

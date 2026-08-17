@@ -289,7 +289,7 @@ External 与 None 的 App 音量控制始终禁用。App 不修改 macOS 系统�
 
 - 设备仍可选择；
 - App 显示 `Nch → Hch`；
-- 设备菜单中的不足项视觉降级并显示红色叉号；
+- 设备菜单中的不足项视觉降级，以红色 `Nch → Hch` 损失字样标注；
 - 不弹 modal、不显示 toast；
 - Load/Change 直接按 `K = min(N,H)` 启动；
 - App 不通过解析 scsynth 日志猜测设备通道数。

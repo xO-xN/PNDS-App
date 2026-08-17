@@ -156,7 +156,7 @@ App 必须按 Runtime Contract 计算 `N/H/K/B` 并启动 scsynth。
 设备列表每项显示可用输出通道数。对当前工程通道不足的设备：
 
 - 视觉灰显但仍可选择；
-- 最右显示红色叉号；
+- 最右以红色 `Nch → Hch` 损失字样标注（不弹 toast 或 modal）；
 - 不显示 toast 或 modal；
 - 设置区域持续显示例如 `16ch → 2ch`。
 
