@@ -5,6 +5,7 @@
 
 mod bindings;
 mod commands;
+mod open_panel;
 mod project;
 mod types;
 mod window;
@@ -57,6 +58,7 @@ pub fn run() {
         .manage(crate::project::session::SessionManager::default())
         .manage(crate::window::WindowManager::default())
         .manage(crate::commands::preferences::PreferencesCache::default())
+        .manage(crate::commands::bundle::PendingBundleOpens::default())
         .plugin({
             #[allow(unused_mut)]
             let mut targets = vec![
@@ -236,6 +238,28 @@ pub fn run() {
                         };
                         crate::window::spawn_ramp(window, fade_gen, gen, 1.0);
                         log::info!("Main window reopened from dock");
+                    }
+                }
+            }
+
+            // macOS: a document the App was asked to open — i.e. a
+            // double-clicked .pnds bundle (v1.2.0, issue #16). Queue it and
+            // wake the frontend; the frontend drains the queue both on this
+            // event and once at mount, so a cold start (listener not yet
+            // registered) races safely.
+            #[cfg(target_os = "macos")]
+            RunEvent::Opened { urls } => {
+                for url in urls {
+                    let Ok(path) = url.to_file_path() else {
+                        continue;
+                    };
+                    let is_bundle = path
+                        .extension()
+                        .and_then(|ext| ext.to_str())
+                        .is_some_and(|ext| ext.eq_ignore_ascii_case("pnds"));
+                    if is_bundle {
+                        log::info!("Bundle open requested: {}", path.display());
+                        commands::bundle::record_pending_bundle_open(app_handle, &path);
                     }
                 }
             }

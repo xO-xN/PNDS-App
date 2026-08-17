@@ -25,10 +25,12 @@ export { commands, type Result } from './bindings'
 export type {
   AppPreferences,
   AudioConfig,
+  BundleOutputInfo,
   HealthAudio,
   HealthPayload,
   HealthScoreServer,
   Manifest,
+  PackResult,
   PortOccupant,
   PortStatus,
   ProjectFolder,

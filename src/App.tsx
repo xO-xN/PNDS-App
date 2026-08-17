@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { listen } from '@tauri-apps/api/event'
 import { check } from '@tauri-apps/plugin-updater'
 import { relaunch } from '@tauri-apps/plugin-process'
 import { buildAppMenu, setupMenuLanguageListener } from './lib/menu'
@@ -8,6 +9,7 @@ import {
 } from './i18n/language-init'
 import { logger } from './lib/logger'
 import { commands } from './lib/tauri-bindings'
+import { drainPendingBundleOpens } from './lib/bundle-project'
 import { initWindowState, markQuitting } from './store/window-store'
 import { useSettingsStore } from './store/settings-store'
 import './App.css'
@@ -114,6 +116,22 @@ function App() {
     return () => {
       clearTimeout(updateTimer)
       window.removeEventListener('beforeunload', onBeforeUnload)
+    }
+  }, [])
+
+  // v1.2.0 (issue #16): `.pnds` files the App was asked to open via macOS
+  // file association. The backend queues them and emits this event; the
+  // mount-time drain also covers a cold start where the event fired before
+  // this listener existed (the drain is atomic, so no double-processing).
+  // The drain runs only after the listener is live — an event landing in
+  // between would otherwise be missed entirely.
+  useEffect(() => {
+    const unlisten = listen('pnds:open-bundle', () => {
+      void drainPendingBundleOpens()
+    })
+    void unlisten.then(() => drainPendingBundleOpens())
+    return () => {
+      void unlisten.then(unlistenFn => unlistenFn())
     }
   }, [])
 

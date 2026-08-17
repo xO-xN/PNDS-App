@@ -3,6 +3,7 @@ import { X } from 'lucide-react'
 import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 import { saveProjectIndex } from '@/lib/audio-prefs'
+import { reclaimIfManagedBundle } from '@/lib/bundle-project'
 import { projectDisplayName } from '@/lib/display-names'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -34,11 +35,19 @@ export function ProjectsSection({ section }: { section: SettingsSection }) {
   const handleRemove = (path: string) => {
     useProjectStore.getState().removeRecentProject(path)
     persistIndex()
+    // v1.2.0 (issue #16): bundle installs under bundles/ go with the
+    // history entry; user-disk projects are untouched by the command.
+    void reclaimIfManagedBundle(path)
   }
 
   const handleClearAll = () => {
+    // Capture the list before the store empties it.
+    const removed = useProjectStore.getState().recentProjectPaths
     useProjectStore.getState().clearRecentProjects()
     persistIndex()
+    for (const path of removed) {
+      void reclaimIfManagedBundle(path)
+    }
   }
 
   return (

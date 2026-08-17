@@ -25,6 +25,7 @@ import {
   stopAndReset,
 } from '@/lib/open-project'
 import { selectProject, setActiveFolderView } from '@/lib/project-select'
+import { reclaimIfManagedBundle } from '@/lib/bundle-project'
 import { saveProjectDisplayName, saveProjectIndex } from '@/lib/audio-prefs'
 import { projectDisplayName, titleCasePath } from '@/lib/display-names'
 import {
@@ -347,10 +348,13 @@ export function Sidebar({
 
   /** ✕ (remove from history) is only offered for projects that are not
    * currently open; the Close action handles the open one. Removing the
-   * app-side index never touches the on-disk project (spec issue #4). */
+   * app-side index never touches the on-disk project (spec issue #4);
+   * v1.2.0 (issue #16) additionally reclaims bundle installs under the
+   * app-managed bundles/ directory. */
   const handleRemove = (path: string) => {
     useProjectStore.getState().removeRecentProject(path)
     persistIndex()
+    void reclaimIfManagedBundle(path)
   }
 
   const handleNewFolder = () => {

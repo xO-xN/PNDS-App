@@ -21,7 +21,7 @@ PNDS score project 是用户明确选择的一个本地目录。工程拥有并�
 
 工程不是 PNDS App 插件，也不获得 Tauri API。高频演奏消息必须在客户端、工程 Node 服务器和音频目标之间直接传递，不经过 PNDS App 的 Rust/React 层。
 
-当前工程格式是**目录**。`.pnds` bundle、工程安装、更新、checksum 与项目库不属于本文档。
+当前工程格式是**目录**。`.pnds` bundle、工程安装、更新与 checksum 见 [`PNDS_PROJECT_BUNDLE_SPECIFICATION.md`](./PNDS_PROJECT_BUNDLE_SPECIFICATION.md)。
 
 ---
 

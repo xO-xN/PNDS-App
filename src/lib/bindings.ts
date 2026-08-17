@@ -243,6 +243,83 @@ async releasePort(port: number) : Promise<Result<PortStatus, string>> {
 }
 },
 /**
+ * Pre-flight info for the pack UI: the `<name>-<version>.pnds` path the
+ * pack would produce and whether it already exists (overwrite confirm),
+ * plus the same manifest/dependency validations the pack itself runs.
+ */
+async getBundleOutputInfo(path: string) : Promise<Result<BundleOutputInfo, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_bundle_output_info", { path }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Packs the project at `path` (spec issue #16: staging-isolated, no npm,
+ * source untouched). `overwrite` must be true to replace an existing
+ * output — the UI confirms first via [`get_bundle_output_info`].
+ */
+async packProjectBundle(path: string, overwrite: boolean) : Promise<Result<PackResult, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("pack_project_bundle", { path, overwrite }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Installs a `.pnds` into `bundles/<id>-<version>/` (always reinstalling
+ * over an existing install) and returns the installed project directory —
+ * the frontend then runs the normal open flow from there.
+ */
+async installBundle(path: string) : Promise<Result<string, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("install_bundle", { path }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Deletes the extracted bundle directory behind a history entry when (and
+ * only when) it is a direct child of the app-managed `bundles/` root.
+ * `Ok(false)` = not a managed install, nothing was touched.
+ */
+async reclaimProjectBundle(path: string) : Promise<Result<boolean, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("reclaim_project_bundle", { path }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Atomically drains the queue of `.pnds` paths macOS asked the App to open.
+ */
+async takePendingBundleOpens() : Promise<Result<string[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("take_pending_bundle_opens") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * The ⌘O picker: one native panel that accepts a project directory or a
+ * `.pnds` bundle file (see `open_panel.rs` for why the dialog plugin can't
+ * do this). Synchronous on purpose — the modal panel must block its caller
+ * while running on the main thread.
+ */
+async pickProjectOrBundle(title: string) : Promise<Result<string | null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("pick_project_or_bundle", { title }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * v1.1.2 T7: absolute paths of the bundled example projects that make up
  * the Utilities folder. Empty when none are installed — the frontend then
  * seeds nothing.
@@ -347,6 +424,7 @@ export type AudioDeviceCapabilities = { devices: AudioOutputDevice[]; sampleRate
  * device supports that rate.
  */
 export type AudioOutputDevice = { name: string; isDefault: boolean; maxOutputChannels: number }
+export type BundleOutputInfo = { outputPath: string; exists: boolean }
 /**
  * §7.1: the Internal channel plan computed at session start.
  */
@@ -383,6 +461,7 @@ export type HealthPayload = {
 status: string; projectId?: string | null; audioMode?: string | null; audio?: HealthAudio | null; scoreServer?: HealthScoreServer | null }
 export type HealthScoreServer = { performerPort?: number | null; monitorPort?: number | null; error?: string | null }
 export type Manifest = { schemaVersion: number; id: string; name: string; version: string; description: string | null; scoreServer: ScoreServer; audio: AudioConfig }
+export type PackResult = { outputPath: string; sha256: string }
 /**
  * Who is listening on a project port.
  */

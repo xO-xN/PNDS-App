@@ -23,6 +23,7 @@ import {
 import { Label } from '@/components/ui/label'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { Separator } from '@/components/ui/separator'
+import { DeveloperSection } from './DeveloperSection'
 import { PortsSection } from './PortsSection'
 import { ProjectsSection } from './ProjectsSection'
 
@@ -126,10 +127,7 @@ export function SettingsPanel() {
         <Separator />
         <ProjectsSection section="projects" />
         <Separator />
-        <PlaceholderSection
-          section="developer"
-          title={t('settings.developerTools')}
-        />
+        <DeveloperSection section="developer" />
         <Separator />
 
         {/* ── About ── */}
@@ -178,31 +176,6 @@ export function SettingsPanel() {
 
 function sectionId(section: SettingsSection): string {
   return `settings-section-${section}`
-}
-
-/** Placeholder for the sections whose tickets land later in v1.2.0. */
-function PlaceholderSection({
-  section,
-  title,
-}: {
-  section: SettingsSection
-  title: string
-}) {
-  const { t } = useTranslation()
-  return (
-    <section
-      id={sectionId(section)}
-      aria-labelledby={`settings-${section}-title`}
-      className="flex flex-col gap-3 py-4"
-    >
-      <h3 id={`settings-${section}-title`} className="text-sm font-semibold">
-        {title}
-      </h3>
-      <p className="text-muted-foreground text-sm">
-        {t('settings.comingSoon')}
-      </p>
-    </section>
-  )
 }
 
 /** Reveal a managed directory in Finder; surface failures as a toast. */

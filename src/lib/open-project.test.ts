@@ -1,8 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { commands } from '@/lib/tauri-bindings'
+import { notifications } from '@/lib/notifications'
 import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
-import { openProject } from './open-project'
+import { openProject, promptOpenProject } from './open-project'
+
+vi.mock('@/lib/notifications', () => ({
+  notifications: {
+    error: vi.fn(),
+    success: vi.fn(),
+    info: vi.fn(),
+    warning: vi.fn(),
+  },
+}))
 import type { Manifest } from '@/lib/tauri-bindings'
 
 const manifest: Manifest = {
@@ -110,5 +120,77 @@ describe('openProject (no trust gate)', () => {
     expect(state.recentProjectPaths).toEqual(['/a', '/b'])
     expect(commands.savePreferences).not.toHaveBeenCalled()
     expect(commands.preflightProject).toHaveBeenCalledWith('/a')
+  })
+})
+
+describe('promptOpenProject picker (v1.2.0 issue #16)', () => {
+  const PICKED_DIR = '/Users/test/Score 5'
+  const PICKED_BUNDLE = '/Users/test/Score 5-1.0.0.pnds'
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(commands.preflightProject).mockResolvedValue({
+      status: 'ok',
+      data: manifest,
+    })
+    vi.mocked(commands.installBundle).mockResolvedValue({
+      status: 'ok',
+      data: '/bundles/score-5-1.0.0',
+    })
+  })
+
+  it('opens a picked directory as a normal project', async () => {
+    vi.mocked(commands.pickProjectOrBundle).mockResolvedValue({
+      status: 'ok',
+      data: PICKED_DIR,
+    })
+
+    await promptOpenProject()
+
+    expect(commands.pickProjectOrBundle).toHaveBeenCalled()
+    expect(commands.installBundle).not.toHaveBeenCalled()
+    expect(commands.preflightProject).toHaveBeenCalledWith(PICKED_DIR)
+  })
+
+  it('installs a picked .pnds bundle and opens the extracted directory', async () => {
+    vi.mocked(commands.pickProjectOrBundle).mockResolvedValue({
+      status: 'ok',
+      data: PICKED_BUNDLE,
+    })
+
+    await promptOpenProject()
+
+    expect(commands.installBundle).toHaveBeenCalledWith(PICKED_BUNDLE)
+    // The extracted dir is what enters the normal open flow — never the
+    // .pnds file itself.
+    expect(commands.preflightProject).toHaveBeenCalledWith(
+      '/bundles/score-5-1.0.0'
+    )
+  })
+
+  it('does nothing when the picker is cancelled', async () => {
+    vi.mocked(commands.pickProjectOrBundle).mockResolvedValue({
+      status: 'ok',
+      data: null,
+    })
+
+    await promptOpenProject()
+
+    expect(commands.preflightProject).not.toHaveBeenCalled()
+    expect(commands.installBundle).not.toHaveBeenCalled()
+  })
+
+  it('reports a picker failure without opening anything', async () => {
+    vi.mocked(commands.pickProjectOrBundle).mockResolvedValue({
+      status: 'error',
+      error: 'panel unavailable',
+    })
+
+    await promptOpenProject()
+
+    expect(notifications.error).toHaveBeenCalledWith(
+      'Could not open the file dialog'
+    )
+    expect(commands.preflightProject).not.toHaveBeenCalled()
   })
 })

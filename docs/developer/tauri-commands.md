@@ -213,6 +213,12 @@ vi.mock('@/lib/tauri-bindings', () => ({
 | `openAppLogDir`            | none                                  | `Result<null, string>`                | Reveal app log dir in Finder (settings About, v1.2.0)               |
 | `checkPortStatus`          | `port: number`                        | `Result<PortStatus, string>`          | Occupancy of one TCP port (settings Ports, v1.2.0)                  |
 | `releasePort`              | `port: number`                        | `Result<PortStatus, string>`          | SIGTERM→grace→SIGKILL release; returns post-release status (v1.2.0) |
+| `getBundleOutputInfo`      | `path: string`                        | `Result<BundleOutputInfo, string>`    | Pack probe: output path + exists flag + packability errors (#16)    |
+| `packProjectBundle`        | `path: string, overwrite: boolean`    | `Result<PackResult, string>`          | Pack project into sibling `.pnds` + sha256 (#16)                    |
+| `installBundle`            | `path: string`                        | `Result<string, string>`              | Install `.pnds` into `bundles/<id>-<version>/` (#16)                |
+| `reclaimProjectBundle`     | `path: string`                        | `Result<boolean, string>`             | Delete managed bundle install on history removal (#16)              |
+| `takePendingBundleOpens`   | none                                  | `Result<string[], string>`            | Atomically drain macOS-requested `.pnds` opens (#16)                |
+| `pickProjectOrBundle`      | `title: string`                       | `Result<string \| null, string>`      | NSOpenPanel: project directory OR `.pnds` file (⌘O, #16)            |
 
 ## Dependencies
 

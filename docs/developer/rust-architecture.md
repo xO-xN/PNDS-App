@@ -7,18 +7,28 @@ Module organization and patterns for the Tauri backend.
 ```
 src-tauri/src/
 ├── main.rs          # Entry point (just calls lib::run())
-├── lib.rs           # App setup, plugins, startup logic
+├── lib.rs           # App setup, plugins, run-event handlers
 ├── bindings.rs      # tauri-specta command registration
-├── types.rs         # Shared types, constants, validation
+├── open_panel.rs    # Native NSOpenPanel (directory OR .pnds picker)
+├── types.rs         # Shared types (AppPreferences, ProjectFolder)
+├── window.rs        # Fullscreen action + window fade state machine
 ├── commands/        # Command handlers by domain
 │   ├── mod.rs       # Re-exports all command modules
 │   ├── preferences.rs
 │   ├── notifications.rs
-│   ├── quick_pane.rs
-│   └── recovery.rs
-└── utils/           # Utility modules
-    ├── mod.rs
-    └── platform.rs  # Platform-specific helpers
+│   ├── project.rs   # Preflight / session / ports commands
+│   ├── bundle.rs    # .pnds pack / install / reclaim commands
+│   ├── examples.rs
+│   └── system.rs
+└── project/         # Project domain logic (fully path-based, testable)
+    ├── manifest.rs  # manifest.json schema + path containment
+    ├── preflight.rs # Dependency + port availability checks
+    ├── bundle.rs    # .pnds zip pack/install/reclaim service
+    ├── session.rs   # SessionManager (Rust source of truth)
+    ├── children.rs  # Child process registry + orphan cleanup
+    ├── ports.rs     # Port occupancy / release (lsof + SIGTERM→SIGKILL)
+    ├── audio.rs     # CoreAudio capabilities + scsynth bridge
+    └── logs.rs      # Per-session logs
 ```
 
 ## Adding New Commands

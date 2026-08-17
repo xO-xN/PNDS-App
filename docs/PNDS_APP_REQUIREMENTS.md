@@ -6,6 +6,7 @@
 
 - score project 静态格式：[`PNDS_SCORE_PROJECT_SPECIFICATION.md`](./PNDS_SCORE_PROJECT_SPECIFICATION.md)
 - App 与工程运行协议：[`PNDS_RUNTIME_CONTRACT.md`](./PNDS_RUNTIME_CONTRACT.md)
+- `.pnds` bundle 格式：[`PNDS_PROJECT_BUNDLE_SPECIFICATION.md`](./PNDS_PROJECT_BUNDLE_SPECIFICATION.md)
 - 实施阶段与 release scope：[GitHub issues](https://github.com/xO-xN/PNDS-App/issues)（milestone 分组）
 
 规范发生冲突时：工程格式以 Score Project Specification 为准，进程/环境变量/health/audio bus 以 Runtime Contract 为准，App 产品行为以本文档为准。
@@ -52,7 +53,7 @@ App 不是：
 
 - Intel Mac、Windows、Linux 或 universal binary；
 - 跨互联网分布式演出；
-- `.pnds` bundle、checksum、目标平台/runtime asset 安装检查；
+- 打开端强制 checksum / 目标平台校验（`.pnds` bundle 本身见 Project Bundle Specification）；
 - Creator Guide 与在线工程库；
 - 运行中无重启地热切换模式、设备或 target；
 - App 直接配置环绕声、扬声器或空间化布局。

@@ -71,8 +71,11 @@ describe('SettingsPanel (v1.2.0 issue #13)', () => {
       screen.getByRole('heading', { name: 'Developer Tools' })
     ).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'About' })).toBeInTheDocument()
-    // Placeholder sections announce their status.
-    expect(screen.getAllByText(/v1\.2\.0/).length).toBeGreaterThan(0)
+    // The developer section packs .pnds bundles (issue #16) — its action is
+    // present even with no project selected.
+    expect(
+      screen.getByRole('button', { name: 'Pack Bundle' })
+    ).toBeInTheDocument()
   })
 
   it('shows the app version in the About section', () => {

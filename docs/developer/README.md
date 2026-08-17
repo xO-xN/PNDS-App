@@ -7,6 +7,7 @@ Before implementation, read the applicable platform specifications:
 - [Score Project Specification](../PNDS_SCORE_PROJECT_SPECIFICATION.md)
 - [Runtime Contract](../PNDS_RUNTIME_CONTRACT.md)
 - [App Requirements](../PNDS_APP_REQUIREMENTS.md)
+- [Project Bundle Specification](../PNDS_PROJECT_BUNDLE_SPECIFICATION.md)
 
 ## Architecture & Patterns
 

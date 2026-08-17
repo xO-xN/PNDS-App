@@ -1,9 +1,10 @@
-import { open } from '@tauri-apps/plugin-dialog'
 import i18n from '@/i18n/config'
 import { commands } from '@/lib/tauri-bindings'
 import { logger } from '@/lib/logger'
+import { notifications } from '@/lib/notifications'
 import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
+import { installAndOpenBundle } from '@/lib/bundle-project'
 import {
   DEFAULT_OSC_TARGET,
   loadAudioPreferences,
@@ -12,7 +13,7 @@ import {
 
 /**
  * Shared project flows (§4, §6.1, §7, §8):
- * - promptOpenProject: folder picker → open
+ * - promptOpenProject: picker (directory or .pnds) → open/install
  * - openProject: open a path → history add → preflight
  * - startIfReady: starts when preflight passed and LAN is chosen
  * - restartSession: §8.3 full restart (used when mode/device/target change)
@@ -20,14 +21,28 @@ import {
  * v1.2.0 (spec issue #15): the first-open trust confirmation was removed —
  * the operator is the machine's owner, so opening a path goes straight to
  * preflight and lands in the project history.
+ *
+ * v1.2.0 (issue #16): the picker is one native panel accepting a project
+ * directory OR a `.pnds` bundle file (the dialog plugin cannot combine
+ * files and directories, hence the Rust NSOpenPanel command). A selected
+ * bundle installs into the app-managed bundles/ dir and then flows through
+ * the exact same open path as a directory project.
  */
 export async function promptOpenProject(): Promise<void> {
-  const selected = await open({
-    directory: true,
-    multiple: false,
-    title: i18n.t('sidebar.addProject'),
-  })
+  const result = await commands.pickProjectOrBundle(
+    i18n.t('sidebar.addProject')
+  )
+  if (result.status === 'error') {
+    logger.error('Project picker failed', { error: result.error })
+    notifications.error(i18n.t('sidebar.pickFailed'))
+    return
+  }
+  const selected = result.data
   if (!selected) return
+  if (selected.toLowerCase().endsWith('.pnds')) {
+    await installAndOpenBundle(selected)
+    return
+  }
   await openProject(selected)
 }
 

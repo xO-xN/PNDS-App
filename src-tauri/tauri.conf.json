@@ -39,6 +39,15 @@
     "createUpdaterArtifacts": true,
     "active": true,
     "targets": "all",
+    "fileAssociations": [
+      {
+        "ext": ["pnds"],
+        "name": "PNDS Project Bundle",
+        "description": "PNDS score project bundle",
+        "role": "Editor",
+        "rank": "Owner"
+      }
+    ],
     "externalBin": ["binaries/node"],
     "resources": {
       "binaries/scsynth-aarch64-apple-darwin": "scsynth",

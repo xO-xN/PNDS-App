@@ -45,6 +45,16 @@ vi.mock('@tauri-apps/plugin-updater', () => ({
   check: vi.fn().mockResolvedValue(null),
 }))
 
+// v1.2.0 (issue #16): folder picker (developer pack browse) and clipboard
+// copies (sha256/path) — cancelled / no-op by default; tests override.
+vi.mock('@tauri-apps/plugin-dialog', () => ({
+  open: vi.fn().mockResolvedValue(null),
+}))
+
+vi.mock('@tauri-apps/plugin-clipboard-manager', () => ({
+  writeText: vi.fn().mockResolvedValue(undefined),
+}))
+
 // v1.2.0: frontend logger forwards to the log plugin — keep tests IPC-free
 vi.mock('@tauri-apps/plugin-log', () => ({
   trace: vi.fn().mockResolvedValue(undefined),
@@ -138,6 +148,31 @@ vi.mock('@/lib/tauri-bindings', () => ({
         data: { port, occupant: null },
       })
     ),
+    // v1.2.0 (issue #16): .pnds bundles — default: pack probe targets a
+    // fresh output, no pending opens, picker cancelled, no managed bundle.
+    getBundleOutputInfo: vi.fn().mockResolvedValue({
+      status: 'ok',
+      data: { outputPath: '/tmp/demo-1.0.0.pnds', exists: false },
+    }),
+    packProjectBundle: vi.fn().mockResolvedValue({
+      status: 'ok',
+      data: {
+        outputPath: '/tmp/demo-1.0.0.pnds',
+        sha256: 'a'.repeat(64),
+      },
+    }),
+    installBundle: vi
+      .fn()
+      .mockResolvedValue({ status: 'ok', data: '/bundles/demo-1.0.0' }),
+    reclaimProjectBundle: vi
+      .fn()
+      .mockResolvedValue({ status: 'ok', data: false }),
+    takePendingBundleOpens: vi
+      .fn()
+      .mockResolvedValue({ status: 'ok', data: [] }),
+    pickProjectOrBundle: vi
+      .fn()
+      .mockResolvedValue({ status: 'ok', data: null }),
   },
   unwrapResult: vi.fn((result: { status: string; data?: unknown }) => {
     if (result.status === 'ok') return result.data
