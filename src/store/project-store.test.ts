@@ -162,16 +162,43 @@ describe('project-store folders (v1.1.2, spec issue #4)', () => {
     })
   })
 
-  it('creates folders with unique ids and renames them', () => {
+  it('creates folders at the top of the folder area, with unique ids, and renames them', () => {
     const store = useProjectStore.getState()
     const id1 = store.createFolder('Gig Friday')
     const id2 = store.createFolder('Gig Saturday')
     expect(id1).not.toBe(id2)
+    // v1.2.0: a new folder opens at the top — newest first.
+    expect(useProjectStore.getState().projectFolders.map(f => f.name)).toEqual([
+      'Gig Saturday',
+      'Gig Friday',
+    ])
 
     store.renameFolder(id1, 'Renamed')
     expect(useProjectStore.getState().projectFolders.map(f => f.name)).toEqual([
-      'Renamed',
       'Gig Saturday',
+      'Renamed',
+    ])
+  })
+
+  it('pins the Utilities folder last through folder reorder commits', () => {
+    const store = useProjectStore.getState()
+    const id1 = store.createFolder('One')
+    const id2 = store.createFolder('Two')
+    useProjectStore.setState({
+      projectFolders: [
+        ...useProjectStore.getState().projectFolders,
+        { id: UTILITIES_FOLDER_ID, name: 'Utilities', projectPaths: [] },
+      ],
+    })
+
+    // A drag that computes Utilities first still settles it last.
+    useProjectStore
+      .getState()
+      .applyFolderReorder([UTILITIES_FOLDER_ID, id2, id1])
+    expect(useProjectStore.getState().projectFolders.map(f => f.id)).toEqual([
+      id2,
+      id1,
+      UTILITIES_FOLDER_ID,
     ])
   })
 
@@ -429,9 +456,10 @@ describe('folder reorder from drags (v1.1.2 T5, spec issue #9)', () => {
     useProjectStore.getState().applyFolderReorder([first, 'nope'])
     useProjectStore.getState().applyFolderReorder([first, first])
     expect(useProjectStore.getState().projectFolders).toBe(before)
+    // Newest-created first (v1.2.0 top insertion).
     expect(
       useProjectStore.getState().projectFolders.map(folder => folder.id)
-    ).toEqual([first, second])
+    ).toEqual([second, first])
   })
 })
 

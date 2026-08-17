@@ -56,7 +56,7 @@ describe('ensureUtilitiesFolder', () => {
     })
   })
 
-  it('seeds ahead of the user’s existing folders', async () => {
+  it('seeds below the user’s existing folders (bottom-pinned)', async () => {
     useProjectStore.setState({
       projectFolders: [{ id: 'f1', name: 'Set list', projectPaths: [] }],
     })
@@ -65,8 +65,31 @@ describe('ensureUtilitiesFolder', () => {
 
     const folders = useProjectStore.getState().projectFolders
     expect(folders).toHaveLength(2)
-    expect(folders[0]?.id).toBe(UTILITIES_FOLDER_ID)
-    expect(folders[1]?.id).toBe('f1')
+    expect(folders[0]?.id).toBe('f1')
+    expect(folders[1]?.id).toBe(UTILITIES_FOLDER_ID)
+  })
+
+  it('moves an existing Utilities folder to the bottom (front-seeded installs migrate)', async () => {
+    // v1.2.0: installs seeded before the pin have it first — the next
+    // launch settles it last, persisting the migrated order.
+    useProjectStore.setState({
+      projectFolders: [
+        { id: UTILITIES_FOLDER_ID, name: 'Utilities', projectPaths: [] },
+        { id: 'f1', name: 'Set list', projectPaths: [] },
+      ],
+    })
+    vi.mocked(commands.savePreferences).mockClear()
+
+    await ensureUtilitiesFolder()
+
+    const folders = useProjectStore.getState().projectFolders
+    expect(folders.map(folder => folder.id)).toEqual([
+      'f1',
+      UTILITIES_FOLDER_ID,
+    ])
+    await vi.waitFor(() => {
+      expect(commands.savePreferences).toHaveBeenCalled()
+    })
   })
 
   it('is a no-op once the folder exists — later edits stick across launches', async () => {

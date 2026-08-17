@@ -663,7 +663,13 @@ export function Sidebar({
       : null
   const folderInsertionIndex =
     drag?.kind === 'folder' && listDrop
-      ? insertionIndexFor(listDrop.index, listDrop.half)
+      ? // The gap never opens below the bottom-pinned Utilities card — a
+        // drop aimed there settles just above it (the store commit pins
+        // it back last anyway).
+        Math.min(
+          insertionIndexFor(listDrop.index, listDrop.half),
+          projectFolders.length - 1
+        )
       : null
   /** Hovered folder card while a project drag hovers it (join gesture). */
   const folderDropIndex =
@@ -974,7 +980,8 @@ export function Sidebar({
                   data-drop-active={isDropHover ? 'true' : undefined}
                   onPointerDown={e => {
                     // Inline naming owns the card; no drag while editing.
-                    if (isEditing) return
+                    // The bottom-pinned Utilities card is not draggable.
+                    if (isEditing || isProtected) return
                     beginCardDrag(
                       { kind: 'folder', id: folder.id },
                       e,

@@ -172,29 +172,30 @@ describe('Sidebar folder drags (v1.1.2 T5)', () => {
     mockBoundingClientRect(cards[1] as HTMLElement, { top: 361 })
     mockBoundingClientRect(cards[2] as HTMLElement, { top: 422 })
 
-    // Drag Friday over Saturday's bottom half → insert after it.
+    // Newest-created first (v1.2.0 top insertion): cards[0] is Sunday.
+    // Drag Sunday over Saturday's bottom half → insert after it.
     await dragCardTo(cards[0] as HTMLElement, 150, 400)
-    // Saturday yields one stride up, opening Friday's landing slot.
+    // Saturday yields one stride up, opening Sunday's landing slot.
     expect(cards[1]).toHaveStyle({ transform: 'translateY(-61px)' })
 
     fireEvent.pointerUp(window, { pointerId: 1 })
 
     expect(
       useProjectStore.getState().projectFolders.map(folder => folder.id)
-    ).toEqual([saturday, friday, sunday])
+    ).toEqual([saturday, sunday, friday])
     // The DOM follows the new folder order.
     expect(
       screen
         .getAllByTestId('folder-card')
         .map(card => card.getAttribute('data-folder-id'))
-    ).toEqual([saturday, friday, sunday])
+    ).toEqual([saturday, sunday, friday])
     await waitFor(() => {
       expect(commands.savePreferences).toHaveBeenCalledWith(
         expect.objectContaining({
           projectFolders: [
             expect.objectContaining({ name: 'Saturday' }),
-            expect.objectContaining({ name: 'Friday' }),
             expect.objectContaining({ name: 'Sunday' }),
+            expect.objectContaining({ name: 'Friday' }),
           ],
         })
       )

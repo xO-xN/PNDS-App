@@ -12,8 +12,9 @@ export type PreflightStatus = 'idle' | 'checking' | 'ready' | 'error'
 
 /**
  * v1.1.2 T7 (spec issue #11): reserved id of the default Utilities folder
- * seeded from the bundled example projects. It can be reordered and its
- * membership edited, but never renamed or deleted.
+ * seeded from the bundled example projects. Its membership can be edited,
+ * but it is pinned to the bottom of the folder area (v1.2.0) and never
+ * renamed or deleted.
  */
 export const UTILITIES_FOLDER_ID = 'utilities'
 
@@ -257,7 +258,9 @@ export const useProjectStore = create<ProjectState>()(set => ({
         ? crypto.randomUUID()
         : `folder-${Date.now()}-${Math.random().toString(36).slice(2)}`
     set(state => ({
-      projectFolders: [...state.projectFolders, { id, name, projectPaths: [] }],
+      // New folders open at the TOP of the folder area (v1.2.0: they used
+      // to append below the bottom-pinned Utilities folder).
+      projectFolders: [{ id, name, projectPaths: [] }, ...state.projectFolders],
     }))
     return id
   },
@@ -345,7 +348,18 @@ export const useProjectStore = create<ProjectState>()(set => ({
       const reordered = orderedFolderIds
         .map(id => byId.get(id))
         .filter((folder): folder is ProjectFolder => folder !== undefined)
-      return { projectFolders: reordered }
+      // The Utilities folder is pinned to the bottom of the folder area
+      // (v1.2.0): a drag may compute any order — including below it —
+      // the commit always settles it last, so a bottom drop lands just
+      // above it.
+      const pinned = reordered.filter(folder => isProtectedFolder(folder.id))
+      const ordered = pinned.length
+        ? [
+            ...reordered.filter(folder => !isProtectedFolder(folder.id)),
+            ...pinned,
+          ]
+        : reordered
+      return { projectFolders: ordered }
     }),
 
   startPreflight: () =>
