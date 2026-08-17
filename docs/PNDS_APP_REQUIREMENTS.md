@@ -319,7 +319,7 @@ Back/Close 返回 Welcome，不自动重启。
 examples/Multichannel Signal Generator/
 ```
 
-它不是安装到 App 数据目录的“内置项目”基础设施。
+它不是安装到 App 数据目录的“内置项目”基础设施。App 自带的 Utilities 工具（Local Network Diagnostics、Multichannel Signal Generator）按 Project Bundle Specification §5 的注册表管线分发，与本验证工程无关。
 
 要求：
 

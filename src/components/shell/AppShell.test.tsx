@@ -310,23 +310,27 @@ describe('AppShell', () => {
     expect(useProjectStore.getState().projectFolders).toEqual([])
   })
 
-  it('seeds the default Utilities folder from the bundled examples on a fresh index', async () => {
-    const EXAMPLES = [
-      '/repo/examples/Local Network Diagnostics',
-      '/repo/examples/Multichannel Signal Generator',
+  it('seeds the default Utilities folder from the built-in tools on a fresh index', async () => {
+    const TOOLS = [
+      '~/bundles/local-network-diagnostics-0.1.0',
+      '~/bundles/multichannel-signal-generator-1.0.0',
     ]
-    vi.mocked(commands.bundledExampleProjects).mockResolvedValue({
+    vi.mocked(commands.syncBuiltinTools).mockResolvedValue({
       status: 'ok',
-      data: EXAMPLES,
+      data: TOOLS.map(path => ({
+        path,
+        name: path,
+        supersededPaths: [],
+      })),
     })
 
     render(<AppShell />)
 
-    // The folder appears ahead of everything, holding the two examples.
+    // The folder appears with the two installed tools as members.
     await screen.findByTestId('folder-card')
     expect(screen.getByTestId('folder-name')).toHaveTextContent('Utilities')
-    // Both examples are folder members, so the top segment stays empty.
+    // Both tools are folder members, so the top segment stays empty.
     expect(screen.queryByTestId('project-entry')).not.toBeInTheDocument()
-    expect(useProjectStore.getState().recentProjectPaths).toEqual(EXAMPLES)
+    expect(useProjectStore.getState().recentProjectPaths).toEqual(TOOLS)
   })
 })

@@ -138,11 +138,9 @@ vi.mock('@/lib/tauri-bindings', () => ({
     fadeInWindow: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
     markQuitting: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
     quitApp: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
-    // Default: no bundled examples installed (Utilities seeding is a no-op;
+    // Default: no built-in tools installed (Utilities seeding is a no-op;
     // tests that exercise it override this mock).
-    bundledExampleProjects: vi
-      .fn()
-      .mockResolvedValue({ status: 'ok', data: [] }),
+    syncBuiltinTools: vi.fn().mockResolvedValue({ status: 'ok', data: [] }),
     // v1.2.0 (issue #13): Settings About section reveal buttons
     openAppDataDir: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
     openAppLogDir: vi.fn().mockResolvedValue({ status: 'ok', data: null }),

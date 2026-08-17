@@ -114,7 +114,12 @@ pnds-bundle.json            # bundle 元数据（位于归档顶层，不在工�
 
 ## 5. 内置工具
 
-随 App 分发的内置工具使用同一 bundle 布局（压成 zip 即 `.pnds`）。工具注册、拉取与 Utilities 入口的细节由对应 issue 决定，本规范只锁定布局一致性。
+随 App 分发的内置工具(Local Network Diagnostics、Multichannel Signal Generator)使用同一 bundle 布局:构建期按注册表(`builtin-tools.json`,随仓库提交)拉取各工具仓库的 release artifact,sha256 校验失败即构建失败,校验通过的 artifact 注入顶层 `pnds-bundle.json` 后以 `<id>.pnds` 形式随 App 资源分发(`Contents/Resources/builtin-tools/`)。App 首次运行把 staged bundle 安装到数据目录 `bundles/<id>-<version>/`(复用 §4 安装规则:结构校验、完整 manifest 校验、失败不留半解压目录);注册表版本变更时,同 id 其他版本的安装目录被回收。Utilities 入口形态与相关细节(v1.2.0 issue #18 定案):
+
+- **入口形态**:Utilities 保持既有受保护文件夹(固定底部、不可改名/删除);内置工具以普通工程条目形式列出(路径指向 `bundles/` 安装目录),点击走标准 preflight → spawn → health → monitor 流程,无独立启动器 UI。
+- **复制为普通工程**:不提供。安装目录位于 App 数据目录(设置 → 打开数据目录可达);需要副本时由操作者在 Finder 手动复制。
+- **版本显示**:不做专门版本 UI;列表名来自 manifest(首次同步即学习,无需先打开一次),与普通工程一致,版本体现在安装目录名 `<id>-<version>` 与 manifest 中。
+- **成员编辑**:用户从 Utilities 移除某工具后,重启/版本升级都不会自动加回;仅当旧版本仍是成员时,新版本接管其位置,被回收的旧路径同时从历史与成员中清除。
 
 ## 6. 合规清单
 

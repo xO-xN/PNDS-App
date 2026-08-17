@@ -35,10 +35,12 @@ src-tauri/Frameworks/
 src-tauri/plugins/
 /Frameworks
 
-# Bundled example score projects (Utilities folder, v1.1.2 T7): their
-# dependencies and nested VCS history stay out of this repository.
+# Bundled example score projects: their dependencies and nested VCS
+# history stay out of this repository.
 examples/*/node_modules/
 examples/*/.git/
 
-# Staged copy of examples/ for release bundling (npm run examples:install)
-src-tauri/examples/
+# Staged .pnds bundles of the built-in utility tools (npm run tools:fetch)
+# and the download cache it keeps to skip re-fetching on rebuilds.
+src-tauri/resources/builtin-tools/
+.cache/

@@ -2,7 +2,7 @@ use tauri_specta::{collect_commands, Builder};
 
 pub fn generate_bindings() -> Builder<tauri::Wry> {
     use crate::commands::{
-        bundle, examples, notifications, preferences, project, synthdef, system,
+        bundle, notifications, preferences, project, synthdef, system, tools,
     };
 
     Builder::<tauri::Wry>::new().commands(collect_commands![
@@ -32,7 +32,7 @@ pub fn generate_bindings() -> Builder<tauri::Wry> {
         bundle::take_pending_bundle_opens,
         bundle::pick_project_or_bundle,
         synthdef::compile_project_synthdefs,
-        examples::bundled_example_projects,
+        tools::sync_builtin_tools,
         system::open_app_data_dir,
         system::open_app_log_dir,
     ])

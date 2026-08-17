@@ -113,16 +113,27 @@ export async function saveProjectManifestName(
   path: string,
   name: string
 ): Promise<void> {
+  return saveProjectManifestNames({ [path]: name })
+}
+
+/**
+ * v1.2.0 (issue #18): persist a batch of manifest-declared names in one
+ * save — the Utilities seeding learns every built-in tool's name up front,
+ * before any of them has been opened.
+ */
+export async function saveProjectManifestNames(
+  names: Record<string, string>
+): Promise<void> {
   return enqueueSave(async () => {
     const prefs = await loadAudioPreferences()
     if (!prefs) return
+    const merged = { ...prefs.projectManifestNames }
+    for (const [path, name] of Object.entries(names)) {
+      if (name) merged[path] = name
+    }
     await commands.savePreferences({
       ...prefs,
-      projectManifestNames: upsertDisplayName(
-        prefs.projectManifestNames,
-        path,
-        name
-      ),
+      projectManifestNames: merged,
     })
   })
 }

@@ -37,7 +37,6 @@
     "synthdefs:build": "bash scripts/build-synthdefs.sh",
     "node:fetch": "bash scripts/fetch-node.sh",
     "scsynth:fetch": "bash scripts/fetch-scsynth.sh",
-    "examples:install": "bash scripts/install-examples.sh",
     "tauri": "tauri",
     "tauri:dev": "source ~/.cargo/env && npm run tauri dev",
     "tauri:build": "npm run tauri build",
@@ -50,7 +49,8 @@
     "knip": "knip",
     "jscpd": "jscpd",
     "ast:lint": "ast-grep scan",
-    "ast:fix": "ast-grep scan --fix"
+    "ast:fix": "ast-grep scan --fix",
+    "tools:fetch": "node scripts/fetch-builtin-tools.mjs"
   },
   "dependencies": {
     "@radix-ui/react-alert-dialog": "^1.1.15",
