@@ -161,7 +161,7 @@ describe('Error Page Retry (§9.3, §10.3)', () => {
  * one-interaction [Release and Retry] that clears the port, then restarts. */
 describe('Error Page port-conflict linkage (v1.2.0 issue #14)', () => {
   const CONFLICT_ERROR =
-    'Port 6868 is already in use.\nClose the application using it (find it with: lsof -i :6868) and try again.'
+    'Port 6868 is already in use.\nOpen Settings → Ports (⌘,) to see who holds it and release the port, then try again.'
   const occupant = {
     pid: 4242,
     name: 'node',

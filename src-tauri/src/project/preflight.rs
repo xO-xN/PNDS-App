@@ -83,10 +83,12 @@ pub fn check_ports_available(performer_port: u16, monitor_port: u16) -> Result<(
     Ok(())
 }
 
-/// The single producer of the port-conflict error string.
+/// The single producer of the port-conflict error string. The guidance
+/// line points at the Settings → Ports release (v1.2.0, issue #14) instead
+/// of telling the user to run lsof themselves.
 pub(crate) fn port_conflict_message(port: u16) -> String {
     format!(
-        "Port {port} is already in use.\nClose the application using it (find it with: lsof -i :{port}) and try again."
+        "Port {port} is already in use.\nOpen Settings → Ports (⌘,) to see who holds it and release the port, then try again."
     )
 }
 
@@ -225,12 +227,21 @@ mod tests {
 
     /// v1.2.0 (issue #14): the ErrorScreen port-conflict linkage parses the
     /// FIRST line with the regex `/^Port (\d+) is already in use\./m` — this
-    /// pins the exact shape the frontend depends on.
+    /// pins the exact shape the frontend depends on. The guidance line must
+    /// point at the Settings → Ports release, not manual lsof.
     #[test]
     fn port_conflict_message_is_parseable() {
         let message = port_conflict_message(6868);
         let re = regex_lite_expect(&message);
         assert_eq!(re, Some(6868));
+        assert!(
+            message.contains("Settings → Ports"),
+            "guidance must point at the settings release: {message}"
+        );
+        assert!(
+            !message.contains("lsof"),
+            "the user no longer needs to run lsof manually: {message}"
+        );
     }
 
     /// Minimal mirror of the frontend regex — no regex crate dependency.
