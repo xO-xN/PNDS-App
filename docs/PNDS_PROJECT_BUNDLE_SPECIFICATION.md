@@ -114,12 +114,12 @@ pnds-bundle.json            # bundle 元数据（位于归档顶层，不在工�
 
 ## 5. 内置工具
 
-随 App 分发的内置工具(Local Network Diagnostics、Multichannel Signal Generator)与所有工程一样,以 `.pnds` 为 release 格式:各工具仓库的 CI 按 §2 布局组装并发布 `.pnds`(`packedWith` 记录该工具的 release tag)。App 构建期按注册表(`builtin-tools.json`,随仓库提交)拉取,sha256 校验失败即构建失败,并校验 bundle 布局(单一根目录 + 顶层 `pnds-bundle.json` + manifest id 与注册表一致),校验通过的 bundle **原样**随 App 资源分发(`Contents/Resources/builtin-tools/`)。App 首次运行把 staged bundle 安装到数据目录 `bundles/<id>-<version>/`(复用 §4 安装规则:结构校验、完整 manifest 校验、失败不留半解压目录);注册表版本变更时,同 id 其他版本的安装目录被回收。Utilities 入口形态与相关细节(v1.2.0 issue #18 定案):
+内置工具(Local Network Diagnostics、Multichannel Signal Generator)的 release 与所有工程一样是 `.pnds`:各工具仓库的 CI 按 §2 布局组装并发布 `.pnds`(`packedWith` 记录该工具的 release tag),这是面向公众的分发格式。随 App 分发则采用**解包后的文件夹形态**:App 构建期按注册表(`utilities.json`,随仓库提交)拉取,sha256 校验失败即构建失败,校验 bundle 布局(单一根目录 + 顶层 `pnds-bundle.json` + manifest id 与注册表一致)后,把工程目录解包到稳定路径 `Contents/Resources/utilities/<id>/`(路径不含版本号;`pnds-bundle.json` 是运输元数据,不进入解包产物)。App 原地运行该目录,不安装到数据目录 `bundles/`;App 更新随包自然携带新版本,Utilities 的工程历史条目因路径稳定而永不过期。此形态为 v1.2.0 #18 定案后的复核修订(原定案:随包携带 .pnds 文件 + 首启装入数据目录)。Utilities 入口细节(定案不变):
 
-- **入口形态**:Utilities 保持既有受保护文件夹(固定底部、不可改名/删除);内置工具以普通工程条目形式列出(路径指向 `bundles/` 安装目录),点击走标准 preflight → spawn → health → monitor 流程,无独立启动器 UI。
-- **复制为普通工程**:不提供。安装目录位于 App 数据目录(设置 → 打开数据目录可达);需要副本时由操作者在 Finder 手动复制。
-- **版本显示**:不做专门版本 UI;列表名来自 manifest(首次同步即学习,无需先打开一次),与普通工程一致,版本体现在安装目录名 `<id>-<version>` 与 manifest 中。
-- **成员编辑**:用户从 Utilities 移除某工具后,重启/版本升级都不会自动加回;仅当旧版本仍是成员时,新版本接管其位置,被回收的旧路径同时从历史与成员中清除。
+- **入口形态**:Utilities 保持既有受保护文件夹(固定底部、不可改名/删除);内置工具以普通工程条目形式列出(路径指向 `Contents/Resources/utilities/<id>/`),点击走标准 preflight → spawn → health → monitor 流程,无独立启动器 UI。
+- **复制为普通工程**:不提供。资源目录随 App 包(在 Finder 中显示包内容可达);需要副本时由操作者手动复制。
+- **版本显示**:不做专门版本 UI;列表名来自 manifest(App 每次启动解析资源时学习,无需先打开一次),与普通工程一致,版本记录在 manifest 中。
+- **成员编辑**:用户从 Utilities 移除某工具后,重启不会自动加回(文件夹仅在缺失时播种)。
 
 ## 6. 合规清单
 

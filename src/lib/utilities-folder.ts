@@ -26,26 +26,22 @@ function learnToolNames(tools: { path: string; name: string }[]): void {
 }
 
 /**
- * v1.2.0 (issue #18): sync the built-in utility tools behind the default
- * Utilities folder. The backend installs the staged `.pnds` resources into
- * the app-managed `bundles/` directory on first run and returns the tool
- * project paths (in registry order) plus any superseded-version installs
- * it reclaimed.
+ * v1.2.0 (issue #18): the built-in utility tools behind the default
+ * Utilities folder. They ship UNPACKED with the app resources at stable
+ * paths (`utilities/<id>/`, no version in the path) and run in place — the
+ * backend returns each tool's path and manifest name in registry order.
  *
- * Runs after the preference restore on every launch:
- *
- * - folder missing → seeded with the tool paths (pinned to the BOTTOM of
- *   the folder area) and added to the history;
- * - folder present → only version-bump bookkeeping: a tool whose previous
- *   version was a member gets its current path in the old slot, and
- *   reclaimed paths disappear from the folder and the history. A tool the
- *   user deliberately removed stays removed — nothing is re-added unless a
- *   superseded version was still a member.
+ * Runs after the preference restore on every launch. Membership edits are
+ * never undone — the folder is only created when missing, so removing a
+ * tool from it (or from history) sticks across relaunches, and app updates
+ * swap the folder contents without ever stale-dating the entries. The
+ * folder is pinned to the BOTTOM of the folder area: seeded last, and a
+ * launch also migrates installs where it still sits elsewhere.
  */
 export async function ensureUtilitiesFolder(): Promise<void> {
-  const result = await commands.syncBuiltinTools()
+  const result = await commands.builtinUtilities()
   if (result.status === 'error') {
-    logger.warn('Failed to sync the built-in utility tools', {
+    logger.warn('Failed to resolve the built-in utility tools', {
       error: result.error,
     })
     return
@@ -78,60 +74,15 @@ export async function ensureUtilitiesFolder(): Promise<void> {
     return
   }
 
-  // Folder already present. Version-bump bookkeeping first: compute the
-  // membership/history after pruning superseded paths and swapping in the
-  // current ones, then pin the folder to the bottom when an older install
-  // still has it elsewhere (it used to be seeded first).
-  const stalePaths = new Set(tools.flatMap(tool => tool.supersededPaths))
-  const folderPaths = existing.projectPaths.filter(
-    path => !stalePaths.has(path)
-  )
-  let membershipChanged = stalePaths.size > 0
-  for (const tool of tools) {
-    const wasMember =
-      existing.projectPaths.includes(tool.path) ||
-      tool.supersededPaths.some(path => existing.projectPaths.includes(path))
-    if (!wasMember || folderPaths.includes(tool.path)) continue
-    // The tool's previous version was a member — take over its slot so the
-    // Utilities order survives registry version bumps.
-    const slot = existing.projectPaths.findIndex(path =>
-      tool.supersededPaths.includes(path)
-    )
-    if (slot >= 0 && slot <= folderPaths.length) {
-      folderPaths.splice(slot, 0, tool.path)
-    } else {
-      folderPaths.push(tool.path)
-    }
-    membershipChanged = true
-  }
-
-  if (membershipChanged) {
-    const { recentProjectPaths } = useProjectStore.getState()
-    const prunedRecent = recentProjectPaths.filter(
-      path => !stalePaths.has(path)
-    )
-    for (const tool of tools) {
-      if (
-        folderPaths.includes(tool.path) &&
-        !prunedRecent.includes(tool.path)
-      ) {
-        prunedRecent.push(tool.path)
-      }
-    }
-    useProjectStore.setState({ recentProjectPaths: prunedRecent })
-  }
-
-  // Rebuild with the Utilities folder pinned last. Last position is the
-  // steady state, so nothing moves on subsequent launches.
+  // Already present: pin it to the bottom when an older install still has
+  // it elsewhere (it used to be seeded first). Last position is the steady
+  // state, so nothing moves on subsequent launches.
   const folders = useProjectStore.getState().projectFolders
-  const positionChanged =
-    folders[folders.length - 1]?.id !== UTILITIES_FOLDER_ID
-  if (!membershipChanged && !positionChanged) return
+  if (folders[folders.length - 1]?.id === UTILITIES_FOLDER_ID) return
   const pinned = [
     ...folders.filter(folder => folder.id !== UTILITIES_FOLDER_ID),
-    { ...existing, projectPaths: folderPaths },
+    existing,
   ]
   useProjectStore.getState().setProjectFolders(pinned)
-  const { recentProjectPaths } = useProjectStore.getState()
-  void saveProjectIndex(recentProjectPaths, pinned)
+  void saveProjectIndex(useProjectStore.getState().recentProjectPaths, pinned)
 }

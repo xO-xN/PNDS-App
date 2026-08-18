@@ -21,11 +21,12 @@ import {
   releaseAssetUrl,
   verifyArtifact,
   readBundleIdentity,
-} from '../../scripts/fetch-builtin-tools.mjs'
+  unpackBundle,
+} from '../../scripts/fetch-utilities.mjs'
 
 const SCRIPT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
-  '../../scripts/fetch-builtin-tools.mjs'
+  '../../scripts/fetch-utilities.mjs'
 )
 
 function tempdir() {
@@ -65,6 +66,9 @@ function buildReleaseBundle(
     })
   )
   fs.writeFileSync(path.join(project, 'server.js'), '// score server')
+  fs.mkdirSync(path.join(project, 'bin'), { recursive: true })
+  fs.writeFileSync(path.join(project, 'bin', 'tool'), '#!/bin/sh\necho hi\n')
+  fs.chmodSync(path.join(project, 'bin', 'tool'), 0o755)
   fs.writeFileSync(
     path.join(dir, 'pnds-bundle.json'),
     JSON.stringify({
@@ -80,13 +84,6 @@ function buildReleaseBundle(
     stdio: 'ignore',
   })
   return pndsPath
-}
-
-function zipEntryNames(pndsPath) {
-  return spawnSync('unzip', ['-Z1', pndsPath], { encoding: 'utf8' })
-    .stdout.split('\n')
-    .map(name => name.trim())
-    .filter(name => name.length > 0 && !name.endsWith('/'))
 }
 
 describe('parseRegistry', () => {
@@ -266,6 +263,27 @@ describe('readBundleIdentity', () => {
   })
 })
 
+describe('unpackBundle', () => {
+  it('unpacks the project root without the metadata and replaces stale contents', () => {
+    const dir = tempdir()
+    const pnds = buildReleaseBundle(dir, { version: '1.0.0' })
+    const out = path.join(dir, 'out')
+    fs.mkdirSync(out, { recursive: true })
+    // A stale file from a previous unpack must not survive the replace.
+    fs.mkdirSync(path.join(out, 'fixture-tool'), { recursive: true })
+    fs.writeFileSync(path.join(out, 'fixture-tool', 'stale.txt'), 'old')
+
+    const { dest, identity } = unpackBundle(pnds, out, 'fixture-tool')
+
+    expect(identity.id).toBe('fixture-tool')
+    expect(dest).toBe(path.join(out, 'fixture-tool'))
+    expect(fs.existsSync(path.join(dest, 'manifest.json'))).toBe(true)
+    expect(fs.existsSync(path.join(dest, 'pnds-bundle.json'))).toBe(false)
+    expect(fs.existsSync(path.join(dest, 'stale.txt'))).toBe(false)
+    expect(fs.existsSync(path.join(out, '.unpacking-fixture-tool'))).toBe(false)
+  })
+})
+
 describe('fetch script end-to-end (child process)', () => {
   let server
   let baseUrl
@@ -332,16 +350,15 @@ describe('fetch script end-to-end (child process)', () => {
     })
     expect(result.status).toBe(0)
 
-    const staged = path.join(workdir, 'staged', 'fixture-tool.pnds')
-    expect(fs.existsSync(staged)).toBe(true)
-    // Staged byte-for-byte: no build-time transformation of the artifact.
-    expect(
-      createHash('sha256').update(fs.readFileSync(staged)).digest('hex')
-    ).toBe(artifactSha())
-    // And the layout survives: metadata next to the single project root.
-    const names = zipEntryNames(staged)
-    expect(names).toContain('pnds-bundle.json')
-    expect(names).toContain('Fixture Tool/manifest.json')
+    const staged = path.join(workdir, 'staged', 'fixture-tool')
+    expect(fs.existsSync(path.join(staged, 'manifest.json'))).toBe(true)
+    expect(fs.existsSync(path.join(staged, 'server.js'))).toBe(true)
+    // Transport metadata is not part of the unpacked project.
+    expect(fs.existsSync(path.join(staged, 'pnds-bundle.json'))).toBe(false)
+    // Unix permission bits survive the unpack (node_modules executables).
+    expect(fs.statSync(path.join(staged, 'bin', 'tool')).mode & 0o777).toBe(
+      0o755
+    )
   })
 
   it('exits non-zero when the checksum does not match (build fails, no silent shipping)', async () => {
@@ -359,9 +376,9 @@ describe('fetch script end-to-end (child process)', () => {
     expect(result.status).not.toBe(0)
     expect(result.stderr).toMatch(/sha256 mismatch/)
     expect(result.stderr).toMatch(/expected 0{64}/)
-    expect(
-      fs.existsSync(path.join(workdir, 'staged', 'fixture-tool.pnds'))
-    ).toBe(false)
+    expect(fs.existsSync(path.join(workdir, 'staged', 'fixture-tool'))).toBe(
+      false
+    )
   })
 
   it('exits non-zero when the registry id does not match the bundle', async () => {

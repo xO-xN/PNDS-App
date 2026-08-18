@@ -188,7 +188,7 @@ http://<Host-LAN-IP>:<performerPort>/  → performer/client 页面
 http://<Host-LAN-IP>:<monitorPort>/    → monitor/conductor 页面
 ```
 
-工程可以不提供可演奏的 performer UI，但 performer server 仍必须提供 health endpoint，并可在 `/` 显示说明页面。`examples/Multichannel Signal Generator/` 使用这种模式。
+工程可以不提供可演奏的 performer UI，但 performer server 仍必须提供 health endpoint，并可在 `/` 显示说明页面。`utilities/Multichannel Signal Generator/` 使用这种模式。
 
 ### 3.7 不属于 schema 的字段
 

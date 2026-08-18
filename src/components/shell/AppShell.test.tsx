@@ -315,13 +315,9 @@ describe('AppShell', () => {
       '~/bundles/local-network-diagnostics-0.1.0',
       '~/bundles/multichannel-signal-generator-1.0.0',
     ]
-    vi.mocked(commands.syncBuiltinTools).mockResolvedValue({
+    vi.mocked(commands.builtinUtilities).mockResolvedValue({
       status: 'ok',
-      data: TOOLS.map(path => ({
-        path,
-        name: path,
-        supersededPaths: [],
-      })),
+      data: TOOLS.map(path => ({ path, name: path })),
     })
 
     render(<AppShell />)

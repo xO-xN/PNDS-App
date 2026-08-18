@@ -316,7 +316,7 @@ Back/Close 返回 Welcome，不自动重启。
 仓库提供普通 score project：
 
 ```text
-examples/Multichannel Signal Generator/
+utilities/Multichannel Signal Generator/
 ```
 
 它不是安装到 App 数据目录的“内置项目”基础设施。App 自带的 Utilities 工具（Local Network Diagnostics、Multichannel Signal Generator）按 Project Bundle Specification §5 的注册表管线分发，与本验证工程无关。
@@ -361,7 +361,7 @@ examples/Multichannel Signal Generator/
 
 - 《Inarticulate III》Internal/External/None；
 - Node `24.18.1` sidecar；
-- `examples/Multichannel Signal Generator` 16ch → BlackHole/DAW；
+- `utilities/Multichannel Signal Generator` 16ch → BlackHole/DAW；
 - 16ch 工程选择 2ch 设备仍 ready 并显示 `16ch → 2ch`；
 - 设备、模式、target restart；
 - 全屏进入/退出时 monitor 正确 resize 且 Socket.IO 不重连；
@@ -386,5 +386,5 @@ PNDS App 当前要求完成的判定：
 9. session restart 不丢失工程选择和待应用设置；
 10. red close、Dock reopen 与真正退出的窗口行为正确；
 11. 无残留 Node/scsynth，日志正确写入和轮转；
-12. `examples/Multichannel Signal Generator` 可验证 16 路路由；
+12. `utilities/Multichannel Signal Generator` 可验证 16 路路由；
 13. 可产出可更新的 macOS ARM64 release artifact。

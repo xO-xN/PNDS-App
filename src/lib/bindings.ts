@@ -333,16 +333,14 @@ async compileProjectSynthdefs(path: string) : Promise<Result<SynthdefCompileResu
 }
 },
 /**
- * v1.2.0 (issue #18): syncs the built-in utility tools. Installs the
- * staged `.pnds` resources into the app-managed `bundles/` directory on
- * first run (no-op once the registry version is installed), reclaims
- * installs of superseded versions, and returns the tool project paths in
- * Utilities order. With nothing staged (a dev checkout), the repository's
- * example mirrors are returned in place.
+ * v1.2.0 (issue #18): the built-in utility tools behind the Utilities
+ * folder. Returns each tool's stable project path (run in place from the
+ * app resources) and manifest name, in registry order. With nothing staged
+ * (a dev checkout), the repository's utility mirrors are returned instead.
  */
-async syncBuiltinTools() : Promise<Result<BuiltinTool[], string>> {
+async builtinUtilities() : Promise<Result<BuiltinUtility[], string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("sync_builtin_tools") };
+    return { status: "ok", data: await TAURI_INVOKE("builtin_utilities") };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -448,24 +446,19 @@ export type AudioDeviceCapabilities = { devices: AudioOutputDevice[]; sampleRate
  */
 export type AudioOutputDevice = { name: string; isDefault: boolean; maxOutputChannels: number }
 /**
- * One tool as the frontend sees it after a sync.
+ * One tool as the frontend sees it: the stable project path inside the app
+ * resources and its manifest-declared display name.
  */
-export type BuiltinTool = { 
+export type BuiltinUtility = { 
 /**
- * Absolute path of the installed (or dev-resolved) tool project.
+ * Absolute path of the unpacked tool project, run in place.
  */
 path: string; 
 /**
  * The manifest-declared display name, so a clean install lists the
  * Utilities entries by name before their first preflight.
  */
-name: string; 
-/**
- * Install directories of older registry versions reclaimed by this
- * sync — the frontend prunes them from the history and folder
- * membership so no dead entries linger after an app update.
- */
-supersededPaths: string[] }
+name: string }
 export type BundleOutputInfo = { outputPath: string; exists: boolean }
 /**
  * §7.1: the Internal channel plan computed at session start.

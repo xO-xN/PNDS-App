@@ -7,7 +7,7 @@
     "removeUnusedCommands": true,
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "npm run build && npm run tools:fetch",
+    "beforeBuildCommand": "npm run build && npm run utilities:fetch",
     "frontendDist": "../dist"
   },
   "app": {
@@ -53,7 +53,7 @@
       "binaries/scsynth-aarch64-apple-darwin": "scsynth",
       "resources/synthdefs/pndsMaster.scsyndef": "synthdefs/pndsMaster.scsyndef",
       "plugins": "plugins",
-      "resources/builtin-tools": "builtin-tools",
+      "resources/utilities": "utilities",
       "binaries/NODE-LICENSE.txt": "licenses/NODE-LICENSE.txt",
       "binaries/SC-GPL-3.0.txt": "licenses/SC-GPL-3.0.txt",
       "binaries/SC-SOURCE.txt": "licenses/SC-SOURCE.txt"

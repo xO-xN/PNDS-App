@@ -76,16 +76,17 @@ Then GitHub Actions will:
    `Contents/Resources/scsynth` so macOS does not register it as a second PNDS
    application. The scsynth step also compiles `pndsMaster.scsyndef` using the
    mounted SuperCollider dmg's `sclang`. The built-in utility tools are
-   fetched the same way by `npm run tools:fetch`: the tool repos release
+   staged the same way by `npm run utilities:fetch`: the tool repos release
    `.pnds` bundles themselves (one project root + `pnds-bundle.json`, per the
    Project Bundle Specification), and the script downloads each pinned
-   release (registry: `builtin-tools.json`), fails the build on a sha256
-   mismatch or a malformed bundle layout, and stages the verified `.pnds`
-   unchanged under the gitignored `src-tauri/resources/builtin-tools/` — it
-   is chained into `beforeBuildCommand`, so every `tauri build` (local or CI)
-   ships them under `Contents/Resources/builtin-tools`, where
-   `syncBuiltinTools` installs them into the app data `bundles/` directory on
-   first run for the Utilities folder.
+   release (registry: `utilities.json`), fails the build on a sha256
+   mismatch or a malformed bundle layout, and unpacks the verified project
+   into the gitignored `src-tauri/resources/utilities/<id>/` (stable path,
+   no version) — it is chained into `beforeBuildCommand`, so every
+   `tauri build` (local or CI) ships them under
+   `Contents/Resources/utilities`, where `builtinUtilities` resolves them
+   for the Utilities folder. The app runs them in place; there is no
+   first-run install.
 2. Build the app for all platforms
 3. Create a draft release
 4. Generate `latest.json` for auto-updates

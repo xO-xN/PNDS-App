@@ -3,18 +3,19 @@
 //
 // The Utilities folder's two tools (Local Network Diagnostics, Multichannel
 // Signal Generator) are released by their own repositories as `.pnds`
-// bundles — the canonical distribution format for every PNDS project (the
-// tool repos' CI assembles them: one project root + a top-level
-// pnds-bundle.json). This script is the build-time half of docs/
-// PNDS_PROJECT_BUNDLE_SPECIFICATION.md §5: for every entry in the committed
-// registry (builtin-tools.json) it downloads the pinned release bundle,
-// REFUSES to continue on a sha256 mismatch (a broken tool must never ship
-// silently), validates the .pnds layout, and stages the verified bundle
-// as-is under src-tauri/resources/builtin-tools/<id>.pnds — first-run
-// installs then go through the ordinary bundle install path.
+// bundles — the canonical distribution format for every PNDS project. This
+// script is the build-time half of docs/PNDS_PROJECT_BUNDLE_SPECIFICATION.md
+// §5: for every entry in the committed registry (utilities.json) it
+// downloads the pinned release bundle, REFUSES to continue on a sha256
+// mismatch (a broken tool must never ship silently), validates the .pnds
+// layout, and unpacks the project into the app resources at a STABLE path —
+// `src-tauri/resources/utilities/<id>/` — where the app runs it in place
+// (no first-run install; app updates swap the folder contents and the
+// Utilities paths never go stale). The top-level pnds-bundle.json is
+// transport metadata and is not unpacked.
 //
 // Chained into beforeBuildCommand, so every `tauri build` (local or CI)
-// stages the tools automatically. Run manually with: npm run tools:fetch
+// stages the tools automatically. Run manually with: npm run utilities:fetch
 //
 // Test hooks: pure helpers are exported for vitest, and the base URL / paths
 // can be overridden so the child-process e2e test can serve fixtures locally.
@@ -91,7 +92,7 @@ function runCapture(command, args, options = {}) {
 
 /**
  * Reads the identity of a release `.pnds` and validates the §2 layout the
- * install path relies on: exactly one top-level directory (the project
+ * unpack step relies on: exactly one top-level directory (the project
  * root, holding manifest.json), the top-level `pnds-bundle.json` metadata
  * (parseable, supported formatVersion), and no stray top-level files.
  */
@@ -149,6 +150,35 @@ export function readBundleIdentity(pndsPath) {
   return { id, version, root }
 }
 
+/**
+ * Unpacks a verified `.pnds` into the stable resource folder
+ * `<outDir>/<id>/`: the single project root's contents, unix permission
+ * bits intact (node_modules executables depend on them), without the
+ * transport metadata. Extraction happens in a sibling temp dir so the
+ * final rename never crosses a volume boundary, and a failed unpack never
+ * leaves a half-written folder behind.
+ */
+export function unpackBundle(pndsPath, outDir, id) {
+  const dest = path.join(outDir, id)
+  const staging = path.join(outDir, `.unpacking-${id}`)
+  fs.rmSync(staging, { recursive: true, force: true })
+  fs.rmSync(dest, { recursive: true, force: true })
+  try {
+    fs.mkdirSync(staging, { recursive: true })
+    const identity = readBundleIdentity(pndsPath)
+    runCapture('unzip', ['-q', '-o', pndsPath], { cwd: staging })
+    const project = path.join(staging, identity.root)
+    if (!fs.statSync(project).isDirectory()) {
+      throw new Error(`the bundle root "${identity.root}" is not a directory`)
+    }
+    fs.mkdirSync(outDir, { recursive: true })
+    fs.renameSync(project, dest)
+    return { dest, identity }
+  } finally {
+    fs.rmSync(staging, { recursive: true, force: true })
+  }
+}
+
 async function download(url) {
   const response = await fetch(url, { redirect: 'follow' })
   if (!response.ok) {
@@ -183,7 +213,7 @@ async function main(argv) {
     verifyArtifact(bytes, tool.sha256, tool.id)
 
     // Materialize the bundle once for the zip tooling, validate it, then
-    // stage the verified file unchanged — the artifact is already a .pnds.
+    // unpack the verified project into its stable resource folder.
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pnds-fetch-'))
     try {
       const downloaded = path.join(tmp, tool.artifact)
@@ -194,9 +224,9 @@ async function main(argv) {
           `registry/tool mismatch: registry declares "${tool.id}" but the bundle contains "${identity.id}"`
         )
       }
-      fs.copyFileSync(downloaded, path.join(options.out, `${tool.id}.pnds`))
+      const { dest } = unpackBundle(downloaded, options.out, tool.id)
       process.stdout.write(
-        `staged ${tool.id}-${identity.version}.pnds (${(bytes.length / 1024 / 1024).toFixed(1)} MB)\n`
+        `unpacked ${tool.id} ${identity.version} → ${path.relative(ROOT, dest)} (${(bytes.length / 1024 / 1024).toFixed(1)} MB bundle)\n`
       )
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true })
@@ -209,9 +239,9 @@ async function main(argv) {
 
 function parseArgs(argv) {
   const options = {
-    registry: path.join(ROOT, 'builtin-tools.json'),
-    out: path.join(ROOT, 'src-tauri/resources/builtin-tools'),
-    cache: path.join(ROOT, '.cache/builtin-tools'),
+    registry: path.join(ROOT, 'utilities.json'),
+    out: path.join(ROOT, 'src-tauri/resources/utilities'),
+    cache: path.join(ROOT, '.cache/utilities'),
   }
   for (let i = 0; i < argv.length; i += 2) {
     const flag = argv[i]

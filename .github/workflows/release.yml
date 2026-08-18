@@ -45,9 +45,9 @@ jobs:
       # src-tauri/binaries, Frameworks, plugins, and resources/synthdefs are
       # gitignored (~100MB Node runtime + SuperCollider extraction); these
       # scripts provision them fresh on every release build. The built-in
-      # utility tools (.pnds bundles under resources/builtin-tools) are
-      # fetched and checksum-verified automatically by the build's
-      # beforeBuildCommand (npm run tools:fetch).
+      # utility tools (unpacked under resources/utilities) are fetched,
+      # checksum-verified, and unpacked automatically by the build's
+      # beforeBuildCommand (npm run utilities:fetch).
       - name: Fetch Node sidecar
         run: npm run node:fetch
 

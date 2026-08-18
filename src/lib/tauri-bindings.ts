@@ -25,7 +25,7 @@ export { commands, type Result } from './bindings'
 export type {
   AppPreferences,
   AudioConfig,
-  BuiltinTool,
+  BuiltinUtility,
   BundleOutputInfo,
   HealthAudio,
   HealthPayload,

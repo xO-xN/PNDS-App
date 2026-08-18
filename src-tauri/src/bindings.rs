@@ -30,7 +30,7 @@ pub fn generate_bindings() -> Builder<tauri::Wry> {
         bundle::take_pending_bundle_opens,
         bundle::pick_project_or_bundle,
         synthdef::compile_project_synthdefs,
-        tools::sync_builtin_tools,
+        tools::builtin_utilities,
         system::open_app_data_dir,
         system::open_app_log_dir,
     ])

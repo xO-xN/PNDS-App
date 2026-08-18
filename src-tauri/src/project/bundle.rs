@@ -440,19 +440,6 @@ pub fn install_bundle(bundles_root: &Path, bundle_path: &Path) -> Result<PathBuf
     Ok(target)
 }
 
-/// Reads a bundle's identity — the metadata gate (§4.1), the single-root
-/// rule (§2) and the manifest `id`/`version` (§4.2 path-segment checks) —
-/// without extracting. The install path and the built-in tools sync share
-/// it; the latter uses it to predict `<bundles>/<id>-<version>` and skip
-/// work when the registry version is already installed.
-pub fn bundle_identity(bundle_path: &Path) -> Result<(String, String, String), String> {
-    let file = File::open(bundle_path)
-        .map_err(|e| format!("Cannot open the bundle {}: {e}", bundle_path.display()))?;
-    let mut archive =
-        ZipArchive::new(file).map_err(|e| format!("Not a valid .pnds bundle (zip): {e}"))?;
-    archive_identity(&mut archive)
-}
-
 /// The shared validation prologue: `(root directory, manifest id, version)`.
 fn archive_identity(archive: &mut ZipArchive<File>) -> Result<(String, String, String), String> {
     // §4.1: metadata gate first.

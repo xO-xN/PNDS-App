@@ -37,10 +37,10 @@ src-tauri/plugins/
 
 # Bundled example score projects: their dependencies and nested VCS
 # history stay out of this repository.
-examples/*/node_modules/
-examples/*/.git/
+utilities/*/node_modules/
+utilities/*/.git/
 
-# Staged .pnds bundles of the built-in utility tools (npm run tools:fetch)
+# Unpacked utility tools staged for app bundling (npm run utilities:fetch)
 # and the download cache it keeps to skip re-fetching on rebuilds.
-src-tauri/resources/builtin-tools/
+src-tauri/resources/utilities/
 .cache/

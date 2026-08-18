@@ -50,7 +50,7 @@
     "jscpd": "jscpd",
     "ast:lint": "ast-grep scan",
     "ast:fix": "ast-grep scan --fix",
-    "tools:fetch": "node scripts/fetch-builtin-tools.mjs"
+    "utilities:fetch": "node scripts/fetch-utilities.mjs"
   },
   "dependencies": {
     "@radix-ui/react-alert-dialog": "^1.1.15",
