@@ -94,6 +94,7 @@
   "welcome.subtitle": "网络数字乐谱演奏平台",
   "welcome.hintAdd": "添加一个 PNDS 池谱",
   "welcome.hintSelect": "或是从左侧栏选取一个进行演出",
+  "welcome.cmdHint": "按住 ⌘ 键即可快速操控 App",
   "welcome.checking": "正在检查工程…",
   "project.version": "版本",
   "project.modes": "音频模式",

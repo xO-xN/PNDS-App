@@ -29,6 +29,10 @@ export function WelcomeScreen() {
         <span className="block">{t('welcome.hintSelect')}</span>
       </p>
 
+      <p className="mt-6 text-sm text-(--pnds-text)/80 select-none">
+        {t('welcome.cmdHint')}
+      </p>
+
       {/* Bottom-docked status, out of the centered column: an appearing
           or disappearing box (any height) must never re-center the content
           above. The transient "Checking project…" state uses the same
