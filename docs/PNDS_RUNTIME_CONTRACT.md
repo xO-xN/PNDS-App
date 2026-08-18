@@ -195,7 +195,7 @@ starting | ready | error | disabled
 
 ```text
 N = manifest.audio.outputChannels（1..=64，缺省 2）
-H = 所选 CoreAudio 设备在工程 sampleRate 下可用的输出通道数
+H = 所选 CoreAudio 设备在 App 有效采样率下可用的输出通道数
 K = min(N, H)
 B = private project bus start = K
 ```
@@ -207,7 +207,7 @@ App 无法可靠取得设备能力或设备没有可用输出时，Internal 启�
 ```text
 -i 0                              不启用音频输入
 -o K                              实际打开的硬件输出通道数
--S <audio.scsynth.sampleRate>
+-S <App 有效采样率>
 -z <audio.scsynth.blockSize>
 -a <audio.scsynth.audioBusChannels>
 -u <dynamic UDP port>
@@ -215,6 +215,8 @@ App 无法可靠取得设备能力或设备没有可用输出时，Internal 启�
 -U <App bundled UGen plugins>
 -H <selected device name>         非系统默认时
 ```
+
+`-S` 使用 App 的**有效采样率**：App 全局采样率偏好，未设置时为 `48000`。manifest 不再声明 sampleRate（已从 schema 的活跃表面移除）；旧 manifest 中残留的 `audio.scsynth.sampleRate` 被读取后忽略——不参与启动、不被改写、不导致校验失败。§7.1 的 H 与 §7.6 的设备能力判定同样以有效采样率为准。
 
 必须满足：
 
@@ -294,7 +296,7 @@ External 与 None 的 App 音量控制始终禁用。App 不修改 macOS 系统�
 - Load/Change 直接按 `K = min(N,H)` 启动；
 - App 不通过解析 scsynth 日志猜测设备通道数。
 
-设备能力应以工程 sample rate 可用配置为准，而不是仅使用设备名称或系统默认声道数。
+设备能力应以 App 有效采样率的可用配置为准，而不是仅使用设备名称或系统默认声道数。
 
 ---
 

@@ -57,9 +57,21 @@ fn default_output_channels() -> u32 {
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ScsynthConfig {
+    /// Issue #20: legacy field, read and ignored. The App's global
+    /// sample-rate preference is the sole boot authority; manifests no
+    /// longer declare `sampleRate` and validation never requires it. Kept
+    /// on the struct (with a placeholder default) so manifests that still
+    /// carry it — existing works, bundled .pnds — load losslessly.
+    #[serde(default = "default_scsynth_sample_rate")]
     pub sample_rate: u32,
     pub block_size: u32,
     pub audio_bus_channels: u32,
+}
+
+/// Issue #20: placeholder for manifests that omit the legacy `sampleRate`;
+/// never authoritative (see [`ScsynthConfig::sample_rate`]).
+fn default_scsynth_sample_rate() -> u32 {
+    crate::types::DEFAULT_SAMPLE_RATE
 }
 
 /// Loads and fully validates the manifest of the project at `project_root`.
@@ -202,11 +214,10 @@ fn validate_schema(value: &Value) -> Result<(), String> {
                 );
             }
         }
-        for field in [
-            "audio.scsynth.sampleRate",
-            "audio.scsynth.blockSize",
-            "audio.scsynth.audioBusChannels",
-        ] {
+        // Issue #20: `audio.scsynth.sampleRate` is no longer required (the
+        // App's global sample-rate setting owns the boot rate); a legacy
+        // value still present in the manifest is read and ignored below.
+        for field in ["audio.scsynth.blockSize", "audio.scsynth.audioBusChannels"] {
             match get(value, field).and_then(Value::as_u64) {
                 Some(n) if n > 0 => {}
                 _ => {
@@ -468,6 +479,38 @@ mod tests {
         );
         let err = load_manifest(dir.path()).unwrap_err();
         assert!(err.contains("blockSize"), "unexpected: {err}");
+    }
+
+    /// Issue #20: `audio.scsynth.sampleRate` is no longer part of the
+    /// schema's live surface — an internal manifest validates with the
+    /// field absent (placeholder fills in) and with a legacy value present
+    /// (read and ignored, never a rejection, never used for boot).
+    #[test]
+    fn internal_manifest_validates_with_and_without_sample_rate() {
+        for (declared, parsed) in [(None, 48_000), (Some(96_000u32), 96_000)] {
+            let dir = tempfile::tempdir().unwrap();
+            write_valid_project(dir.path());
+            let sample_rate_json = declared
+                .map(|n| format!("\"sampleRate\": {n}, "))
+                .unwrap_or_default();
+            write_manifest(
+                dir.path(),
+                &format!(
+                    r#"{{
+                      "schemaVersion": 1, "id": "x", "name": "X", "version": "0.1.0",
+                      "scoreServer": {{ "entry": "server.js", "workingDirectory": ".", "performerPort": 6868, "monitorPort": 6869 }},
+                      "audio": {{ "defaultMode": "internal", "supportedModes": ["internal"],
+                        "synthdefs": ["supercollider/synthdefs/inarticulate-iii.scsyndef"],
+                        "scsynth": {{ {sample_rate_json}"blockSize": 64, "audioBusChannels": 128 }} }}
+                    }}"#
+                ),
+            );
+            let manifest = load_manifest(dir.path())
+                .unwrap_or_else(|e| panic!("declared={declared:?} must validate: {e}"));
+            let sc = manifest.audio.scsynth.as_ref().unwrap();
+            assert_eq!(sc.sample_rate, parsed, "declared={declared:?}");
+            assert_eq!(sc.block_size, 64);
+        }
     }
 
     #[test]

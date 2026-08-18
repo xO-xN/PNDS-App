@@ -21,6 +21,13 @@ pub struct AppPreferences {
     /// This is an app-local preference and never touches project manifests.
     #[serde(default)]
     pub output_device: Option<String>,
+    /// Issue #20: global audio sample rate (Hz). The App's sole audio
+    /// authority — scsynth boots and device capabilities resolve at this
+    /// rate; a manifest's legacy `audio.scsynth.sampleRate` (when still
+    /// present) is read and ignored. `None` = unset → 48000. App-local,
+    /// never touches project manifests.
+    #[serde(default)]
+    pub sample_rate: Option<u32>,
     /// §6.6: last valid external OSC target per project id.
     #[serde(default)]
     pub osc_targets: HashMap<String, String>,
@@ -60,6 +67,7 @@ impl Default for AppPreferences {
             theme: "system".to_string(),
             language: None, // None means use system locale
             output_device: None,
+            sample_rate: None,
             osc_targets: HashMap::new(),
             recent_projects: Vec::new(),
             project_folders: Vec::new(),
@@ -68,6 +76,20 @@ impl Default for AppPreferences {
         }
     }
 }
+
+impl AppPreferences {
+    /// Issue #20: the App's effective audio sample rate. An unset
+    /// preference resolves to [`DEFAULT_SAMPLE_RATE`] so existing installs
+    /// see no behaviour change.
+    pub fn effective_sample_rate(&self) -> u32 {
+        self.sample_rate.unwrap_or(DEFAULT_SAMPLE_RATE)
+    }
+}
+
+/// Issue #20: the rate an unset sample-rate preference resolves to. Also
+/// the placeholder the manifest parser fills in for a legacy
+/// `audio.scsynth.sampleRate` that is absent (see `ScsynthConfig`).
+pub const DEFAULT_SAMPLE_RATE: u32 = 48_000;
 
 // ============================================================================
 // Validation Functions
@@ -78,6 +100,16 @@ pub fn validate_theme(theme: &str) -> Result<(), String> {
     match theme {
         "light" | "dark" | "system" => Ok(()),
         _ => Err("Invalid theme: must be 'light', 'dark', or 'system'".to_string()),
+    }
+}
+
+/// Issue #20: validates the global sample-rate preference. `Option<u32>`
+/// already rules out non-integers and negatives at the serde boundary;
+/// this rejects 0 with a readable error.
+pub fn validate_sample_rate(rate: Option<u32>) -> Result<(), String> {
+    match rate {
+        None | Some(1..) => Ok(()),
+        Some(0) => Err("Invalid sampleRate: must be a positive integer (Hz)".to_string()),
     }
 }
 
@@ -184,5 +216,49 @@ mod tests {
         );
         let reserialized = serde_json::to_string(&prefs).expect("prefs serialize");
         assert!(reserialized.contains("\"projectManifestNames\""));
+    }
+
+    /// Issue #20: preference files written before `sampleRate` existed must
+    /// load losslessly (serde default fills the field in), and an unset
+    /// preference resolves to the 48000 fallback.
+    #[test]
+    fn deserializes_preferences_without_sample_rate() {
+        let legacy = r#"{
+            "theme": "dark",
+            "language": null,
+            "recentProjects": ["/a"]
+        }"#;
+        let prefs: AppPreferences = serde_json::from_str(legacy).expect("legacy prefs parse");
+        assert_eq!(prefs.sample_rate, None);
+        assert_eq!(prefs.effective_sample_rate(), 48_000);
+    }
+
+    #[test]
+    fn roundtrips_sample_rate() {
+        let modern = r#"{
+            "theme": "system",
+            "language": null,
+            "recentProjects": ["/a"],
+            "sampleRate": 96000
+        }"#;
+        let prefs: AppPreferences = serde_json::from_str(modern).expect("modern prefs parse");
+        assert_eq!(prefs.sample_rate, Some(96_000));
+        assert_eq!(prefs.effective_sample_rate(), 96_000);
+        let reserialized = serde_json::to_string(&prefs).expect("prefs serialize");
+        assert!(reserialized.contains("\"sampleRate\""));
+    }
+
+    /// Issue #20: the save path must reject a non-positive sample rate with
+    /// a readable error. Non-integers/negatives never get here — the
+    /// `Option<u32>` type rejects them at the serde boundary.
+    #[test]
+    fn validates_sample_rate() {
+        assert!(validate_sample_rate(None).is_ok());
+        assert!(validate_sample_rate(Some(48_000)).is_ok());
+        let err = validate_sample_rate(Some(0)).expect_err("0 Hz must be rejected");
+        assert!(
+            err.contains("positive integer"),
+            "readable error, got: {err}"
+        );
     }
 }

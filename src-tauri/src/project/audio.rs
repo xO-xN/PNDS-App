@@ -16,6 +16,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use crate::project::manifest::ScsynthConfig;
+use crate::types::AppPreferences;
 
 /// §7.6: one CoreAudio output device and what it can do at the project's
 /// sample rate. `maxOutputChannels` is 0 when no configuration of the
@@ -286,6 +287,18 @@ pub fn plugins_dir() -> Result<PathBuf, String> {
         return Ok(dev);
     }
     Err("UGen plugins not found.\nRun `npm run scsynth:fetch` and try again.".to_string())
+}
+
+/// Issue #20: the scsynth config the session actually runs with. The App's
+/// global sample-rate preference is the sole audio authority — a legacy
+/// `audio.scsynth.sampleRate` still present in the manifest is read and
+/// ignored; block size and bus channels still come from the manifest.
+/// Pure so the preference → `-S` flow is testable without spawning.
+pub fn with_effective_sample_rate(cfg: &ScsynthConfig, prefs: &AppPreferences) -> ScsynthConfig {
+    ScsynthConfig {
+        sample_rate: prefs.effective_sample_rate(),
+        ..cfg.clone()
+    }
 }
 
 /// §7.2: the exact scsynth command line. `-o` opens K hardware output
@@ -863,6 +876,48 @@ mod tests {
         // No device → no -H flag at all.
         let args = scsynth_args(&cfg, 2, 57110, Path::new("/plugins"), None);
         assert!(!args.iter().any(|a| a == "-H"));
+    }
+
+    /// Issue #20: `-S` carries the App's effective sample rate — the global
+    /// preference when set, 48000 when unset — never a legacy manifest
+    /// rate that is still present. Block size and bus channels stay from
+    /// the manifest.
+    #[test]
+    fn scsynth_args_use_effective_sample_rate() {
+        let manifest_cfg = ScsynthConfig {
+            sample_rate: 44_100,
+            block_size: 512,
+            audio_bus_channels: 128,
+        };
+        let s_flag = |prefs: &AppPreferences| {
+            let cfg = with_effective_sample_rate(&manifest_cfg, prefs);
+            let args = scsynth_args(&cfg, 2, 57110, Path::new("/plugins"), None);
+            let pos = args.iter().position(|a| a == "-S").unwrap();
+            (args[pos + 1].clone(), args)
+        };
+
+        // (a) a set preference is the effective rate.
+        let prefs = AppPreferences {
+            sample_rate: Some(96_000),
+            ..Default::default()
+        };
+        let (s, args) = s_flag(&prefs);
+        assert_eq!(s, "96000");
+        // Manifest-declared fields pass through untouched.
+        let z = args.iter().position(|a| a == "-z").unwrap();
+        assert_eq!(args[z + 1], "512");
+
+        // (b) unset → 48000, not the manifest rate.
+        let (s, _) = s_flag(&AppPreferences::default());
+        assert_eq!(s, "48000");
+
+        // (c) a preference that differs from the manifest rate still wins.
+        let prefs = AppPreferences {
+            sample_rate: Some(48_000),
+            ..Default::default()
+        };
+        let (s, _) = s_flag(&prefs);
+        assert_eq!(s, "48000");
     }
 
     #[test]

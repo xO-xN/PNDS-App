@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager};
 
-use crate::types::{validate_theme, AppPreferences};
+use crate::types::{validate_sample_rate, validate_theme, AppPreferences};
 
 /// In-memory cache of the preferences file. Managed by Tauri.
 #[derive(Default)]
@@ -87,6 +87,8 @@ pub async fn load_preferences(app: AppHandle) -> Result<AppPreferences, String> 
 pub async fn save_preferences(app: AppHandle, preferences: AppPreferences) -> Result<(), String> {
     // Validate theme value
     validate_theme(&preferences.theme)?;
+    // Issue #20: the global sample rate must be a positive integer (Hz).
+    validate_sample_rate(preferences.sample_rate)?;
 
     log::debug!("Saving preferences to disk: {preferences:?}");
     let prefs_path = get_preferences_path(&app)?;

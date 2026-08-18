@@ -447,10 +447,11 @@ impl SessionManager {
         )?;
 
         // §7.1/§7.6: for internal sessions resolve the output device and
-        // its capability at the project sample rate, then compute N/H/K/B.
-        // Unreadable capability or H = 0 fails before anything is spawned;
-        // a channel-poor device (H < N) is bridged partially, never an error.
-        let (device, channel_plan) = if mode == "internal" {
+        // its capability at the effective sample rate, then compute
+        // N/H/K/B. Unreadable capability or H = 0 fails before anything is
+        // spawned; a channel-poor device (H < N) is bridged partially,
+        // never an error.
+        let (device, channel_plan, effective_sc_cfg) = if mode == "internal" {
             let sc_cfg = manifest
                 .audio
                 .scsynth
@@ -460,6 +461,11 @@ impl SessionManager {
             // (never the manifest). A missing saved device falls back to
             // the system default with a warning.
             let prefs = crate::commands::preferences::load_preferences_sync(app)?;
+            // Issue #20: the App's global sample-rate preference is the
+            // sole audio authority — device enumeration and the scsynth
+            // boot below both use this config; a legacy manifest rate is
+            // never read for boot.
+            let sc_cfg = crate::project::audio::with_effective_sample_rate(sc_cfg, &prefs);
             let caps = crate::project::audio::list_output_devices(sc_cfg.sample_rate)?;
             let device = match prefs.output_device {
                 Some(name) => {
@@ -485,9 +491,9 @@ impl SessionManager {
                 plan.private_bus_start,
                 cap.name
             );
-            (device, Some((plan, cap.name)))
+            (device, Some((plan, cap.name)), Some(sc_cfg))
         } else {
-            (None, None)
+            (None, None, None)
         };
 
         if let Some((plan, device_name)) = &channel_plan {
@@ -527,6 +533,14 @@ impl SessionManager {
                 plan.private_bus_start
             ));
         }
+        // Issue #20: record the authority the session runs at — the App's
+        // global setting (or its 48000 fallback), not the manifest rate.
+        if let (Some(log), Some(sc_cfg)) = (&mut session_log, &effective_sc_cfg) {
+            log.write_line(&format!(
+                "Sample rate: {} Hz (App global setting)",
+                sc_cfg.sample_rate
+            ));
+        }
         {
             let mut inner = self.lock();
             inner.logger = session_log;
@@ -536,11 +550,12 @@ impl SessionManager {
         // before the score server starts. External/none skip this entirely.
         let osc_target = match mode.as_str() {
             "internal" => {
-                let sc_cfg = manifest
-                    .audio
-                    .scsynth
+                // Issue #20: the config resolved above already carries the
+                // App's effective sample rate; the manifest rate is never
+                // re-read here.
+                let sc_cfg = effective_sc_cfg
                     .as_ref()
-                    .ok_or("manifest is missing audio.scsynth (required for internal mode)")?;
+                    .ok_or("internal mode requires a resolved scsynth config")?;
                 // §7.2: scsynth opens exactly K hardware output channels.
                 let k = channel_plan
                     .as_ref()

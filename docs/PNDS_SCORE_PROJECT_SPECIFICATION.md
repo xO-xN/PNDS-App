@@ -92,7 +92,6 @@ project/
     "outputChannels": 2,
     "synthdefs": ["supercollider/synthdefs/inarticulate-iii.scsyndef"],
     "scsynth": {
-      "sampleRate": 48000,
       "blockSize": 64,
       "audioBusChannels": 128
     },
@@ -141,10 +140,11 @@ audio.standaloneTarget
 
 ```text
 audio.synthdefs                       非空路径数组
-audio.scsynth.sampleRate              正整数
 audio.scsynth.blockSize               正整数
 audio.scsynth.audioBusChannels        正整数
 ```
+
+`audio.scsynth.sampleRate` **已从 schema 的活跃表面移除**：internal 模式不再要求它，新工程不应再声明它。App 托管的 scsynth 一律运行在 App 的全局采样率设置（未设置时 48000，见 [`PNDS_RUNTIME_CONTRACT.md`](./PNDS_RUNTIME_CONTRACT.md) §7.2）。旧 manifest 中残留的该字段被读取后忽略——永不参与启动，永不被改写，也永不导致校验失败。工程脱离 App standalone 调试时自行决定 scsynth 采样率。
 
 此外必须满足：
 

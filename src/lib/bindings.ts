@@ -398,6 +398,14 @@ language: string | null;
  */
 outputDevice?: string | null; 
 /**
+ * Issue #20: global audio sample rate (Hz). The App's sole audio
+ * authority — scsynth boots and device capabilities resolve at this
+ * rate; a manifest's legacy `audio.scsynth.sampleRate` (when still
+ * present) is read and ignored. `None` = unset → 48000. App-local,
+ * never touches project manifests.
+ */
+sampleRate?: number | null; 
+/**
  * §6.6: last valid external OSC target per project id.
  */
 oscTargets?: Partial<{ [key in string]: string }>; 
@@ -518,7 +526,15 @@ export type PortStatus = { port: number; occupant: PortOccupant | null }
  */
 export type ProjectFolder = { id: string; name: string; projectPaths: string[] }
 export type ScoreServer = { entry: string; workingDirectory: string; performerPort: number; monitorPort: number }
-export type ScsynthConfig = { sampleRate: number; blockSize: number; audioBusChannels: number }
+export type ScsynthConfig = { 
+/**
+ * Issue #20: legacy field, read and ignored. The App's global
+ * sample-rate preference is the sole boot authority; manifests no
+ * longer declare `sampleRate` and validation never requires it. Kept
+ * on the struct (with a placeholder default) so manifests that still
+ * carry it — existing works, bundled .pnds — load losslessly.
+ */
+sampleRate?: number; blockSize: number; audioBusChannels: number }
 /**
  * Session snapshot emitted to the frontend as the `pnds:session` event.
  */

@@ -100,7 +100,7 @@ project/
     "supportedModes": ["internal", "external", "none"],
     "outputChannels": 16,
     "synthdefs": ["supercollider/synthdefs/template-sine.scsyndef"],
-    "scsynth": { "sampleRate": 48000, "blockSize": 64, "audioBusChannels": 64 }
+    "scsynth": { "blockSize": 64, "audioBusChannels": 64 }
   }
 }
 ```
@@ -115,6 +115,8 @@ project/
 | `audioBusChannels ≥ 2 × outputChannels`                            | preflight 失败                 |
 | `entry` / `workingDirectory` / `synthdefs[*]` 必须是工程内相对路径 | 拒绝绝对路径与 `../` 逃逸      |
 | 声明了非空生产依赖就必须携带 `node_modules/`                       | 无法打开,也无法打包(见 §5、§6) |
+
+sampleRate 已从 manifest schema 移除:App 托管的 scsynth 一律运行在 App 的全局采样率设置(未设置时 48000),新工程不应再声明该字段;旧 manifest 里残留的值被读取后忽略,不会导致校验失败。工程脱离 App standalone 调试时自行决定 scsynth 采样率。详见 [`PNDS_RUNTIME_CONTRACT.md`](./PNDS_RUNTIME_CONTRACT.md) §7.2。
 
 端口选择:**没有特殊理由,直接沿用 6868(performer)/ 6869(monitor)**。这是平台惯例——模板、官方工程(Inarticulate III)与两个内置工具全部使用这对端口,App 设置的端口管理面板在未选中工程时也以 6868/6869 为参考。App 启动前确认端口可用,**冲突即失败,不自动换端口**。
 
