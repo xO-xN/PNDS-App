@@ -21,6 +21,7 @@ pub fn generate_bindings() -> Builder<tauri::Wry> {
         project::set_master_volume,
         project::list_lan_addresses,
         project::list_output_devices,
+        project::list_supported_sample_rates,
         project::check_port_status,
         project::release_port,
         bundle::get_bundle_output_info,

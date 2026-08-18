@@ -128,6 +128,17 @@ pub async fn list_output_devices(
     crate::project::audio::refresh_output_devices(sample_rate)
 }
 
+/// Issue #21: the sample rates the Settings Audio section offers — the
+/// standard rates supported across all enumerated output devices
+/// (deduplicated, ascending). Enumeration failure or an empty union already
+/// falls back to the full standard list inside, so the frontend never has
+/// to handle an error or an empty list.
+#[tauri::command]
+#[specta::specta]
+pub async fn list_supported_sample_rates() -> Vec<u32> {
+    crate::project::audio::supported_sample_rates()
+}
+
 /// v1.2.0 (issue #14): occupancy of one TCP port — the listening process's
 /// pid, name and full command line, or None when free. The Settings port
 /// section queries this on open / manual refresh (no polling).

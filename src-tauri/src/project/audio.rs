@@ -162,6 +162,58 @@ pub fn select_max_channels(
         .unwrap_or(0)
 }
 
+/// Issue #21: the discrete sample rates the Settings Audio section offers.
+/// CoreAudio config ranges are continuous (e.g. 44.1k–96k), so the offered
+/// list is the standard rates that fall inside some device's supported
+/// range — never every integer rate of the range. Also the fallback list
+/// when enumeration fails or finds nothing.
+pub const STANDARD_SAMPLE_RATES: [u32; 4] = [44_100, 48_000, 88_200, 96_000];
+
+/// Issue #21: the union of standard rates covered by any supported config
+/// range, deduplicated and ascending (by construction — `STANDARD_SAMPLE_
+/// RATES` is a sorted set). `ranges` are (min, max) pairs across all
+/// enumerated output devices. `None` when no range covers any standard
+/// rate; the caller falls back to the full standard list.
+/// Pure so the union rule is testable without audio hardware.
+pub fn supported_standard_rates(ranges: impl IntoIterator<Item = (u32, u32)>) -> Option<Vec<u32>> {
+    let ranges: Vec<(u32, u32)> = ranges.into_iter().collect();
+    let covered: Vec<u32> = STANDARD_SAMPLE_RATES
+        .into_iter()
+        .filter(|rate| ranges.iter().any(|(min, max)| min <= rate && rate <= max))
+        .collect();
+    (!covered.is_empty()).then_some(covered)
+}
+
+/// Issue #21: sample rates offered by the Settings Audio section — the
+/// standard rates supported by at least one enumerated output device, or
+/// the full standard list when enumeration fails or the union is empty.
+/// Hot-pluggable devices must be seen, so this always walks cpal fresh.
+pub fn supported_sample_rates() -> Vec<u32> {
+    let ranges = enumerate_config_ranges().unwrap_or_default();
+    supported_standard_rates(ranges).unwrap_or_else(|| STANDARD_SAMPLE_RATES.to_vec())
+}
+
+/// The uncached (min, max) range of every config of every output device.
+fn enumerate_config_ranges() -> Result<Vec<(u32, u32)>, String> {
+    use cpal::traits::{DeviceTrait, HostTrait};
+    let host = cpal::default_host();
+    let mut ranges = Vec::new();
+    for device in host
+        .output_devices()
+        .map_err(|e| format!("Failed to enumerate audio output devices: {e}"))?
+    {
+        match device.supported_output_configs() {
+            Ok(configs) => {
+                ranges.extend(configs.map(|r| (r.min_sample_rate(), r.max_sample_rate())));
+            }
+            Err(e) => {
+                log::warn!("Skipping output device \"{device}\": {e}");
+            }
+        }
+    }
+    Ok(ranges)
+}
+
 /// §7.1/§7.6: resolve H for the selected (or system default) device.
 /// Missing capability or zero usable channels fails Internal startup with a
 /// diagnosable error; a channel-poor device (H < N) is NOT an error.
@@ -850,6 +902,43 @@ mod tests {
         assert_eq!(select_max_channels(ranges, 22_050), 0);
         // No configs at all → 0.
         assert_eq!(select_max_channels([], 48_000), 0);
+    }
+
+    /// Issue #21: the offered rates are the standard list intersected with
+    /// the devices' continuous ranges — unioned across devices, deduplicated
+    /// and ascending by construction.
+    #[test]
+    fn supported_standard_rates_union_devices() {
+        // Two devices with different coverage overlap at 44.1k and 48k.
+        let rates = supported_standard_rates([(8_000, 48_000), (44_100, 96_000)]).unwrap();
+        assert_eq!(rates, vec![44_100, 48_000, 88_200, 96_000]);
+        // A single narrow device yields only the rates it covers.
+        assert_eq!(
+            supported_standard_rates([(44_100, 48_000)]).unwrap(),
+            vec![44_100, 48_000]
+        );
+        // Range bounds are inclusive.
+        assert_eq!(
+            supported_standard_rates([(48_000, 88_200)]).unwrap(),
+            vec![48_000, 88_200]
+        );
+        // No device covers any standard rate (or no devices at all) → None,
+        // the caller's cue to fall back to the full standard list.
+        assert_eq!(supported_standard_rates([(8_000, 22_050)]), None);
+        assert_eq!(supported_standard_rates([]), None);
+    }
+
+    /// Issue #21: whatever the hardware says, the offered list is always a
+    /// non-empty, ascending, deduplicated subset of the standard rates
+    /// (enumeration failure degrades to the full standard list).
+    #[test]
+    fn supported_sample_rates_is_sorted_standard_subset() {
+        let rates = supported_sample_rates();
+        assert!(!rates.is_empty());
+        assert!(rates.windows(2).all(|w| w[0] < w[1]));
+        assert!(rates
+            .iter()
+            .all(|rate| STANDARD_SAMPLE_RATES.contains(rate)));
     }
 
     #[test]

@@ -10,6 +10,7 @@ import {
 } from './i18n/language-init'
 import { logger } from './lib/logger'
 import { commands } from './lib/tauri-bindings'
+import { DEFAULT_SAMPLE_RATE } from './lib/audio-prefs'
 import { drainPendingBundleOpens } from './lib/bundle-project'
 import { handleDroppedPaths } from './lib/drag-drop'
 import { initWindowState, markQuitting } from './store/window-store'
@@ -51,6 +52,13 @@ function App() {
         useSettingsStore
           .getState()
           .setLanguageSetting(languageSettingFromPrefs(savedLanguage))
+        // Issue #21: seed the Audio-section rate from the same read — the
+        // effective rate (preference ?? 48000) the select shows on open.
+        if (result.status === 'ok') {
+          useSettingsStore
+            .getState()
+            .setSampleRateSetting(result.data.sampleRate ?? DEFAULT_SAMPLE_RATE)
+        }
         await buildAppMenu()
         logger.debug('Application menu built')
         setupMenuLanguageListener()

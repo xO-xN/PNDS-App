@@ -124,6 +124,12 @@ vi.mock('@/lib/tauri-bindings', () => ({
       },
     }),
     setMasterVolume: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
+    // Issue #21: Settings Audio section — default: the fixed fallback list
+    // (the backend only errors at the transport level; its own enumeration
+    // failure already degrades to this list).
+    listSupportedSampleRates: vi
+      .fn()
+      .mockResolvedValue([44100, 48000, 88200, 96000]),
     getWindowState: vi.fn().mockResolvedValue({
       status: 'ok',
       data: { fullscreen: false, showCustomTrafficLights: true, generation: 0 },

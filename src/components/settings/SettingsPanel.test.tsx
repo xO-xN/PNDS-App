@@ -57,12 +57,13 @@ describe('SettingsPanel (v1.2.0 issue #13)', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
-  it('renders the four sections of the single-page panel', () => {
+  it('renders the five sections of the single-page panel', () => {
     useSettingsStore.getState().openSettings()
     render(<SettingsPanel />)
 
     expect(screen.getByRole('dialog')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'General' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Audio' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Ports' })).toBeInTheDocument()
     expect(
       screen.getByRole('heading', { name: 'Developer Tools' })
@@ -90,7 +91,7 @@ describe('SettingsPanel (v1.2.0 issue #13)', () => {
     useSettingsStore.getState().openSettings()
     render(<SettingsPanel />)
 
-    fireEvent.change(screen.getByRole('combobox'), {
+    fireEvent.change(screen.getByLabelText('Language'), {
       target: { value: 'zh-CN' },
     })
 
@@ -111,7 +112,7 @@ describe('SettingsPanel (v1.2.0 issue #13)', () => {
     useSettingsStore.getState().openSettings()
     render(<SettingsPanel />)
 
-    fireEvent.change(screen.getByRole('combobox'), {
+    fireEvent.change(screen.getByLabelText('Language'), {
       target: { value: 'system' },
     })
 
@@ -356,5 +357,146 @@ describe('SettingsPanel Ports section (v1.2.0 issue #14)', () => {
       screen.queryByRole('button', { name: 'Release' })
     ).not.toBeInTheDocument()
     useSessionStore.setState({ sessionStatus: 'idle' })
+  })
+})
+
+/** Issue #21: the Audio section — the App's global sample rate (the sole
+ * audio authority since #20) as an inline select: the device-supported
+ * union with the fixed fallback, an immediate queued save, and a hard lock
+ * while a session runs. */
+describe('SettingsPanel Audio section (issue #21)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useSettingsStore.setState({
+      settingsOpen: false,
+      focusSection: null,
+      languageSetting: 'system',
+      sampleRateSetting: 48000,
+    })
+    useSessionStore.setState({ sessionStatus: 'idle' })
+    // Explicit per-describe implementations: clearAllMocks keeps the ones
+    // set by earlier tests, which would couple these to execution order.
+    vi.mocked(commands.listSupportedSampleRates).mockResolvedValue([
+      44100, 48000, 88200, 96000,
+    ])
+    // The queued save is a load-modify-write cycle over the same file.
+    vi.mocked(commands.loadPreferences).mockResolvedValue({
+      status: 'ok',
+      data: { theme: 'system', language: null, sampleRate: null },
+    })
+  })
+
+  afterEach(() => {
+    cleanup()
+    useSessionStore.setState({ sessionStatus: 'idle' })
+  })
+
+  const openPanel = () => {
+    useSettingsStore.getState().openSettings()
+    render(<SettingsPanel />)
+    return screen.getByLabelText('Sample rate')
+  }
+
+  it('shows the effective rate — 48000 when the preference is unset', async () => {
+    const select = openPanel()
+
+    expect(screen.getByRole('heading', { name: 'Audio' })).toBeInTheDocument()
+    expect(select).toHaveValue('48000')
+    // One capability query per panel open, like the Ports section.
+    await waitFor(() =>
+      expect(commands.listSupportedSampleRates).toHaveBeenCalledTimes(1)
+    )
+  })
+
+  it('lists the device-supported union ascending, formatted in kHz', async () => {
+    vi.mocked(commands.listSupportedSampleRates).mockResolvedValue([
+      44100, 48000, 96000,
+    ])
+    const select = openPanel()
+
+    await waitFor(() => {
+      const labels = within(select)
+        .getAllByRole('option')
+        .map(option => option.textContent)
+      expect(labels).toEqual(['44.1 kHz', '48 kHz', '96 kHz'])
+    })
+  })
+
+  it('falls back to the fixed list when the capability query fails', async () => {
+    vi.mocked(commands.listSupportedSampleRates).mockRejectedValue(
+      new Error('transport down')
+    )
+    const select = openPanel()
+
+    await waitFor(() => {
+      const labels = within(select)
+        .getAllByRole('option')
+        .map(option => option.textContent)
+      expect(labels).toEqual(['44.1 kHz', '48 kHz', '88.2 kHz', '96 kHz'])
+    })
+    expect(select).toHaveValue('48000')
+  })
+
+  it('selecting a rate updates the store and persists via the queued save', async () => {
+    vi.mocked(commands.listSupportedSampleRates).mockResolvedValue([
+      44100, 48000, 96000,
+    ])
+    const select = openPanel()
+
+    fireEvent.change(select, { target: { value: '96000' } })
+
+    expect(useSettingsStore.getState().sampleRateSetting).toBe(96000)
+    await waitFor(() => {
+      expect(commands.savePreferences).toHaveBeenCalledWith(
+        expect.objectContaining({ sampleRate: 96000 })
+      )
+    })
+  })
+
+  it('keeps a saved rate visible even when the hardware no longer offers it', async () => {
+    useSettingsStore.getState().setSampleRateSetting(88200)
+    vi.mocked(commands.listSupportedSampleRates).mockResolvedValue([
+      44100, 48000,
+    ])
+    const select = openPanel()
+
+    await waitFor(() => {
+      const labels = within(select)
+        .getAllByRole('option')
+        .map(option => option.textContent)
+      expect(labels).toEqual(['44.1 kHz', '48 kHz', '88.2 kHz'])
+    })
+    expect(select).toHaveValue('88200')
+  })
+
+  it('locks the control with an explanatory hint while a session runs', async () => {
+    useSessionStore.setState({ sessionStatus: 'ready' })
+    const select = openPanel()
+
+    expect(select).toBeDisabled()
+    expect(
+      screen.getByText('Stop the project to change the sample rate.')
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByText('Applies at the next project start.')
+    ).not.toBeInTheDocument()
+    expect(commands.savePreferences).not.toHaveBeenCalled()
+
+    // 'error' is not a running session — a boot failure at one rate must
+    // not lock the user out of picking another.
+    useSessionStore.setState({ sessionStatus: 'error' })
+    await waitFor(() =>
+      expect(screen.getByLabelText('Sample rate')).toBeEnabled()
+    )
+  })
+
+  it('explains that an idle change applies at the next project start', async () => {
+    openPanel()
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('Applies at the next project start.')
+      ).toBeInTheDocument()
+    })
   })
 })

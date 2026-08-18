@@ -152,6 +152,32 @@ export async function saveLanguagePreference(
   })
 }
 
+/** Issue #20: the rate an unset sample-rate preference resolves to —
+ * mirrors `DEFAULT_SAMPLE_RATE` in Rust. The Audio section's selected
+ * value when the user has never chosen. */
+export const DEFAULT_SAMPLE_RATE = 48000
+
+/** Issue #21: the fixed list the Audio section offers while the
+ * device-capability query is in flight or failed — mirrors
+ * `STANDARD_SAMPLE_RATES` in Rust (the backend already degrades to it when
+ * enumeration fails or finds nothing). */
+export const FALLBACK_SAMPLE_RATES: readonly number[] = [
+  44100, 48000, 88200, 96000,
+]
+
+/**
+ * Issue #21: persist the Settings Audio-section sample-rate choice. The
+ * rate only ever applies at the next project start — mid-session changes
+ * are impossible (the control is disabled while a session runs).
+ */
+export async function saveSampleRatePreference(rate: number): Promise<void> {
+  return enqueueSave(async () => {
+    const prefs = await loadAudioPreferences()
+    if (!prefs) return
+    await commands.savePreferences({ ...prefs, sampleRate: rate })
+  })
+}
+
 /** §6.6 validation, mirroring the Rust rule: `host:port`, port 1-65535. */
 export function isValidOscTarget(target: string): boolean {
   const idx = target.lastIndexOf(':')

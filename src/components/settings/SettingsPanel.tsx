@@ -25,14 +25,15 @@ import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { Separator } from '@/components/ui/separator'
 import { DeveloperSection } from './DeveloperSection'
 import { PortsSection } from './PortsSection'
+import { AudioSection } from './AudioSection'
 
 /**
  * v1.2.0 (issue #13): the in-app settings panel — a single scrolling page
- * with four sections (spec issue #12). General (language), Ports (issue
- * #14), Developer Tools (issue #16) and About are live; the Projects
- * history section (#15) was removed after user review — history
- * management lives in the sidebar alone. Opened by ⌘, / the menu item,
- * closed by Esc or ⌘, again. The About menu item routes here with
+ * with five sections (spec issue #12). General (language), Audio (issue
+ * #21), Ports (issue #14), Developer Tools (issue #16) and About are live;
+ * the Projects history section (#15) was removed after user review —
+ * history management lives in the sidebar alone. Opened by ⌘, / the menu
+ * item, closed by Esc or ⌘, again. The About menu item routes here with
  * `focusSection`.
  */
 export function SettingsPanel() {
@@ -122,7 +123,9 @@ export function SettingsPanel() {
 
         <Separator />
 
-        {/* ── Ports / Developer Tools ── */}
+        {/* ── Audio / Ports / Developer Tools ── */}
+        <AudioSection section="audio" />
+        <Separator />
         <PortsSection section="ports" />
         <Separator />
         <DeveloperSection section="developer" />

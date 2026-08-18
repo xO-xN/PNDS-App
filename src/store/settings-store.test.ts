@@ -7,6 +7,7 @@ describe('settings-store (v1.2.0 issue #13: settings panel state)', () => {
       settingsOpen: false,
       focusSection: null,
       languageSetting: 'system',
+      sampleRateSetting: 48000,
     })
   })
 
@@ -48,5 +49,13 @@ describe('settings-store (v1.2.0 issue #13: settings panel state)', () => {
   it('setLanguageSetting stores the General-section selection', () => {
     useSettingsStore.getState().setLanguageSetting('zh-CN')
     expect(useSettingsStore.getState().languageSetting).toBe('zh-CN')
+  })
+
+  // Issue #21: the Audio-section rate — 48000 (the effective rate of an
+  // unset preference) until App.tsx seeds the saved value at startup.
+  it('defaults the sample-rate selection to 48000 and stores changes', () => {
+    expect(useSettingsStore.getState().sampleRateSetting).toBe(48000)
+    useSettingsStore.getState().setSampleRateSetting(96000)
+    expect(useSettingsStore.getState().sampleRateSetting).toBe(96000)
   })
 })
