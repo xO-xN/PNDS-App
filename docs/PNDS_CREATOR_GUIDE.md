@@ -2,7 +2,7 @@
 
 本文档面向 PNDS 数字乐谱的**创作者**:如何从模板创建一个工程,在 App 里编译 SynthDef、试运行,最终打包成单一 `.pnds` 文件分发给演出方。按本文走完,接收方在另一台机器上双击即可安装并演出。
 
-本文只讲**创作与分发流程**,不重复规范内容。规范原文:
+延伸文档索引：
 
 - 工程目录结构与 `manifest.json`:[`PNDS_SCORE_PROJECT_SPECIFICATION.md`](./PNDS_SCORE_PROJECT_SPECIFICATION.md)
 - 进程、环境变量、health、音频 bus、关闭协议:[`PNDS_RUNTIME_CONTRACT.md`](./PNDS_RUNTIME_CONTRACT.md)
@@ -220,4 +220,4 @@ shasum -a 256 Template-0.1.1.pnds
 
 ---
 
-App 自带的两个内置工具(Local Network Diagnostics、Multichannel Signal Generator)使用的正是同一 `.pnds` 布局——在 Utilities 文件夹里打开它们,可以提前体验接收方的完整使用感受。
+平台自己的两个内置工具(Local Network Diagnostics、Multichannel Signal Generator)发布的 release 同样是 `.pnds`——你分发工程所用的格式,与平台自身工具的发布格式一致。它们随 App 以解包后的文件夹形态直接运行(见 Project Bundle Specification §5),因此打开 Utilities 里的工具走的是普通工程流程;要体验接收方安装 `.pnds` 的流程,把你打包的 `.pnds` 在另一台机器上双击打开即可。
