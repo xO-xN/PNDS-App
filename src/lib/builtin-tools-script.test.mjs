@@ -4,7 +4,8 @@
  * The script lives outside src/ (it is build tooling), so this file is plain
  * .mjs — it exercises the exported helpers directly and, for the checksum
  * gate, runs the script as a child process against a local HTTP server that
- * stands in for GitHub releases.
+ * stands in for GitHub releases. Fixtures are .pnds bundles shaped like the
+ * tool repos' CI output: one project root plus a top-level pnds-bundle.json.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { spawn, spawnSync } from 'node:child_process'
@@ -18,10 +19,8 @@ import { fileURLToPath } from 'node:url'
 import {
   parseRegistry,
   releaseAssetUrl,
-  bundleMetadata,
   verifyArtifact,
-  readZipManifestIdentity,
-  stageBundle,
+  readBundleIdentity,
 } from '../../scripts/fetch-builtin-tools.mjs'
 
 const SCRIPT = path.resolve(
@@ -33,10 +32,19 @@ function tempdir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'pnds-tools-test-'))
 }
 
-/** A minimal release zip: one project root with a manifest + server file. */
-function buildReleaseZip(
+/**
+ * A minimal .pnds release bundle: one project root (manifest + server file)
+ * plus the top-level pnds-bundle.json metadata, exactly what the tool repos'
+ * CI zips up.
+ */
+function buildReleaseBundle(
   dir,
-  { root = 'Fixture Tool', id = 'fixture-tool', version = '1.0.0' } = {}
+  {
+    root = 'Fixture Tool',
+    id = 'fixture-tool',
+    version = '1.0.0',
+    formatVersion = 1,
+  } = {}
 ) {
   const project = path.join(dir, root)
   fs.mkdirSync(project, { recursive: true })
@@ -57,12 +65,28 @@ function buildReleaseZip(
     })
   )
   fs.writeFileSync(path.join(project, 'server.js'), '// score server')
-  const zipPath = path.join(dir, 'fixture.zip')
-  spawnSync('zip', ['-q', '-r', '-X', zipPath, root], {
+  fs.writeFileSync(
+    path.join(dir, 'pnds-bundle.json'),
+    JSON.stringify({
+      formatVersion,
+      packedWith: `v${version}`,
+      packedAt: '2026-08-17T00:00:00Z',
+      sourcePlatform: 'test',
+    })
+  )
+  const pndsPath = path.join(dir, 'fixture.pnds')
+  spawnSync('zip', ['-q', '-r', '-X', pndsPath, root, 'pnds-bundle.json'], {
     cwd: dir,
     stdio: 'ignore',
   })
-  return zipPath
+  return pndsPath
+}
+
+function zipEntryNames(pndsPath) {
+  return spawnSync('unzip', ['-Z1', pndsPath], { encoding: 'utf8' })
+    .stdout.split('\n')
+    .map(name => name.trim())
+    .filter(name => name.length > 0 && !name.endsWith('/'))
 }
 
 describe('parseRegistry', () => {
@@ -72,14 +96,14 @@ describe('parseRegistry', () => {
         id: 'a',
         repo: 'xO-xN/A',
         tag: 'v1.0.0',
-        artifact: 'a-v1.0.0.zip',
+        artifact: 'a-v1.0.0.pnds',
         sha256: 'a'.repeat(64),
       },
       {
         id: 'b',
         repo: 'xO-xN/B',
         tag: 'v2.0.0',
-        artifact: 'b-v2.0.0.zip',
+        artifact: 'b-v2.0.0.pnds',
         sha256: '0'.repeat(64),
       },
     ],
@@ -145,10 +169,10 @@ describe('releaseAssetUrl', () => {
       releaseAssetUrl({
         repo: 'xO-xN/Tool',
         tag: 'v0.1.0',
-        artifact: 'tool-v0.1.0.zip',
+        artifact: 'tool-v0.1.0.pnds',
       })
     ).toBe(
-      'https://github.com/xO-xN/Tool/releases/download/v0.1.0/tool-v0.1.0.zip'
+      'https://github.com/xO-xN/Tool/releases/download/v0.1.0/tool-v0.1.0.pnds'
     )
   })
 
@@ -159,19 +183,6 @@ describe('releaseAssetUrl', () => {
         'http://127.0.0.1:1'
       )
     ).toBe('http://127.0.0.1:1/r/releases/download/t/a')
-  })
-})
-
-describe('bundleMetadata', () => {
-  it('produces the spec §3.4 shape', () => {
-    expect(
-      bundleMetadata('1.2.0', '2026-08-17T00:00:00Z', 'darwin-arm64')
-    ).toEqual({
-      formatVersion: 1,
-      packedWith: '1.2.0',
-      packedAt: '2026-08-17T00:00:00Z',
-      sourcePlatform: 'darwin-arm64',
-    })
   })
 })
 
@@ -189,63 +200,69 @@ describe('verifyArtifact', () => {
   })
 })
 
-describe('zip staging helpers', () => {
-  it('reads the manifest identity and enforces a single root', () => {
+describe('readBundleIdentity', () => {
+  it('reads the identity and validates the .pnds layout', () => {
     const dir = tempdir()
-    const zipPath = buildReleaseZip(dir, {
+    const pnds = buildReleaseBundle(dir, {
       id: 'fixture-tool',
       version: '0.4.1',
     })
-    expect(readZipManifestIdentity(zipPath)).toMatchObject({
+    expect(readBundleIdentity(pnds)).toMatchObject({
       id: 'fixture-tool',
       version: '0.4.1',
       root: 'Fixture Tool',
     })
   })
 
-  it('rejects archives with stray top-level files', () => {
+  it('rejects bundles with stray top-level files', () => {
     const dir = tempdir()
-    const zipPath = buildReleaseZip(dir)
+    const pnds = buildReleaseBundle(dir)
     fs.writeFileSync(path.join(dir, 'stray.txt'), 'junk')
-    spawnSync('zip', ['-q', '-j', zipPath, 'stray.txt'], {
+    spawnSync('zip', ['-q', '-j', pnds, 'stray.txt'], {
       cwd: dir,
       stdio: 'ignore',
     })
-    expect(() => readZipManifestIdentity(zipPath)).toThrow(/top-level file/)
+    expect(() => readBundleIdentity(pnds)).toThrow(/top-level file/)
   })
 
-  it('rejects archives without manifest.json in the root', () => {
+  it('rejects a bare project zip without pnds-bundle.json', () => {
+    const dir = tempdir()
+    buildReleaseBundle(dir)
+    const bare = path.join(dir, 'bare.pnds')
+    spawnSync('zip', ['-q', '-r', '-X', bare, 'Fixture Tool'], {
+      cwd: dir,
+      stdio: 'ignore',
+    })
+    expect(() => readBundleIdentity(bare)).toThrow(/pnds-bundle\.json/)
+  })
+
+  it('rejects an unsupported metadata formatVersion', () => {
+    const dir = tempdir()
+    const pnds = buildReleaseBundle(dir, { formatVersion: 99 })
+    expect(() => readBundleIdentity(pnds)).toThrow(/formatVersion/)
+  })
+
+  it('rejects bundles without manifest.json in the root', () => {
     const dir = tempdir()
     const project = path.join(dir, 'NoManifest')
     fs.mkdirSync(project, { recursive: true })
     fs.writeFileSync(path.join(project, 'server.js'), '// no manifest')
-    const zipPath = path.join(dir, 'nomanifest.zip')
-    spawnSync('zip', ['-q', '-r', '-X', zipPath, 'NoManifest'], {
-      cwd: dir,
-      stdio: 'ignore',
-    })
-    expect(() => readZipManifestIdentity(zipPath)).toThrow(/manifest\.json/)
-  })
-
-  it('stages a .pnds with the metadata entry next to the single root', () => {
-    const dir = tempdir()
-    const zipPath = buildReleaseZip(dir)
-    const dest = path.join(dir, 'out', 'fixture-tool.pnds')
-    stageBundle(zipPath, dest, bundleMetadata('9.9.9', 't', 'p'))
-
-    const listing = spawnSync('unzip', ['-Z1', dest], { encoding: 'utf8' })
-    const names = listing.stdout
-      .split('\n')
-      .map(name => name.trim())
-      .filter(name => name.length > 0 && !name.endsWith('/'))
-    expect(names).toContain('pnds-bundle.json')
-    expect(names).toContain('Fixture Tool/manifest.json')
-    expect(names).toContain('Fixture Tool/server.js')
-
-    const metadata = spawnSync('unzip', ['-p', dest, 'pnds-bundle.json'], {
-      encoding: 'utf8',
-    })
-    expect(JSON.parse(metadata.stdout).formatVersion).toBe(1)
+    fs.writeFileSync(
+      path.join(dir, 'pnds-bundle.json'),
+      JSON.stringify({
+        formatVersion: 1,
+        packedWith: 'x',
+        packedAt: 't',
+        sourcePlatform: 'p',
+      })
+    )
+    const pnds = path.join(dir, 'nomanifest.pnds')
+    spawnSync(
+      'zip',
+      ['-q', '-r', '-X', pnds, 'NoManifest', 'pnds-bundle.json'],
+      { cwd: dir, stdio: 'ignore' }
+    )
+    expect(() => readBundleIdentity(pnds)).toThrow(/manifest\.json/)
   })
 })
 
@@ -257,9 +274,7 @@ describe('fetch script end-to-end (child process)', () => {
 
   beforeAll(async () => {
     workdir = tempdir()
-    artifactBytes = fs.readFileSync(
-      buildReleaseZip(workdir, { root: 'Fixture Tool' })
-    )
+    artifactBytes = fs.readFileSync(buildReleaseBundle(workdir))
     server = http.createServer((request, response) => {
       response.end(artifactBytes)
     })
@@ -303,14 +318,14 @@ describe('fetch script end-to-end (child process)', () => {
   const artifactSha = () =>
     createHash('sha256').update(artifactBytes).digest('hex')
 
-  it('stages a verified artifact as <id>.pnds', async () => {
+  it('stages the verified bundle unchanged as <id>.pnds', async () => {
     const result = await runScript({
       tools: [
         {
           id: 'fixture-tool',
           repo: 'fixtures/fixture-tool',
           tag: 'v1.0.0',
-          artifact: 'fixture.zip',
+          artifact: 'fixture.pnds',
           sha256: artifactSha(),
         },
       ],
@@ -319,16 +334,14 @@ describe('fetch script end-to-end (child process)', () => {
 
     const staged = path.join(workdir, 'staged', 'fixture-tool.pnds')
     expect(fs.existsSync(staged)).toBe(true)
-    // The staged bundle carries the injected top-level metadata entry next
-    // to the single project root (readZipManifestIdentity is for raw
-    // release zips and must reject that file — so read the manifest
-    // directly here).
-    const manifest = spawnSync('unzip', [
-      '-p',
-      staged,
-      'Fixture Tool/manifest.json',
-    ])
-    expect(JSON.parse(manifest.stdout).id).toBe('fixture-tool')
+    // Staged byte-for-byte: no build-time transformation of the artifact.
+    expect(
+      createHash('sha256').update(fs.readFileSync(staged)).digest('hex')
+    ).toBe(artifactSha())
+    // And the layout survives: metadata next to the single project root.
+    const names = zipEntryNames(staged)
+    expect(names).toContain('pnds-bundle.json')
+    expect(names).toContain('Fixture Tool/manifest.json')
   })
 
   it('exits non-zero when the checksum does not match (build fails, no silent shipping)', async () => {
@@ -338,7 +351,7 @@ describe('fetch script end-to-end (child process)', () => {
           id: 'fixture-tool',
           repo: 'fixtures/fixture-tool',
           tag: 'v1.0.0',
-          artifact: 'fixture.zip',
+          artifact: 'fixture.pnds',
           sha256: '0'.repeat(64),
         },
       ],
@@ -351,19 +364,51 @@ describe('fetch script end-to-end (child process)', () => {
     ).toBe(false)
   })
 
-  it('exits non-zero when the registry id does not match the artifact', async () => {
+  it('exits non-zero when the registry id does not match the bundle', async () => {
     const result = await runScript({
       tools: [
         {
           id: 'some-other-tool',
           repo: 'fixtures/fixture-tool',
           tag: 'v1.0.0',
-          artifact: 'fixture.zip',
+          artifact: 'fixture.pnds',
           sha256: artifactSha(),
         },
       ],
     })
     expect(result.status).not.toBe(0)
     expect(result.stderr).toMatch(/registry\/tool mismatch/)
+  })
+
+  it('exits non-zero when the artifact is a bare zip without bundle metadata', async () => {
+    const dir = tempdir()
+    const project = path.join(dir, 'Fixture Tool')
+    fs.mkdirSync(project, { recursive: true })
+    fs.writeFileSync(path.join(project, 'server.js'), '// score server')
+    const bare = path.join(dir, 'bare.pnds')
+    spawnSync('zip', ['-q', '-r', '-X', bare, 'Fixture Tool'], {
+      cwd: dir,
+      stdio: 'ignore',
+    })
+    const bareBytes = fs.readFileSync(bare)
+    const bareSha = createHash('sha256').update(bareBytes).digest('hex')
+    // The fixture server always serves the same bundle, so the bare zip is
+    // delivered through the download cache instead.
+    const cache = path.join(workdir, 'cache')
+    fs.mkdirSync(cache, { recursive: true })
+    fs.writeFileSync(path.join(cache, 'bare.pnds'), bareBytes)
+    const result = await runScript({
+      tools: [
+        {
+          id: 'fixture-tool',
+          repo: 'fixtures/fixture-tool',
+          tag: 'v1.0.0',
+          artifact: 'bare.pnds',
+          sha256: bareSha,
+        },
+      ],
+    })
+    expect(result.status).not.toBe(0)
+    expect(result.stderr).toMatch(/pnds-bundle\.json/)
   })
 })

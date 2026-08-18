@@ -2,15 +2,16 @@
 // Fetch the built-in utility tools bundled with PNDS App (v1.2.0, issue #18).
 //
 // The Utilities folder's two tools (Local Network Diagnostics, Multichannel
-// Signal Generator) are released as runnable-project zips by their own
-// repositories. This script is the build-time half of docs/
+// Signal Generator) are released by their own repositories as `.pnds`
+// bundles — the canonical distribution format for every PNDS project (the
+// tool repos' CI assembles them: one project root + a top-level
+// pnds-bundle.json). This script is the build-time half of docs/
 // PNDS_PROJECT_BUNDLE_SPECIFICATION.md §5: for every entry in the committed
-// registry (builtin-tools.json) it downloads the pinned release artifact,
+// registry (builtin-tools.json) it downloads the pinned release bundle,
 // REFUSES to continue on a sha256 mismatch (a broken tool must never ship
-// silently), and stages the verified artifact as a `.pnds` bundle under
-// src-tauri/resources/builtin-tools/ — same layout as any App-packed bundle
-// (one project root + a top-level pnds-bundle.json) so first-run installs go
-// through the ordinary bundle install path.
+// silently), validates the .pnds layout, and stages the verified bundle
+// as-is under src-tauri/resources/builtin-tools/<id>.pnds — first-run
+// installs then go through the ordinary bundle install path.
 //
 // Chained into beforeBuildCommand, so every `tauri build` (local or CI)
 // stages the tools automatically. Run manually with: npm run tools:fetch
@@ -65,16 +66,6 @@ export function releaseAssetUrl(tool, base = DEFAULT_BASE) {
   return `${base}/${tool.repo}/releases/download/${tool.tag}/${tool.artifact}`
 }
 
-/** The pnds-bundle.json payload injected while staging (spec §3.4). */
-export function bundleMetadata(packedWith, packedAt, sourcePlatform) {
-  return {
-    formatVersion: 1,
-    packedWith,
-    packedAt,
-    sourcePlatform,
-  }
-}
-
 export function sha256Hex(buffer) {
   return createHash('sha256').update(buffer).digest('hex')
 }
@@ -99,39 +90,54 @@ function runCapture(command, args, options = {}) {
 }
 
 /**
- * Reads the project identity (manifest id + version) out of a release zip
- * and validates the §2 layout basics the install path relies on: exactly one
- * top-level directory (the project root, holding manifest.json) and no stray
- * top-level files.
+ * Reads the identity of a release `.pnds` and validates the §2 layout the
+ * install path relies on: exactly one top-level directory (the project
+ * root, holding manifest.json), the top-level `pnds-bundle.json` metadata
+ * (parseable, supported formatVersion), and no stray top-level files.
  */
-export function readZipManifestIdentity(zipPath) {
-  const listing = runCapture('unzip', ['-Z1', zipPath])
+export function readBundleIdentity(pndsPath) {
+  const listing = runCapture('unzip', ['-Z1', pndsPath])
     .split('\n')
     .map(name => name.trim())
     .filter(name => name.length > 0 && !name.endsWith('/'))
   if (listing.length === 0) {
-    throw new Error('the release archive contains no files')
+    throw new Error('the release bundle contains no files')
   }
   const roots = new Set()
   for (const name of listing) {
     const slash = name.indexOf('/')
     if (slash === -1) {
-      throw new Error(`unexpected top-level file in the archive: "${name}"`)
+      if (name !== 'pnds-bundle.json') {
+        throw new Error(`unexpected top-level file in the bundle: "${name}"`)
+      }
+      continue
     }
     roots.add(name.slice(0, slash))
   }
   if (roots.size !== 1) {
     throw new Error(
-      `the archive must contain exactly one project directory (found ${roots.size})`
+      `the bundle must contain exactly one project directory (found ${roots.size})`
     )
   }
+  if (!listing.includes('pnds-bundle.json')) {
+    throw new Error('the bundle is missing the top-level pnds-bundle.json')
+  }
+  const metadata = JSON.parse(
+    runCapture('unzip', ['-p', pndsPath, 'pnds-bundle.json'])
+  )
+  if (metadata.formatVersion !== 1) {
+    throw new Error(
+      `unsupported bundle formatVersion ${metadata.formatVersion} in pnds-bundle.json`
+    )
+  }
+
   const root = [...roots][0]
   const manifestName = `${root}/manifest.json`
   if (!listing.includes(manifestName)) {
-    throw new Error(`the archive's project is missing manifest.json`)
+    throw new Error(`the bundle's project is missing manifest.json`)
   }
   const manifest = JSON.parse(
-    runCapture('unzip', ['-p', zipPath, manifestName])
+    runCapture('unzip', ['-p', pndsPath, manifestName])
   )
   const { id, version } = manifest
   if (typeof id !== 'string' || id.length === 0) {
@@ -141,29 +147,6 @@ export function readZipManifestIdentity(zipPath) {
     throw new Error(`the manifest "version" must be a single path segment`)
   }
   return { id, version, root }
-}
-
-/**
- * Stages a verified release zip as a `.pnds`: copy it to `destPath` and add
- * the top-level `pnds-bundle.json` metadata entry in place. The zip CLI
- * preserves the original entries (deflate + unix permissions) untouched.
- */
-export function stageBundle(zipPath, destPath, metadata) {
-  fs.mkdirSync(path.dirname(destPath), { recursive: true })
-  fs.copyFileSync(zipPath, destPath)
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pnds-tool-'))
-  try {
-    const metadataPath = path.join(tmp, 'pnds-bundle.json')
-    fs.writeFileSync(
-      metadataPath,
-      `${JSON.stringify(metadata, null, 2)}\n`,
-      'utf8'
-    )
-    runCapture('zip', ['-q', destPath, 'pnds-bundle.json'], { cwd: tmp })
-  } finally {
-    fs.rmSync(tmp, { recursive: true, force: true })
-  }
-  return destPath
 }
 
 async function download(url) {
@@ -177,14 +160,6 @@ async function download(url) {
 async function main(argv) {
   const options = parseArgs(argv)
   const tools = parseRegistry(fs.readFileSync(options.registry, 'utf8'))
-  const packageJson = JSON.parse(
-    fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')
-  )
-  const metadata = bundleMetadata(
-    packageJson.version,
-    new Date().toISOString(),
-    `${process.platform}-${process.arch}`
-  )
 
   fs.rmSync(options.out, { recursive: true, force: true })
   fs.mkdirSync(options.out, { recursive: true })
@@ -207,22 +182,19 @@ async function main(argv) {
     }
     verifyArtifact(bytes, tool.sha256, tool.id)
 
-    // Download once to a temp file for the zip tooling, then stage it.
+    // Materialize the bundle once for the zip tooling, validate it, then
+    // stage the verified file unchanged — the artifact is already a .pnds.
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pnds-fetch-'))
     try {
       const downloaded = path.join(tmp, tool.artifact)
       fs.writeFileSync(downloaded, bytes)
-      const identity = readZipManifestIdentity(downloaded)
+      const identity = readBundleIdentity(downloaded)
       if (identity.id !== tool.id) {
         throw new Error(
-          `registry/tool mismatch: registry declares "${tool.id}" but the artifact contains "${identity.id}"`
+          `registry/tool mismatch: registry declares "${tool.id}" but the bundle contains "${identity.id}"`
         )
       }
-      stageBundle(
-        downloaded,
-        path.join(options.out, `${tool.id}.pnds`),
-        metadata
-      )
+      fs.copyFileSync(downloaded, path.join(options.out, `${tool.id}.pnds`))
       process.stdout.write(
         `staged ${tool.id}-${identity.version}.pnds (${(bytes.length / 1024 / 1024).toFixed(1)} MB)\n`
       )

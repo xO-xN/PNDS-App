@@ -4,15 +4,15 @@
       "id": "local-network-diagnostics",
       "repo": "xO-xN/Local-Network-Diagnostics",
       "tag": "v0.1.0",
-      "artifact": "local-network-diagnostics-v0.1.0.zip",
-      "sha256": "011e6cf7cc03b4d9881684845a6fe4f5521c63e3964cee58a009a44b5e564c9e"
+      "artifact": "local-network-diagnostics-v0.1.0.pnds",
+      "sha256": "32fa12d9cfcb9c5fd3c8e4d61a5ff413f91dc70302a7655b42e7acaaf850b63f"
     },
     {
       "id": "multichannel-signal-generator",
       "repo": "xO-xN/Multichannel-Signal-Generator",
       "tag": "v1.0.0",
-      "artifact": "multichannel-signal-generator-v1.0.0.zip",
-      "sha256": "d62bd6113b05e7fec812db7b318f80bf76d516d837f1750c4a39933f60159cb8"
+      "artifact": "multichannel-signal-generator-v1.0.0.pnds",
+      "sha256": "3c4143e73d3ead0f09724ade7f0a4f1f21f0d731cceef7fce19dcaaab42f373c"
     }
   ]
 }
