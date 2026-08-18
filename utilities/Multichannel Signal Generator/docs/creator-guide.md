@@ -24,7 +24,7 @@ npm start    # 启动 performer/monitor 两个 HTTP server + 音频引擎
 
 单独调试时需要一个在听的 scsynth 才能达到 `ready`（默认 OSC 目标 `127.0.0.1:57110`，可用 `PNDS_OSC_TARGET` 覆盖）；没有 scsynth 时两个 HTTP server 仍会起来，health 停在 starting/error。
 
-在 PNDS App 中运行：App 中点击 **Open**，选择本文件夹。App 按 `manifest.json` 的 `audio` 块启动 scsynth（sampleRate 48000 / blockSize 64 / audioBusChannels 128）并加载 `synthdefs`，然后以 internal 模式启动 server。
+在 PNDS App 中运行：App 中点击 **Open**，选择本文件夹。App 按 `manifest.json` 的 `audio` 块启动 scsynth（blockSize 64 / audioBusChannels 128；采样率来自 App 全局采样率偏好，未设置时 48000）并加载 `synthdefs`，然后以 internal 模式启动 server。
 
 ### 3. 两个端口
 
@@ -85,7 +85,7 @@ docs/                     本指南与交接文档
 
 ## 音频
 
-本工程**仅 internal 模式**：`audio.defaultMode: "internal"`、`supportedModes: ["internal"]`、`outputChannels: 16`；App 以 sampleRate 48000 / blockSize 64 / audioBusChannels 128 启动 scsynth，并加载 `supercollider/synthdefs/multichannel-signal-generator.scsyndef`（`toneTest`）。
+本工程**仅 internal 模式**：`audio.defaultMode: "internal"`、`supportedModes: ["internal"]`、`outputChannels: 16`；scsynth 以 manifest 的 blockSize 64 / audioBusChannels 128 与 App 全局采样率偏好（未设置时 48000）启动，并加载 `supercollider/synthdefs/multichannel-signal-generator.scsyndef`（`toneTest`）。
 
 - 16 个实例只写自己的私有总线（`PNDS_AUDIO_OUTPUT_BUS + i`），绝不写硬件总线 0、绝不下混；App master stage 只负责把私有总线桥接到硬件。
 - 所有音默认静音（Mute）；主音量默认 −6 dBFS；`Lag.kr(gain, 0.02)` 平滑 ~20 ms。

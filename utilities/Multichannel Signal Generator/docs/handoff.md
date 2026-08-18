@@ -17,7 +17,7 @@
 ## PNDS 契约要点（必须遵守）
 
 - `scoreServer.entry` 指向 `server.js`，路径必须在工程根内；禁止绝对路径与 `../`。
-- manifest 的 `audio` 块声明 `defaultMode: "internal"`、`supportedModes: ["internal"]`、`outputChannels: 16`、`scsynth`（sampleRate 48000 / blockSize 64 / audioBusChannels 128）与 `synthdefs`（编译产物路径，必须存在）。
+- manifest 的 `audio` 块声明 `defaultMode: "internal"`、`supportedModes: ["internal"]`、`outputChannels: 16`、`scsynth`（blockSize 64 / audioBusChannels 128）与 `synthdefs`（编译产物路径，必须存在）。`sampleRate` 已从 schema 的活跃表面移除（运行契约 §7.2）——manifest 里残留的值读取后忽略，启动采样率由 App 全局采样率偏好决定（未设置时 48000）。
 - health ready 的前置条件：两个 HTTP server 都监听成功 **且** 音频引擎确认 16 个实例存在（运行契约 §8：所有 master/instance 确认后才 ready）。没有 scsynth 时 health 停在 starting/error，但 endpoint 照常响应。
 - 退出时释放全部资源：`/g_freeAll` 组、OSC UDP socket、两个 HTTP server——见 `server.js` 的 `shutdown()`（SIGINT/SIGTERM，退出码 0）。
 - 唯一生产依赖 `qrcode ^1.5.4`（仅 monitor `/qr` 使用）。spec §2 的 preflight 要求生产依赖已安装 → 发布包必须预装 node_modules（见决策记录）。

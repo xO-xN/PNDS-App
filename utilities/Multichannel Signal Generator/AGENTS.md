@@ -24,7 +24,7 @@ Single-context layout: `CONTEXT.md` + `docs/adr/` at the repo root (created lazi
 
 ## Domain notes
 
-- **Internal audio only**: `defaultMode: "internal"`, `supportedModes: ["internal"]`, 16 output channels; the App-hosted scsynth runs at sampleRate 48000 / blockSize 64 / audioBusChannels 128 and loads `supercollider/synthdefs/multichannel-signal-generator.scsyndef`.
+- **Internal audio only**: `defaultMode: "internal"`, `supportedModes: ["internal"]`, 16 output channels; the App-hosted scsynth runs at the App's global sample-rate preference (48000 when unset) with the manifest's blockSize 64 / audioBusChannels 128, and loads `supercollider/synthdefs/multichannel-signal-generator.scsyndef`.
 - **Private buses**: the project owns group 1000 with 16 mono `toneTest` instances (nodes 1001..1016); tone *i* writes only bus `PNDS_AUDIO_OUTPUT_BUS + i` and never downmixes.
 - **Fader API**: the monitor page drives the engine via `POST /api/tone {channel, on}` (channel 1..16) and `POST /api/master {value 0..1}`; rules live in `lib/audio-engine.js`, validation in `server.js`.
 - **QR endpoint**: `/qr` on the monitor port renders the monitor URL (`http://<LAN-IP>:6869/`) as PNG via `lib/qr.js` + `lib/network.js`; the performer port 404s it.
