@@ -315,13 +315,13 @@ mod tests {
     use super::*;
     use std::fs;
 
-    /// The shipped `examples/Multichannel Signal Generator` utility project
+    /// The shipped `utilities/Multichannel Signal Generator` utility project
     /// must keep passing the App parser and preflight (§11: bundled
     /// verification project contract).
     #[test]
     fn tone_test_example_passes_app_parser() {
-        let root =
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("../examples/Multichannel Signal Generator");
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../utilities/Multichannel Signal Generator");
         let manifest = load_manifest(&root).unwrap();
         assert_eq!(manifest.audio.output_channels, 16);
         assert_eq!(manifest.audio.supported_modes, vec!["internal"]);

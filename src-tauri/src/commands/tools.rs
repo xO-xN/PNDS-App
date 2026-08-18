@@ -107,10 +107,7 @@ fn validate_registry(tools: &[ToolEntry]) -> Result<(), String> {
 /// Resolves the staged utility folders under `staged_dir`, in registry
 /// order. An entry without a staged folder (or with an unreadable
 /// manifest) is skipped — it cannot be run, so it must not be listed.
-pub fn resolve_staged_utilities(
-    registry: &[ToolEntry],
-    staged_dir: &Path,
-) -> Vec<BuiltinUtility> {
+pub fn resolve_staged_utilities(registry: &[ToolEntry], staged_dir: &Path) -> Vec<BuiltinUtility> {
     registry
         .iter()
         .filter_map(|entry| {
@@ -273,13 +270,14 @@ mod tests {
         stage_fixture_utility(staged.path(), "first-tool", "First Tool");
         stage_fixture_utility(staged.path(), "second-tool", "Second Tool");
 
-        let utilities = resolve_staged_utilities(
-            &[entry("second-tool"), entry("first-tool")],
-            staged.path(),
-        );
+        let utilities =
+            resolve_staged_utilities(&[entry("second-tool"), entry("first-tool")], staged.path());
 
         assert_eq!(
-            utilities.iter().map(|u| u.path.as_str()).collect::<Vec<_>>(),
+            utilities
+                .iter()
+                .map(|u| u.path.as_str())
+                .collect::<Vec<_>>(),
             vec![
                 staged.path().join("second-tool").to_string_lossy().as_ref(),
                 staged.path().join("first-tool").to_string_lossy().as_ref(),
@@ -299,7 +297,11 @@ mod tests {
         fs::write(staged.path().join("bad-tool/manifest.json"), "{").unwrap();
 
         let utilities = resolve_staged_utilities(
-            &[entry("good-tool"), entry("unstaged-tool"), entry("bad-tool")],
+            &[
+                entry("good-tool"),
+                entry("unstaged-tool"),
+                entry("bad-tool"),
+            ],
             staged.path(),
         );
 
