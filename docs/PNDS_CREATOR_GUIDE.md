@@ -2,7 +2,7 @@
 
 本文档面向 PNDS 数字乐谱的**创作者**:如何从模板创建一个工程,在 App 里编译 SynthDef、试运行,最终打包成单一 `.pnds` 文件分发给演出方。按本文走完,接收方在另一台机器上双击即可安装并演出。
 
-延伸文档索引：
+相关规范：
 
 - 工程目录结构与 `manifest.json`:[`PNDS_SCORE_PROJECT_SPECIFICATION.md`](./PNDS_SCORE_PROJECT_SPECIFICATION.md)
 - 进程、环境变量、health、音频 bus、关闭协议:[`PNDS_RUNTIME_CONTRACT.md`](./PNDS_RUNTIME_CONTRACT.md)
@@ -14,7 +14,7 @@
 ## 1. 全流程总览
 
 ```text
-① 创建    从 PNDS Template 复制出新工程,改 id / name / version / 端口 / 音频配置
+① 创建    从 PNDS Template 复制出新工程,改 id / name / version / 音频配置(端口沿用 6868/6869,见 §4)
 ② 开发    写 score server 与页面;SynthDef 源码放 supercollider/source/*.scd
 ③ 编译    设置 → 开发者工具 →「编译 SynthDef」(创作机需装 SuperCollider)
 ④ 试运行  在 App 中打开工程,确认 preflight 通过、页面与声音正常
@@ -116,7 +116,19 @@ project/
 | `entry` / `workingDirectory` / `synthdefs[*]` 必须是工程内相对路径 | 拒绝绝对路径与 `../` 逃逸      |
 | 声明了非空生产依赖就必须携带 `node_modules/`                       | 无法打开,也无法打包(见 §5、§6) |
 
-端口选择:两个端口由工程自己声明,没有平台默认值。App 启动前确认端口可用,**冲突即失败,不自动换端口**——建议给自己的工程选一对不易与其他 PNDS 工程撞车的端口(模板默认的 6868/6869 被很多工程沿用)。
+端口选择:**没有特殊理由,直接沿用 6868(performer)/ 6869(monitor)**。这是平台惯例——模板、官方工程(Inarticulate III)与两个内置工具全部使用这对端口,App 设置的端口管理面板在未选中工程时也以 6868/6869 为参考。App 启动前确认端口可用,**冲突即失败,不自动换端口**。
+
+只有当 6868/6869 被你确定要同时运行的其他软件占用时才需要换端口,此时避开:
+
+| 避开范围               | 原因                                                        |
+| ---------------------- | ----------------------------------------------------------- |
+| 1–1023                 | 系统保留端口(well-known),macOS 系统服务使用且权限敏感       |
+| 49152–65535            | macOS 临时(ephemeral)端口范围,任何出站连接都可能随机占用    |
+| 5000、7000             | AirPlay 接收器(Mac 开启「隔空播放接收器」时监听)            |
+| 3000、5173、8000、8080 | 常见开发服务器(Vite、React dev server、Flask、Django、代理) |
+| 3306、5432、6379       | 常见数据库(MySQL、PostgreSQL、Redis)                        |
+
+拿不准端口是否空闲时,打开 **设置 → 端口**:选中工程后,App 显示 manifest 声明的两个端口的占用状态与占用者身份,并可一键释放。还有一点要心里有数:使用相同端口对的两个工程不能在同一台机器上同时运行——切换作品时,先关闭当前工程再打开下一个。
 
 ## 5. 依赖与 node_modules
 
