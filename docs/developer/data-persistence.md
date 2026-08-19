@@ -9,17 +9,17 @@ Patterns for saving and loading data to disk.
 | App preferences    | Preferences System | Strongly-typed settings (theme, shortcuts)                            |
 | Emergency recovery | Recovery System    | Crash recovery, backup before risky operations                        |
 | Relational data    | SQLite             | User data requiring queries, relationships                            |
-| External API data  | TanStack Query     | Remote data with caching (see [external-apis.md](./external-apis.md)) |
+| External API data  | External APIs      | Remote data with caching (see [external-apis.md](./external-apis.md)) |
 
 ```
 Need to persist data?
-├─ App settings? → Preferences (Rust struct + TanStack Query)
+├─ App settings? → Preferences (Rust struct + src/lib/preferences.ts)
 ├─ User data with queries/relationships? → SQLite (see below)
 ├─ Remote API data? → external-apis.md
 └─ Emergency/crash recovery? → Recovery System
 ```
 
-All data goes through Rust for type safety and security. Use TanStack Query on the frontend for loading states and cache invalidation.
+All data goes through Rust for type safety and security. The frontend reads via typed commands from `@/lib/tauri-bindings` (on-mount effects today; preferences go through `src/lib/preferences.ts`).
 
 ## File Locations
 
@@ -66,13 +66,9 @@ impl Default for AppPreferences {
 ### React Side
 
 ```typescript
-// src/services/preferences.ts
-export function usePreferences() {
-  return useQuery({
-    queryKey: ['preferences'],
-    queryFn: async () => unwrapResult(await commands.loadPreferences()),
-  })
-}
+// Frontend: typed commands + explicit status handling
+const result = await commands.loadPreferences()
+const prefs = result.status === 'ok' ? result.data : defaultPreferences
 
 export function useUpdatePreferences() {
   const queryClient = useQueryClient()
@@ -199,10 +195,10 @@ cd src-tauri && cargo add rusqlite --features bundled
 
 ### Architecture Pattern
 
-Tauri commands wrap database operations, TanStack Query provides frontend caching.
+Tauri commands wrap database operations; the frontend calls the typed commands directly (there is no query-cache layer — if one becomes necessary, introduce it with the feature that needs it).
 
 ```
-React Component → TanStack Query → Tauri Command (rusqlite) → SQLite
+React Component → Tauri Command (rusqlite) → SQLite
 ```
 
 ```rust
@@ -257,21 +253,18 @@ app.manage(DbConnection(Mutex::new(conn)));
 ```
 
 ```typescript
-// Frontend: TanStack Query for caching and loading states
-export function useItems() {
-  return useQuery({
-    queryKey: ['items'],
-    queryFn: async () => unwrapResult(await commands.getItems()),
+// Frontend: typed commands from @/lib/tauri-bindings, with explicit
+// loading/error state in the consuming component
+useEffect(() => {
+  let stale = false
+  commands.getItems().then(result => {
+    if (stale || result.status === 'error') return
+    setItems(result.data)
   })
-}
-
-export function useAddItem() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (item: CreateItem) => commands.addItem(item),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['items'] }),
-  })
-}
+  return () => {
+    stale = true
+  }
+}, [])
 ```
 
 ### Migration Rules

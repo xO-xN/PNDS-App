@@ -15,7 +15,7 @@ Before implementation, read the applicable platform specifications:
 | --------------------------------------------- | ------------------------------------------------------- |
 | [Architecture Guide](./architecture-guide.md) | High-level overview, mental models, system architecture |
 | [Rust Architecture](./rust-architecture.md)   | Rust module organization and patterns                   |
-| [State Management](./state-management.md)     | Three-layer state onion, Zustand, TanStack Query        |
+| [State Management](./state-management.md)     | Two-layer state onion, Zustand, persistence pattern     |
 | [Error Handling](./error-handling.md)         | Error propagation, user feedback, retry patterns        |
 
 ## Core Systems

@@ -27,7 +27,6 @@ import {
 } from '@/lib/open-project'
 import { selectProject, setActiveFolderView } from '@/lib/project-select'
 import { reclaimIfManagedBundle } from '@/lib/bundle-project'
-import { saveProjectDisplayName, saveProjectIndex } from '@/lib/audio-prefs'
 import { projectDisplayName } from '@/lib/display-names'
 import {
   cardShift,
@@ -322,13 +321,6 @@ export function Sidebar({
       currentProject
     )
 
-  /** Persists the app-side project index — history list and folder
-   * membership change together, so they always save atomically. */
-  const persistIndex = () => {
-    const store = useProjectStore.getState()
-    void saveProjectIndex(store.recentProjectPaths, store.projectFolders)
-  }
-
   /** Share: open the monitor page in the default external browser. */
   const handleShare = async () => {
     if (!running || !lanIp || !monitorPort) return
@@ -357,8 +349,8 @@ export function Sidebar({
    * v1.2.0 (issue #16) additionally reclaims bundle installs under the
    * app-managed bundles/ directory. */
   const handleRemove = (path: string) => {
+    // The store persists the index as part of the removal commit.
     useProjectStore.getState().removeRecentProject(path)
-    persistIndex()
     void reclaimIfManagedBundle(path)
   }
 
@@ -366,7 +358,6 @@ export function Sidebar({
     const store = useProjectStore.getState()
     const id = store.createFolder(t('sidebar.folderDefaultName'))
     setEditingFolderId(id)
-    persistIndex()
   }
 
   const commitFolderName = (rawName: string) => {
@@ -378,7 +369,6 @@ export function Sidebar({
     if (name) store.renameFolder(id, name)
     setEditingFolderId(null)
     store.setRenameTarget(null)
-    persistIndex()
   }
 
   const cancelFolderName = () => {
@@ -393,7 +383,6 @@ export function Sidebar({
     const folder = store.projectFolders.find(f => f.id === id)
     if (editingFolderId === id && folder && folder.projectPaths.length === 0) {
       store.deleteFolder(id)
-      persistIndex()
     }
   }
 
@@ -410,7 +399,6 @@ export function Sidebar({
     const store = useProjectStore.getState()
     store.setRenameTarget(null)
     store.setProjectDisplayName(target.path, name)
-    void saveProjectDisplayName(target.path, name)
   }
 
   const cancelProjectName = () => {
@@ -422,7 +410,6 @@ export function Sidebar({
     setPendingDeleteFolderId(null)
     if (!id) return
     useProjectStore.getState().deleteFolder(id)
-    persistIndex()
   }
 
   /**
@@ -560,13 +547,11 @@ export function Sidebar({
           const folder = store.projectFolders[target.index]
           if (folder) {
             store.moveProjectToFolder(folder.id, source.path)
-            persistIndex()
           }
         } else if (target.kind === 'breadcrumb') {
           // Dropping on the breadcrumb returns the project to ungrouped.
           if (store.activeFolderId) {
             store.removeProjectFromFolder(store.activeFolderId, source.path)
-            persistIndex()
           }
         } else {
           // Reordering follows the active view: inside a folder it is the
@@ -586,7 +571,6 @@ export function Sidebar({
             // reorderedList keeps its input reference for no-move drops.
             if (next !== visible) {
               store.applyVisibleReorder(next)
-              persistIndex()
               setSuppressTransition(true)
             }
           }
@@ -602,7 +586,6 @@ export function Sidebar({
           )
           if (next !== folderIds) {
             store.applyFolderReorder(next)
-            persistIndex()
             setSuppressTransition(true)
           }
         }

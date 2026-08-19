@@ -8,10 +8,10 @@ import { commands } from '@/lib/tauri-bindings'
 import { logger } from '@/lib/logger'
 import {
   isValidOscTarget,
-  saveOscTarget,
-  saveOutputDevice,
+  updateOscTarget,
+  updatePreferences,
   SYSTEM_DEFAULT_DEVICE,
-} from '@/lib/audio-prefs'
+} from '@/lib/preferences'
 import {
   Select,
   SelectContent,
@@ -109,7 +109,7 @@ export function SettingsCard({ onPopupOpenChange }: SettingsCardProps) {
       ) {
         missingDeviceWarned = true
         useSessionStore.getState().setOutputDevice(SYSTEM_DEFAULT_DEVICE)
-        void saveOutputDevice(null)
+        void updatePreferences({ outputDevice: null })
         toast.info(
           `Saved output device "${saved}" is not available; using the system default.`
         )
@@ -162,13 +162,15 @@ export function SettingsCard({ onPopupOpenChange }: SettingsCardProps) {
 
   const handleDeviceChange = (device: string) => {
     useSessionStore.getState().setOutputDevice(device)
-    void saveOutputDevice(device === SYSTEM_DEFAULT_DEVICE ? null : device)
+    void updatePreferences({
+      outputDevice: device === SYSTEM_DEFAULT_DEVICE ? null : device,
+    })
     flagChange()
   }
 
   const commitOscTarget = () => {
     if (!oscTargetValid || !currentProject) return
-    void saveOscTarget(currentProject.manifest.id, oscTargetInput)
+    void updateOscTarget(currentProject.manifest.id, oscTargetInput)
     flagChange()
   }
 

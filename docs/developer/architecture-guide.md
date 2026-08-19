@@ -21,9 +21,6 @@ State management follows a three-layer hierarchy:
 │           useState                  │  ← Component UI State
 │  ┌─────────────────────────────────┐│
 │  │          Zustand                ││  ← Global UI State
-│  │  ┌─────────────────────────────┐││
-│  │  │      TanStack Query         │││  ← Persistent Data
-│  │  └─────────────────────────────┘││
 │  └─────────────────────────────────┘│
 └─────────────────────────────────────┘
 ```
@@ -33,9 +30,7 @@ State management follows a three-layer hierarchy:
 ```
 Is this data needed across multiple components?
 ├─ No → useState
-└─ Yes → Does this data persist between app sessions?
-    ├─ No → Zustand
-    └─ Yes → TanStack Query
+└─ Yes → Zustand (persisted slices save through src/lib/preferences.ts)
 ```
 
 See [state-management.md](./state-management.md) for implementation details.
@@ -124,7 +119,6 @@ src/
 ├── lib/
 │   ├── commands/        # Command system implementation
 │   └── menu.ts          # Native menu builder with i18n
-├── services/            # TanStack Query + Tauri integration
 ├── store/               # Zustand stores
 └── types/               # Shared TypeScript types
 ```
@@ -269,7 +263,7 @@ See [static-analysis.md](./static-analysis.md) for all tools included.
 ## Adding New Features
 
 1. **Commands** - Add to appropriate command group file
-2. **State** - Choose appropriate layer (useState/Zustand/TanStack Query)
+2. **State** - Choose appropriate layer (useState/Zustand; persisted slices via src/lib/preferences.ts)
 3. **UI** - Follow component architecture
 4. **Persistence** - Use established [data-persistence.md](./data-persistence.md) patterns
 5. **Testing** - Add tests following [testing.md](./testing.md) patterns

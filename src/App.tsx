@@ -10,7 +10,7 @@ import {
 } from './i18n/language-init'
 import { logger } from './lib/logger'
 import { commands } from './lib/tauri-bindings'
-import { DEFAULT_SAMPLE_RATE } from './lib/audio-prefs'
+import { DEFAULT_SAMPLE_RATE } from './lib/preferences'
 import { drainPendingBundleOpens } from './lib/bundle-project'
 import { handleDroppedPaths } from './lib/drag-drop'
 import { initWindowState, markQuitting } from './store/window-store'

@@ -8,7 +8,7 @@
  * ```typescript
  * import { commands, unwrapResult } from '@/lib/tauri-bindings'
  *
- * // In TanStack Query - let errors propagate
+ * // In a throwing boundary - let errors propagate
  * const prefs = unwrapResult(await commands.loadPreferences())
  *
  * // In event handlers - explicit error handling

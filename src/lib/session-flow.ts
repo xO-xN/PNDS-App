@@ -2,7 +2,7 @@ import { commands } from '@/lib/tauri-bindings'
 import { logger } from '@/lib/logger'
 import { useSessionStore } from '@/store/session-store'
 import { useProjectStore } from '@/store/project-store'
-import { isValidOscTarget } from '@/lib/audio-prefs'
+import { isValidOscTarget } from '@/lib/preferences'
 
 /**
  * Session-flow module: the single implementation of all start-gating and

@@ -65,22 +65,30 @@ const preferences = unwrapResult(await commands.loadPreferences())
 
 **When to use each pattern:**
 
-| Pattern          | Use When                                                        |
-| ---------------- | --------------------------------------------------------------- |
-| `unwrapResult`   | TanStack Query functions, errors should propagate to a boundary |
-| Manual `if/else` | Event handlers, need explicit error handling (toasts, UI state) |
+| Pattern          | Use When                                                       |
+| ---------------- | -------------------------------------------------------------- |
+| Manual `if/else` | The default — event handlers, on-mount fetches, flow modules   |
+| `unwrapResult`   | Rare throwing boundaries where a catch suits the caller better |
 
-**TanStack Query example** (preferred pattern for data fetching):
+**On-mount fetch example** (the standard data-fetching pattern):
 
 ```typescript
-import { useQuery } from '@tanstack/react-query'
-import { commands, unwrapResult } from '@/lib/tauri-bindings'
+import { commands } from '@/lib/tauri-bindings'
 
-const { data, error } = useQuery({
-  queryKey: ['preferences'],
-  queryFn: async () => unwrapResult(await commands.loadPreferences()),
-})
-// TanStack Query handles the thrown error automatically
+useEffect(() => {
+  let stale = false
+  commands.loadPreferences().then(result => {
+    if (stale) return
+    if (result.status === 'error') {
+      setError(result.error)
+      return
+    }
+    setPreferences(result.data)
+  })
+  return () => {
+    stale = true
+  }
+}, [])
 ```
 
 **Event handler example** (explicit error handling):

@@ -1,10 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { commands } from '@/lib/tauri-bindings'
-import {
-  FALLBACK_SAMPLE_RATES,
-  saveSampleRatePreference,
-} from '@/lib/audio-prefs'
+import { FALLBACK_SAMPLE_RATES, updatePreferences } from '@/lib/preferences'
 import { logger } from '@/lib/logger'
 import { useSessionStore } from '@/store/session-store'
 import { useSettingsStore } from '@/store/settings-store'
@@ -94,7 +91,7 @@ export function AudioSection({ section }: { section: SettingsSection }) {
           onChange={event => {
             const rate = Number(event.target.value)
             useSettingsStore.getState().setSampleRateSetting(rate)
-            void saveSampleRatePreference(rate)
+            void updatePreferences({ sampleRate: rate })
           }}
         >
           {options.map(rate => (

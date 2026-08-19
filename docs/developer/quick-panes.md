@@ -66,7 +66,6 @@ listen('quick-pane-submit', ({ payload }) => {
 This pattern is intentionally flexible - the action can be anything:
 
 - Update Zustand store (as demonstrated)
-- Call a TanStack Query mutation
 - Invoke a Tauri command
 - Make an API request
 
@@ -188,9 +187,9 @@ listen('quick-pane-submit', ({ payload }) => {
   useUIStore.getState().setLastQuickPaneEntry(payload.text)
 })
 
-// TanStack Query mutation
+// Tauri command
 listen('quick-pane-submit', ({ payload }) => {
-  createTaskMutation.mutate({ title: payload.text })
+  void commands.createTask({ title: payload.text })
 })
 
 // API call

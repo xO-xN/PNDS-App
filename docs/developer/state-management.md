@@ -1,46 +1,36 @@
 # State Management
 
-Three-layer "onion" architecture for state management.
+Two-layer "onion" architecture for state management.
 
-## The Three Layers
+## The Two Layers
 
 ```
 ┌─────────────────────────────────────┐
 │           useState                  │  ← Component UI State
 │  ┌─────────────────────────────────┐│
 │  │          Zustand                ││  ← Global UI State
-│  │  ┌─────────────────────────────┐││
-│  │  │      TanStack Query         │││  ← Persistent Data
-│  │  └─────────────────────────────┘││
 │  └─────────────────────────────────┘│
 └─────────────────────────────────────┘
 ```
 
-### Layer 1: TanStack Query (Persistent Data)
+> v1.2.0: the TanStack Query layer was removed. It was scaffolded but
+> never adopted — every real fetch went through on-mount effects calling
+> typed commands directly. If a future feature genuinely needs query
+> caching and automatic refetching, reintroduce a query layer then, sized
+> to that feature.
 
-Use for data that:
-
-- Comes from Tauri backend (file system, external APIs)
-- Benefits from caching and automatic refetching
-- Has loading, error, and success states
-
-```typescript
-const { data, isLoading, error } = useQuery({
-  queryKey: ['user', userId],
-  queryFn: () => commands.getUser({ userId }),
-  enabled: !!userId,
-})
-```
-
-See [error-handling.md](./error-handling.md) for retry configuration and error display patterns.
-
-### Layer 2: Zustand (Global UI State)
+### Layer 1: Zustand (Global UI State)
 
 Use for transient global state:
 
 - Panel visibility, layout state
 - Command palette open/closed
 - UI modes and navigation
+
+Persisted state (preferences, project index) does not need a query layer:
+`src/lib/preferences.ts` owns the preference file (load + serialized
+update queue), and `project-store`'s structural actions persist as part of
+their commit (see [Persisting Store State](#persisting-store-state-v120-pattern)).
 
 ```typescript
 import { create } from 'zustand'
@@ -63,7 +53,7 @@ export const useUIStore = create<UIState>()(
 )
 ```
 
-### Layer 3: useState (Component State)
+### Layer 2: useState (Component State)
 
 Use for state that:
 
@@ -160,6 +150,26 @@ This app uses React Compiler which automatically handles memoization. You do **n
 - Domain-specific state (e.g., `useDocumentStore`)
 - Feature flags and configuration
 - Temporary workflow state
+
+## Persisting Store State (v1.2.0 pattern)
+
+`src/lib/preferences.ts` is the only preferences writer: every field save
+goes through `updatePreferences(patch)` (or `updateOscTarget` for the
+per-project map), each a load-modify-write cycle inside one serialized
+queue so overlapping updates never clobber each other.
+
+In `project-store.ts`, persistence is part of the commit — **structural
+actions save the project index themselves** (`addRecentProject`,
+`removeRecentProject`, folder lifecycle, membership moves, drag reorder
+commits, `setProjectFolders`, `setProjectDisplayName`,
+`preflightSucceeded`/`upsertManifestProjectNames` for the name maps).
+Callers never pair a mutation with a save; a missed save is no longer
+possible. No-op guards (protected folders, ignored drag sets) and repeat
+commits write nothing.
+
+Launch restore must never write back: it goes through the non-persisting
+bulk setters (`restoreProjectIndex`, `setProjectDisplayNames`,
+`setManifestProjectNames`) instead of the structural actions.
 
 ## Adding a New Store
 

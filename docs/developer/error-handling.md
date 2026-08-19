@@ -5,7 +5,7 @@ Patterns for consistent error handling across Rust and TypeScript.
 ## Error Propagation Flow
 
 ```
-Rust Command (Result<T, E>) → tauri-specta → TypeScript discriminated union → TanStack Query/UI
+Rust Command (Result<T, E>) → tauri-specta → TypeScript discriminated union → UI
 ```
 
 Rust `Result<T, E>` types become TypeScript discriminated unions:
@@ -83,31 +83,23 @@ const handleSave = async () => {
 }
 ```
 
-### Pattern 2: unwrapResult (TanStack Query)
+### Pattern 2: unwrapResult (throwing boundaries)
+
+`unwrapResult` throws on the error variant, for callers that prefer
+exceptions (e.g. a promise chain that ends in a toast). Prefer Pattern 1
+in most code — explicit branches read better in this codebase.
 
 ```typescript
-// ✅ GOOD: Let TanStack Query handle errors
-const { data, error } = useQuery({
-  queryKey: ['data'],
-  queryFn: async () => unwrapResult(await commands.loadData()),
-})
+// ✅ GOOD: Propagate to the caller's catch
+void unwrapResult(await commands.loadData())
 ```
 
 ### Pattern 3: Graceful Degradation
 
 ```typescript
 // ✅ GOOD: Fall back to defaults on error
-const { data } = useQuery({
-  queryKey: ['preferences'],
-  queryFn: async () => {
-    const result = await commands.loadPreferences()
-    if (result.status === 'error') {
-      logger.warn('Failed to load preferences, using defaults')
-      return defaultPreferences
-    }
-    return result.data
-  },
-})
+const result = await commands.loadPreferences()
+const prefs = result.status === 'error' ? defaultPreferences : result.data
 ```
 
 ## User-Facing vs Technical Errors
@@ -137,54 +129,35 @@ if (result.status === 'error') {
 }
 ```
 
-## Retry Configuration
+## Retries
 
-Configure TanStack Query retry behavior based on error type:
+Retries live where the operation lives — no frontend query layer retries
+for you:
+
+- **Rust**: retry transient failures inside the command (e.g. the
+  scsynth boot attempts in `src-tauri/src/project/session.rs`), so the
+  policy is testable next to the operation.
+- **Frontend**: a plain loop for the rare case (keep it in the flow
+  module, not the component); log and surface a user message when the
+  budget runs out.
 
 ```typescript
-// ✅ GOOD: Smart retry logic
-const { data } = useQuery({
-  queryKey: ['data'],
-  queryFn: loadData,
-  retry: (failureCount, error) => {
-    // Don't retry client errors (4xx)
-    if (error.message.includes('API error: 4')) return false
-    // Retry network/server errors up to 3 times
-    return failureCount < 3
-  },
-})
+// ✅ GOOD: Explicit budget in the flow module
+for (let attempt = 1; ; attempt++) {
+  const result = await commands.loadData()
+  if (result.status === 'ok') return result.data
+  if (attempt >= 3 || isPermanent(result.error)) {
+    logger.warn('loadData failed', { attempt, error: result.error })
+    return null
+  }
+}
 ```
-
-Default retry settings in `query-client.ts`:
-
-| Query Type | Retries | Rationale                            |
-| ---------- | ------- | ------------------------------------ |
-| Queries    | 1       | Transient failures may recover       |
-| Mutations  | 1       | Avoid duplicate writes on slow saves |
 
 ## Global Error Toasts
 
-Avoid per-query error toasts (causes duplicates). Use global handling:
-
-```typescript
-// ✅ GOOD: Centralized in query-client.ts
-const queryClient = new QueryClient({
-  queryCache: new QueryCache({
-    onError: (error, query) => {
-      if (query.meta?.errorToast !== false) {
-        toast.error('Something went wrong')
-      }
-    },
-  }),
-})
-
-// Opt out for specific queries
-useQuery({
-  queryKey: ['optional-feature'],
-  queryFn: loadOptional,
-  meta: { errorToast: false },
-})
-```
+Prefer toasts at the action site (the user knows what failed) —
+`notifications.error` from `@/lib/notifications` with an i18n string.
+Avoid firing the same toast from multiple code paths for one failure.
 
 ## React Error Boundaries
 
@@ -196,7 +169,8 @@ Error boundaries catch render errors, not async errors:
 | Errors in lifecycle methods | Async code (promises)               |
 | Errors in constructors      | Errors in the error boundary itself |
 
-For async Tauri command errors, use explicit handling or `unwrapResult` with TanStack Query.
+For async Tauri command errors, use explicit `status` handling (or
+`unwrapResult` when a throwing boundary fits).
 
 ## Rollback Pattern
 

@@ -48,7 +48,7 @@ const NEW_PATH = '/Users/test/Score 4'
 describe('openProject (no trust gate)', () => {
   let folderId: string
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks()
     vi.mocked(commands.preflightProject).mockResolvedValue({
       status: 'ok',
@@ -68,6 +68,11 @@ describe('openProject (no trust gate)', () => {
     useSessionStore.getState().resetSession()
     folderId = useProjectStore.getState().createFolder('Set list')
     useProjectStore.getState().moveProjectToFolder(folderId, '/b')
+    // The setup actions persist through the store's save queue — let those
+    // saves land and clear them, so the not-called assertions below observe
+    // only the flow under test.
+    await new Promise(resolve => setTimeout(resolve, 0))
+    vi.mocked(commands.savePreferences).mockClear()
   })
 
   it('preflights a new path immediately, without any confirmation step', async () => {
@@ -98,7 +103,7 @@ describe('openProject (no trust gate)', () => {
     expect(grouped.has(NEW_PATH)).toBe(false)
   })
 
-  it('persists history and folders in a single save', async () => {
+  it('persists the landing index — history and folder membership together', async () => {
     useProjectStore.getState().setActiveFolderId(folderId)
 
     await openProject(NEW_PATH)

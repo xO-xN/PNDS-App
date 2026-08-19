@@ -38,10 +38,10 @@ PNDS App 是在演出现场运行 PNDS 数字乐谱工程的 macOS（Apple Silic
 ### State Management Onion
 
 ```
-useState (component) → Zustand (global UI) → TanStack Query (persistent data)
+useState (component) → Zustand (global UI)
 ```
 
-**Decision**: Is data needed across components? → Does it persist between sessions?
+**Decision**: Is data needed across components? → Zustand. Persisted data (preferences, project index) goes through `src/lib/preferences.ts` (serialized update queue); `project-store` structural actions persist as part of their commit — callers never pair mutations with saves. The TanStack Query layer was removed in v1.2.0 (scaffolded, never adopted).
 
 ### Performance Pattern (CRITICAL)
 

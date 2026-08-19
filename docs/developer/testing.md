@@ -81,44 +81,18 @@ test('loads preferences', async () => {
 
 ### Test Wrapper for Providers
 
-Components using TanStack Query need a provider wrapper:
-
-```typescript
-// src/test/utils.ts
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { ReactNode } from 'react'
-
-export function createTestQueryClient() {
-  return new QueryClient({
-    defaultOptions: {
-      queries: { retry: false },
-      mutations: { retry: false },
-    },
-  })
-}
-
-export function TestProviders({ children }: { children: ReactNode }) {
-  const queryClient = createTestQueryClient()
-  return (
-    <QueryClientProvider client={queryClient}>
-      {children}
-    </QueryClientProvider>
-  )
-}
-```
+`render` from `@/test/test-utils` already wraps components in the i18n
+and mock-theme providers. No query-client setup is needed (the TanStack
+Query layer was removed in v1.2.0; tests mock `@/lib/tauri-bindings`
+instead — see the setup section above).
 
 Usage:
 
 ```typescript
-import { render } from '@testing-library/react'
-import { TestProviders } from '@/test/utils'
+import { render } from '@/test/test-utils'
 
-test('component with query', () => {
-  render(
-    <TestProviders>
-      <MyComponent />
-    </TestProviders>
-  )
+test('component renders', () => {
+  render(<MyComponent />)
 })
 ```
 

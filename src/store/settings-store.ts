@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { DEFAULT_SAMPLE_RATE } from '@/lib/audio-prefs'
+import { DEFAULT_SAMPLE_RATE } from '@/lib/preferences'
 
 /** The sections of the settings panel (spec issue #12, single-page scroll
  * layout; issue #21 added Audio). The Projects history section (#15) was

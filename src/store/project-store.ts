@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type { Manifest, ProjectFolder } from '@/lib/tauri-bindings'
 import { masterWithUngroupedOrder, sameMemberSet } from '@/lib/drag-reorder'
 import { upsertDisplayName } from '@/lib/display-names'
+import { updatePreferences } from '@/lib/preferences'
 
 export interface CurrentProject {
   path: string
@@ -91,16 +92,34 @@ interface ProjectState {
   setConfirmCloseProjectOpen: (open: boolean) => void
   /** Drills the sidebar into a folder, or back to the top level (null). */
   setActiveFolderId: (id: string | null) => void
-  /** Restores display-name overrides from persisted preferences. */
+  /** Restores display-name overrides from persisted preferences (launch). */
   setProjectDisplayNames: (names: Record<string, string>) => void
-  /** Restores the learned manifest names from persisted preferences. */
+  /** Restores the learned manifest names from persisted preferences (launch). */
   setManifestProjectNames: (names: Record<string, string>) => void
   /**
-   * Sets one override. An empty name removes the entry — the card falls
-   * back to the path-basename name (spec issue #10: 空串回退).
+   * Merges learned manifest names (truthy entries only) and persists when
+   * the map changed — the Utilities seeding learns every tool's name up
+   * front (issue #18).
+   */
+  upsertManifestProjectNames: (names: Record<string, string>) => void
+  /**
+   * Sets one override and persists it. An empty name removes the entry —
+   * the card falls back to the path-basename name (spec issue #10: 空串回退).
    */
   setProjectDisplayName: (path: string, name: string) => void
   setRenameTarget: (target: RenameTarget | null) => void
+  /**
+   * Bulk restore from persisted preferences at launch — the one index
+   * mutation that must NOT write back. Every structural action below
+   * persists the index as part of its commit; this is their
+   * non-persisting counterpart for boot.
+   */
+  restoreProjectIndex: (paths: string[], folders: ProjectFolder[]) => void
+  /**
+   * Bulk folder replace that persists like any structural commit — the
+   * Utilities seeding flow (issue #18) seeds and bottom-pins through it.
+   * Launch restore goes through `restoreProjectIndex` instead.
+   */
   setProjectFolders: (folders: ProjectFolder[]) => void
   /** Creates a folder and returns its id (caller drives inline naming). */
   createFolder: (name: string) => string
@@ -174,7 +193,31 @@ export function visibleProjectPaths(
   return ungroupedProjectPaths(recentProjectPaths, folders)
 }
 
-export const useProjectStore = create<ProjectState>()(set => ({
+/** Content equality for the small persisted slices — guards and repeat
+ * commits produce new references with unchanged contents, and those must
+ * not write. */
+function sameJson(a: unknown, b: unknown): boolean {
+  return JSON.stringify(a) === JSON.stringify(b)
+}
+
+/**
+ * Structural actions persist the app-side project index as part of their
+ * commit — history and folder membership always save together (v1.1.2),
+ * so no caller can forget the save. No-op guards (protected folders,
+ * ignored drag sets) settle as "unchanged" and write nothing.
+ */
+function persistIndexIfChanged(
+  before: Pick<ProjectState, 'recentProjectPaths' | 'projectFolders'>,
+  after: Pick<ProjectState, 'recentProjectPaths' | 'projectFolders'>
+): void {
+  if (sameJson(before, after)) return
+  void updatePreferences({
+    recentProjects: after.recentProjectPaths,
+    projectFolders: after.projectFolders,
+  })
+}
+
+export const useProjectStore = create<ProjectState>()((set, get) => ({
   currentProject: null,
   recentProjectPaths: [],
   projectFolders: [],
@@ -188,14 +231,18 @@ export const useProjectStore = create<ProjectState>()(set => ({
   preflightStatus: 'idle',
   preflightError: null,
 
-  addRecentProject: path =>
+  addRecentProject: path => {
+    const before = get()
     set(state => ({
       recentProjectPaths: state.recentProjectPaths.includes(path)
         ? state.recentProjectPaths
         : [...state.recentProjectPaths, path],
-    })),
+    }))
+    persistIndexIfChanged(before, get())
+  },
 
-  removeRecentProject: path =>
+  removeRecentProject: path => {
+    const before = get()
     set(state => ({
       recentProjectPaths: state.recentProjectPaths.filter(p => p !== path),
       // Removing the app-side index also drops folder membership — the
@@ -206,9 +253,12 @@ export const useProjectStore = create<ProjectState>()(set => ({
       ...(state.currentProject?.path === path
         ? { preflightStatus: 'idle' as const, preflightError: null }
         : {}),
-    })),
+    }))
+    persistIndexIfChanged(before, get())
+  },
 
-  clearRecentProjects: () =>
+  clearRecentProjects: () => {
+    const before = get()
     set(state => ({
       recentProjectPaths: [],
       // Members are gone with the list; the folders themselves (and the
@@ -222,7 +272,9 @@ export const useProjectStore = create<ProjectState>()(set => ({
       ...(state.currentProject !== null
         ? { preflightStatus: 'idle' as const, preflightError: null }
         : {}),
-    })),
+    }))
+    persistIndexIfChanged(before, get())
+  },
 
   setPendingPreflight: path => set({ pendingPreflightPath: path }),
 
@@ -239,33 +291,68 @@ export const useProjectStore = create<ProjectState>()(set => ({
 
   setManifestProjectNames: names => set({ manifestProjectNames: names }),
 
-  setProjectDisplayName: (path, name) =>
+  upsertManifestProjectNames: names => {
+    const before = get()
+    set(state => {
+      const merged = { ...state.manifestProjectNames }
+      for (const [path, name] of Object.entries(names)) {
+        if (name) merged[path] = name
+      }
+      return { manifestProjectNames: merged }
+    })
+    const after = get()
+    if (sameJson(before.manifestProjectNames, after.manifestProjectNames)) {
+      return
+    }
+    void updatePreferences({
+      projectManifestNames: after.manifestProjectNames,
+    })
+  },
+
+  setProjectDisplayName: (path, name) => {
+    const before = get()
     set(state => ({
       projectDisplayNames: upsertDisplayName(
         state.projectDisplayNames,
         path,
         name
       ),
-    })),
+    }))
+    const after = get()
+    if (sameJson(before.projectDisplayNames, after.projectDisplayNames)) {
+      return
+    }
+    void updatePreferences({ projectDisplayNames: after.projectDisplayNames })
+  },
 
   setRenameTarget: target => set({ renameTarget: target }),
 
-  setProjectFolders: folders => set({ projectFolders: folders }),
+  restoreProjectIndex: (paths, folders) =>
+    set({ recentProjectPaths: paths, projectFolders: folders }),
+
+  setProjectFolders: folders => {
+    const before = get()
+    set({ projectFolders: folders })
+    persistIndexIfChanged(before, get())
+  },
 
   createFolder: name => {
     const id =
       typeof crypto !== 'undefined' && 'randomUUID' in crypto
         ? crypto.randomUUID()
         : `folder-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    const before = get()
     set(state => ({
       // New folders open at the TOP of the folder area (v1.2.0: they used
       // to append below the bottom-pinned Utilities folder).
       projectFolders: [{ id, name, projectPaths: [] }, ...state.projectFolders],
     }))
+    persistIndexIfChanged(before, get())
     return id
   },
 
-  renameFolder: (id, name) =>
+  renameFolder: (id, name) => {
+    const before = get()
     set(state => ({
       // Protected folders keep their name (v1.1.2 T7) — the guard makes
       // every entry point (inline commit, ⌘R, Edit menu) a silent no-op.
@@ -274,9 +361,12 @@ export const useProjectStore = create<ProjectState>()(set => ({
         : state.projectFolders.map(folder =>
             folder.id === id ? { ...folder, name } : folder
           ),
-    })),
+    }))
+    persistIndexIfChanged(before, get())
+  },
 
-  deleteFolder: id =>
+  deleteFolder: id => {
+    const before = get()
     set(state => ({
       // Protected folders are never deleted; membership edits are the
       // only structural lever on them (v1.1.2 T7).
@@ -285,9 +375,12 @@ export const useProjectStore = create<ProjectState>()(set => ({
         : state.projectFolders.filter(folder => folder.id !== id),
       // Deleting the folder the sidebar is drilled into exits to the top.
       activeFolderId: state.activeFolderId === id ? null : state.activeFolderId,
-    })),
+    }))
+    persistIndexIfChanged(before, get())
+  },
 
-  moveProjectToFolder: (folderId, path) =>
+  moveProjectToFolder: (folderId, path) => {
+    const before = get()
     set(state => {
       const folders = withoutFolderMember(state.projectFolders, path).map(
         folder =>
@@ -296,9 +389,12 @@ export const useProjectStore = create<ProjectState>()(set => ({
             : folder
       )
       return { projectFolders: folders }
-    }),
+    })
+    persistIndexIfChanged(before, get())
+  },
 
-  removeProjectFromFolder: (folderId, path) =>
+  removeProjectFromFolder: (folderId, path) => {
+    const before = get()
     set(state => ({
       projectFolders: withoutFolderMember(state.projectFolders, path).map(
         folder =>
@@ -309,9 +405,12 @@ export const useProjectStore = create<ProjectState>()(set => ({
               }
             : folder
       ),
-    })),
+    }))
+    persistIndexIfChanged(before, get())
+  },
 
-  applyVisibleReorder: newVisiblePaths =>
+  applyVisibleReorder: newVisiblePaths => {
+    const before = get()
     set(state => {
       if (state.activeFolderId !== null) {
         return {
@@ -330,9 +429,12 @@ export const useProjectStore = create<ProjectState>()(set => ({
           newVisiblePaths
         ),
       }
-    }),
+    })
+    persistIndexIfChanged(before, get())
+  },
 
-  applyFolderReorder: orderedFolderIds =>
+  applyFolderReorder: orderedFolderIds => {
+    const before = get()
     set(state => {
       if (
         !sameMemberSet(
@@ -360,24 +462,37 @@ export const useProjectStore = create<ProjectState>()(set => ({
           ]
         : reordered
       return { projectFolders: ordered }
-    }),
+    })
+    persistIndexIfChanged(before, get())
+  },
 
   startPreflight: () =>
     set({ preflightStatus: 'checking', preflightError: null }),
 
-  preflightSucceeded: (path, manifest) =>
+  preflightSucceeded: (path, manifest) => {
+    const before = get()
     set(state => ({
       currentProject: { path, manifest },
       preflightStatus: 'ready',
       preflightError: null,
       // v1.2.0 (issue #16): learn the manifest-declared name so every
-      // listing shows it, not just the selected project.
+      // listing shows it, not just the selected project. Persisted when
+      // the learn actually changed something (a reopen of a known name
+      // saves nothing).
       manifestProjectNames: upsertDisplayName(
         state.manifestProjectNames,
         path,
         manifest.name
       ),
-    })),
+    }))
+    const after = get()
+    if (sameJson(before.manifestProjectNames, after.manifestProjectNames)) {
+      return
+    }
+    void updatePreferences({
+      projectManifestNames: after.manifestProjectNames,
+    })
+  },
 
   preflightFailed: message =>
     set({

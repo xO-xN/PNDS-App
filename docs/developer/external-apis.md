@@ -37,10 +37,10 @@ For secure token storage, see the Authentication section below.
 
 ## Architecture Pattern
 
-Follow the same pattern as local data: Tauri commands wrap API calls, TanStack Query provides caching.
+Follow the same pattern as local data: Tauri commands wrap API calls; the frontend calls the typed commands directly (introduce a query-cache layer only if a feature needs it).
 
 ```
-React Component → TanStack Query → Tauri Command (reqwest) → External API
+React Component → Tauri Command (reqwest) → External API
 ```
 
 ### Rust Command
@@ -82,7 +82,7 @@ pub async fn fetch_user(user_id: u32) -> Result<User, String> {
 ### React Service
 
 ```typescript
-// src/services/users.ts
+// Frontend integration (typed command call)
 export const userQueryKeys = {
   all: ['users'] as const,
   user: (id: number) => [...userQueryKeys.all, id] as const,
@@ -225,11 +225,11 @@ See [data-persistence.md](./data-persistence.md) for SQLite setup.
 
 ## Quick Reference
 
-| Task            | Pattern                                  |
-| --------------- | ---------------------------------------- |
-| Basic API call  | Rust command with reqwest                |
-| Caching         | TanStack Query (frontend) or SQLite      |
-| Token storage   | `keyring` crate (OS keychain)            |
-| Type safety     | tauri-specta (same as local commands)    |
-| Error handling  | Result types, see error-handling.md      |
-| Offline support | Cache to SQLite, fallback on network err |
+| Task            | Pattern                                    |
+| --------------- | ------------------------------------------ |
+| Basic API call  | Rust command with reqwest                  |
+| Caching         | SQLite (frontend has no query-cache layer) |
+| Token storage   | `keyring` crate (OS keychain)              |
+| Type safety     | tauri-specta (same as local commands)      |
+| Error handling  | Result types, see error-handling.md        |
+| Offline support | Cache to SQLite, fallback on network err   |

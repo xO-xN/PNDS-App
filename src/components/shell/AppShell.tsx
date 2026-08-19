@@ -6,7 +6,7 @@ import { useSessionStore } from '@/store/session-store'
 import { useProjectStore } from '@/store/project-store'
 import { useWindowStore } from '@/store/window-store'
 import { useCommandKeyboard } from '@/hooks/use-command-keyboard'
-import { loadAudioPreferences } from '@/lib/audio-prefs'
+import { loadPreferences } from '@/lib/preferences'
 import { ensureUtilitiesFolder } from '@/lib/utilities-folder'
 import { cn } from '@/lib/utils'
 import { WelcomeScreen } from '@/components/welcome'
@@ -67,18 +67,19 @@ export function AppShell() {
 
   // §6.5 / §4.1: restore saved preferences on mount.
   useEffect(() => {
-    void loadAudioPreferences().then(async prefs => {
+    void loadPreferences().then(async prefs => {
       if (prefs?.outputDevice) {
         useSessionStore.getState().setOutputDevice(prefs.outputDevice)
       }
-      if (prefs?.recentProjects?.length) {
-        const store = useProjectStore.getState()
-        for (const p of prefs.recentProjects) store.addRecentProject(p)
-      }
-      // v1.1.2: folder structure; old preference files simply lack the
-      // field (Rust serde default) and restore as no folders.
-      if (prefs?.projectFolders?.length) {
-        useProjectStore.getState().setProjectFolders(prefs.projectFolders)
+      // v1.1.2: the project index — history master list + folder
+      // structure. Old preference files simply lack the fields (Rust serde
+      // defaults) and restore as an empty index. The bulk restore never
+      // writes back; every later structural change persists through the
+      // store's own actions.
+      const paths = prefs?.recentProjects ?? []
+      const folders = prefs?.projectFolders ?? []
+      if (paths.length > 0 || folders.length > 0) {
+        useProjectStore.getState().restoreProjectIndex(paths, folders)
       }
       // v1.1.2 T6: custom display names (spec issue #10) — same serde
       // default, so old files restore as no overrides. The generated

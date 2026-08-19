@@ -1,28 +1,19 @@
 import { commands } from '@/lib/tauri-bindings'
 import { logger } from '@/lib/logger'
-import { saveProjectIndex, saveProjectManifestNames } from '@/lib/audio-prefs'
 import { useProjectStore, UTILITIES_FOLDER_ID } from '@/store/project-store'
-import { upsertDisplayName } from '@/lib/display-names'
 
 /**
  * Learns every tool's manifest-declared name up front, so the Utilities
  * entries read as "Local Network Diagnostics" & co. on a clean install —
- * before any of them has been opened and preflighted.
+ * before any of them has been opened and preflighted. The store merges
+ * and persists when the names actually changed.
  */
 function learnToolNames(tools: { path: string; name: string }[]): void {
-  const store = useProjectStore.getState()
-  let names = store.manifestProjectNames
-  let learned = false
+  const names: Record<string, string> = {}
   for (const tool of tools) {
-    if (tool.name && names[tool.path] !== tool.name) {
-      names = upsertDisplayName(names, tool.path, tool.name)
-      learned = true
-    }
+    if (tool.name) names[tool.path] = tool.name
   }
-  if (learned) {
-    store.setManifestProjectNames(names)
-    void saveProjectManifestNames(names)
-  }
+  useProjectStore.getState().upsertManifestProjectNames(names)
 }
 
 /**
@@ -36,7 +27,8 @@ function learnToolNames(tools: { path: string; name: string }[]): void {
  * tool from it (or from history) sticks across relaunches, and app updates
  * swap the folder contents without ever stale-dating the entries. The
  * folder is pinned to the BOTTOM of the folder area: seeded last, and a
- * launch also migrates installs where it still sits elsewhere.
+ * launch also migrates installs where it still sits elsewhere. Every
+ * mutation persists through the store's structural actions.
  */
 export async function ensureUtilitiesFolder(): Promise<void> {
   const result = await commands.builtinUtilities()
@@ -60,17 +52,15 @@ export async function ensureUtilitiesFolder(): Promise<void> {
     // so opening them adds them to the history; preflight still runs on
     // open).
     for (const tool of tools) store.addRecentProject(tool.path)
-    const { recentProjectPaths, projectFolders } = useProjectStore.getState()
-    const seeded = [
+    const { projectFolders } = useProjectStore.getState()
+    useProjectStore.getState().setProjectFolders([
       ...projectFolders,
       {
         id: UTILITIES_FOLDER_ID,
         name: 'Utilities',
         projectPaths: tools.map(tool => tool.path),
       },
-    ]
-    useProjectStore.getState().setProjectFolders(seeded)
-    void saveProjectIndex(recentProjectPaths, seeded)
+    ])
     return
   }
 
@@ -84,5 +74,4 @@ export async function ensureUtilitiesFolder(): Promise<void> {
     existing,
   ]
   useProjectStore.getState().setProjectFolders(pinned)
-  void saveProjectIndex(useProjectStore.getState().recentProjectPaths, pinned)
 }

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import {
   useProjectStore,
   ungroupedProjectPaths,
@@ -6,7 +6,7 @@ import {
   isProtectedFolder,
   UTILITIES_FOLDER_ID,
 } from './project-store'
-import type { Manifest } from '@/lib/tauri-bindings'
+import { commands, type Manifest } from '@/lib/tauri-bindings'
 
 const manifest: Manifest = {
   schemaVersion: 1,
@@ -512,5 +512,164 @@ describe('protected folders (v1.1.2 T7, spec issue #11)', () => {
     expect(isProtectedFolder(UTILITIES_FOLDER_ID)).toBe(true)
     expect(isProtectedFolder('utilities-2')).toBe(false)
     expect(isProtectedFolder(crypto.randomUUID())).toBe(false)
+  })
+})
+
+/**
+ * Structural actions persist the index (and the name maps) as part of
+ * their commit — the v1.2.0 architecture refactor removed the callers'
+ * save pairing, so persistence is now assertable through the store's own
+ * interface. No-op guards and the bulk launch restore must write nothing.
+ */
+describe('project-store persistence (structural actions commit + save)', () => {
+  /** Lets the serialized save queue settle before a not-called assert. */
+  async function settle(): Promise<void> {
+    await new Promise(resolve => setTimeout(resolve, 0))
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useProjectStore.setState({
+      currentProject: null,
+      recentProjectPaths: [],
+      projectFolders: [],
+      pendingPreflightPath: null,
+      pendingSwitchPath: null,
+      activeFolderId: null,
+      projectDisplayNames: {},
+      manifestProjectNames: {},
+      preflightStatus: 'idle',
+      preflightError: null,
+    })
+  })
+
+  it('addRecentProject persists history and folders together', async () => {
+    useProjectStore.getState().addRecentProject('/a')
+
+    await vi.waitFor(() => {
+      expect(commands.savePreferences).toHaveBeenCalledWith(
+        expect.objectContaining({
+          recentProjects: ['/a'],
+          projectFolders: [],
+        })
+      )
+    })
+  })
+
+  it('removeRecentProject persists the shrunk index in one commit', async () => {
+    useProjectStore.getState().restoreProjectIndex(['/a', '/b'], [])
+
+    useProjectStore.getState().removeRecentProject('/a')
+
+    await vi.waitFor(() => {
+      expect(commands.savePreferences).toHaveBeenCalledWith(
+        expect.objectContaining({
+          recentProjects: ['/b'],
+        })
+      )
+    })
+  })
+
+  it('re-adding a known path writes nothing', async () => {
+    useProjectStore.getState().restoreProjectIndex(['/a'], [])
+    await settle()
+    vi.mocked(commands.savePreferences).mockClear()
+
+    useProjectStore.getState().addRecentProject('/a')
+    await settle()
+
+    expect(commands.savePreferences).not.toHaveBeenCalled()
+  })
+
+  it('protected-folder no-ops and ignored drag sets write nothing', async () => {
+    useProjectStore
+      .getState()
+      .restoreProjectIndex(
+        ['/a', '/b'],
+        [{ id: UTILITIES_FOLDER_ID, name: 'Utilities', projectPaths: ['/a'] }]
+      )
+    await settle()
+    vi.mocked(commands.savePreferences).mockClear()
+
+    useProjectStore.getState().renameFolder(UTILITIES_FOLDER_ID, 'X')
+    useProjectStore.getState().deleteFolder(UTILITIES_FOLDER_ID)
+    // Not the current visible list — the reorder is ignored.
+    useProjectStore.getState().applyVisibleReorder(['/unrelated'])
+    await settle()
+
+    expect(commands.savePreferences).not.toHaveBeenCalled()
+  })
+
+  it('restoreProjectIndex (launch restore) never writes back', async () => {
+    useProjectStore
+      .getState()
+      .restoreProjectIndex(
+        ['/a', '/b'],
+        [{ id: 'f1', name: 'Set list', projectPaths: ['/a'] }]
+      )
+    await settle()
+
+    expect(commands.savePreferences).not.toHaveBeenCalled()
+  })
+
+  it('setProjectDisplayName persists the override map', async () => {
+    useProjectStore.getState().setProjectDisplayName('/a', 'My Score')
+
+    await vi.waitFor(() => {
+      expect(commands.savePreferences).toHaveBeenCalledWith(
+        expect.objectContaining({ projectDisplayNames: { '/a': 'My Score' } })
+      )
+    })
+
+    // Committing the same name again writes nothing.
+    vi.mocked(commands.savePreferences).mockClear()
+    useProjectStore.getState().setProjectDisplayName('/a', 'My Score')
+    await settle()
+    expect(commands.savePreferences).not.toHaveBeenCalled()
+  })
+
+  it('preflightSucceeded persists the manifest name only when it is new', async () => {
+    useProjectStore.getState().preflightSucceeded('/a', manifest)
+    await vi.waitFor(() => {
+      expect(commands.savePreferences).toHaveBeenCalledWith(
+        expect.objectContaining({
+          projectManifestNames: { '/a': 'Inarticulate III' },
+        })
+      )
+    })
+
+    vi.mocked(commands.savePreferences).mockClear()
+    useProjectStore.getState().preflightSucceeded('/a', manifest)
+    await settle()
+    expect(commands.savePreferences).not.toHaveBeenCalled()
+  })
+
+  it('upsertManifestProjectNames merges and persists only real changes', async () => {
+    useProjectStore.getState().upsertManifestProjectNames({ '/a': 'Tool A' })
+    await vi.waitFor(() => {
+      expect(commands.savePreferences).toHaveBeenCalledWith(
+        expect.objectContaining({
+          projectManifestNames: { '/a': 'Tool A' },
+        })
+      )
+    })
+
+    useProjectStore
+      .getState()
+      .upsertManifestProjectNames({ '/a': 'Tool A', '/b': 'Tool B' })
+    await vi.waitFor(() => {
+      expect(commands.savePreferences).toHaveBeenCalledWith(
+        expect.objectContaining({
+          projectManifestNames: { '/a': 'Tool A', '/b': 'Tool B' },
+        })
+      )
+    })
+
+    vi.mocked(commands.savePreferences).mockClear()
+    useProjectStore
+      .getState()
+      .upsertManifestProjectNames({ '/a': 'Tool A', '/b': 'Tool B' })
+    await settle()
+    expect(commands.savePreferences).not.toHaveBeenCalled()
   })
 })

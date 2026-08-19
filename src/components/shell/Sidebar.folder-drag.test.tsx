@@ -205,6 +205,10 @@ describe('Sidebar folder drags (v1.1.2 T5)', () => {
   it('a project dragged back over the list neither joins a folder nor saves', async () => {
     const folderId = useProjectStore.getState().createFolder('Set list')
     useProjectStore.getState().moveProjectToFolder(folderId, THIRD_PATH)
+    // Those setup commits persist through the store — settle the queue and
+    // clear it, so only a drag-triggered save could be observed below.
+    await new Promise(resolve => setTimeout(resolve, 0))
+    vi.mocked(commands.savePreferences).mockClear()
     render(<Sidebar variant="static" />)
 
     const [first, second] = screen.getAllByTestId('project-entry')

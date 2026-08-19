@@ -5,7 +5,7 @@
 import { locale } from '@tauri-apps/plugin-os'
 import i18n, { availableLanguages } from './config'
 import { logger } from '@/lib/logger'
-import { saveLanguagePreference } from '@/lib/audio-prefs'
+import { updatePreferences } from '@/lib/preferences'
 import { useSettingsStore, type LanguageSetting } from '@/store/settings-store'
 
 /**
@@ -112,7 +112,7 @@ export async function applyLanguageSetting(
       await i18n.changeLanguage(setting)
     }
     useSettingsStore.getState().setLanguageSetting(setting)
-    await saveLanguagePreference(setting === 'system' ? null : setting)
+    await updatePreferences({ language: setting === 'system' ? null : setting })
     logger.info('Language setting applied', { setting })
   } catch (error) {
     logger.error('Failed to apply language setting', { error, setting })

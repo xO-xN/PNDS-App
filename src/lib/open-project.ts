@@ -5,12 +5,7 @@ import { notifications } from '@/lib/notifications'
 import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 import { installAndOpenBundle, isBundlePath } from '@/lib/bundle-project'
-import {
-  DEFAULT_OSC_TARGET,
-  loadAudioPreferences,
-  saveProjectIndex,
-  saveProjectManifestName,
-} from '@/lib/audio-prefs'
+import { DEFAULT_OSC_TARGET, loadPreferences } from '@/lib/preferences'
 
 /**
  * Shared project flows (§4, §6.1, §7, §8):
@@ -57,14 +52,11 @@ export async function openProject(path: string): Promise<void> {
     // issue #4 新导入落点) — drilled into a folder it joins that folder's
     // end, at the top level it stays ungrouped. Every import entry (open
     // dialog / share a directory) funnels through here, so the rule lives
-    // in one place.
+    // in one place. The store persists the index as part of each commit.
     store.addRecentProject(path)
     if (store.activeFolderId) {
       store.moveProjectToFolder(store.activeFolderId, path)
     }
-    // History and folder membership change together — save atomically.
-    const { recentProjectPaths, projectFolders } = useProjectStore.getState()
-    void saveProjectIndex(recentProjectPaths, projectFolders)
   }
   await runPreflight(path)
 }
@@ -80,19 +72,16 @@ export async function runPreflight(path: string): Promise<void> {
     logger.warn('Preflight failed', { path, error: result.error })
     return
   }
-  // v1.2.0 (issue #16): learn the manifest name before the store records
-  // it, so a reopen of an already-known name saves nothing.
-  const knownName = useProjectStore.getState().manifestProjectNames[path]
+  // v1.2.0 (issue #16): preflightSucceeded learns the manifest-declared
+  // name and persists it when it is actually new — a reopen of an
+  // already-known name saves nothing.
   useProjectStore.getState().preflightSucceeded(path, result.data)
-  if (knownName !== result.data.name) {
-    void saveProjectManifestName(path, result.data.name)
-  }
   logger.info('Preflight passed', { project: result.data.name })
 
   useSessionStore.getState().setAudioMode(result.data.audio.defaultMode)
 
   // §6.6: restore this project's last valid OSC target (app-local pref).
-  const prefs = await loadAudioPreferences()
+  const prefs = await loadPreferences()
   const savedTarget = prefs?.oscTargets?.[result.data.id]
   useSessionStore
     .getState()

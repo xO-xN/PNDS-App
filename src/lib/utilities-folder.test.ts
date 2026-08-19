@@ -60,7 +60,8 @@ describe('ensureUtilitiesFolder', () => {
     if (!lnd || !msg) throw new Error('Expected two tool paths')
     expect(state.manifestProjectNames[lnd]).toBe(TOOL_NAMES[0])
     expect(state.manifestProjectNames[msg]).toBe(TOOL_NAMES[1])
-    // saveProjectIndex runs through the serialized save queue.
+    // saveProjectIndex runs through the serialized save queue — the store's
+    // structural commits (history adds + the folder seed) each persist.
     await vi.waitFor(() => {
       expect(commands.savePreferences).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -115,11 +116,11 @@ describe('ensureUtilitiesFolder', () => {
 
   it('is a no-op once the folder exists — later edits stick across launches', async () => {
     await ensureUtilitiesFolder()
-    // Let the seeding save flush before clearing, so only a hypothetical
+    // Let every queued seeding save land (the history adds and the folder
+    // commit each persist) before clearing, so only a hypothetical
     // reseeding save could be observed below.
-    await vi.waitFor(() => {
-      expect(commands.savePreferences).toHaveBeenCalled()
-    })
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(commands.savePreferences).toHaveBeenCalled()
 
     // The user moved a tool out and removed it from history.
     const second = TOOL_PATHS[1]
@@ -127,6 +128,10 @@ describe('ensureUtilitiesFolder', () => {
     const store = useProjectStore.getState()
     store.removeProjectFromFolder(UTILITIES_FOLDER_ID, second)
     store.removeRecentProject(second)
+    // Those removals persist through the store — let the queue settle
+    // before clearing, so only a hypothetical reseeding save could be
+    // observed below.
+    await new Promise(resolve => setTimeout(resolve, 0))
     vi.mocked(commands.savePreferences).mockClear()
 
     await ensureUtilitiesFolder()
