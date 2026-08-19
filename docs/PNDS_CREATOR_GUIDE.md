@@ -24,12 +24,12 @@
 
 创作机与演出机的分工:
 
-|               | 创作机(你的 Mac)           | 演出机(接收方的 Mac)      |
-| ------------- | -------------------------- | ------------------------- |
-| PNDS App      | 需要                       | 需要                      |
-| Node.js       | 需要(开发与 `npm install`) | 不需要(App 自带固定 Node) |
-| SuperCollider | 需要(仅编译 SynthDef 用)   | 不需要(App 自带 scsynth)  |
-| npm / 网络    | 创作期可用                 | 运行与安装 .pnds 均不需要 |
+|               | 创作机(你的 Mac)                       | 演出机(接收方的 Mac)                   |
+| ------------- | -------------------------------------- | -------------------------------------- |
+| PNDS App      | 需要                                   | 需要                                   |
+| Node.js       | 需要(开发与 `npm install`)             | 不需要(App 自带固定 Node)              |
+| SuperCollider | Internal模式：需要(仅编译 SynthDef 用) | Internal模式：不需要(App 自带 scsynth) |
+| npm / 网络    | 创作期可用                             | 运行与安装 .pnds 均不需要              |
 
 工程在演出机上**不得依赖**宿主安装的 Node.js、SuperCollider、`sclang` 或第三方 UGen——这是 Score Project Specification 的硬性要求。
 
@@ -131,6 +131,14 @@ sampleRate 已从 manifest schema 移除:App 托管的 scsynth 一律运行在 A
 | 3306、5432、6379       | 常见数据库(MySQL、PostgreSQL、Redis)                        |
 
 拿不准端口是否空闲时,打开 **设置 → 端口**:选中工程后,App 显示 manifest 声明的两个端口的占用状态与占用者身份,并可一键释放。还有一点要心里有数:使用相同端口对的两个工程不能在同一台机器上同时运行——切换作品时,先关闭当前工程再打开下一个。
+
+blockSize 与设备 buffer:`manifest` 的 `scsynth.blockSize` 是传给 scsynth `-z` 的合成块大小(行为契约见 [`PNDS_RUNTIME_CONTRACT.md`](./PNDS_RUNTIME_CONTRACT.md) §7.2),**不是**音频设备的 IO buffer,也不构成延迟承诺。典型链路 scsynth → BlackHole → DAW → 输出设备中,BlackHole 的 buffer 由接收它的 DAW 决定(即 DAW 音频设置里的 Buffer Size);App 只写 `-z`,不碰设备 buffer。
+
+给演出机的守则:
+
+- 设备 buffer **不小于工程的 `blockSize`**,且为整数倍——2 的幂档位(64/128/256/512…)对 blockSize 64 自然满足。稳妥默认 512,追求更低交接延迟可用 256;
+- **红线:不要把设备 buffer 设到低于工程 `blockSize`**(DAW 在部分设备上提供 32/16 档位)——合成块被迫跨越多个硬件回调,延迟反而恶化;
+- 先开 DAW、定好 buffer,再在 App 中 Load 工程;演出进行中不改 buffer(运行中变更会让链路短暂中断)。
 
 ## 5. 依赖与 node_modules
 

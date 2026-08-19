@@ -154,6 +154,8 @@ audio.scsynth.audioBusChannels >= 2 × audio.outputChannels
 
 该约束为硬件 bus 与工程私有 bus 提供足够空间。违反时 preflight 必须失败。
 
+`audio.scsynth.blockSize` 只声明 scsynth 的合成块大小（App 以 `-z` 传入，见 [`PNDS_RUNTIME_CONTRACT.md`](./PNDS_RUNTIME_CONTRACT.md) §7.2），不等于音频设备的 IO buffer，也不构成延迟承诺。设备 IO buffer 由设备自身或共用该设备的其他 app 决定，App 不写入该值。设备 buffer 的选择规则与演出机守则见 [`PNDS_CREATOR_GUIDE.md`](./PNDS_CREATOR_GUIDE.md) §4。
+
 ### 3.5 音频模式
 
 有效模式只有：
@@ -236,11 +238,14 @@ App 必须：
 
 ### 5.1 Performer 页面
 
+Performer页面通常由演奏者的演奏设备（手机、平板电脑、笔记本电脑）打开，用来显示交互界面。
 performer 页面由客户端通过 Host LAN IP 访问。工程负责移动端交互、身份、断线恢复和作品数据协议。
 
 PNDS 不规定 Socket.IO event 名称、客户端 ID、角色数量或 UI 框架。
 
 ### 5.2 Monitor 页面
+
+Monitor页面通常由PNDS App打开，并作为乐谱的指挥或监控界面，可以被投放到演出场地的大型屏幕上供指挥、演奏者或观众观看。
 
 monitor 页面必须：
 
@@ -258,6 +263,8 @@ monitor 页面必须：
 
 ## 6. Internal 音频工程要求
 
+Internal模式下，PNDS App 托管的 scsynth 进程是工程的唯一音频输出目标。
+
 Internal 工程必须：
 
 - 只加载已编译 `.scsyndef`；
@@ -272,7 +279,7 @@ Internal 工程必须：
 - 不使用 PNDS App 保留的 node ID 范围 `2147480000..=2147483647`；
 - 拥有并释放自身创建的 group、synth、buffer 与 OSC 资源。
 
-PNDS 只保证离散信号输出，不负责声道到扬声器的空间布局。需要现场多声道 PA 时，应将 PNDS 输出路由到 Ableton Live、DAW、矩阵调音台或其他专用软件。
+PNDS 只保证离散信号输出，不负责声道到扬声器的空间布局。需要现场多声道 PA 时，应将 PNDS 输出路由到 有多声道能力的DAW、矩阵调音台或其他专用软件。
 
 ---
 

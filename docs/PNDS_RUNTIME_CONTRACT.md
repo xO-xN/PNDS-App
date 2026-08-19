@@ -230,6 +230,8 @@ audioBusChannels >= 2N
 
 由于 `K <= N`，这保证 bus `B .. B+N-1` 始终可用。
 
+`-z` 只设定 scsynth 的合成块大小。所选设备的 IO buffer 是 CoreAudio 设备属性，由设备自身或共用该设备的其他 app（如经 loopback 设备接收音频的 DAW）决定，App 不写入该值。设备 buffer 应不小于 `audio.scsynth.blockSize` 且为其整数倍；更小的设备 buffer 会迫使一个合成块跨越多个硬件回调，属应避免的配置。
+
 ### 7.3 Bus 模型
 
 ```text
