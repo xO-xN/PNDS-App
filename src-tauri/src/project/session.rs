@@ -806,46 +806,23 @@ impl SessionManager {
                         match health.status.as_str() {
                             // §9.1: readiness is the payload field, not HTTP 200.
                             "ready" => {
-                                guard.status = "ready".to_string();
-                                guard.startup_stage = 4;
-                                let sc_port = guard.scsynth_port;
-                                let volume = guard.volume;
-                                let plan = guard.channel_plan.clone();
                                 drop(guard);
 
-                                // §8 steps 8–10 (internal): the master stage
-                                // runs after the project group (§7.4). Without
-                                // it the private buses reach nothing — fail
-                                // loudly. N > 2 masters are fixed at unity
-                                // gain (§7.5).
-                                if let (Some(port), Some(plan)) = (sc_port, plan) {
-                                    let gain = if plan.project_channels > 2 {
-                                        1.0
-                                    } else {
-                                        crate::project::audio::volume_percent_to_gain(volume)
-                                    };
-                                    if let Err(e) = Self::create_master_stage(
-                                        port,
-                                        plan.bridged_channels,
-                                        plan.private_bus_start,
-                                        gain,
-                                    ) {
-                                        Self::fail_generation(
-                                            &app,
-                                            &inner,
-                                            &app_data_dir,
-                                            generation,
-                                            format!("Audio master stage failed: {e}"),
-                                        );
-                                        return;
-                                    }
-                                    let mut guard = inner.lock().unwrap_or_else(|e| e.into_inner());
-                                    guard.master_synth_ready = true;
-                                    drop(guard);
+                                if Self::complete_startup(
+                                    &app,
+                                    &inner,
+                                    &app_data_dir,
+                                    generation,
+                                    Self::create_master_stage,
+                                ) {
+                                    Self::watch_running(
+                                        &app,
+                                        &inner,
+                                        &app_data_dir,
+                                        pid,
+                                        generation,
+                                    );
                                 }
-
-                                Self::emit_static(&app, &inner);
-                                Self::watch_running(&app, &inner, &app_data_dir, pid, generation);
                                 return;
                             }
                             "error" => {
@@ -884,6 +861,77 @@ impl SessionManager {
                 }
             }
         });
+    }
+
+    /// §8 steps 8–10 (internal) and step 10 (none/external): finish the
+    /// health→ready transition once the payload reports ready. Internal
+    /// sessions must confirm the master stage BEFORE the session claims
+    /// `ready`; a master-stage failure fails the whole generation (§8). For
+    /// none/external sessions health ready is the final condition — there is
+    /// no App-side master stage. Returns true when the session reached
+    /// `ready` (the caller then continues into `watch_running`).
+    ///
+    /// `create_master` runs at exactly the point production performs the
+    /// OSC handshake against scsynth; tests observe the session state
+    /// through it to pin the ordering invariant.
+    fn complete_startup<R: tauri::Runtime, F>(
+        app: &AppHandle<R>,
+        inner: &Arc<Mutex<SessionInner>>,
+        app_data_dir: &Path,
+        generation: u64,
+        create_master: F,
+    ) -> bool
+    where
+        F: FnOnce(u16, u32, u32, f32) -> Result<(), String>,
+    {
+        let (sc_port, volume, plan, current_generation) = {
+            let guard = inner.lock().unwrap_or_else(|e| e.into_inner());
+            (
+                guard.scsynth_port,
+                guard.volume,
+                guard.channel_plan.clone(),
+                guard.generation,
+            )
+        };
+        // §9.3: a stop/retry that landed while health was being polled must
+        // not run the OSC handshake on a torn-down engine.
+        if current_generation != generation {
+            return false;
+        }
+        // §8 steps 8–9 (internal): the master stage runs after the project
+        // group (§7.4). Without it the private buses reach nothing — fail
+        // loudly. N > 2 masters are fixed at unity gain (§7.5).
+        let needs_master_stage = matches!((sc_port, &plan), (Some(_), Some(_)));
+        if let (Some(port), Some(plan)) = (sc_port, &plan) {
+            let gain = if plan.project_channels > 2 {
+                1.0
+            } else {
+                crate::project::audio::volume_percent_to_gain(volume)
+            };
+            if let Err(e) = create_master(port, plan.bridged_channels, plan.private_bus_start, gain)
+            {
+                Self::fail_generation(
+                    app,
+                    inner,
+                    app_data_dir,
+                    generation,
+                    format!("Audio master stage failed: {e}"),
+                );
+                return false;
+            }
+        }
+        let mut guard = inner.lock().unwrap_or_else(|e| e.into_inner());
+        if guard.generation != generation || guard.status != "starting" {
+            return false; // a retry already replaced this generation
+        }
+        if needs_master_stage {
+            guard.master_synth_ready = true;
+        }
+        guard.status = "ready".to_string();
+        guard.startup_stage = 4;
+        drop(guard);
+        Self::emit_static(app, inner);
+        true
     }
 
     /// After ready: watch for unexpected exits until stop is requested.
@@ -1103,10 +1151,10 @@ impl SessionManager {
         let (port, apply) = {
             let mut inner = self.lock();
             inner.volume = percent;
-            (
-                inner.scsynth_port,
-                inner.status == "ready" && inner.master_synth_ready,
-            )
+            // §8 step 10: master_synth_ready flips in the same critical
+            // section as `ready`, so this single flag is the live-audio gate
+            // (none/external sessions never set it).
+            (inner.scsynth_port, inner.master_synth_ready)
         };
         if apply {
             if let Some(port) = port {
@@ -1397,6 +1445,119 @@ mod tests {
         }
     }
 
+    /// #23 / §8 step 10 regression: `ready` must be claimed only AFTER the
+    /// master stage is confirmed. The closure observes the session state at
+    /// exactly the point production performs the OSC handshake — with the
+    /// pre-fix ordering (status flipped on health ready) it would observe
+    /// "ready" while the audio chain is not yet built.
+    #[test]
+    fn ready_is_claimed_only_after_the_master_stage_confirms() {
+        let app = tauri::test::mock_app().handle().clone();
+        let manager = SessionManager::default();
+        let dir = tempfile::tempdir().unwrap();
+        let generation = {
+            let mut inner = manager.lock();
+            inner.generation += 1;
+            inner.status = "starting".to_string();
+            inner.startup_stage = 3;
+            inner.scsynth_port = Some(57110);
+            inner.channel_plan = Some(crate::project::audio::channel_plan(2, 2));
+            inner.generation
+        };
+
+        let inner = std::sync::Arc::clone(&manager.inner);
+        let observed = std::sync::Mutex::new(String::new());
+        let reached_ready = SessionManager::complete_startup(
+            &app,
+            &inner,
+            dir.path(),
+            generation,
+            |_port, _k, _b, _gain| {
+                *observed.lock().unwrap() = manager.lock().status.clone();
+                Ok(())
+            },
+        );
+
+        assert!(reached_ready);
+        assert_eq!(
+            *observed.lock().unwrap(),
+            "starting",
+            "the session must still be `starting` while the master stage is being confirmed"
+        );
+        let guard = manager.lock();
+        assert_eq!(guard.status, "ready");
+        assert_eq!(guard.startup_stage, 4);
+        assert!(guard.master_synth_ready);
+    }
+
+    /// §8: a master-stage failure fails the whole generation — from
+    /// `starting`, never leaving a phantom ready state behind.
+    #[test]
+    fn master_stage_failure_fails_the_generation_instead_of_ready() {
+        let app = tauri::test::mock_app().handle().clone();
+        let manager = SessionManager::default();
+        let dir = tempfile::tempdir().unwrap();
+        let generation = {
+            let mut inner = manager.lock();
+            inner.generation += 1;
+            inner.status = "starting".to_string();
+            inner.startup_stage = 3;
+            inner.scsynth_port = Some(57110);
+            inner.channel_plan = Some(crate::project::audio::channel_plan(2, 2));
+            inner.generation
+        };
+
+        let inner = std::sync::Arc::clone(&manager.inner);
+        let reached_ready = SessionManager::complete_startup(
+            &app,
+            &inner,
+            dir.path(),
+            generation,
+            |_port, _k, _b, _gain| Err("synthdef load timed out".to_string()),
+        );
+
+        assert!(!reached_ready);
+        let snapshot = manager.snapshot();
+        assert_eq!(snapshot.status, "error");
+        assert_eq!(
+            snapshot.error.as_deref(),
+            Some("Audio master stage failed: synthdef load timed out")
+        );
+        assert_eq!(snapshot.startup_stage, 0);
+        assert!(!manager.lock().master_synth_ready);
+    }
+
+    /// None mode has no App-side master stage (§9): health ready is the
+    /// final condition, and the session must never claim master readiness.
+    #[test]
+    fn none_mode_ready_needs_no_master_stage() {
+        let app = tauri::test::mock_app().handle().clone();
+        let manager = SessionManager::default();
+        let dir = tempfile::tempdir().unwrap();
+        let generation = {
+            let mut inner = manager.lock();
+            inner.generation += 1;
+            inner.status = "starting".to_string();
+            inner.startup_stage = 3;
+            inner.generation
+        };
+
+        let inner = std::sync::Arc::clone(&manager.inner);
+        let reached_ready = SessionManager::complete_startup(
+            &app,
+            &inner,
+            dir.path(),
+            generation,
+            |_port, _k, _b, _gain| panic!("none mode must not touch scsynth"),
+        );
+
+        assert!(reached_ready);
+        let snapshot = manager.snapshot();
+        assert_eq!(snapshot.status, "ready");
+        assert_eq!(snapshot.startup_stage, 4);
+        assert!(!manager.lock().master_synth_ready);
+    }
+
     /// §9.3: a dying old generation must never overwrite the retry that
     /// replaced it — the late failure is dropped, not published.
     #[test]
@@ -1489,6 +1650,107 @@ mod tests {
             snapshot.output_tail.is_empty(),
             "stale output must be cleared"
         );
+        assert!(!manager.has_active_session());
+    }
+
+    /// Integration: the REAL supervisor thread polling a live (stdlib) HTTP
+    /// health server — none mode, so readiness needs no master stage. Pins
+    /// the full §8 step 6 → step 10 transition including the ready snapshot
+    /// fields, then tears the session down through the public stop path.
+    #[test]
+    fn supervisor_reports_ready_for_a_healthy_none_mode_session() {
+        let app = tauri::test::mock_app().handle().clone();
+        let manager = SessionManager::default();
+        let dir = tempfile::tempdir().unwrap();
+
+        // Minimal /__pnds/health responder (§9.1: readiness is the payload
+        // field, not HTTP 200 — no status-line tricks needed).
+        let port = {
+            let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+            let port = listener.local_addr().unwrap().port();
+            std::thread::spawn(move || {
+                let body =
+                    r#"{"status":"ready","projectId":"fixture","audio":{"status":"disabled"}}"#;
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\nContent-Length: {}\r\n\r\n{body}",
+                    body.len()
+                );
+                for conn in listener.incoming() {
+                    let Ok(mut stream) = conn else { break };
+                    let mut buf = [0u8; 512];
+                    let _ = std::io::Read::read(&mut stream, &mut buf);
+                    let _ = std::io::Write::write_all(&mut stream, response.as_bytes());
+                }
+            });
+            port
+        };
+
+        let manifest: Manifest = serde_json::from_str(&format!(
+            r#"{{
+                "schemaVersion": 1,
+                "id": "fixture",
+                "name": "fixture",
+                "version": "0.0.0",
+                "scoreServer": {{
+                    "entry": "fixture.js",
+                    "workingDirectory": ".",
+                    "performerPort": {port},
+                    "monitorPort": {port}
+                }},
+                "audio": {{"defaultMode": "none", "supportedModes": ["none"]}}
+            }}"#
+        ))
+        .unwrap();
+
+        let generation = {
+            let child = Command::new("sleep").arg("30").spawn().unwrap();
+            let mut inner = manager.lock();
+            inner.generation += 1;
+            inner.status = "starting".to_string();
+            inner.startup_stage = 3;
+            inner.child = Some(child);
+            inner.generation
+        };
+        let pid = {
+            let guard = manager.lock();
+            guard.child.as_ref().unwrap().id()
+        };
+
+        manager.spawn_supervisor(
+            app.clone(),
+            dir.path().to_path_buf(),
+            pid,
+            manifest,
+            generation,
+        );
+
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            let status = manager.lock().status.clone();
+            if status == "ready" {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "supervisor never reached ready (status: {status})"
+            );
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        {
+            let guard = manager.lock();
+            assert_eq!(guard.startup_stage, 4);
+            assert!(!guard.master_synth_ready, "none mode has no master stage");
+        }
+        let snapshot = manager.snapshot();
+        assert_eq!(snapshot.status, "ready");
+        assert_eq!(snapshot.startup_stage, 4);
+        assert_eq!(
+            snapshot.health.as_ref().map(|h| h.status.as_str()),
+            Some("ready")
+        );
+
+        manager.stop(&app, dir.path()).unwrap();
+        assert_eq!(manager.snapshot().status, "idle");
         assert!(!manager.has_active_session());
     }
 
