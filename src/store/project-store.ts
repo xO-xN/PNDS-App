@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import i18n from '@/i18n/config'
 import type { Manifest, ProjectFolder } from '@/lib/tauri-bindings'
 import { masterWithUngroupedOrder, sameMemberSet } from '@/lib/drag-reorder'
 import { upsertDisplayName } from '@/lib/display-names'
@@ -231,15 +232,47 @@ export function visibleProjectPaths(
   return ungroupedProjectPaths(recentProjectPaths, folders)
 }
 
+/**
+ * v1.2.2 (user feedback): display names the switch owns. The Home segment
+ * and the protected Utilities folder localize at display time, so both
+ * their current- and fallback-locale labels are reserved — a folder named
+ * "Home" could not be told apart from the segment.
+ */
+function reservedFolderNames(): Set<string> {
+  const fallback =
+    typeof i18n.options.fallbackLng === 'string'
+      ? i18n.options.fallbackLng
+      : 'en'
+  const names = new Set<string>()
+  for (const key of ['sidebar.unfiled', 'sidebar.utilitiesFolder']) {
+    names.add(i18n.t(key).trim())
+    names.add(i18n.t(key, { lng: fallback }).trim())
+  }
+  return names
+}
+
+/** True when `name` (trimmed) belongs to another folder, or to one of the
+ * switch's own display names. */
+function folderNameClashes(
+  name: string,
+  folders: ProjectFolder[],
+  excludeId?: string
+): boolean {
+  const trimmed = name.trim()
+  if (reservedFolderNames().has(trimmed)) return true
+  return folders.some(
+    folder => folder.id !== excludeId && folder.name.trim() === trimmed
+  )
+}
+
 /** v1.2.2 (user feedback): a folder name no other folder holds — the
  * creation default gets " 2", " 3"… suffixes until it is free (trimmed
- * comparison). */
+ * comparison, reserved names included). */
 function uniqueFolderName(base: string, folders: ProjectFolder[]): string {
-  const taken = new Set(folders.map(folder => folder.name.trim()))
-  if (!taken.has(base)) return base
+  if (!folderNameClashes(base, folders)) return base
   for (let i = 2; ; i++) {
     const candidate = `${base} ${i}`
-    if (!taken.has(candidate)) return candidate
+    if (!folderNameClashes(candidate, folders)) return candidate
   }
 }
 
@@ -438,10 +471,12 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
     // is refused — the switch segments could not be told apart. Both
     // guards make every entry point (inline commit, ⌘R, Edit menu) a
     // no-op; the boolean lets the inline path explain the refusal.
-    const clash = before.projectFolders.some(
-      folder => folder.id !== id && folder.name.trim() === name.trim()
-    )
-    if (isProtectedFolder(id) || clash) return false
+    if (
+      isProtectedFolder(id) ||
+      folderNameClashes(name, before.projectFolders, id)
+    ) {
+      return false
+    }
     set(state => ({
       projectFolders: state.projectFolders.map(folder =>
         folder.id === id ? { ...folder, name } : folder

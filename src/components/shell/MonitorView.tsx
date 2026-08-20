@@ -69,9 +69,15 @@ export function MonitorView() {
     // WKWebView does not reliably surface DOM focus events for desktop
     // switches, the exact case the steal was reported on.
     const unlisten = listen('pnds:window-focus', reclaimIfLost)
+    // Heartbeat backstop: every event path above can be dropped by the
+    // suspended webview, but the interval itself was throttled with it —
+    // the first tick after the webview resumes reclaims without needing
+    // any event to arrive (user retest: the events alone proved inert).
+    const heartbeat = setInterval(reclaimIfLost, 2000)
     return () => {
       window.removeEventListener('focus', reclaimIfLost)
       document.removeEventListener('visibilitychange', handleVisibility)
+      clearInterval(heartbeat)
       void unlisten.then(off => off())
     }
   }, [])

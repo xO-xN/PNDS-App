@@ -16,6 +16,18 @@ import { HoverSidebar } from './HoverSidebar'
 import { LoadingScreen } from './LoadingScreen'
 import { ErrorScreen } from './ErrorScreen'
 
+/** Pulls the authoritative session state from Rust into the store — the
+ * mount restore, the visibility/focus catch-ups and the loading poll all
+ * share this one path (v1.2.2, user reports on #29: occluded-webview
+ * event loss). */
+function restoreSessionState(): void {
+  void commands.getSessionState().then(result => {
+    if (result.status === 'ok') {
+      useSessionStore.getState().applySnapshot(result.data)
+    }
+  })
+}
+
 /**
  * Application shell (§10.1): routes between the four window states.
  *
@@ -44,27 +56,20 @@ export function AppShell() {
     const unlisten = listen<SessionSnapshot>('pnds:session', event => {
       useSessionStore.getState().applySnapshot(event.payload)
     })
-    const restore = () => {
-      void commands.getSessionState().then(result => {
-        if (result.status === 'ok') {
-          useSessionStore.getState().applySnapshot(result.data)
-        }
-      })
-    }
-    restore()
+    restoreSessionState()
     // v1.2.2 (user report on #29): an occluded WKWebView suspends its JS,
     // so `pnds:session` events queue behind the suspension — coming back
     // from another desktop showed the loading screen's last stage until
     // the queued events caught up. Re-fetching on regain makes the shell
     // current the moment the view is visible again.
     const handleVisibility = () => {
-      if (!document.hidden) restore()
+      if (!document.hidden) restoreSessionState()
     }
     document.addEventListener('visibilitychange', handleVisibility)
     // The Rust-side regain signal (NSWindowDidBecomeKey) — WKWebView
     // does not reliably surface DOM focus/visibility events for desktop
     // switches, so lib.rs emits this on Focused(true) instead.
-    const unlistenFocus = listen('pnds:window-focus', restore)
+    const unlistenFocus = listen('pnds:window-focus', restoreSessionState)
     return () => {
       void unlisten.then(off => off())
       void unlistenFocus.then(off => off())
@@ -129,6 +134,17 @@ export function AppShell() {
     if (sessionStatus !== 'starting' && sessionStatus !== 'ready') {
       queueMicrotask(() => setLoadingDone(false))
     }
+  }, [sessionStatus])
+
+  // v1.2.2 (user retest on #29): while a session loads, poll the
+  // authoritative state once a second. Events emitted into the occluded
+  // (suspended) webview can be dropped outright — the poll bounds the
+  // stall to a second instead of replaying the whole loading animation
+  // after the switch back.
+  useEffect(() => {
+    if (sessionStatus !== 'starting') return
+    const id = setInterval(restoreSessionState, 1000)
+    return () => clearInterval(id)
   }, [sessionStatus])
 
   // ── Running (dissolve must have finished) ──

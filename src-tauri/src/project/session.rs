@@ -998,7 +998,17 @@ impl SessionManager {
 
     fn emit_static<R: tauri::Runtime>(app: &AppHandle<R>, inner: &Arc<Mutex<SessionInner>>) {
         let snapshot = {
-            let guard = inner.lock().unwrap_or_else(|e| e.into_inner());
+            let mut guard = inner.lock().unwrap_or_else(|e| e.into_inner());
+            // The supervisor funnel refreshes the App-Nap activity too —
+            // error transitions land here without passing through emit.
+            let live = matches!(guard.status.as_str(), "starting" | "ready" | "stopping");
+            if live && guard.process_activity.is_none() {
+                guard.process_activity = Some(crate::process_activity::ProcessActivity::begin(
+                    "PNDS live score session",
+                ));
+            } else if !live {
+                guard.process_activity = None;
+            }
             guard.snapshot()
         };
         if let Err(e) = app.emit("pnds:session", snapshot) {

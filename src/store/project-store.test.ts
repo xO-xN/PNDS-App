@@ -380,6 +380,21 @@ describe('folder name uniqueness (v1.2.2, user feedback)', () => {
     ])
   })
 
+  it('the switch’s own display names are reserved — Home most of all', () => {
+    const store = useProjectStore.getState()
+    const id = createFolderOrFail('Gig')
+
+    // The Home segment localizes at display time; the store reserves the
+    // current- and fallback-locale labels (tests run under en).
+    expect(store.renameFolder(id, 'Home')).toBe(false)
+    expect(store.renameFolder(id, ' Home ')).toBe(false)
+    expect(useProjectStore.getState().projectFolders[0]?.name).toBe('Gig')
+
+    // Creation suffixes past a reserved name too.
+    expect(store.createFolder('Home')).toBeTypeOf('string')
+    expect(useProjectStore.getState().projectFolders[0]?.name).toBe('Home 2')
+  })
+
   it('a rename onto another folder’s name is refused and keeps the old one', () => {
     const store = useProjectStore.getState()
     createFolderOrFail('Gig')

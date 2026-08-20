@@ -187,6 +187,19 @@ pub fn run() {
                 let session = app_handle.state::<crate::project::session::SessionManager>();
                 session.publish(app_handle);
                 let _ = app_handle.emit("pnds:window-focus", ());
+                // The first emit can land while the webview is still
+                // resuming from occlusion suspension — an emit into a
+                // suspended webview is dropped outright, taking the
+                // catch-up with it (user retest: both fixes inert).
+                // Re-fire at +300ms / +1s / +2.5s so at least one
+                // certainly arrives after the webview is back.
+                let handle = app_handle.clone();
+                std::thread::spawn(move || {
+                    for delay_ms in [300u64, 700, 1500] {
+                        std::thread::sleep(std::time::Duration::from_millis(delay_ms));
+                        let _ = handle.emit("pnds:window-focus", ());
+                    }
+                });
             }
 
             // macOS: Hide the main window instead of quitting so the dock icon can
