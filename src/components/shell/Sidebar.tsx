@@ -288,7 +288,10 @@ function InlineNameInput({
  * right-click context menu — the inline "+" and the hover ✕ are gone; the
  * menu disables at the folder cap (#26) and for the protected Utilities
  * folder, with the reasons spelled out. Segments are tabs: roving
- * tabindex, ←/→ view switching, accent focus ring.
+ * tabindex, ←/→ view switching, accent focus ring. The project cards
+ * hold no tab stops of their own (the title and ✕ buttons are
+ * pointer-only; ⌘1..9 and ⌘↑/↓ are their keyboard path), so Tab walks
+ * the top controls → the switch → the settings footer only.
  *
  * Folder drag interactions (v1.1.2 T5, spec issue #9, carried over):
  * dropping a card on a folder segment files it into that folder's end,
@@ -1478,6 +1481,7 @@ export function Sidebar({
                     type="button"
                     disabled={busy || (isCurrent && running)}
                     title={path}
+                    tabIndex={-1}
                     className="flex-1 truncate text-center text-[15px] text-(--pnds-text)/85 disabled:opacity-60"
                   >
                     {cardName(path)}
@@ -1502,6 +1506,7 @@ export function Sidebar({
                   <button
                     type="button"
                     aria-label={t('sidebar.removeFromHistory')}
+                    tabIndex={-1}
                     onClick={e => {
                       e.stopPropagation()
                       handleRemove(path)

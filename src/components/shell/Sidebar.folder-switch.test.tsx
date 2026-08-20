@@ -159,6 +159,25 @@ describe('Sidebar folder switch (v1.2.2, issue #28)', () => {
       expect(useProjectStore.getState().activeFolderId).toBeNull()
       expect(input).toBeInTheDocument()
     })
+
+    it('Tab order skips the project cards — the switch is the only list-level stop', () => {
+      seedFolders()
+      render(<Sidebar variant="static" />)
+
+      // The cards' title and ✕ buttons are pointer-only (⌘1..9 / ⌘↑↓ are
+      // the keyboard path); Tab walks top controls → switch → settings.
+      const [first] = screen.getAllByTestId('project-entry')
+      if (!first) throw new Error('Expected a project entry')
+      for (const button of within(first).getAllByRole('button')) {
+        expect(button).toHaveAttribute('tabIndex', '-1')
+      }
+      // The switch keeps exactly one tab stop: the active view.
+      const tabbables = screen
+        .getAllByRole('tab')
+        .filter(tab => tab.tabIndex === 0)
+      expect(tabbables).toHaveLength(1)
+      expect(tabbables[0]).toBe(screen.getByTestId('unfiled-segment'))
+    })
   })
 
   describe('sliding pill', () => {
