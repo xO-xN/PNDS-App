@@ -418,4 +418,60 @@ describe('Cmd keyboard layer (v1.1.2)', () => {
       expect(commands.startProject).not.toHaveBeenCalled()
     })
   })
+
+  describe('Cmd+Left/Right master volume (v1.2.2, #30 feedback)', () => {
+    const pressCmdArrow = (key: 'ArrowLeft' | 'ArrowRight') => {
+      fireEvent.keyDown(window, { key, metaKey: true })
+    }
+
+    it('nudges the master volume in 12.5% steps while a session runs', () => {
+      seedRunningSession(FIRST_PATH)
+      render(<AppShell />)
+
+      pressCmdArrow('ArrowRight')
+      expect(useSessionStore.getState().volume).toBe(92.5)
+      expect(commands.setMasterVolume).toHaveBeenLastCalledWith(92.5)
+
+      pressCmdArrow('ArrowLeft')
+      pressCmdArrow('ArrowLeft')
+      expect(useSessionStore.getState().volume).toBe(67.5)
+      expect(commands.setMasterVolume).toHaveBeenLastCalledWith(67.5)
+    })
+
+    it('nudges from the volume slider too (range inputs are exempt)', () => {
+      seedRunningSession(FIRST_PATH)
+      render(<AppShell />)
+
+      // After clicking the slider its range input holds focus — the nudge
+      // must still fire (only text fields keep the arrows).
+      const slider = screen.getByRole('slider')
+      fireEvent.keyDown(slider, { key: 'ArrowRight', metaKey: true })
+      expect(useSessionStore.getState().volume).toBe(92.5)
+      expect(commands.setMasterVolume).toHaveBeenLastCalledWith(92.5)
+    })
+
+    it('never fires while a text input holds focus (line navigation kept)', () => {
+      // Internal ready session: the gate is OPEN, so only the editable
+      // guard can explain the block — the keys stay line-start/end.
+      seedRunningSession(FIRST_PATH)
+      render(<AppShell />)
+
+      const probe = document.createElement('input')
+      document.body.appendChild(probe)
+      fireEvent.keyDown(probe, { key: 'ArrowLeft', metaKey: true })
+      expect(commands.setMasterVolume).not.toHaveBeenCalled()
+      expect(useSessionStore.getState().volume).toBe(80)
+      probe.remove()
+    })
+
+    it('is inert without a live session (the shared gate)', () => {
+      seedRunningSession(FIRST_PATH)
+      useSessionStore.setState({ sessionStatus: 'idle' })
+      render(<AppShell />)
+
+      pressCmdArrow('ArrowRight')
+      expect(useSessionStore.getState().volume).toBe(80)
+      expect(commands.setMasterVolume).not.toHaveBeenCalled()
+    })
+  })
 })

@@ -4,6 +4,7 @@ import { useSettingsStore } from '@/store/settings-store'
 import { visibleProjectPaths, useProjectStore } from '@/store/project-store'
 import { moveProjectSelection, selectProject } from '@/lib/project-select'
 import { startRename } from '@/lib/project-rename'
+import { nudgeMasterVolume, VOLUME_STEP_PERCENT } from '@/lib/volume-control'
 
 /**
  * True when a keyboard event originates from a text-editing target —
@@ -55,6 +56,8 @@ export function hasOpenOverlayBesidesSettings(): boolean {
  * - ⌘↓/⌘↑ → move the selection along the visible order (clamped, no
  *   wrap; auto-drills into the current project's folder) via the same
  *   entry as a click
+ * - ⌘←/⌘→ → master volume down/up in 12.5% steps (v1.2.2, #30 feedback)
+ *   via the shared volume-control entry
  * - ⌘1..9 → select the Nth visible project via the same entry as a click,
  *   folder-aware (a drilled-in view numbers only the folder's members);
  *   pressing the selected project's number deselects it (v1.2.0, same
@@ -92,6 +95,30 @@ export function useCommandKeyboard(): void {
         if (isEditableTarget(event.target) || hasOpenOverlay()) return
         event.preventDefault()
         moveProjectSelection(event.key === 'ArrowDown' ? 1 : -1)
+        return
+      }
+      // v1.2.2 (#30 feedback): ⌘←/⌘→ nudge the master volume in 12.5%
+      // steps. Web-layer on purpose: ⌘←/⌘→ are line-start/end in text
+      // fields, and a menu accelerator would consume the key even inside
+      // an input — the editable guard here lets inputs keep them. The
+      // volume slider itself is exempted: it is a range input, and after
+      // clicking it the nudges must keep working (plain ←/→ keep their
+      // native small-step adjustment there).
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+        const onRangeControl =
+          event.target instanceof HTMLInputElement &&
+          event.target.type === 'range'
+        if (
+          (!onRangeControl && isEditableTarget(event.target)) ||
+          hasOpenOverlay()
+        )
+          return
+        event.preventDefault()
+        nudgeMasterVolume(
+          event.key === 'ArrowRight'
+            ? VOLUME_STEP_PERCENT
+            : -VOLUME_STEP_PERCENT
+        )
         return
       }
       if (!/^[1-9]$/.test(event.key)) return

@@ -13,6 +13,12 @@ import {
   SYSTEM_DEFAULT_DEVICE,
 } from '@/lib/preferences'
 import {
+  fixedGainFrom,
+  setMasterVolumeTo,
+  toggleMasterMute,
+  volumeAdjustableAt,
+} from '@/lib/volume-control'
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -73,7 +79,6 @@ export function SettingsCard({ onPopupOpenChange }: SettingsCardProps) {
   const running = sessionStatus !== 'idle'
   const volume = useSessionStore(state => state.volume)
   const muted = useSessionStore(state => state.muted)
-  const channelPlan = useSessionStore(state => state.channelPlan)
   const oscTargetValid = isValidOscTarget(oscTargetInput)
 
   // §3.3: outputChannels defaults to 2 when the manifest omits it.
@@ -136,12 +141,19 @@ export function SettingsCard({ onPopupOpenChange }: SettingsCardProps) {
     selectedChannels !== undefined &&
     selectedChannels < projectChannels
 
-  // §7.5: N > 2 internal sessions fix the master at 100% / 0 dB.
-  const fixedGain =
-    audioMode === 'internal' &&
-    (channelPlan?.projectChannels ?? projectChannels) > 2
-  const volumeEnabled =
-    sessionStatus === 'ready' && audioMode === 'internal' && !fixedGain
+  // §7.5 (#30): the fixed-gain / adjustable derivations live in
+  // volume-control as pure functions; subscribing with them keeps the
+  // card, the ⌘M menu item and the ⌘←/⌘→ nudges on one shared gate.
+  const fixedGain = useSessionStore(state =>
+    fixedGainFrom(
+      state.audioMode,
+      state.channelPlan?.projectChannels,
+      projectChannels
+    )
+  )
+  const volumeEnabled = useSessionStore(state =>
+    volumeAdjustableAt(state, projectChannels)
+  )
   const volumeDisplay = fixedGain ? 100 : volume
 
   const flagChange = () => {
@@ -153,23 +165,14 @@ export function SettingsCard({ onPopupOpenChange }: SettingsCardProps) {
     flagChange()
   }
 
-  const applyMasterVolume = (percent: number) => {
-    void commands.setMasterVolume(percent).then(result => {
-      if (result.status === 'error') {
-        logger.warn('setMasterVolume failed', { error: result.error })
-      }
-    })
-  }
-
   const handleVolumeChange = (percent: number) => {
     // The store keeps the mute state honest (drag >0 releases it, 0 is
     // muted) — the drag stays live, never deferred.
-    useSessionStore.getState().setVolume(percent)
-    applyMasterVolume(percent)
+    setMasterVolumeTo(percent)
   }
 
   const handleMuteToggle = () => {
-    applyMasterVolume(useSessionStore.getState().toggleMute())
+    toggleMasterMute()
   }
 
   const handleDeviceChange = (device: string) => {

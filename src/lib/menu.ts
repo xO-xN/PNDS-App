@@ -35,6 +35,7 @@ import {
   hasOpenOverlayBesidesSettings,
   isEditableTarget,
 } from '@/hooks/use-command-keyboard'
+import { toggleMasterMute } from '@/lib/volume-control'
 
 const APP_NAME = 'PNDS'
 
@@ -187,6 +188,18 @@ export async function buildAppMenu(): Promise<Menu> {
           action: () => useSessionStore.getState().resetZoom(),
         }),
         await PredefinedMenuItem.new({ item: 'Separator' }),
+        // v1.2.2 (#30 feedback): ⌘M mute. The accelerator exists to CLAIM
+        // the key from macOS's native hide/minimize — like ⌘Q, the native
+        // path is replaced, not layered on. Unlike ⌘R it carries no
+        // text-input/overlay guards: mute is a pure audio mutation (no UI
+        // opens), and emergency silence should work under any overlay.
+        // No-op unless the volume can act (volumeAdjustable inside).
+        await MenuItem.new({
+          id: 'mute-toggle',
+          text: t('menu.mute'),
+          accelerator: 'Cmd+M',
+          action: () => toggleMasterMute(),
+        }),
         await MenuItem.new({
           id: 'reload-monitor',
           text: t('menu.reloadMonitor'),

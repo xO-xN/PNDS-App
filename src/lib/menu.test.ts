@@ -195,3 +195,41 @@ describe('buildAppMenu (v1.2.0 issue #13)', () => {
     expect(item('quit-app').accelerator).toBe('Cmd+Q')
   })
 })
+
+describe('buildAppMenu mute item (v1.2.2, #30 feedback)', () => {
+  it('claims ⌘M from the system hide and routes the shared mute entry', () => {
+    const mute = item('mute-toggle')
+    expect(mute.accelerator).toBe('Cmd+M')
+    expect(mute.text).toBe('Mute / Unmute')
+    expect(submenuItems('View')).toContain(mute)
+
+    // The action is the shared volume-control toggle: gated to live
+    // internal sessions, forwarding 0/restore to the synth.
+    useSessionStore.setState({
+      sessionStatus: 'ready',
+      audioMode: 'internal',
+      volume: 70,
+      muted: false,
+      prevVolume: 0,
+    })
+    mute.action?.()
+    expect(useSessionStore.getState()).toMatchObject({
+      volume: 0,
+      muted: true,
+      prevVolume: 70,
+    })
+    expect(commands.setMasterVolume).toHaveBeenLastCalledWith(0)
+
+    mute.action?.()
+    expect(useSessionStore.getState().volume).toBe(70)
+    expect(commands.setMasterVolume).toHaveBeenLastCalledWith(70)
+
+    // Outside a live internal session the accelerator is a silent no-op.
+    useSessionStore.setState({ sessionStatus: 'idle', volume: 70 })
+    vi.mocked(commands.setMasterVolume).mockClear()
+    mute.action?.()
+    expect(useSessionStore.getState().muted).toBe(false)
+    expect(commands.setMasterVolume).not.toHaveBeenCalled()
+    useSessionStore.getState().resetSession()
+  })
+})

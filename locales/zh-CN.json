@@ -15,6 +15,7 @@
   "menu.zoomOut": "缩小",
   "menu.actualSize": "实际大小",
   "menu.reloadMonitor": "重新加载监视器",
+  "menu.mute": "静音 / 取消静音",
   "menu.enterFullScreen": "进入全屏",
   "menu.undo": "撤销",
   "menu.redo": "重做",
