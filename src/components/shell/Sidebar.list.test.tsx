@@ -163,6 +163,49 @@ describe('Sidebar project list (v1.2.2, issue #29)', () => {
       expect(pill.style.transform).toBe('translateY(87px)')
       expect(pill.style.height).toBe('57px')
       expect(pill.style.opacity).toBe('1')
+      // Both cards sit in this view — the move animates with the class
+      // transition (no inline override).
+      expect(pill.style.transition).toBe('')
+    })
+
+    it('reappears in place after a view switch instead of sliding from the old view', () => {
+      const folderId = createFolderOrFail('Setlist')
+      useProjectStore.setState({
+        currentProject: { path: FIRST_PATH, manifest },
+        preflightStatus: 'ready',
+        projectFolders: [
+          { id: folderId, name: 'Setlist', projectPaths: [SECOND_PATH] },
+        ],
+      })
+      render(<Sidebar variant="static" />)
+
+      // Anchored on the Home view's card; switching views clears the
+      // selection and the pill goes invisible (stale geometry kept).
+      act(() => {
+        useProjectStore.setState({
+          currentProject: null,
+          activeFolderId: folderId,
+          preflightStatus: 'idle',
+        })
+      })
+      expect(screen.getByTestId('card-selection-pill').style.opacity).toBe('0')
+
+      // The folder view's only card — select it (the ⌘↓ entry-from-end
+      // path). The old anchor is not in this view: the pill must snap
+      // into place, not slide up from the previous view's offsets.
+      const folderCard = screen.getByTestId('project-entry')
+      pinCardBox(folderCard, 26, 57)
+      act(() => {
+        useProjectStore.setState({
+          currentProject: { path: SECOND_PATH, manifest },
+          preflightStatus: 'ready',
+        })
+      })
+
+      const pill = screen.getByTestId('card-selection-pill')
+      expect(pill.style.transform).toBe('translateY(26px)')
+      expect(pill.style.opacity).toBe('1')
+      expect(pill.style.transition).toBe('none')
     })
 
     it('hides when the selection is not in the visible view', () => {

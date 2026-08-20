@@ -225,6 +225,12 @@ function applyFolderPill(
  * card's offsets inside the (positioned) list content, opacity owned here
  * (hidden covers project drags, the post-drop snap frames, and the
  * selection not being in the current view).
+ *
+ * The slide is only meaningful between cards the current view shows: the
+ * pill remembers its last anchored card, and when that card is not in the
+ * view anymore (a folder switch replaced the list, or the pill appears
+ * for the first time) it reappears in place instead of sliding from the
+ * previous view's meaningless geometry.
  */
 function applyCardSelectionPill(
   pill: HTMLDivElement | null,
@@ -233,15 +239,17 @@ function applyCardSelectionPill(
   hidden: boolean
 ): void {
   if (!pill) return
+  const anchor = pill.dataset.anchor ?? null
   let card: HTMLElement | null = null
-  if (selectedPath !== null && container !== null) {
+  let anchorVisible = false
+  if (container !== null) {
     for (const el of container.querySelectorAll('[data-project-path]')) {
-      if (
-        el instanceof HTMLElement &&
-        el.dataset.projectPath === selectedPath
-      ) {
+      if (!(el instanceof HTMLElement)) continue
+      if (selectedPath !== null && el.dataset.projectPath === selectedPath) {
         card = el
-        break
+      }
+      if (anchor !== null && el.dataset.projectPath === anchor) {
+        anchorVisible = true
       }
     }
   }
@@ -252,9 +260,26 @@ function applyCardSelectionPill(
     pill.style.opacity = '0'
     return
   }
+  const slide = anchorVisible && anchor !== card.dataset.projectPath
+  if (slide) {
+    // Also cancels a still-pending snap restore — this move animates.
+    pill.style.transition = ''
+  } else {
+    pill.style.transition = 'none'
+  }
   pill.style.transform = `translateY(${card.offsetTop}px)`
   pill.style.height = `${card.offsetHeight}px`
   pill.style.opacity = hidden ? '0' : '1'
+  pill.dataset.anchor = card.dataset.projectPath
+  if (!slide) {
+    // Let the snapped geometry paint one frame before the class-owned
+    // transition comes back.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        pill.style.transition = ''
+      })
+    })
+  }
 }
 
 /** The list's scrollable range below its viewport (0 when it fits). */
