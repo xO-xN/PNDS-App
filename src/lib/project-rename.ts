@@ -24,7 +24,19 @@ export function startRename(): void {
     })
     return
   }
-  if (project.activeFolderId && !isProtectedFolder(project.activeFolderId)) {
-    project.setRenameTarget({ kind: 'folder', id: project.activeFolderId })
+  if (project.activeFolderId) {
+    startFolderRename(project.activeFolderId)
   }
+}
+
+/**
+ * v1.2.2 (issue #28): rename a specific folder — the context menu's
+ * "Rename" lands here with the same guards ⌘R applies: forbidden while a
+ * session runs (or stops), never for the protected Utilities folder.
+ */
+export function startFolderRename(folderId: string): void {
+  const status = useSessionStore.getState().sessionStatus
+  if (status === 'ready' || status === 'stopping') return
+  if (isProtectedFolder(folderId)) return
+  useProjectStore.getState().setRenameTarget({ kind: 'folder', id: folderId })
 }

@@ -184,7 +184,7 @@ describe('Sidebar project-list scrolling (issue #25)', () => {
       render(<Sidebar variant="static" />)
 
       expect(screen.getByTestId('unfiled-segment')).toBeInTheDocument()
-      expect(screen.getByTestId('new-folder-button')).toBeInTheDocument()
+      expect(screen.getByTestId('folder-pill')).toBeInTheDocument()
     })
 
     it('the folder view scrolls its members; the switch and footer stay outside', () => {
@@ -210,7 +210,7 @@ describe('Sidebar project-list scrolling (issue #25)', () => {
       const scroller = screen.getByTestId('project-list-scroll')
       expect(scroller).toHaveTextContent('No projects opened yet')
       expect(screen.getByTestId('unfiled-segment')).toBeInTheDocument()
-      expect(screen.getByTestId('new-folder-button')).toBeInTheDocument()
+      expect(screen.getByTestId('folder-pill')).toBeInTheDocument()
     })
 
     it('an empty folder shows its hint inside the scroller', () => {

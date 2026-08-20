@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom'
-import { vi } from 'vitest'
+import { vi, afterEach } from 'vitest'
 
 // jsdom lacks pointer-capture APIs that Radix Select relies on.
 Element.prototype.hasPointerCapture ??= function (this: Element) {
@@ -14,6 +14,13 @@ Element.prototype.releasePointerCapture ??= function (this: Element) {
 Element.prototype.scrollIntoView ??= function (this: Element) {
   // jsdom has no scroll layout; Radix only needs the call to exist.
 }
+
+// Radix modal layers (context menu, dialogs) set `pointer-events: none` on
+// document.body while open and restore it on unmount — an abrupt test
+// cleanup can leave the style behind and break userEvent in later tests.
+afterEach(() => {
+  document.body.style.pointerEvents = ''
+})
 
 // Mock matchMedia for tests
 Object.defineProperty(window, 'matchMedia', {

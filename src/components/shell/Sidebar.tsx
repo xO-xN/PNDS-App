@@ -1,7 +1,16 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
-import { Plus, X, Share, RefreshCw, FolderPlus, Command } from 'lucide-react'
+import {
+  Plus,
+  X,
+  Share,
+  RefreshCw,
+  FolderPlus,
+  Pencil,
+  Trash2,
+  Command,
+} from 'lucide-react'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import i18n from '@/i18n/config'
 import {
@@ -20,7 +29,12 @@ import {
   promptOpenProject,
   stopAndReset,
 } from '@/lib/open-project'
-import { selectProject, setActiveFolderView } from '@/lib/project-select'
+import {
+  selectProject,
+  setActiveFolderView,
+  nextFolderView,
+} from '@/lib/project-select'
+import { startFolderRename } from '@/lib/project-rename'
 import { reclaimIfManagedBundle } from '@/lib/bundle-project'
 import { projectDisplayName } from '@/lib/display-names'
 import {
@@ -49,6 +63,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuShortcut,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu'
 import { SettingsCard } from './SettingsCard'
 import { SessionActionButton } from './SessionActionButton'
 import { TrafficLights } from './TrafficLights'
@@ -166,6 +188,32 @@ function rectOf(element: HTMLElement | null): Rect | null {
   }
 }
 
+/**
+ * v1.2.2 (issue #28): positions the sliding pill over the active segment —
+ * its offsetLeft/offsetWidth inside the track, applied as transform+width
+ * so the pill animates between views instead of a background crossfade.
+ * Module-level: both the per-commit layout effect and the resize/font
+ * listeners call it with live values (a component-scope function would
+ * churn their dependency arrays).
+ */
+function applyFolderPill(
+  pill: HTMLDivElement | null,
+  activeFolderId: string | null,
+  segments: ReadonlyMap<string, HTMLDivElement>,
+  unfiled: HTMLDivElement | null
+): void {
+  if (!pill) return
+  const segment =
+    activeFolderId === null ? unfiled : (segments.get(activeFolderId) ?? null)
+  if (segment === null) {
+    pill.style.transform = ''
+    pill.style.width = ''
+    return
+  }
+  pill.style.transform = `translateX(${segment.offsetLeft}px)`
+  pill.style.width = `${segment.offsetWidth}px`
+}
+
 /** The list's scrollable range below its viewport (0 when it fits). */
 function maxScrollOf(container: HTMLElement): number {
   return Math.max(0, container.scrollHeight - container.clientHeight)
@@ -232,10 +280,15 @@ function InlineNameInput({
  * v1.2.1 (folder switch): folders are a segmented control above the
  * project column — the unfiled segment (the default view) first, then one
  * segment per folder, Utilities pinned last. Selecting a segment switches
- * the list; a hover-revealed "+" beside the row creates folders (capped,
- * issue #26) and an always-visible "+" imports a project into the
- * selected view. Holding Cmd numbers the first nine projects of the
- * current view.
+ * the list; an always-visible "+" imports a project into the selected
+ * view. Holding Cmd numbers the first nine projects of the current view.
+ * v1.2.2 (issue #28) completes the control: the track spans the row, the
+ * segments share it by content width, and a white pill slides under the
+ * active one. Folder management (create / rename / delete) lives in a
+ * right-click context menu — the inline "+" and the hover ✕ are gone; the
+ * menu disables at the folder cap (#26) and for the protected Utilities
+ * folder, with the reasons spelled out. Segments are tabs: roving
+ * tabindex, ←/→ view switching, accent focus ring.
  *
  * Folder drag interactions (v1.1.2 T5, spec issue #9, carried over):
  * dropping a card on a folder segment files it into that folder's end,
@@ -310,6 +363,9 @@ export function Sidebar({
   const [pendingDeleteFolderId, setPendingDeleteFolderId] = useState<
     string | null
   >(null)
+  /** v1.2.2 (issue #28): the folder segment the context menu was opened on
+   * (null = the track or the unfiled segment — no folder-specific items). */
+  const [menuFolderId, setMenuFolderId] = useState<string | null>(null)
   const dragRef = useRef<DragSource | null>(null)
   const dropTargetRef = useRef<ActiveDropTarget | null>(null)
   const dragGhostRef = useRef<DragGhost | null>(null)
@@ -331,6 +387,12 @@ export function Sidebar({
     breadcrumb: null,
   })
   const unfiledSegmentRef = useRef<HTMLDivElement | null>(null)
+  /** v1.2.2 (issue #28): the sliding pill — geometry applied imperatively
+   * (like the drag clone), never through React state. */
+  const pillRef = useRef<HTMLDivElement | null>(null)
+  /** v1.2.2 (issue #28): folder segments by id — pill measurement and the
+   * arrow-key focus hand-off address them directly. */
+  const segmentRefs = useRef(new Map<string, HTMLDivElement>())
   const cloneRef = useRef<HTMLDivElement | null>(null)
   /** v1.2.1 (issue #25): the independently scrolling project column. */
   const projectScrollRef = useRef<HTMLDivElement | null>(null)
@@ -359,14 +421,19 @@ export function Sidebar({
   const pendingDeleteFolder = projectFolders.find(
     folder => folder.id === pendingDeleteFolderId
   )
-  // v1.2.1 (issue #26): the FOLDERS "+" disabled state derives from the
-  // store's cap helper — the sidebar never re-counts folders on its own.
-  // At the cap the label swaps to the reason, so the tooltip explains the
-  // disabled button instead of naming a gesture it refuses.
+  // v1.2.1 (issue #26): the cap derivation stays store-driven — the sidebar
+  // never re-counts folders on its own. Since v1.2.2 (issue #28) the only
+  // creation entry is the context menu, whose "New folder" item disables
+  // with the reason spelled out beneath it.
   const foldersAtCap = folderLimitReached(projectFolders)
-  const newFolderLabel = foldersAtCap
-    ? t('sidebar.folderLimitReached', { limit: FOLDER_LIMIT })
-    : t('sidebar.newFolder')
+  // v1.2.2 (issue #28): the folder the context menu targets — its items
+  // (rename / delete) and their disabled reasons derive from it.
+  const menuFolder =
+    menuFolderId === null
+      ? null
+      : (projectFolders.find(folder => folder.id === menuFolderId) ?? null)
+  const menuFolderProtected =
+    menuFolder !== null && isProtectedFolder(menuFolder.id)
 
   // v1.2.0 (issue #16): the one listing name for `path` (display-names.ts)
   // — a v1.1.2 T6 display-name override (spec issue #10) wins, then the
@@ -481,6 +548,74 @@ export function Sidebar({
   }
 
   /**
+   * v1.2.2 (issue #28): ←/→ on a focused segment — the roving-tabindex tab
+   * pattern. The view moves to the neighboring folder view (wrapping at
+   * the ends) and focus follows onto the newly active tab.
+   */
+  const handleSegmentKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+    event.preventDefault()
+    const store = useProjectStore.getState()
+    const next = nextFolderView(
+      store.projectFolders,
+      store.activeFolderId,
+      event.key === 'ArrowLeft' ? -1 : 1
+    )
+    setActiveFolderView(next)
+    const element =
+      next === null
+        ? unfiledSegmentRef.current
+        : (segmentRefs.current.get(next) ?? null)
+    element?.focus()
+  }
+
+  /** Resolves which folder segment a right-click landed on (null = track
+   * or the unfiled segment) — runs before Radix opens the menu, so the
+   * content renders for the right target. */
+  const handleTrackContextMenu = (event: React.MouseEvent<HTMLDivElement>) => {
+    const segment = (event.target as HTMLElement).closest(
+      '[data-folder-segment]'
+    )
+    setMenuFolderId(
+      segment instanceof HTMLElement
+        ? (segment.dataset.folderSegment ?? null)
+        : null
+    )
+  }
+
+  /** The menu is a portal outside the sidebar element — report it like the
+   * settings popups so the hover sidebar must not auto-retract under it. */
+  const handleMenuOpenChange = (open: boolean) => {
+    onPopupOpenChange?.(open)
+    if (!open) setMenuFolderId(null)
+  }
+
+  /**
+   * An action queued by a menu selection, run once the menu has fully
+   * closed. The menu's trapped FocusScope reclaims any focus that leaves
+   * it while the content is still mounted — through its exit animation in
+   * a real browser — so running the selection from onSelect itself would
+   * see the auto-focused name input blurred back (committing the
+   * untouched draft and cancelling the edit). The close handler below is
+   * the first moment the scope is guaranteed gone.
+   */
+  const pendingMenuActionRef = useRef<(() => void) | null>(null)
+
+  /**
+   * Runs as the menu content unmounts: the queued action opens now (an
+   * inline edit or the delete confirm) and the trigger's focus return is
+   * cancelled — whatever the action opens owns the focus. Every other
+   * close returns focus to the trigger.
+   */
+  const handleMenuCloseAutoFocus = (event: Event) => {
+    const pendingAction = pendingMenuActionRef.current
+    if (pendingAction === null) return
+    pendingMenuActionRef.current = null
+    event.preventDefault()
+    pendingAction()
+  }
+
+  /**
    * v1.1.2 T4/T5 drag initiation (spec issues #8, #9): a pointer press
    * anywhere on a card (project or folder) arms the drag; it activates —
    * snapshotting the clone anchor and the static drop zones (the visible
@@ -492,6 +627,9 @@ export function Sidebar({
     event: React.PointerEvent<HTMLElement>,
     cardSelector: string
   ) => {
+    // v1.2.2 (issue #28): only the primary button drags — the secondary
+    // button's press now opens the folder context menu instead.
+    if (event.button !== 0) return
     suppressClickRef.current = false
     const card = event.currentTarget.closest(cardSelector)
     pressRef.current = {
@@ -800,6 +938,39 @@ export function Sidebar({
     }
   }, [suppressTransition])
 
+  // v1.2.2 (issue #28): the pill tracks the active segment. Like the drag
+  // clone, its geometry is applied imperatively — a state update per
+  // commit would re-render the row for a purely visual shift. The layout
+  // effect runs after every commit (view switch, rename, reorder, the
+  // inline edit swapping a name for an input), so the pill never goes
+  // stale; nothing paints between the commit and the effect.
+  const activeFolderIdForPill = activeFolder?.id ?? null
+  useLayoutEffect(() => {
+    applyFolderPill(
+      pillRef.current,
+      activeFolderIdForPill,
+      segmentRefs.current,
+      unfiledSegmentRef.current
+    )
+  })
+  // Web fonts land after first paint and resize reflows the row — both
+  // change segment widths without any state moving, so re-measure (the
+  // active folder is read from the store so the listener never goes
+  // stale itself).
+  useEffect(() => {
+    const reapply = () => {
+      applyFolderPill(
+        pillRef.current,
+        useProjectStore.getState().activeFolderId,
+        segmentRefs.current,
+        unfiledSegmentRef.current
+      )
+    }
+    window.addEventListener('resize', reapply)
+    void document.fonts?.ready.then(reapply)
+    return () => window.removeEventListener('resize', reapply)
+  }, [])
+
   // v1.2.1 (issue #25): keyboard selection (⌘↑/⌘↓, ⌘1..9 — and the
   // auto-drill view switch) can land on a card the independent list scroll
   // has clipped, so the selected card is scrolled into view. A live
@@ -873,6 +1044,12 @@ export function Sidebar({
     activeFolderId !== null
   // Card pitch fallback: h-14.25 (57px) + gap-1 (4px). Real drags measure it.
   const stride = dragGhost?.stride ?? 61
+  // v1.2.2 (issue #28): the pill steps aside while the row is mid-flight —
+  // a folder drag translates the segments (the active one may itself be
+  // the invisible dragged clone) and the post-drop snap frame repositions
+  // everything; the pill fades out for both and back in at its measured
+  // spot once the row is at rest.
+  const pillHidden = drag?.kind === 'folder' || suppressTransition
 
   return (
     <aside
@@ -920,174 +1097,289 @@ export function Sidebar({
       </div>
 
       <nav className="mt-2 flex min-h-0 flex-1 flex-col">
-        {/* v1.2.1 (folder switch): folders are a segmented control above
-            the project column — the unfiled segment first (the default
-            view), then one segment per folder. Selecting a segment
-            switches the list; dropping a dragged project on a folder
-            segment files it in, on the unfiled segment returns it to
-            ungrouped (the old breadcrumb bar). The import "+" lands in
-            the selected segment's view (spec issue #7 新导入落点); the
-            new-folder "+" is hover-revealed and caps at FOLDER_LIMIT with
-            the reason as its tooltip (issue #26). */}
-        <div className="group/switch mx-5 mb-2 flex items-center gap-1">
-          <div className="flex min-w-0 flex-1 items-stretch rounded-lg bg-(--pnds-text)/[0.05] p-0.5">
-            <div
-              ref={unfiledSegmentRef}
-              data-testid="unfiled-segment"
-              data-drop-active={unfiledDropping ? 'true' : undefined}
-              onPointerDown={() => {
-                // Every fresh press re-arms the click suppression a
-                // finished drag left behind — the unfiled segment is not
-                // a drag source, so its press has no other handler.
-                suppressClickRef.current = false
-              }}
-              onClick={() => {
-                if (suppressClickRef.current) {
-                  suppressClickRef.current = false
-                  return
-                }
-                setActiveFolderView(null)
-              }}
-              className={cn(
-                'flex min-w-0 flex-1 cursor-pointer items-center justify-center truncate rounded-md px-2 py-1.5 text-[13px] transition-colors duration-200',
-                !activeFolder
-                  ? 'bg-(--pnds-card) font-medium text-(--pnds-text) shadow-sm'
-                  : 'text-(--pnds-text)/55 hover:text-(--pnds-text)/85',
-                unfiledDropping &&
-                  'bg-(--pnds-accent)/15 ring-1 ring-(--pnds-accent)/50'
-              )}
-            >
-              {t('sidebar.unfiled')}
-            </div>
-            {projectFolders.map((folder, folderIndex) => {
-              // Editing covers both the creation gesture (editingFolderId)
-              // and ⌘R on the selected folder (renameTarget) — the old
-              // breadcrumb edit now lives inside the segment.
-              const isEditing =
-                editingFolderId === folder.id ||
-                (renameTarget?.kind === 'folder' &&
-                  renameTarget.id === folder.id)
-              // v1.1.2 T7: the Utilities folder is permanent — no delete
-              // affordance, no rename, never draggable, pinned last.
-              const isProtected = isProtectedFolder(folder.id)
-              const isActive = activeFolderId === folder.id
-              const inUse =
-                sessionLive &&
-                currentProject !== null &&
-                folder.projectPaths.includes(currentProject.path)
-              // A folder drag yields its siblings exactly like a project
-              // drag, horizontally (spec issue #9: 文件夹卡在文件夹区内
-              // 可拖拽排序).
-              const isDraggedSegment =
-                drag?.kind === 'folder' && drag.id === folder.id
-              const isDropHover = folderDropIndex === folderIndex
-              const cardOffset =
-                folderInsertionIndex === null || dragFolderIndex < 0
-                  ? 0
-                  : cardShift(
-                      dragFolderIndex,
-                      folderInsertionIndex,
-                      folderIndex,
-                      stride
-                    )
-              return (
+        {/* v1.2.2 (issue #28): folders are a segmented control above the
+            project column — the unfiled segment first (the default view),
+            then one segment per folder. The track spans the row and the
+            segments share it by content width; a white pill slides under
+            the active one (measured offsetLeft/width, transform+width
+            transitions) instead of a per-segment background swap. Selecting
+            a segment switches the list; dropping a dragged project on a
+            folder segment files it in, on the unfiled segment returns it to
+            ungrouped (the old breadcrumb bar). Folder management lives in
+            a right-click context menu (new / rename / delete); the import
+            "+" lands in the selected segment's view (spec issue #7
+            新导入落点). Segments are real tabs: role/aria-selected, a
+            roving tabindex, ←/→ view switching and an accent focus ring. */}
+        <div className="mx-5 mb-2 flex items-center gap-1">
+          <ContextMenu onOpenChange={handleMenuOpenChange}>
+            <ContextMenuTrigger asChild>
+              <div
+                role="tablist"
+                aria-label={t('sidebar.folderViewsLabel')}
+                title={t('sidebar.folderSwitchManageHint')}
+                onContextMenu={handleTrackContextMenu}
+                className="relative flex min-w-0 flex-1 items-stretch rounded-lg bg-(--pnds-text)/[0.05] p-0.5"
+              >
+                {/* The sliding active indicator: absolutely positioned
+                    inside the track, above nothing (z-0) and below the
+                    segments (z-10), pointer-transparent. During a folder
+                    drag and the post-drop snap frame it fades out, then
+                    fades back in over its re-measured spot. */}
                 <div
-                  key={folder.id}
-                  data-testid="folder-segment"
-                  data-folder-segment={folder.id}
-                  data-drop-active={isDropHover ? 'true' : undefined}
-                  onPointerDown={e => {
+                  ref={pillRef}
+                  data-testid="folder-pill"
+                  aria-hidden="true"
+                  className={cn(
+                    'pointer-events-none absolute inset-y-0.5 left-0 z-0 rounded-md bg-(--pnds-card) shadow-sm',
+                    suppressTransition
+                      ? 'transition-none'
+                      : 'transition-[transform,width,opacity] duration-[280ms] ease-[cubic-bezier(0.4,0.1,0.2,1)]',
+                    pillHidden ? 'opacity-0' : 'opacity-100'
+                  )}
+                />
+                <div
+                  ref={unfiledSegmentRef}
+                  data-testid="unfiled-segment"
+                  data-drop-active={unfiledDropping ? 'true' : undefined}
+                  role="tab"
+                  aria-selected={!activeFolder}
+                  tabIndex={!activeFolder ? 0 : -1}
+                  onKeyDown={handleSegmentKeyDown}
+                  onPointerDown={() => {
                     // Every fresh press re-arms the click suppression a
-                    // finished drag left behind — also when the segment
-                    // cannot become a drag source (editing, protected).
+                    // finished drag left behind — the unfiled segment is not
+                    // a drag source, so its press has no other handler.
+                    // (The primary-button drag guard lives in beginCardDrag.)
                     suppressClickRef.current = false
-                    // Inline naming owns the segment; no drag while
-                    // editing. The pinned Utilities segment is not
-                    // draggable.
-                    if (isEditing || isProtected) return
-                    beginCardDrag(
-                      { kind: 'folder', id: folder.id },
-                      e,
-                      '[data-folder-segment]'
-                    )
                   }}
                   onClick={() => {
-                    if (isEditing) return
                     if (suppressClickRef.current) {
                       suppressClickRef.current = false
                       return
                     }
-                    setActiveFolderView(folder.id)
+                    setActiveFolderView(null)
                   }}
-                  style={
-                    cardOffset !== 0
-                      ? { transform: `translateX(${cardOffset}px)` }
-                      : undefined
-                  }
                   className={cn(
-                    'group/segment relative flex min-w-0 flex-1 cursor-pointer select-none items-center justify-center gap-1 truncate rounded-md px-2 py-1.5 text-[13px]',
-                    suppressTransition
-                      ? 'transition-none'
-                      : 'transition-[background-color,transform] duration-200',
-                    isActive
-                      ? 'bg-(--pnds-card) font-medium text-(--pnds-text) shadow-sm'
+                    'relative z-10 flex min-w-0 flex-[1_1_auto] cursor-pointer items-center justify-center truncate rounded-md px-2 py-1.5 text-[13px] transition-colors duration-200',
+                    'focus-visible:outline-2 focus-visible:outline-(--pnds-accent) focus-visible:outline-offset-1',
+                    !activeFolder
+                      ? 'font-medium text-(--pnds-text)'
                       : 'text-(--pnds-text)/55 hover:text-(--pnds-text)/85',
-                    // Hidden, not removed: its slot is what the yielding
-                    // segments slide over while the clone represents it.
-                    isDraggedSegment && 'invisible',
-                    // Project-over-segment drop hint (join gesture).
-                    isDropHover &&
+                    unfiledDropping &&
                       'bg-(--pnds-accent)/15 ring-1 ring-(--pnds-accent)/50'
                   )}
                 >
-                  {isEditing ? (
-                    /* v1.1.2 T6: the new-folder gesture and ⌘R rename in
-                     * place — Enter/blur commit, Esc cancel (spec issue
-                     * #10). */
-                    <InlineNameInput
-                      testId="folder-name-input"
-                      value={folder.name}
-                      className="min-w-0 flex-1 truncate rounded-md border border-(--pnds-text)/15 bg-(--pnds-text)/5 px-1.5 py-0.5 text-center text-[13px] text-(--pnds-text) outline-none"
-                      onCommit={commitFolderName}
-                      onCancel={cancelFolderName}
-                    />
-                  ) : (
-                    <>
-                      {/* "使用中" indicator: the running project lives in
-                          this folder (spec issue #4). */}
-                      {inUse && (
-                        <span
-                          data-testid="folder-in-use-dot"
-                          aria-label={t('sidebar.folderInUse')}
-                          title={t('sidebar.folderInUse')}
-                          className="h-1.5 w-1.5 shrink-0 rounded-full bg-(--pnds-accent)"
+                  {t('sidebar.unfiled')}
+                </div>
+                {projectFolders.map((folder, folderIndex) => {
+                  // Editing covers both the creation gesture (editingFolderId)
+                  // and ⌘R / the context-menu rename (renameTarget) — the
+                  // edit lives inside the segment.
+                  const isEditing =
+                    editingFolderId === folder.id ||
+                    (renameTarget?.kind === 'folder' &&
+                      renameTarget.id === folder.id)
+                  // v1.1.2 T7: the Utilities folder is permanent — its menu
+                  // rename/delete disable with the reason, it is never
+                  // draggable, and it pins last.
+                  const isProtected = isProtectedFolder(folder.id)
+                  const isActive = activeFolderId === folder.id
+                  const inUse =
+                    sessionLive &&
+                    currentProject !== null &&
+                    folder.projectPaths.includes(currentProject.path)
+                  // A folder drag yields its siblings exactly like a project
+                  // drag, horizontally (spec issue #9: 文件夹卡在文件夹区内
+                  // 可拖拽排序).
+                  const isDraggedSegment =
+                    drag?.kind === 'folder' && drag.id === folder.id
+                  const isDropHover = folderDropIndex === folderIndex
+                  const cardOffset =
+                    folderInsertionIndex === null || dragFolderIndex < 0
+                      ? 0
+                      : cardShift(
+                          dragFolderIndex,
+                          folderInsertionIndex,
+                          folderIndex,
+                          stride
+                        )
+                  return (
+                    <div
+                      key={folder.id}
+                      ref={node => {
+                        if (node) segmentRefs.current.set(folder.id, node)
+                        else segmentRefs.current.delete(folder.id)
+                      }}
+                      data-testid="folder-segment"
+                      data-folder-segment={folder.id}
+                      data-drop-active={isDropHover ? 'true' : undefined}
+                      role="tab"
+                      aria-selected={isActive}
+                      tabIndex={isActive ? 0 : -1}
+                      title={folder.name}
+                      onKeyDown={handleSegmentKeyDown}
+                      onPointerDown={e => {
+                        // Every fresh press re-arms the click suppression a
+                        // finished drag left behind — also when the segment
+                        // cannot become a drag source (editing, protected,
+                        // secondary button).
+                        suppressClickRef.current = false
+                        // Inline naming owns the segment; no drag while
+                        // editing. The pinned Utilities segment is not
+                        // draggable.
+                        if (isEditing || isProtected) return
+                        beginCardDrag(
+                          { kind: 'folder', id: folder.id },
+                          e,
+                          '[data-folder-segment]'
+                        )
+                      }}
+                      onClick={() => {
+                        if (isEditing) return
+                        if (suppressClickRef.current) {
+                          suppressClickRef.current = false
+                          return
+                        }
+                        setActiveFolderView(folder.id)
+                      }}
+                      style={
+                        cardOffset !== 0
+                          ? { transform: `translateX(${cardOffset}px)` }
+                          : undefined
+                      }
+                      className={cn(
+                        'group/segment relative z-10 flex min-w-0 flex-[1_1_auto] cursor-pointer select-none items-center justify-center gap-1 truncate rounded-md px-2 py-1.5 text-[13px]',
+                        'focus-visible:outline-2 focus-visible:outline-(--pnds-accent) focus-visible:outline-offset-1',
+                        suppressTransition
+                          ? 'transition-none'
+                          : 'transition-[color,background-color,transform] duration-200',
+                        isActive
+                          ? 'font-medium text-(--pnds-text)'
+                          : 'text-(--pnds-text)/55 hover:text-(--pnds-text)/85',
+                        // Hidden, not removed: its slot is what the yielding
+                        // segments slide over while the clone represents it.
+                        isDraggedSegment && 'invisible',
+                        // Project-over-segment drop hint (join gesture).
+                        isDropHover &&
+                          'bg-(--pnds-accent)/15 ring-1 ring-(--pnds-accent)/50'
+                      )}
+                    >
+                      {isEditing ? (
+                        /* v1.1.2 T6: the new-folder gesture and ⌘R rename in
+                         * place — Enter/blur commit, Esc cancel (spec issue
+                         * #10). */
+                        <InlineNameInput
+                          testId="folder-name-input"
+                          value={folder.name}
+                          className="min-w-0 flex-1 truncate rounded-md border border-(--pnds-text)/15 bg-(--pnds-text)/5 px-1.5 py-0.5 text-center text-[13px] text-(--pnds-text) outline-none"
+                          onCommit={commitFolderName}
+                          onCancel={cancelFolderName}
                         />
+                      ) : (
+                        <>
+                          {/* "使用中" indicator: the running project lives in
+                              this folder (spec issue #4). */}
+                          {inUse && (
+                            <span
+                              data-testid="folder-in-use-dot"
+                              aria-label={t('sidebar.folderInUse')}
+                              title={t('sidebar.folderInUse')}
+                              className="h-1.5 w-1.5 shrink-0 rounded-full bg-(--pnds-accent)"
+                            />
+                          )}
+                          <span
+                            data-testid="folder-name"
+                            className="truncate text-(--pnds-text)/85"
+                          >
+                            {folder.name}
+                          </span>
+                        </>
                       )}
-                      <span
-                        data-testid="folder-name"
-                        className="truncate text-(--pnds-text)/85"
-                      >
-                        {folder.name}
-                      </span>
-                      {isProtected ? null : (
-                        <button
-                          type="button"
-                          aria-label={t('sidebar.deleteFolder')}
-                          onClick={e => {
-                            e.stopPropagation()
-                            setPendingDeleteFolderId(folder.id)
-                          }}
-                          className="w-3.5 shrink-0 text-(--pnds-text)/50 opacity-0 transition-opacity group-hover/segment:opacity-100 hover:text-(--pnds-text)"
-                        >
-                          <X size={12} />
-                        </button>
-                      )}
-                    </>
+                    </div>
+                  )
+                })}
+              </div>
+            </ContextMenuTrigger>
+            {/* v1.2.2 (issue #28): folder management menu. The track and
+                the unfiled segment offer creation only; a folder segment
+                adds rename (the same InlineNameInput ⌘R enters) and delete
+                (the existing confirm dialog). The cap (#26) and the
+                Utilities protection disable their items with the reason
+                spelled out beneath — a disabled item must say why. */}
+            <ContextMenuContent
+              data-testid="folder-context-menu"
+              onCloseAutoFocus={handleMenuCloseAutoFocus}
+            >
+              <ContextMenuItem
+                data-testid="menu-new-folder"
+                disabled={foldersAtCap}
+                onSelect={() => {
+                  pendingMenuActionRef.current = handleNewFolder
+                }}
+              >
+                <div className="flex w-full flex-col gap-0.5">
+                  <span className="flex items-center gap-2">
+                    <FolderPlus />
+                    {t('sidebar.newFolder')}
+                  </span>
+                  {foldersAtCap && (
+                    <span className="pl-6 text-xs leading-snug font-normal text-(--pnds-text)/45">
+                      {t('sidebar.folderLimitReached', {
+                        limit: FOLDER_LIMIT,
+                      })}
+                    </span>
                   )}
                 </div>
-              )
-            })}
-          </div>
+              </ContextMenuItem>
+              {menuFolder && (
+                <>
+                  <ContextMenuSeparator />
+                  <ContextMenuItem
+                    data-testid="menu-rename-folder"
+                    disabled={menuFolderProtected}
+                    onSelect={() => {
+                      pendingMenuActionRef.current = () =>
+                        startFolderRename(menuFolder.id)
+                    }}
+                  >
+                    <div className="flex w-full flex-col gap-0.5">
+                      <span className="flex items-center gap-2">
+                        <Pencil />
+                        {t('sidebar.renameFolder')}
+                        <ContextMenuShortcut>⌘R</ContextMenuShortcut>
+                      </span>
+                      {menuFolderProtected && (
+                        <span className="pl-6 text-xs leading-snug font-normal text-(--pnds-text)/45">
+                          {t('sidebar.utilitiesProtected')}
+                        </span>
+                      )}
+                    </div>
+                  </ContextMenuItem>
+                  <ContextMenuItem
+                    data-testid="menu-delete-folder"
+                    variant="destructive"
+                    disabled={menuFolderProtected}
+                    onSelect={() => {
+                      pendingMenuActionRef.current = () =>
+                        setPendingDeleteFolderId(menuFolder.id)
+                    }}
+                  >
+                    <div className="flex w-full flex-col gap-0.5">
+                      <span className="flex items-center gap-2">
+                        <Trash2 />
+                        {t('sidebar.deleteFolder')}
+                      </span>
+                      {menuFolderProtected && (
+                        <span className="pl-6 text-xs leading-snug font-normal text-(--pnds-text)/45">
+                          {t('sidebar.utilitiesProtected')}
+                        </span>
+                      )}
+                    </div>
+                  </ContextMenuItem>
+                </>
+              )}
+            </ContextMenuContent>
+          </ContextMenu>
           <button
             type="button"
             data-testid="add-project-button"
@@ -1098,25 +1390,6 @@ export function Sidebar({
             className="shrink-0 rounded-md p-1 text-(--pnds-text)/70 hover:bg-(--pnds-text)/5 hover:text-(--pnds-text) disabled:opacity-50"
           >
             <Plus size={14} />
-          </button>
-          <button
-            type="button"
-            data-testid="new-folder-button"
-            aria-label={newFolderLabel}
-            title={newFolderLabel}
-            onClick={handleNewFolder}
-            disabled={foldersAtCap}
-            className={cn(
-              'shrink-0 rounded-md p-1 transition-opacity',
-              // v1.2.1 (issue #26): at the cap the button stays visible
-              // (not hover-revealed) and dimmed — the disabled state must
-              // be discoverable, with the tooltip explaining it.
-              foldersAtCap
-                ? 'cursor-not-allowed text-(--pnds-text)/40 opacity-60'
-                : 'text-(--pnds-text)/70 opacity-0 group-hover/switch:opacity-100 hover:bg-(--pnds-text)/5 hover:text-(--pnds-text)'
-            )}
-          >
-            <FolderPlus size={14} />
           </button>
         </div>
 

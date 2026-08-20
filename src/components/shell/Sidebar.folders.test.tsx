@@ -5,6 +5,7 @@ import {
   waitFor,
   within,
   createFolderOrFail,
+  openFolderContextMenu,
 } from '@/test/test-utils'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -28,6 +29,8 @@ const THIRD_PATH = '/Users/test/Another Score'
 /**
  * v1.1.2 T1 (issue #5): folder basics — creation with inline naming,
  * the two-segment top-level layout, deletion semantics and persistence.
+ * Since v1.2.2 (issue #28) creation and deletion enter through the
+ * right-click context menu.
  */
 describe('Sidebar folders (v1.1.2)', () => {
   beforeEach(() => {
@@ -44,14 +47,18 @@ describe('Sidebar folders (v1.1.2)', () => {
     useSessionStore.getState().resetSession()
   })
 
-  it('creates a folder from the title button and names it inline (Enter)', async () => {
+  it('creates a folder from the context menu and names it inline (Enter)', async () => {
     const user = userEvent.setup()
     render(<Sidebar variant="static" />)
 
-    await user.click(screen.getByTestId('new-folder-button'))
+    const menu = await openFolderContextMenu(
+      screen.getByTestId('unfiled-segment')
+    )
+    fireEvent.click(within(menu).getByTestId('menu-new-folder'))
 
-    // Creation immediately enters inline naming with the default name.
-    const input = screen.getByTestId('folder-name-input')
+    // Creation (a macrotask after the menu closes) immediately enters
+    // inline naming with the default name.
+    const input = await screen.findByTestId('folder-name-input')
     expect(input).toHaveValue('New Folder')
     expect(input).toHaveFocus()
 
@@ -74,8 +81,14 @@ describe('Sidebar folders (v1.1.2)', () => {
     const user = userEvent.setup()
     render(<Sidebar variant="static" />)
 
-    await user.click(screen.getByTestId('new-folder-button'))
-    await user.type(screen.getByTestId('folder-name-input'), 'Nope{Escape}')
+    const menu = await openFolderContextMenu(
+      screen.getByTestId('unfiled-segment')
+    )
+    fireEvent.click(within(menu).getByTestId('menu-new-folder'))
+    await user.type(
+      await screen.findByTestId('folder-name-input'),
+      'Nope{Escape}'
+    )
 
     expect(screen.queryByTestId('folder-segment')).not.toBeInTheDocument()
     expect(useProjectStore.getState().projectFolders).toEqual([])
@@ -98,7 +111,7 @@ describe('Sidebar folders (v1.1.2)', () => {
     expect(screen.getByTestId('unfiled-segment')).toBeInTheDocument()
   })
 
-  it('deleting a folder confirms, then returns its projects to ungrouped', async () => {
+  it('deleting from the menu confirms, then returns its projects to ungrouped', async () => {
     const user = userEvent.setup()
     const folderId = createFolderOrFail('Set list')
     useProjectStore.getState().moveProjectToFolder(folderId, OTHER_PATH)
@@ -109,11 +122,10 @@ describe('Sidebar folders (v1.1.2)', () => {
     // Members are hidden from the top segment while grouped.
     expect(screen.getAllByTestId('project-entry')).toHaveLength(1)
 
-    fireEvent.click(
-      within(screen.getByTestId('folder-segment')).getByRole('button', {
-        name: /delete folder/i,
-      })
+    const menu = await openFolderContextMenu(
+      screen.getByTestId('folder-segment')
     )
+    fireEvent.click(within(menu).getByTestId('menu-delete-folder'))
 
     // Confirmation copy spells out the ungrouped fallback.
     const dialog = await screen.findByRole('alertdialog')

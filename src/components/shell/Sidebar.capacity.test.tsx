@@ -3,7 +3,9 @@ import {
   screen,
   fireEvent,
   waitFor,
+  within,
   mockBoundingClientRect,
+  openFolderContextMenu,
 } from '@/test/test-utils'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import {
@@ -36,13 +38,14 @@ vi.mock('sonner', () => ({
 const LOOSE_PATH = '/Users/test/Loose Score'
 
 /**
- * v1.2.1 (issue #26): the sidebar's capacity UX derives entirely from the
- * store — the FOLDERS "+" disables (with an explaining tooltip) when the
- * folder area reaches its cap, and a project blocked by a full directory
- * surfaces the store's refusal as a warning. The cap arithmetic itself is
- * covered by the project-store capacity tests.
+ * v1.2.1 (issue #26), v1.2.2 (issue #28): the sidebar's capacity UX
+ * derives entirely from the store — the context menu's "New folder"
+ * disables with an explaining reason when the folder area reaches its
+ * cap, and a project blocked by a full directory surfaces the store's
+ * refusal as a warning. The cap arithmetic itself is covered by the
+ * project-store capacity tests.
  */
-describe('Sidebar capacity caps (v1.2.1, issue #26)', () => {
+describe('Sidebar capacity caps (v1.2.1 #26, menu since v1.2.2 #28)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     useKeyboardStore.getState().setCommandKeyPressed(false)
@@ -59,7 +62,7 @@ describe('Sidebar capacity caps (v1.2.1, issue #26)', () => {
     useSessionStore.getState().resetSession()
   })
 
-  it('disables the FOLDERS "+" at 3 folders (Utilities counts) and explains why', () => {
+  it('disables the menu "New folder" at 3 folders (Utilities counts) and explains why', async () => {
     useProjectStore.setState({
       projectFolders: [
         { id: 'f1', name: 'One', projectPaths: [] },
@@ -69,15 +72,20 @@ describe('Sidebar capacity caps (v1.2.1, issue #26)', () => {
     })
     render(<Sidebar variant="static" />)
 
-    const button = screen.getByTestId('new-folder-button')
-    expect(button).toBeDisabled()
-    expect(button).toHaveAttribute(
-      'title',
+    const menu = await openFolderContextMenu(
+      screen.getByTestId('unfiled-segment')
+    )
+
+    const create = within(menu).getByTestId('menu-new-folder')
+    expect(create).toHaveAttribute('aria-disabled', 'true')
+    // The reason rides along under the label, not behind a tooltip.
+    expect(menu).toHaveTextContent(
       'Folder limit reached (3, including Utilities) — delete a folder to create another.'
     )
+    expect(screen.queryByTestId('folder-name-input')).not.toBeInTheDocument()
   })
 
-  it('keeps the FOLDERS "+" enabled below the cap with its normal tooltip', () => {
+  it('keeps the menu "New folder" enabled below the cap and creating works', async () => {
     useProjectStore.setState({
       projectFolders: [
         { id: 'f1', name: 'One', projectPaths: [] },
@@ -86,9 +94,16 @@ describe('Sidebar capacity caps (v1.2.1, issue #26)', () => {
     })
     render(<Sidebar variant="static" />)
 
-    const button = screen.getByTestId('new-folder-button')
-    expect(button).toBeEnabled()
-    expect(button).toHaveAttribute('title', 'New folder')
+    const menu = await openFolderContextMenu(
+      screen.getByTestId('unfiled-segment')
+    )
+
+    const create = within(menu).getByTestId('menu-new-folder')
+    expect(create).not.toHaveAttribute('aria-disabled', 'true')
+    fireEvent.click(create)
+
+    const input = await screen.findByTestId('folder-name-input')
+    expect(input).toHaveValue('New Folder')
   })
 
   it('dropping a project on a full folder warns and leaves the folder unchanged', async () => {

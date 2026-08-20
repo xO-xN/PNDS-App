@@ -1,5 +1,10 @@
 import React, { useState } from 'react'
-import { render, type RenderOptions } from '@testing-library/react'
+import {
+  fireEvent,
+  render,
+  screen,
+  type RenderOptions,
+} from '@testing-library/react'
 import { I18nextProvider } from 'react-i18next'
 import i18n from '@/i18n/config'
 import { useProjectStore } from '@/store/project-store'
@@ -64,6 +69,37 @@ export function mockBoundingClientRect(
       y: top,
       toJSON: () => ({}),
     }) as DOMRect
+}
+
+/**
+ * Pin an element's layout offsets (offsetLeft/offsetWidth). The folder
+ * switch's sliding pill measures these directly — unlike rects, jsdom
+ * never recomputes them, so tests state the boxes they mean.
+ */
+export function mockOffsets(
+  element: Element,
+  offsets: { left: number; width: number }
+): void {
+  const { left, width } = offsets
+  Object.defineProperty(element, 'offsetLeft', {
+    configurable: true,
+    get: () => left,
+  })
+  Object.defineProperty(element, 'offsetWidth', {
+    configurable: true,
+    get: () => width,
+  })
+}
+
+/**
+ * Right-clicks the folder switch and waits for its Radix context menu to
+ * portal in (v1.2.2, issue #28). Returns the menu content element.
+ */
+export async function openFolderContextMenu(
+  target: HTMLElement
+): Promise<HTMLElement> {
+  fireEvent.contextMenu(target)
+  return await screen.findByTestId('folder-context-menu')
 }
 
 /**

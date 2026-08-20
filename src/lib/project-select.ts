@@ -1,6 +1,7 @@
 import { useProjectStore, visibleProjectPaths } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 import { openProject } from '@/lib/open-project'
+import type { ProjectFolder } from '@/lib/tauri-bindings'
 
 /**
  * The single entry for selecting a project card (spec issue #4: 选中语义
@@ -62,6 +63,23 @@ export function setActiveFolderView(folderId: string | null): void {
     project.clearProject()
   }
   project.setActiveFolderId(folderId)
+}
+
+/**
+ * v1.2.2 (issue #28): ←/→ on the focused switch segment — the next folder
+ * view along the row. The unfiled view is the first stop, the folders
+ * follow in display order, and the ends wrap (the row is short — at most
+ * four stops under the #26 cap — so wrapping beats clamping).
+ */
+export function nextFolderView(
+  folders: ProjectFolder[],
+  activeFolderId: string | null,
+  direction: 1 | -1
+): string | null {
+  const viewIds: (string | null)[] = [null, ...folders.map(folder => folder.id)]
+  const currentIndex = Math.max(0, viewIds.indexOf(activeFolderId))
+  const nextIndex = (currentIndex + direction + viewIds.length) % viewIds.length
+  return viewIds[nextIndex] ?? null
 }
 
 /**

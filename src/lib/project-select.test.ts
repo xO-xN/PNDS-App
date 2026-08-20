@@ -2,7 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { commands } from '@/lib/tauri-bindings'
 import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
-import { moveProjectSelection, selectProject } from './project-select'
+import {
+  moveProjectSelection,
+  nextFolderView,
+  selectProject,
+} from './project-select'
 import type { Manifest } from '@/lib/tauri-bindings'
 
 const manifest: Manifest = {
@@ -268,5 +272,32 @@ describe('moveProjectSelection', () => {
     moveProjectSelection(-1)
 
     expect(commands.preflightProject).not.toHaveBeenCalled()
+  })
+})
+
+describe('nextFolderView (v1.2.2, issue #28)', () => {
+  const folders = [
+    { id: 'f1', name: 'Gig', projectPaths: [] },
+    { id: 'utilities', name: 'Utilities', projectPaths: [] },
+  ]
+
+  it('walks right from unfiled through the folders in display order', () => {
+    expect(nextFolderView(folders, null, 1)).toBe('f1')
+    expect(nextFolderView(folders, 'f1', 1)).toBe('utilities')
+  })
+
+  it('wraps at both ends — the row is a ring', () => {
+    expect(nextFolderView(folders, 'utilities', 1)).toBeNull()
+    expect(nextFolderView(folders, null, -1)).toBe('utilities')
+  })
+
+  it('treats an unknown active id as the unfiled stop', () => {
+    expect(nextFolderView(folders, 'gone', 1)).toBe('f1')
+    expect(nextFolderView(folders, 'gone', -1)).toBe('utilities')
+  })
+
+  it('an empty folder area only ever resolves to unfiled', () => {
+    expect(nextFolderView([], null, 1)).toBeNull()
+    expect(nextFolderView([], null, -1)).toBeNull()
   })
 })

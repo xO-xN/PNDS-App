@@ -6,20 +6,21 @@ Keyboard input reaches the app through two layers: native menu accelerators
 
 ## Current Shortcuts
 
-| Shortcut      | Action                                                 | Layer                             |
-| ------------- | ------------------------------------------------------ | --------------------------------- |
-| Cmd+W         | Close-confirm flow (v1.1.1)                            | Menu (`menu.ts`)                  |
-| Cmd+Q         | Quit-confirm flow with a live session (v1.1.2 T7)      | Menu (`menu.ts`)                  |
-| Cmd+= / Cmd+- | Monitor zoom in/out (v1.1.1)                           | Menu (`menu.ts`)                  |
-| Cmd+0         | Monitor zoom: actual size (v1.1.1)                     | Menu (`menu.ts`)                  |
-| Cmd+Shift+R   | Reload monitor (v1.1.1)                                | Menu (`menu.ts`)                  |
-| Cmd+R         | Rename selected project / folder (v1.1.2)              | Menu + Web (shared `startRename`) |
-| Ctrl+Cmd+F    | Toggle fullscreen (§7.4)                               | Menu (`menu.ts`)                  |
-| Cmd (hold)    | Number badges + sidebar peek while running             | Web (`use-command-keyboard.ts`)   |
-| Cmd+1..9      | Select the Nth visible project (v1.1.2)                | Web (`use-command-keyboard.ts`)   |
-| Cmd+↓ / Cmd+↑ | Next/previous project in the visible order (v1.1.2 T7) | Web (`use-command-keyboard.ts`)   |
-| Enter         | Load (idle) / Change-restart (pending)                 | Web (`SessionActionButton.tsx`)   |
-| Esc           | Close-project confirmation (v1.1.2 T7)                 | Web (`SessionActionButton.tsx`)   |
+| Shortcut      | Action                                                         | Layer                             |
+| ------------- | -------------------------------------------------------------- | --------------------------------- |
+| Cmd+W         | Close-confirm flow (v1.1.1)                                    | Menu (`menu.ts`)                  |
+| Cmd+Q         | Quit-confirm flow with a live session (v1.1.2 T7)              | Menu (`menu.ts`)                  |
+| Cmd+= / Cmd+- | Monitor zoom in/out (v1.1.1)                                   | Menu (`menu.ts`)                  |
+| Cmd+0         | Monitor zoom: actual size (v1.1.1)                             | Menu (`menu.ts`)                  |
+| Cmd+Shift+R   | Reload monitor (v1.1.1)                                        | Menu (`menu.ts`)                  |
+| Cmd+R         | Rename selected project / folder (v1.1.2)                      | Menu + Web (shared `startRename`) |
+| Ctrl+Cmd+F    | Toggle fullscreen (§7.4)                                       | Menu (`menu.ts`)                  |
+| Cmd (hold)    | Number badges + sidebar peek while running                     | Web (`use-command-keyboard.ts`)   |
+| Cmd+1..9      | Select the Nth visible project (v1.1.2)                        | Web (`use-command-keyboard.ts`)   |
+| Cmd+↓ / Cmd+↑ | Next/previous project in the visible order (v1.1.2 T7)         | Web (`use-command-keyboard.ts`)   |
+| ← / →         | Switch folder views on the focused switch segment (v1.2.2 #28) | Web (`Sidebar.tsx` tabs)          |
+| Enter         | Load (idle) / Change-restart (pending)                         | Web (`SessionActionButton.tsx`)   |
+| Esc           | Close-project confirmation (v1.1.2 T7)                         | Web (`SessionActionButton.tsx`)   |
 
 ## Web Cmd Layer (v1.1.2)
 
@@ -66,6 +67,19 @@ one set of conditions:
   stops a live show. A ⌘Esc direct alias was tried and dropped: macOS
   owns that chord (Siri/dictation), so the webview never sees it
   reliably.
+
+## Folder Switch Tabs (v1.2.2, issue #28)
+
+The sidebar's folder switch is a real `tablist`: the segments carry
+`role="tab"` + `aria-selected` with a roving tabindex (only the active
+view is tab-stoppable, so one Tab reaches the switch). While a segment
+holds focus, **←/→** moves to the neighboring folder view through
+`nextFolderView` (`src/lib/project-select.ts`) — unfiled first, the
+folders in display order, Utilities pinned last, both ends wrapping —
+and focus follows onto the newly active tab. The keys live on the
+segments themselves (not the global layer): an inline name edit inside
+a segment stops propagation, so the arrows keep working as caret keys
+while typing.
 
 Guards: text inputs own their keys (`isEditableTarget`), and while a
 Radix dialog or select popup is open (`hasOpenOverlay`) Enter/Esc belong

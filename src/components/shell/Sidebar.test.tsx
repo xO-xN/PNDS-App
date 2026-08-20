@@ -163,11 +163,13 @@ describe('Sidebar', () => {
     expect(screen.getByTestId('settings-card')).toBeInTheDocument()
 
     // The folder switch always renders: the unfiled segment carries the
-    // default view, and the new-folder button exists even before any
-    // folder (the bottom "Open" pill is long gone).
+    // default view; folder management lives in the context menu (issue
+    // #28), so no new-folder button exists anymore (the bottom "Open"
+    // pill is long gone too).
     expect(screen.getByTestId('unfiled-segment')).toBeInTheDocument()
+    expect(screen.getByRole('tablist')).toBeInTheDocument()
     expect(screen.getByTestId('add-project-button')).toBeInTheDocument()
-    expect(screen.getByTestId('new-folder-button')).toBeInTheDocument()
+    expect(screen.queryByTestId('new-folder-button')).not.toBeInTheDocument()
     expect(screen.queryByText('Open')).not.toBeInTheDocument()
   })
 
