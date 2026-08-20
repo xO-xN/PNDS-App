@@ -262,7 +262,12 @@ describe('Sidebar', () => {
     const projectCard = screen.getByTestId('project-entry')
     fireEvent.click(projectCard)
 
-    expect(projectCard.className).toContain('bg-(--pnds-card)')
+    // v1.2.2 (card-selection pill): the pending card takes the selection
+    // branch (hover affordance dropped) and the pill rides under it —
+    // jsdom has no layout, so the branch is the honest observable; the
+    // slide itself is human-verified.
+    expect(projectCard.className).not.toContain('hover:bg-')
+    expect(screen.getByTestId('card-selection-pill')).toBeInTheDocument()
     expect(commands.preflightProject).toHaveBeenCalledWith(PROJECT_PATH)
 
     resolvePreflight()

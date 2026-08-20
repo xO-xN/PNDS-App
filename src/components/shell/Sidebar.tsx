@@ -217,6 +217,46 @@ function applyFolderPill(
   pill.style.width = `${segment.offsetWidth}px`
 }
 
+/**
+ * The folder pill's language applied to the project column (v1.2.2 user
+ * request): the selected card's white highlight is a pill that slides
+ * between cards instead of a per-card background crossfade. Geometry is
+ * imperative like applyFolderPill — translateY/height from the selected
+ * card's offsets inside the (positioned) list content, opacity owned here
+ * (hidden covers project drags, the post-drop snap frames, and the
+ * selection not being in the current view).
+ */
+function applyCardSelectionPill(
+  pill: HTMLDivElement | null,
+  container: HTMLElement | null,
+  selectedPath: string | null,
+  hidden: boolean
+): void {
+  if (!pill) return
+  let card: HTMLElement | null = null
+  if (selectedPath !== null && container !== null) {
+    for (const el of container.querySelectorAll('[data-project-path]')) {
+      if (
+        el instanceof HTMLElement &&
+        el.dataset.projectPath === selectedPath
+      ) {
+        card = el
+        break
+      }
+    }
+  }
+  if (card === null) {
+    // No target (nothing selected, or the selection lives in another
+    // folder view): keep the last geometry — invisible anyway — so the
+    // pill never animates a slide toward a collapsed position.
+    pill.style.opacity = '0'
+    return
+  }
+  pill.style.transform = `translateY(${card.offsetTop}px)`
+  pill.style.height = `${card.offsetHeight}px`
+  pill.style.opacity = hidden ? '0' : '1'
+}
+
 /** The list's scrollable range below its viewport (0 when it fits). */
 function maxScrollOf(container: HTMLElement): number {
   return Math.max(0, container.scrollHeight - container.clientHeight)
@@ -434,6 +474,11 @@ export function Sidebar({
   /** v1.2.2 (issue #28): folder segments by id — pill measurement and the
    * arrow-key focus hand-off address them directly. */
   const segmentRefs = useRef(new Map<string, HTMLDivElement>())
+  /** v1.2.2 (user request after #32): the card-selection pill — geometry
+   * imperative like the folder pill. */
+  const cardPillRef = useRef<HTMLDivElement | null>(null)
+  /** The positioned list content the card pill measures against. */
+  const projectContentRef = useRef<HTMLDivElement | null>(null)
   const cloneRef = useRef<HTMLDivElement | null>(null)
   /** v1.2.1 (issue #25): the independently scrolling project column. */
   const projectScrollRef = useRef<HTMLDivElement | null>(null)
@@ -1036,6 +1081,40 @@ export function Sidebar({
   // no scroll call at all.
   const selectedPath =
     pendingPreflightPath ?? pendingSwitchPath ?? currentProject?.path ?? null
+
+  // The card-selection pill follows that same chain. Every commit
+  // re-applies — selection, view switches, reorders and drag frames all
+  // move cards.
+  useLayoutEffect(() => {
+    applyCardSelectionPill(
+      cardPillRef.current,
+      projectContentRef.current,
+      selectedPath,
+      drag?.kind === 'project' || suppressTransition
+    )
+  })
+  // Resize/fonts reflow the column without moving state — re-measure. (A
+  // resize landing mid-drag would briefly ignore the drag hide; the next
+  // commit corrects it.)
+  useEffect(() => {
+    const reapply = () => {
+      const { pendingPreflightPath, pendingSwitchPath, currentProject } =
+        useProjectStore.getState()
+      applyCardSelectionPill(
+        cardPillRef.current,
+        projectContentRef.current,
+        pendingPreflightPath ??
+          pendingSwitchPath ??
+          currentProject?.path ??
+          null,
+        false
+      )
+    }
+    window.addEventListener('resize', reapply)
+    void document.fonts?.ready.then(reapply)
+    return () => window.removeEventListener('resize', reapply)
+  }, [])
+
   useEffect(() => {
     if (!selectedPath) return
     const container = projectScrollRef.current
@@ -1470,9 +1549,26 @@ export function Sidebar({
           className="min-h-0 flex-1 overflow-y-auto overscroll-contain [mask-composite:add] [-webkit-mask-composite:source-over] [mask-image:linear-gradient(to_bottom,transparent_0px,#000_20px,#000_calc(100%_-_20px),transparent_100%),linear-gradient(to_right,transparent_calc(100%_-_15px),#000_calc(100%_-_15px))]"
         >
           <div
+            ref={projectContentRef}
             data-testid="project-list-content"
-            className="flex flex-col gap-1 pt-[26px] pb-[32px]"
+            className="relative flex flex-col gap-1 pt-[26px] pb-[32px]"
           >
+            {/* The card-selection pill: the folder switch's sliding
+                language on the project column. The white highlight slides
+                between cards instead of crossfading per card; geometry is
+                imperative (applyCardSelectionPill), so it never re-renders
+                the list for a visual shift. */}
+            <div
+              ref={cardPillRef}
+              data-testid="card-selection-pill"
+              aria-hidden="true"
+              className={cn(
+                'pointer-events-none absolute inset-x-5 top-0 z-0 rounded-xl bg-(--pnds-card) shadow-sm',
+                suppressTransition
+                  ? 'transition-none'
+                  : 'transition-[transform,opacity] duration-[280ms] ease-[cubic-bezier(0.4,0.1,0.2,1)]'
+              )}
+            />
             {visiblePaths.map((path, index) => {
               const isCurrent = path === currentProject?.path
               const isDragged = drag?.kind === 'project' && drag.path === path
@@ -1524,12 +1620,18 @@ export function Sidebar({
                   className={cn(
                     // shrink-0: without it the scroll container's flex column
                     // squeezes the cards instead of overflowing into scroll.
-                    'group relative mx-5 flex h-14.25 shrink-0 select-none items-center rounded-xl px-3',
+                    // z-10: the selection pill (z-0) slides under the cards —
+                    // the selected card itself stays transparent; the pill is
+                    // its white highlight (the folder switch's language).
+                    'group relative z-10 mx-5 flex h-14.25 shrink-0 select-none items-center rounded-xl px-3',
                     suppressTransition
                       ? 'transition-none'
                       : 'transition-[background-color,transform] duration-200',
-                    isCurrent || pendingPreflightPath === path
-                      ? 'bg-(--pnds-card) shadow-sm active:bg-(--pnds-bg)'
+                    // selectedPath covers pending preflight, the pending
+                    // switch proposal and the current project — the pill
+                    // slides to whichever card the chain names.
+                    path === selectedPath
+                      ? 'active:bg-(--pnds-bg)'
                       : 'hover:bg-(--pnds-text)/5 active:bg-(--pnds-text)/10',
                     // Hidden, not removed: its slot is what the yielding cards
                     // slide over while the floating clone represents it.

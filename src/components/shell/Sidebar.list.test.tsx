@@ -1,4 +1,10 @@
-import { render, screen, within } from '@/test/test-utils'
+import {
+  act,
+  render,
+  screen,
+  within,
+  createFolderOrFail,
+} from '@/test/test-utils'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { useProjectStore, UTILITIES_FOLDER_ID } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
@@ -120,6 +126,63 @@ describe('Sidebar project list (v1.2.2, issue #29)', () => {
     })
   })
 
+  describe('the card-selection pill', () => {
+    /** jsdom performs no layout — pin the offsets the pill measures. */
+    function pinCardBox(el: HTMLElement, top: number, height: number) {
+      Object.defineProperty(el, 'offsetTop', {
+        configurable: true,
+        get: () => top,
+      })
+      Object.defineProperty(el, 'offsetHeight', {
+        configurable: true,
+        get: () => height,
+      })
+    }
+
+    it('slides to the selected card: translateY/height from its offsets', () => {
+      useProjectStore.setState({
+        currentProject: { path: FIRST_PATH, manifest },
+        preflightStatus: 'ready',
+      })
+      render(<Sidebar variant="static" />)
+
+      // The column's real geometry: 26px top inset, 57px cards, 4px gap.
+      pinCardBox(screen.getByTestId('current-project-card'), 26, 57)
+      const secondCard = screen.getAllByTestId('project-entry')[0]
+      if (!secondCard) throw new Error('Expected a second project card')
+      pinCardBox(secondCard, 87, 57)
+
+      // Selection moves to the second card — the layout effect re-applies.
+      act(() => {
+        useProjectStore.setState({
+          currentProject: { path: SECOND_PATH, manifest },
+        })
+      })
+
+      const pill = screen.getByTestId('card-selection-pill')
+      expect(pill.style.transform).toBe('translateY(87px)')
+      expect(pill.style.height).toBe('57px')
+      expect(pill.style.opacity).toBe('1')
+    })
+
+    it('hides when the selection is not in the visible view', () => {
+      const folderId = createFolderOrFail('Setlist')
+      useProjectStore.setState({
+        currentProject: { path: FIRST_PATH, manifest },
+        preflightStatus: 'ready',
+        projectFolders: [
+          { id: folderId, name: 'Setlist', projectPaths: [SECOND_PATH] },
+        ],
+        activeFolderId: folderId,
+      })
+      render(<Sidebar variant="static" />)
+
+      // FIRST_PATH (the selection) lives outside the folder view — the
+      // pill keeps its last geometry but goes invisible.
+      expect(screen.getByTestId('card-selection-pill').style.opacity).toBe('0')
+    })
+  })
+
   describe('the running bar', () => {
     it('appears on the current card once the session starts, not while idle', () => {
       useProjectStore.setState({
@@ -128,9 +191,11 @@ describe('Sidebar project list (v1.2.2, issue #29)', () => {
       })
       const { rerender } = render(<Sidebar variant="static" />)
 
-      // Idle selection: white card, no bar.
+      // Idle selection: pill-highlighted (the card itself carries no
+      // background — the selection pill slides under it), no bar.
       const idleCard = screen.getByTestId('current-project-card')
-      expect(idleCard.className).toContain('bg-(--pnds-card)')
+      expect(idleCard.className).not.toContain('hover:bg-')
+      expect(screen.getByTestId('card-selection-pill')).toBeInTheDocument()
       expect(
         within(idleCard).queryByTestId('running-bar')
       ).not.toBeInTheDocument()
@@ -157,7 +222,7 @@ describe('Sidebar project list (v1.2.2, issue #29)', () => {
       expect(
         within(stoppedCard).queryByTestId('running-bar')
       ).not.toBeInTheDocument()
-      expect(stoppedCard.className).toContain('bg-(--pnds-card)')
+      expect(stoppedCard.className).not.toContain('hover:bg-')
     })
 
     it('never marks a non-current card, even mid-session', () => {
