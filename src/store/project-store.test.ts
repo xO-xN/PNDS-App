@@ -352,6 +352,56 @@ describe('folder-aware view derivation (v1.1.2 T3, spec issue #7)', () => {
   })
 })
 
+describe('folder name uniqueness (v1.2.2, user feedback)', () => {
+  beforeEach(() => {
+    useProjectStore.setState({
+      currentProject: null,
+      recentProjectPaths: [],
+      projectFolders: [],
+      pendingPreflightPath: null,
+      pendingSwitchPath: null,
+      activeFolderId: null,
+      renameTarget: null,
+      preflightStatus: 'idle',
+      preflightError: null,
+    })
+  })
+
+  it('repeat creations suffix the default name instead of colliding', () => {
+    const store = useProjectStore.getState()
+    store.createFolder('New Folder')
+    store.createFolder('New Folder')
+    store.createFolder('New Folder')
+
+    expect(useProjectStore.getState().projectFolders.map(f => f.name)).toEqual([
+      'New Folder 3',
+      'New Folder 2',
+      'New Folder',
+    ])
+  })
+
+  it('a rename onto another folder’s name is refused and keeps the old one', () => {
+    const store = useProjectStore.getState()
+    createFolderOrFail('Gig')
+    const b = createFolderOrFail('Tour')
+
+    expect(store.renameFolder(b, 'Gig')).toBe(false)
+    expect(store.renameFolder(b, ' Gig ')).toBe(false) // trimmed compare
+    expect(useProjectStore.getState().projectFolders.map(f => f.name)).toEqual([
+      'Tour',
+      'Gig',
+    ])
+
+    // Re-committing a folder's own name is not a clash.
+    expect(store.renameFolder(b, 'Tour')).toBe(true)
+    expect(store.renameFolder(b, 'Encore')).toBe(true)
+    expect(useProjectStore.getState().projectFolders.map(f => f.name)).toEqual([
+      'Encore',
+      'Gig',
+    ])
+  })
+})
+
 describe('visible reorder from drags (v1.1.2 T4, spec issue #8)', () => {
   let folderId: string
 

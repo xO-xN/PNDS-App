@@ -152,7 +152,8 @@ interface ProjectState {
    * (Utilities counts). A refusal changes nothing.
    */
   createFolder: (name: string) => string | null
-  renameFolder: (id: string, name: string) => void
+  /** true when the rename applied (false: protected or duplicate). */
+  renameFolder: (id: string, name: string) => boolean
   /** Deletes the grouping; member projects return to ungrouped. */
   deleteFolder: (id: string) => void
   /**
@@ -228,6 +229,18 @@ export function visibleProjectPaths(
     return folder ? folder.projectPaths : []
   }
   return ungroupedProjectPaths(recentProjectPaths, folders)
+}
+
+/** v1.2.2 (user feedback): a folder name no other folder holds — the
+ * creation default gets " 2", " 3"… suffixes until it is free (trimmed
+ * comparison). */
+function uniqueFolderName(base: string, folders: ProjectFolder[]): string {
+  const taken = new Set(folders.map(folder => folder.name.trim()))
+  if (!taken.has(base)) return base
+  for (let i = 2; ; i++) {
+    const candidate = `${base} ${i}`
+    if (!taken.has(candidate)) return candidate
+  }
 }
 
 /** Content equality for the small persisted slices — guards and repeat
@@ -403,10 +416,16 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       typeof crypto !== 'undefined' && 'randomUUID' in crypto
         ? crypto.randomUUID()
         : `folder-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    // v1.2.2 (user feedback): the fresh folder never shares a name —
+    // repeat creations pick up " 2", " 3"… instead of colliding.
+    const uniqueName = uniqueFolderName(name, before.projectFolders)
     set(state => ({
       // New folders open at the TOP of the folder area (v1.2.0: they used
       // to append below the bottom-pinned Utilities folder).
-      projectFolders: [{ id, name, projectPaths: [] }, ...state.projectFolders],
+      projectFolders: [
+        { id, name: uniqueName, projectPaths: [] },
+        ...state.projectFolders,
+      ],
     }))
     persistIndexIfChanged(before, get())
     return id
@@ -414,16 +433,22 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
 
   renameFolder: (id, name) => {
     const before = get()
+    // Protected folders keep their name (v1.1.2 T7), and v1.2.2 (user
+    // feedback) so must uniqueness: a rename onto another folder's name
+    // is refused — the switch segments could not be told apart. Both
+    // guards make every entry point (inline commit, ⌘R, Edit menu) a
+    // no-op; the boolean lets the inline path explain the refusal.
+    const clash = before.projectFolders.some(
+      folder => folder.id !== id && folder.name.trim() === name.trim()
+    )
+    if (isProtectedFolder(id) || clash) return false
     set(state => ({
-      // Protected folders keep their name (v1.1.2 T7) — the guard makes
-      // every entry point (inline commit, ⌘R, Edit menu) a silent no-op.
-      projectFolders: isProtectedFolder(id)
-        ? state.projectFolders
-        : state.projectFolders.map(folder =>
-            folder.id === id ? { ...folder, name } : folder
-          ),
+      projectFolders: state.projectFolders.map(folder =>
+        folder.id === id ? { ...folder, name } : folder
+      ),
     }))
     persistIndexIfChanged(before, get())
+    return true
   },
 
   deleteFolder: id => {

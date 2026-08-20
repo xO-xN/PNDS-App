@@ -10,6 +10,7 @@ import {
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { commands } from '@/lib/tauri-bindings'
+import { notifications } from '@/lib/notifications'
 import { useProjectStore, UTILITIES_FOLDER_ID } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 import { Sidebar } from './Sidebar'
@@ -20,6 +21,15 @@ vi.mock('@tauri-apps/plugin-opener', () => ({
 
 vi.mock('sonner', () => ({
   toast: { info: vi.fn(), error: vi.fn() },
+}))
+
+vi.mock('@/lib/notifications', () => ({
+  notifications: {
+    error: vi.fn(),
+    success: vi.fn(),
+    info: vi.fn(),
+    warning: vi.fn(),
+  },
 }))
 
 const PROJECT_PATH = '/Users/test/Inarticulate III'
@@ -109,6 +119,48 @@ describe('Sidebar folders (v1.1.2)', () => {
     const scroller = screen.getByTestId('project-list-scroll')
     expect(scroller).not.toContainElement(screen.getByTestId('folder-segment'))
     expect(screen.getByTestId('unfiled-segment')).toBeInTheDocument()
+  })
+
+  it('repeat creations pick fresh names; renaming onto an existing name is refused', async () => {
+    render(<Sidebar variant="static" />)
+
+    // First creation, committed unchanged.
+    let menu = await openFolderContextMenu(
+      screen.getByTestId('unfiled-segment')
+    )
+    fireEvent.click(within(menu).getByTestId('menu-new-folder'))
+    fireEvent.keyDown(await screen.findByTestId('folder-name-input'), {
+      key: 'Enter',
+    })
+    expect(screen.getByTestId('folder-name')).toHaveTextContent('New Folder')
+
+    // Second creation without typing: the default is taken → suffix 2.
+    menu = await openFolderContextMenu(screen.getByTestId('unfiled-segment'))
+    fireEvent.click(within(menu).getByTestId('menu-new-folder'))
+    fireEvent.keyDown(await screen.findByTestId('folder-name-input'), {
+      key: 'Enter',
+    })
+    // New folders prepend, so the second creation is the first segment.
+    const [newest, oldest] = screen.getAllByTestId('folder-segment')
+    if (!newest || !oldest) throw new Error('Expected both segments')
+    expect(within(newest).getByTestId('folder-name')).toHaveTextContent(
+      'New Folder 2'
+    )
+
+    // Renaming the second onto the first's name: refused with the reason,
+    // the old name stays.
+    menu = await openFolderContextMenu(newest)
+    fireEvent.click(within(menu).getByTestId('menu-rename-folder'))
+    const input = await screen.findByTestId('folder-name-input')
+    await fireEvent.change(input, { target: { value: 'New Folder' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    expect(notifications.warning).toHaveBeenCalledWith(
+      'A folder named “New Folder” already exists.'
+    )
+    expect(within(newest).getByTestId('folder-name')).toHaveTextContent(
+      'New Folder 2'
+    )
   })
 
   it('deleting from the menu confirms, then returns its projects to ungrouped', async () => {

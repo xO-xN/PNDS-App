@@ -31,11 +31,11 @@ unsafe impl Send for ProcessActivity {}
 impl ProcessActivity {
     pub fn begin(reason: &str) -> Self {
         let activity = NSProcessInfo::processInfo().beginActivityWithOptions_reason(
-            // Strong enough to defeat occlusion App Nap for the app
-            // and its children, without keeping the whole machine
-            // awake when the user walks away (idle system sleep stays
-            // allowed).
-            NSActivityOptions::UserInitiatedAllowingIdleSystemSleep,
+            // A live show must keep working while the window is occluded
+            // AND must not let the machine idle to sleep mid-performance:
+            // UserInitiated carries both (occlusion App Nap off, idle
+            // system sleep off).
+            NSActivityOptions::UserInitiated,
             &NSString::from_str(reason),
         );
         Self { activity }

@@ -552,7 +552,11 @@ export function Sidebar({
     if (!id) return
     const name = rawName.trim()
     const store = useProjectStore.getState()
-    if (name) store.renameFolder(id, name)
+    // v1.2.2 (user feedback): a rename onto another folder's name is
+    // refused by the store — say why, keep the old name.
+    if (name && !store.renameFolder(id, name)) {
+      notifications.warning(i18n.t('sidebar.folderNameTaken', { name }))
+    }
     setEditingFolderId(null)
     store.setRenameTarget(null)
   }

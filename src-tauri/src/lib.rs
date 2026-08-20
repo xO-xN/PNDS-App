@@ -169,6 +169,26 @@ pub fn run() {
                 }
             }
 
+            // Coming back from another desktop/space (the window becomes
+            // key again): the webview's JS was suspended while occluded,
+            // so its queued `pnds:session` events lag the backend, and
+            // macOS may have handed the keyboard first responder to the
+            // monitor's out-of-process iframe — killing every
+            // window-level key until the next click. WKWebView does not
+            // reliably surface DOM focus/visibility events for space
+            // switches, so the shell learns about the regain here and
+            // catches up on both fronts.
+            RunEvent::WindowEvent {
+                label,
+                event: WindowEvent::Focused(true),
+                ..
+            } if label == "main" => {
+                use tauri::Emitter;
+                let session = app_handle.state::<crate::project::session::SessionManager>();
+                session.publish(app_handle);
+                let _ = app_handle.emit("pnds:window-focus", ());
+            }
+
             // macOS: Hide the main window instead of quitting so the dock icon can
             // reopen it. On other platforms, the close proceeds normally.
             RunEvent::WindowEvent {

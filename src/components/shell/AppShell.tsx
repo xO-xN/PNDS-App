@@ -61,8 +61,13 @@ export function AppShell() {
       if (!document.hidden) restore()
     }
     document.addEventListener('visibilitychange', handleVisibility)
+    // The Rust-side regain signal (NSWindowDidBecomeKey) — WKWebView
+    // does not reliably surface DOM focus/visibility events for desktop
+    // switches, so lib.rs emits this on Focused(true) instead.
+    const unlistenFocus = listen('pnds:window-focus', restore)
     return () => {
       void unlisten.then(off => off())
+      void unlistenFocus.then(off => off())
       document.removeEventListener('visibilitychange', handleVisibility)
     }
   }, [])

@@ -181,5 +181,6 @@
   "error.releasing": "Releasing…",
   "error.releaseFailed": "Could not release the port",
   "bundle.installFailed": "Could not open the bundle",
-  "sidebar.utilitiesFolder": "Utilities"
+  "sidebar.utilitiesFolder": "Utilities",
+  "sidebar.folderNameTaken": "A folder named “{{name}}” already exists."
 }

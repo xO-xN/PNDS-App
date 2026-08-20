@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { listen } from '@tauri-apps/api/event'
 import { useSessionStore } from '@/store/session-store'
 import { useProjectStore } from '@/store/project-store'
 import { HoverSidebar } from './HoverSidebar'
@@ -64,9 +65,14 @@ export function MonitorView() {
     }
     window.addEventListener('focus', reclaimIfLost)
     document.addEventListener('visibilitychange', handleVisibility)
+    // The Rust-side regain signal (NSWindowDidBecomeKey via lib.rs) —
+    // WKWebView does not reliably surface DOM focus events for desktop
+    // switches, the exact case the steal was reported on.
+    const unlisten = listen('pnds:window-focus', reclaimIfLost)
     return () => {
       window.removeEventListener('focus', reclaimIfLost)
       document.removeEventListener('visibilitychange', handleVisibility)
+      void unlisten.then(off => off())
     }
   }, [])
 

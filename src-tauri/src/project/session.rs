@@ -351,6 +351,14 @@ impl SessionManager {
         self.lock().snapshot()
     }
 
+    /// Publishes the current snapshot — the `emit` funnel, opened up for
+    /// the window-focus regain path (see lib.rs): coming back from
+    /// another desktop, the webview's JS was suspended and its queued
+    /// `pnds:session` events lag the backend; this pushes the truth.
+    pub fn publish<R: tauri::Runtime>(&self, app: &AppHandle<R>) {
+        self.emit(app)
+    }
+
     fn emit<R: tauri::Runtime>(&self, app: &AppHandle<R>) {
         let snapshot = {
             let mut inner = self.lock();

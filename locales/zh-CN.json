@@ -181,5 +181,6 @@
   "error.releasing": "正在释放…",
   "error.releaseFailed": "无法释放该端口",
   "bundle.installFailed": "无法打开 bundle",
-  "sidebar.utilitiesFolder": "工具"
+  "sidebar.utilitiesFolder": "工具",
+  "sidebar.folderNameTaken": "已存在同名文件夹“{{name}}”。"
 }
