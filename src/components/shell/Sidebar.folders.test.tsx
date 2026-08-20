@@ -102,10 +102,14 @@ describe('Sidebar folders (v1.1.2)', () => {
 
     render(<Sidebar variant="static" />)
 
-    // OTHER_PATH lives in the folder: only the two ungrouped cards render,
-    // and the folder segment sits in the switch row, not the scroller.
+    // The flat top view lists all three projects — OTHER_PATH included,
+    // wearing its folder tag — and the folder segment sits in the switch
+    // row, not the scroller.
     const entries = screen.getAllByTestId('project-entry')
-    expect(entries).toHaveLength(2)
+    expect(entries).toHaveLength(3)
+    expect(
+      within(entries[1] as HTMLElement).getByTestId('folder-tag')
+    ).toHaveTextContent('Set list')
     const scroller = screen.getByTestId('project-list-scroll')
     expect(scroller).not.toContainElement(screen.getByTestId('folder-segment'))
     expect(screen.getByTestId('unfiled-segment')).toBeInTheDocument()
@@ -119,8 +123,8 @@ describe('Sidebar folders (v1.1.2)', () => {
 
     render(<Sidebar variant="static" />)
 
-    // Members are hidden from the top segment while grouped.
-    expect(screen.getAllByTestId('project-entry')).toHaveLength(1)
+    // Members stay listed at the flat top view, tagged with the folder.
+    expect(screen.getAllByTestId('project-entry')).toHaveLength(3)
 
     const menu = await openFolderContextMenu(
       screen.getByTestId('folder-segment')

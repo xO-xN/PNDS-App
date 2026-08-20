@@ -106,7 +106,7 @@
   "session.starting": "Starting…",
   "session.stopping": "Stopping…",
   "session.error": "Session error",
-  "sidebar.addProject": "Add project",
+  "sidebar.addProject": "Import project",
   "sidebar.pickFailed": "Could not open the file dialog",
   "sidebar.hideSidebar": "Hide sidebar",
   "sidebar.closeWindow": "Close window",

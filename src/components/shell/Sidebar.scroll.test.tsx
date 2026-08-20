@@ -3,6 +3,7 @@ import {
   screen,
   fireEvent,
   createFolderOrFail,
+  mockBoundingClientRect,
 } from '@/test/test-utils'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { commands } from '@/lib/tauri-bindings'
@@ -100,10 +101,33 @@ function seedRunningSession(currentPath: string) {
   })
 }
 
-/** data-project-path of every card asked to scrollIntoView, in call order.
- * jsdom lays out nothing, so the reveal is asserted as a behavior call. */
-let scrolledPaths: string[] = []
-let restoreScrollIntoView: () => void = () => undefined
+/** Every container scrollTo the reveal effect issued, in call order.
+ * jsdom lays out nothing, so the reveal is asserted as a behavior call
+ * against pinned geometry (see pinColumnGeometry). */
+let revealCalls: { element: Element; top: number }[] = []
+let restoreScrollTo: () => void = () => undefined
+
+/** Pins a uniform column inside a 400px-tall scroller: the scroller's
+ * document top is 100, card i's document top is 150 + i*61 (57px card +
+ * 4px gap). Card i's content-relative top is then 50 + i*61 + scrollTop.
+ * Content is 800px tall unless pinned otherwise (maxScroll 400). */
+function pinColumnGeometry(
+  scroller: HTMLElement,
+  options?: { scrollTop?: number; scrollHeight?: number }
+): void {
+  const { scrollTop = 0, scrollHeight = 800 } = options ?? {}
+  mockBoundingClientRect(scroller, { top: 100, height: 400 })
+  scroller.scrollTop = scrollTop
+  Object.defineProperty(scroller, 'scrollHeight', {
+    configurable: true,
+    get: () => scrollHeight,
+  })
+  for (const [i, card] of [
+    ...scroller.querySelectorAll('[data-project-path]'),
+  ].entries()) {
+    mockBoundingClientRect(card, { top: 150 + i * 61 })
+  }
+}
 
 /**
  * v1.2.1 (issue #25): the sidebar's project column becomes its own
@@ -117,16 +141,17 @@ let restoreScrollIntoView: () => void = () => undefined
 describe('Sidebar project-list scrolling (issue #25)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    // setup.ts installs a no-op scrollIntoView; replace it with a recorder
-    // so the reveal can be asserted per card.
-    const original = Element.prototype.scrollIntoView
-    Element.prototype.scrollIntoView = function (this: HTMLElement) {
-      if (this.dataset.projectPath) scrolledPaths.push(this.dataset.projectPath)
+    // setup.ts installs a no-op scrollTo; replace it with a recorder so
+    // the reveal can be asserted per call.
+    const original = Element.prototype.scrollTo
+    const recorder = function (this: Element, options?: ScrollToOptions) {
+      revealCalls.push({ element: this, top: options?.top ?? 0 })
     }
-    restoreScrollIntoView = () => {
-      Element.prototype.scrollIntoView = original
+    Element.prototype.scrollTo = recorder as typeof Element.prototype.scrollTo
+    restoreScrollTo = () => {
+      Element.prototype.scrollTo = original
     }
-    scrolledPaths = []
+    revealCalls = []
     useKeyboardStore.getState().setCommandKeyPressed(false)
     useProjectStore.setState({
       currentProject: null,
@@ -142,7 +167,7 @@ describe('Sidebar project-list scrolling (issue #25)', () => {
   })
 
   afterEach(() => {
-    restoreScrollIntoView()
+    restoreScrollTo()
   })
 
   describe('the project column is its own scroll region', () => {
@@ -225,43 +250,70 @@ describe('Sidebar project-list scrolling (issue #25)', () => {
     })
   })
 
-  describe('keyboard selection scrolls the target card into view', () => {
-    it('Cmd+digit reveals the numbered card', () => {
+  describe('selection scrolls clear of the static fade bands (issue #29)', () => {
+    it('Cmd+digit brings a below-the-fold card to the bottom clear line', () => {
       useProjectStore.setState({ recentProjectPaths: TWELVE_PATHS })
       render(<AppShell />)
 
+      const scroller = screen.getByTestId('project-list-scroll')
+      pinColumnGeometry(scroller, { scrollTop: 0 })
+
       fireEvent.keyDown(window, { key: '9', metaKey: true })
 
-      expect(scrolledPaths).toEqual([pathAt(8)])
+      // Card 8: content top 50 + 8*61 = 538, bottom 595 → target
+      // 595 - 400 + 26 = 221 (bottom edge 26px above the viewport floor).
+      expect(revealCalls).toEqual([{ element: scroller, top: 221 }])
     })
 
-    it('Cmd+↓ reveals each newly selected card along the visible order', () => {
+    it('Cmd+↓ to a clear card moves nothing; a banded card scrolls clear', () => {
       useProjectStore.setState({
         recentProjectPaths: TWELVE_PATHS,
         currentProject: { path: pathAt(0), manifest },
         preflightStatus: 'ready',
       })
       render(<AppShell />)
-      // Mount already reveals the restored selection.
-      expect(scrolledPaths).toEqual([pathAt(0)])
+
+      // Pinned rects never move with the scroll, so a card's viewport
+      // position is fixed by its pin: card i sits at 50 + 61i (bottom
+      // 107 + 61i) — card 1 is clear, cards from 5 down poke into the
+      // bottom band (bottom > 374).
+      const scroller = screen.getByTestId('project-list-scroll')
+      pinColumnGeometry(scroller, { scrollTop: 300 })
+      revealCalls.length = 0
 
       fireEvent.keyDown(window, { key: 'ArrowDown', metaKey: true })
+      expect(revealCalls).toEqual([])
 
-      expect(scrolledPaths).toEqual([pathAt(0), pathAt(1)])
+      // ⌘6 = the sixth card (index 5): content top 655, bottom 712 →
+      // 712 - 400 + 26 = 338.
+      fireEvent.keyDown(window, { key: '6', metaKey: true })
+      expect(revealCalls).toEqual([{ element: scroller, top: 338 }])
+      revealCalls.length = 0
+
+      // ⌘7 (index 6): bottom 773 → 399 — one short of the column end.
+      fireEvent.keyDown(window, { key: '7', metaKey: true })
+      expect(revealCalls).toEqual([{ element: scroller, top: 399 }])
+      revealCalls.length = 0
+
+      // ⌘8 (index 7) wants 460 — clamped to the column's end (800 - 400).
+      fireEvent.keyDown(window, { key: '8', metaKey: true })
+      expect(revealCalls).toEqual([{ element: scroller, top: 400 }])
     })
 
     it('a keyboard switch request during a live session reveals the target card too', async () => {
       seedRunningSession(pathAt(0))
       render(<AppShell />)
-      // Mount revealed the running current project.
-      expect(scrolledPaths).toEqual([pathAt(0)])
 
-      fireEvent.keyDown(window, { key: '2', metaKey: true })
+      const scroller = screen.getByTestId('project-list-scroll')
+      pinColumnGeometry(scroller, { scrollTop: 300 })
+
+      fireEvent.keyDown(window, { key: '7', metaKey: true })
 
       // The switch confirmation opens for the target — its card was
       // revealed even though the selection itself did not move.
       await screen.findByRole('alertdialog')
-      expect(scrolledPaths).toEqual([pathAt(0), pathAt(1)])
+      // ⌘7 = index 6: content bottom 773 → 773 - 400 + 26 = 399.
+      expect(revealCalls).toEqual([{ element: scroller, top: 399 }])
     })
 
     it('a clamped move keeps the selection and scrolls nothing new', () => {
@@ -271,13 +323,34 @@ describe('Sidebar project-list scrolling (issue #25)', () => {
         preflightStatus: 'ready',
       })
       render(<AppShell />)
-      expect(scrolledPaths).toEqual([pathAt(0)])
-      scrolledPaths.length = 0
+
+      const scroller = screen.getByTestId('project-list-scroll')
+      pinColumnGeometry(scroller, { scrollTop: 0 })
+      revealCalls.length = 0
 
       fireEvent.keyDown(window, { key: 'ArrowUp', metaKey: true })
 
-      expect(scrolledPaths).toEqual([])
+      expect(revealCalls).toEqual([])
       expect(useProjectStore.getState().currentProject?.path).toBe(pathAt(0))
+    })
+
+    it('a mouse click avoids into the clear zone like the keyboard does', () => {
+      useProjectStore.setState({ recentProjectPaths: TWELVE_PATHS })
+      render(<AppShell />)
+
+      const scroller = screen.getByTestId('project-list-scroll')
+      pinColumnGeometry(scroller, { scrollTop: 300 })
+      // Re-pin card 0 into the top band: 10px into the viewport (< 26).
+      const [first] = screen.getAllByTestId('project-entry')
+      if (!first) throw new Error('Expected a project card')
+      mockBoundingClientRect(first, { top: 110 })
+      revealCalls.length = 0
+
+      fireEvent.click(first)
+
+      // Content top 110 - 100 + 300 = 310 → 310 - 26 = 284 pushes the
+      // card's top down past the band.
+      expect(revealCalls).toEqual([{ element: scroller, top: 284 }])
     })
 
     it("auto-drilling into the current project's folder reveals the next member inside it", () => {
@@ -292,13 +365,20 @@ describe('Sidebar project-list scrolling (issue #25)', () => {
         preflightStatus: 'ready',
       })
       render(<AppShell />)
-      // The grouped current project has no card in the top-level view.
-      expect(scrolledPaths).toEqual([])
+
+      const scroller = screen.getByTestId('project-list-scroll')
+      pinColumnGeometry(scroller, { scrollTop: 300 })
+      revealCalls.length = 0
 
       fireEvent.keyDown(window, { key: 'ArrowDown', metaKey: true })
 
       expect(useProjectStore.getState().activeFolderId).toBe(folderId)
-      expect(scrolledPaths).toEqual([pathAt(5)])
+      // The folder view mounts fresh card nodes (the members were absent
+      // from the unfiled view, so no rects were pinned for them) — the
+      // reveal's arithmetic is covered above and in the pure tests; here
+      // it must simply have fired on the drill, for the column.
+      expect(revealCalls).toHaveLength(1)
+      expect(revealCalls[0]?.element).toBe(scroller)
     })
   })
 })

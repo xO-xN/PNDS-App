@@ -1,4 +1,4 @@
-import { render, screen, act, fireEvent } from '@/test/test-utils'
+import { render, screen, act, fireEvent, within } from '@/test/test-utils'
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { listen } from '@tauri-apps/api/event'
 import { commands } from '@/lib/tauri-bindings'
@@ -279,12 +279,15 @@ describe('AppShell', () => {
 
     render(<AppShell />)
 
-    // The grouped project is hidden from the top segment; the folder card
-    // renders below it with the persisted name.
+    // The flat top view lists both projects — the member tagged with the
+    // persisted folder name.
     await screen.findByTestId('folder-segment')
     expect(screen.getByTestId('folder-name')).toHaveTextContent('Gig Friday')
     const entries = screen.getAllByTestId('project-entry')
-    expect(entries).toHaveLength(1)
+    expect(entries).toHaveLength(2)
+    expect(
+      within(entries[1] as HTMLElement).getByTestId('folder-tag')
+    ).toHaveTextContent('Gig Friday')
     expect(entries[0]).toHaveAttribute(
       'data-project-path',
       '/Users/test/Inarticulate III'
@@ -325,8 +328,15 @@ describe('AppShell', () => {
     // The folder appears with the two installed tools as members.
     await screen.findByTestId('folder-segment')
     expect(screen.getByTestId('folder-name')).toHaveTextContent('Utilities')
-    // Both tools are folder members, so the top segment stays empty.
-    expect(screen.queryByTestId('project-entry')).not.toBeInTheDocument()
+    // Both tools are folder members — visible in the flat top view, each
+    // tagged with Utilities.
+    const entries = screen.getAllByTestId('project-entry')
+    expect(entries).toHaveLength(2)
+    for (const entry of entries) {
+      expect(within(entry).getByTestId('folder-tag')).toHaveTextContent(
+        'Utilities'
+      )
+    }
     expect(useProjectStore.getState().recentProjectPaths).toEqual(TOOLS)
   })
 })

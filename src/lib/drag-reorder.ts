@@ -1,5 +1,3 @@
-import type { ProjectFolder } from '@/lib/tauri-bindings'
-
 /**
  * v1.1.2 T4 (spec issue #8): pure drop/yield geometry for the sidebar's
  * handwritten pointer drag. The component measures rects and renders; every
@@ -162,31 +160,6 @@ export function cardShift(
     return stride
   }
   return 0
-}
-
-/**
- * Top-level drops reorder only the ungrouped segment, but `recentProjectPaths`
- * stays the master list: rebuild it by swapping each ungrouped slot for the
- * next path of the new order, leaving every folder member in place. A
- * `newUngrouped` that is not a reorder of the current ungrouped set returns
- * the master list untouched.
- */
-export function masterWithUngroupedOrder(
-  master: string[],
-  folders: ProjectFolder[],
-  newUngrouped: string[]
-): string[] {
-  const grouped = new Set(folders.flatMap(folder => folder.projectPaths))
-  const ungrouped = master.filter(path => !grouped.has(path))
-  if (!sameMemberSet(ungrouped, newUngrouped)) return master
-  let cursor = 0
-  return master.map(path => {
-    if (grouped.has(path)) return path
-    const replacement = newUngrouped[cursor]
-    cursor += 1
-    // Unreachable after the set check, but never corrupt the master list.
-    return replacement ?? path
-  })
 }
 
 /**

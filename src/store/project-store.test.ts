@@ -310,8 +310,11 @@ describe('folder-aware view derivation (v1.1.2 T3, spec issue #7)', () => {
     )
   }
 
-  it('top level shows only ungrouped projects, in master-list order', () => {
-    expect(visible()).toEqual(['/a', '/c'])
+  it('the top level is flat — every project in master order (v1.2.2 #29)', () => {
+    // Folder members stay in the list wearing their folder's tag; the
+    // ungrouped-only derivation moved to ungroupedProjectPaths (the
+    // import cap still counts it).
+    expect(visible()).toEqual(['/a', '/b', '/c', '/d'])
   })
 
   it('folder view shows only members, in set order (not master order)', () => {
@@ -326,7 +329,7 @@ describe('folder-aware view derivation (v1.1.2 T3, spec issue #7)', () => {
 
     // Leaving the folder restores the flat top-level numbering source.
     useProjectStore.getState().setActiveFolderId(null)
-    expect(visible()).toEqual(['/a', '/c'])
+    expect(visible()).toEqual(['/a', '/b', '/c', '/d'])
   })
 
   it('deleting the drilled-in folder exits back to the top level', () => {
@@ -373,17 +376,31 @@ describe('visible reorder from drags (v1.1.2 T4, spec issue #8)', () => {
     store.moveProjectToFolder(folderId, '/d')
   })
 
-  it('a top-level drop remaps the master list, folder members keep their slots', () => {
-    useProjectStore.getState().applyVisibleReorder(['/c', '/e', '/a'])
+  it('a top-level drop is the new master order itself (v1.2.2 #29 flat view)', () => {
+    // The top level shows every project, so its reorder needs no remap —
+    // a permutation of the full set commits directly; anything else is
+    // ignored (same guard as the folder branch).
+    useProjectStore
+      .getState()
+      .applyVisibleReorder(['/c', '/b', '/e', '/d', '/a'])
     const state = useProjectStore.getState()
     expect(state.recentProjectPaths).toEqual(['/c', '/b', '/e', '/d', '/a'])
     expect(
       state.projectFolders.find(f => f.id === folderId)?.projectPaths
     ).toEqual(['/b', '/d'])
-    // The ungrouped view now derives the dragged order.
     expect(
       visibleProjectPaths(state.recentProjectPaths, state.projectFolders, null)
-    ).toEqual(['/c', '/e', '/a'])
+    ).toEqual(['/c', '/b', '/e', '/d', '/a'])
+
+    // A set that is not the current visible list changes nothing.
+    useProjectStore.getState().applyVisibleReorder(['/c', '/e', '/a'])
+    expect(useProjectStore.getState().recentProjectPaths).toEqual([
+      '/c',
+      '/b',
+      '/e',
+      '/d',
+      '/a',
+    ])
   })
 
   it('a folder-view drop replaces the member order only', () => {

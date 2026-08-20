@@ -14,6 +14,11 @@ Element.prototype.releasePointerCapture ??= function (this: Element) {
 Element.prototype.scrollIntoView ??= function (this: Element) {
   // jsdom has no scroll layout; Radix only needs the call to exist.
 }
+// jsdom has no Element.scrollTo at all; the sidebar's reveal scroll only
+// needs the call to exist (the scroll tests swap in a recorder).
+Element.prototype.scrollTo ??= function (this: Element) {
+  // no scroll layout in jsdom
+}
 
 // Radix modal layers (context menu, dialogs) set `pointer-events: none` on
 // document.body while open and restore it on unmount — an abrupt test

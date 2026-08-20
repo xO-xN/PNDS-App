@@ -106,7 +106,7 @@
   "session.starting": "正在启动…",
   "session.stopping": "正在停止…",
   "session.error": "会话错误",
-  "sidebar.addProject": "添加工程",
+  "sidebar.addProject": "导入工程",
   "sidebar.pickFailed": "无法打开文件选择窗口",
   "sidebar.hideSidebar": "隐藏侧栏",
   "sidebar.closeWindow": "关闭窗口",

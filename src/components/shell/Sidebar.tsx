@@ -10,6 +10,8 @@ import {
   Pencil,
   Trash2,
   Command,
+  Music,
+  FolderOpen,
 } from 'lucide-react'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import i18n from '@/i18n/config'
@@ -36,6 +38,7 @@ import {
 } from '@/lib/project-select'
 import { startFolderRename } from '@/lib/project-rename'
 import { reclaimIfManagedBundle } from '@/lib/bundle-project'
+import { revealScrollTarget } from '@/lib/list-reveal'
 import { projectDisplayName } from '@/lib/display-names'
 import {
   AUTO_SCROLL_STEP,
@@ -266,6 +269,30 @@ function InlineNameInput({
 }
 
 /**
+ * v1.2.2 (issue #29): the project column's empty state — a centered
+ * linear icon over the copy, dimmed to the icon tier.
+ */
+function ListEmptyState({
+  testId,
+  label,
+  children,
+}: {
+  testId: string
+  label: string
+  children: React.ReactNode
+}) {
+  return (
+    <div
+      data-testid={testId}
+      className="flex shrink-0 flex-col items-center gap-2 px-9 py-4 text-(--pnds-text)/35"
+    >
+      {children}
+      <p className="text-xs">{label}</p>
+    </div>
+  )
+}
+
+/**
  * PNDS sidebar (§10.1, §10.2; Figma "PNDS UI Design"). A floating rounded
  * panel, always open on Welcome/Loading and popping in over the monitor
  * during a performance. Selecting a project only preflights it; starting
@@ -292,6 +319,16 @@ function InlineNameInput({
  * hold no tab stops of their own (the title and ✕ buttons are
  * pointer-only; ⌘1..9 and ⌘↑/↓ are their keyboard path), so Tab walks
  * the top controls → the switch → the settings footer only.
+ *
+ * v1.2.2 (issue #29): the project column polishes up — the import entry
+ * moves to the column's end (icon + label, ghost), the running project
+ * wears a left-edge accent bar (from the session's start — the in-use
+ * dot's semantics; idle selection stays white-card-only), unfiled-view
+ * member cards carry their folder's name at the slot tail (yielding to
+ * the ✕ on hover, ⌘ badges outranking it), the column fades its edges
+ * statically (20px mask, end paddings keep resting content clear), and
+ * selection — keyboard or click, one selectedPath chain — scrolls clear
+ * of the bands via revealScrollTarget (src/lib/list-reveal.ts).
  *
  * Folder drag interactions (v1.1.2 T5, spec issue #9, carried over):
  * dropping a card on a folder segment files it into that folder's end,
@@ -416,6 +453,13 @@ export function Sidebar({
     recentProjectPaths,
     projectFolders,
     activeFolderId
+  )
+  // v1.2.2 (issue #29): membership → folder name, once per render (the
+  // per-card tags read it; membership is exclusive, one entry per path).
+  const folderNameByPath = new Map(
+    projectFolders.flatMap(folder =>
+      folder.projectPaths.map(path => [path, folder.name] as const)
+    )
   )
   const activeFolder =
     activeFolderId === null
@@ -974,13 +1018,14 @@ export function Sidebar({
     return () => window.removeEventListener('resize', reapply)
   }, [])
 
-  // v1.2.1 (issue #25): keyboard selection (⌘↑/⌘↓, ⌘1..9 — and the
-  // auto-drill view switch) can land on a card the independent list scroll
-  // has clipped, so the selected card is scrolled into view. A live
-  // session never changes its selection — the ⌘-key switch request
-  // (pendingSwitchPath) is the keyboard target, and the running current
-  // project is revealed at mount. `nearest` is a no-op for fully visible
-  // cards, keeping click selection on the same path.
+  // v1.2.2 (issue #29, superseding the issue #25 `nearest` reveal): the
+  // selected card must sit fully clear of the column's static fade bands —
+  // keyboard selection (⌘↑/⌘↓, ⌘1..9, auto-drill), the ⌘-key switch
+  // request, the mount-time running project and mouse clicks all flow
+  // through this one selectedPath chain, so every entry point avoids
+  // alike. The math is revealScrollTarget (list-reveal.ts): minimal
+  // movement, clamped to the scroll bounds; a card already clear produces
+  // no scroll call at all.
   const selectedPath =
     pendingPreflightPath ?? pendingSwitchPath ?? currentProject?.path ?? null
   useEffect(() => {
@@ -992,7 +1037,18 @@ export function Sidebar({
         card instanceof HTMLElement &&
         card.dataset.projectPath === selectedPath
       ) {
-        card.scrollIntoView({ block: 'nearest' })
+        const containerRect = container.getBoundingClientRect()
+        const cardRect = card.getBoundingClientRect()
+        const target = revealScrollTarget({
+          cardTop: cardRect.top - containerRect.top + container.scrollTop,
+          cardHeight: cardRect.height,
+          scrollTop: container.scrollTop,
+          viewportHeight: containerRect.height,
+          scrollHeight: container.scrollHeight,
+        })
+        if (target !== null) {
+          container.scrollTo({ top: target, behavior: 'smooth' })
+        }
         return
       }
     }
@@ -1383,32 +1439,38 @@ export function Sidebar({
               )}
             </ContextMenuContent>
           </ContextMenu>
-          <button
-            type="button"
-            data-testid="add-project-button"
-            aria-label={t('sidebar.addProject')}
-            title={t('sidebar.addProject')}
-            onClick={() => void promptOpenProject()}
-            disabled={busy}
-            className="shrink-0 rounded-md p-1 text-(--pnds-text)/70 hover:bg-(--pnds-text)/5 hover:text-(--pnds-text) disabled:opacity-50"
-          >
-            <Plus size={14} />
-          </button>
         </div>
 
         {/* v1.2.1 (issue #25): the project column is its own vertical
             scroll region — overflow cards stay reachable while the folder
-            switch above and the footer below stay fixed. */}
+            switch above and the footer below stay fixed.
+            v1.2.2 (issue #29): the column wears a static 20px fade mask on
+            both edges (never toggled by scrolling) and pads its ends
+            (26px top / 32px bottom) so resting content — the first card,
+            the tail import "+" — naturally sits clear of the bands; the
+            reveal effect scrolls selection out of a band (list-reveal.ts). */}
         <div
           ref={projectScrollRef}
           data-testid="project-list-scroll"
-          className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overscroll-contain pb-1"
+          className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overscroll-contain pt-[26px] pb-[32px] [mask-image:linear-gradient(to_bottom,transparent_0px,#000_20px,#000_calc(100%_-_20px),transparent_100%)]"
         >
           {visiblePaths.map((path, index) => {
             const isCurrent = path === currentProject?.path
             const isDragged = drag?.kind === 'project' && drag.path === path
             const renamingProject =
               renameTarget?.kind === 'project' && renameTarget.path === path
+            // v1.2.2 (issue #29): the running-project bar shares the
+            // folder segment dot's semantics — from the moment the session
+            // starts, not only once ready; an idle selection stays
+            // white-card-only.
+            const showRunningBar = isCurrent && sessionLive
+            // v1.2.2 (issue #29): in the unfiled view, a member card wears
+            // its folder's name at the slot tail (membership is exclusive,
+            // one folder max); folder views name everything already.
+            const folderTag =
+              activeFolderId === null
+                ? (folderNameByPath.get(path) ?? null)
+                : null
             const cardOffset =
               projectInsertionIndex === null || dragProjectIndex < 0
                 ? 0
@@ -1462,6 +1524,16 @@ export function Sidebar({
                   isDragged && 'invisible'
                 )}
               >
+                {/* v1.2.2 (issue #29): the running project's left-edge accent
+                    bar — rounded, inset from the card's corners (the
+                    placement prototype's 3px/14px spec). */}
+                {showRunningBar && (
+                  <span
+                    data-testid="running-bar"
+                    aria-hidden="true"
+                    className="absolute top-3.5 bottom-3.5 left-1.5 w-[3px] rounded-[2px] bg-(--pnds-accent)"
+                  />
+                )}
                 {/* Left slot keeps the centered title's optical axis; the
                   whole card is the drag trigger (v1.1.2 T5). */}
                 <span className="w-5 shrink-0" aria-hidden="true" />
@@ -1488,8 +1560,11 @@ export function Sidebar({
                   </button>
                 )}
 
-                {/* Right slot: ⌘N hint while Cmd is held (v1.1.2), else ✕
-                  remove from history — never for the open project */}
+                {/* Right slot: ⌘N hint while Cmd is held (v1.1.2) — the
+                  highest priority — else the folder tag (issue #29)
+                  cross-fading with the ✕ on hover. The current card keeps
+                  its tag (it has no ✕); its slot just stays empty beyond
+                  the tag. */}
                 {showBadge ? (
                   <span
                     data-testid="project-number-badge"
@@ -1500,36 +1575,74 @@ export function Sidebar({
                       {index + 1}
                     </span>
                   </span>
-                ) : isCurrent ? (
-                  <span className="w-5 shrink-0" />
                 ) : (
-                  <button
-                    type="button"
-                    aria-label={t('sidebar.removeFromHistory')}
-                    tabIndex={-1}
-                    onClick={e => {
-                      e.stopPropagation()
-                      handleRemove(path)
-                    }}
-                    className="w-5 shrink-0 text-(--pnds-text)/50 opacity-0 transition-opacity hover:text-(--pnds-text) group-hover:opacity-100"
-                  >
-                    <X size={14} />
-                  </button>
+                  <>
+                    {folderTag !== null && (
+                      <span
+                        data-testid="folder-tag"
+                        className="max-w-24 shrink-0 truncate text-[11px] font-manrope text-(--pnds-text)/45 transition-opacity group-hover:opacity-0"
+                      >
+                        {folderTag}
+                      </span>
+                    )}
+                    {isCurrent ? (
+                      <span className="w-5 shrink-0" />
+                    ) : (
+                      <button
+                        type="button"
+                        aria-label={t('sidebar.removeFromHistory')}
+                        tabIndex={-1}
+                        onClick={e => {
+                          e.stopPropagation()
+                          handleRemove(path)
+                        }}
+                        className="w-5 shrink-0 text-(--pnds-text)/50 opacity-0 transition-opacity hover:text-(--pnds-text) group-hover:opacity-100"
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
+                  </>
                 )}
               </div>
             )
           })}
 
-          {!activeFolder && recentProjectPaths.length === 0 && (
-            <p className="px-9 py-3 text-center text-xs text-(--pnds-text)/50">
-              {t('sidebar.noProjects')}
-            </p>
-          )}
-          {activeFolder && visiblePaths.length === 0 && (
-            <p className="px-9 py-3 text-center text-xs text-(--pnds-text)/50">
-              {t('sidebar.folderEmpty')}
-            </p>
-          )}
+          {/* v1.2.2 (issue #29): empty states carry a centered linear icon
+              alongside the existing copy. */}
+          {visiblePaths.length === 0 &&
+            (activeFolder ? (
+              <ListEmptyState
+                testId="folder-empty"
+                label={t('sidebar.folderEmpty')}
+              >
+                <FolderOpen size={26} strokeWidth={1.8} aria-hidden="true" />
+              </ListEmptyState>
+            ) : (
+              <ListEmptyState
+                testId="no-projects-empty"
+                label={t('sidebar.noProjects')}
+              >
+                <Music size={26} strokeWidth={1.8} aria-hidden="true" />
+              </ListEmptyState>
+            ))}
+
+          {/* v1.2.2 (issue #29): the import entry lives at the column's
+              end — "add to the list" belongs to the list. The end padding
+              keeps it clear of the fade band at full scroll; with no
+              projects it follows the empty state. Same promptOpenProject
+              as the ⌘O menu path. */}
+          <button
+            type="button"
+            data-testid="add-project-button"
+            aria-label={t('sidebar.addProject')}
+            title={t('sidebar.addProject')}
+            onClick={() => void promptOpenProject()}
+            disabled={busy}
+            className="mx-auto mt-1.5 mb-1 flex shrink-0 items-center gap-1.5 rounded-[9px] bg-(--pnds-text)/5 px-[18px] py-1.5 text-xs text-(--pnds-text)/60 transition-colors hover:bg-(--pnds-text)/10 hover:text-(--pnds-text) disabled:opacity-50"
+          >
+            <Plus size={14} />
+            {t('sidebar.addProject')}
+          </button>
         </div>
       </nav>
 

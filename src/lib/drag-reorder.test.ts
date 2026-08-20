@@ -6,7 +6,6 @@ import {
   insertionIndexFor,
   reorderedList,
   cardShift,
-  masterWithUngroupedOrder,
   pointInRect,
   projectDropAt,
   folderDropAt,
@@ -16,13 +15,6 @@ import {
   AUTO_SCROLL_EDGE,
   AUTO_SCROLL_STEP,
 } from './drag-reorder'
-import type { ProjectFolder } from '@/lib/tauri-bindings'
-
-/** A folder with the given members (ids are irrelevant to the geometry). */
-function folder(paths: string[]): ProjectFolder {
-  return { id: 'f1', name: 'Set list', projectPaths: paths }
-}
-
 describe('drag-reorder (v1.1.2 T4, spec issue #8)', () => {
   describe('hoveredHalf — midpoint drop rule', () => {
     it('above the midpoint drops before, at or below drops after', () => {
@@ -201,29 +193,6 @@ describe('drag-reorder (v1.1.2 T4, spec issue #8)', () => {
 
     it('the dragged card itself never shifts (the clone represents it)', () => {
       expect(cardShift(2, 0, 2, STRIDE)).toBe(0)
-    })
-  })
-
-  describe('masterWithUngroupedOrder — top-level drops keep folder slots', () => {
-    it('remaps the master list so the ungrouped segment matches the new order', () => {
-      const master = ['/a', '/b', '/c', '/d', '/e']
-      const folders = [folder(['/b', '/d'])]
-      // Ungrouped [a, c, e] dragged to [c, e, a].
-      expect(
-        masterWithUngroupedOrder(master, folders, ['/c', '/e', '/a'])
-      ).toEqual(['/c', '/b', '/e', '/d', '/a'])
-    })
-
-    it('returns the same reference when the new set is not the old ungrouped set', () => {
-      const master = ['/a', '/b', '/c']
-      const folders = [folder(['/b'])]
-      expect(masterWithUngroupedOrder(master, folders, ['/a'])).toBe(master)
-      expect(masterWithUngroupedOrder(master, folders, ['/a', '/b'])).toBe(
-        master
-      )
-      expect(
-        masterWithUngroupedOrder(master, folders, ['/a', '/c', '/x'])
-      ).toBe(master)
     })
   })
 

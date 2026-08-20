@@ -141,10 +141,11 @@ describe('Sidebar capacity caps (v1.2.1 #26, menu since v1.2.2 #28)', () => {
       `This list already holds the maximum of ${PROJECT_LIMIT_PER_DIRECTORY} projects — remove one before adding another.`
     )
     // The refusal changed nothing: the folder stayed at 30, the dragged
-    // project is still ungrouped and in the history.
+    // project is still ungrouped and in the history (the flat view lists
+    // all 31 cards, members included).
     const state = useProjectStore.getState()
     expect(state.projectFolders[0]?.projectPaths).toEqual(members)
     expect(state.recentProjectPaths).toEqual([LOOSE_PATH, ...members])
-    expect(screen.getAllByTestId('project-entry')).toHaveLength(1)
+    expect(screen.getAllByTestId('project-entry')).toHaveLength(31)
   })
 })
