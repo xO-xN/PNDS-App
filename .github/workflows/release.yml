@@ -66,6 +66,42 @@ jobs:
           releaseBody: |
             ## PNDS ${{ github.ref_name || inputs.version }}
 
+            ### What's New in V1.2.2 — folders as a switch & a fully tuned sidebar
+
+            **Folders are a switch now**
+            - **The folder switch** — folders live in a segmented control at the top of the sidebar: the track fills the row, segment widths follow their names, and a white pill slides between them. Home lists ungrouped projects; every folder is one click (or one key) away. The old breadcrumb drill-in is gone.
+            - **Right-click to manage** — new / rename / delete live on the segment's context menu (rename shares ⌘R); the built-in Utilities folder stays pinned last and protected. The switch caps at 3 folders and 30 projects per folder, with the reason shown when disabled; folder names can never collide — repeat creations pick " 2", " 3"… and a clashing rename refuses.
+            - **Real tab semantics** — the segments are a tablist with a roving tabindex (one Tab reaches the switch); ←/→ on a focused segment cycles views.
+            - **Filing by drag** — drop a project on a folder segment to file it, on the Home segment to return it; the pill fades out during the drag and back in at the landing.
+
+            **One Cmd-arrow grid**
+            - **⌘← / ⌘→ switch folder views** — clamped at both ends (Home is not left, the last folder is not right), through the same entry as a segment click. **⌘↑ / ⌘↓** keep walking the visible order, so the four Cmd arrows navigate folder × project as one grid. (⌘←/⌘→ briefly adjusted volume during the beta; that role is gone — ⌘M keeps mute, the slider keeps fine control.)
+
+            **Project list, polished**
+            - **The selection is a sliding pill** — the white highlight glides between cards instead of crossfading per card, and snaps into place (never slides from stale geometry) when a folder switch replaced the list.
+            - **Tail import** — the "+" import entry moved to the end of the list; the sidebar header is copy-only.
+            - **The running project reads at a glance** — an accent bar on its card from the moment the session starts; an idle selection stays a plain white card.
+            - **Fade bands with equal rights** — static 20px fades at both ends of the list; a keyboard-selected card scrolls clear of them exactly like a clicked one, with minimal movement.
+            - **Independent scrolling** — the project list scrolls on its own again, and cards keep full height inside the scroller. Cards left the Tab order: the switch is the one stop.
+
+            **The settings audio pair**
+            - **Click-to-mute speaker** — click to mute (the restore value is remembered), click again to restore; dragging to 0 reads as muted and leaving 0 releases it. Mute is session-only — every show starts at the known default 80%.
+            - **Redrawn volume slider** — thin groove, accent fill, white knob; disabled honestly (external/none mode, no session, >2-channel fixed gain), and it never steals your cursor — the arrow stays an arrow.
+            - **⌘M mutes** — the menu accelerator claims the key from macOS's hide; emergency silence works under any dialog.
+
+            **Interaction consistency**
+            - One arrow cursor everywhere, one shared accent focus ring (keyboard-only), press feedback on every control (cards darken, buttons micro-shrink), and `prefers-reduced-motion` swaps the new animations for instant transitions.
+
+            **Reliability**
+            - The session reports ready only after the master startup stage actually confirms; the monitor can no longer steal keyboard focus when it loads; occlusion and switch catch-ups no longer stall loading or the ⌘ layer.
+
+            ### What's New in V1.2.0 — settings, ports & the creator distribution loop
+            - **Settings panel (⌘,)** — language, ports with occupant identity and one-click release, developer tools, and About in one scrolling page.
+            - **`.pnds` bundles** — Pack Project turns a directory project into a single-file bundle; double-click or drop to install and run. Trust-confirmation dialogs are gone — adding a project goes straight to preflight.
+            - **Compile SynthDef** — one click compiles `supercollider/source/*.scd` enforcing the naming contract; failures surface sclang output verbatim.
+            - **Global sample-rate preference** — the app-hosted scsynth always boots at the app-level rate (Settings → Audio).
+            - **Logging** — frontend events land in the app log file; rotation grew to ~2 MB so a full performance cycle survives.
+
             ### What's New in V1.1.2 — the performer-ready sidebar
             - **Performance folders (set lists)** — group projects into one-level folders; click to drill in with a breadcrumb, an "in use" dot marks the folder holding the running project. Dropping a project on a folder files it in; dropping a member on the breadcrumb returns it to the ungrouped list; folders sort by dragging.
             - **⌘ number selection** — hold Cmd to reveal ⌘1..⌘9 badges over the visible projects and pick one by number; a folder view numbers only that folder's members. While a session runs, holding Cmd also peeks the sidebar out over the monitor.
