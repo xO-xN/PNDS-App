@@ -84,6 +84,11 @@ while typing.
 Guards: text inputs own their keys (`isEditableTarget`), and while a
 Radix dialog or select popup is open (`hasOpenOverlay`) Enter/Esc belong
 to the overlay — the global layer never fires underneath a confirm flow.
+The alias listens in the **capture phase** and stops propagation when it
+fires (v1.2.2 #29 feedback): focus on a settings control — the device
+select, say — must not swallow Enter into opening its popup before the
+alias runs; a bubble-phase window listener only ever saw the key after
+Radix had acted on it.
 
 In every confirmation dialog the primary (filled/dark) action carries
 `autoFocus`, so Enter activates it and Esc cancels. Radix's FocusScope

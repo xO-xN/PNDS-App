@@ -65,11 +65,17 @@ export function SessionActionButton() {
       if (running && !pendingChanges) return
       if (running || loadable) {
         event.preventDefault()
+        // v1.2.2 (#29 feedback): capture-phase + stopPropagation — a
+        // focused control must not swallow the alias. With focus on the
+        // device select, a bubble-phase window listener ran only after
+        // Radix had opened the popup (hasOpenOverlay then bailed), so
+        // the first Enter opened the popup instead of Change.
+        event.stopPropagation()
         void (running ? restart() : start())
       }
     }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
+    window.addEventListener('keydown', handleKeyDown, true)
+    return () => window.removeEventListener('keydown', handleKeyDown, true)
   }, [running, busy, pendingChanges, loadable])
 
   // Full-bleed footer: the card clips the bottom corners, so no radius

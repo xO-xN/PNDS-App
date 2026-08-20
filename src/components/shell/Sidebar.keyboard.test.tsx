@@ -374,6 +374,26 @@ describe('Cmd keyboard layer (v1.1.2)', () => {
       expect(useSessionStore.getState().pendingChanges).toBe(false)
     })
 
+    it('Enter fires Change even while the device select holds focus (#29 feedback)', async () => {
+      seedRunningSession(FIRST_PATH)
+      useSessionStore.setState({ pendingChanges: true })
+      render(<AppShell />)
+
+      // The settings rows render synth / device / LAN selects in order;
+      // focus sits on the device one, exactly as after a mouse change.
+      const deviceSelect = screen.getAllByRole('combobox')[1]
+      if (!deviceSelect) throw new Error('Expected the device select')
+      fireEvent.keyDown(deviceSelect, { key: 'Enter' })
+
+      // The alias runs in the capture phase: Change happens, and the
+      // select's own Enter (opening its popup) never fires.
+      await waitFor(() => {
+        expect(commands.stopProject).toHaveBeenCalled()
+      })
+      expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+      expect(useSessionStore.getState().pendingChanges).toBe(false)
+    })
+
     it('Enter is inert while the switch confirmation dialog is open', async () => {
       seedRunningSession(FIRST_PATH)
       render(<AppShell />)

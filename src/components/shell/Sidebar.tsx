@@ -488,6 +488,12 @@ export function Sidebar({
       currentProject
     )
 
+  /** v1.2.2 (user feedback on #29): the protected folder's name localizes
+   * at display time — the persisted index keeps the canonical
+   * "Utilities", the zh UI reads 工具. */
+  const folderDisplayName = (folder: { id: string; name: string }): string =>
+    isProtectedFolder(folder.id) ? t('sidebar.utilitiesFolder') : folder.name
+
   /** Share: open the monitor page in the default external browser. */
   const handleShare = async () => {
     if (!running || !lanIp || !monitorPort) return
@@ -1269,7 +1275,7 @@ export function Sidebar({
                       role="tab"
                       aria-selected={isActive}
                       tabIndex={isActive ? 0 : -1}
-                      title={folder.name}
+                      title={folderDisplayName(folder)}
                       onKeyDown={handleSegmentKeyDown}
                       onPointerDown={e => {
                         // Every fresh press re-arms the click suppression a
@@ -1344,7 +1350,7 @@ export function Sidebar({
                             data-testid="folder-name"
                             className="truncate text-(--pnds-text)/85"
                           >
-                            {folder.name}
+                            {folderDisplayName(folder)}
                           </span>
                         </>
                       )}
@@ -1442,202 +1448,188 @@ export function Sidebar({
             statically and pads its ends (26px top / 32px bottom) so resting
             content — the first card, the tail import "+" — naturally sits
             clear of the bands; the reveal effect scrolls selection out of a
-            band (list-reveal.ts). The fade rides on overlay gradient strips,
-            NOT a mask on the scroller: a mask also fades the native overlay
-            scrollbar (user feedback on #29), so the strips stop short of the
-            scrollbar lane on the right. */}
-        <div className="relative min-h-0 flex-1">
+            band (list-reveal.ts). The fade is a two-layer mask on the
+            scroller (user feedback on #29): a mask needs no color matching,
+            so the translucent overlay sidebar composites correctly, and the
+            second layer keeps the right scrollbar lane unmasked — the
+            native indicator must not fade. */}
+        <div
+          ref={projectScrollRef}
+          data-testid="project-list-scroll"
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain [mask-composite:add] [-webkit-mask-composite:source-over] [mask-image:linear-gradient(to_bottom,transparent_0px,#000_20px,#000_calc(100%_-_20px),transparent_100%),linear-gradient(to_right,transparent_calc(100%_-_15px),#000_calc(100%_-_15px))]"
+        >
           <div
-            ref={projectScrollRef}
-            data-testid="project-list-scroll"
-            className="h-full overflow-y-auto overscroll-contain"
+            data-testid="project-list-content"
+            className="flex flex-col gap-1 pt-[26px] pb-[32px]"
           >
-            <div
-              data-testid="project-list-content"
-              className="flex flex-col gap-1 pt-[26px] pb-[32px]"
-            >
-              {visiblePaths.map((path, index) => {
-                const isCurrent = path === currentProject?.path
-                const isDragged = drag?.kind === 'project' && drag.path === path
-                const renamingProject =
-                  renameTarget?.kind === 'project' && renameTarget.path === path
-                // v1.2.2 (issue #29): the running-project bar shares the
-                // folder segment dot's semantics — from the moment the session
-                // starts, not only once ready; an idle selection stays
-                // white-card-only.
-                const showRunningBar = isCurrent && sessionLive
-                const cardOffset =
-                  projectInsertionIndex === null || dragProjectIndex < 0
-                    ? 0
-                    : cardShift(
-                        dragProjectIndex,
-                        projectInsertionIndex,
-                        index,
-                        stride
-                      )
-                const showBadge = commandKeyPressed && index < 9
-                return (
-                  <div
-                    key={path}
-                    data-testid={
-                      isCurrent ? 'current-project-card' : 'project-entry'
+            {visiblePaths.map((path, index) => {
+              const isCurrent = path === currentProject?.path
+              const isDragged = drag?.kind === 'project' && drag.path === path
+              const renamingProject =
+                renameTarget?.kind === 'project' && renameTarget.path === path
+              // v1.2.2 (issue #29): the running-project bar shares the
+              // folder segment dot's semantics — from the moment the session
+              // starts, not only once ready; an idle selection stays
+              // white-card-only.
+              const showRunningBar = isCurrent && sessionLive
+              const cardOffset =
+                projectInsertionIndex === null || dragProjectIndex < 0
+                  ? 0
+                  : cardShift(
+                      dragProjectIndex,
+                      projectInsertionIndex,
+                      index,
+                      stride
+                    )
+              const showBadge = commandKeyPressed && index < 9
+              return (
+                <div
+                  key={path}
+                  data-testid={
+                    isCurrent ? 'current-project-card' : 'project-entry'
+                  }
+                  data-project-path={path}
+                  onPointerDown={e => {
+                    // Renaming owns the card; the drag must not steal focus.
+                    if (renamingProject) return
+                    beginCardDrag(
+                      { kind: 'project', path },
+                      e,
+                      '[data-project-path]'
+                    )
+                  }}
+                  onClick={() => {
+                    if (suppressClickRef.current) {
+                      suppressClickRef.current = false
+                      return
                     }
-                    data-project-path={path}
-                    onPointerDown={e => {
-                      // Renaming owns the card; the drag must not steal focus.
-                      if (renamingProject) return
-                      beginCardDrag(
-                        { kind: 'project', path },
-                        e,
-                        '[data-project-path]'
-                      )
-                    }}
-                    onClick={() => {
-                      if (suppressClickRef.current) {
-                        suppressClickRef.current = false
-                        return
-                      }
-                      selectProject(path)
-                    }}
-                    style={
-                      cardOffset !== 0
-                        ? { transform: `translateY(${cardOffset}px)` }
-                        : undefined
-                    }
-                    className={cn(
-                      // shrink-0: without it the scroll container's flex column
-                      // squeezes the cards instead of overflowing into scroll.
-                      'group relative mx-5 flex h-14.25 shrink-0 select-none items-center rounded-xl px-3',
-                      suppressTransition
-                        ? 'transition-none'
-                        : 'transition-[background-color,transform] duration-200',
-                      isCurrent || pendingPreflightPath === path
-                        ? 'bg-(--pnds-card) shadow-sm'
-                        : 'hover:bg-(--pnds-text)/5',
-                      // Hidden, not removed: its slot is what the yielding cards
-                      // slide over while the floating clone represents it.
-                      isDragged && 'invisible'
-                    )}
-                  >
-                    {/* v1.2.2 (issue #29): the running project's left-edge accent
+                    selectProject(path)
+                  }}
+                  style={
+                    cardOffset !== 0
+                      ? { transform: `translateY(${cardOffset}px)` }
+                      : undefined
+                  }
+                  className={cn(
+                    // shrink-0: without it the scroll container's flex column
+                    // squeezes the cards instead of overflowing into scroll.
+                    'group relative mx-5 flex h-14.25 shrink-0 select-none items-center rounded-xl px-3',
+                    suppressTransition
+                      ? 'transition-none'
+                      : 'transition-[background-color,transform] duration-200',
+                    isCurrent || pendingPreflightPath === path
+                      ? 'bg-(--pnds-card) shadow-sm'
+                      : 'hover:bg-(--pnds-text)/5',
+                    // Hidden, not removed: its slot is what the yielding cards
+                    // slide over while the floating clone represents it.
+                    isDragged && 'invisible'
+                  )}
+                >
+                  {/* v1.2.2 (issue #29): the running project's left-edge accent
                     bar — rounded, inset from the card's corners (the
                     placement prototype's 3px/14px spec). */}
-                    {showRunningBar && (
-                      <span
-                        data-testid="running-bar"
-                        aria-hidden="true"
-                        className="absolute top-3.5 bottom-3.5 left-1.5 w-[3px] rounded-[2px] bg-(--pnds-accent)"
-                      />
-                    )}
-                    {/* Left slot keeps the centered title's optical axis; the
+                  {showRunningBar && (
+                    <span
+                      data-testid="running-bar"
+                      aria-hidden="true"
+                      className="absolute top-3.5 bottom-3.5 left-1.5 w-[3px] rounded-[2px] bg-(--pnds-accent)"
+                    />
+                  )}
+                  {/* Left slot keeps the centered title's optical axis; the
                   whole card is the drag trigger (v1.1.2 T5). */}
-                    <span className="w-5 shrink-0" aria-hidden="true" />
+                  <span className="w-5 shrink-0" aria-hidden="true" />
 
-                    {renamingProject ? (
-                      /* v1.1.2 T6: ⌘R inline rename — autofocus, select-all,
-                       * Enter/blur commit, Esc cancel (spec issue #10). */
-                      <InlineNameInput
-                        testId="project-name-input"
-                        value={cardName(path)}
-                        className="flex-1 truncate rounded-lg border border-(--pnds-text)/15 bg-(--pnds-text)/5 px-2 py-1 text-center text-[15px] text-(--pnds-text) outline-none"
-                        onCommit={commitProjectName}
-                        onCancel={cancelProjectName}
-                      />
-                    ) : (
-                      <button
-                        type="button"
-                        disabled={busy || (isCurrent && running)}
-                        title={path}
-                        tabIndex={-1}
-                        className="flex-1 truncate text-center text-[15px] text-(--pnds-text)/85 disabled:opacity-60"
-                      >
-                        {cardName(path)}
-                      </button>
-                    )}
+                  {renamingProject ? (
+                    /* v1.1.2 T6: ⌘R inline rename — autofocus, select-all,
+                     * Enter/blur commit, Esc cancel (spec issue #10). */
+                    <InlineNameInput
+                      testId="project-name-input"
+                      value={cardName(path)}
+                      className="flex-1 truncate rounded-lg border border-(--pnds-text)/15 bg-(--pnds-text)/5 px-2 py-1 text-center text-[15px] text-(--pnds-text) outline-none"
+                      onCommit={commitProjectName}
+                      onCancel={cancelProjectName}
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={busy || (isCurrent && running)}
+                      title={path}
+                      tabIndex={-1}
+                      className="flex-1 truncate text-center text-[15px] text-(--pnds-text)/85 disabled:opacity-60"
+                    >
+                      {cardName(path)}
+                    </button>
+                  )}
 
-                    {/* Right slot: ⌘N hint while Cmd is held (v1.1.2), else ✕
+                  {/* Right slot: ⌘N hint while Cmd is held (v1.1.2), else ✕
                   remove from history — never for the open project. */}
-                    {showBadge ? (
-                      <span
-                        data-testid="project-number-badge"
-                        className="flex w-5 shrink-0 items-center justify-center gap-0.5 text-(--pnds-text)/45"
-                      >
-                        <Command
-                          size={10}
-                          strokeWidth={2.5}
-                          aria-hidden="true"
-                        />
-                        <span className="translate-y-[0.5px] text-[10px] leading-none font-semibold">
-                          {index + 1}
-                        </span>
+                  {showBadge ? (
+                    <span
+                      data-testid="project-number-badge"
+                      className="flex w-5 shrink-0 items-center justify-center gap-0.5 text-(--pnds-text)/45"
+                    >
+                      <Command size={10} strokeWidth={2.5} aria-hidden="true" />
+                      <span className="translate-y-[0.5px] text-[10px] leading-none font-semibold">
+                        {index + 1}
                       </span>
-                    ) : isCurrent ? (
-                      <span className="w-5 shrink-0" />
-                    ) : (
-                      <button
-                        type="button"
-                        aria-label={t('sidebar.removeFromHistory')}
-                        tabIndex={-1}
-                        onClick={e => {
-                          e.stopPropagation()
-                          handleRemove(path)
-                        }}
-                        className="w-5 shrink-0 text-(--pnds-text)/50 opacity-0 transition-opacity hover:text-(--pnds-text) group-hover:opacity-100"
-                      >
-                        <X size={14} />
-                      </button>
-                    )}
-                  </div>
-                )
-              })}
+                    </span>
+                  ) : isCurrent ? (
+                    <span className="w-5 shrink-0" />
+                  ) : (
+                    <button
+                      type="button"
+                      aria-label={t('sidebar.removeFromHistory')}
+                      tabIndex={-1}
+                      onClick={e => {
+                        e.stopPropagation()
+                        handleRemove(path)
+                      }}
+                      className="w-5 shrink-0 text-(--pnds-text)/50 opacity-0 transition-opacity hover:text-(--pnds-text) group-hover:opacity-100"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+              )
+            })}
 
-              {/* v1.2.2 (issue #29): empty states carry a centered linear icon
+            {/* v1.2.2 (issue #29): empty states carry a centered linear icon
               alongside the existing copy. */}
-              {!activeFolder && recentProjectPaths.length === 0 && (
-                <ListEmptyState
-                  testId="no-projects-empty"
-                  label={t('sidebar.noProjects')}
-                >
-                  <Music size={26} strokeWidth={1.8} aria-hidden="true" />
-                </ListEmptyState>
-              )}
-              {activeFolder && visiblePaths.length === 0 && (
-                <ListEmptyState
-                  testId="folder-empty"
-                  label={t('sidebar.folderEmpty')}
-                >
-                  <FolderOpen size={26} strokeWidth={1.8} aria-hidden="true" />
-                </ListEmptyState>
-              )}
+            {!activeFolder && recentProjectPaths.length === 0 && (
+              <ListEmptyState
+                testId="no-projects-empty"
+                label={t('sidebar.noProjects')}
+              >
+                <Music size={26} strokeWidth={1.8} aria-hidden="true" />
+              </ListEmptyState>
+            )}
+            {activeFolder && visiblePaths.length === 0 && (
+              <ListEmptyState
+                testId="folder-empty"
+                label={t('sidebar.folderEmpty')}
+              >
+                <FolderOpen size={26} strokeWidth={1.8} aria-hidden="true" />
+              </ListEmptyState>
+            )}
 
-              {/* v1.2.2 (issue #29): the import entry lives at the column's
+            {/* v1.2.2 (issue #29): the import entry lives at the column's
               end — "add to the list" belongs to the list. The end padding
               keeps it clear of the fade band at full scroll; with no
               projects it follows the empty state. Same promptOpenProject
               as the ⌘O menu path. */}
-              <button
-                type="button"
-                data-testid="add-project-button"
-                aria-label={t('sidebar.addProject')}
-                title={t('sidebar.addProject')}
-                onClick={() => void promptOpenProject()}
-                disabled={busy}
-                className="mx-auto mt-1.5 mb-1 flex shrink-0 items-center gap-1.5 rounded-[9px] bg-(--pnds-text)/5 px-[18px] py-1.5 text-xs text-(--pnds-text)/60 transition-colors hover:bg-(--pnds-text)/10 hover:text-(--pnds-text) disabled:opacity-50"
-              >
-                <Plus size={14} />
-                {t('sidebar.addProject')}
-              </button>
-            </div>
+            <button
+              type="button"
+              data-testid="add-project-button"
+              aria-label={t('sidebar.addProject')}
+              title={t('sidebar.addProject')}
+              onClick={() => void promptOpenProject()}
+              disabled={busy}
+              className="mx-auto mt-1.5 mb-1 flex shrink-0 items-center gap-1.5 rounded-[9px] bg-(--pnds-text)/5 px-[18px] py-1.5 text-xs text-(--pnds-text)/60 transition-colors hover:bg-(--pnds-text)/10 hover:text-(--pnds-text) disabled:opacity-50"
+            >
+              <Plus size={14} />
+              {t('sidebar.addProject')}
+            </button>
           </div>
-          {/* The static fade strips (see the comment above). */}
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-x-0 right-3 top-0 z-10 h-5 bg-gradient-to-b from-(--pnds-sidebar-bg) to-transparent"
-          />
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-x-0 right-3 bottom-0 z-10 h-5 bg-gradient-to-t from-(--pnds-sidebar-bg) to-transparent"
-          />
         </div>
       </nav>
 
@@ -1673,7 +1665,11 @@ export function Sidebar({
           >
             {drag.kind === 'folder' ? (
               <span className="min-w-0 flex-1 truncate px-1 text-center text-[13px] font-medium text-(--pnds-text)/85">
-                {projectFolders.find(folder => folder.id === drag.id)?.name}
+                {(() => {
+                  const dragged =
+                    projectFolders.find(folder => folder.id === drag.id) ?? null
+                  return dragged ? folderDisplayName(dragged) : ''
+                })()}
               </span>
             ) : (
               <>
@@ -1769,7 +1765,9 @@ export function Sidebar({
             </AlertDialogTitle>
             <AlertDialogDescription>
               {t('sidebar.deleteFolderMessage', {
-                name: pendingDeleteFolder?.name ?? '',
+                name: pendingDeleteFolder
+                  ? folderDisplayName(pendingDeleteFolder)
+                  : '',
               })}
             </AlertDialogDescription>
           </AlertDialogHeader>

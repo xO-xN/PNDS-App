@@ -13,6 +13,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { useProjectStore, UTILITIES_FOLDER_ID } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 import { useKeyboardStore } from '@/store/keyboard-store'
+import i18n from '@/i18n/config'
 import { Sidebar } from './Sidebar'
 
 vi.mock('@tauri-apps/plugin-opener', () => ({
@@ -177,6 +178,26 @@ describe('Sidebar folder switch (v1.2.2, issue #28)', () => {
         .filter(tab => tab.tabIndex === 0)
       expect(tabbables).toHaveLength(1)
       expect(tabbables[0]).toBe(screen.getByTestId('unfiled-segment'))
+    })
+  })
+
+  describe('localized names', () => {
+    it('the protected folder reads 工具 under zh (the index keeps Utilities)', async () => {
+      seedFolders()
+      await i18n.changeLanguage('zh-CN')
+      try {
+        render(<Sidebar variant="static" />)
+
+        const names = screen.getAllByTestId('folder-name')
+        expect(names[0]).toHaveTextContent('Gig')
+        expect(names[1]).toHaveTextContent('工具')
+        // The persisted structure is untouched — only display localizes.
+        expect(useProjectStore.getState().projectFolders[1]?.name).toBe(
+          'Utilities'
+        )
+      } finally {
+        await i18n.changeLanguage('en')
+      }
     })
   })
 

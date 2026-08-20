@@ -180,5 +180,6 @@
   "error.releaseAndRetry": "Release and Retry",
   "error.releasing": "Releasing…",
   "error.releaseFailed": "Could not release the port",
-  "bundle.installFailed": "Could not open the bundle"
+  "bundle.installFailed": "Could not open the bundle",
+  "sidebar.utilitiesFolder": "Utilities"
 }
