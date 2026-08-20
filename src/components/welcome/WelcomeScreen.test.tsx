@@ -1,25 +1,16 @@
-import { render, screen, fireEvent } from '@/test/test-utils'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { promptOpenProject } from '@/lib/open-project'
+import { render, screen } from '@/test/test-utils'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { useProjectStore } from '@/store/project-store'
-import { useSessionStore } from '@/store/session-store'
 import { WelcomeScreen } from './WelcomeScreen'
-
-vi.mock('@/lib/open-project', () => ({
-  promptOpenProject: vi.fn().mockResolvedValue(undefined),
-}))
 
 /**
  * v1.2.0 (spec issue #15): the starting page is copy plus preflight
- * feedback; adding a project ran through the sidebar only. v1.2.2 (issue
- * #31) reverses the copy-only stance: a central accent "Import Project"
- * CTA (same language as the Load button) makes the first import
- * discoverable without knowing the sidebar. It routes through the same
- * promptOpenProject as the list-tail "+" and ⌘O.
+ * feedback. A central "Import Project" CTA (#31) was removed again before
+ * the v1.2.2 release (user call: the hint copy carries the first-use
+ * story) — importing lives in the list-tail entry and ⌘O only.
  */
 describe('WelcomeScreen', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
     useProjectStore.setState({
       currentProject: null,
       recentProjectPaths: [],
@@ -27,56 +18,9 @@ describe('WelcomeScreen', () => {
       preflightStatus: 'idle',
       preflightError: null,
     })
-    useSessionStore.getState().resetSession()
   })
 
-  describe('the central import CTA (v1.2.2, issue #31)', () => {
-    it('renders between the subtitle and the hint block', () => {
-      render(<WelcomeScreen />)
-
-      const button = screen.getByTestId('welcome-import-button')
-      expect(button).toHaveTextContent('Import Project')
-      const subtitle = screen.getByText(
-        'The Platform for Network Digital Score'
-      )
-      const hint = screen.getByText(
-        'Start a PNDS Digital Score by adding a new project'
-      )
-      // #31: the CTA sits after the subtitle and before the hint copy.
-      expect(
-        subtitle.compareDocumentPosition(button) &
-          Node.DOCUMENT_POSITION_FOLLOWING
-      ).toBeTruthy()
-      expect(
-        hint.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_PRECEDING
-      ).toBeTruthy()
-    })
-
-    it('opens the same import flow as the sidebar entry', () => {
-      render(<WelcomeScreen />)
-
-      fireEvent.click(screen.getByTestId('welcome-import-button'))
-
-      expect(vi.mocked(promptOpenProject)).toHaveBeenCalledTimes(1)
-    })
-
-    it('disables while a session is busy, in both busy states', () => {
-      for (const status of ['starting', 'stopping'] as const) {
-        useSessionStore.setState({ sessionStatus: status })
-        const { unmount } = render(<WelcomeScreen />)
-
-        const button = screen.getByTestId('welcome-import-button')
-        expect(button).toBeDisabled()
-        fireEvent.click(button)
-        expect(vi.mocked(promptOpenProject)).not.toHaveBeenCalled()
-
-        unmount()
-        useSessionStore.setState({ sessionStatus: 'idle' })
-      }
-    })
-  })
-
-  it('renders the plain hint copy alongside the CTA', () => {
+  it('renders the plain hint — no interactive open/add control', () => {
     render(<WelcomeScreen />)
 
     expect(
@@ -85,6 +29,7 @@ describe('WelcomeScreen', () => {
     expect(
       screen.getByText('or select a project on the left sidebar')
     ).toBeInTheDocument()
+    expect(screen.queryByRole('button')).not.toBeInTheDocument()
   })
 
   it('shows the checking feedback while preflight runs', () => {

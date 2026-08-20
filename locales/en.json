@@ -89,7 +89,6 @@
   "toast.error.generic": "Something went wrong",
   "welcome.title": "Hi! Welcome to PNDS",
   "welcome.subtitle": "The Platform for Network Digital Score",
-  "welcome.importProject": "Import Project",
   "welcome.hintAdd": "Start a PNDS Digital Score by adding a new project",
   "welcome.hintSelect": "or select a project on the left sidebar",
   "welcome.cmdHint": "Hold the ⌘ key to quickly control the App",

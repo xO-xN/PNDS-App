@@ -4,7 +4,6 @@ import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 import { useWindowStore } from '@/store/window-store'
 import { Sidebar } from './Sidebar'
-import { WelcomeScreen } from '@/components/welcome'
 import type { Manifest } from '@/lib/tauri-bindings'
 
 vi.mock('@tauri-apps/plugin-opener', () => ({
@@ -114,13 +113,6 @@ describe('interaction consistency (v1.2.2, issue #32)', () => {
     ).toContain('focus-visible:opacity-100')
   })
 
-  it('gives the Welcome CTA and the traffic lights the shared ring', () => {
-    render(<WelcomeScreen />)
-    expect(screen.getByTestId('welcome-import-button').className).toContain(
-      'pnds-focus-ring'
-    )
-  })
-
   it('presses: cards and segments darken, plain buttons micro-shrink', () => {
     const { container } = render(<Sidebar variant="static" />)
 
@@ -153,12 +145,5 @@ describe('interaction consistency (v1.2.2, issue #32)', () => {
 
     // No hand cursor anywhere in the rendered sidebar.
     expect(container.querySelector('.cursor-pointer')).toBeNull()
-  })
-
-  it('presses: the Welcome CTA micro-shrinks', () => {
-    render(<WelcomeScreen />)
-    expect(screen.getByTestId('welcome-import-button').className).toContain(
-      'active:scale-[0.98]'
-    )
   })
 })
