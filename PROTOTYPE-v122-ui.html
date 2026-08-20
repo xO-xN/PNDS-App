@@ -1,0 +1,1422 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PNDS v1.2.2 UI 提案 · 放置图（PROTOTYPE — 用完即弃）</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Comfortaa:wght@300..700&family=Manrope:wght@200..800&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      /* ── PNDS tokens（与 App.css 同源）────────────────────────── */
+      :root {
+        --pnds-bg: #eef0f8;
+        --pnds-sidebar-bg: #e2e5f3;
+        --pnds-card: #fff;
+        --pnds-pill: #e8ebf7;
+        --pnds-pill-hover: #dee2f2;
+        --pnds-accent: #5a4ff3;
+        --pnds-accent-hover: #4a3fe0;
+        --pnds-text: #171a2b;
+        --pnds-text-secondary: #5d6484;
+        --pnds-danger: #e11d48;
+        --pnds-warning: #ffb020;
+        --r-win: 16px;
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        font-family:
+          'Comfortaa',
+          -apple-system,
+          'Segoe UI',
+          sans-serif;
+        background: #c8cde0;
+        color: var(--pnds-text);
+        min-height: 100vh;
+        padding: 28px 28px 120px;
+        user-select: none;
+      }
+      .page {
+        display: flex;
+        gap: 28px;
+        justify-content: center;
+        align-items: flex-start;
+        flex-wrap: wrap;
+      }
+      h1 {
+        font-size: 20px;
+        font-weight: 600;
+        text-align: center;
+        margin-bottom: 4px;
+      }
+      .sub {
+        text-align: center;
+        font-size: 12.5px;
+        color: var(--pnds-text-secondary);
+        margin-bottom: 24px;
+      }
+
+      /* ── 模拟 App 窗口 ───────────────────────────────────────── */
+      .window {
+        width: 880px;
+        height: 640px;
+        border-radius: var(--r-win);
+        overflow: hidden;
+        display: flex;
+        background: var(--pnds-bg);
+        box-shadow: 0 24px 60px rgba(23, 26, 43, 0.35);
+        outline: 1px solid rgba(23, 26, 43, 0.06);
+      }
+      .sidebar {
+        width: 320px;
+        height: 100%;
+        background: var(--pnds-sidebar-bg);
+        display: flex;
+        flex-direction: column;
+        position: relative;
+        border-right: 1px solid rgba(23, 26, 43, 0.05);
+      }
+      .monitor {
+        flex: 1;
+        background: #0b0b10;
+        position: relative;
+        background-image: radial-gradient(
+          ellipse at 30% 20%,
+          #1a1a26 0%,
+          #0b0b10 70%
+        );
+      }
+      .title-strip {
+        position: absolute;
+        top: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(0, 0, 0, 0.3);
+        backdrop-filter: blur(12px);
+        color: rgba(255, 255, 255, 0.85);
+        font-size: 12px;
+        font-weight: 500;
+        letter-spacing: 0.05em;
+        padding: 6px 20px;
+        border-radius: 0 0 12px 12px;
+      }
+      .monitor .fake-score {
+        position: absolute;
+        inset: 60px 40px 40px;
+        color: #3d3f52;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        padding: 24px;
+      }
+      .fake-score .stave {
+        height: 1px;
+        background: #2a2c3e;
+        position: relative;
+      }
+      .fake-score .stave::after {
+        content: '';
+        position: absolute;
+        left: 18%;
+        top: -4px;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #4a4d68;
+      }
+
+      /* ── 侧栏内部 ─────────────────────────────────────────────── */
+      .tl-row {
+        height: 56px;
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        padding: 16px 16px 0;
+        flex-shrink: 0;
+      }
+      .lights {
+        display: flex;
+        gap: 8px;
+      }
+      .light {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+      }
+      .ghost {
+        border: 0;
+        background: transparent;
+        color: rgba(23, 26, 43, 0.7);
+        padding: 6px;
+        border-radius: 6px;
+        display: inline-flex;
+        align-items: center;
+        cursor: default;
+        transition:
+          background 0.15s,
+          transform 0.1s;
+      }
+      .ghost:hover {
+        background: rgba(23, 26, 43, 0.05);
+        color: var(--pnds-text);
+      }
+      .ghost:active {
+        transform: scale(0.94);
+      }
+      .ghost svg {
+        width: 15px;
+        height: 15px;
+      }
+
+      .switch-row {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        padding: 8px 20px 8px;
+        flex-shrink: 0;
+      }
+      .track {
+        position: relative;
+        display: flex;
+        align-items: stretch;
+        gap: 0;
+        background: rgba(23, 26, 43, 0.05);
+        border-radius: 8px;
+        padding: 3px;
+      }
+      .segment {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+        padding: 6px 12px;
+        font-size: 13px;
+        border-radius: 6px;
+        white-space: nowrap;
+        color: rgba(23, 26, 43, 0.55);
+        transition: color 0.2s;
+        cursor: default;
+      }
+      .segment:hover {
+        color: rgba(23, 26, 43, 0.85);
+      }
+      .segment.active {
+        color: var(--pnds-text);
+        font-weight: 600;
+      }
+      .segment:focus-visible {
+        outline: 2px solid var(--pnds-accent);
+        outline-offset: 1px;
+      }
+      .pill {
+        position: absolute;
+        top: 3px;
+        bottom: 3px;
+        background: var(--pnds-card);
+        border-radius: 6px;
+        box-shadow: 0 1px 2px rgba(23, 26, 43, 0.12);
+        transition:
+          transform 0.28s cubic-bezier(0.4, 0.1, 0.2, 1),
+          width 0.28s cubic-bezier(0.4, 0.1, 0.2, 1);
+        pointer-events: none;
+        z-index: 0;
+      }
+      .segment {
+        position: relative;
+        z-index: 1;
+      }
+      .in-use-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--pnds-accent);
+        flex-shrink: 0;
+      }
+
+      /* V0（现状）：等宽拉伸 + 活动态直接白底 + 手型指针 + 原生滑杆 */
+      body[data-variant='0'] .track {
+        flex: 1;
+      }
+      body[data-variant='0'] .segment {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        cursor: pointer;
+      }
+      body[data-variant='0'] .segment.active {
+        background: var(--pnds-card);
+        box-shadow: 0 1px 2px rgba(23, 26, 43, 0.12);
+      }
+      body[data-variant='0'] .pill {
+        display: none;
+      }
+      body[data-variant='0'] .center-add {
+        display: none;
+      }
+      body[data-variant='0'] .accent-bar {
+        display: none;
+      }
+      body[data-variant='0'] .tag {
+        display: none;
+      }
+      body[data-variant='0'] .co,
+      body[data-variant='0'] .term {
+        display: none;
+      }
+      body[data-variant='0'] .vslider {
+        -webkit-appearance: auto;
+        appearance: auto;
+      }
+
+      /* V1（提案）：track 撑满、段按内容分配；行内不再有任何 "+" */
+      body:not([data-variant='0']) .track {
+        flex: 1;
+      }
+      body:not([data-variant='0']) .segment {
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      body[data-variant='1'] .row-add,
+      body[data-variant='1'] .row-folder {
+        display: none;
+      }
+      /* 列表双侧淡出（提案·修订）：静态常显、范围缩短到 20px；
+     两端内边距让静止位置天然落在淡出区外——顶：第一张卡起始线
+     低于淡出带；底：导入 "+" 止于淡出带之上。淡出只作用于
+     过渡中的内容，静止内容永远完整。 */
+      body:not([data-variant='0']) .list {
+        padding-top: 26px;
+        padding-bottom: 32px;
+        -webkit-mask-image: linear-gradient(
+          to bottom,
+          transparent 0,
+          #000 20px,
+          #000 calc(100% - 20px),
+          transparent 100%
+        );
+        mask-image: linear-gradient(
+          to bottom,
+          transparent 0,
+          #000 20px,
+          #000 calc(100% - 20px),
+          transparent 100%
+        );
+      }
+      body[data-variant='0'] .mute-btn {
+        pointer-events: none;
+      }
+
+      .list {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        padding: 4px 0;
+        scrollbar-width: thin;
+      }
+      .card {
+        position: relative;
+        height: 57px;
+        flex-shrink: 0;
+        margin: 0 20px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        padding: 0 12px;
+        cursor: default;
+        transition: background 0.15s;
+      }
+      .card:hover {
+        background: rgba(23, 26, 43, 0.05);
+      }
+      .card.current {
+        background: var(--pnds-card);
+        box-shadow: 0 1px 3px rgba(23, 26, 43, 0.1);
+      }
+      .accent-bar {
+        position: absolute;
+        left: 6px;
+        top: 14px;
+        bottom: 14px;
+        width: 3px;
+        border-radius: 2px;
+        background: var(--pnds-accent);
+      }
+      .name {
+        flex: 1;
+        text-align: center;
+        font-size: 15px;
+        color: rgba(23, 26, 43, 0.85);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .slot {
+        width: 20px;
+        flex-shrink: 0;
+        display: flex;
+        justify-content: center;
+      }
+      .tag {
+        font-size: 11px;
+        color: rgba(23, 26, 43, 0.45);
+        transition: opacity 0.15s;
+      }
+      .x {
+        opacity: 0;
+        color: rgba(23, 26, 43, 0.5);
+        transition: opacity 0.15s;
+        background: none;
+        border: 0;
+        cursor: default;
+        padding: 2px;
+      }
+      .x:hover {
+        color: var(--pnds-text);
+      }
+      .x svg {
+        width: 14px;
+        height: 14px;
+        display: block;
+      }
+      .card:hover .tag {
+        opacity: 0;
+      }
+      .card:hover .x {
+        opacity: 1;
+      }
+      .center-add {
+        align-self: center;
+        margin: 6px 0 4px;
+        padding: 6px 18px;
+        border: 0;
+        border-radius: 9px;
+        background: rgba(23, 26, 43, 0.05);
+        color: rgba(23, 26, 43, 0.6);
+        cursor: default;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        font-family: inherit;
+        transition:
+          background 0.15s,
+          transform 0.1s;
+      }
+      .center-add:hover {
+        background: rgba(23, 26, 43, 0.09);
+        color: var(--pnds-text);
+      }
+      .center-add:active {
+        transform: scale(0.97);
+      }
+      .center-add svg {
+        width: 14px;
+        height: 14px;
+      }
+
+      /* ── 设置卡 ──────────────────────────────────────────────── */
+      .settings-wrap {
+        padding: 24px 20px 20px;
+        flex-shrink: 0;
+      }
+      .settings-card {
+        background: var(--pnds-card);
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 1px 3px rgba(23, 26, 43, 0.1);
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 12px 14px 0;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .lbl {
+        width: 48px;
+        flex-shrink: 0;
+        font-size: 11px;
+        color: rgba(23, 26, 43, 0.45);
+      }
+      .field {
+        flex: 1;
+        height: 28px;
+        background: var(--pnds-pill);
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        padding: 0 10px;
+        font-size: 12px;
+        font-family: 'Manrope', sans-serif;
+        transition: background 0.15s;
+      }
+      .field:hover {
+        background: var(--pnds-pill-hover);
+      }
+      .field .chev {
+        margin-left: auto;
+        color: rgba(23, 26, 43, 0.4);
+        font-size: 10px;
+      }
+      .vol-num {
+        width: 28px;
+        text-align: end;
+        font-size: 11px;
+        font-family: 'Manrope', sans-serif;
+        color: rgba(23, 26, 43, 0.7);
+      }
+
+      /* 自定义音量滑杆（提案） */
+      .vslider {
+        -webkit-appearance: none;
+        appearance: none;
+        flex: 1;
+        height: 28px;
+        background: transparent;
+        cursor: default;
+      }
+      .vslider::-webkit-slider-runnable-track {
+        height: 4px;
+        border-radius: 2px;
+        background: linear-gradient(
+          to right,
+          var(--pnds-accent) var(--fill, 80%),
+          var(--pnds-pill) var(--fill, 80%)
+        );
+      }
+      .vslider::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: #fff;
+        margin-top: -5px;
+        box-shadow: 0 1px 3px rgba(23, 26, 43, 0.35);
+      }
+      .vslider:focus-visible {
+        outline: 2px solid var(--pnds-accent);
+        outline-offset: 2px;
+        border-radius: 6px;
+      }
+
+      /* 静音切换按钮（提案）：占用原喇叭图标位 */
+      .mute-btn {
+        border: 0;
+        background: none;
+        color: rgba(23, 26, 43, 0.45);
+        cursor: default;
+        padding: 3px;
+        display: inline-flex;
+        border-radius: 6px;
+        transition:
+          background 0.15s,
+          color 0.15s;
+      }
+      .mute-btn:hover {
+        color: var(--pnds-text);
+        background: rgba(23, 26, 43, 0.05);
+      }
+      .mute-btn:active {
+        transform: scale(0.92);
+      }
+      .mute-btn:focus-visible {
+        outline: 2px solid var(--pnds-accent);
+        outline-offset: 1px;
+      }
+      .mute-btn svg {
+        width: 14px;
+        height: 14px;
+      }
+
+      /* 右键菜单（提案） */
+      .ctxmenu {
+        position: fixed;
+        z-index: 200;
+        background: #fff;
+        border-radius: 10px;
+        box-shadow: 0 8px 30px rgba(23, 26, 43, 0.28);
+        padding: 5px;
+        min-width: 176px;
+        font-size: 13px;
+        display: none;
+        color: var(--pnds-text);
+      }
+      .ctxmenu.open {
+        display: block;
+      }
+      .ctxmenu .mi {
+        padding: 6px 12px;
+        border-radius: 6px;
+        cursor: default;
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+      }
+      .ctxmenu .mi:hover {
+        background: var(--pnds-pill);
+      }
+      .ctxmenu .mi .kbd {
+        color: rgba(23, 26, 43, 0.35);
+        font-size: 11px;
+        font-family: 'Manrope', sans-serif;
+      }
+      .ctxmenu .mi.dis {
+        color: rgba(23, 26, 43, 0.35);
+      }
+      .ctxmenu .mi.dis:hover {
+        background: none;
+      }
+      .ctxmenu .sep {
+        height: 1px;
+        background: rgba(23, 26, 43, 0.08);
+        margin: 4px 8px;
+      }
+      /* V0 滑杆的还原由上方 -webkit-appearance:auto 完成（伪元素样式随之失效） */
+
+      .hr {
+        border: 0;
+        border-top: 1px solid rgba(23, 26, 43, 0.08);
+        margin: 4px 0;
+      }
+      .session-btn {
+        height: 40px;
+        border: 0;
+        background: var(--pnds-danger);
+        color: #fff;
+        font-family: inherit;
+        font-size: 14px;
+        cursor: default;
+        margin: 4px -14px 0;
+        transition:
+          filter 0.15s,
+          transform 0.1s;
+      }
+      .session-btn:hover {
+        filter: brightness(0.94);
+      }
+      .session-btn:active {
+        transform: scale(0.99);
+      }
+
+      /* ── 标注（callout）──────────────────────────────────────── */
+      .co {
+        position: absolute;
+        z-index: 30;
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        background: var(--pnds-accent);
+        color: #fff;
+        font-size: 12px;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow:
+          0 0 0 3px rgba(90, 79, 243, 0.25),
+          0 2px 6px rgba(23, 26, 43, 0.3);
+        font-family: 'Manrope', sans-serif;
+      }
+      .term {
+        position: absolute;
+        z-index: 30;
+        font-size: 11px;
+        padding: 3px 8px;
+        border-radius: 999px;
+        background: #171a2b;
+        color: #fff;
+        white-space: nowrap;
+        font-family: 'Manrope', sans-serif;
+        box-shadow: 0 2px 8px rgba(23, 26, 43, 0.35);
+      }
+      .term::after {
+        content: '';
+        position: absolute;
+        width: 1px;
+        height: 26px;
+        background: #171a2b;
+        top: 100%;
+        left: 8px;
+      }
+      .term.up::after {
+        top: auto;
+        bottom: 100%;
+        height: 26px;
+      }
+
+      /* ── 图例 ─────────────────────────────────────────────────── */
+      .legend {
+        width: 300px;
+        background: #fff;
+        border-radius: 14px;
+        padding: 20px;
+        box-shadow: 0 12px 32px rgba(23, 26, 43, 0.18);
+        font-size: 13px;
+      }
+      .legend h2 {
+        font-size: 15px;
+        margin-bottom: 10px;
+      }
+      .legend ol {
+        padding-left: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 9px;
+        color: #33344a;
+        line-height: 1.5;
+      }
+      .legend b {
+        color: var(--pnds-text);
+      }
+      .legend .try {
+        margin-top: 14px;
+        padding-top: 12px;
+        border-top: 1px dashed rgba(23, 26, 43, 0.15);
+        font-size: 12px;
+        color: var(--pnds-text-secondary);
+        line-height: 1.7;
+      }
+
+      /* ── 底部小面板（Welcome / 空态）─────────────────────────── */
+      .minis {
+        display: flex;
+        gap: 20px;
+        justify-content: center;
+        margin-top: 26px;
+        flex-wrap: wrap;
+      }
+      .mini {
+        background: #fff;
+        border-radius: 14px;
+        overflow: hidden;
+        box-shadow: 0 12px 32px rgba(23, 26, 43, 0.18);
+      }
+      .mini .cap {
+        font-size: 11px;
+        color: #fff;
+        background: #171a2b;
+        padding: 6px 14px;
+        font-family: 'Manrope', sans-serif;
+      }
+      .mini .body {
+        width: 420px;
+        height: 230px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: var(--pnds-bg);
+        gap: 0;
+      }
+      .hero {
+        font-size: 30px;
+        font-weight: 300;
+        letter-spacing: 0.04em;
+      }
+      .hero-sub {
+        font-size: 13px;
+        color: rgba(23, 26, 43, 0.55);
+        margin-top: 8px;
+      }
+      .cta {
+        margin-top: 26px;
+        height: 40px;
+        padding: 0 30px;
+        border: 0;
+        border-radius: 12px;
+        background: var(--pnds-accent);
+        color: #fff;
+        font-size: 14px;
+        font-family: inherit;
+        cursor: default;
+        transition:
+          background 0.15s,
+          transform 0.1s;
+      }
+      .cta:hover {
+        background: var(--pnds-accent-hover);
+      }
+      .cta:active {
+        transform: scale(0.98);
+      }
+      body[data-variant='0'] .cta {
+        display: none;
+      }
+      body[data-variant='0'] .cta-note {
+        display: block;
+      }
+      .cta-note {
+        display: none;
+        margin-top: 26px;
+        font-size: 12px;
+        color: rgba(23, 26, 43, 0.4);
+      }
+      .empty-demo {
+        width: 420px;
+        height: 230px;
+        background: var(--pnds-sidebar-bg);
+        display: flex;
+        flex-direction: column;
+        gap: 26px;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+      }
+      .empty-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        color: rgba(23, 26, 43, 0.35);
+        font-size: 12px;
+      }
+      .empty-item svg {
+        width: 26px;
+        height: 26px;
+      }
+      body[data-variant='0'] .empty-item svg {
+        display: none;
+      }
+      body[data-variant='0'] .empty-item {
+        color: rgba(23, 26, 43, 0.5);
+      }
+      .empty-split {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 50%;
+        border-top: 1px dashed rgba(23, 26, 43, 0.15);
+      }
+
+      /* ── 切换栏 ───────────────────────────────────────────────── */
+      .switcher {
+        position: fixed;
+        left: 50%;
+        bottom: 22px;
+        transform: translateX(-50%);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        z-index: 99;
+        background: #171a2b;
+        color: #fff;
+        border-radius: 999px;
+        padding: 8px 14px;
+        box-shadow: 0 10px 30px rgba(23, 26, 43, 0.45);
+        font-size: 13px;
+      }
+      .switcher button {
+        border: 0;
+        background: rgba(255, 255, 255, 0.12);
+        color: #fff;
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        cursor: default;
+        font-size: 14px;
+        transition: background 0.15s;
+      }
+      .switcher button:hover {
+        background: rgba(255, 255, 255, 0.3);
+      }
+      .switcher .cur {
+        font-family: 'Manrope', sans-serif;
+        min-width: 210px;
+        text-align: center;
+      }
+
+      .hintbar {
+        position: fixed;
+        right: 18px;
+        bottom: 22px;
+        z-index: 99;
+        font-size: 11px;
+        color: rgba(23, 26, 43, 0.55);
+        background: rgba(255, 255, 255, 0.7);
+        padding: 6px 12px;
+        border-radius: 8px;
+        backdrop-filter: blur(6px);
+      }
+    </style>
+  </head>
+  <body data-variant="1">
+    <h1>PNDS v1.2.2 UI 提案 · 放置图</h1>
+    <p class="sub">
+      PROTOTYPE — 用完即弃 · 底部按钮或 ← → 键切换 现状 / 提案 ·
+      图中可点、可悬停、可右键、可拖滑杆
+    </p>
+
+    <div class="page">
+      <!-- ═══ 模拟窗口 ═══ -->
+      <div class="window">
+        <div class="sidebar">
+          <div class="tl-row">
+            <div class="lights">
+              <span class="light" style="background: #ff5f57"></span>
+              <span class="light" style="background: #febc2e"></span>
+              <span class="light" style="background: #28c840"></span>
+            </div>
+            <div style="display: flex; gap: 2px">
+              <button class="ghost" title="Share">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <circle cx="18" cy="5" r="3" />
+                  <circle cx="6" cy="12" r="3" />
+                  <circle cx="18" cy="19" r="3" />
+                  <line x1="8.6" y1="13.5" x2="15.4" y2="17.5" />
+                  <line x1="15.4" y1="6.5" x2="8.6" y2="10.5" />
+                </svg>
+              </button>
+              <button class="ghost" title="Refresh">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M21 12a9 9 0 1 1-2.6-6.4" />
+                  <polyline points="21 3 21 9 15 9" />
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- 文件夹 switch -->
+          <div class="switch-row">
+            <div class="track" id="track">
+              <div class="pill" id="pill"></div>
+              <div class="segment active" tabindex="0">未分组</div>
+              <div class="segment" tabindex="0">Friday</div>
+              <div class="segment" tabindex="0">
+                <span class="in-use-dot" title="使用中"></span>Utilities
+              </div>
+            </div>
+            <!-- V0/V2：行内"导入 +"（V1 隐藏，移去列表末尾） -->
+            <button class="ghost row-add" title="导入工程">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+              >
+                <path d="M5 12h14" />
+                <path d="M12 5v14" />
+              </svg>
+            </button>
+            <!-- 新建文件夹 "+"：V1/V2 都留在 switch 旁 -->
+            <button class="ghost row-folder" title="新建文件夹">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M12 10v6" />
+                <path d="M9 13h6" />
+                <path
+                  d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.7-.9L9.6 3.9A2 2 0 0 0 7.9 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"
+                />
+              </svg>
+            </button>
+          </div>
+
+          <!-- 工程列表 -->
+          <div class="list" id="list">
+            <div class="card current">
+              <span class="accent-bar"></span>
+              <span class="slot"></span>
+              <span class="name">Inarticulate III</span>
+              <span class="slot"></span>
+            </div>
+            <div class="card">
+              <span class="slot"></span>
+              <span class="name">PNDS Score 1</span>
+              <span class="slot"><span class="tag">Friday</span></span>
+            </div>
+            <div class="card">
+              <span class="slot"></span>
+              <span class="name">Another Score</span>
+              <span class="slot"><span class="tag">Friday</span></span>
+            </div>
+            <div class="card">
+              <span class="slot"></span>
+              <span class="name">Solo Piece</span>
+              <span class="slot"
+                ><button class="x" title="从历史移除">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                  >
+                    <path d="M18 6 6 18" />
+                    <path d="m6 6 12 12" />
+                  </svg></button
+              ></span>
+            </div>
+            <div class="card">
+              <span class="slot"></span>
+              <span class="name">Etude No.3</span>
+              <span class="slot"><span class="tag">Friday</span></span>
+            </div>
+            <div class="card">
+              <span class="slot"></span>
+              <span class="name">Warmup Set</span>
+              <span class="slot"><span class="tag">Utilities</span></span>
+            </div>
+            <div class="card">
+              <span class="slot"></span>
+              <span class="name">Duo Sketch</span>
+              <span class="slot"
+                ><button class="x" title="从历史移除">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                  >
+                    <path d="M18 6 6 18" />
+                    <path d="m6 6 12 12" />
+                  </svg></button
+              ></span>
+            </div>
+            <div class="card">
+              <span class="slot"></span>
+              <span class="name">Old Take 4</span>
+              <span class="slot"><span class="tag">Friday</span></span>
+            </div>
+            <!-- V1：导入 + 在列表末尾居中 -->
+            <button class="center-add" title="导入工程">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+              >
+                <path d="M5 12h14" />
+                <path d="M12 5v14" />
+              </svg>
+              导入工程
+            </button>
+          </div>
+
+          <!-- 设置卡 -->
+          <div class="settings-wrap">
+            <div class="settings-card">
+              <div class="row">
+                <span class="lbl" style="width: auto">
+                  <button
+                    class="mute-btn"
+                    id="muteBtn"
+                    title="点击静音；再点恢复原音量"
+                    aria-label="静音切换"
+                  >
+                    <svg
+                      id="volOn"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                      <path d="M15.5 8.5a5 5 0 0 1 0 7" />
+                    </svg>
+                    <svg
+                      id="volOff"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      style="display: none"
+                    >
+                      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                      <line x1="22" y1="9" x2="16" y2="15" />
+                      <line x1="16" y1="9" x2="22" y2="15" />
+                    </svg>
+                  </button>
+                </span>
+                <input
+                  class="vslider"
+                  type="range"
+                  min="0"
+                  max="100"
+                  value="80"
+                  aria-label="音量"
+                />
+                <span class="vol-num" id="volNum">80</span>
+              </div>
+              <hr class="hr" />
+              <div class="row">
+                <span class="lbl">Synth</span>
+                <div class="field">
+                  Internal Synth<span class="chev">▾</span>
+                </div>
+              </div>
+              <div class="row">
+                <span class="lbl">Device</span>
+                <div class="field">
+                  MacBook Pro Speakers<span class="chev">▾</span>
+                </div>
+              </div>
+              <div class="row">
+                <span class="lbl">LAN</span>
+                <div class="field">192.168.1.42<span class="chev">▾</span></div>
+              </div>
+              <button class="session-btn">Close Project</button>
+            </div>
+          </div>
+
+          <!-- 标注（V0 隐藏） -->
+          <div class="term" style="top: 30px; left: 24px">
+            track = 分段控件的底槽 ↴
+          </div>
+          <div class="term up" style="top: 104px; left: 56px">
+            ↰ pill = 白色活动滑块（会滑动）
+          </div>
+          <div class="term up" style="top: 104px; left: 210px">
+            ↰ 右键这里试试菜单
+          </div>
+          <div class="co" style="top: 58px; left: 296px">1</div>
+          <div class="co" style="top: 104px; left: 296px">2</div>
+          <div class="co" style="top: 58px; left: 150px">4</div>
+          <div class="co co3" style="top: 356px; left: 150px">3</div>
+          <div class="co" style="top: 118px; left: 22px">5</div>
+          <div class="co" style="top: 400px; left: 186px">6</div>
+          <div class="co" style="top: 368px; left: 44px">7</div>
+        </div>
+
+        <div class="monitor">
+          <div class="title-strip">PNDS - Inarticulate III</div>
+          <div class="fake-score">
+            <div class="stave"></div>
+            <div class="stave"></div>
+            <div class="stave"></div>
+            <div class="stave"></div>
+            <div class="stave"></div>
+            <div class="stave"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ 图例 ═══ -->
+      <div class="legend">
+        <h2 id="legendTitle">提案 A</h2>
+        <ol id="legendList">
+          <li>
+            <b>switch 按内容收缩</b>：常态 2 段不再等宽拉伸半行；最多 4 段（#26
+            上限）也不需滚动。
+          </li>
+          <li>
+            <b>新建文件夹 “+”</b>：留在 switch 旁，与顶栏 share/refresh
+            同族幽灵按钮（同尺寸同 hover）。
+          </li>
+          <li>
+            <b>导入 “+”</b>：移到工程列表末尾居中（你的提案A）。悬停工程卡可看 ✕
+            与文件夹标签的让位关系。
+          </li>
+          <li>
+            <b>pill 滑动</b>：点一下其它段试试 ——
+            白色滑块从当前段滑过去（不再是纯颜色渐变）。track/pill
+            的含义见图中黑标签。
+          </li>
+          <li>
+            <b>运行中竖条</b>：当前卡左缘 3px accent
+            竖条，仅在会话运行中出现；空闲选中只有白底。
+          </li>
+          <li>
+            <b>音量滑杆重绘</b>：4px 槽 + accent 填充 + 白旋钮，可拖动。键盘 Tab
+            可聚焦（见焦点环）。
+          </li>
+        </ol>
+        <div class="try">
+          <b>还可以试：</b><br />
+          · 右键 track / 各段 —— 文件夹菜单（新建/重命名/删除）<br />
+          · Tab 聚焦到段后按 ←/→ 切换（Round 1 定的键盘方案）<br />
+          · 点喇叭图标静音 / 恢复；拖滑杆到 0 也会切成 mute 图标<br />
+          · 列表已加长，滚到底看淡出效果；按住按钮有按压微缩<br />
+          · 全部指针统一为箭头（macOS 惯例）；V0 现状里段是手型
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ 小面板：Welcome 与 空态 ═══ -->
+    <div class="minis">
+      <div class="mini">
+        <div class="cap">Welcome 屏（v1.2.2：中央 CTA）</div>
+        <div class="body">
+          <div class="hero">Welcome to PNDS</div>
+          <div class="hero-sub">数字乐谱工程的演出现场主机</div>
+          <button class="cta">导入工程</button>
+          <span class="cta-note"
+            >（v1.2.1 现状：这里没有按钮，只有文字提示）</span
+          >
+        </div>
+      </div>
+      <div class="mini">
+        <div class="cap">空态（v1.2.2：图标 + 文案）</div>
+        <div class="empty-demo">
+          <div class="empty-item">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M9 18V5l12-2v13" />
+              <circle cx="6" cy="18" r="3" />
+              <circle cx="18" cy="16" r="3" />
+            </svg>
+            还没有打开过的工程
+          </div>
+          <div class="empty-split"></div>
+          <div class="empty-item">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path
+                d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.7-.9L9.6 3.9A2 2 0 0 0 7.9 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"
+              />
+            </svg>
+            这个文件夹是空的
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ 右键菜单（提案演示）═══ -->
+    <div class="ctxmenu" id="ctxmenu"></div>
+
+    <!-- ═══ 切换栏 ═══ -->
+    <div class="switcher">
+      <button id="prev" aria-label="上一个">◀</button>
+      <span class="cur" id="curLabel"
+        >提案 — 右键菜单 + 撑满 track + 静音 + 淡出</span
+      >
+      <button id="next" aria-label="下一个">▶</button>
+    </div>
+    <div class="hintbar">← → 键也可切换 · 专注输入框时除外</div>
+
+    <script>
+      const VARIANTS = [
+        {
+          key: '0',
+          label: '现状 v1.2.1 — 等宽段 + 双 “+” 在行内',
+          legend: `<li><b>等宽拉伸</b>：两段平分整行宽度，短名被拉宽（突兀感来源之一）。</li>
+             <li><b>双 “+” 外挂在行尾</b>：与 track 视觉无关，像补丁。</li>
+             <li><b>原生滑杆</b>：系统样式；喇叭图标不可点。</li>
+             <li><b>无运行指示 / 无文件夹标签 / 列表底部硬切一条线</b>。</li>
+             <li><b>段是手型指针</b>（把鼠标放段上对比提案的箭头）。</li>`,
+        },
+        {
+          key: '1',
+          label: '提案 — 右键菜单 + 撑满 track + 静音 + 淡出',
+          legend: `<li><b>track 撑满、段按内容分配</b>：整行有归属感，名字长的段自然更宽（不再是等宽拉伸）。</li>
+             <li><b>文件夹管理改右键</b>：行内不再有文件夹 “+”。<b>右键</b> track / 未分组段 → 新建文件夹；右键文件夹段 → 重命名 / 删除（Utilities 删除禁用）。真实实现用 Radix ContextMenu。</li>
+             <li><b>导入 “+” 保留</b>：工程列表末尾居中（你已确认满意）。</li>
+             <li><b>pill 滑动</b>：点其它段，白色滑块滑过去。track/pill 含义见图中黑标签。</li>
+             <li><b>运行中竖条</b>：当前卡左缘 3px accent 竖条，仅运行中显示。</li>
+             <li><b>喇叭可点静音</b>：点图标 → 静音（变 mute 喇叭），再点 → 恢复原音量。滑杆仍是新样式。</li>
+             <li><b>列表双侧淡出（修订）</b>：静态常显但缩短到 20px；列表上下加内边距，静止位置天然避开淡出带（顶：第一张卡完整；底：滚到底导入 "+" 完整）。<b>点任意卡</b>看效果：选中卡自动滚到完全避开淡出区的位置（键盘 ⌘↑↓/⌘数字 同此逻辑）。</li>`,
+        },
+      ]
+      let idx = 1
+      const body = document.body
+      const track = document.getElementById('track')
+      const pill = document.getElementById('pill')
+      const segs = [...track.querySelectorAll('.segment')]
+
+      function movePill() {
+        const act = track.querySelector('.segment.active')
+        if (!act || !pill) return
+        pill.style.width = act.offsetWidth + 'px'
+        pill.style.transform = 'translateX(' + act.offsetLeft + 'px)'
+      }
+      segs.forEach(s => {
+        s.addEventListener('click', () => {
+          segs.forEach(x => x.classList.remove('active'))
+          s.classList.add('active')
+          movePill()
+        })
+        s.addEventListener('keydown', e => {
+          if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+          e.preventDefault()
+          e.stopPropagation()
+          const d = e.key === 'ArrowLeft' ? -1 : 1
+          const i = segs.indexOf(s)
+          const n = segs[(i + d + segs.length) % segs.length]
+          n.focus()
+          n.click()
+        })
+      })
+
+      function apply() {
+        const v = VARIANTS[idx]
+        body.dataset.variant = v.key
+        document.getElementById('curLabel').textContent = v.label
+        const titles = {
+          0: '现状 v1.2.1（基准）',
+          1: '提案 — 右键菜单 + 撑满 track + 静音 + 淡出',
+        }
+        document.getElementById('legendTitle').textContent = titles[v.key]
+        document.getElementById('legendList').innerHTML = v.legend
+        requestAnimationFrame(movePill)
+      }
+      document.getElementById('prev').onclick = () => {
+        idx = (idx + VARIANTS.length - 1) % VARIANTS.length
+        apply()
+      }
+      document.getElementById('next').onclick = () => {
+        idx = (idx + 1) % VARIANTS.length
+        apply()
+      }
+      window.addEventListener('keydown', e => {
+        if (/INPUT|TEXTAREA/.test(document.activeElement.tagName)) return
+        if (e.key === 'ArrowLeft') document.getElementById('prev').click()
+        if (e.key === 'ArrowRight') document.getElementById('next').click()
+      })
+      window.addEventListener('resize', movePill)
+      // web 字体加载后段宽会变，pill 需要重新定位
+      if (document.fonts && document.fonts.ready)
+        document.fonts.ready.then(movePill)
+
+      // 淡出静态常显（无滚动开关）。选中一张卡时，自动滚到
+      // "完全避开淡出区"的位置：比 block:'nearest' 多让出一个
+      // 淡出带 + 间隙，卡片永不停在半淡出位置（提案·修订）。
+      const list = document.getElementById('list')
+      const FADE = 20,
+        GAP = 6
+      function revealClear(card) {
+        const pad = FADE + GAP
+        const cTop = list.scrollTop,
+          cH = list.clientHeight
+        const top = card.offsetTop,
+          h = card.offsetHeight
+        let target = null
+        if (top - cTop < pad)
+          target = top - pad // 压顶：推到顶淡出之下
+        else if (top + h - cTop > cH - pad) target = top + h - (cH - pad) // 压底：推到底淡出之上
+        if (target === null) return
+        const max = list.scrollHeight - list.clientHeight
+        list.scrollTo({
+          top: Math.max(0, Math.min(target, max)),
+          behavior: 'smooth',
+        })
+      }
+      list.querySelectorAll('.card').forEach(c => {
+        c.addEventListener('click', () => {
+          list
+            .querySelectorAll('.card')
+            .forEach(x => x.classList.remove('current'))
+          c.classList.add('current')
+          revealClear(c)
+        })
+      })
+
+      // 音量滑杆填充比例 + 静音切换（提案）
+      const slider = document.querySelector('.vslider')
+      const volNum = document.getElementById('volNum')
+      const muteBtn = document.getElementById('muteBtn')
+      const volOn = document.getElementById('volOn')
+      const volOff = document.getElementById('volOff')
+      let muted = false,
+        prevVol = 80
+      function syncVol() {
+        slider.style.setProperty('--fill', slider.value + '%')
+        volNum.textContent = slider.value
+      }
+      slider.addEventListener('input', () => {
+        syncVol()
+        if (Number(slider.value) > 0) {
+          muted = false
+          volOn.style.display = ''
+          volOff.style.display = 'none'
+        } else {
+          muted = true
+          volOn.style.display = 'none'
+          volOff.style.display = ''
+        }
+      })
+      muteBtn.addEventListener('click', () => {
+        if (!muted && Number(slider.value) > 0) prevVol = Number(slider.value)
+        muted = !muted
+        slider.value = muted ? 0 : prevVol
+        volOn.style.display = muted ? 'none' : ''
+        volOff.style.display = muted ? '' : 'none'
+        syncVol()
+      })
+      syncVol()
+
+      // 右键菜单（提案）：track/未分组 → 新建；文件夹段 → 重命名/删除
+      const ctx = document.getElementById('ctxmenu')
+      const isFolderSeg = el =>
+        el.classList.contains('segment') &&
+        el.textContent.includes('未分组') === false
+      document
+        .querySelector('.switch-row')
+        .addEventListener('contextmenu', e => {
+          e.preventDefault()
+          if (body.dataset.variant === '0') return // 现状无菜单
+          const seg = e.target.closest('.segment')
+          const onFolder = seg && isFolderSeg(seg)
+          const isUtilities = seg && seg.textContent.includes('Utilities')
+          ctx.innerHTML =
+            `<div class="mi">新建文件夹</div>` +
+            (onFolder
+              ? `<div class="sep"></div>
+        <div class="mi">重命名<span class="kbd">⌘R</span></div>
+        <div class="mi${isUtilities ? ' dis' : ''}">删除文件夹${isUtilities ? '（受保护，不可删）' : ''}</div>`
+              : '')
+          ctx.style.left = Math.min(e.clientX, window.innerWidth - 200) + 'px'
+          ctx.style.top = e.clientY + 'px'
+          ctx.classList.add('open')
+        })
+      document.addEventListener('pointerdown', e => {
+        if (!ctx.contains(e.target)) ctx.classList.remove('open')
+      })
+      document.addEventListener('keydown', e => {
+        if (e.key === 'Escape') ctx.classList.remove('open')
+      })
+
+      apply()
+    </script>
+  </body>
+</html>
