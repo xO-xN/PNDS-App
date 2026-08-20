@@ -36,6 +36,27 @@ describe('MonitorView keyboard focus', () => {
     expect(document.activeElement).toBe(screen.getByTestId('monitor-host'))
   })
 
+  it('reclaims keyboard focus when the window regains focus after a space switch', () => {
+    render(<MonitorView />)
+
+    // Coming back from another desktop, WKWebView can hand the first
+    // responder to the monitor iframe again (user report on #29): every
+    // window-level key goes dead until the next click.
+    const iframe = screen.getByTitle('Project monitor')
+    iframe.focus()
+    window.dispatchEvent(new Event('focus'))
+
+    expect(document.activeElement).toBe(screen.getByTestId('monitor-host'))
+
+    // The reclaim never steals from a meaningful focus holder.
+    const input = document.createElement('input')
+    document.body.appendChild(input)
+    input.focus()
+    window.dispatchEvent(new Event('focus'))
+    expect(document.activeElement).toBe(input)
+    input.remove()
+  })
+
   it('reclaims keyboard focus after the monitor iframe loads', () => {
     render(<MonitorView />)
 

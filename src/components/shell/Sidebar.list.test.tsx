@@ -1,6 +1,6 @@
 import { render, screen, within } from '@/test/test-utils'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { useProjectStore } from '@/store/project-store'
+import { useProjectStore, UTILITIES_FOLDER_ID } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 import { useKeyboardStore } from '@/store/keyboard-store'
 import { Sidebar } from './Sidebar'
@@ -98,6 +98,18 @@ describe('Sidebar project list (v1.2.2, issue #29)', () => {
       expect(
         empty.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING
       ).toBeTruthy()
+    })
+
+    it('hides inside the fixed Utilities view — bundled tools, not imports', () => {
+      useProjectStore.setState({
+        projectFolders: [
+          { id: UTILITIES_FOLDER_ID, name: 'Utilities', projectPaths: [] },
+        ],
+        activeFolderId: UTILITIES_FOLDER_ID,
+      })
+      render(<Sidebar variant="static" />)
+
+      expect(screen.queryByTestId('add-project-button')).not.toBeInTheDocument()
     })
 
     it('disables while a session is busy', () => {

@@ -6,6 +6,7 @@
 mod bindings;
 mod commands;
 mod open_panel;
+mod process_activity;
 mod project;
 mod types;
 mod window;

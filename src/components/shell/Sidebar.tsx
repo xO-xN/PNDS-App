@@ -459,6 +459,10 @@ export function Sidebar({
     activeFolderId === null
       ? null
       : (projectFolders.find(folder => folder.id === activeFolderId) ?? null)
+  /** v1.2.2 (user feedback on #29): the fixed Utilities view imports
+   * nothing — its members are the bundled tools, seeded by the app. */
+  const activeFolderIsProtected =
+    activeFolder !== null && isProtectedFolder(activeFolder.id)
   const pendingDeleteFolder = projectFolders.find(
     folder => folder.id === pendingDeleteFolderId
   )
@@ -1616,19 +1620,23 @@ export function Sidebar({
               end — "add to the list" belongs to the list. The end padding
               keeps it clear of the fade band at full scroll; with no
               projects it follows the empty state. Same promptOpenProject
-              as the ⌘O menu path. */}
-            <button
-              type="button"
-              data-testid="add-project-button"
-              aria-label={t('sidebar.addProject')}
-              title={t('sidebar.addProject')}
-              onClick={() => void promptOpenProject()}
-              disabled={busy}
-              className="mx-auto mt-1.5 mb-1 flex shrink-0 items-center gap-1.5 rounded-[9px] bg-(--pnds-text)/5 px-[18px] py-1.5 text-xs text-(--pnds-text)/60 transition-colors hover:bg-(--pnds-text)/10 hover:text-(--pnds-text) disabled:opacity-50"
-            >
-              <Plus size={14} />
-              {t('sidebar.addProject')}
-            </button>
+              as the ⌘O menu path. The fixed Utilities view is the one
+              exception (user feedback): its members are bundled tools,
+              not imports. */}
+            {!activeFolderIsProtected && (
+              <button
+                type="button"
+                data-testid="add-project-button"
+                aria-label={t('sidebar.addProject')}
+                title={t('sidebar.addProject')}
+                onClick={() => void promptOpenProject()}
+                disabled={busy}
+                className="mx-auto mt-1.5 mb-1 flex shrink-0 items-center gap-1.5 rounded-[9px] bg-(--pnds-text)/5 px-[18px] py-1.5 text-xs text-(--pnds-text)/60 transition-colors hover:bg-(--pnds-text)/10 hover:text-(--pnds-text) disabled:opacity-50"
+              >
+                <Plus size={14} />
+                {t('sidebar.addProject')}
+              </button>
+            )}
           </div>
         </div>
       </nav>

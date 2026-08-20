@@ -44,13 +44,26 @@ export function AppShell() {
     const unlisten = listen<SessionSnapshot>('pnds:session', event => {
       useSessionStore.getState().applySnapshot(event.payload)
     })
-    void commands.getSessionState().then(result => {
-      if (result.status === 'ok') {
-        useSessionStore.getState().applySnapshot(result.data)
-      }
-    })
+    const restore = () => {
+      void commands.getSessionState().then(result => {
+        if (result.status === 'ok') {
+          useSessionStore.getState().applySnapshot(result.data)
+        }
+      })
+    }
+    restore()
+    // v1.2.2 (user report on #29): an occluded WKWebView suspends its JS,
+    // so `pnds:session` events queue behind the suspension — coming back
+    // from another desktop showed the loading screen's last stage until
+    // the queued events caught up. Re-fetching on regain makes the shell
+    // current the moment the view is visible again.
+    const handleVisibility = () => {
+      if (!document.hidden) restore()
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
     return () => {
       void unlisten.then(off => off())
+      document.removeEventListener('visibilitychange', handleVisibility)
     }
   }, [])
 

@@ -61,7 +61,7 @@ tauri-plugin-window-state = "2"
 # project directories and .pnds bundle files.
 objc2 = "0.6"
 objc2-app-kit = { version = "0.3", features = ["std", "NSWindow", "NSOpenPanel"] }
-objc2-foundation = { version = "0.3", features = ["std"] }
+objc2-foundation = { version = "0.3", features = ["std", "NSString", "NSProcessInfo"] }
 
 [dev-dependencies]
 

@@ -291,6 +291,19 @@ describe('AppShell', () => {
     )
   })
 
+  it('re-fetches the session state when the webview becomes visible again', () => {
+    render(<AppShell />)
+
+    const callsBefore = vi.mocked(commands.getSessionState).mock.calls.length
+    // An occluded WKWebView suspends JS; the queued pnds:session events
+    // lag behind the backend. On regain the shell must catch up itself.
+    document.dispatchEvent(new Event('visibilitychange'))
+
+    expect(vi.mocked(commands.getSessionState).mock.calls.length).toBe(
+      callsBefore + 1
+    )
+  })
+
   it('loads a legacy preferences file (no projectFolders) without error', async () => {
     vi.mocked(commands.loadPreferences).mockResolvedValueOnce({
       status: 'ok',

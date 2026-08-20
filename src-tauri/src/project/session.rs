@@ -254,6 +254,9 @@ struct SessionInner {
     generation: u64,
     /// §11: per-session log file.
     logger: Option<crate::project::logs::SessionLogger>,
+    /// App-Nap prevention held while the session is live (see
+    /// process_activity.rs); refreshed on every state publication.
+    process_activity: Option<crate::process_activity::ProcessActivity>,
 }
 
 impl Default for SessionInner {
@@ -278,6 +281,7 @@ impl Default for SessionInner {
             output_device: None,
             generation: 0,
             logger: None,
+            process_activity: None,
         }
     }
 }
@@ -348,7 +352,21 @@ impl SessionManager {
     }
 
     fn emit<R: tauri::Runtime>(&self, app: &AppHandle<R>) {
-        let snapshot = self.snapshot();
+        let snapshot = {
+            let mut inner = self.lock();
+            // App-Nap prevention rides the same funnel every state
+            // publication passes through: hold an activity while the
+            // session is live, release it once idle/error settles.
+            let live = matches!(inner.status.as_str(), "starting" | "ready" | "stopping");
+            if live && inner.process_activity.is_none() {
+                inner.process_activity = Some(crate::process_activity::ProcessActivity::begin(
+                    "PNDS live score session",
+                ));
+            } else if !live {
+                inner.process_activity = None;
+            }
+            inner.snapshot()
+        };
         if let Err(e) = app.emit("pnds:session", snapshot) {
             log::warn!("Failed to emit session snapshot: {e}");
         }

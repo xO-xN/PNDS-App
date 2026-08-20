@@ -42,6 +42,33 @@ export function MonitorView() {
   useEffect(() => {
     reclaimKeyboardFocus()
   }, [])
+  // v1.2.2 (user report on #29): switching to another desktop and back can
+  // hand the first responder to the monitor iframe again — every
+  // window-level key (the ⌘ layer above all) then goes dead until the
+  // next click. Reclaim on focus/visibility regain, but only when
+  // nothing meaningful holds focus: never steal from a sidebar input or
+  // an open dialog.
+  useEffect(() => {
+    const reclaimIfLost = () => {
+      const active = document.activeElement
+      if (
+        active === null ||
+        active === document.body ||
+        active instanceof HTMLIFrameElement
+      ) {
+        reclaimKeyboardFocus()
+      }
+    }
+    const handleVisibility = () => {
+      if (!document.hidden) reclaimIfLost()
+    }
+    window.addEventListener('focus', reclaimIfLost)
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => {
+      window.removeEventListener('focus', reclaimIfLost)
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
+  }, [])
 
   if (!lanIp || !monitorPort) {
     // Should not happen for a ready session; fail visibly rather than blank.
