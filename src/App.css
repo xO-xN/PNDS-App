@@ -170,15 +170,33 @@
     cursor: text !important;
   }
 
-  /* Utility class for when pointer cursor is explicitly needed */
-  .cursor-pointer {
-    cursor: pointer !important;
-  }
-
   /* Required for drag regions to work with touch/pen on Windows */
   *[data-tauri-drag-region] {
     -webkit-app-region: drag;
     app-region: drag;
+  }
+}
+
+/* Shared keyboard focus ring (v1.2.2, issue #32): one accent outline for
+   every interactive control in the app's own UI (the shadcn settings
+   components keep their design-system ring). :focus-visible only — mouse
+   clicks never show a ring; Tab navigation always does. */
+.pnds-focus-ring:focus-visible {
+  outline: 2px solid var(--pnds-accent);
+  outline-offset: 1px;
+}
+
+/* Reduced motion (v1.2.2, issue #32): with the system preference set, CSS
+   transitions and animations complete near-instantly instead of playing —
+   every state change (hover tints, the folder pill's slide, the sidebar's
+   hover reveal) still lands, it just stops animating. The LoadingScreen
+   logo is canvas-drawn per frame, not CSS, and stays as is. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
   }
 }
 

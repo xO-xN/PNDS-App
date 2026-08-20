@@ -227,9 +227,8 @@ export function SettingsCard({ onPopupOpenChange }: SettingsCardProps) {
             aria-label={muted ? t('sidebar.unmute') : t('sidebar.mute')}
             aria-pressed={muted}
             className={cn(
-              '-mx-2 flex size-7 items-center justify-center rounded-md',
-              'transition-transform active:scale-90',
-              'focus-visible:outline-2 focus-visible:outline-(--pnds-accent) focus-visible:outline-offset-1'
+              'pnds-focus-ring -mx-2 flex size-7 items-center justify-center rounded-md',
+              'transition-transform active:scale-90'
             )}
           >
             {muted ? <VolumeX size={14} /> : <Volume2 size={14} />}
@@ -251,10 +250,7 @@ export function SettingsCard({ onPopupOpenChange }: SettingsCardProps) {
               '--pnds-volume-fill': `${Math.round(volumeDisplay)}%`,
             } as CSSProperties
           }
-          className={cn(
-            'pnds-volume-slider h-7 w-full rounded-full disabled:opacity-35',
-            'focus-visible:outline-2 focus-visible:outline-(--pnds-accent) focus-visible:outline-offset-1'
-          )}
+          className="pnds-focus-ring pnds-volume-slider h-7 w-full rounded-full disabled:opacity-35"
         />
         <span
           data-testid="volume-value"

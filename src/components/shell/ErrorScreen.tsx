@@ -176,9 +176,7 @@ export function ErrorScreen() {
       </div>
 
       <details className="font-manrope w-full max-w-xl rounded-md border bg-white/60 p-4 text-xs backdrop-blur-md">
-        <summary className="cursor-pointer text-sm font-medium">
-          {t('error.details')}
-        </summary>
+        <summary className="text-sm font-medium">{t('error.details')}</summary>
         <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
           <dt className="text-muted-foreground">{t('error.projectPath')}</dt>
           <dd className="break-all">{currentProject?.path ?? '—'}</dd>

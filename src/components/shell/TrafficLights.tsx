@@ -52,7 +52,7 @@ export function TrafficLights() {
           type="button"
           aria-label={t(labelKey)}
           onClick={action}
-          className="flex h-3 w-3 items-center justify-center rounded-full text-black/60 transition-transform hover:scale-110"
+          className="pnds-focus-ring flex h-3 w-3 items-center justify-center rounded-full text-black/60 transition-transform hover:scale-110 active:scale-95"
           style={{ backgroundColor: bg }}
         >
           <Icon

@@ -42,7 +42,7 @@ export function WelcomeScreen() {
         data-testid="welcome-import-button"
         onClick={() => void promptOpenProject()}
         disabled={busy}
-        className="mt-8 flex h-10 items-center justify-center rounded-xl bg-(--pnds-accent) px-6 text-[14px] text-white transition hover:bg-(--pnds-accent-hover) active:scale-[0.98] disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-(--pnds-accent) focus-visible:outline-offset-1"
+        className="pnds-focus-ring mt-8 flex h-10 items-center justify-center rounded-xl bg-(--pnds-accent) px-6 text-[14px] text-white transition hover:bg-(--pnds-accent-hover) active:scale-[0.98] disabled:opacity-50"
       >
         {t('welcome.importProject')}
       </button>

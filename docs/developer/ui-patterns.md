@@ -185,13 +185,27 @@ input,
 textarea {
   cursor: text !important;
 }
+```
 
-.cursor-pointer {
-  cursor: pointer !important;
+**Why:** Native apps use arrow cursor, not text cursor on labels. v1.2.2
+(issue #32) retired the old `.cursor-pointer` utility: every control —
+segments, cards, icon buttons, `<summary>` disclosure — keeps the arrow;
+affordance comes from hover/press styling, never the hand cursor.
+
+### Focus Ring
+
+```css
+.pnds-focus-ring:focus-visible {
+  outline: 2px solid var(--pnds-accent);
+  outline-offset: 1px;
 }
 ```
 
-**Why:** Native apps use arrow cursor, not text cursor on labels.
+One shared class for every interactive control in the app's own UI (the
+shadcn settings primitives keep their design-system ring). `:focus-visible`
+only — mouse clicks never show a ring, Tab navigation always does. New
+controls take the class instead of hand-rolled `focus-visible:outline-*`
+variants (v1.2.2, issue #32).
 
 ### Scroll Behavior
 
@@ -359,5 +373,8 @@ This preserves scroll position, form state, and resize dimensions.
 - Use raw color values (`bg-white`, `text-gray-900`)
 - Hardcode light/dark specific values
 - Override shadcn components in place (copy and modify instead)
-- Add `cursor-pointer` everywhere (only for actual clickable elements)
+- Add `cursor-pointer` — the hand cursor is retired app-wide (v1.2.2 #32);
+  affordance comes from hover/press styling
+- Hand-roll `focus-visible:outline-*` variants — use the shared
+  `pnds-focus-ring` class
 - Use viewport-based responsive design (this is a fixed-size desktop app)

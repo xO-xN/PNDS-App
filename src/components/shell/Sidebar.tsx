@@ -1146,7 +1146,7 @@ export function Sidebar({
             title={t('sidebar.shareHint')}
             disabled={!running || !lanIp || !monitorPort}
             onClick={() => void handleShare()}
-            className="rounded-md p-1.5 text-(--pnds-text)/70 hover:bg-(--pnds-text)/5 hover:text-(--pnds-text) disabled:opacity-40"
+            className="pnds-focus-ring rounded-md p-1.5 text-(--pnds-text)/70 transition hover:bg-(--pnds-text)/5 hover:text-(--pnds-text) active:scale-90 disabled:opacity-40"
           >
             <Share size={15} />
           </button>
@@ -1156,7 +1156,7 @@ export function Sidebar({
             title={t('sidebar.refreshHint')}
             disabled={!running}
             onClick={() => useSessionStore.getState().bumpMonitorReload()}
-            className="rounded-md p-1.5 text-(--pnds-text)/70 hover:bg-(--pnds-text)/5 hover:text-(--pnds-text) disabled:opacity-40"
+            className="pnds-focus-ring rounded-md p-1.5 text-(--pnds-text)/70 transition hover:bg-(--pnds-text)/5 hover:text-(--pnds-text) active:scale-90 disabled:opacity-40"
           >
             <RefreshCw size={15} />
           </button>
@@ -1227,8 +1227,10 @@ export function Sidebar({
                     setActiveFolderView(null)
                   }}
                   className={cn(
-                    'relative z-10 flex min-w-0 flex-[1_1_auto] cursor-pointer items-center justify-center truncate rounded-md px-2 py-1.5 text-[13px] transition-colors duration-200',
-                    'focus-visible:outline-2 focus-visible:outline-(--pnds-accent) focus-visible:outline-offset-1',
+                    // #32: shared focus ring + press-darkening (the segment
+                    // carries an inline transform for the drag yield, so no
+                    // press-scale); arrows app-wide, no hand cursor.
+                    'pnds-focus-ring relative z-10 flex min-w-0 flex-[1_1_auto] items-center justify-center truncate rounded-md px-2 py-1.5 text-[13px] transition-colors duration-200 active:bg-(--pnds-text)/10',
                     !activeFolder
                       ? 'font-medium text-(--pnds-text)'
                       : 'text-(--pnds-text)/55 hover:text-(--pnds-text)/85',
@@ -1315,8 +1317,9 @@ export function Sidebar({
                           : undefined
                       }
                       className={cn(
-                        'group/segment relative z-10 flex min-w-0 flex-[1_1_auto] cursor-pointer select-none items-center justify-center gap-1 truncate rounded-md px-2 py-1.5 text-[13px]',
-                        'focus-visible:outline-2 focus-visible:outline-(--pnds-accent) focus-visible:outline-offset-1',
+                        // #32: shared focus ring + press-darkening (the
+                        // inline drag transform rules out press-scale).
+                        'pnds-focus-ring group/segment relative z-10 flex min-w-0 flex-[1_1_auto] select-none items-center justify-center gap-1 truncate rounded-md px-2 py-1.5 text-[13px] active:bg-(--pnds-text)/10',
                         suppressTransition
                           ? 'transition-none'
                           : 'transition-[color,background-color,transform] duration-200',
@@ -1526,8 +1529,8 @@ export function Sidebar({
                       ? 'transition-none'
                       : 'transition-[background-color,transform] duration-200',
                     isCurrent || pendingPreflightPath === path
-                      ? 'bg-(--pnds-card) shadow-sm'
-                      : 'hover:bg-(--pnds-text)/5',
+                      ? 'bg-(--pnds-card) shadow-sm active:bg-(--pnds-bg)'
+                      : 'hover:bg-(--pnds-text)/5 active:bg-(--pnds-text)/10',
                     // Hidden, not removed: its slot is what the yielding cards
                     // slide over while the floating clone represents it.
                     isDragged && 'invisible'
@@ -1592,7 +1595,7 @@ export function Sidebar({
                         e.stopPropagation()
                         handleRemove(path)
                       }}
-                      className="w-5 shrink-0 text-(--pnds-text)/50 opacity-0 transition-opacity hover:text-(--pnds-text) group-hover:opacity-100"
+                      className="pnds-focus-ring w-5 shrink-0 text-(--pnds-text)/50 opacity-0 transition hover:text-(--pnds-text) active:scale-90 focus-visible:opacity-100 group-hover:opacity-100"
                     >
                       <X size={14} />
                     </button>
@@ -1635,7 +1638,7 @@ export function Sidebar({
                 title={t('sidebar.addProject')}
                 onClick={() => void promptOpenProject()}
                 disabled={busy}
-                className="mx-auto mt-1.5 mb-1 flex shrink-0 items-center gap-1.5 rounded-[9px] bg-(--pnds-text)/5 px-[18px] py-1.5 text-xs text-(--pnds-text)/60 transition-colors hover:bg-(--pnds-text)/10 hover:text-(--pnds-text) disabled:opacity-50"
+                className="pnds-focus-ring mx-auto mt-1.5 mb-1 flex shrink-0 items-center gap-1.5 rounded-[9px] bg-(--pnds-text)/5 px-[18px] py-1.5 text-xs text-(--pnds-text)/60 transition hover:bg-(--pnds-text)/10 hover:text-(--pnds-text) active:scale-[0.98] disabled:opacity-50"
               >
                 <Plus size={14} />
                 {t('sidebar.addProject')}
