@@ -195,6 +195,9 @@
   -webkit-appearance: none;
   appearance: none;
   background: transparent;
+  /* The global input rule sets cursor: text !important; a slider is a
+     control, not a text field — keep the arrow (#30 feedback). */
+  cursor: default !important;
 }
 
 .pnds-volume-slider::-webkit-slider-runnable-track {
