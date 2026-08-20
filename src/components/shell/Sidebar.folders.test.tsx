@@ -77,11 +77,11 @@ describe('Sidebar folders (v1.1.2)', () => {
     await user.click(screen.getByTestId('new-folder-button'))
     await user.type(screen.getByTestId('folder-name-input'), 'Nope{Escape}')
 
-    expect(screen.queryByTestId('folder-card')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('folder-segment')).not.toBeInTheDocument()
     expect(useProjectStore.getState().projectFolders).toEqual([])
   })
 
-  it('renders ungrouped projects above the folder section (two-segment)', () => {
+  it('renders the folder as a switch segment outside the scrolling list', () => {
     createFolderOrFail('Set list')
     const [folder] = useProjectStore.getState().projectFolders
     if (!folder) throw new Error('Expected the created folder')
@@ -89,18 +89,13 @@ describe('Sidebar folders (v1.1.2)', () => {
 
     render(<Sidebar variant="static" />)
 
-    // OTHER_PATH lives in the folder: only the two ungrouped cards render.
+    // OTHER_PATH lives in the folder: only the two ungrouped cards render,
+    // and the folder segment sits in the switch row, not the scroller.
     const entries = screen.getAllByTestId('project-entry')
     expect(entries).toHaveLength(2)
-
-    // Order in the DOM: ungrouped projects first, folders after.
-    const firstEntry = entries[0]
-    if (!firstEntry) throw new Error('Expected an ungrouped project entry')
-    const folderCard = screen.getByTestId('folder-card')
-    expect(
-      firstEntry.compareDocumentPosition(folderCard) &
-        Node.DOCUMENT_POSITION_FOLLOWING
-    ).toBeTruthy()
+    const scroller = screen.getByTestId('project-list-scroll')
+    expect(scroller).not.toContainElement(screen.getByTestId('folder-segment'))
+    expect(screen.getByTestId('unfiled-segment')).toBeInTheDocument()
   })
 
   it('deleting a folder confirms, then returns its projects to ungrouped', async () => {
@@ -115,7 +110,7 @@ describe('Sidebar folders (v1.1.2)', () => {
     expect(screen.getAllByTestId('project-entry')).toHaveLength(1)
 
     fireEvent.click(
-      within(screen.getByTestId('folder-card')).getByRole('button', {
+      within(screen.getByTestId('folder-segment')).getByRole('button', {
         name: /delete folder/i,
       })
     )
@@ -197,21 +192,21 @@ describe('Utilities folder protection (v1.1.2 T7, spec issue #11)', () => {
     useSessionStore.getState().resetSession()
   })
 
-  it('renders the folder card without a delete affordance', () => {
+  it('renders the Utilities segment without a delete affordance', () => {
     render(<Sidebar variant="static" />)
 
-    const card = screen
-      .getAllByTestId('folder-card')
-      .find(card => card.textContent?.includes('Utilities'))
-    expect(card).toBeDefined()
+    const segment = screen
+      .getAllByTestId('folder-segment')
+      .find(segment => segment.textContent?.includes('Utilities'))
+    expect(segment).toBeDefined()
     expect(
-      within(card as HTMLElement).queryByRole('button', {
+      within(segment as HTMLElement).queryByRole('button', {
         name: 'Delete folder',
       })
     ).not.toBeInTheDocument()
   })
 
-  it('⌘R never starts a rename of the drilled-in Utilities folder', () => {
+  it('⌘R never starts a rename of the selected Utilities folder', () => {
     useProjectStore.setState({ activeFolderId: UTILITIES_FOLDER_ID })
     render(<Sidebar variant="static" />)
 
@@ -223,21 +218,19 @@ describe('Utilities folder protection (v1.1.2 T7, spec issue #11)', () => {
 
     expect(useProjectStore.getState().renameTarget).toBeNull()
     expect(screen.queryByTestId('folder-name-input')).not.toBeInTheDocument()
-    expect(screen.getByTestId('breadcrumb-folder-name')).toHaveTextContent(
-      'Utilities'
-    )
+    expect(screen.getByTestId('folder-name')).toHaveTextContent('Utilities')
   })
 
-  it('still drills in and shows the bundled examples like any folder', () => {
+  it('still selects and shows the bundled examples like any folder', () => {
     render(<Sidebar variant="static" />)
 
-    const utilitiesCard = screen
-      .getAllByTestId('folder-card')
-      .find(card => card.textContent?.includes('Utilities'))
-    if (!utilitiesCard) throw new Error('Expected the Utilities folder card')
-    fireEvent.click(utilitiesCard)
+    const utilitiesSegment = screen
+      .getAllByTestId('folder-segment')
+      .find(segment => segment.textContent?.includes('Utilities'))
+    if (!utilitiesSegment) throw new Error('Expected the Utilities segment')
+    fireEvent.click(utilitiesSegment)
 
-    expect(screen.getByTestId('breadcrumb-bar')).toBeInTheDocument()
+    expect(useProjectStore.getState().activeFolderId).toBe(UTILITIES_FOLDER_ID)
     expect(screen.getAllByTestId('project-entry')).toHaveLength(2)
   })
 })

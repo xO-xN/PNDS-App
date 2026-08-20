@@ -228,8 +228,11 @@ describe('drag-reorder (v1.1.2 T4, spec issue #8)', () => {
   })
 
   describe('folder drop targets (v1.1.2 T5, spec issue #9)', () => {
-    // Two project cards pitched 61px from top 100, then the folder cards
-    // further down (three, pitched the same).
+    // The folder switch row above the list: three segments 70px wide
+    // pitched 74px from x=20, the row spanning y 40..72. The space is
+    // axis-swapped (top = first segment's left, cardHeight = width,
+    // left/right = the row's vertical extent). Two project cards sit
+    // below, pitched 61px from top 100.
     const listSpace = {
       top: 100,
       left: 20,
@@ -238,12 +241,12 @@ describe('drag-reorder (v1.1.2 T4, spec issue #8)', () => {
       stride: 61,
       count: 2,
     }
-    const folderSpace = {
-      top: 400,
-      left: 20,
-      right: 300,
-      cardHeight: 57,
-      stride: 61,
+    const folderRowSpace = {
+      top: 20,
+      left: 40,
+      right: 72,
+      cardHeight: 70,
+      stride: 74,
       count: 3,
     }
     const breadcrumb = { top: 0, left: 10, right: 310, bottom: 24 }
@@ -262,7 +265,7 @@ describe('drag-reorder (v1.1.2 T4, spec issue #8)', () => {
         expect(
           projectDropAt(150, 129, {
             list: listSpace,
-            folders: folderSpace,
+            folders: folderRowSpace,
             breadcrumb: null,
           })
         ).toEqual({
@@ -272,12 +275,12 @@ describe('drag-reorder (v1.1.2 T4, spec issue #8)', () => {
         })
       })
 
-      it('below the list, over a folder card, resolves to that folder', () => {
-        // Folder slot 1 spans 461..522.
+      it('over a folder segment resolves to that folder', () => {
+        // Segment 1 spans x 94..164; the pointer sits in its left half.
         expect(
-          projectDropAt(150, 500, {
+          projectDropAt(124, 56, {
             list: listSpace,
-            folders: folderSpace,
+            folders: folderRowSpace,
             breadcrumb: null,
           })
         ).toEqual({
@@ -288,9 +291,9 @@ describe('drag-reorder (v1.1.2 T4, spec issue #8)', () => {
 
       it('a folder hit still wins with the list space absent (folder view)', () => {
         expect(
-          projectDropAt(150, 410, {
+          projectDropAt(30, 56, {
             list: null,
-            folders: folderSpace,
+            folders: folderRowSpace,
             breadcrumb: null,
           })
         ).toEqual({
@@ -299,7 +302,7 @@ describe('drag-reorder (v1.1.2 T4, spec issue #8)', () => {
         })
       })
 
-      it('inside the folder view the breadcrumb bar outranks everything', () => {
+      it('the unfiled segment (the old breadcrumb) outranks everything', () => {
         expect(
           projectDropAt(150, 12, { list: listSpace, folders: null, breadcrumb })
         ).toEqual({
@@ -307,12 +310,12 @@ describe('drag-reorder (v1.1.2 T4, spec issue #8)', () => {
         })
       })
 
-      it('between the segments, or with no spaces, there is no target', () => {
-        // The folder header row sits at ~350: outside both hit spaces.
+      it('past the row, or with no spaces, there is no target', () => {
+        // Right of the last segment's slot: outside the row hit space.
         expect(
-          projectDropAt(150, 350, {
+          projectDropAt(260, 56, {
             list: listSpace,
-            folders: folderSpace,
+            folders: folderRowSpace,
             breadcrumb: null,
           })
         ).toBeNull()
@@ -326,9 +329,10 @@ describe('drag-reorder (v1.1.2 T4, spec issue #8)', () => {
       })
     })
 
-    describe('folderDropAt — folder drags only reorder the folder area', () => {
-      it('hits inside the folder space become list targets', () => {
-        expect(folderDropAt(150, 500, folderSpace)).toEqual({
+    describe('folderDropAt — folder drags only reorder the switch row', () => {
+      it('hits inside the row become list targets', () => {
+        // Segment 1's lower half: x 129..164.
+        expect(folderDropAt(134, 56, folderRowSpace)).toEqual({
           kind: 'list',
           index: 1,
           half: 'after',
@@ -336,7 +340,7 @@ describe('drag-reorder (v1.1.2 T4, spec issue #8)', () => {
       })
 
       it('the project list never reacts to a folder drag', () => {
-        expect(folderDropAt(150, 129, folderSpace)).toBeNull()
+        expect(folderDropAt(150, 129, folderRowSpace)).toBeNull()
         expect(folderDropAt(150, 400, null)).toBeNull()
       })
     })

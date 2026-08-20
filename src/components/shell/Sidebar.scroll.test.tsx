@@ -146,7 +146,7 @@ describe('Sidebar project-list scrolling (issue #25)', () => {
   })
 
   describe('the project column is its own scroll region', () => {
-    it('holds every project card; folder cards and the settings card stay outside (static)', () => {
+    it('holds every project card; the folder switch and settings stay outside (static)', () => {
       useProjectStore.setState({ recentProjectPaths: TWELVE_PATHS })
       createFolderOrFail('Set list')
       render(<Sidebar variant="static" />)
@@ -157,7 +157,12 @@ describe('Sidebar project-list scrolling (issue #25)', () => {
       for (const entry of entries) {
         expect(scroller).toContainElement(entry)
       }
-      expect(scroller).not.toContainElement(screen.getByTestId('folder-card'))
+      expect(scroller).not.toContainElement(
+        screen.getByTestId('folder-segment')
+      )
+      expect(scroller).not.toContainElement(
+        screen.getByTestId('unfiled-segment')
+      )
       expect(scroller).not.toContainElement(screen.getByTestId('settings-card'))
     })
 
@@ -174,38 +179,37 @@ describe('Sidebar project-list scrolling (issue #25)', () => {
       expect(scroller).not.toContainElement(screen.getByTestId('settings-card'))
     })
 
-    it('the FOLDERS section still renders under many projects', () => {
+    it('the folder switch still renders under many projects', () => {
       useProjectStore.setState({ recentProjectPaths: TWELVE_PATHS })
       render(<Sidebar variant="static" />)
 
-      expect(screen.getByText('Folders')).toBeInTheDocument()
+      expect(screen.getByTestId('unfiled-segment')).toBeInTheDocument()
       expect(screen.getByTestId('new-folder-button')).toBeInTheDocument()
     })
 
-    it('the drilled-in view scrolls its members; breadcrumb and footer stay outside', () => {
+    it('the folder view scrolls its members; the switch and footer stay outside', () => {
       const folderId = createFolderOrFail('Set list')
       useProjectStore.getState().moveProjectToFolder(folderId, pathAt(0))
       render(<Sidebar variant="static" />)
 
-      fireEvent.click(screen.getByTestId('folder-card'))
+      fireEvent.click(screen.getByTestId('folder-segment'))
 
       const scroller = screen.getByTestId('project-list-scroll')
       expect(scroller).toContainElement(screen.getByTestId('project-entry'))
       expect(scroller).not.toContainElement(
-        screen.getByTestId('breadcrumb-bar')
+        screen.getByTestId('unfiled-segment')
       )
       expect(scroller).not.toContainElement(screen.getByTestId('settings-card'))
-      // The FOLDERS section stays hidden while drilled in (v1.1.2).
-      expect(screen.queryByText('Folders')).not.toBeInTheDocument()
     })
   })
 
   describe('empty states', () => {
-    it('top-level empty shows the hint inside the scroller; folders stay reachable', () => {
+    it('the empty unfiled view shows the hint inside the scroller; the switch stays reachable', () => {
       render(<Sidebar variant="static" />)
 
       const scroller = screen.getByTestId('project-list-scroll')
       expect(scroller).toHaveTextContent('No projects opened yet')
+      expect(screen.getByTestId('unfiled-segment')).toBeInTheDocument()
       expect(screen.getByTestId('new-folder-button')).toBeInTheDocument()
     })
 
@@ -213,11 +217,11 @@ describe('Sidebar project-list scrolling (issue #25)', () => {
       createFolderOrFail('Set list')
       render(<Sidebar variant="static" />)
 
-      fireEvent.click(screen.getByTestId('folder-card'))
+      fireEvent.click(screen.getByTestId('folder-segment'))
 
       const scroller = screen.getByTestId('project-list-scroll')
       expect(scroller).toHaveTextContent('This folder is empty')
-      expect(screen.getByTestId('breadcrumb-bar')).toBeInTheDocument()
+      expect(screen.getByTestId('unfiled-segment')).toBeInTheDocument()
     })
   })
 

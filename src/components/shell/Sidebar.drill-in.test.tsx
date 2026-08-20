@@ -53,9 +53,9 @@ const SECOND_PATH = '/Users/test/PNDS Score 1'
 const THIRD_PATH = '/Users/test/Another Score'
 
 /**
- * v1.1.2 T3 (issue #7): the folder drill-in view — breadcrumb navigation,
- * the folder card's "in use" dot, folder-aware number badges and the
- * new-import landing.
+ * v1.1.2 T3 (issue #7), reworked for the v1.2.1 folder switch: the folder
+ * view — segment navigation, the segment's "in use" dot, folder-aware
+ * number badges and the new-import landing.
  */
 describe('Sidebar folder drill-in (v1.1.2 T3)', () => {
   beforeEach(() => {
@@ -82,12 +82,12 @@ describe('Sidebar folder drill-in (v1.1.2 T3)', () => {
     return id
   }
 
-  it('clicking a folder card drills in: only members listed, breadcrumb shown', async () => {
+  it('selecting a folder segment switches the view: only members listed', async () => {
     const user = userEvent.setup()
     seedFolder()
     render(<Sidebar variant="static" />)
 
-    await user.click(screen.getByTestId('folder-card'))
+    await user.click(screen.getByTestId('folder-segment'))
 
     const entries = screen.getAllByTestId('project-entry')
     expect(entries).toHaveLength(2)
@@ -95,31 +95,27 @@ describe('Sidebar folder drill-in (v1.1.2 T3)', () => {
       within(entries[0] as HTMLElement).getByText('PNDS Score 1')
     ).toBeInTheDocument()
 
-    // The header is replaced by the breadcrumb; the folder list is gone.
-    expect(screen.getByTestId('breadcrumb-back')).toBeInTheDocument()
-    expect(screen.getByTestId('breadcrumb-folder-name')).toHaveTextContent(
-      'Set list'
-    )
-    // The add-project "+" stays reachable — inside a folder view it is
-    // the import entry that lands projects in this folder.
+    // The switch row stays: the unfiled segment returns to the default
+    // view, the folder segment names it, and the add-project "+" stays
+    // reachable — inside a folder view it is the import entry that lands
+    // projects in this folder.
+    expect(screen.getByTestId('unfiled-segment')).toBeInTheDocument()
+    expect(screen.getByTestId('folder-name')).toHaveTextContent('Set list')
     expect(screen.getByTestId('add-project-button')).toBeInTheDocument()
-    expect(screen.queryByTestId('folder-card')).not.toBeInTheDocument()
-    expect(screen.queryByTestId('new-folder-button')).not.toBeInTheDocument()
   })
 
-  it('the breadcrumb returns to the top level and restores the flat list', async () => {
+  it('the unfiled segment returns to the default view and the flat list', async () => {
     const user = userEvent.setup()
     seedFolder()
     render(<Sidebar variant="static" />)
 
-    await user.click(screen.getByTestId('folder-card'))
-    await user.click(screen.getByTestId('breadcrumb-back'))
+    await user.click(screen.getByTestId('folder-segment'))
+    await user.click(screen.getByTestId('unfiled-segment'))
 
-    // Back at the top: one ungrouped entry plus the folder card again.
+    // Back at the unfiled view: one ungrouped entry, the switch intact.
     expect(screen.getAllByTestId('project-entry')).toHaveLength(1)
-    expect(screen.getByTestId('folder-card')).toBeInTheDocument()
-    expect(screen.queryByTestId('breadcrumb-back')).not.toBeInTheDocument()
-    expect(screen.getByTestId('new-folder-button')).toBeInTheDocument()
+    expect(screen.getByTestId('folder-segment')).toBeInTheDocument()
+    expect(useProjectStore.getState().activeFolderId).toBeNull()
   })
 
   it('an empty folder shows the empty hint instead of the no-projects one', () => {
@@ -140,15 +136,15 @@ describe('Sidebar folder drill-in (v1.1.2 T3)', () => {
     useSessionStore.setState({ sessionStatus: 'ready' })
     render(<Sidebar variant="static" />)
 
-    const card = screen.getByTestId('folder-card')
-    expect(within(card).getByTestId('folder-in-use-dot')).toBeInTheDocument()
+    const segment = screen.getByTestId('folder-segment')
+    expect(within(segment).getByTestId('folder-in-use-dot')).toBeInTheDocument()
 
     // A merely preflighted (idle) selection is not "in use".
     act(() => {
       useSessionStore.setState({ sessionStatus: 'idle' })
     })
     expect(
-      within(screen.getByTestId('folder-card')).queryByTestId(
+      within(screen.getByTestId('folder-segment')).queryByTestId(
         'folder-in-use-dot'
       )
     ).not.toBeInTheDocument()
@@ -171,7 +167,7 @@ describe('Sidebar folder drill-in (v1.1.2 T3)', () => {
     seedFolder()
     render(<AppShell />)
 
-    await user.click(screen.getByTestId('folder-card'))
+    await user.click(screen.getByTestId('folder-segment'))
 
     const entries = screen.getAllByTestId('project-entry')
     const first = entries[0]
@@ -250,7 +246,7 @@ describe('Sidebar folder drill-in (v1.1.2 T3)', () => {
       seedFolder()
       render(<AppShell />)
 
-      await user.click(screen.getByTestId('folder-card'))
+      await user.click(screen.getByTestId('folder-segment'))
       pressCmd()
 
       const badges = screen.getAllByTestId('project-number-badge')
@@ -258,8 +254,8 @@ describe('Sidebar folder drill-in (v1.1.2 T3)', () => {
       // The ungrouped project is not part of the folder view.
       expect(entryOrder()).toEqual([SECOND_PATH, THIRD_PATH])
 
-      // Returning to the top restores the flat numbering.
-      await user.click(screen.getByTestId('breadcrumb-back'))
+      // Returning to the unfiled view restores the flat numbering.
+      await user.click(screen.getByTestId('unfiled-segment'))
       expect(
         screen
           .getAllByTestId('project-number-badge')
@@ -286,7 +282,7 @@ describe('Sidebar folder drill-in (v1.1.2 T3)', () => {
       seedFolder()
       render(<AppShell />)
 
-      await user.click(screen.getByTestId('folder-card'))
+      await user.click(screen.getByTestId('folder-segment'))
       pressCmd()
       expect(badgeNumbersByPath()).toEqual([
         [SECOND_PATH, '1'],

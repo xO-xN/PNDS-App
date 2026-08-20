@@ -281,7 +281,7 @@ describe('AppShell', () => {
 
     // The grouped project is hidden from the top segment; the folder card
     // renders below it with the persisted name.
-    await screen.findByTestId('folder-card')
+    await screen.findByTestId('folder-segment')
     expect(screen.getByTestId('folder-name')).toHaveTextContent('Gig Friday')
     const entries = screen.getAllByTestId('project-entry')
     expect(entries).toHaveLength(1)
@@ -306,7 +306,7 @@ describe('AppShell', () => {
     render(<AppShell />)
 
     await screen.findByTestId('project-entry')
-    expect(screen.queryByTestId('folder-card')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('folder-segment')).not.toBeInTheDocument()
     expect(useProjectStore.getState().projectFolders).toEqual([])
   })
 
@@ -323,7 +323,7 @@ describe('AppShell', () => {
     render(<AppShell />)
 
     // The folder appears with the two installed tools as members.
-    await screen.findByTestId('folder-card')
+    await screen.findByTestId('folder-segment')
     expect(screen.getByTestId('folder-name')).toHaveTextContent('Utilities')
     // Both tools are folder members, so the top segment stays empty.
     expect(screen.queryByTestId('project-entry')).not.toBeInTheDocument()

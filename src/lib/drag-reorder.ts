@@ -95,6 +95,21 @@ export function hoveredCardAt(
 }
 
 /**
+ * v1.2.1 (folder switch): the same slot/midpoint math for a uniform
+ * horizontal row — the sidebar's folder segments. `space` carries the
+ * row axis-swapped (top = first segment's left, cardHeight = segment
+ * width, left/right = the row's vertical extent), and this helper swaps
+ * the pointer axes to match.
+ */
+export function hoveredCardInRow(
+  pointerX: number,
+  pointerY: number,
+  space: DragHitSpace
+): DropTarget | null {
+  return hoveredCardAt(pointerY, pointerX, space)
+}
+
+/**
  * The visible order a drop at `insertionIndex` produces. Returns the input
  * reference for no-ops (invalid source, no insertion, or landing back on the
  * original slot), so callers can skip work without deep comparison.
@@ -176,9 +191,10 @@ export function masterWithUngroupedOrder(
 
 /**
  * v1.1.2 T5 (spec issue #9): the drop zones a drag can resolve to beyond
- * the visible-list reorder — dropping a project on a folder card (join it)
- * or on the breadcrumb bar (leave the folder). All rects are the static
- * snapshots taken at drag start, like DragHitSpace.
+ * the visible-list reorder — dropping a project on a folder (join it) or
+ * on the unfiled segment (leave the folder; v1.2.1 folder switch, it was
+ * the breadcrumb bar). All rects are the static snapshots taken at drag
+ * start, like DragHitSpace.
  */
 export interface Rect {
   top: number
@@ -203,9 +219,9 @@ export function pointInRect(
 
 /**
  * Where a dragged project card would land. The zones are disjoint in
- * practice (breadcrumb above the list, folder cards below it), so the
- * precedence here only guards against overlap: breadcrumb, then folder
- * cards, then the in-list reorder slot.
+ * practice (the segments row above the list), so the precedence here only
+ * guards against overlap: unfiled segment, then folder segments, then the
+ * in-list reorder slot.
  */
 export type ProjectDropTarget =
   | { kind: 'list'; index: number; half: DropHalf }
@@ -214,11 +230,11 @@ export type ProjectDropTarget =
 
 /** The drop zones snapshotted at drag start; null where not rendered. */
 export interface DragSpaces {
-  /** Visible project cards (top-level ungrouped or one folder's members). */
+  /** Visible project cards (unfiled or one folder's members). */
   list: DragHitSpace | null
-  /** Folder cards — top level only, hidden while drilled in. */
+  /** Folder segments — the switch row, as an axis-swapped row space. */
   folders: DragHitSpace | null
-  /** The breadcrumb bar — folder view only. */
+  /** The unfiled segment — dropping a member on it returns it to unfiled. */
   breadcrumb: Rect | null
 }
 
@@ -231,7 +247,7 @@ export function projectDropAt(
     return { kind: 'breadcrumb' }
   }
   if (spaces.folders) {
-    const folderHit = hoveredCardAt(pointerX, pointerY, spaces.folders)
+    const folderHit = hoveredCardInRow(pointerX, pointerY, spaces.folders)
     if (folderHit) return { kind: 'folder', index: folderHit.index }
   }
   const listHit = spaces.list
@@ -243,9 +259,9 @@ export function projectDropAt(
 }
 
 /**
- * Where a dragged folder card would land: folders only ever reorder within
- * the folder area (spec issue #9: 文件夹卡在文件夹区内可拖拽排序), so the
- * project list is never consulted.
+ * Where a dragged folder segment would land: folders only ever reorder
+ * within the switch row (spec issue #9: 文件夹卡在文件夹区内可拖拽排序),
+ * so the project list is never consulted.
  */
 export interface FolderDropTarget {
   kind: 'list'
@@ -258,7 +274,7 @@ export function folderDropAt(
   pointerY: number,
   space: DragHitSpace | null
 ): FolderDropTarget | null {
-  const hit = space ? hoveredCardAt(pointerX, pointerY, space) : null
+  const hit = space ? hoveredCardInRow(pointerX, pointerY, space) : null
   return hit ? { kind: 'list', index: hit.index, half: hit.half } : null
 }
 

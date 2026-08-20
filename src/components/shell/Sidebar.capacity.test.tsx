@@ -99,21 +99,27 @@ describe('Sidebar capacity caps (v1.2.1, issue #26)', () => {
     })
     render(<Sidebar variant="static" />)
 
-    // One ungrouped card above the (full) folder card — the drop geometry
-    // follows the folder-drag tests' pinned rects (jsdom lays out nothing).
+    // One ungrouped card, the full folder as a switch segment — the drop
+    // geometry follows the folder-drag tests' pinned rects (jsdom lays
+    // out nothing): the segment spans x 100..170, y 200..232.
     const [loose] = screen.getAllByTestId('project-entry')
-    const folderCard = screen.getByTestId('folder-card')
+    const segment = screen.getByTestId('folder-segment')
     if (!loose) throw new Error('Expected the ungrouped project card')
     mockBoundingClientRect(loose, { top: 0 })
-    mockBoundingClientRect(folderCard, { top: 200 })
+    mockBoundingClientRect(segment, {
+      top: 200,
+      left: 100,
+      width: 70,
+      height: 32,
+    })
 
     fireEvent.pointerDown(loose, { pointerId: 1, clientX: 40, clientY: 20 })
     fireEvent.pointerMove(window, { pointerId: 1, clientX: 60, clientY: 30 })
     await waitFor(() =>
       expect(screen.getByTestId('drag-clone')).toBeInTheDocument()
     )
-    fireEvent.pointerMove(window, { pointerId: 1, clientX: 150, clientY: 220 })
-    expect(folderCard).toHaveAttribute('data-drop-active', 'true')
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 135, clientY: 216 })
+    expect(segment).toHaveAttribute('data-drop-active', 'true')
     fireEvent.pointerUp(window, { pointerId: 1 })
 
     expect(notifications.warning).toHaveBeenCalledWith(

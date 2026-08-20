@@ -221,7 +221,7 @@ describe('Cmd+↑/↓ project navigation and Esc close (v1.1.2 T7)', () => {
       pressCmdArrow('ArrowDown')
 
       // The view followed the current project into its folder…
-      expect(screen.getByTestId('breadcrumb-bar')).toBeInTheDocument()
+      expect(screen.getByTestId('folder-segment')).toBeInTheDocument()
       expect(useProjectStore.getState().activeFolderId).toBe('f1')
       // …and the move landed on the folder's next member.
       expect(commands.preflightProject).toHaveBeenCalledWith(THIRD_PATH)

@@ -297,9 +297,7 @@ describe('⌘R project rename (v1.1.2 T6)', () => {
         })
       )
     })
-    expect(screen.getByTestId('breadcrumb-folder-name')).toHaveTextContent(
-      'Tour 2026'
-    )
+    expect(screen.getByTestId('folder-name')).toHaveTextContent('Tour 2026')
   })
 
   it('a selected project wins over the folder while drilled in', () => {
@@ -336,8 +334,7 @@ describe('⌘R project rename (v1.1.2 T6)', () => {
     render(<AppShell />)
 
     // Enter: selection resets, ⌘R falls through to the folder name.
-    fireEvent.click(screen.getByTestId('folder-card'))
-    expect(screen.getByTestId('breadcrumb-bar')).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('folder-segment'))
     expect(useProjectStore.getState().currentProject).toBeNull()
 
     pressCmdR()
@@ -349,7 +346,7 @@ describe('⌘R project rename (v1.1.2 T6)', () => {
       currentProject: { path: SECOND_PATH, manifest: secondManifest },
       preflightStatus: 'ready',
     })
-    fireEvent.click(screen.getByTestId('breadcrumb-back'))
+    fireEvent.click(screen.getByTestId('unfiled-segment'))
     expect(useProjectStore.getState().currentProject).toBeNull()
   })
 
@@ -361,10 +358,10 @@ describe('⌘R project rename (v1.1.2 T6)', () => {
     createFolderOrFail('Gig')
     render(<AppShell />)
 
-    fireEvent.click(screen.getByTestId('folder-card'))
+    fireEvent.click(screen.getByTestId('folder-segment'))
     expect(useProjectStore.getState().currentProject?.path).toBe(FIRST_PATH)
 
-    fireEvent.click(screen.getByTestId('breadcrumb-back'))
+    fireEvent.click(screen.getByTestId('unfiled-segment'))
     expect(useProjectStore.getState().currentProject?.path).toBe(FIRST_PATH)
   })
 

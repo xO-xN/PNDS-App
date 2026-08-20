@@ -42,7 +42,7 @@ It owns three behaviors (spec issue #4):
   continues inside it ("下一首曲子" mental model, v1.1.2 T7).
 - **Cmd+R** → starts the inline rename through `startRename`
   (`src/lib/project-rename.ts`): the selected project's card (or the
-  drilled-in folder's breadcrumb name when nothing is selected). The Edit
+  selected folder segment's name when nothing is selected). The Edit
   menu's "Rename Project" item fires the same function behind the same
   accelerator — the native accelerator consumes the key before the webview,
   so both paths apply the same text-input/open-overlay guards. Forbidden

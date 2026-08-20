@@ -6,6 +6,7 @@ import {
   mockBoundingClientRect,
   createFolderOrFail,
 } from '@/test/test-utils'
+import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { commands } from '@/lib/tauri-bindings'
 import { useProjectStore } from '@/store/project-store'
@@ -26,14 +27,15 @@ const SECOND_PATH = '/Users/test/PNDS Score 1'
 const THIRD_PATH = '/Users/test/Another Score'
 
 /**
- * v1.1.2 T5 (issue #9): folder drag interactions — dropping a project on
- * a folder card files it in, dropping a member on the breadcrumb bar
- * returns it to ungrouped, and folder cards reorder within their section.
- * jsdom lays out nothing, so each test pins the rects the drag derives
- * its geometry from (cards pitch 61px); the drop decision itself is the
- * same pure math covered by the drag-reorder unit tests.
+ * v1.1.2 T5 (issue #9), reworked for the v1.2.1 folder switch: folder
+ * drag interactions — dropping a project on a folder segment files it in,
+ * dropping a member on the unfiled segment returns it to ungrouped, and
+ * the segments reorder within the switch row. jsdom lays out nothing, so
+ * each test pins the rects the drag derives its geometry from (project
+ * cards pitch 61px; segments pitch 74px horizontally); the drop decision
+ * itself is the same pure math covered by the drag-reorder unit tests.
  */
-describe('Sidebar folder drags (v1.1.2 T5)', () => {
+describe('Sidebar folder drags (v1.1.2 T5, folder switch)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     useKeyboardStore.getState().setCommandKeyPressed(false)
@@ -62,28 +64,34 @@ describe('Sidebar folder drags (v1.1.2 T5)', () => {
     fireEvent.pointerMove(window, { pointerId: 1, clientX: x, clientY: y })
   }
 
-  it('dropping a project on a folder card files it into that folder (end), persisted', async () => {
+  it('dropping a project on a folder segment files it into that folder (end), persisted', async () => {
     const folderId = createFolderOrFail('Set list')
     useProjectStore.getState().moveProjectToFolder(folderId, THIRD_PATH)
     render(<Sidebar variant="static" />)
 
-    // Ungrouped FIRST/SECOND pitch 61px; the folder card sits below them.
+    // Ungrouped FIRST/SECOND pitch 61px; the folder segment sits below
+    // them in the (pinned) switch row geometry: x 100..170, y 200..232.
     const [first, second] = screen.getAllByTestId('project-entry')
-    const folderCard = screen.getByTestId('folder-card')
+    const segment = screen.getByTestId('folder-segment')
     if (!first || !second) throw new Error('Expected two ungrouped cards')
     mockBoundingClientRect(first, { top: 0 })
     mockBoundingClientRect(second, { top: 61 })
-    mockBoundingClientRect(folderCard, { top: 200 })
+    mockBoundingClientRect(segment, {
+      top: 200,
+      left: 100,
+      width: 70,
+      height: 32,
+    })
 
-    await dragCardTo(second, 150, 220)
+    await dragCardTo(second, 135, 216)
 
-    // Hovering the folder card highlights it as the drop zone.
-    expect(folderCard).toHaveAttribute('data-drop-active', 'true')
+    // Hovering the segment highlights it as the drop zone.
+    expect(segment).toHaveAttribute('data-drop-active', 'true')
     // Moving back over the list clears the highlight.
     fireEvent.pointerMove(window, { pointerId: 1, clientX: 150, clientY: 30 })
-    expect(folderCard).not.toHaveAttribute('data-drop-active')
+    expect(segment).not.toHaveAttribute('data-drop-active')
 
-    fireEvent.pointerMove(window, { pointerId: 1, clientX: 150, clientY: 220 })
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 135, clientY: 216 })
     fireEvent.pointerUp(window, { pointerId: 1 })
 
     // SECOND joined the folder at its end; THIRD keeps its slot, the
@@ -98,7 +106,7 @@ describe('Sidebar folder drags (v1.1.2 T5)', () => {
       SECOND_PATH,
       THIRD_PATH,
     ])
-    // Only FIRST remains ungrouped at the top level.
+    // Only FIRST remains ungrouped in the default view.
     expect(screen.getAllByTestId('project-entry')).toHaveLength(1)
     await waitFor(() => {
       expect(commands.savePreferences).toHaveBeenCalledWith(
@@ -114,24 +122,32 @@ describe('Sidebar folder drags (v1.1.2 T5)', () => {
     })
   })
 
-  it('dropping a member on the breadcrumb returns it to ungrouped, persisted', async () => {
+  it('dropping a member on the unfiled segment returns it to ungrouped, persisted', async () => {
+    const user = userEvent.setup()
     const folderId = createFolderOrFail('Set list')
     useProjectStore.getState().moveProjectToFolder(folderId, SECOND_PATH)
     useProjectStore.getState().moveProjectToFolder(folderId, THIRD_PATH)
     render(<Sidebar variant="static" />)
 
-    await fireEvent.click(screen.getByTestId('folder-card'))
+    await fireEvent.click(screen.getByTestId('folder-segment'))
 
-    const breadcrumb = screen.getByTestId('breadcrumb-bar')
-    mockBoundingClientRect(breadcrumb, { top: 0, height: 24 })
+    // The unfiled segment spans x 100..160, y 0..32; the two members
+    // pitch 61px from y 100.
+    const unfiled = screen.getByTestId('unfiled-segment')
+    mockBoundingClientRect(unfiled, {
+      top: 0,
+      left: 100,
+      width: 60,
+      height: 32,
+    })
     const [first, second] = screen.getAllByTestId('project-entry')
     if (!first || !second) throw new Error('Expected two folder members')
     mockBoundingClientRect(first, { top: 100 })
     mockBoundingClientRect(second, { top: 161 })
 
-    await dragCardTo(first, 150, 10)
+    await dragCardTo(first, 130, 16)
 
-    expect(breadcrumb).toHaveAttribute('data-drop-active', 'true')
+    expect(unfiled).toHaveAttribute('data-drop-active', 'true')
     fireEvent.pointerUp(window, { pointerId: 1 })
 
     // SECOND left the folder; the master list keeps every project.
@@ -154,29 +170,46 @@ describe('Sidebar folder drags (v1.1.2 T5)', () => {
       )
     })
 
-    // Back at the top level the project is ungrouped again.
-    fireEvent.click(screen.getByTestId('breadcrumb-back'))
+    // Back at the unfiled view the project is ungrouped again. (userEvent:
+    // a real click starts with pointerdown, which re-arms the click
+    // suppression the drop left behind.)
+    await user.click(screen.getByTestId('unfiled-segment'))
     expect(screen.getAllByTestId('project-entry')).toHaveLength(2)
   })
 
-  it('folder cards reorder within the folder area, persisted', async () => {
+  it('segments reorder within the switch row, persisted', async () => {
     const friday = createFolderOrFail('Friday')
     const saturday = createFolderOrFail('Saturday')
     const sunday = createFolderOrFail('Sunday')
     render(<Sidebar variant="static" />)
 
-    const cards = screen.getAllByTestId('folder-card')
-    expect(cards).toHaveLength(3)
-    // The three folder cards pitch 61px below the ungrouped project.
-    mockBoundingClientRect(cards[0] as HTMLElement, { top: 300 })
-    mockBoundingClientRect(cards[1] as HTMLElement, { top: 361 })
-    mockBoundingClientRect(cards[2] as HTMLElement, { top: 422 })
+    const segments = screen.getAllByTestId('folder-segment')
+    expect(segments).toHaveLength(3)
+    // The three segments pitch 74px along the row at y 200.
+    mockBoundingClientRect(segments[0] as HTMLElement, {
+      top: 200,
+      left: 20,
+      width: 70,
+      height: 32,
+    })
+    mockBoundingClientRect(segments[1] as HTMLElement, {
+      top: 200,
+      left: 94,
+      width: 70,
+      height: 32,
+    })
+    mockBoundingClientRect(segments[2] as HTMLElement, {
+      top: 200,
+      left: 168,
+      width: 70,
+      height: 32,
+    })
 
-    // Newest-created first (v1.2.0 top insertion): cards[0] is Sunday.
-    // Drag Sunday over Saturday's bottom half → insert after it.
-    await dragCardTo(cards[0] as HTMLElement, 150, 400)
-    // Saturday yields one stride up, opening Sunday's landing slot.
-    expect(cards[1]).toHaveStyle({ transform: 'translateY(-61px)' })
+    // Newest-created first (v1.2.0 top insertion): segments[0] is Sunday.
+    // Drag Sunday over Saturday's right half → insert after it.
+    await dragCardTo(segments[0] as HTMLElement, 150, 216)
+    // Saturday yields one stride left, opening Sunday's landing slot.
+    expect(segments[1]).toHaveStyle({ transform: 'translateX(-74px)' })
 
     fireEvent.pointerUp(window, { pointerId: 1 })
 
@@ -186,8 +219,8 @@ describe('Sidebar folder drags (v1.1.2 T5)', () => {
     // The DOM follows the new folder order.
     expect(
       screen
-        .getAllByTestId('folder-card')
-        .map(card => card.getAttribute('data-folder-id'))
+        .getAllByTestId('folder-segment')
+        .map(segment => segment.getAttribute('data-folder-segment'))
     ).toEqual([saturday, sunday, friday])
     await waitFor(() => {
       expect(commands.savePreferences).toHaveBeenCalledWith(
@@ -212,14 +245,19 @@ describe('Sidebar folder drags (v1.1.2 T5)', () => {
     render(<Sidebar variant="static" />)
 
     const [first, second] = screen.getAllByTestId('project-entry')
-    const folderCard = screen.getByTestId('folder-card')
+    const segment = screen.getByTestId('folder-segment')
     if (!first || !second) throw new Error('Expected two ungrouped cards')
     mockBoundingClientRect(first, { top: 0 })
     mockBoundingClientRect(second, { top: 61 })
-    mockBoundingClientRect(folderCard, { top: 200 })
+    mockBoundingClientRect(segment, {
+      top: 200,
+      left: 100,
+      width: 70,
+      height: 32,
+    })
 
-    // Hover the folder, then retreat to the list and drop on a no-move slot.
-    await dragCardTo(second, 150, 220)
+    // Hover the segment, then retreat to the list and drop on a no-move slot.
+    await dragCardTo(second, 135, 216)
     fireEvent.pointerMove(window, { pointerId: 1, clientX: 150, clientY: 100 })
     fireEvent.pointerUp(window, { pointerId: 1 })
 

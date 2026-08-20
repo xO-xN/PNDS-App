@@ -158,16 +158,15 @@ describe('Sidebar', () => {
     useSessionStore.getState().resetSession()
   })
 
-  it('shows the section labels, the header buttons and the settings card', () => {
+  it('shows the folder switch row, the header buttons and the settings card', () => {
     render(<Sidebar variant="static" />)
-    expect(screen.getByText('Projects')).toBeInTheDocument()
     expect(screen.getByTestId('settings-card')).toBeInTheDocument()
 
-    // Add-project lives beside the Projects label (the bottom "Open" pill
-    // is gone); the FOLDERS row always renders and carries the
-    // new-folder button even before any folder exists.
+    // The folder switch always renders: the unfiled segment carries the
+    // default view, and the new-folder button exists even before any
+    // folder (the bottom "Open" pill is long gone).
+    expect(screen.getByTestId('unfiled-segment')).toBeInTheDocument()
     expect(screen.getByTestId('add-project-button')).toBeInTheDocument()
-    expect(screen.getByText('Folders')).toBeInTheDocument()
     expect(screen.getByTestId('new-folder-button')).toBeInTheDocument()
     expect(screen.queryByText('Open')).not.toBeInTheDocument()
   })

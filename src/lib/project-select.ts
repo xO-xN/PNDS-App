@@ -43,8 +43,8 @@ export function selectProject(path: string): void {
 }
 
 /**
- * v1.1.2 T6: enters a folder view (folder-card click) or returns to the
- * top level (breadcrumb back, `null`). Folder views are exclusive — the
+ * v1.1.2 T6: enters a folder view (folder-segment click) or returns to
+ * the unfiled default (`null`). Folder views are exclusive — the
  * collapsed sidebar never shows outside projects — so opening or closing
  * one resets the selection: a card the view no longer shows must not stay
  * the ⌘R target. A live session keeps its project (it is not a selection
