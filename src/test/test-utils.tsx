@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { render, type RenderOptions } from '@testing-library/react'
 import { I18nextProvider } from 'react-i18next'
 import i18n from '@/i18n/config'
+import { useProjectStore } from '@/store/project-store'
 import {
   ThemeProviderContext,
   type Theme,
@@ -63,6 +64,19 @@ export function mockBoundingClientRect(
       y: top,
       toJSON: () => ({}),
     }) as DOMRect
+}
+
+/**
+ * Creates a folder through the store or throws — v1.2.1 (issue #26) made
+ * `createFolder` nullable at the folder cap, and setup code in tests
+ * (always well below the cap) wants a plain id back.
+ */
+export function createFolderOrFail(name: string): string {
+  const id = useProjectStore.getState().createFolder(name)
+  if (id === null) {
+    throw new Error(`Folder creation was refused: ${name}`)
+  }
+  return id
 }
 
 export * from '@testing-library/react'

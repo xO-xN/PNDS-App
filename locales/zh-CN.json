@@ -146,6 +146,8 @@
   "sidebar.backToAllProjects": "返回全部工程",
   "sidebar.folderInUse": "使用中",
   "sidebar.folderEmpty": "此文件夹为空",
+  "sidebar.folderLimitReached": "文件夹已达上限（{{limit}} 个，含 Utilities）——请先删除文件夹再新建。",
+  "sidebar.projectLimitReached": "该列表已达 {{limit}} 个工程的上限——请先移除工程再添加。",
   "closeProject.confirmTitle": "关闭工程？",
   "closeProject.confirmMessage": "正在运行一个会话。停止它并关闭工程吗？",
   "closeProject.confirm": "关闭",

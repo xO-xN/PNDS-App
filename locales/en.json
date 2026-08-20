@@ -146,6 +146,8 @@
   "sidebar.backToAllProjects": "Back to all projects",
   "sidebar.folderInUse": "In use",
   "sidebar.folderEmpty": "This folder is empty",
+  "sidebar.folderLimitReached": "Folder limit reached ({{limit}}, including Utilities) — delete a folder to create another.",
+  "sidebar.projectLimitReached": "This list already holds the maximum of {{limit}} projects — remove one before adding another.",
   "switchProject.title": "Load the “{{name}}”?",
   "switchProject.description": "This will close the current server and select “{{name}}”. You can then load it from the sidebar.",
   "switchProject.back": "Back",

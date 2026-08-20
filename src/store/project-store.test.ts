@@ -5,8 +5,10 @@ import {
   visibleProjectPaths,
   isProtectedFolder,
   UTILITIES_FOLDER_ID,
+  folderLimitReached,
 } from './project-store'
 import { commands, type Manifest } from '@/lib/tauri-bindings'
+import { createFolderOrFail } from '@/test/test-utils'
 
 const manifest: Manifest = {
   schemaVersion: 1,
@@ -134,7 +136,7 @@ describe('project-store', () => {
     useProjectStore.getState().addRecentProject('/a')
     useProjectStore.getState().addRecentProject('/b')
     useProjectStore.getState().preflightSucceeded('/a', manifest)
-    const folderId = useProjectStore.getState().createFolder('Set list')
+    const folderId = createFolderOrFail('Set list')
     useProjectStore.getState().moveProjectToFolder(folderId, '/b')
 
     useProjectStore.getState().clearRecentProjects()
@@ -164,8 +166,8 @@ describe('project-store folders (v1.1.2, spec issue #4)', () => {
 
   it('creates folders at the top of the folder area, with unique ids, and renames them', () => {
     const store = useProjectStore.getState()
-    const id1 = store.createFolder('Gig Friday')
-    const id2 = store.createFolder('Gig Saturday')
+    const id1 = createFolderOrFail('Gig Friday')
+    const id2 = createFolderOrFail('Gig Saturday')
     expect(id1).not.toBe(id2)
     // v1.2.0: a new folder opens at the top — newest first.
     expect(useProjectStore.getState().projectFolders.map(f => f.name)).toEqual([
@@ -181,9 +183,8 @@ describe('project-store folders (v1.1.2, spec issue #4)', () => {
   })
 
   it('pins the Utilities folder last through folder reorder commits', () => {
-    const store = useProjectStore.getState()
-    const id1 = store.createFolder('One')
-    const id2 = store.createFolder('Two')
+    const id1 = createFolderOrFail('One')
+    const id2 = createFolderOrFail('Two')
     useProjectStore.setState({
       projectFolders: [
         ...useProjectStore.getState().projectFolders,
@@ -204,7 +205,7 @@ describe('project-store folders (v1.1.2, spec issue #4)', () => {
 
   it('deleting a folder returns its projects to ungrouped (never removed from history)', () => {
     const store = useProjectStore.getState()
-    const id = store.createFolder('Set list')
+    const id = createFolderOrFail('Set list')
     store.moveProjectToFolder(id, '/a')
     store.moveProjectToFolder(id, '/b')
     expect(
@@ -225,8 +226,8 @@ describe('project-store folders (v1.1.2, spec issue #4)', () => {
 
   it('moving into a folder removes membership from any previous folder', () => {
     const store = useProjectStore.getState()
-    const id1 = store.createFolder('One')
-    const id2 = store.createFolder('Two')
+    const id1 = createFolderOrFail('One')
+    const id2 = createFolderOrFail('Two')
     store.moveProjectToFolder(id1, '/a')
     store.moveProjectToFolder(id2, '/a')
 
@@ -237,7 +238,7 @@ describe('project-store folders (v1.1.2, spec issue #4)', () => {
 
   it('removeProjectFromFolder returns a single path to ungrouped', () => {
     const store = useProjectStore.getState()
-    const id = store.createFolder('Set list')
+    const id = createFolderOrFail('Set list')
     store.moveProjectToFolder(id, '/a')
     store.moveProjectToFolder(id, '/b')
 
@@ -254,7 +255,7 @@ describe('project-store folders (v1.1.2, spec issue #4)', () => {
 
   it('removeRecentProject drops folder membership too (index-only delete)', () => {
     const store = useProjectStore.getState()
-    const id = store.createFolder('Set list')
+    const id = createFolderOrFail('Set list')
     store.moveProjectToFolder(id, '/b')
 
     store.removeRecentProject('/b')
@@ -266,7 +267,7 @@ describe('project-store folders (v1.1.2, spec issue #4)', () => {
 
   it('folder cards never take a number: ungrouped derives from the master list', () => {
     const store = useProjectStore.getState()
-    const id = store.createFolder('Set list')
+    const id = createFolderOrFail('Set list')
     store.moveProjectToFolder(id, '/b')
     // Master-list order is reflected in the ungrouped order.
     useProjectStore.setState({ recentProjectPaths: ['/c', '/a', '/b'] })
@@ -293,7 +294,7 @@ describe('folder-aware view derivation (v1.1.2 T3, spec issue #7)', () => {
       preflightStatus: 'idle',
       preflightError: null,
     })
-    folderId = useProjectStore.getState().createFolder('Set list')
+    folderId = createFolderOrFail('Set list')
     const store = useProjectStore.getState()
     store.moveProjectToFolder(folderId, '/b')
     store.moveProjectToFolder(folderId, '/d')
@@ -366,7 +367,7 @@ describe('visible reorder from drags (v1.1.2 T4, spec issue #8)', () => {
       preflightStatus: 'idle',
       preflightError: null,
     })
-    folderId = useProjectStore.getState().createFolder('Set list')
+    folderId = createFolderOrFail('Set list')
     const store = useProjectStore.getState()
     store.moveProjectToFolder(folderId, '/b')
     store.moveProjectToFolder(folderId, '/d')
@@ -430,10 +431,9 @@ describe('folder reorder from drags (v1.1.2 T5, spec issue #9)', () => {
   })
 
   it('reorders the folder cards by id, memberships untouched', () => {
-    const store = useProjectStore.getState()
-    const first = store.createFolder('Friday')
-    const second = store.createFolder('Saturday')
-    const third = store.createFolder('Sunday')
+    const first = createFolderOrFail('Friday')
+    const second = createFolderOrFail('Saturday')
+    const third = createFolderOrFail('Sunday')
 
     useProjectStore.getState().applyFolderReorder([third, first, second])
 
@@ -446,9 +446,8 @@ describe('folder reorder from drags (v1.1.2 T5, spec issue #9)', () => {
   })
 
   it('ignores an id set that is not the current folder set', () => {
-    const store = useProjectStore.getState()
-    const first = store.createFolder('Friday')
-    const second = store.createFolder('Saturday')
+    const first = createFolderOrFail('Friday')
+    const second = createFolderOrFail('Saturday')
     const before = useProjectStore.getState().projectFolders
 
     // Missing, foreign and duplicated ids are all rejected.
@@ -670,6 +669,193 @@ describe('project-store persistence (structural actions commit + save)', () => {
       .getState()
       .upsertManifestProjectNames({ '/a': 'Tool A', '/b': 'Tool B' })
     await settle()
+    expect(commands.savePreferences).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * v1.2.1 (issue #26): sidebar capacity caps — the folder area holds at
+ * most 3 folders (Utilities counts), and every directory (the ungrouped
+ * top level, each folder) holds at most 30 projects. The caps are
+ * enforced by the structural actions themselves; over-limit legacy data
+ * loads untouched and only further additions are refused.
+ */
+describe('capacity limits (v1.2.1, issue #26)', () => {
+  /** `n` paths living at the top level (ungrouped). */
+  const ungroupedPaths = (n: number) =>
+    Array.from({ length: n }, (_, i) => `/top-${i}`)
+  /** A folder holding exactly `n` members, plus the member paths. */
+  const fullFolder = (n: number, id = 'f-full') => {
+    const paths = Array.from({ length: n }, (_, i) => `/in-${id}-${i}`)
+    return { paths, folder: { id, name: 'Full', projectPaths: paths } }
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useProjectStore.setState({
+      currentProject: null,
+      recentProjectPaths: [],
+      projectFolders: [],
+      pendingPreflightPath: null,
+      pendingSwitchPath: null,
+      activeFolderId: null,
+      preflightStatus: 'idle',
+      preflightError: null,
+    })
+  })
+
+  it('createFolder refuses the 4th folder — Utilities counts toward the 3', () => {
+    createFolderOrFail('One')
+    createFolderOrFail('Two')
+    useProjectStore.setState({
+      projectFolders: [
+        ...useProjectStore.getState().projectFolders,
+        { id: UTILITIES_FOLDER_ID, name: 'Utilities', projectPaths: [] },
+      ],
+    })
+    expect(folderLimitReached(useProjectStore.getState().projectFolders)).toBe(
+      true
+    )
+
+    const refused = useProjectStore.getState().createFolder('Three')
+    expect(refused).toBeNull()
+    expect(useProjectStore.getState().projectFolders).toHaveLength(3)
+  })
+
+  it('createFolder still works at 2 folders and below', () => {
+    useProjectStore.setState({
+      projectFolders: [
+        { id: 'f1', name: 'One', projectPaths: [] },
+        { id: UTILITIES_FOLDER_ID, name: 'Utilities', projectPaths: [] },
+      ],
+    })
+
+    const id = createFolderOrFail('Two')
+    expect(id).not.toBeNull()
+    expect(useProjectStore.getState().projectFolders).toHaveLength(3)
+  })
+
+  it('addRecentProject refuses the 31st top-level project (folders count separately)', () => {
+    const member = fullFolder(5)
+    useProjectStore.setState({
+      recentProjectPaths: [...ungroupedPaths(30), ...member.paths],
+      projectFolders: [member.folder],
+    })
+
+    const refused = useProjectStore.getState().addRecentProject('/new')
+    expect(refused).toBe(false)
+    expect(useProjectStore.getState().recentProjectPaths).toHaveLength(35)
+
+    // A full folder does not cap the top level, and vice versa: reopening
+    // a known path is never refused.
+    expect(useProjectStore.getState().addRecentProject('/top-0')).toBe(true)
+    expect(useProjectStore.getState().recentProjectPaths).toHaveLength(35)
+  })
+
+  it('addRecentProject at 29 top-level projects still admits the 30th', () => {
+    useProjectStore.setState({ recentProjectPaths: ungroupedPaths(29) })
+
+    expect(useProjectStore.getState().addRecentProject('/new')).toBe(true)
+    expect(useProjectStore.getState().recentProjectPaths).toHaveLength(30)
+  })
+
+  it('moveProjectToFolder refuses joining a full folder, but not re-filing a member', () => {
+    const member = fullFolder(30)
+    useProjectStore.setState({
+      recentProjectPaths: ['/loose', ...member.paths],
+      projectFolders: [member.folder],
+    })
+
+    expect(
+      useProjectStore.getState().moveProjectToFolder('f-full', '/loose')
+    ).toBe(false)
+    expect(
+      useProjectStore.getState().projectFolders[0]?.projectPaths
+    ).toHaveLength(30)
+    expect(useProjectStore.getState().recentProjectPaths).toContain('/loose')
+
+    // A member already inside the target is a no-op, not a refusal.
+    const [firstMember] = member.paths
+    if (!firstMember) throw new Error('Expected a folder member')
+    expect(
+      useProjectStore.getState().moveProjectToFolder('f-full', firstMember)
+    ).toBe(true)
+    expect(
+      useProjectStore.getState().projectFolders[0]?.projectPaths
+    ).toHaveLength(30)
+  })
+
+  it('an import into a drilled-in folder is capped by that folder, not the top level', () => {
+    const member = fullFolder(30)
+    useProjectStore.setState({
+      recentProjectPaths: [...ungroupedPaths(30), ...member.paths],
+      projectFolders: [member.folder],
+      activeFolderId: 'f-full',
+    })
+
+    // The landing directory (the folder) is full — refuse even though the
+    // ungrouped count is what a top-level import would consult.
+    expect(useProjectStore.getState().addRecentProject('/new')).toBe(false)
+
+    // Conversely a folder with room admits an import while the top level
+    // sits at its own cap.
+    const room = fullFolder(5, 'f-room')
+    useProjectStore.setState({
+      recentProjectPaths: [...ungroupedPaths(30), ...room.paths],
+      projectFolders: [room.folder],
+      activeFolderId: 'f-room',
+    })
+    expect(useProjectStore.getState().addRecentProject('/new')).toBe(true)
+  })
+
+  it('legacy over-limit data loads as-is, but cannot grow (defensive)', () => {
+    const member = fullFolder(30)
+    useProjectStore.getState().restoreProjectIndex(
+      [...ungroupedPaths(31), ...member.paths],
+      [
+        { id: 'f-a', name: 'A', projectPaths: [] },
+        { id: 'f-b', name: 'B', projectPaths: [] },
+        { id: 'f-c', name: 'C', projectPaths: [] },
+        {
+          id: UTILITIES_FOLDER_ID,
+          name: 'Utilities',
+          projectPaths: member.paths,
+        },
+      ]
+    )
+
+    // Loaded untouched: 31 ungrouped, 4 folders.
+    const state = useProjectStore.getState()
+    expect(
+      ungroupedProjectPaths(state.recentProjectPaths, state.projectFolders)
+    ).toHaveLength(31)
+    expect(state.projectFolders).toHaveLength(4)
+
+    // Only further additions are refused.
+    expect(useProjectStore.getState().addRecentProject('/new')).toBe(false)
+    expect(useProjectStore.getState().createFolder('D')).toBeNull()
+  })
+
+  it('refused actions write nothing to preferences', async () => {
+    const member = fullFolder(30)
+    useProjectStore
+      .getState()
+      .restoreProjectIndex(
+        [...ungroupedPaths(30), ...member.paths],
+        [
+          member.folder,
+          { id: 'f-b', name: 'B', projectPaths: [] },
+          { id: UTILITIES_FOLDER_ID, name: 'Utilities', projectPaths: [] },
+        ]
+      )
+    await new Promise(resolve => setTimeout(resolve, 0))
+    vi.mocked(commands.savePreferences).mockClear()
+
+    useProjectStore.getState().addRecentProject('/new') // top level at 30
+    useProjectStore.getState().moveProjectToFolder('f-full', '/top-0') // folder at 30
+    useProjectStore.getState().createFolder('Capped') // 3 folders exist
+    await new Promise(resolve => setTimeout(resolve, 0))
+
     expect(commands.savePreferences).not.toHaveBeenCalled()
   })
 })

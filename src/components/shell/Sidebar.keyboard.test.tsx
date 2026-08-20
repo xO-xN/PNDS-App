@@ -1,4 +1,11 @@
-import { render, screen, fireEvent, waitFor, within } from '@/test/test-utils'
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  within,
+  createFolderOrFail,
+} from '@/test/test-utils'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { commands } from '@/lib/tauri-bindings'
@@ -158,7 +165,7 @@ describe('Cmd keyboard layer (v1.1.2)', () => {
     it('never badges a project that sits inside a folder (flat list)', () => {
       useProjectStore.setState({ recentProjectPaths: TEN_PATHS })
       const store = useProjectStore.getState()
-      const id = store.createFolder('Set list')
+      const id = createFolderOrFail('Set list')
       const groupedPath = TEN_PATHS[9]
       if (!groupedPath) throw new Error('Expected a grouped path')
       store.moveProjectToFolder(id, groupedPath)

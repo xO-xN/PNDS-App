@@ -4,6 +4,7 @@ import {
   fireEvent,
   waitFor,
   mockBoundingClientRect,
+  createFolderOrFail,
 } from '@/test/test-utils'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { commands } from '@/lib/tauri-bindings'
@@ -62,7 +63,7 @@ describe('Sidebar folder drags (v1.1.2 T5)', () => {
   }
 
   it('dropping a project on a folder card files it into that folder (end), persisted', async () => {
-    const folderId = useProjectStore.getState().createFolder('Set list')
+    const folderId = createFolderOrFail('Set list')
     useProjectStore.getState().moveProjectToFolder(folderId, THIRD_PATH)
     render(<Sidebar variant="static" />)
 
@@ -114,7 +115,7 @@ describe('Sidebar folder drags (v1.1.2 T5)', () => {
   })
 
   it('dropping a member on the breadcrumb returns it to ungrouped, persisted', async () => {
-    const folderId = useProjectStore.getState().createFolder('Set list')
+    const folderId = createFolderOrFail('Set list')
     useProjectStore.getState().moveProjectToFolder(folderId, SECOND_PATH)
     useProjectStore.getState().moveProjectToFolder(folderId, THIRD_PATH)
     render(<Sidebar variant="static" />)
@@ -159,10 +160,9 @@ describe('Sidebar folder drags (v1.1.2 T5)', () => {
   })
 
   it('folder cards reorder within the folder area, persisted', async () => {
-    const store = useProjectStore.getState()
-    const friday = store.createFolder('Friday')
-    const saturday = store.createFolder('Saturday')
-    const sunday = store.createFolder('Sunday')
+    const friday = createFolderOrFail('Friday')
+    const saturday = createFolderOrFail('Saturday')
+    const sunday = createFolderOrFail('Sunday')
     render(<Sidebar variant="static" />)
 
     const cards = screen.getAllByTestId('folder-card')
@@ -203,7 +203,7 @@ describe('Sidebar folder drags (v1.1.2 T5)', () => {
   })
 
   it('a project dragged back over the list neither joins a folder nor saves', async () => {
-    const folderId = useProjectStore.getState().createFolder('Set list')
+    const folderId = createFolderOrFail('Set list')
     useProjectStore.getState().moveProjectToFolder(folderId, THIRD_PATH)
     // Those setup commits persist through the store — settle the queue and
     // clear it, so only a drag-triggered save could be observed below.

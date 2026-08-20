@@ -48,17 +48,21 @@ export async function ensureUtilitiesFolder(): Promise<void> {
   )
   if (!existing) {
     // History and membership change together — the folder only ever holds
-    // projects the sidebar can show (they are first-party built-in tools,
-    // so opening them adds them to the history; preflight still runs on
-    // open).
-    for (const tool of tools) store.addRecentProject(tool.path)
+    // projects the sidebar can show. v1.2.1 (issue #26): an upgrade whose
+    // top level already sits at the per-directory cap refuses the history
+    // adds, and only the admitted tools become members, so the folder
+    // never lists an entry the sidebar cannot show.
+    const admitted: string[] = []
+    for (const tool of tools) {
+      if (store.addRecentProject(tool.path)) admitted.push(tool.path)
+    }
     const { projectFolders } = useProjectStore.getState()
     useProjectStore.getState().setProjectFolders([
       ...projectFolders,
       {
         id: UTILITIES_FOLDER_ID,
         name: 'Utilities',
-        projectPaths: tools.map(tool => tool.path),
+        projectPaths: admitted,
       },
     ])
     return

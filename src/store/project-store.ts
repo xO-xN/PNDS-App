@@ -19,9 +19,27 @@ export type PreflightStatus = 'idle' | 'checking' | 'ready' | 'error'
  */
 export const UTILITIES_FOLDER_ID = 'utilities'
 
+/**
+ * v1.2.1 (issue #26): hard sidebar capacity caps — hardcoded constants,
+ * not preferences. Over-limit legacy data loads untouched (defensive: no
+ * destructive migration on performance machines); the caps only refuse
+ * further additions.
+ */
+export const FOLDER_LIMIT = 3
+export const PROJECT_LIMIT_PER_DIRECTORY = 30
+
 /** True for folders the sidebar must keep as-is (no rename, no delete). */
 export function isProtectedFolder(id: string): boolean {
   return id === UTILITIES_FOLDER_ID
+}
+
+/**
+ * v1.2.1 (issue #26): the folder area is at its cap (Utilities counts) —
+ * the sidebar's FOLDERS "+" derives its disabled state from this, never
+ * from its own count.
+ */
+export function folderLimitReached(folders: ProjectFolder[]): boolean {
+  return folders.length >= FOLDER_LIMIT
 }
 
 /**
@@ -82,7 +100,14 @@ interface ProjectState {
   renameTarget: RenameTarget | null
   preflightStatus: PreflightStatus
   preflightError: string | null
-  addRecentProject: (path: string) => void
+  /**
+   * v1.2.1 (issue #26): adds a history entry, refused (false) when the
+   * landing directory is at `PROJECT_LIMIT_PER_DIRECTORY` — the drilled-in
+   * folder on an import, the ungrouped top level otherwise. Reopening a
+   * known path is never refused. Refusals leave the state and the
+   * persisted index untouched; the caller surfaces the reason.
+   */
+  addRecentProject: (path: string) => boolean
   removeRecentProject: (path: string) => void
   /** Empties the history; folder memberships go with it (folders stay). */
   clearRecentProjects: () => void
@@ -121,13 +146,24 @@ interface ProjectState {
    * Launch restore goes through `restoreProjectIndex` instead.
    */
   setProjectFolders: (folders: ProjectFolder[]) => void
-  /** Creates a folder and returns its id (caller drives inline naming). */
-  createFolder: (name: string) => string
+  /**
+   * v1.2.1 (issue #26): creates a folder and returns its id (caller drives
+   * inline naming), or null when the folder area is at `FOLDER_LIMIT`
+   * (Utilities counts). A refusal changes nothing.
+   */
+  createFolder: (name: string) => string | null
   renameFolder: (id: string, name: string) => void
   /** Deletes the grouping; member projects return to ungrouped. */
   deleteFolder: (id: string) => void
-  /** Moves a path into a folder (appended last), out of any other folder. */
-  moveProjectToFolder: (folderId: string, path: string) => void
+  /**
+   * Moves a path into a folder (appended last), out of any other folder.
+   * v1.2.1 (issue #26): joining a folder already holding
+   * `PROJECT_LIMIT_PER_DIRECTORY` members is refused (false) — unless the
+   * path is already a member (a no-op re-file). Removals and folder
+   * deletions that leave a directory over-limit are tolerated: only
+   * additions are capped.
+   */
+  moveProjectToFolder: (folderId: string, path: string) => boolean
   /** Returns a path to the ungrouped section. */
   removeProjectFromFolder: (folderId: string, path: string) => void
   /**
@@ -233,12 +269,32 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
 
   addRecentProject: path => {
     const before = get()
+    if (!before.recentProjectPaths.includes(path)) {
+      // v1.2.1 (issue #26): the cap counts the landing directory — the
+      // drilled-in folder an import joins, the ungrouped top level
+      // otherwise. The check runs before any state change, so a refusal
+      // neither mutates nor persists.
+      const landing =
+        before.activeFolderId === null
+          ? null
+          : (before.projectFolders.find(
+              folder => folder.id === before.activeFolderId
+            ) ?? null)
+      const count = landing
+        ? landing.projectPaths.length
+        : ungroupedProjectPaths(
+            before.recentProjectPaths,
+            before.projectFolders
+          ).length
+      if (count >= PROJECT_LIMIT_PER_DIRECTORY) return false
+    }
     set(state => ({
       recentProjectPaths: state.recentProjectPaths.includes(path)
         ? state.recentProjectPaths
         : [...state.recentProjectPaths, path],
     }))
     persistIndexIfChanged(before, get())
+    return true
   },
 
   removeRecentProject: path => {
@@ -337,11 +393,15 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
   },
 
   createFolder: name => {
+    const before = get()
+    // v1.2.1 (issue #26): the folder cap (Utilities counts) refuses the
+    // creation outright — the sidebar's "+" is disabled at the same
+    // threshold via `folderLimitReached`.
+    if (folderLimitReached(before.projectFolders)) return null
     const id =
       typeof crypto !== 'undefined' && 'randomUUID' in crypto
         ? crypto.randomUUID()
         : `folder-${Date.now()}-${Math.random().toString(36).slice(2)}`
-    const before = get()
     set(state => ({
       // New folders open at the TOP of the folder area (v1.2.0: they used
       // to append below the bottom-pinned Utilities folder).
@@ -381,6 +441,17 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
 
   moveProjectToFolder: (folderId, path) => {
     const before = get()
+    const target = before.projectFolders.find(folder => folder.id === folderId)
+    // v1.2.1 (issue #26): a join that would push the target past the
+    // per-directory cap is refused before any state change. A path already
+    // inside the target is a no-op re-file, never a refusal.
+    if (
+      target &&
+      !target.projectPaths.includes(path) &&
+      target.projectPaths.length >= PROJECT_LIMIT_PER_DIRECTORY
+    ) {
+      return false
+    }
     set(state => {
       const folders = withoutFolderMember(state.projectFolders, path).map(
         folder =>
@@ -391,6 +462,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       return { projectFolders: folders }
     })
     persistIndexIfChanged(before, get())
+    return true
   },
 
   removeProjectFromFolder: (folderId, path) => {

@@ -2,7 +2,10 @@ import i18n from '@/i18n/config'
 import { commands } from '@/lib/tauri-bindings'
 import { logger } from '@/lib/logger'
 import { notifications } from '@/lib/notifications'
-import { useProjectStore } from '@/store/project-store'
+import {
+  PROJECT_LIMIT_PER_DIRECTORY,
+  useProjectStore,
+} from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 import { installAndOpenBundle, isBundlePath } from '@/lib/bundle-project'
 import { DEFAULT_OSC_TARGET, loadPreferences } from '@/lib/preferences'
@@ -53,8 +56,22 @@ export async function openProject(path: string): Promise<void> {
     // end, at the top level it stays ungrouped. Every import entry (open
     // dialog / share a directory) funnels through here, so the rule lives
     // in one place. The store persists the index as part of each commit.
-    store.addRecentProject(path)
+    //
+    // v1.2.1 (issue #26): a full landing directory refuses the whole open
+    // — nothing is added and preflight never runs, so the sidebar cannot
+    // strand a selected project it cannot list.
+    const added = store.addRecentProject(path)
+    if (!added) {
+      notifications.warning(
+        i18n.t('sidebar.projectLimitReached', {
+          limit: PROJECT_LIMIT_PER_DIRECTORY,
+        })
+      )
+      return
+    }
     if (store.activeFolderId) {
+      // Cannot refuse: the landing folder had room when addRecentProject
+      // checked it, and nothing ran in between.
       store.moveProjectToFolder(store.activeFolderId, path)
     }
   }

@@ -152,6 +152,24 @@ describe('ensureUtilitiesFolder', () => {
     expect(commands.savePreferences).not.toHaveBeenCalled()
   })
 
+  it('seeds only the tools the cap admits (issue #26 upgrade edge)', async () => {
+    // An upgrade from before Utilities existed can arrive with the
+    // ungrouped top level already at the 30-project cap — every history
+    // add is refused, so the folder seeds empty rather than listing
+    // entries the sidebar cannot show.
+    useProjectStore.setState({
+      recentProjectPaths: Array.from({ length: 30 }, (_, i) => `/legacy-${i}`),
+    })
+
+    await ensureUtilitiesFolder()
+
+    const state = useProjectStore.getState()
+    expect(state.recentProjectPaths).toHaveLength(30)
+    expect(state.projectFolders).toEqual([
+      { id: UTILITIES_FOLDER_ID, name: 'Utilities', projectPaths: [] },
+    ])
+  })
+
   it('seeds nothing when the backend lookup fails', async () => {
     vi.mocked(commands.builtinUtilities).mockResolvedValue({
       status: 'error',

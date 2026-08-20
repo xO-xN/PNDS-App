@@ -1,4 +1,9 @@
-import { render, screen, fireEvent } from '@/test/test-utils'
+import {
+  render,
+  screen,
+  fireEvent,
+  createFolderOrFail,
+} from '@/test/test-utils'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { commands } from '@/lib/tauri-bindings'
 import { useProjectStore } from '@/store/project-store'
@@ -143,7 +148,7 @@ describe('Sidebar project-list scrolling (issue #25)', () => {
   describe('the project column is its own scroll region', () => {
     it('holds every project card; folder cards and the settings card stay outside (static)', () => {
       useProjectStore.setState({ recentProjectPaths: TWELVE_PATHS })
-      useProjectStore.getState().createFolder('Set list')
+      createFolderOrFail('Set list')
       render(<Sidebar variant="static" />)
 
       const scroller = screen.getByTestId('project-list-scroll')
@@ -178,7 +183,7 @@ describe('Sidebar project-list scrolling (issue #25)', () => {
     })
 
     it('the drilled-in view scrolls its members; breadcrumb and footer stay outside', () => {
-      const folderId = useProjectStore.getState().createFolder('Set list')
+      const folderId = createFolderOrFail('Set list')
       useProjectStore.getState().moveProjectToFolder(folderId, pathAt(0))
       render(<Sidebar variant="static" />)
 
@@ -205,7 +210,7 @@ describe('Sidebar project-list scrolling (issue #25)', () => {
     })
 
     it('an empty folder shows its hint inside the scroller', () => {
-      useProjectStore.getState().createFolder('Set list')
+      createFolderOrFail('Set list')
       render(<Sidebar variant="static" />)
 
       fireEvent.click(screen.getByTestId('folder-card'))
@@ -272,7 +277,7 @@ describe('Sidebar project-list scrolling (issue #25)', () => {
     })
 
     it("auto-drilling into the current project's folder reveals the next member inside it", () => {
-      const folderId = useProjectStore.getState().createFolder('Set list')
+      const folderId = createFolderOrFail('Set list')
       const store = useProjectStore.getState()
       store.moveProjectToFolder(folderId, pathAt(3))
       store.moveProjectToFolder(folderId, pathAt(4))

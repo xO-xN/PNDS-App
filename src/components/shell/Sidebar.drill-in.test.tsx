@@ -6,6 +6,7 @@ import {
   act,
   waitFor,
   mockBoundingClientRect,
+  createFolderOrFail,
 } from '@/test/test-utils'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -75,7 +76,7 @@ describe('Sidebar folder drill-in (v1.1.2 T3)', () => {
 
   /** A folder named "Set list" holding the two non-first projects. */
   function seedFolder(): string {
-    const id = useProjectStore.getState().createFolder('Set list')
+    const id = createFolderOrFail('Set list')
     useProjectStore.getState().moveProjectToFolder(id, SECOND_PATH)
     useProjectStore.getState().moveProjectToFolder(id, THIRD_PATH)
     return id
@@ -122,7 +123,7 @@ describe('Sidebar folder drill-in (v1.1.2 T3)', () => {
   })
 
   it('an empty folder shows the empty hint instead of the no-projects one', () => {
-    const id = useProjectStore.getState().createFolder('Empty set')
+    const id = createFolderOrFail('Empty set')
     useProjectStore.getState().setActiveFolderId(id)
     render(<Sidebar variant="static" />)
 
@@ -269,7 +270,7 @@ describe('Sidebar folder drill-in (v1.1.2 T3)', () => {
     it('a folder deeper than nine members still caps badges at nine', () => {
       const paths = Array.from({ length: 10 }, (_, i) => `/Users/test/S${i}`)
       useProjectStore.setState({ recentProjectPaths: [FIRST_PATH, ...paths] })
-      const id = useProjectStore.getState().createFolder('Big set')
+      const id = createFolderOrFail('Big set')
       for (const p of paths) {
         useProjectStore.getState().moveProjectToFolder(id, p)
       }

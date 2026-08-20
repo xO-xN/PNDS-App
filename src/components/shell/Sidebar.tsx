@@ -13,13 +13,18 @@ import {
   ChevronLeft,
 } from 'lucide-react'
 import { openUrl } from '@tauri-apps/plugin-opener'
+import i18n from '@/i18n/config'
 import {
+  FOLDER_LIMIT,
+  PROJECT_LIMIT_PER_DIRECTORY,
+  folderLimitReached,
   isProtectedFolder,
   useProjectStore,
   visibleProjectPaths,
 } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 import { useKeyboardStore } from '@/store/keyboard-store'
+import { notifications } from '@/lib/notifications'
 import {
   openProject,
   promptOpenProject,
@@ -333,6 +338,14 @@ export function Sidebar({
   const pendingDeleteFolder = projectFolders.find(
     folder => folder.id === pendingDeleteFolderId
   )
+  // v1.2.1 (issue #26): the FOLDERS "+" disabled state derives from the
+  // store's cap helper — the sidebar never re-counts folders on its own.
+  // At the cap the label swaps to the reason, so the tooltip explains the
+  // disabled button instead of naming a gesture it refuses.
+  const foldersAtCap = folderLimitReached(projectFolders)
+  const newFolderLabel = foldersAtCap
+    ? t('sidebar.folderLimitReached', { limit: FOLDER_LIMIT })
+    : t('sidebar.newFolder')
 
   // v1.2.0 (issue #16): the one listing name for `path` (display-names.ts)
   // — a v1.1.2 T6 display-name override (spec issue #10) wins, then the
@@ -382,6 +395,15 @@ export function Sidebar({
   const handleNewFolder = () => {
     const store = useProjectStore.getState()
     const id = store.createFolder(t('sidebar.folderDefaultName'))
+    // v1.2.1 (issue #26): the "+" is disabled at the cap, so a null here
+    // is defense in depth for any other entry point — surface the store's
+    // refusal instead of failing silently.
+    if (id === null) {
+      notifications.warning(
+        t('sidebar.folderLimitReached', { limit: FOLDER_LIMIT })
+      )
+      return
+    }
     setEditingFolderId(id)
   }
 
@@ -657,10 +679,20 @@ export function Sidebar({
       if (source?.kind === 'project' && target) {
         if (target.kind === 'folder') {
           // Dropping on a folder card files the project at that folder's
-          // end (spec issue #9: 释放后工程入夹末尾).
+          // end (spec issue #9: 释放后工程入夹末尾). v1.2.1 (issue #26):
+          // a full folder refuses the join — say why instead of silently
+          // bouncing the card (i18n.t: a window listener is a non-React
+          // context, kept out of the effect's deps).
           const folder = store.projectFolders[target.index]
           if (folder) {
-            store.moveProjectToFolder(folder.id, source.path)
+            const joined = store.moveProjectToFolder(folder.id, source.path)
+            if (!joined) {
+              notifications.warning(
+                i18n.t('sidebar.projectLimitReached', {
+                  limit: PROJECT_LIMIT_PER_DIRECTORY,
+                })
+              )
+            }
           }
         } else if (target.kind === 'breadcrumb') {
           // Dropping on the breadcrumb returns the project to ungrouped.
@@ -1080,10 +1112,19 @@ export function Sidebar({
               <button
                 type="button"
                 data-testid="new-folder-button"
-                aria-label={t('sidebar.newFolder')}
-                title={t('sidebar.newFolder')}
+                aria-label={newFolderLabel}
+                title={newFolderLabel}
                 onClick={handleNewFolder}
-                className="rounded-md p-1 text-(--pnds-text)/70 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-(--pnds-text)/5 hover:text-(--pnds-text)"
+                disabled={foldersAtCap}
+                className={cn(
+                  'rounded-md p-1 transition-opacity',
+                  // v1.2.1 (issue #26): at the cap the button stays visible
+                  // (not hover-revealed) and dimmed — the disabled state
+                  // must be discoverable, with the tooltip explaining it.
+                  foldersAtCap
+                    ? 'cursor-not-allowed text-(--pnds-text)/40 opacity-60'
+                    : 'text-(--pnds-text)/70 opacity-0 group-hover:opacity-100 hover:bg-(--pnds-text)/5 hover:text-(--pnds-text)'
+                )}
               >
                 <FolderPlus size={14} />
               </button>

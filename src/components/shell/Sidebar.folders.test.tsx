@@ -1,4 +1,11 @@
-import { render, screen, fireEvent, waitFor, within } from '@/test/test-utils'
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  within,
+  createFolderOrFail,
+} from '@/test/test-utils'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { commands } from '@/lib/tauri-bindings'
@@ -75,7 +82,7 @@ describe('Sidebar folders (v1.1.2)', () => {
   })
 
   it('renders ungrouped projects above the folder section (two-segment)', () => {
-    useProjectStore.getState().createFolder('Set list')
+    createFolderOrFail('Set list')
     const [folder] = useProjectStore.getState().projectFolders
     if (!folder) throw new Error('Expected the created folder')
     useProjectStore.getState().moveProjectToFolder(folder.id, OTHER_PATH)
@@ -98,7 +105,7 @@ describe('Sidebar folders (v1.1.2)', () => {
 
   it('deleting a folder confirms, then returns its projects to ungrouped', async () => {
     const user = userEvent.setup()
-    const folderId = useProjectStore.getState().createFolder('Set list')
+    const folderId = createFolderOrFail('Set list')
     useProjectStore.getState().moveProjectToFolder(folderId, OTHER_PATH)
     useProjectStore.getState().moveProjectToFolder(folderId, THIRD_PATH)
 
@@ -137,7 +144,7 @@ describe('Sidebar folders (v1.1.2)', () => {
 
   it('removing a project keeps folder membership of the others intact', async () => {
     const user = userEvent.setup()
-    const folderId = useProjectStore.getState().createFolder('Set list')
+    const folderId = createFolderOrFail('Set list')
     useProjectStore.getState().moveProjectToFolder(folderId, OTHER_PATH)
 
     render(<Sidebar variant="static" />)

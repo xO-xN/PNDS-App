@@ -1,0 +1,129 @@
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  mockBoundingClientRect,
+} from '@/test/test-utils'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import {
+  useProjectStore,
+  UTILITIES_FOLDER_ID,
+  PROJECT_LIMIT_PER_DIRECTORY,
+} from '@/store/project-store'
+import { useSessionStore } from '@/store/session-store'
+import { useKeyboardStore } from '@/store/keyboard-store'
+import { notifications } from '@/lib/notifications'
+import { Sidebar } from './Sidebar'
+
+vi.mock('@tauri-apps/plugin-opener', () => ({
+  openUrl: vi.fn().mockResolvedValue(undefined),
+}))
+
+vi.mock('@/lib/notifications', () => ({
+  notifications: {
+    error: vi.fn(),
+    success: vi.fn(),
+    info: vi.fn(),
+    warning: vi.fn(),
+  },
+}))
+
+vi.mock('sonner', () => ({
+  toast: { info: vi.fn(), error: vi.fn(), warning: vi.fn() },
+}))
+
+const LOOSE_PATH = '/Users/test/Loose Score'
+
+/**
+ * v1.2.1 (issue #26): the sidebar's capacity UX derives entirely from the
+ * store — the FOLDERS "+" disables (with an explaining tooltip) when the
+ * folder area reaches its cap, and a project blocked by a full directory
+ * surfaces the store's refusal as a warning. The cap arithmetic itself is
+ * covered by the project-store capacity tests.
+ */
+describe('Sidebar capacity caps (v1.2.1, issue #26)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useKeyboardStore.getState().setCommandKeyPressed(false)
+    useProjectStore.setState({
+      currentProject: null,
+      recentProjectPaths: [LOOSE_PATH],
+      projectFolders: [],
+      pendingPreflightPath: null,
+      pendingSwitchPath: null,
+      activeFolderId: null,
+      preflightStatus: 'idle',
+      preflightError: null,
+    })
+    useSessionStore.getState().resetSession()
+  })
+
+  it('disables the FOLDERS "+" at 3 folders (Utilities counts) and explains why', () => {
+    useProjectStore.setState({
+      projectFolders: [
+        { id: 'f1', name: 'One', projectPaths: [] },
+        { id: 'f2', name: 'Two', projectPaths: [] },
+        { id: UTILITIES_FOLDER_ID, name: 'Utilities', projectPaths: [] },
+      ],
+    })
+    render(<Sidebar variant="static" />)
+
+    const button = screen.getByTestId('new-folder-button')
+    expect(button).toBeDisabled()
+    expect(button).toHaveAttribute(
+      'title',
+      'Folder limit reached (3, including Utilities) — delete a folder to create another.'
+    )
+  })
+
+  it('keeps the FOLDERS "+" enabled below the cap with its normal tooltip', () => {
+    useProjectStore.setState({
+      projectFolders: [
+        { id: 'f1', name: 'One', projectPaths: [] },
+        { id: UTILITIES_FOLDER_ID, name: 'Utilities', projectPaths: [] },
+      ],
+    })
+    render(<Sidebar variant="static" />)
+
+    const button = screen.getByTestId('new-folder-button')
+    expect(button).toBeEnabled()
+    expect(button).toHaveAttribute('title', 'New folder')
+  })
+
+  it('dropping a project on a full folder warns and leaves the folder unchanged', async () => {
+    const members = Array.from({ length: 30 }, (_, i) => `/in-${i}`)
+    useProjectStore.setState({
+      recentProjectPaths: [LOOSE_PATH, ...members],
+      projectFolders: [{ id: 'f-full', name: 'Full', projectPaths: members }],
+    })
+    render(<Sidebar variant="static" />)
+
+    // One ungrouped card above the (full) folder card — the drop geometry
+    // follows the folder-drag tests' pinned rects (jsdom lays out nothing).
+    const [loose] = screen.getAllByTestId('project-entry')
+    const folderCard = screen.getByTestId('folder-card')
+    if (!loose) throw new Error('Expected the ungrouped project card')
+    mockBoundingClientRect(loose, { top: 0 })
+    mockBoundingClientRect(folderCard, { top: 200 })
+
+    fireEvent.pointerDown(loose, { pointerId: 1, clientX: 40, clientY: 20 })
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 60, clientY: 30 })
+    await waitFor(() =>
+      expect(screen.getByTestId('drag-clone')).toBeInTheDocument()
+    )
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 150, clientY: 220 })
+    expect(folderCard).toHaveAttribute('data-drop-active', 'true')
+    fireEvent.pointerUp(window, { pointerId: 1 })
+
+    expect(notifications.warning).toHaveBeenCalledWith(
+      `This list already holds the maximum of ${PROJECT_LIMIT_PER_DIRECTORY} projects — remove one before adding another.`
+    )
+    // The refusal changed nothing: the folder stayed at 30, the dragged
+    // project is still ungrouped and in the history.
+    const state = useProjectStore.getState()
+    expect(state.projectFolders[0]?.projectPaths).toEqual(members)
+    expect(state.recentProjectPaths).toEqual([LOOSE_PATH, ...members])
+    expect(screen.getAllByTestId('project-entry')).toHaveLength(1)
+  })
+})

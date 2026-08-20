@@ -1,4 +1,11 @@
-import { render, screen, fireEvent, waitFor, within } from '@/test/test-utils'
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  within,
+  createFolderOrFail,
+} from '@/test/test-utils'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { commands } from '@/lib/tauri-bindings'
 import { useProjectStore } from '@/store/project-store'
@@ -270,7 +277,7 @@ describe('⌘R project rename (v1.1.2 T6)', () => {
   it('renames the drilled-in folder when nothing is selected inside it', async () => {
     useProjectStore.setState({ recentProjectPaths: [SECOND_PATH] })
     const store = useProjectStore.getState()
-    const id = store.createFolder('Gig')
+    const id = createFolderOrFail('Gig')
     store.moveProjectToFolder(id, SECOND_PATH)
     useProjectStore.setState({ activeFolderId: id })
     render(<AppShell />)
@@ -302,7 +309,7 @@ describe('⌘R project rename (v1.1.2 T6)', () => {
       preflightStatus: 'ready',
     })
     const store = useProjectStore.getState()
-    const id = store.createFolder('Gig')
+    const id = createFolderOrFail('Gig')
     store.moveProjectToFolder(id, SECOND_PATH)
     useProjectStore.setState({ activeFolderId: id })
     render(<AppShell />)
@@ -324,7 +331,7 @@ describe('⌘R project rename (v1.1.2 T6)', () => {
       preflightStatus: 'ready',
     })
     const store = useProjectStore.getState()
-    const id = store.createFolder('Gig')
+    const id = createFolderOrFail('Gig')
     store.moveProjectToFolder(id, SECOND_PATH)
     render(<AppShell />)
 
@@ -351,8 +358,7 @@ describe('⌘R project rename (v1.1.2 T6)', () => {
     // in-use dot and the top-level current marker read it — so folder
     // navigation must not clear it (rename is blocked while running).
     seedRunningSession(FIRST_PATH)
-    const store = useProjectStore.getState()
-    store.createFolder('Gig')
+    createFolderOrFail('Gig')
     render(<AppShell />)
 
     fireEvent.click(screen.getByTestId('folder-card'))

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { commands } from '@/lib/tauri-bindings'
+import { createFolderOrFail } from '@/test/test-utils'
 import { notifications } from '@/lib/notifications'
 import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
@@ -66,7 +67,7 @@ describe('openProject (no trust gate)', () => {
       preflightError: null,
     })
     useSessionStore.getState().resetSession()
-    folderId = useProjectStore.getState().createFolder('Set list')
+    folderId = createFolderOrFail('Set list')
     useProjectStore.getState().moveProjectToFolder(folderId, '/b')
     // The setup actions persist through the store's save queue — let those
     // saves land and clear them, so the not-called assertions below observe
@@ -229,5 +230,86 @@ describe('promptOpenProject picker (v1.2.0 issue #16)', () => {
       'Could not open the file dialog'
     )
     expect(commands.preflightProject).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * v1.2.1 (issue #26): every import entry (picker / ⌘O / Finder drop /
+ * bundle install) funnels through openProject, so the per-directory cap
+ * refusal is asserted once here — the open aborts with a warning before
+ * anything is added or preflighted.
+ */
+describe('openProject capacity caps (v1.2.1 issue #26)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(commands.preflightProject).mockResolvedValue({
+      status: 'ok',
+      data: manifest,
+    })
+    useProjectStore.setState({
+      currentProject: null,
+      recentProjectPaths: [],
+      projectFolders: [],
+      pendingPreflightPath: null,
+      pendingSwitchPath: null,
+      activeFolderId: null,
+      manifestProjectNames: {},
+      preflightStatus: 'idle',
+      preflightError: null,
+    })
+    useSessionStore.getState().resetSession()
+  })
+
+  it('refuses the 31st top-level project — warning, no add, no preflight, no save', async () => {
+    useProjectStore.setState({
+      recentProjectPaths: Array.from({ length: 30 }, (_, i) => `/top-${i}`),
+    })
+    await new Promise(resolve => setTimeout(resolve, 0))
+    vi.mocked(commands.savePreferences).mockClear()
+
+    await openProject(NEW_PATH)
+
+    expect(notifications.warning).toHaveBeenCalledWith(
+      'This list already holds the maximum of 30 projects — remove one before adding another.'
+    )
+    expect(useProjectStore.getState().recentProjectPaths).toHaveLength(30)
+    expect(commands.preflightProject).not.toHaveBeenCalled()
+    expect(commands.savePreferences).not.toHaveBeenCalled()
+  })
+
+  it('refuses an import into a full drilled-in folder (the folder caps the landing)', async () => {
+    const members = Array.from({ length: 30 }, (_, i) => `/in-${i}`)
+    useProjectStore.setState({
+      recentProjectPaths: members,
+      projectFolders: [
+        { id: 'f-full', name: 'Set list', projectPaths: members },
+      ],
+      activeFolderId: 'f-full',
+    })
+    await new Promise(resolve => setTimeout(resolve, 0))
+    vi.mocked(commands.savePreferences).mockClear()
+
+    await openProject(NEW_PATH)
+
+    expect(notifications.warning).toHaveBeenCalled()
+    expect(useProjectStore.getState().recentProjectPaths).toHaveLength(30)
+    expect(useProjectStore.getState().projectFolders[0]?.projectPaths).toEqual(
+      members
+    )
+    expect(commands.preflightProject).not.toHaveBeenCalled()
+    expect(commands.savePreferences).not.toHaveBeenCalled()
+  })
+
+  it('still opens a known path even when its directory sits over the cap', async () => {
+    useProjectStore.setState({
+      // Legacy over-limit data (31 ungrouped): loads fine, and reopening
+      // a known entry is never a new addition.
+      recentProjectPaths: Array.from({ length: 31 }, (_, i) => `/top-${i}`),
+    })
+
+    await openProject('/top-0')
+
+    expect(notifications.warning).not.toHaveBeenCalled()
+    expect(commands.preflightProject).toHaveBeenCalledWith('/top-0')
   })
 })
