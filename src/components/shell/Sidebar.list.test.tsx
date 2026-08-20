@@ -40,9 +40,11 @@ const SECOND_PATH = '/Users/test/PNDS Score 1'
 
 /**
  * v1.2.2 (issue #29): the project column's polish — the import entry at
- * the column's end, the running project's accent bar, folder tags on
- * unfiled-view members, and the icon empty states. The fade/avoidance
- * scroll math lives in list-reveal.test.ts plus Sidebar.scroll.test.tsx.
+ * the column's end, the running project's accent bar, and the icon empty
+ * states. (Folder tags shipped with the first #29 cut's flat Home view
+ * and went away with it — Home lists ungrouped projects only.) The
+ * fade/avoidance scroll math lives in list-reveal.test.ts plus
+ * Sidebar.scroll.test.tsx.
  */
 describe('Sidebar project list (v1.2.2, issue #29)', () => {
   beforeEach(() => {
@@ -69,8 +71,10 @@ describe('Sidebar project list (v1.2.2, issue #29)', () => {
       const scroller = screen.getByTestId('project-list-scroll')
       const button = screen.getByTestId('add-project-button')
       expect(scroller).toContainElement(button)
-      // It closes the column: the last child after every card.
-      expect(scroller.lastElementChild).toBe(button)
+      // It closes the column: the last content child after every card.
+      expect(screen.getByTestId('project-list-content').lastElementChild).toBe(
+        button
+      )
       expect(button).toHaveTextContent('Import project')
       expect(button.querySelector('svg')).not.toBeNull()
 
@@ -88,7 +92,9 @@ describe('Sidebar project list (v1.2.2, issue #29)', () => {
       const empty = screen.getByTestId('no-projects-empty')
       const button = screen.getByTestId('add-project-button')
       expect(scroller).toContainElement(empty)
-      expect(scroller.lastElementChild).toBe(button)
+      expect(screen.getByTestId('project-list-content').lastElementChild).toBe(
+        button
+      )
       expect(
         empty.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING
       ).toBeTruthy()
@@ -153,80 +159,6 @@ describe('Sidebar project list (v1.2.2, issue #29)', () => {
       const [entry] = screen.getAllByTestId('project-entry')
       if (!entry) throw new Error('Expected a non-current project card')
       expect(within(entry).queryByTestId('running-bar')).not.toBeInTheDocument()
-    })
-  })
-
-  describe('folder tags', () => {
-    it('unfiled-view members wear their folder name; loose cards wear nothing', () => {
-      useProjectStore.setState({
-        projectFolders: [
-          { id: 'f1', name: 'Set list', projectPaths: [SECOND_PATH] },
-        ],
-      })
-      render(<Sidebar variant="static" />)
-
-      const [loose, member] = screen.getAllByTestId('project-entry')
-      if (!loose || !member) throw new Error('Expected both cards')
-      expect(within(loose).queryByTestId('folder-tag')).not.toBeInTheDocument()
-      expect(within(member).getByTestId('folder-tag')).toHaveTextContent(
-        'Set list'
-      )
-      // The tag yields its hover to the ✕ (cross-fading pair).
-      const tag = within(member).getByTestId('folder-tag')
-      expect(tag.className).toContain('group-hover:opacity-0')
-      expect(
-        within(member).getByRole('button', { name: /remove from history/i })
-      ).toBeInTheDocument()
-    })
-
-    it('the current card keeps its tag — it has no ✕ to yield to', () => {
-      useProjectStore.setState({
-        currentProject: { path: SECOND_PATH, manifest },
-        preflightStatus: 'ready',
-        projectFolders: [
-          { id: 'f1', name: 'Set list', projectPaths: [SECOND_PATH] },
-        ],
-      })
-      render(<Sidebar variant="static" />)
-
-      const card = screen.getByTestId('current-project-card')
-      expect(within(card).getByTestId('folder-tag')).toHaveTextContent(
-        'Set list'
-      )
-      expect(
-        within(card).queryByRole('button', { name: /remove from history/i })
-      ).not.toBeInTheDocument()
-    })
-
-    it('folder views name nothing — the view itself is the folder', () => {
-      useProjectStore.setState({
-        projectFolders: [
-          { id: 'f1', name: 'Set list', projectPaths: [SECOND_PATH] },
-        ],
-        activeFolderId: 'f1',
-      })
-      render(<Sidebar variant="static" />)
-
-      expect(screen.getAllByTestId('project-entry')).toHaveLength(1)
-      expect(screen.queryByTestId('folder-tag')).not.toBeInTheDocument()
-    })
-
-    it('the ⌘ badge outranks the tag', () => {
-      useKeyboardStore.getState().setCommandKeyPressed(true)
-      useProjectStore.setState({
-        projectFolders: [
-          { id: 'f1', name: 'Set list', projectPaths: [SECOND_PATH] },
-        ],
-      })
-      render(<Sidebar variant="static" />)
-
-      const [loose, member] = screen.getAllByTestId('project-entry')
-      if (!loose || !member) throw new Error('Expected both cards')
-      expect(
-        within(member).getByTestId('project-number-badge')
-      ).toBeInTheDocument()
-      expect(within(member).queryByTestId('folder-tag')).not.toBeInTheDocument()
-      expect(within(loose).queryByTestId('folder-tag')).not.toBeInTheDocument()
     })
   })
 

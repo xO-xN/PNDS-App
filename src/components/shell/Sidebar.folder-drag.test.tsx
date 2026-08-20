@@ -106,8 +106,8 @@ describe('Sidebar folder drags (v1.1.2 T5, folder switch)', () => {
       SECOND_PATH,
       THIRD_PATH,
     ])
-    // The flat default view still lists all three — SECOND now a member.
-    expect(screen.getAllByTestId('project-entry')).toHaveLength(3)
+    // Only FIRST remains ungrouped in the Home view.
+    expect(screen.getAllByTestId('project-entry')).toHaveLength(1)
     await waitFor(() => {
       expect(commands.savePreferences).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -174,8 +174,7 @@ describe('Sidebar folder drags (v1.1.2 T5, folder switch)', () => {
     // a real click starts with pointerdown, which re-arms the click
     // suppression the drop left behind.)
     await user.click(screen.getByTestId('unfiled-segment'))
-    // Flat view: every project, SECOND back among the untagged.
-    expect(screen.getAllByTestId('project-entry')).toHaveLength(3)
+    expect(screen.getAllByTestId('project-entry')).toHaveLength(2)
   })
 
   it('segments reorder within the switch row, persisted', async () => {

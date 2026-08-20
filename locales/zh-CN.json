@@ -145,7 +145,7 @@
   "sidebar.deleteFolderCancel": "取消",
   "sidebar.deleteFolderConfirm": "删除",
   "sidebar.folderInUse": "使用中",
-  "sidebar.unfiled": "未分组",
+  "sidebar.unfiled": "主页",
   "sidebar.folderEmpty": "此文件夹为空",
   "sidebar.folderLimitReached": "文件夹已达上限（{{limit}} 个，含 Utilities）——请先删除文件夹再新建。",
   "sidebar.projectLimitReached": "该列表已达 {{limit}} 个工程的上限——请先移除工程再添加。",

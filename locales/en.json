@@ -145,7 +145,7 @@
   "sidebar.deleteFolderCancel": "Cancel",
   "sidebar.deleteFolderConfirm": "Delete",
   "sidebar.folderInUse": "In use",
-  "sidebar.unfiled": "Unfiled",
+  "sidebar.unfiled": "Home",
   "sidebar.folderEmpty": "This folder is empty",
   "sidebar.folderLimitReached": "Folder limit reached ({{limit}}, including Utilities) — delete a folder to create another.",
   "sidebar.projectLimitReached": "This list already holds the maximum of {{limit}} projects — remove one before adding another.",

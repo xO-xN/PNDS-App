@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import type { Manifest, ProjectFolder } from '@/lib/tauri-bindings'
-import { sameMemberSet } from '@/lib/drag-reorder'
+import { masterWithUngroupedOrder, sameMemberSet } from '@/lib/drag-reorder'
 import { upsertDisplayName } from '@/lib/display-names'
 import { updatePreferences } from '@/lib/preferences'
 
@@ -198,10 +198,10 @@ function withoutFolderMember(
 }
 
 /**
- * History entries not filed into any folder, in master-list order.
- * v1.2.2 (issue #29) made the sidebar's top level flat (every project,
- * members tagged), so this derivation no longer feeds a view — the
- * ungrouped count remains the #26 import-cap measure for the top level.
+ * Projects visible at the sidebar's Home level: history entries that are
+ * not in any folder, in master-list order (v1.2.2 user feedback on #29:
+ * Home lists ungrouped only — the flat all-projects variant was rolled
+ * back; the same count is the #26 import-cap measure).
  */
 export function ungroupedProjectPaths(
   recentProjectPaths: string[],
@@ -212,10 +212,9 @@ export function ungroupedProjectPaths(
 }
 
 /**
- * v1.1.2 T3 → v1.2.2 (issue #29): projects visible in the current view
- * (spec issue #4: 可见列表与序号派生). The top level is flat — every
- * history entry in master order, folder members included (their cards
- * wear the folder's name as a tag); a folder view shows that folder's
+ * v1.1.2 T3: projects visible in the current view (spec issue #4: 可见列
+ * 表与序号派生). Home shows the ungrouped projects in master order (a
+ * folder's members are its own view); a folder view shows that folder's
  * members in their set order. Badges and Cmd+1..9 both consume this
  * single derivation, so they can never disagree.
  */
@@ -228,7 +227,7 @@ export function visibleProjectPaths(
     const folder = folders.find(folder => folder.id === activeFolderId)
     return folder ? folder.projectPaths : []
   }
-  return recentProjectPaths
+  return ungroupedProjectPaths(recentProjectPaths, folders)
 }
 
 /** Content equality for the small persisted slices — guards and repeat
@@ -496,12 +495,13 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
           ),
         }
       }
-      // v1.2.2 (issue #29): the top level shows the full master list, so
-      // its reorder is the master order itself — set-checked like the
-      // folder branch, anything else is ignored.
-      return sameMemberSet(state.recentProjectPaths, newVisiblePaths)
-        ? { recentProjectPaths: newVisiblePaths }
-        : {}
+      return {
+        recentProjectPaths: masterWithUngroupedOrder(
+          state.recentProjectPaths,
+          state.projectFolders,
+          newVisiblePaths
+        ),
+      }
     })
     persistIndexIfChanged(before, get())
   },

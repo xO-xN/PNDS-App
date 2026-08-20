@@ -112,9 +112,8 @@ describe('Sidebar folder drill-in (v1.1.2 T3)', () => {
     await user.click(screen.getByTestId('folder-segment'))
     await user.click(screen.getByTestId('unfiled-segment'))
 
-    // Back at the unfiled view: the flat list carries every project —
-    // the two members included, tagged — and the switch is intact.
-    expect(screen.getAllByTestId('project-entry')).toHaveLength(3)
+    // Back at Home: one ungrouped entry, the switch intact.
+    expect(screen.getAllByTestId('project-entry')).toHaveLength(1)
     expect(screen.getByTestId('folder-segment')).toBeInTheDocument()
     expect(useProjectStore.getState().activeFolderId).toBeNull()
   })
@@ -242,7 +241,7 @@ describe('Sidebar folder drill-in (v1.1.2 T3)', () => {
         })
     }
 
-    it('badges number the visible list — members included at the flat top (v1.2.2 #29)', async () => {
+    it('badges number only the folder members, 1..9, while drilled in', async () => {
       const user = userEvent.setup()
       seedFolder()
       render(<AppShell />)
@@ -255,14 +254,13 @@ describe('Sidebar folder drill-in (v1.1.2 T3)', () => {
       // The ungrouped project is not part of the folder view.
       expect(entryOrder()).toEqual([SECOND_PATH, THIRD_PATH])
 
-      // Returning to the unfiled view numbers the flat list — the
-      // ungrouped project plus both members.
+      // Returning to Home restores the ungrouped numbering.
       await user.click(screen.getByTestId('unfiled-segment'))
       expect(
         screen
           .getAllByTestId('project-number-badge')
           .map(b => (b.textContent ?? '').trim())
-      ).toEqual(['1', '2', '3'])
+      ).toEqual(['1'])
     })
 
     it('a folder deeper than nine members still caps badges at nine', () => {
