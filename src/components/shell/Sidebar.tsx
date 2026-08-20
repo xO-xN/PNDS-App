@@ -1019,7 +1019,9 @@ export function Sidebar({
                     : undefined
                 }
                 className={cn(
-                  'group relative mx-5 flex h-14.25 select-none items-center rounded-xl px-3',
+                  // shrink-0: without it the scroll container's flex column
+                  // squeezes the cards instead of overflowing into scroll.
+                  'group relative mx-5 flex h-14.25 shrink-0 select-none items-center rounded-xl px-3',
                   suppressTransition
                     ? 'transition-none'
                     : 'transition-[background-color,transform] duration-200',
