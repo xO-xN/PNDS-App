@@ -2,19 +2,16 @@
  * Master volume command entries (v1.2.2, issue #30 feedback).
  *
  * One module owns everything that acts on the master volume so the
- * settings card's slider, its speaker button, the ⌘M menu accelerator and
- * the ⌘←/⌘→ keyboard nudges can never drift: the §7.5 fixed-gain
- * derivation, the volumeAdjustable gate every entry shares, and the
- * setMasterVolume forwarding (with the same error swallow the slider
- * always had — the store stays the live UI truth, the synth follows).
+ * settings card's slider, its speaker button and the ⌘M menu accelerator
+ * can never drift: the §7.5 fixed-gain derivation, the volumeAdjustable
+ * gate every entry shares, and the setMasterVolume forwarding (with the
+ * same error swallow the slider always had — the store stays the live UI
+ * truth, the synth follows).
  */
 import { commands } from '@/lib/tauri-bindings'
 import { logger } from '@/lib/logger'
 import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
-
-/** ⌘←/⌘→ nudge step (percent): 1/8 of the range per press. */
-export const VOLUME_STEP_PERCENT = 12.5
 
 /** Pure §7.5 core: internal mode with more than 2 output channels fixes
  * the master at 100% / 0 dB. The running channel plan leads once the
@@ -101,17 +98,4 @@ export function setMasterVolumeTo(percent: number): void {
 export function toggleMasterMute(): void {
   if (!volumeAdjustable()) return
   applyMasterVolume(useSessionStore.getState().toggleMute())
-}
-
-/** ⌘←/⌘→ nudge by a signed step (percent), clamped to 0–100. Landing on
- * 0 reads as muted and leaving 0 releases it (the same store sync the
- * drag goes through). No-op while the volume cannot act. */
-export function nudgeMasterVolume(deltaPercent: number): void {
-  if (!volumeAdjustable()) return
-  const next = Math.min(
-    100,
-    Math.max(0, useSessionStore.getState().volume + deltaPercent)
-  )
-  useSessionStore.getState().setVolume(next)
-  applyMasterVolume(next)
 }

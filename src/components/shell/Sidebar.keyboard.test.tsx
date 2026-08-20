@@ -419,59 +419,76 @@ describe('Cmd keyboard layer (v1.1.2)', () => {
     })
   })
 
-  describe('Cmd+Left/Right master volume (v1.2.2, #30 feedback)', () => {
+  describe('Cmd+Left/Right folder-view switching', () => {
     const pressCmdArrow = (key: 'ArrowLeft' | 'ArrowRight') => {
       fireEvent.keyDown(window, { key, metaKey: true })
     }
 
-    it('nudges the master volume in 12.5% steps while a session runs', () => {
-      seedRunningSession(FIRST_PATH)
+    /**
+     * Seeds the row Home → Gig → Archives and returns the ids in that
+     * display order. The view resets first (the outer beforeEach leaves
+     * whatever activeFolderId the previous test ended on), and folders
+     * are created back-to-front: new folders open at the top of the
+     * folder area, so Archives must be created before Gig.
+     */
+    function seedFolderRow(): [string, string] {
+      useProjectStore.setState({
+        recentProjectPaths: [FIRST_PATH, SECOND_PATH],
+        activeFolderId: null,
+      })
+      const archives = createFolderOrFail('Archives')
+      const gig = createFolderOrFail('Gig')
+      return [gig, archives]
+    }
+
+    it('moves through the row in display order and back', () => {
+      const [gig, archives] = seedFolderRow()
       render(<AppShell />)
 
       pressCmdArrow('ArrowRight')
-      expect(useSessionStore.getState().volume).toBe(92.5)
-      expect(commands.setMasterVolume).toHaveBeenLastCalledWith(92.5)
+      expect(useProjectStore.getState().activeFolderId).toBe(gig)
+
+      pressCmdArrow('ArrowRight')
+      expect(useProjectStore.getState().activeFolderId).toBe(archives)
 
       pressCmdArrow('ArrowLeft')
       pressCmdArrow('ArrowLeft')
-      expect(useSessionStore.getState().volume).toBe(67.5)
-      expect(commands.setMasterVolume).toHaveBeenLastCalledWith(67.5)
+      expect(useProjectStore.getState().activeFolderId).toBeNull()
     })
 
-    it('nudges from the volume slider too (range inputs are exempt)', () => {
-      seedRunningSession(FIRST_PATH)
+    it('clamps at both ends — Home is not left, the last folder is not right', () => {
+      const [, archives] = seedFolderRow()
       render(<AppShell />)
 
-      // After clicking the slider its range input holds focus — the nudge
-      // must still fire (only text fields keep the arrows).
-      const slider = screen.getByRole('slider')
-      fireEvent.keyDown(slider, { key: 'ArrowRight', metaKey: true })
-      expect(useSessionStore.getState().volume).toBe(92.5)
-      expect(commands.setMasterVolume).toHaveBeenLastCalledWith(92.5)
+      pressCmdArrow('ArrowLeft')
+      expect(useProjectStore.getState().activeFolderId).toBeNull()
+
+      useProjectStore.setState({ activeFolderId: archives })
+      pressCmdArrow('ArrowRight')
+      expect(useProjectStore.getState().activeFolderId).toBe(archives)
     })
 
-    it('never fires while a text input holds focus (line navigation kept)', () => {
-      // Internal ready session: the gate is OPEN, so only the editable
-      // guard can explain the block — the keys stay line-start/end.
-      seedRunningSession(FIRST_PATH)
+    it('keeps the keys while a text input holds focus (line navigation)', () => {
+      seedFolderRow()
       render(<AppShell />)
 
       const probe = document.createElement('input')
       document.body.appendChild(probe)
       fireEvent.keyDown(probe, { key: 'ArrowLeft', metaKey: true })
-      expect(commands.setMasterVolume).not.toHaveBeenCalled()
-      expect(useSessionStore.getState().volume).toBe(80)
+      expect(useProjectStore.getState().activeFolderId).toBeNull()
       probe.remove()
     })
 
-    it('is inert without a live session (the shared gate)', () => {
+    it('is inert while the switch confirmation dialog is open', async () => {
+      seedFolderRow()
       seedRunningSession(FIRST_PATH)
-      useSessionStore.setState({ sessionStatus: 'idle' })
       render(<AppShell />)
 
+      // Live session: ⌘2 opens the §8.3 switch confirmation on top.
+      pressCmdDigit('2')
+      await screen.findByRole('alertdialog')
       pressCmdArrow('ArrowRight')
-      expect(useSessionStore.getState().volume).toBe(80)
-      expect(commands.setMasterVolume).not.toHaveBeenCalled()
+      expect(useProjectStore.getState().activeFolderId).toBeNull()
     })
   })
 })

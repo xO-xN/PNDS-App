@@ -19,7 +19,7 @@ Keyboard input reaches the app through two layers: native menu accelerators
 | Cmd (hold)    | Number badges + sidebar peek while running                     | Web (`use-command-keyboard.ts`)   |
 | Cmd+1..9      | Select the Nth visible project (v1.1.2)                        | Web (`use-command-keyboard.ts`)   |
 | Cmd+↓ / Cmd+↑ | Next/previous project in the visible order (v1.1.2 T7)         | Web (`use-command-keyboard.ts`)   |
-| Cmd+← / Cmd+→ | Master volume down/up in 12.5% steps (v1.2.2 #30)              | Web (`use-command-keyboard.ts`)   |
+| Cmd+← / Cmd+→ | Previous/next folder view, clamped at the ends (v1.2.2)        | Web (`use-command-keyboard.ts`)   |
 | ← / →         | Switch folder views on the focused switch segment (v1.2.2 #28) | Web (`Sidebar.tsx` tabs)          |
 | Enter         | Load (idle) / Change-restart (pending)                         | Web (`SessionActionButton.tsx`)   |
 | Esc           | Close-project confirmation (v1.1.2 T7)                         | Web (`SessionActionButton.tsx`)   |
@@ -43,10 +43,15 @@ Its behaviors (spec issue #4, later additions noted):
   never wrap — and when the current project sits inside a folder while the
   user is at the top level, the move drills into that folder first and
   continues inside it ("下一首曲子" mental model, v1.1.2 T7).
-- **Cmd+←/Cmd+→** → nudges the master volume in 12.5% steps through
-  `nudgeMasterVolume` (`src/lib/volume-control.ts`) — see
-  [Volume Shortcuts](#volume-shortcuts-v122-issue-30-feedback) for the
-  layer choice and guards.
+- **Cmd+←/Cmd+→** → moves one folder view along the row through
+  `moveFolderSelection` (`src/lib/project-select.ts`) — the same entry a
+  segment click uses, so the selection reset and the live-session keep
+  behave alike. The ends clamp, never wrap (the Cmd+↓/Cmd+↑ rule), and a
+  clamped press is a full no-op — see
+  [Folder Switch Tabs](#folder-switch-tabs-v122-issue-28). Together the
+  four Cmd arrows navigate the folder/project grid. (They briefly nudged
+  the master volume before v1.2.2 shipped; that role is gone, Cmd+M keeps
+  mute.)
 - **Cmd+R** → starts the inline rename through `startRename`
   (`src/lib/project-rename.ts`): the selected project's card (or the
   selected folder segment's name when nothing is selected). The Edit
@@ -87,6 +92,15 @@ segments themselves (not the global layer): an inline name edit inside
 a segment stops propagation, so the arrows keep working as caret keys
 while typing.
 
+**Cmd+←/Cmd+→** are the global variant, registered in the web Cmd layer
+and working from anywhere: `moveFolderSelection` walks the same stops
+through `setActiveFolderView` (the segment-click entry) but **clamps at
+the ends instead of wrapping** — Cmd+← at the Home view and Cmd+→ at
+the last folder are full no-ops, matching the Cmd+↓/Cmd+↑ rule that the
+arrows navigate a grid, never a ring. Text inputs keep the keys as
+line-start/end and overlays block the move, the standard web-layer
+guards.
+
 Guards: text inputs own their keys (`isEditableTarget`), and while a
 Radix dialog or select popup is open (`hasOpenOverlay`) Enter/Esc belong
 to the overlay — the global layer never fires underneath a confirm flow.
@@ -113,29 +127,24 @@ on mount and on every iframe `onLoad` (project switches and monitor
 reloads included); the monitor page is display-only, so nothing usable
 loses focus.
 
-## Volume Shortcuts (v1.2.2, issue #30 feedback)
+## Mute Shortcut (v1.2.2, issue #30 feedback)
 
-Both volume shortcuts route through `src/lib/volume-control.ts` — the one
+Every volume entry routes through `src/lib/volume-control.ts` — the one
 module that owns the §7.5 fixed-gain derivation, the `volumeAdjustable`
 gate, and the `setMasterVolume` forwarding — so the slider, the speaker
-button, the menu item and the keyboard can never drift. All entries are
-no-ops unless a live internal ≤2-channel session is running.
+button and the menu item can never drift. All entries are no-ops unless
+a live internal ≤2-channel session is running.
 
 - **⌘M** is a View-menu accelerator on purpose: the accelerator claims the
   key from macOS's native hide/minimize before the system ever sees it
   (the same replacement strategy as ⌘Q/⌘W). Unlike ⌘R it carries no
   text-input/overlay guards — mute opens no UI, and emergency silence
   should work under any dialog.
-- **⌘←/⌘→** nudge by ±12.5% (1/8 of the range), clamped at 0/100; landing
-  on 0 reads as muted and leaving 0 releases it (the same store sync the
-  slider drag goes through). They live in the web layer, NOT the menu:
-  ⌘←/⌘→ are line-start/end in text fields, and a menu accelerator would
-  consume the key even inside an input. The editable guard lets inputs
-  keep their arrows; the volume slider itself is exempt (a range input —
-  after clicking it the nudges must keep working; plain ←/→ there keep
-  their native small-step adjustment). Like the other web-layer arrows
-  they are inert while a Radix dialog/popup overlay is open — unlike ⌘M,
-  which deliberately works under any overlay.
+- **⌘←/⌘→ volume nudges were cut before v1.2.2 shipped** — the chords
+  switched to folder-view navigation (see above), leaving the slider as
+  the only fine-grained volume control. They had lived in the web layer
+  (⌘←/⌘→ are line-start/end in text fields, which a menu accelerator
+  would break); the folder role inherits that layer choice.
 
 ## Cmd+Q Quit Flow (v1.1.2 T7)
 

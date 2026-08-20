@@ -3,12 +3,10 @@ import { commands } from '@/lib/tauri-bindings'
 import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 import {
-  VOLUME_STEP_PERCENT,
   isFixedGain,
   volumeAdjustable,
   setMasterVolumeTo,
   toggleMasterMute,
-  nudgeMasterVolume,
 } from './volume-control'
 import type { Manifest } from '@/lib/tauri-bindings'
 
@@ -73,8 +71,9 @@ function seedSession(
 /**
  * v1.2.2 (#30 feedback): the shared master-volume command entries — the
  * one gate (§7.5 fixed gain / external / not running) behind the slider,
- * the speaker button, the ⌘M menu accelerator and the ⌘←/⌘→ nudges, and
- * the 12.5% step math with the same mute sync the drag goes through.
+ * the speaker button and the ⌘M menu accelerator, and the mute sync the
+ * drag goes through. (⌘←/⌘→ briefly nudged volume before v1.2.2 shipped;
+ * they switch folder views now — see project-select.)
  */
 describe('volume-control (v1.2.2, #30 feedback)', () => {
   beforeEach(() => {
@@ -165,49 +164,6 @@ describe('volume-control (v1.2.2, #30 feedback)', () => {
       seedSession({ audioMode: 'external' })
       toggleMasterMute()
       expect(useSessionStore.getState().muted).toBe(false)
-      expect(commands.setMasterVolume).not.toHaveBeenCalled()
-    })
-  })
-
-  describe('nudgeMasterVolume (the ⌘←/⌘→ path)', () => {
-    it(`steps by ${VOLUME_STEP_PERCENT} in both directions`, () => {
-      seedSession({ volume: 80 })
-      nudgeMasterVolume(-VOLUME_STEP_PERCENT)
-      expect(useSessionStore.getState().volume).toBe(67.5)
-      expect(commands.setMasterVolume).toHaveBeenLastCalledWith(67.5)
-
-      seedSession({ volume: 80 })
-      nudgeMasterVolume(VOLUME_STEP_PERCENT)
-      expect(useSessionStore.getState().volume).toBe(92.5)
-      expect(commands.setMasterVolume).toHaveBeenLastCalledWith(92.5)
-    })
-
-    it('clamps at 0 and 100', () => {
-      seedSession({ volume: 5 })
-      nudgeMasterVolume(-VOLUME_STEP_PERCENT)
-      expect(useSessionStore.getState().volume).toBe(0)
-
-      seedSession({ volume: 95 })
-      nudgeMasterVolume(VOLUME_STEP_PERCENT)
-      expect(useSessionStore.getState().volume).toBe(100)
-    })
-
-    it('landing on 0 reads as muted; leaving 0 releases it', () => {
-      seedSession({ volume: 10 })
-      nudgeMasterVolume(-VOLUME_STEP_PERCENT)
-      expect(useSessionStore.getState().muted).toBe(true)
-
-      nudgeMasterVolume(VOLUME_STEP_PERCENT)
-      expect(useSessionStore.getState()).toMatchObject({
-        volume: 12.5,
-        muted: false,
-      })
-    })
-
-    it('is a no-op while the volume cannot act', () => {
-      seedSession({ sessionStatus: 'idle' })
-      nudgeMasterVolume(VOLUME_STEP_PERCENT)
-      expect(useSessionStore.getState().volume).toBe(80)
       expect(commands.setMasterVolume).not.toHaveBeenCalled()
     })
   })

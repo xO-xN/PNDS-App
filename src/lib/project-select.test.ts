@@ -3,6 +3,7 @@ import { commands } from '@/lib/tauri-bindings'
 import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 import {
+  moveFolderSelection,
   moveProjectSelection,
   nextFolderView,
   selectProject,
@@ -299,5 +300,104 @@ describe('nextFolderView (v1.2.2, issue #28)', () => {
   it('an empty folder area only ever resolves to unfiled', () => {
     expect(nextFolderView([], null, 1)).toBeNull()
     expect(nextFolderView([], null, -1)).toBeNull()
+  })
+})
+
+/**
+ * ⌘←/⌘→ — one folder view along the row, through the same entry as a
+ * segment click. The ends clamp (the ⌘↓/⌘↑ rule — the Cmd arrows navigate
+ * a grid, never a ring), and a clamped press must be a full no-op.
+ */
+describe('moveFolderSelection', () => {
+  const folders = [
+    { id: 'f1', name: 'Gig', projectPaths: ['/a'] },
+    { id: 'utilities', name: 'Utilities', projectPaths: [] },
+  ]
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useProjectStore.setState({
+      currentProject: null,
+      recentProjectPaths: ['/a', '/b', '/c'],
+      projectFolders: folders,
+      pendingPreflightPath: null,
+      pendingSwitchPath: null,
+      activeFolderId: null,
+      preflightStatus: 'idle',
+      preflightError: null,
+    })
+    useSessionStore.getState().resetSession()
+  })
+
+  it('moves through the row in display order and back', () => {
+    moveFolderSelection(1)
+    expect(useProjectStore.getState().activeFolderId).toBe('f1')
+
+    moveFolderSelection(1)
+    expect(useProjectStore.getState().activeFolderId).toBe('utilities')
+
+    moveFolderSelection(-1)
+    moveFolderSelection(-1)
+    expect(useProjectStore.getState().activeFolderId).toBeNull()
+  })
+
+  it('clamps at both ends — never wraps', () => {
+    moveFolderSelection(-1)
+    expect(useProjectStore.getState().activeFolderId).toBeNull()
+
+    useProjectStore.setState({ activeFolderId: 'utilities' })
+    moveFolderSelection(1)
+    expect(useProjectStore.getState().activeFolderId).toBe('utilities')
+  })
+
+  it('a clamped press is a full no-op — an idle selection survives', () => {
+    // The view must not re-run the click entry when it does not move:
+    // that would reset an idle selection for nothing.
+    useProjectStore.setState({
+      currentProject: { path: '/a', manifest },
+      preflightStatus: 'ready',
+    })
+    moveFolderSelection(-1)
+
+    expect(useProjectStore.getState().activeFolderId).toBeNull()
+    expect(useProjectStore.getState().currentProject?.path).toBe('/a')
+  })
+
+  it('goes through the segment-click entry: an idle selection resets, a live session keeps its project', () => {
+    useProjectStore.setState({
+      currentProject: { path: '/a', manifest },
+      preflightStatus: 'ready',
+    })
+    moveFolderSelection(1)
+
+    expect(useProjectStore.getState().activeFolderId).toBe('f1')
+    expect(useProjectStore.getState().currentProject).toBeNull()
+
+    useProjectStore.setState({
+      currentProject: { path: '/a', manifest },
+      preflightStatus: 'ready',
+    })
+    useSessionStore.setState({ sessionStatus: 'ready' })
+    moveFolderSelection(-1)
+
+    expect(useProjectStore.getState().activeFolderId).toBeNull()
+    expect(useProjectStore.getState().currentProject?.path).toBe('/a')
+  })
+
+  it('treats an unknown active id as the unfiled stop', () => {
+    useProjectStore.setState({ activeFolderId: 'gone' })
+    moveFolderSelection(1)
+    expect(useProjectStore.getState().activeFolderId).toBe('f1')
+
+    useProjectStore.setState({ activeFolderId: 'gone' })
+    moveFolderSelection(-1)
+    expect(useProjectStore.getState().activeFolderId).toBeNull()
+  })
+
+  it('an empty folder area is a no-op in both directions', () => {
+    useProjectStore.setState({ projectFolders: [] })
+    moveFolderSelection(1)
+    moveFolderSelection(-1)
+    expect(useProjectStore.getState().activeFolderId).toBeNull()
   })
 })

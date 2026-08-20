@@ -65,21 +65,45 @@ export function setActiveFolderView(folderId: string | null): void {
   project.setActiveFolderId(folderId)
 }
 
+/** The folder-view stops in row order: the unfiled view first, then the
+ * folders in display order (at most four stops under the #26 cap). */
+function folderViewStops(folders: ProjectFolder[]): (string | null)[] {
+  return [null, ...folders.map(folder => folder.id)]
+}
+
 /**
  * v1.2.2 (issue #28): ←/→ on the focused switch segment — the next folder
- * view along the row. The unfiled view is the first stop, the folders
- * follow in display order, and the ends wrap (the row is short — at most
- * four stops under the #26 cap — so wrapping beats clamping).
+ * view along the row, wrapping at the ends (the row is short, so wrapping
+ * beats clamping).
  */
 export function nextFolderView(
   folders: ProjectFolder[],
   activeFolderId: string | null,
   direction: 1 | -1
 ): string | null {
-  const viewIds: (string | null)[] = [null, ...folders.map(folder => folder.id)]
+  const viewIds = folderViewStops(folders)
   const currentIndex = Math.max(0, viewIds.indexOf(activeFolderId))
   const nextIndex = (currentIndex + direction + viewIds.length) % viewIds.length
   return viewIds[nextIndex] ?? null
+}
+
+/**
+ * ⌘←/⌘→ — one folder view along the row, through the same entry as a
+ * segment click. The ends clamp instead of wrapping (the ⌘↑/⌘↓ rule: the
+ * arrows navigate a grid, never a ring), and a clamped press is a full
+ * no-op — re-running the click entry would reset an idle selection even
+ * though the view never moved.
+ */
+export function moveFolderSelection(direction: 1 | -1): void {
+  const { projectFolders, activeFolderId } = useProjectStore.getState()
+  const viewIds = folderViewStops(projectFolders)
+  const currentIndex = Math.max(0, viewIds.indexOf(activeFolderId))
+  const nextIndex = Math.min(
+    Math.max(currentIndex + direction, 0),
+    viewIds.length - 1
+  )
+  const next = viewIds[nextIndex] ?? null
+  if (next !== activeFolderId) setActiveFolderView(next)
 }
 
 /**
