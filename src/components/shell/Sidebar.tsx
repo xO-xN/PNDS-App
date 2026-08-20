@@ -23,7 +23,7 @@ import {
   useProjectStore,
   visibleProjectPaths,
 } from '@/store/project-store'
-import { useSessionStore } from '@/store/session-store'
+import { isSessionBusy, useSessionStore } from '@/store/session-store'
 import { useKeyboardStore } from '@/store/keyboard-store'
 import { notifications } from '@/lib/notifications'
 import {
@@ -379,7 +379,7 @@ export function Sidebar({
   const monitorPort = useSessionStore(
     state => state.health?.scoreServer?.monitorPort
   )
-  const busy = sessionStatus === 'starting' || sessionStatus === 'stopping'
+  const busy = isSessionBusy(sessionStatus)
   const running = sessionStatus === 'ready'
   // v1.1.2 T3: the folder card shows its "in use" dot from the moment the
   // session starts, not only once ready (spec issue #4: 使用中指示点).

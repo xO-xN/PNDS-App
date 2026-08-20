@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { stopAndReset } from '@/lib/open-project'
 import { canStart, start, restart } from '@/lib/session-flow'
 import { useProjectStore } from '@/store/project-store'
-import { useSessionStore } from '@/store/session-store'
+import { isSessionBusy, useSessionStore } from '@/store/session-store'
 import { hasOpenOverlay, isEditableTarget } from '@/hooks/use-command-keyboard'
 import { cn } from '@/lib/utils'
 
@@ -35,7 +35,7 @@ export function SessionActionButton() {
   const pendingChanges = useSessionStore(state => state.pendingChanges)
 
   const running = sessionStatus === 'ready'
-  const busy = sessionStatus === 'starting' || sessionStatus === 'stopping'
+  const busy = isSessionBusy(sessionStatus)
   const loadable = canStart({
     currentProject,
     preflightStatus,

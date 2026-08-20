@@ -20,6 +20,14 @@ export function shouldConfirmClose(status: SessionStatus): boolean {
   return status === 'starting' || status === 'ready'
 }
 
+/** True while a session transition is in flight (starting/stopping) — the
+ * moment import entries and submits step aside. One derivation for the
+ * sidebar's list-tail entry, the session action button and the Welcome
+ * CTA so the three can never drift. */
+export function isSessionBusy(status: SessionStatus): boolean {
+  return status === 'starting' || status === 'stopping'
+}
+
 /** §6.4: every new session's master starts at 80%. */
 export const DEFAULT_SESSION_VOLUME = 80
 

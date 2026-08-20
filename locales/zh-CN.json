@@ -93,6 +93,7 @@
   "toast.error.generic": "出现了一些问题",
   "welcome.title": "你好！欢迎来到 PNDS 池谱",
   "welcome.subtitle": "网络数字乐谱演奏平台",
+  "welcome.importProject": "导入工程",
   "welcome.hintAdd": "添加一个 PNDS 池谱",
   "welcome.hintSelect": "或是从左侧栏选取一个进行演出",
   "welcome.cmdHint": "按住 ⌘ 键即可快速操控 App",

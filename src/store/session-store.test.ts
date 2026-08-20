@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import {
   clampZoom,
   shouldConfirmClose,
+  isSessionBusy,
   DEFAULT_SESSION_VOLUME,
   useSessionStore,
 } from './session-store'
@@ -159,6 +160,14 @@ describe('session-store', () => {
       expect(shouldConfirmClose('idle')).toBe(false)
       expect(shouldConfirmClose('error')).toBe(false)
       expect(shouldConfirmClose('stopping')).toBe(false)
+    })
+
+    it('isSessionBusy covers both in-flight transitions (#31: one shared gate)', () => {
+      expect(isSessionBusy('starting')).toBe(true)
+      expect(isSessionBusy('stopping')).toBe(true)
+      expect(isSessionBusy('ready')).toBe(false)
+      expect(isSessionBusy('idle')).toBe(false)
+      expect(isSessionBusy('error')).toBe(false)
     })
   })
 
