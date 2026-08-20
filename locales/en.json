@@ -129,6 +129,8 @@
   "sidebar.deviceListFailed": "Could not read audio device capabilities for the project sample rate.",
   "sidebar.volume": "Master Volume",
   "sidebar.volumeFixed": "Master volume is fixed at 100% for multichannel projects.",
+  "sidebar.mute": "Mute",
+  "sidebar.unmute": "Unmute",
   "sidebar.loadProject": "Load",
   "sidebar.closeProject": "Close",
   "sidebar.change": "Change",

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Volume2 } from 'lucide-react'
+import { Volume2, VolumeX } from 'lucide-react'
 import { toast } from 'sonner'
 import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
+import type { CSSProperties } from 'react'
 
 const MODE_LABELS: Record<string, string> = {
   internal: 'Internal Synth',
@@ -71,6 +72,7 @@ export function SettingsCard({ onPopupOpenChange }: SettingsCardProps) {
   const projectLoaded = currentProject !== null
   const running = sessionStatus !== 'idle'
   const volume = useSessionStore(state => state.volume)
+  const muted = useSessionStore(state => state.muted)
   const channelPlan = useSessionStore(state => state.channelPlan)
   const oscTargetValid = isValidOscTarget(oscTargetInput)
 
@@ -151,13 +153,23 @@ export function SettingsCard({ onPopupOpenChange }: SettingsCardProps) {
     flagChange()
   }
 
-  const handleVolumeChange = (percent: number) => {
-    useSessionStore.getState().setVolume(percent)
+  const applyMasterVolume = (percent: number) => {
     void commands.setMasterVolume(percent).then(result => {
       if (result.status === 'error') {
         logger.warn('setMasterVolume failed', { error: result.error })
       }
     })
+  }
+
+  const handleVolumeChange = (percent: number) => {
+    // The store keeps the mute state honest (drag >0 releases it, 0 is
+    // muted) — the drag stays live, never deferred.
+    useSessionStore.getState().setVolume(percent)
+    applyMasterVolume(percent)
+  }
+
+  const handleMuteToggle = () => {
+    applyMasterVolume(useSessionStore.getState().toggleMute())
   }
 
   const handleDeviceChange = (device: string) => {
@@ -192,7 +204,10 @@ export function SettingsCard({ onPopupOpenChange }: SettingsCardProps) {
     >
       {/* Master volume (§7.5: internal only; N>2 fixed at 100%/0dB — the
           slider greys out and shows 100; N<=2 keeps the dB-linear curve and
-          80% default). Live — applied on drag, never deferred. */}
+          80% default). Live — applied on drag, never deferred. The speaker
+          is a click-to-mute toggle (#30): mute remembers the current value,
+          a second click restores it; the state lives in the session store
+          only, so every reopened session returns to the known 80%. */}
       <div className="flex items-center gap-2">
         <span
           className={cn(
@@ -201,10 +216,25 @@ export function SettingsCard({ onPopupOpenChange }: SettingsCardProps) {
             !volumeEnabled && 'opacity-45'
           )}
         >
-          <Volume2 size={14} />
+          <button
+            type="button"
+            data-testid="mute-toggle"
+            onClick={handleMuteToggle}
+            disabled={!volumeEnabled}
+            aria-label={muted ? t('sidebar.unmute') : t('sidebar.mute')}
+            aria-pressed={muted}
+            className={cn(
+              '-mx-2 flex size-7 items-center justify-center rounded-md',
+              'transition-transform active:scale-90',
+              'focus-visible:outline-2 focus-visible:outline-(--pnds-accent) focus-visible:outline-offset-1'
+            )}
+          >
+            {muted ? <VolumeX size={14} /> : <Volume2 size={14} />}
+          </button>
         </span>
         <input
           type="range"
+          dir="ltr"
           aria-label={
             fixedGain ? t('sidebar.volumeFixed') : t('sidebar.volume')
           }
@@ -213,9 +243,18 @@ export function SettingsCard({ onPopupOpenChange }: SettingsCardProps) {
           value={Math.round(volumeDisplay)}
           disabled={!volumeEnabled}
           onChange={e => handleVolumeChange(Number(e.target.value))}
-          className="h-7 w-full accent-(--pnds-accent) disabled:opacity-35"
+          style={
+            {
+              '--pnds-volume-fill': `${Math.round(volumeDisplay)}%`,
+            } as CSSProperties
+          }
+          className={cn(
+            'pnds-volume-slider h-7 w-full rounded-full disabled:opacity-35',
+            'focus-visible:outline-2 focus-visible:outline-(--pnds-accent) focus-visible:outline-offset-1'
+          )}
         />
         <span
+          data-testid="volume-value"
           className={cn(
             'font-manrope w-7 shrink-0 text-end text-[11px] tabular-nums',
             volumeEnabled ? 'text-(--pnds-text)/70' : 'text-(--pnds-text)/30'

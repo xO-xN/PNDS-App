@@ -20,6 +20,14 @@ export function shouldConfirmClose(status: SessionStatus): boolean {
   return status === 'starting' || status === 'ready'
 }
 
+/** §6.4: every new session's master starts at 80%. */
+export const DEFAULT_SESSION_VOLUME = 80
+
+/** Entering the mute: remember what to restore — the volume being silenced
+ * if it's non-zero, else whatever an earlier mute already recorded. */
+const volumeToRestore = (current: number, recorded: number): number =>
+  current > 0 ? current : recorded
+
 interface SessionState {
   /** Mirrors the Rust SessionManager via `pnds:session` events (§8, §9). */
   sessionStatus: SessionStatus
@@ -31,6 +39,14 @@ interface SessionState {
   oscTarget: string | null
   /** Master volume percent (§6.4; every new session starts at 80). */
   volume: number
+  /** v1.2.2 (#30): click-to-mute state. Session-only — never written to
+   * preferences, so a performance machine always reopens at the known
+   * 80% default. Dragging the slider to 0 counts as muted; above 0
+   * releases the mute. */
+  muted: boolean
+  /** Volume to restore on unmute — the last non-zero volume (0 = none
+   * recorded; unmute then falls back to the 80% default). */
+  prevVolume: number
   /** Incremented to force the monitor iframe to reload (sidebar refresh). */
   monitorReloadNonce: number
   /** Selected audio mode; defaults to the manifest's defaultMode (§6.1). */
@@ -56,6 +72,10 @@ interface SessionState {
   setLanIp: (ip: string) => void
   setLanAddresses: (ips: string[]) => void
   setVolume: (percent: number) => void
+  /** v1.2.2 (#30): click-mute round-trip. Returns the volume the master
+   * synth should receive (0 when muting, the restored value when
+   * unmuting) — the caller forwards it to setMasterVolume. */
+  toggleMute: () => number
   setOutputDevice: (device: string) => void
   setDeviceError: (error: string | null) => void
   setChannelPlan: (plan: SessionState['channelPlan'], device: string) => void
@@ -91,7 +111,9 @@ export const useSessionStore = create<SessionState>()(set => ({
   outputTail: [],
   projectName: null,
   oscTarget: null,
-  volume: 80,
+  volume: DEFAULT_SESSION_VOLUME,
+  muted: false,
+  prevVolume: 0,
   monitorReloadNonce: 0,
   audioMode: 'internal',
   lanIp: null,
@@ -108,7 +130,32 @@ export const useSessionStore = create<SessionState>()(set => ({
   setAudioMode: audioMode => set({ audioMode }),
   setLanIp: lanIp => set({ lanIp }),
   setLanAddresses: lanAddresses => set({ lanAddresses }),
-  setVolume: volume => set({ volume }),
+  setVolume: volume =>
+    set(state => ({
+      volume,
+      // v1.2.2 (#30): the drag keeps the mute icon honest — landing on 0
+      // reads as muted (remembering what to restore), any value above 0
+      // releases a mute.
+      muted: volume === 0,
+      prevVolume:
+        volume > 0 ? 0 : volumeToRestore(state.volume, state.prevVolume),
+    })),
+  toggleMute: (): number => {
+    const { muted, volume, prevVolume } = useSessionStore.getState()
+    const next = muted
+      ? {
+          volume: prevVolume > 0 ? prevVolume : DEFAULT_SESSION_VOLUME,
+          muted: false,
+          prevVolume: 0,
+        }
+      : {
+          volume: 0,
+          muted: true,
+          prevVolume: volumeToRestore(volume, prevVolume),
+        }
+    set(next)
+    return next.volume
+  },
   setOutputDevice: outputDevice => set({ outputDevice }),
   setDeviceError: deviceError => set({ deviceError }),
   setChannelPlan: (channelPlan, outputDevice) =>
@@ -116,32 +163,37 @@ export const useSessionStore = create<SessionState>()(set => ({
   setOscTargetInput: oscTargetInput => set({ oscTargetInput }),
 
   applySnapshot: snapshot =>
-    set(state => ({
-      sessionStatus: snapshot.status as SessionStatus,
-      sessionError: snapshot.error,
-      health: snapshot.health,
-      outputTail: snapshot.outputTail,
-      projectName: snapshot.projectName,
-      oscTarget: snapshot.oscTarget,
-      volume: snapshot.volume,
-      // §7.1: backend-owned channel facts; keep the user's pre-start
-      // selection when the backend has none (idle snapshots).
-      channelPlan: snapshot.channelPlan ?? state.channelPlan,
-      outputDevice: snapshot.outputDevice ?? state.outputDevice,
-      // Backend-owned session facts; when absent (idle snapshots), keep the
-      // user's pre-start selection so Welcome controls don't reset.
-      lanIp: snapshot.lanIp ?? state.lanIp,
-      audioMode: snapshot.audioMode ?? state.audioMode,
-      startupStage: snapshot.startupStage,
+    set(state => {
       // §9.3: entering `starting` from any other state opens a new loading
       // session (first start, restart, or a Retry out of `error`).
-      runId:
+      const newRun =
         snapshot.status === 'starting' && state.sessionStatus !== 'starting'
-          ? state.runId + 1
-          : state.runId,
-      // After a committed session event, any pending is resolved.
-      pendingChanges: false,
-    })),
+      return {
+        sessionStatus: snapshot.status as SessionStatus,
+        sessionError: snapshot.error,
+        health: snapshot.health,
+        outputTail: snapshot.outputTail,
+        projectName: snapshot.projectName,
+        oscTarget: snapshot.oscTarget,
+        volume: snapshot.volume,
+        // v1.2.2 (#30): mute is session-only — every new run returns to
+        // the backend's known default, never to the previous run's mute.
+        muted: newRun ? false : state.muted,
+        prevVolume: newRun ? 0 : state.prevVolume,
+        // §7.1: backend-owned channel facts; keep the user's pre-start
+        // selection when the backend has none (idle snapshots).
+        channelPlan: snapshot.channelPlan ?? state.channelPlan,
+        outputDevice: snapshot.outputDevice ?? state.outputDevice,
+        // Backend-owned session facts; when absent (idle snapshots), keep the
+        // user's pre-start selection so Welcome controls don't reset.
+        lanIp: snapshot.lanIp ?? state.lanIp,
+        audioMode: snapshot.audioMode ?? state.audioMode,
+        startupStage: snapshot.startupStage,
+        runId: newRun ? state.runId + 1 : state.runId,
+        // After a committed session event, any pending is resolved.
+        pendingChanges: false,
+      }
+    }),
 
   failLocal: message => set({ sessionStatus: 'error', sessionError: message }),
 
@@ -173,7 +225,9 @@ export const useSessionStore = create<SessionState>()(set => ({
       health: null,
       outputTail: [],
       projectName: null,
-      volume: 80,
+      volume: DEFAULT_SESSION_VOLUME,
+      muted: false,
+      prevVolume: 0,
       startupStage: 0,
       audioMode: 'internal',
       lanIp: null,

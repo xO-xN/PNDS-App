@@ -129,6 +129,8 @@
   "sidebar.deviceListFailed": "无法读取工程采样率下的音频设备能力。",
   "sidebar.volume": "主音量",
   "sidebar.volumeFixed": "多声道工程的主音量固定为 100%。",
+  "sidebar.mute": "静音",
+  "sidebar.unmute": "取消静音",
   "sidebar.loadProject": "加载",
   "sidebar.closeProject": "关闭",
   "sidebar.change": "更改",

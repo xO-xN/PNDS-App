@@ -1,5 +1,10 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { clampZoom, shouldConfirmClose, useSessionStore } from './session-store'
+import {
+  clampZoom,
+  shouldConfirmClose,
+  DEFAULT_SESSION_VOLUME,
+  useSessionStore,
+} from './session-store'
 import { useProjectStore } from './project-store'
 import type { Manifest, SessionSnapshot } from '@/lib/tauri-bindings'
 
@@ -154,6 +159,99 @@ describe('session-store', () => {
       expect(shouldConfirmClose('idle')).toBe(false)
       expect(shouldConfirmClose('error')).toBe(false)
       expect(shouldConfirmClose('stopping')).toBe(false)
+    })
+  })
+
+  /** v1.2.2 (issue #30): the settings card's click-to-mute — the
+   * muted/prevVolume round-trip, the restore value, and how dragging the
+   * slider releases (or lands in) the mute state. Session-only: nothing
+   * here ever reaches preferences. */
+  describe('mute (v1.2.2, issue #30)', () => {
+    it('mutes at the current volume and restores it on the second click', () => {
+      useSessionStore.setState({ volume: 65, muted: false, prevVolume: 0 })
+
+      expect(useSessionStore.getState().toggleMute()).toBe(0)
+      expect(useSessionStore.getState()).toMatchObject({
+        volume: 0,
+        muted: true,
+        prevVolume: 65,
+      })
+
+      expect(useSessionStore.getState().toggleMute()).toBe(65)
+      expect(useSessionStore.getState()).toMatchObject({
+        volume: 65,
+        muted: false,
+        prevVolume: 0,
+      })
+    })
+
+    it('falls back to the 80% default when unmuting with nothing recorded', () => {
+      // Volume already 0 with no recorded prevVolume (e.g. a backend
+      // snapshot reported 0): unmute must not stay silent forever.
+      useSessionStore.setState({ volume: 0, muted: true, prevVolume: 0 })
+
+      expect(useSessionStore.getState().toggleMute()).toBe(
+        DEFAULT_SESSION_VOLUME
+      )
+      expect(useSessionStore.getState()).toMatchObject({
+        volume: DEFAULT_SESSION_VOLUME,
+        muted: false,
+      })
+    })
+
+    it('dragging to 0 counts as muted and remembers what to restore', () => {
+      useSessionStore.setState({ volume: 45, muted: false, prevVolume: 0 })
+
+      useSessionStore.getState().setVolume(0)
+      expect(useSessionStore.getState()).toMatchObject({
+        volume: 0,
+        muted: true,
+        prevVolume: 45,
+      })
+
+      // Unmute via the speaker restores the pre-drag value.
+      expect(useSessionStore.getState().toggleMute()).toBe(45)
+    })
+
+    it('dragging above 0 releases a click-mute', () => {
+      useSessionStore.setState({ volume: 80, muted: false, prevVolume: 0 })
+      useSessionStore.getState().toggleMute()
+      expect(useSessionStore.getState().muted).toBe(true)
+
+      useSessionStore.getState().setVolume(30)
+      expect(useSessionStore.getState()).toMatchObject({
+        volume: 30,
+        muted: false,
+        prevVolume: 0,
+      })
+    })
+
+    it('is session-only: resetSession and every new run clear it', () => {
+      useSessionStore.setState({ volume: 80, muted: false, prevVolume: 0 })
+      useSessionStore.getState().toggleMute()
+      expect(useSessionStore.getState().muted).toBe(true)
+
+      useSessionStore.getState().resetSession()
+      expect(useSessionStore.getState()).toMatchObject({
+        volume: DEFAULT_SESSION_VOLUME,
+        muted: false,
+        prevVolume: 0,
+      })
+
+      // Mid-session snapshots never resurrect it; only a NEW run (the same
+      // runId-bump condition) starts from the backend's clean default.
+      useSessionStore.getState().applySnapshot(snapshot({ status: 'ready' }))
+      useSessionStore.getState().toggleMute()
+      useSessionStore.getState().applySnapshot(snapshot({ status: 'ready' }))
+      expect(useSessionStore.getState().muted).toBe(true)
+
+      useSessionStore
+        .getState()
+        .applySnapshot(snapshot({ status: 'starting', volume: 80 }))
+      expect(useSessionStore.getState()).toMatchObject({
+        muted: false,
+        prevVolume: 0,
+      })
     })
   })
 })

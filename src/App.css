@@ -181,3 +181,42 @@
     app-region: drag;
   }
 }
+
+/* Master volume slider (v1.2.2, issue #30) — redrawn away from the system
+   native look so it matches the white-card language: a 4px pill trough with
+   the accent colour filled to the current value (--pnds-volume-fill is
+   injected by React as a percentage) and a 14px white knob with a soft
+   shadow. WebKit centres the runnable track in the input box, so the thumb
+   just needs margin-top to centre on the 4px trough. The element is pinned
+   dir="ltr" — the fill has no directional meaning and must not flip under
+   an RTL locale. Focus ring / disabled opacity come from the Tailwind
+   classes on the input itself. */
+.pnds-volume-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+}
+
+.pnds-volume-slider::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 9999px;
+  background: linear-gradient(
+    to right,
+    var(--pnds-accent) 0 var(--pnds-volume-fill, 80%),
+    var(--pnds-pill) var(--pnds-volume-fill, 80%) 100%
+  );
+}
+
+.pnds-volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: #ffffff;
+  /* (4px trough − 14px knob) / 2 */
+  margin-top: -5px;
+  box-shadow:
+    0 1px 2px rgb(23 26 43 / 20%),
+    0 2px 6px rgb(23 26 43 / 15%);
+}
