@@ -29,12 +29,15 @@ import { selectProject, setActiveFolderView } from '@/lib/project-select'
 import { reclaimIfManagedBundle } from '@/lib/bundle-project'
 import { projectDisplayName } from '@/lib/display-names'
 import {
+  AUTO_SCROLL_STEP,
+  autoScrollDirection,
   cardShift,
   folderDropAt,
   insertionIndexFor,
   projectDropAt,
   reorderedList,
   sameDropTarget,
+  scrollShiftedHitSpace,
   type DragHitSpace,
   type DragSpaces,
   type FolderDropTarget,
@@ -138,6 +141,11 @@ function rectOf(element: HTMLElement | null): Rect | null {
   }
 }
 
+/** The list's scrollable range below its viewport (0 when it fits). */
+function maxScrollOf(container: HTMLElement): number {
+  return Math.max(0, container.scrollHeight - container.clientHeight)
+}
+
 interface InlineNameInputProps {
   testId: string
   value: string
@@ -214,6 +222,11 @@ function InlineNameInput({
  * falls back to the path basename) and with nothing selected inside a
  * folder view the breadcrumb's folder name does. Overrides persist in
  * preferences (`projectDisplayNames`) and every name display follows them.
+ *
+ * v1.2.1 (issue #25): the project column scrolls independently — the
+ * FOLDERS section and the settings footer stay fixed; keyboard selection
+ * scrolls its card into view, and a drag hovering the list's top/bottom
+ * edge auto-scrolls it (the drag hit spaces re-anchor on every scroll).
  */
 export function Sidebar({
   variant,
@@ -293,6 +306,18 @@ export function Sidebar({
   })
   const breadcrumbBarRef = useRef<HTMLDivElement | null>(null)
   const cloneRef = useRef<HTMLDivElement | null>(null)
+  /** v1.2.1 (issue #25): the independently scrolling project column. */
+  const projectScrollRef = useRef<HTMLDivElement | null>(null)
+  /** scrollTop and viewport rect captured when a drag snapshotted its hit
+   * spaces — scrolling re-anchors the static list geometry against them. */
+  const scrollBaselineRef = useRef(0)
+  const scrollViewportRef = useRef<Rect | null>(null)
+  /** Edge auto-scroll state while a project drag hovers a list edge. */
+  const autoScrollDirectionRef = useRef<-1 | 0 | 1>(0)
+  const autoScrollRafRef = useRef(0)
+  /** Last pointer position — re-resolving the drop target after a scroll
+   * tick needs it, because the pointer itself did not move. */
+  const lastPointerRef = useRef({ x: 0, y: 0 })
 
   // v1.1.2 T3: one folder-aware derivation drives the list, the number
   // badges and the drag indices (spec issue #7: 可见列表与序号派生).
@@ -475,6 +500,11 @@ export function Sidebar({
         folders: hitSpaceOf(p.nav?.querySelectorAll('[data-folder-id]')),
         breadcrumb: rectOf(breadcrumbBarRef.current),
       }
+      // The list snapshot is taken at the current scroll; every later
+      // scroll tick re-anchors it (issue #25).
+      scrollBaselineRef.current = projectScrollRef.current?.scrollTop ?? 0
+      scrollViewportRef.current = rectOf(projectScrollRef.current)
+      lastPointerRef.current = { x: event.clientX, y: event.clientY }
       dragRef.current = p.source
       dropTargetRef.current = null
       setDrag(p.source)
@@ -500,7 +530,101 @@ export function Sidebar({
   useEffect(() => {
     if (!drag) return
 
+    /** Where a pointer position resolves against the drag's static zone
+     * snapshots — the single resolution path for pointer moves and for
+     * scroll ticks that move cards under a stationary pointer. */
+    const resolveDropTarget = (x: number, y: number) => {
+      // Folder cards only ever reorder among themselves; a project drag
+      // resolves against breadcrumb → folder cards → the list slots. All
+      // zones are the static snapshots taken at drag start: the yielding
+      // cards slide under the pointer, so live rects would make the
+      // target flicker as the gap opens and closes.
+      const source = dragRef.current
+      const spaces = dragSpacesRef.current
+      const next =
+        source?.kind === 'folder'
+          ? folderDropAt(x, y, spaces.folders)
+          : projectDropAt(x, y, spaces)
+      if (sameDropTarget(dropTargetRef.current, next)) return
+      dropTargetRef.current = next
+      setDropTarget(next)
+    }
+
+    /** Re-anchors the list snapshot to the container's current scroll and
+     * re-resolves the drop target under the stationary pointer — the
+     * cards physically move while the list scrolls (issue #25). Idempotent
+     * through the baseline: a repeat call with no further scroll is a
+     * no-op, so the browser's scroll event and the auto-scroll tick can
+     * both land here. */
+    const syncListScroll = () => {
+      const container = projectScrollRef.current
+      const spaces = dragSpacesRef.current
+      if (!container || !spaces.list) return
+      const delta = container.scrollTop - scrollBaselineRef.current
+      if (delta === 0) return
+      scrollBaselineRef.current = container.scrollTop
+      spaces.list = scrollShiftedHitSpace(spaces.list, delta)
+      resolveDropTarget(lastPointerRef.current.x, lastPointerRef.current.y)
+    }
+
+    const stopAutoScroll = () => {
+      autoScrollDirectionRef.current = 0
+      if (autoScrollRafRef.current) {
+        cancelAnimationFrame(autoScrollRafRef.current)
+        autoScrollRafRef.current = 0
+      }
+    }
+
+    const stepAutoScroll = () => {
+      autoScrollRafRef.current = 0
+      const container = projectScrollRef.current
+      const direction = autoScrollDirectionRef.current
+      if (!container || direction === 0) return
+      const maxScroll = maxScrollOf(container)
+      const target = Math.max(
+        0,
+        Math.min(container.scrollTop + direction * AUTO_SCROLL_STEP, maxScroll)
+      )
+      if (target !== container.scrollTop) {
+        container.scrollTop = target
+        // jsdom dispatches no scroll event for a programmatic scrollTop;
+        // sync directly so the snapshot follows every frame (in browsers
+        // the listener coalesces to a no-op — the delta is applied).
+        syncListScroll()
+      }
+      // At a scroll bound the loop rests; the next pointer move re-arms it
+      // if the pointer still sits in the edge band.
+      if (container.scrollTop > 0 && container.scrollTop < maxScroll) {
+        autoScrollRafRef.current = requestAnimationFrame(stepAutoScroll)
+      } else {
+        autoScrollDirectionRef.current = 0
+      }
+    }
+
+    const updateAutoScroll = (x: number, y: number) => {
+      // Only the project list scrolls (issue #25): folder drags reorder a
+      // static section, so they never arm the loop.
+      const container = projectScrollRef.current
+      const viewport = scrollViewportRef.current
+      if (!container || !viewport || dragRef.current?.kind !== 'project') {
+        stopAutoScroll()
+        return
+      }
+      autoScrollDirectionRef.current = autoScrollDirection(
+        x,
+        y,
+        viewport,
+        container.scrollTop,
+        maxScrollOf(container)
+      )
+      if (autoScrollDirectionRef.current === 0) stopAutoScroll()
+      else if (!autoScrollRafRef.current) {
+        autoScrollRafRef.current = requestAnimationFrame(stepAutoScroll)
+      }
+    }
+
     const clearDrag = () => {
+      stopAutoScroll()
       dragRef.current = null
       dropTargetRef.current = null
       dragGhostRef.current = null
@@ -517,23 +641,13 @@ export function Sidebar({
       if (cloneRef.current && ghost) {
         cloneRef.current.style.transform = `translate(${event.clientX - ghost.offsetX}px, ${event.clientY - ghost.offsetY}px)`
       }
-      // Folder cards only ever reorder among themselves; a project drag
-      // resolves against breadcrumb → folder cards → the list slots. All
-      // zones are the static snapshots taken at drag start: the yielding
-      // cards slide under the pointer, so live rects would make the
-      // target flicker as the gap opens and closes.
-      const source = dragRef.current
-      const spaces = dragSpacesRef.current
-      const next =
-        source?.kind === 'folder'
-          ? folderDropAt(event.clientX, event.clientY, spaces.folders)
-          : projectDropAt(event.clientX, event.clientY, spaces)
-      if (sameDropTarget(dropTargetRef.current, next)) return
-      dropTargetRef.current = next
-      setDropTarget(next)
+      lastPointerRef.current = { x: event.clientX, y: event.clientY }
+      resolveDropTarget(event.clientX, event.clientY)
+      updateAutoScroll(event.clientX, event.clientY)
     }
 
     const finishDrag = () => {
+      stopAutoScroll()
       // The ensuing click on the card is the drop's own pointerup — the
       // card's onClick must not treat it as a selection.
       suppressClickRef.current = true
@@ -596,10 +710,16 @@ export function Sidebar({
     window.addEventListener('pointermove', handlePointerMove)
     window.addEventListener('pointerup', finishDrag)
     window.addEventListener('pointercancel', clearDrag)
+    // Manual scrolls (wheel/trackpad) during a drag move the cards under
+    // the pointer too — keep the snapshot anchored (issue #25).
+    const scrollContainer = projectScrollRef.current
+    scrollContainer?.addEventListener('scroll', syncListScroll)
     return () => {
       window.removeEventListener('pointermove', handlePointerMove)
       window.removeEventListener('pointerup', finishDrag)
       window.removeEventListener('pointercancel', clearDrag)
+      scrollContainer?.removeEventListener('scroll', syncListScroll)
+      stopAutoScroll()
     }
   }, [drag])
 
@@ -617,6 +737,30 @@ export function Sidebar({
       cancelAnimationFrame(second)
     }
   }, [suppressTransition])
+
+  // v1.2.1 (issue #25): keyboard selection (⌘↑/⌘↓, ⌘1..9 — and the
+  // auto-drill view switch) can land on a card the independent list scroll
+  // has clipped, so the selected card is scrolled into view. A live
+  // session never changes its selection — the ⌘-key switch request
+  // (pendingSwitchPath) is the keyboard target, and the running current
+  // project is revealed at mount. `nearest` is a no-op for fully visible
+  // cards, keeping click selection on the same path.
+  const selectedPath =
+    pendingPreflightPath ?? pendingSwitchPath ?? currentProject?.path ?? null
+  useEffect(() => {
+    if (!selectedPath) return
+    const container = projectScrollRef.current
+    if (!container) return
+    for (const card of container.querySelectorAll('[data-project-path]')) {
+      if (
+        card instanceof HTMLElement &&
+        card.dataset.projectPath === selectedPath
+      ) {
+        card.scrollIntoView({ block: 'nearest' })
+        return
+      }
+    }
+  }, [selectedPath, activeFolderId])
 
   // Report dialog visibility so the hover sidebar keeps peeking while a
   // confirm flow is open (spec issue #4: 确认框期间松开 Cmd 不收回).
@@ -789,134 +933,146 @@ export function Sidebar({
         </div>
       )}
 
-      <nav className="mt-4 flex min-h-0 flex-1 flex-col gap-1">
-        {visiblePaths.map((path, index) => {
-          const isCurrent = path === currentProject?.path
-          const isDragged = drag?.kind === 'project' && drag.path === path
-          const renamingProject =
-            renameTarget?.kind === 'project' && renameTarget.path === path
-          const cardOffset =
-            projectInsertionIndex === null || dragProjectIndex < 0
-              ? 0
-              : cardShift(
-                  dragProjectIndex,
-                  projectInsertionIndex,
-                  index,
-                  stride
-                )
-          const showBadge = commandKeyPressed && index < 9
-          return (
-            <div
-              key={path}
-              data-testid={isCurrent ? 'current-project-card' : 'project-entry'}
-              data-project-path={path}
-              onPointerDown={e => {
-                // Renaming owns the card; the drag must not steal focus.
-                if (renamingProject) return
-                beginCardDrag(
-                  { kind: 'project', path },
-                  e,
-                  '[data-project-path]'
-                )
-              }}
-              onClick={() => {
-                if (suppressClickRef.current) {
-                  suppressClickRef.current = false
-                  return
+      <nav className="mt-4 flex min-h-0 flex-1 flex-col">
+        {/* v1.2.1 (issue #25): the project column is its own vertical
+            scroll region — overflow cards stay reachable while the
+            FOLDERS section below and the footer stay fixed. The top-level
+            and drilled-in views share the same container. */}
+        <div
+          ref={projectScrollRef}
+          data-testid="project-list-scroll"
+          className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overscroll-contain pb-1"
+        >
+          {visiblePaths.map((path, index) => {
+            const isCurrent = path === currentProject?.path
+            const isDragged = drag?.kind === 'project' && drag.path === path
+            const renamingProject =
+              renameTarget?.kind === 'project' && renameTarget.path === path
+            const cardOffset =
+              projectInsertionIndex === null || dragProjectIndex < 0
+                ? 0
+                : cardShift(
+                    dragProjectIndex,
+                    projectInsertionIndex,
+                    index,
+                    stride
+                  )
+            const showBadge = commandKeyPressed && index < 9
+            return (
+              <div
+                key={path}
+                data-testid={
+                  isCurrent ? 'current-project-card' : 'project-entry'
                 }
-                selectProject(path)
-              }}
-              style={
-                cardOffset !== 0
-                  ? { transform: `translateY(${cardOffset}px)` }
-                  : undefined
-              }
-              className={cn(
-                'group relative mx-5 flex h-14.25 select-none items-center rounded-xl px-3',
-                suppressTransition
-                  ? 'transition-none'
-                  : 'transition-[background-color,transform] duration-200',
-                isCurrent || pendingPreflightPath === path
-                  ? 'bg-(--pnds-card) shadow-sm'
-                  : 'hover:bg-(--pnds-text)/5',
-                // Hidden, not removed: its slot is what the yielding cards
-                // slide over while the floating clone represents it.
-                isDragged && 'invisible'
-              )}
-            >
-              {/* Left slot keeps the centered title's optical axis; the
+                data-project-path={path}
+                onPointerDown={e => {
+                  // Renaming owns the card; the drag must not steal focus.
+                  if (renamingProject) return
+                  beginCardDrag(
+                    { kind: 'project', path },
+                    e,
+                    '[data-project-path]'
+                  )
+                }}
+                onClick={() => {
+                  if (suppressClickRef.current) {
+                    suppressClickRef.current = false
+                    return
+                  }
+                  selectProject(path)
+                }}
+                style={
+                  cardOffset !== 0
+                    ? { transform: `translateY(${cardOffset}px)` }
+                    : undefined
+                }
+                className={cn(
+                  'group relative mx-5 flex h-14.25 select-none items-center rounded-xl px-3',
+                  suppressTransition
+                    ? 'transition-none'
+                    : 'transition-[background-color,transform] duration-200',
+                  isCurrent || pendingPreflightPath === path
+                    ? 'bg-(--pnds-card) shadow-sm'
+                    : 'hover:bg-(--pnds-text)/5',
+                  // Hidden, not removed: its slot is what the yielding cards
+                  // slide over while the floating clone represents it.
+                  isDragged && 'invisible'
+                )}
+              >
+                {/* Left slot keeps the centered title's optical axis; the
                   whole card is the drag trigger (v1.1.2 T5). */}
-              <span className="w-5 shrink-0" aria-hidden="true" />
+                <span className="w-5 shrink-0" aria-hidden="true" />
 
-              {renamingProject ? (
-                /* v1.1.2 T6: ⌘R inline rename — autofocus, select-all,
-                 * Enter/blur commit, Esc cancel (spec issue #10). */
-                <InlineNameInput
-                  testId="project-name-input"
-                  value={cardName(path)}
-                  className="flex-1 truncate rounded-lg border border-(--pnds-text)/15 bg-(--pnds-text)/5 px-2 py-1 text-center text-[15px] text-(--pnds-text) outline-none"
-                  onCommit={commitProjectName}
-                  onCancel={cancelProjectName}
-                />
-              ) : (
-                <button
-                  type="button"
-                  disabled={busy || (isCurrent && running)}
-                  title={path}
-                  className="flex-1 truncate text-center text-[15px] text-(--pnds-text)/85 disabled:opacity-60"
-                >
-                  {cardName(path)}
-                </button>
-              )}
+                {renamingProject ? (
+                  /* v1.1.2 T6: ⌘R inline rename — autofocus, select-all,
+                   * Enter/blur commit, Esc cancel (spec issue #10). */
+                  <InlineNameInput
+                    testId="project-name-input"
+                    value={cardName(path)}
+                    className="flex-1 truncate rounded-lg border border-(--pnds-text)/15 bg-(--pnds-text)/5 px-2 py-1 text-center text-[15px] text-(--pnds-text) outline-none"
+                    onCommit={commitProjectName}
+                    onCancel={cancelProjectName}
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    disabled={busy || (isCurrent && running)}
+                    title={path}
+                    className="flex-1 truncate text-center text-[15px] text-(--pnds-text)/85 disabled:opacity-60"
+                  >
+                    {cardName(path)}
+                  </button>
+                )}
 
-              {/* Right slot: ⌘N hint while Cmd is held (v1.1.2), else ✕
+                {/* Right slot: ⌘N hint while Cmd is held (v1.1.2), else ✕
                   remove from history — never for the open project */}
-              {showBadge ? (
-                <span
-                  data-testid="project-number-badge"
-                  className="flex w-5 shrink-0 items-center justify-center gap-0.5 text-(--pnds-text)/45"
-                >
-                  <Command size={10} strokeWidth={2.5} aria-hidden="true" />
-                  <span className="translate-y-[0.5px] text-[10px] leading-none font-semibold">
-                    {index + 1}
+                {showBadge ? (
+                  <span
+                    data-testid="project-number-badge"
+                    className="flex w-5 shrink-0 items-center justify-center gap-0.5 text-(--pnds-text)/45"
+                  >
+                    <Command size={10} strokeWidth={2.5} aria-hidden="true" />
+                    <span className="translate-y-[0.5px] text-[10px] leading-none font-semibold">
+                      {index + 1}
+                    </span>
                   </span>
-                </span>
-              ) : isCurrent ? (
-                <span className="w-5 shrink-0" />
-              ) : (
-                <button
-                  type="button"
-                  aria-label={t('sidebar.removeFromHistory')}
-                  onClick={e => {
-                    e.stopPropagation()
-                    handleRemove(path)
-                  }}
-                  className="w-5 shrink-0 text-(--pnds-text)/50 opacity-0 transition-opacity hover:text-(--pnds-text) group-hover:opacity-100"
-                >
-                  <X size={14} />
-                </button>
-              )}
-            </div>
-          )
-        })}
+                ) : isCurrent ? (
+                  <span className="w-5 shrink-0" />
+                ) : (
+                  <button
+                    type="button"
+                    aria-label={t('sidebar.removeFromHistory')}
+                    onClick={e => {
+                      e.stopPropagation()
+                      handleRemove(path)
+                    }}
+                    className="w-5 shrink-0 text-(--pnds-text)/50 opacity-0 transition-opacity hover:text-(--pnds-text) group-hover:opacity-100"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+            )
+          })}
 
-        {!activeFolder && recentProjectPaths.length === 0 && (
-          <p className="px-9 py-3 text-center text-xs text-(--pnds-text)/50">
-            {t('sidebar.noProjects')}
-          </p>
-        )}
-        {activeFolder && visiblePaths.length === 0 && (
-          <p className="px-9 py-3 text-center text-xs text-(--pnds-text)/50">
-            {t('sidebar.folderEmpty')}
-          </p>
-        )}
+          {!activeFolder && recentProjectPaths.length === 0 && (
+            <p className="px-9 py-3 text-center text-xs text-(--pnds-text)/50">
+              {t('sidebar.noProjects')}
+            </p>
+          )}
+          {activeFolder && visiblePaths.length === 0 && (
+            <p className="px-9 py-3 text-center text-xs text-(--pnds-text)/50">
+              {t('sidebar.folderEmpty')}
+            </p>
+          )}
+        </div>
 
-        {/* Folders (set lists) — pinned directly above the footer controls.
-            The FOLDERS row always renders at the top level: its
-            hover-revealed button is the only entry for creating the first
-            folder. Hidden while drilled in. */}
+        {/* Folders (set lists) — outside the scroll flow, pinned directly
+            above the footer controls. The FOLDERS row always renders at
+            the top level: its hover-revealed button is the only entry for
+            creating the first folder. Hidden while drilled in. */}
         {!activeFolder && (
-          <div className="mt-auto flex flex-col gap-1">
+          <div className="flex shrink-0 flex-col gap-1">
             <div className="group mt-3 flex items-center justify-between pr-8 pl-9">
               <p className="text-[11px] font-medium tracking-wider text-(--pnds-text)/40 uppercase">
                 {t('sidebar.folders')}

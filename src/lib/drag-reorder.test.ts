@@ -11,6 +11,10 @@ import {
   projectDropAt,
   folderDropAt,
   sameDropTarget,
+  autoScrollDirection,
+  scrollShiftedHitSpace,
+  AUTO_SCROLL_EDGE,
+  AUTO_SCROLL_STEP,
 } from './drag-reorder'
 import type { ProjectFolder } from '@/lib/tauri-bindings'
 
@@ -363,6 +367,94 @@ describe('drag-reorder (v1.1.2 T4, spec issue #8)', () => {
         ).toBe(false)
         expect(sameDropTarget(null, { kind: 'breadcrumb' })).toBe(false)
       })
+    })
+  })
+})
+
+describe('drag-reorder scroll adaptation (issue #25)', () => {
+  // A scrolling list viewport 300px tall somewhere on screen.
+  const viewport = { top: 100, left: 20, right: 300, bottom: 400 }
+
+  describe('autoScrollDirection — the edge band of a live drag', () => {
+    it('scrolls up near the top edge, down near the bottom edge', () => {
+      expect(autoScrollDirection(150, 108, viewport, 120, 500)).toBe(-1)
+      expect(autoScrollDirection(150, 395, viewport, 120, 500)).toBe(1)
+    })
+
+    it('holds still in the middle of the viewport and outside it', () => {
+      expect(autoScrollDirection(150, 250, viewport, 120, 500)).toBe(0)
+      expect(autoScrollDirection(10, 108, viewport, 120, 500)).toBe(0)
+      expect(
+        autoScrollDirection(150, 108, { ...viewport, left: 400 }, 120, 500)
+      ).toBe(0)
+      expect(autoScrollDirection(150, 450, viewport, 120, 500)).toBe(0)
+    })
+
+    it('never scrolls past the list bounds', () => {
+      // Already at the top: the top edge band cannot scroll further up.
+      expect(autoScrollDirection(150, 108, viewport, 0, 500)).toBe(0)
+      // Already at the bottom: the bottom edge band cannot scroll further.
+      expect(autoScrollDirection(150, 395, viewport, 500, 500)).toBe(0)
+    })
+
+    it('the band is AUTO_SCROLL_EDGE px deep and the step moves by frame', () => {
+      expect(AUTO_SCROLL_EDGE).toBeGreaterThan(0)
+      expect(
+        autoScrollDirection(
+          150,
+          viewport.top + AUTO_SCROLL_EDGE,
+          viewport,
+          10,
+          500
+        )
+      ).toBe(0)
+      expect(
+        autoScrollDirection(
+          150,
+          viewport.top + AUTO_SCROLL_EDGE - 1,
+          viewport,
+          10,
+          500
+        )
+      ).toBe(-1)
+      expect(AUTO_SCROLL_STEP).toBeGreaterThan(0)
+    })
+  })
+
+  describe('scrollShiftedHitSpace — the snapshot follows container scroll', () => {
+    const space = {
+      top: 100,
+      left: 20,
+      right: 300,
+      cardHeight: 57,
+      stride: 61,
+      count: 3,
+    }
+
+    it('scrolling down lifts every slot by the delta; layout is untouched', () => {
+      expect(scrollShiftedHitSpace(space, 122)).toEqual({
+        top: -22,
+        left: 20,
+        right: 300,
+        cardHeight: 57,
+        stride: 61,
+        count: 3,
+      })
+    })
+
+    it('a zero delta keeps the snapshot as-is', () => {
+      expect(scrollShiftedHitSpace(space, 0)).toEqual(space)
+    })
+
+    it('hit-tests land on the card the scrolled list actually shows', () => {
+      // Card 0 sat at 100..157; after scrolling down 61px it sits at 39..96,
+      // so a pointer at y=50 now hovers its upper half instead of nothing.
+      const shifted = scrollShiftedHitSpace(space, 61)
+      expect(hoveredCardAt(150, 50, shifted)).toEqual({
+        index: 0,
+        half: 'before',
+      })
+      expect(hoveredCardAt(150, 50, space)).toBeNull()
     })
   })
 })

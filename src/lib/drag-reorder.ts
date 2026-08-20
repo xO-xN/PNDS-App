@@ -262,6 +262,52 @@ export function folderDropAt(
   return hit ? { kind: 'list', index: hit.index, half: hit.half } : null
 }
 
+/**
+ * v1.2.1 (issue #25): how deep inside the scrolling list's viewport (px)
+ * a dragged card's pointer must hover before the list auto-scrolls.
+ */
+export const AUTO_SCROLL_EDGE = 40
+
+/** Pixels per animation frame the edge auto-scroll advances the list. */
+export const AUTO_SCROLL_STEP = 14
+
+/**
+ * Auto-scroll direction for a pointer inside the scrolling project list:
+ * -1 near the top edge, +1 near the bottom, 0 elsewhere or where the list
+ * cannot scroll further that way. The component's rAF loop applies it
+ * while a project drag hovers an edge; folder drags never scroll (their
+ * section sits outside the scroll flow).
+ */
+export function autoScrollDirection(
+  pointerX: number,
+  pointerY: number,
+  viewport: Rect,
+  scrollTop: number,
+  maxScroll: number
+): -1 | 0 | 1 {
+  if (pointerX < viewport.left || pointerX > viewport.right) return 0
+  if (pointerY < viewport.top || pointerY > viewport.bottom) return 0
+  if (pointerY - viewport.top < AUTO_SCROLL_EDGE && scrollTop > 0) return -1
+  if (viewport.bottom - pointerY < AUTO_SCROLL_EDGE && scrollTop < maxScroll) {
+    return 1
+  }
+  return 0
+}
+
+/**
+ * The list's static slot snapshot after its container scrolled by
+ * `scrollDelta` px: scrolling down moves every card up by the same amount
+ * in viewport space, and nothing else about the layout changes. Called on
+ * every scroll tick of a live drag so hit-testing stays anchored to what
+ * the list actually shows.
+ */
+export function scrollShiftedHitSpace(
+  space: DragHitSpace,
+  scrollDelta: number
+): DragHitSpace {
+  return { ...space, top: space.top - scrollDelta }
+}
+
 /** Structural equality for any mix of the drop-target unions. */
 export function sameDropTarget(
   a: ProjectDropTarget | FolderDropTarget | null,
