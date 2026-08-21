@@ -15,11 +15,16 @@ export function MonitorView() {
   const hostRef = useRef<HTMLDivElement>(null)
   const health = useSessionStore(state => state.health)
   const projectName = useSessionStore(state => state.projectName)
-  const currentPath = useProjectStore(state => state.currentProject?.path)
+  // v1.2.3 (#42): the title names the RUNNING session's project — looked
+  // up by the session's own path, so selecting another card (whose
+  // rename map entry differs) never retitles the live show.
+  const sessionProjectPath = useSessionStore(state => state.sessionProjectPath)
   // v1.1.2 T6: a custom display name (spec issue #10) wins over the
   // manifest name the session reports.
   const displayOverride = useProjectStore(state =>
-    currentPath ? state.projectDisplayNames[currentPath] : undefined
+    sessionProjectPath
+      ? state.projectDisplayNames[sessionProjectPath]
+      : undefined
   )
   // v1.2.3 (#39/T4): the iframe targets the SESSION's LAN IP (snapshot
   // mirror) — another card's preflight seeding must never retarget or

@@ -386,12 +386,39 @@ describe('⌘R project rename (v1.1.2 T6)', () => {
     })
     useSessionStore.setState({
       sessionStatus: 'ready',
+      sessionProjectPath: FIRST_PATH,
       lanIp: '192.168.1.10',
       health: readyHealth,
     })
     render(<MonitorView />)
 
     expect(screen.getByText(/PNDS - Encore Set/)).toBeInTheDocument()
+    expect(
+      screen.queryByText(/PNDS - Inarticulate III/)
+    ).not.toBeInTheDocument()
+  })
+
+  /** v1.2.3 (#42): the title names the SESSION's project — selecting
+   * another card (with its own rename) never retitles the live show. */
+  it('the monitor title stays on the session project while another card is selected (#42)', () => {
+    useProjectStore.setState({
+      currentProject: { path: SECOND_PATH, manifest },
+      projectDisplayNames: {
+        [FIRST_PATH]: 'Opener',
+        [SECOND_PATH]: 'Encore Set',
+      },
+    })
+    useSessionStore.setState({
+      sessionStatus: 'ready',
+      sessionProjectPath: FIRST_PATH,
+      projectName: 'Inarticulate III',
+      lanIp: '192.168.1.10',
+      health: readyHealth,
+    })
+    render(<MonitorView />)
+
+    expect(screen.getByText(/PNDS - Opener/)).toBeInTheDocument()
+    expect(screen.queryByText(/PNDS - Encore Set/)).not.toBeInTheDocument()
     expect(
       screen.queryByText(/PNDS - Inarticulate III/)
     ).not.toBeInTheDocument()
