@@ -130,30 +130,27 @@ export async function start(): Promise<void> {
   }
 }
 
-/** §8.3: restart the session with the current settings. */
-export async function restart(): Promise<void> {
-  if (startInFlight) return
-  const { currentProject } = useProjectStore.getState()
-  const { audioMode, lanIp, oscTargetInput } = useSessionStore.getState()
-  if (!currentProject || !lanIp) return
-
-  logger.info('Restarting session', {
-    path: currentProject.path,
-    mode: audioMode,
-  })
-  useSessionStore.getState().setPendingChanges(false)
+/**
+ * The stop→start core shared by §8.3 restarts and the confirm-and-replace
+ * switch: the submit latch, the capture-BEFORE-await config (stopProject
+ * emits snapshots whose audio_mode is the PREVIOUS session's, and
+ * applySnapshot overwrites the pending selection — ?? only guards null)
+ * and the failure funnel.
+ */
+async function stopThenStart(
+  path: string,
+  audioMode: string,
+  lanIp: string,
+  oscTarget: string | null
+): Promise<void> {
   startInFlight = true
   try {
     await commands.stopProject()
-    // Capture BEFORE the await — stopProject emits snapshots whose
-    // audio_mode is the PREVIOUS session's mode, and applySnapshot
-    // overwrites the user's pending selection (?? only guards null).
-    const target = audioMode === 'external' ? oscTargetInput : null
     const result = await commands.startProject(
-      currentProject.path,
+      path,
       audioMode,
       lanIp,
-      target
+      oscTarget
     )
     if (result.status === 'error') {
       useSessionStore.getState().failLocal(result.error)
@@ -161,6 +158,21 @@ export async function restart(): Promise<void> {
   } finally {
     startInFlight = false
   }
+}
+
+/** §8.3: restart the session with the current settings. */
+export async function restart(): Promise<void> {
+  if (startInFlight) return
+  const { currentProject } = useProjectStore.getState()
+  const { audioMode, lanIp } = useSessionStore.getState()
+  if (!currentProject || !lanIp) return
+
+  logger.info('Restarting session', {
+    path: currentProject.path,
+    mode: audioMode,
+  })
+  useSessionStore.getState().setPendingChanges(false)
+  await stopThenStart(currentProject.path, audioMode, lanIp, resolveOscTarget())
 }
 
 /**
@@ -198,22 +210,5 @@ export async function startReplacing(): Promise<void> {
     mode: audioMode,
   })
   useSessionStore.getState().setPendingChanges(false)
-  startInFlight = true
-  try {
-    // Capture BEFORE the awaits — the old session's snapshots must not
-    // yank the new selection's pending config (see restart()).
-    const target = audioMode === 'external' ? oscTargetInput : null
-    await commands.stopProject()
-    const result = await commands.startProject(
-      currentProject.path,
-      audioMode,
-      lanIp,
-      target
-    )
-    if (result.status === 'error') {
-      useSessionStore.getState().failLocal(result.error)
-    }
-  } finally {
-    startInFlight = false
-  }
+  await stopThenStart(currentProject.path, audioMode, lanIp, resolveOscTarget())
 }

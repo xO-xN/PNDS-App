@@ -80,6 +80,8 @@ export function SettingsCard({ onPopupOpenChange }: SettingsCardProps) {
   // that card's pending start config (seeded by its preflight); the volume
   // row belongs to the RUNNING session and waits (adjusting it means going
   // back to the running card — the persistent mini-control is future work).
+  // NB: this is `!live || match` — NOT `!selectionIsRunningCard()` (that
+  // would also enable the row while a different card runs).
   const selectionOnRunningCard =
     !isSessionLive(sessionStatus) || currentProject?.path === sessionProjectPath
 

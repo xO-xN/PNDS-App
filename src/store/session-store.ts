@@ -36,6 +36,23 @@ export function isSessionLive(status: SessionStatus): boolean {
   return status === 'starting' || status === 'ready' || status === 'stopping'
 }
 
+/**
+ * v1.2.3 (#39/T4): true when a live session's own card is the selected
+ * one — the footer then keeps Close/Change and the live volume; any other
+ * selected card owns the config rows and the Load button. False with no
+ * live session (the selection is then just a preflight target).
+ */
+export function selectionIsRunningCard(
+  session: Pick<SessionState, 'sessionStatus' | 'sessionProjectPath'>,
+  selectedPath: string | null | undefined
+): boolean {
+  return (
+    isSessionLive(session.sessionStatus) &&
+    selectedPath != null &&
+    selectedPath === session.sessionProjectPath
+  )
+}
+
 /** §6.4: every new session's master starts at 80%. */
 export const DEFAULT_SESSION_VOLUME = 80
 
@@ -58,6 +75,14 @@ interface SessionState {
    * session runs.
    */
   sessionProjectPath: string | null
+  /**
+   * v1.2.3 (#39/T4): the running session's LAN IP, mirrored from the
+   * backend snapshot — unlike `lanIp`, it is never touched by another
+   * card's preflight seeding. The monitor iframe and the Share action read
+   * it, so selecting a project over a running session can never retarget
+   * (or reload) the live monitor page.
+   */
+  sessionLanIp: string | null
   /** OSC target reported by the backend (internal: dynamic; external: §6.6). */
   oscTarget: string | null
   /** Master volume percent (§6.4; every new session starts at 80). */
@@ -134,6 +159,7 @@ export const useSessionStore = create<SessionState>()(set => ({
   outputTail: [],
   projectName: null,
   sessionProjectPath: null,
+  sessionLanIp: null,
   oscTarget: null,
   volume: DEFAULT_SESSION_VOLUME,
   muted: false,
@@ -207,6 +233,7 @@ export const useSessionStore = create<SessionState>()(set => ({
         outputTail: snapshot.outputTail,
         projectName: snapshot.projectName,
         sessionProjectPath: snapshot.projectPath,
+        sessionLanIp: snapshot.lanIp,
         oscTarget: snapshot.oscTarget,
         volume: snapshot.volume,
         // v1.2.2 (#30): mute is session-only — every new run returns to
@@ -265,6 +292,7 @@ export const useSessionStore = create<SessionState>()(set => ({
       outputTail: [],
       projectName: null,
       sessionProjectPath: null,
+      sessionLanIp: null,
       volume: DEFAULT_SESSION_VOLUME,
       muted: false,
       prevVolume: 0,

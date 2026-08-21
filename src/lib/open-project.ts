@@ -106,7 +106,24 @@ export async function runPreflight(path: string): Promise<void> {
   // already-known name saves nothing.
   useProjectStore.getState().preflightSucceeded(path, result.data)
   logger.info('Preflight passed', { project: result.data.name })
-  if (reselectedRunningCard) return
+
+  if (reselectedRunningCard) {
+    // The running card's rows must come back as they were before another
+    // card's seeding overwrote them: a fresh snapshot restores the
+    // backend-owned facts (mode / LAN / device), the OSC input restores
+    // from this project's saved preference.
+    const state = await commands.getSessionState()
+    if (state.status === 'ok') {
+      useSessionStore.getState().applySnapshot(state.data)
+    }
+    const prefs = await loadPreferences()
+    useSessionStore
+      .getState()
+      .setOscTargetInput(
+        prefs?.oscTargets?.[result.data.id] ?? DEFAULT_OSC_TARGET
+      )
+    return
+  }
 
   useSessionStore.getState().setAudioMode(result.data.audio.defaultMode)
 
@@ -152,8 +169,15 @@ export async function stopAndReset(): Promise<void> {
     currentProject !== null &&
     stoppedSessionPath !== null &&
     currentProject.path !== stoppedSessionPath
-  if (!keepSelection) {
-    useProjectStore.getState().clearProject()
+  if (keepSelection && currentProject) {
+    // The kept selection must be a USABLE card, not just a highlighted
+    // one: resetSession() cleared its start config, so re-run the
+    // preflight seeding (the backend is idle now — a plain reset-preflight
+    // round-trip) to bring back the config rows and a live Load button.
+    useSessionStore.getState().resetSession()
+    await runPreflight(currentProject.path)
+    return
   }
+  useProjectStore.getState().clearProject()
   useSessionStore.getState().resetSession()
 }

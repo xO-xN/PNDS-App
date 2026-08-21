@@ -181,7 +181,8 @@ describe('AppShell', () => {
       sessionStatus: 'ready',
       projectName: 'Inarticulate III',
       sessionProjectPath: '/p',
-      lanIp: '192.168.1.10',
+      sessionLanIp: '192.168.1.10',
+      lanIp: '10.0.0.5',
       health: {
         status: 'ready',
         projectId: 'inarticulate-iii',
@@ -206,7 +207,10 @@ describe('AppShell', () => {
     await openProject('/q')
 
     expect(commands.preflightProject).toHaveBeenCalledWith('/q')
-    expect(screen.getByTitle('Project monitor')).toBeInTheDocument()
+    // The iframe still targets the SESSION's IP — the selection's seeded
+    // lanIp (10.0.0.5) must never retarget or reload the live monitor.
+    const monitor = screen.getByTitle('Project monitor')
+    expect(monitor).toHaveAttribute('src', 'http://192.168.1.10:6869/')
     expect(useSessionStore.getState().sessionStatus).toBe('ready')
   })
 

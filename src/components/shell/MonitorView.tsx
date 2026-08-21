@@ -21,7 +21,11 @@ export function MonitorView() {
   const displayOverride = useProjectStore(state =>
     currentPath ? state.projectDisplayNames[currentPath] : undefined
   )
-  const lanIp = useSessionStore(state => state.lanIp)
+  // v1.2.3 (#39/T4): the iframe targets the SESSION's LAN IP (snapshot
+  // mirror) — another card's preflight seeding must never retarget or
+  // reload the live monitor page. Falls back to the start-config IP only
+  // when no snapshot has arrived yet.
+  const lanIp = useSessionStore(state => state.sessionLanIp ?? state.lanIp)
   const reloadNonce = useSessionStore(state => state.monitorReloadNonce)
   // §v1.1.1: browser-style zoom (50–200%), session-only.
   const monitorZoom = useSessionStore(state => state.monitorZoom)

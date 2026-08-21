@@ -6,8 +6,10 @@ import { useProjectStore } from '@/store/project-store'
 import {
   isSessionBusy,
   isSessionLive,
+  selectionIsRunningCard,
   useSessionStore,
 } from '@/store/session-store'
+import { projectDisplayName } from '@/lib/display-names'
 import { hasOpenOverlay, isEditableTarget } from '@/hooks/use-command-keyboard'
 import { cn } from '@/lib/utils'
 import {
@@ -44,7 +46,12 @@ export function SessionActionButton() {
   const preflightStatus = useProjectStore(state => state.preflightStatus)
   const sessionStatus = useSessionStore(state => state.sessionStatus)
   const sessionProjectPath = useSessionStore(state => state.sessionProjectPath)
-  const sessionProjectName = useSessionStore(state => state.projectName)
+  const projectDisplayNames = useProjectStore(
+    state => state.projectDisplayNames
+  )
+  const manifestProjectNames = useProjectStore(
+    state => state.manifestProjectNames
+  )
   const audioMode = useSessionStore(state => state.audioMode)
   const lanIp = useSessionStore(state => state.lanIp)
   const oscTargetInput = useSessionStore(state => state.oscTargetInput)
@@ -57,8 +64,21 @@ export function SessionActionButton() {
   const live = isSessionLive(sessionStatus)
   // v1.2.3 (#39/T4): false while a different card is selected over a live
   // session — the footer then belongs to that card's pending start config.
-  const selectionIsRunningCard =
-    live && currentProject?.path === sessionProjectPath
+  const runningCardSelected = selectionIsRunningCard(
+    { sessionStatus, sessionProjectPath },
+    currentProject?.path
+  )
+  /** The confirm dialog names both cards as the sidebar lists them —
+   * rename overrides first (v1.2.3 #39/T4 review). */
+  const displayName = (path: string | null | undefined, fallback: string) =>
+    path
+      ? projectDisplayName(
+          path,
+          projectDisplayNames,
+          manifestProjectNames,
+          currentProject
+        )
+      : fallback
   const loadable = canStart({
     currentProject,
     preflightStatus,
@@ -67,13 +87,13 @@ export function SessionActionButton() {
     audioMode,
     oscTargetInput,
     deviceError,
-    selectionIsRunningCard,
+    selectionIsRunningCard: runningCardSelected,
   })
 
   /** Load/Enter submit: confirm-and-replace over a live session, plain
    * start otherwise (idle, or a dead `error` the Retry semantics cover). */
   const submitLoad = () => {
-    if (live && !selectionIsRunningCard) {
+    if (live && !runningCardSelected) {
       setConfirmSwitchOpen(true)
       return
     }
@@ -101,8 +121,8 @@ export function SessionActionButton() {
       // project behind a confirm is ⌘W's job (menu.ts).
       if (event.key !== 'Enter') return
       // Enter never stops a live show — Close stays dialog/mouse-only.
-      if (running && !pendingChanges && selectionIsRunningCard) return
-      if (selectionIsRunningCard) {
+      if (running && !pendingChanges && runningCardSelected) return
+      if (runningCardSelected) {
         if (!running && !loadable) return
         event.preventDefault()
         // v1.2.2 (#29 feedback): capture-phase + stopPropagation — a
@@ -127,14 +147,14 @@ export function SessionActionButton() {
     }
     window.addEventListener('keydown', handleKeyDown, true)
     return () => window.removeEventListener('keydown', handleKeyDown, true)
-  }, [running, busy, pendingChanges, loadable, selectionIsRunningCard, live])
+  }, [running, busy, pendingChanges, loadable, runningCardSelected, live])
 
   // Full-bleed footer: the card clips the bottom corners, so no radius
   // and no shadow here — the card owns both.
   const baseClass = 'h-10 w-full text-[14px] transition-colors'
 
   // Close (the running card is selected, no pending change)
-  if (running && selectionIsRunningCard && !pendingChanges) {
+  if (running && runningCardSelected && !pendingChanges) {
     return (
       <button
         type="button"
@@ -151,7 +171,7 @@ export function SessionActionButton() {
 
   // Change (the running card is selected, pending config changes — no
   // preflight gate; restart handles its own validation)
-  if (running && selectionIsRunningCard && pendingChanges) {
+  if (running && runningCardSelected && pendingChanges) {
     return (
       <button
         type="button"
@@ -203,12 +223,12 @@ export function SessionActionButton() {
           <AlertDialogHeader>
             <AlertDialogTitle>
               {t('startOver.title', {
-                name: currentProject?.manifest.name ?? '',
+                name: displayName(currentProject?.path, ''),
               })}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {t('startOver.description', {
-                running: sessionProjectName ?? '',
+                running: displayName(sessionProjectPath, ''),
               })}
             </AlertDialogDescription>
           </AlertDialogHeader>

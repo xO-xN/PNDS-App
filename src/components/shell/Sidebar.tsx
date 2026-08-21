@@ -442,7 +442,9 @@ export function Sidebar({
   // accent bar or the folder in-use dot.
   const sessionProjectPath = useSessionStore(state => state.sessionProjectPath)
   const commandKeyPressed = useKeyboardStore(state => state.commandKeyPressed)
-  const lanIp = useSessionStore(state => state.lanIp)
+  // v1.2.3 (#39/T4): Share targets the SESSION's IP (snapshot mirror) —
+  // another card's preflight seeding must never retarget the live link.
+  const lanIp = useSessionStore(state => state.sessionLanIp ?? state.lanIp)
   const monitorPort = useSessionStore(
     state => state.health?.scoreServer?.monitorPort
   )
