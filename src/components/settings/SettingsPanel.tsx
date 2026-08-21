@@ -47,6 +47,9 @@ export function SettingsPanel() {
   const focusSection = useSettingsStore(state => state.focusSection)
   const languageSetting = useSettingsStore(state => state.languageSetting)
   const colorThemeSetting = useSettingsStore(state => state.colorThemeSetting)
+  const liquidGlassSupported = useSettingsStore(
+    state => state.liquidGlassSupported
+  )
   // The selections are seeded once at app startup (App.tsx init flow, from
   // the same preferences read that initializes the language); afterwards
   // the store is authoritative — applyLanguageSetting / applyColorThemeSetting
@@ -163,13 +166,29 @@ export function SettingsPanel() {
                 }
               >
                 {COLOR_THEME_OPTIONS.map(option => (
-                  <NativeSelectOption key={option.value} value={option.value}>
+                  <NativeSelectOption
+                    key={option.value}
+                    value={option.value}
+                    // Issue #41: Glass is offered only on macOS 26+ — the
+                    // disabled item + the reason line below keep the
+                    // control self-explanatory instead of silently
+                    // missing (spec #36 story 5).
+                    disabled={!!option.requiresMacOS26 && !liquidGlassSupported}
+                  >
                     {t(`settings.theme.${option.value}`)}
                   </NativeSelectOption>
                 ))}
               </NativeSelect>
             </div>
           </div>
+          {!liquidGlassSupported && (
+            <p
+              data-testid="glass-unsupported-hint"
+              className="text-end text-xs text-muted-foreground"
+            >
+              {t('settings.themeGlassRequires')}
+            </p>
+          )}
         </section>
 
         <Separator />

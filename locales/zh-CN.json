@@ -43,6 +43,8 @@
   "settings.theme.sand": "暖沙",
   "settings.theme.stage": "暗场",
   "settings.theme.midnight": "午夜",
+  "settings.theme.glass": "玻璃",
+  "settings.themeGlassRequires": "玻璃主题需要 macOS 26 或更高版本。",
   "settings.language": "语言",
   "settings.languageSystem": "跟随系统",
   "settings.audio": "音频",

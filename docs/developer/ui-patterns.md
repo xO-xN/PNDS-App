@@ -90,7 +90,7 @@ To add a new semantic color:
 
 Then use with Tailwind: `bg-success text-success-foreground`
 
-## Color Themes (v1.2.3, issue #38)
+## Color Themes (v1.2.3, issues #38/#40/#41)
 
 The app's color themes are NOT the `.dark` axis: the shadcn `.dark` class
 is never applied (see Dark Mode below — that section describes why), and a
@@ -106,10 +106,23 @@ node's `data-color-theme` attribute:
   defined as "the current look" and doubles as the pre-JavaScript fallback
   (until startup applies the saved attribute, the app renders Lavender).
 - `src/lib/color-theme.ts` owns the attribute: the startup preferences read
-  applies the saved theme (unknown or not-yet-shipped values fall back to
-  Lavender), and the settings panel's Appearance section applies changes
-  immediately and persists `colorTheme` (enum-validated in Rust:
+  applies the saved theme (unknown values fall back to Lavender), and the
+  settings panel's Appearance section applies changes immediately and
+  persists `colorTheme` (enum-validated in Rust:
   lavender/sand/stage/midnight/glass).
+- **Glass (issue #41)** is macOS 26+ only: the Rust gate
+  (`supports_liquid_glass`) drives the Appearance option's disabled state
+  and the render-time fallback (persisted `glass` on an older system
+  renders Lavender — the preference is not rewritten, so it revives on a
+  supported machine). Selecting it also toggles the native dressing via
+  `set_liquid_glass`: an `NSGlassEffectView` behind the webview plus a
+  transparent window (src-tauri/src/glass.rs); the CSS block paints
+  high-opacity white layers over it (`--pnds-glass-filter` frosts
+  translucent surfaces — `.pnds-glass-blur` on app chrome, the shadcn
+  data-slot hooks for portal surfaces). The monitor iframe area stays
+  opaque. No frosted fallback on older systems — the option is simply
+  gated off (spec #36). Glass is exempt from the 4.5:1 guarantee: its
+  backdrop is the live desktop, so contrast is approximated.
 - Components consume tokens via Tailwind arbitrary values — `bg-(--pnds-bg)`,
   `text-(--pnds-text)/60`, `shadow-(--pnds-card-shadow)` — never literal
   colors. Status fills carry their own label token

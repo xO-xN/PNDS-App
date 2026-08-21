@@ -216,6 +216,8 @@ vi.mock('@/lib/tauri-bindings', () => ({
 | `fadeInWindow`             | none                                  | `Result<null, string>`                  | First show / dock reopen fade (§7.4)                                               |
 | `markQuitting`             | none                                  | `Result<null, string>`                  | Cancel in-flight fades (⌘Q, §7.4)                                                  |
 | `quitApp`                  | none                                  | `Result<null, string>`                  | Process exit behind ⌘Q (v1.1.2 T7)                                                 |
+| `supportsLiquidGlass`      | none                                  | `Result<boolean, string>`               | macOS 26+ version gate for the Glass theme (v1.2.3 #41)                            |
+| `setLiquidGlass`           | `enabled: boolean`                    | `Result<null, string>`                  | Install/remove NSGlassEffectView + window transparency (v1.2.3 #41)                |
 | `builtinUtilities`         | none                                  | `Result<BuiltinUtility[], string>`      | Built-in utility tools behind the Utilities folder, run in place (v1.2.0 #18)      |
 | `openAppDataDir`           | none                                  | `Result<null, string>`                  | Reveal app data dir in Finder (settings About, v1.2.0)                             |
 | `openAppLogDir`            | none                                  | `Result<null, string>`                  | Reveal app log dir in Finder (settings About, v1.2.0)                              |

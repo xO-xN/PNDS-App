@@ -43,6 +43,8 @@
   "settings.theme.sand": "Sand",
   "settings.theme.stage": "Stage",
   "settings.theme.midnight": "Midnight",
+  "settings.theme.glass": "Glass",
+  "settings.themeGlassRequires": "Glass requires macOS 26 or newer.",
   "settings.language": "Language",
   "settings.languageSystem": "Follow System",
   "settings.audio": "Audio",

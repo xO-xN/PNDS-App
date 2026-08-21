@@ -1216,7 +1216,7 @@ export function Sidebar({
       className={cn(
         'relative flex w-[320px] flex-col overflow-hidden rounded-[var(--app-corner-radius)] text-sm',
         variant === 'static' &&
-          'm-3 border border-(--pnds-text)/5 bg-(--pnds-sidebar-bg) shadow-sm',
+          'm-3 border border-(--pnds-text)/5 bg-(--pnds-sidebar-bg) shadow-sm pnds-glass-blur',
         variant === 'overlay' &&
           'h-full border border-(--pnds-card)/30 bg-(--pnds-sidebar-bg)/90 shadow-2xl backdrop-blur-xl'
       )}
@@ -1289,7 +1289,7 @@ export function Sidebar({
                   data-testid="folder-pill"
                   aria-hidden="true"
                   className={cn(
-                    'pointer-events-none absolute inset-y-0.5 left-0 z-0 rounded-md bg-(--pnds-card) shadow-sm',
+                    'pointer-events-none absolute inset-y-0.5 left-0 z-0 rounded-md bg-(--pnds-card) shadow-sm pnds-glass-blur',
                     suppressTransition
                       ? 'transition-none'
                       : 'transition-[transform,width,opacity] duration-[280ms] ease-[cubic-bezier(0.4,0.1,0.2,1)]',
@@ -1579,7 +1579,7 @@ export function Sidebar({
               data-testid="card-selection-pill"
               aria-hidden="true"
               className={cn(
-                'pointer-events-none absolute inset-x-5 top-0 z-0 rounded-xl bg-(--pnds-card) shadow-sm',
+                'pointer-events-none absolute inset-x-5 top-0 z-0 rounded-xl bg-(--pnds-card) shadow-sm pnds-glass-blur',
                 suppressTransition
                   ? 'transition-none'
                   : 'transition-[transform,opacity] duration-[280ms] ease-[cubic-bezier(0.4,0.1,0.2,1)]'
@@ -1799,7 +1799,7 @@ export function Sidebar({
       {/* Deferred settings + their submit are one object (§10.2): the card
           clips the button into a full-bleed footer. */}
       <div className="px-5 pb-5 pt-6">
-        <div className="overflow-hidden rounded-xl bg-(--pnds-card) shadow-(--pnds-card-shadow)">
+        <div className="overflow-hidden rounded-xl bg-(--pnds-card) shadow-(--pnds-card-shadow) pnds-glass-blur">
           <SettingsCard onPopupOpenChange={onPopupOpenChange} />
           <SessionActionButton />
         </div>

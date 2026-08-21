@@ -119,7 +119,7 @@
 }
 
 /*
- * Color themes (v1.2.3, issues #38/#40 / spec #36)
+ * Color themes (v1.2.3, issues #38/#40/#41 / spec #36)
  *
  * A theme is one complete token set selected by the root node's
  * `data-color-theme` attribute (applied by src/lib/color-theme.ts). The
@@ -138,7 +138,9 @@
  * Dark themes lighten the status colors one step (spec #36) and carry
  * dark labels on those lighter fills; recessed pills sit *below* the card
  * (darker, where in light themes they are darker too — the ladder simply
- * inverts with the palette).
+ * inverts with the palette). Glass is exempt from the guarantee: its
+ * backdrop is the live desktop, so contrast is approximated with
+ * high-opacity surfaces, per spec #36.
  */
 
 :root {
@@ -165,6 +167,10 @@
   /* The volume knob's own shadow — a text-tinted drop in light themes. */
   --pnds-knob-shadow:
     0 1px 2px rgb(23 26 43 / 20%), 0 2px 6px rgb(23 26 43 / 15%);
+  /* Glass-only frost for translucent surfaces (see the glass theme
+     block); `none` here so every surface can carry the var
+     unconditionally. */
+  --pnds-glass-filter: none;
   /* Logo background halos — the one part of the logo lockup that follows
      the theme (the dots are brand colours). The animated canvas resolves
      its own pair from the -animated token. */
@@ -401,4 +407,95 @@
   --pnds-warning: #fcd34d;
   --pnds-warning-hover: #fde68a;
   --pnds-warning-foreground: #241c06;
+}
+
+/* Glass — 玻璃: macOS 26+ liquid glass (v1.2.3 T5, issue #41). The native
+   NSGlassEffectView (inserted behind the webview by src-tauri/src/glass.rs)
+   provides the refraction/highlights of whatever is behind the window;
+   these tokens paint the app chrome as high-opacity white layers over it
+   (accent and text keep Lavender's light values). The monitor iframe area
+   stays opaque — it paints solid colors, and the glass view sits behind
+   the webview, not around it. Contrast is approximated, not guaranteed
+   (the desktop behind is live); hence the higher alphas than usual
+   glassmorphism. Offered only where supports_liquid_glass() is true;
+   a persisted glass value on an older system falls back to Lavender
+   before this block is ever applied. */
+[data-color-theme='glass'] {
+  /* shadcn semantic mapping — same structure as every theme, with the
+     translucent fills. */
+  --background: var(--pnds-card);
+  --foreground: var(--pnds-text);
+  --card: var(--pnds-card);
+  --card-foreground: var(--pnds-text);
+  --popover: var(--pnds-card);
+  --popover-foreground: var(--pnds-text);
+  --primary: var(--pnds-text);
+  --primary-foreground: var(--pnds-card);
+  --secondary: var(--pnds-pill);
+  --secondary-foreground: var(--pnds-text);
+  --muted: var(--pnds-pill);
+  --muted-foreground: var(--pnds-text-secondary);
+  --accent: var(--pnds-pill-hover);
+  --accent-foreground: var(--pnds-text);
+  --destructive: var(--pnds-danger);
+  --border: rgb(23 26 43 / 12%);
+  --input: rgb(23 26 43 / 15%);
+  --ring: var(--pnds-accent);
+  --sidebar: var(--pnds-sidebar-bg);
+  --sidebar-foreground: var(--pnds-text);
+  --sidebar-primary: var(--pnds-text);
+  --sidebar-primary-foreground: var(--pnds-card);
+  --sidebar-accent: var(--pnds-pill-hover);
+  --sidebar-accent-foreground: var(--pnds-text);
+  --sidebar-border: rgb(23 26 43 / 12%);
+  --sidebar-ring: var(--pnds-accent);
+
+  /* PNDS design tokens — white α-layers. bg is the window-wide wash over
+     the native glass (most translucent); nested surfaces grow more
+     opaque so stacked chrome keeps its hierarchy. */
+  --pnds-bg: rgb(255 255 255 / 38%);
+  --pnds-sidebar-bg: rgb(255 255 255 / 45%);
+  --pnds-card: rgb(255 255 255 / 72%);
+  --pnds-pill: rgb(255 255 255 / 40%);
+  --pnds-pill-hover: rgb(255 255 255 / 52%);
+  --pnds-accent: #5a4ff3;
+  --pnds-accent-hover: #4a3fe0;
+  --pnds-accent-foreground: #ffffff;
+  --pnds-accent-text: #5a4ff3;
+  --pnds-text: #171a2b;
+  /* Slightly darker than Lavender's secondary: it must also read over
+     the translucent washes. */
+  --pnds-text-secondary: #4f566f;
+  --pnds-card-shadow: 0 1px 3px rgb(23 26 43 / 12%);
+  --pnds-knob-shadow:
+    0 1px 2px rgb(23 26 43 / 20%), 0 2px 6px rgb(23 26 43 / 15%);
+  /* The frost for every translucent surface — both the layered depth on
+     app chrome (`.pnds-glass-blur`, see App.css) and the shadcn portal
+     surfaces below. Also the whole visual if the native effect ever
+     fails (spec #36 fallback: CSS-only glass, still macOS 26+ only). */
+  --pnds-glass-filter: blur(20px) saturate(170%);
+  --pnds-logo-halo: #b8ccf0;
+  --pnds-logo-halo-core: #cdbff2;
+  --pnds-logo-halo-animated: #dee2ff;
+  --pnds-monitor-bar: rgb(0 0 0 / 30%);
+  --pnds-monitor-bar-text: rgb(255 255 255 / 85%);
+
+  /* Light-theme status values (same labels as Lavender). */
+  --pnds-danger: #e11d48;
+  --pnds-danger-hover: #c2143c;
+  --pnds-danger-foreground: #ffffff;
+  --pnds-warning: #ffb020;
+  --pnds-warning-hover: #f0a20c;
+  --pnds-warning-foreground: var(--pnds-text);
+}
+
+/* Glass frosting of the shadcn portal surfaces — their fills come from
+   the token mapping above; the frost itself rides the slot hooks so the
+   vendored components stay untouched. */
+[data-color-theme='glass'] [data-slot='dialog-content'],
+[data-color-theme='glass'] [data-slot='popover-content'],
+[data-color-theme='glass'] [data-slot='dropdown-menu-content'],
+[data-color-theme='glass'] [data-slot='context-menu-content'],
+[data-color-theme='glass'] [data-slot='select-content'] {
+  backdrop-filter: var(--pnds-glass-filter);
 }

@@ -136,7 +136,7 @@ export function ErrorScreen() {
       {conflictPort !== null && conflictOccupant !== false && (
         <div
           data-testid="port-conflict-block"
-          className="w-full max-w-xl rounded-xl border border-(--pnds-text)/10 bg-(--pnds-card) p-4 text-sm"
+          className="w-full max-w-xl rounded-xl border border-(--pnds-text)/10 bg-(--pnds-card) p-4 text-sm pnds-glass-blur"
         >
           <p className="font-medium text-(--pnds-text)">
             {t('error.portConflictOccupant', { port: conflictPort })}

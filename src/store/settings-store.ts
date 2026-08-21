@@ -34,6 +34,10 @@ interface SettingsState {
    * at app startup from preferences (App.tsx, which also applies it to the
    * root node) and set optimistically on change. */
   colorThemeSetting: ColorTheme
+  /** Issue #41 (v1.2.3): whether this system can render the Glass theme
+   * (macOS 26+). Seeded once at app startup from the Rust version gate;
+   * drives the Appearance option's disabled state. */
+  liquidGlassSupported: boolean
   /** Issue #21: the effective sample rate shown in the Audio section —
    * the saved preference, or 48000 when unset. Seeded once at app startup
    * from the same preferences read as the language, then updated
@@ -44,6 +48,7 @@ interface SettingsState {
   toggleSettings: () => void
   setLanguageSetting: (setting: LanguageSetting) => void
   setColorThemeSetting: (theme: ColorTheme) => void
+  setLiquidGlassSupported: (supported: boolean) => void
   setSampleRateSetting: (rate: number) => void
 }
 
@@ -53,6 +58,9 @@ export const useSettingsStore = create<SettingsState>()(set => ({
   languageSetting: 'system',
   // Mirrors DEFAULT_COLOR_THEME in lib/color-theme (see the import note).
   colorThemeSetting: 'lavender',
+  // Pessimistic until App.tsx seeds the version-gate result: Glass stays
+  // disabled in the panel rather than flashing selectable.
+  liquidGlassSupported: false,
   sampleRateSetting: DEFAULT_SAMPLE_RATE,
 
   openSettings: section =>
@@ -70,6 +78,9 @@ export const useSettingsStore = create<SettingsState>()(set => ({
   setLanguageSetting: languageSetting => set({ languageSetting }),
 
   setColorThemeSetting: colorThemeSetting => set({ colorThemeSetting }),
+
+  setLiquidGlassSupported: liquidGlassSupported =>
+    set({ liquidGlassSupported }),
 
   setSampleRateSetting: sampleRateSetting => set({ sampleRateSetting }),
 }))

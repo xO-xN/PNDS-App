@@ -40,6 +40,7 @@ beforeEach(() => {
     focusSection: null,
     languageSetting: 'system',
     colorThemeSetting: 'lavender',
+    liquidGlassSupported: false,
   })
   vi.mocked(commands.loadPreferences).mockResolvedValue({
     status: 'ok',
@@ -188,8 +189,9 @@ describe('SettingsPanel (v1.2.0 issue #13)', () => {
 /** Issue #38 (v1.2.3 T2): the Appearance section — a NativeSelect offering
  * the shipped themes with the current accent swatch beside it; selecting
  * one applies the root data-color-theme attribute immediately and persists
- * the colorTheme preference. #40 added the two dark themes. */
-describe('SettingsPanel Appearance section (issues #38/#40)', () => {
+ * the colorTheme preference. #40 added the two dark themes; #41 added
+ * Glass behind the macOS 26 version gate. */
+describe('SettingsPanel Appearance section (issues #38/#40/#41)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     useSettingsStore.setState({
@@ -197,11 +199,18 @@ describe('SettingsPanel Appearance section (issues #38/#40)', () => {
       focusSection: null,
       languageSetting: 'system',
       colorThemeSetting: 'lavender',
+      // Pessimistic gate by default (the setup mock's stance): the Glass
+      // option renders disabled. Supported-case tests flip it.
+      liquidGlassSupported: false,
       sampleRateSetting: 48000,
     })
     vi.mocked(commands.loadPreferences).mockResolvedValue({
       status: 'ok',
       data: { theme: 'system', language: null },
+    })
+    vi.mocked(commands.supportsLiquidGlass).mockResolvedValue({
+      status: 'ok',
+      data: false,
     })
   })
 
@@ -210,7 +219,7 @@ describe('SettingsPanel Appearance section (issues #38/#40)', () => {
     delete document.documentElement.dataset.colorTheme
   })
 
-  it('offers the four shipped themes with the current one selected', () => {
+  it('offers the five themes with the current one selected', () => {
     useSettingsStore.getState().openSettings()
     render(<SettingsPanel />)
 
@@ -218,7 +227,7 @@ describe('SettingsPanel Appearance section (issues #38/#40)', () => {
     const labels = within(select)
       .getAllByRole('option')
       .map(option => option.textContent)
-    expect(labels).toEqual(['Lavender', 'Sand', 'Stage', 'Midnight'])
+    expect(labels).toEqual(['Lavender', 'Sand', 'Stage', 'Midnight', 'Glass'])
     expect(select).toHaveValue('lavender')
   })
 
@@ -265,6 +274,51 @@ describe('SettingsPanel Appearance section (issues #38/#40)', () => {
     await waitFor(() => {
       expect(commands.savePreferences).toHaveBeenCalledWith(
         expect.objectContaining({ colorTheme: 'lavender' })
+      )
+    })
+  })
+
+  // #41: old systems — the Glass option is greyed out and the reason is
+  // stated, so the control reads as gated rather than missing.
+  it('disables the Glass option with its reason on systems below macOS 26', () => {
+    useSettingsStore.getState().openSettings()
+    render(<SettingsPanel />)
+
+    const glassOption = within(screen.getByLabelText('Theme')).getByRole(
+      'option',
+      { name: 'Glass' }
+    )
+    expect(glassOption).toBeDisabled()
+    expect(screen.getByTestId('glass-unsupported-hint')).toHaveTextContent(
+      'Glass requires macOS 26 or newer.'
+    )
+  })
+
+  // #41: macOS 26+ — Glass is selectable and rides the same mechanism,
+  // plus the native dressing toggle.
+  it('selecting Glass applies the root attribute, toggles the native dressing, and persists', async () => {
+    useSettingsStore.setState({ liquidGlassSupported: true })
+    useSettingsStore.getState().openSettings()
+    render(<SettingsPanel />)
+
+    expect(
+      screen.queryByTestId('glass-unsupported-hint')
+    ).not.toBeInTheDocument()
+    const glassOption = within(screen.getByLabelText('Theme')).getByRole(
+      'option',
+      { name: 'Glass' }
+    )
+    expect(glassOption).toBeEnabled()
+
+    fireEvent.change(screen.getByLabelText('Theme'), {
+      target: { value: 'glass' },
+    })
+
+    expect(document.documentElement.dataset.colorTheme).toBe('glass')
+    expect(commands.setLiquidGlass).toHaveBeenCalledWith(true)
+    await waitFor(() => {
+      expect(commands.savePreferences).toHaveBeenCalledWith(
+        expect.objectContaining({ colorTheme: 'glass' })
       )
     })
   })
