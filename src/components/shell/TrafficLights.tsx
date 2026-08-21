@@ -50,6 +50,7 @@ export function TrafficLights() {
         <button
           key={labelKey}
           type="button"
+          data-os-circle=""
           aria-label={t(labelKey)}
           onClick={action}
           className="pnds-focus-ring flex h-3 w-3 items-center justify-center rounded-full text-black/60 transition-transform hover:scale-110 active:scale-95"

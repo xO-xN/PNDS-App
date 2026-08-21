@@ -3,12 +3,12 @@ import { updatePreferences } from '@/lib/preferences'
 import { useSettingsStore } from '@/store/settings-store'
 
 /**
- * v1.2.3 (issues #38/#40 / spec #36): the app color theme. A theme is one
- * complete token set in theme-variables.css selected by the root node's
- * `data-color-theme` attribute — this module owns that attribute.
+ * v1.2.3 (issues #38/#40/#41 / spec #36): the app color theme. A theme is
+ * one complete token set in theme-variables.css selected by the root
+ * node's `data-color-theme` attribute — this module owns that attribute.
  *
- * The four solid themes ship in T2/T4; the persisted enum also carries
- * `glass` (validated in Rust) for the later v1.2.3 ticket, and
+ * The four solid themes ship in T2/T4/T5; the persisted enum also carries
+ * `glass` (validated in Rust) from the abandoned liquid-glass ticket, and
  * `colorThemeFromPrefs` maps anything this build cannot render back to
  * Lavender, so a preference from a newer App never renders wrong.
  */
@@ -30,7 +30,7 @@ export const COLOR_THEME_OPTIONS: readonly ColorThemeOption[] = [
   { value: 'lavender', accent: '#5a4ff3' },
   { value: 'sand', accent: '#d97706' },
   { value: 'stage', accent: '#34d399' },
-  { value: 'midnight', accent: '#818cf8' },
+  { value: 'midnight', accent: '#ffff00' },
 ]
 
 export const DEFAULT_COLOR_THEME: ColorTheme = 'lavender'

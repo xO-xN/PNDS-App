@@ -281,7 +281,7 @@ describe('SettingsPanel Appearance section (issues #38/#40)', () => {
 
     expect(document.documentElement.dataset.colorTheme).toBe('midnight')
     expect(screen.getByTestId('color-theme-accent')).toHaveStyle({
-      background: '#818cf8',
+      background: '#ffff00',
     })
     await waitFor(() => {
       expect(commands.savePreferences).toHaveBeenCalledWith(

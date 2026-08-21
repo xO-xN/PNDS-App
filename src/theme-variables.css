@@ -350,7 +350,7 @@
   --popover: var(--pnds-card);
   --popover-foreground: var(--pnds-text);
   --primary: var(--pnds-text);
-  --primary-foreground: var(--pnds-card);
+  --primary-foreground: var(--pnds-bg);
   --secondary: var(--pnds-pill);
   --secondary-foreground: var(--pnds-text);
   --muted: var(--pnds-pill);
@@ -358,47 +358,75 @@
   --accent: var(--pnds-pill-hover);
   --accent-foreground: var(--pnds-text);
   --destructive: var(--pnds-danger);
-  --border: rgb(230 233 245 / 16%);
-  --input: rgb(230 233 245 / 16%);
+  --border: #ffffff;
+  --input: #ffffff;
   --ring: var(--pnds-accent);
   --sidebar: var(--pnds-sidebar-bg);
   --sidebar-foreground: var(--pnds-text);
   --sidebar-primary: var(--pnds-text);
-  --sidebar-primary-foreground: var(--pnds-card);
+  --sidebar-primary-foreground: var(--pnds-bg);
   --sidebar-accent: var(--pnds-pill-hover);
   --sidebar-accent-foreground: var(--pnds-text);
-  --sidebar-border: rgb(230 233 245 / 16%);
+  --sidebar-border: #ffffff;
   --sidebar-ring: var(--pnds-accent);
 
-  /* PNDS design tokens; pill below card, ladder inverts with the
-     palette (bg < sidebar < pill < card). */
-  --pnds-bg: #0d1220;
-  --pnds-sidebar-bg: #111828;
-  --pnds-card: #1a2333;
-  --pnds-pill: #151d2d;
-  --pnds-pill-hover: #1f2940;
-  --pnds-accent: #818cf8;
-  --pnds-accent-hover: #98a4fb;
-  --pnds-accent-foreground: #0d1220;
-  --pnds-accent-text: #818cf8;
-  --pnds-text: #e6e9f5;
-  --pnds-text-secondary: #9aa3c0;
-  /* Elevation: black-based (see Stage). */
-  --pnds-card-shadow: 0 1px 3px rgb(0 0 0 / 45%);
-  --pnds-knob-shadow: 0 1px 2px rgb(0 0 0 / 60%), 0 2px 6px rgb(0 0 0 / 50%);
-  /* Logo halos: dim indigo glows. */
-  --pnds-logo-halo: #202a4a;
-  --pnds-logo-halo-core: #243257;
-  --pnds-logo-halo-animated: #161e38;
-  --pnds-monitor-bar: rgb(0 0 0 / 30%);
-  --pnds-monitor-bar-text: rgb(255 255 255 / 85%);
+  /* Neo-brutalism (issue #41 redirect): flat near-black surfaces, pure
+     white text, acid yellow as the one color, full-opacity white
+     borders, and HARD offset shadows — the soft-elevation vocabulary is
+     banned here. Ladder keeps bg < sidebar < pill < card. Contrast:
+     text 17-19:1, secondary 8:1, accent-text 16:1 on card. */
+  --pnds-bg: #0a0a0a;
+  --pnds-sidebar-bg: #0f0f0f;
+  --pnds-card: #1c1c1c;
+  --pnds-pill: #151515;
+  --pnds-pill-hover: #242424;
+  --pnds-accent: #ffff00;
+  --pnds-accent-hover: #e8d500;
+  --pnds-accent-foreground: #0a0a0a;
+  --pnds-accent-text: #ffff00;
+  --pnds-text: #ffffff;
+  --pnds-text-secondary: #b3b3b3;
+  --pnds-card-shadow: 4px 4px 0 #ffffff;
+  --pnds-knob-shadow: 2px 2px 0 #ffffff;
+  /* Logo halos: dim acid rings, flat (no glow vocabulary). */
+  --pnds-logo-halo: #4d4d00;
+  --pnds-logo-halo-core: #66660d;
+  --pnds-logo-halo-animated: #85851d;
+  --pnds-monitor-bar: rgb(0 0 0 / 45%);
+  --pnds-monitor-bar-text: #ffffff;
 
-  /* Lightened one step further than Stage (rose-400); dark labels pass
-     comfortably (6.8:1 / 9.6:1 on hover). */
-  --pnds-danger: #fb7185;
-  --pnds-danger-hover: #fda4af;
-  --pnds-danger-foreground: #2b0a12;
-  --pnds-warning: #fcd34d;
-  --pnds-warning-hover: #fde68a;
-  --pnds-warning-foreground: #241c06;
+  /* Pure-red danger / orange warning with near-black labels (5.9:1 and
+     9.0:1 on their fills; as text on card 5.1:1 and 8.3:1). Hover keeps
+     labels ≥4.7:1. */
+  --pnds-danger: #ff4757;
+  --pnds-danger-hover: #e63946;
+  --pnds-danger-foreground: #1a0006;
+  --pnds-warning: #ff9f1c;
+  --pnds-warning-hover: #eb8c00;
+  --pnds-warning-foreground: #1a1200;
+}
+
+/* ── Neo-brutalism surface behavior (issue #41 redirect) ──────────────
+   The two structural signatures the token set cannot express, scoped to
+   this theme only: flat corners (brutalism's 0px radius) and instant
+   state changes (hover tints, the selection pill, and reveals all snap
+   — the same move the global reduced-motion rule makes in App.css).
+   Exemptions keep functional geometry: window-frame containers align
+   with the native window mask (window.rs CORNER_RADIUS — squaring them
+   would leak the webview background at the corners), and the traffic
+   -light dots stay circular (macOS system metaphor, via TrafficLights'
+   data-os-circle). */
+[data-color-theme='midnight'] *,
+[data-color-theme='midnight'] *::before,
+[data-color-theme='midnight'] *::after {
+  border-radius: 0 !important;
+  transition-duration: 0s !important;
+}
+
+[data-color-theme='midnight'] [data-app-frame] {
+  border-radius: var(--app-corner-radius) !important;
+}
+
+[data-color-theme='midnight'] [data-os-circle] {
+  border-radius: 9999px !important;
 }

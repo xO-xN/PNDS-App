@@ -152,6 +152,7 @@ export function AppShell() {
     return (
       <>
         <div
+          data-app-frame=""
           className={cn(
             'h-screen w-screen overflow-hidden',
             !fullscreen && 'rounded-[var(--app-corner-radius)]'
@@ -173,6 +174,7 @@ export function AppShell() {
     return (
       <>
         <div
+          data-app-frame=""
           className={cn(
             'flex h-screen w-screen overflow-hidden bg-(--pnds-bg)',
             !fullscreen && 'rounded-[var(--app-corner-radius)]'
@@ -198,6 +200,7 @@ export function AppShell() {
     return (
       <>
         <div
+          data-app-frame=""
           className={cn(
             'relative h-screen w-screen overflow-hidden bg-(--pnds-bg)',
             !fullscreen && 'rounded-[var(--app-corner-radius)]'
@@ -220,6 +223,7 @@ export function AppShell() {
   return (
     <>
       <div
+        data-app-frame=""
         className={cn(
           'flex h-screen w-screen overflow-hidden bg-(--pnds-bg)',
           !fullscreen && 'rounded-2xl'
