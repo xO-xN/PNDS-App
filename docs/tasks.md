@@ -12,7 +12,15 @@ The former local task folders (`docs/tasks-todo/`, `docs/tasks-done/`) and the `
 
 ## Release History
 
-### V1.2.2 — UI 打磨：元素互相匹配（未发版）
+### V1.2.3 — 选择与运行解耦 + 界面主题（未发版）
+
+Scope locked by spec issues [#35](https://github.com/xO-xN/PNDS-App/issues/35)（工程卡选择与运行解耦，T1/T3/T6 = #37/#39/#42）与 [#36](https://github.com/xO-xN/PNDS-App/issues/36)（界面主题系统，T2/T4/T5 = #38/#40/#41），收尾 #43。
+
+要点（Spec A 选择解耦）：Rust preflight 与运行 session 解耦（孤儿清理豁免活跃 session 子进程并保留归属记录、端口检查按占用 PID 归因放行自家占用、第三方占用仍报冲突）；五条选卡路径（点卡/⌘1..9/⌘O/拖放/双击 .pnds）统一为"选中 + preflight"，不再弹切换确认、不重置 session、监视页不回退欢迎页；requestSwitch/pendingSwitchPath 机制删除；运行竖线与文件夹"使用中"点跟随 session 所属工程（与选中无关），白色选中 pill 独立跟随（失败选择保持 pill，卡上显示校验中/错误态）；底部设置卡跟随选中卡（选中运行卡 = Close/Change + 实时音量；选中其他卡 = 该卡启动配置 + Load），live session 下 Load/Enter 经"将先关闭正在运行的工程"确认后停旧自动启新，error 态直接启动；⌘W 停 A 时 B 保持选中且可直接 Load；⌘↑/↓ 只在当前视图内移动（不再自动钻回所选工程所在文件夹）；监视页标题与 iframe/Share 目标锁定运行 session（不受选中影响）；旧 v1.2.3 §8.3 切换确认的时机移至启动动作（验收文档 §4 已同步）。
+
+要点（Spec B 主题系统）：Appearance 设置区（设置面板）+ 主题基建（`data-color-theme` 根属性、偏好持久化与未知值回退 Lavender）；四套实色主题——Lavender（浅，默认）、Sand（中等深度）、Stage（深）、Brutal（Neo-brutalism：方形窗口角与角落遮罩、Archivo 字体、奶白实色侧栏无阴影、黑色平面上的浮起选中、方角 ✕、琥珀 accent；前 Midnight 重命名迁移）。macOS 26 液态玻璃（Glass）在 #41 中实验后放弃（透明管线在目标系统不稳定），未随本版发布；持久化枚举保留 `glass`/`midnight` 值以兼容回退。附带修复：webview 全帧抑制默认右键菜单、音量滑杆 I-beam 光标、⌘-peek 侧栏在指针下不再收回。
+
+### V1.2.2 — UI 打磨：元素互相匹配（2026-08-20 发布）
 
 Scope locked by spec issue [#27](https://github.com/xO-xN/PNDS-App/issues/27), implemented in child issues T1–T6（#28–#33）。版本节奏：v1.2.1（文件夹 switch 批次 #25/#26/#23）始终未单独发版，经确认与本轮打磨合并为 v1.2.2 一个版本号发布。
 

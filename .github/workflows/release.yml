@@ -66,6 +66,30 @@ jobs:
           releaseBody: |
             ## PNDS ${{ github.ref_name || inputs.version }}
 
+            ### What's New in V1.2.3 — browse freely mid-show & four themes
+
+            **Selecting is free while a show runs**
+            - Clicking any project card while a session runs — or ⌘1..9, ⌘O, a Finder drop, a double-clicked `.pnds` — now selects and checks that project and never touches the running one. The old "loading this will close the current server" dialog is gone; switching is confirmed at the moment you start, not when you browse.
+            - The running project keeps its accent bar and its folder's "in use" dot no matter what is selected; the white selection pill slides independently.
+            - Each card shows its own check result: a small spinner while checking, a red marker (hover for the reason) when dependencies or a port conflict fail — so a broken next project is visible before you close the current one.
+
+            **Starting another project over a live session**
+            - The settings card follows the selected card: any other card shows its own start config (synth mode / OSC / output device) with a **Load** button; the running card keeps **Close / Change** and the live volume slider (adjusting volume means going back to the running card).
+            - **Load — or Enter — over a live session asks once** ("Start …? This will first close the running project …"), then stops the old project and starts the new one in a single flow. If the previous project died with an error, the next one starts directly.
+            - ⌘W closing the running project keeps a different selected card selected — and immediately loadable.
+            - Checking another project can no longer harm the running one: the backend preflight spares the live session's Node and scsynth processes and treats ports held only by the session as free (a third-party holder still reports a conflict).
+
+            **Keyboard, views & the monitor**
+            - ⌘↑/⌘↓ now stay in the current folder view instead of jumping back into the selected project's folder; a selection absent from the view enters from the matching end.
+            - The monitor title always names the running project — custom display names included — and the monitor page plus the Share link always target the running session's address; selecting another project can never retarget or reload the live monitor.
+
+            **Themes (Settings → Appearance)**
+            - Four complete color themes: **Lavender** (light, default), **Sand** (medium depth), **Stage** (dark) and **Brutal** — a Neo-brutalism take with squared window corners, Archivo type, a solid cream sidebar and an amber accent. The choice persists across launches.
+            - Known note: the macOS 26 "liquid glass" theme was explored this cycle and dropped — the transparency pipeline did not hold up on target systems. A stored preference for it (or for the old "Midnight" name) safely falls back.
+
+            **Other fixes**
+            - The default webview right-click menu is suppressed in every frame; the volume slider's cursor stays an arrow; the ⌘-peeked sidebar no longer retracts under a resting pointer.
+
             ### What's New in V1.2.2 — folders as a switch & a fully tuned sidebar
 
             **Folders are a switch now**
