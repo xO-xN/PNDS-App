@@ -117,7 +117,13 @@ node's `data-color-theme` attribute:
   supported machine). Selecting it also toggles the native dressing via
   `set_liquid_glass`: an `NSGlassEffectView` (default Regular style, the
   lensing material) behind the webview plus a transparent window
-  (src-tauri/src/glass.rs); the CSS block paints one thin white wash over
+  (src-tauri/src/glass.rs). The webview stops painting its background
+  through the public `set_background_color` API (wry's `drawsBackground`
+  KVC key + `underPageBackgroundColor` — the legacy `_setDrawsBackground:`
+  selector is gone from macOS 26's WKWebView and silently skipped), and
+  both toggle directions re-assert the native rounded-corner mask
+  (`window::sync_corner_radius`), which flipping the window's opaque
+  state resets. The CSS block paints one thin white wash over
   it (bg 24%, sidebar 32%, card 66% — heavier coats read as an opaque
   white window). **Exactly one wash per region**: the AppShell branch
   roots own the base coat (`bg-(--pnds-bg)` — the rounded alignment with

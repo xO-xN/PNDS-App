@@ -4,12 +4,18 @@
 //! AppKit API, though the spec planned for a private one; the runtime
 //! class-lookup guard below keeps the enable path safe either way. The
 //! effect view is inserted as a sibling *below* the WKWebView (the same
-//! placement `window-vibrancy` uses for NSVisualEffectView), the window is
-//! made non-opaque with a clear background, and the webview stops drawing
-//! its own background — the CSS layer then paints translucent surfaces
-//! (see `[data-color-theme='glass']` in theme-variables.css) over the real
-//! refraction. The monitor iframe stays fully opaque: its area paints
-//! solid colors, and the glass view sits behind it, not around it.
+//! placement `window-vibrancy` uses for NSVisualEffectView), and the
+//! window is made non-opaque with a clear background. The webview itself
+//! stops painting its background through `set_background_color` — the
+//! public Tauri API that routes into wry's private `drawsBackground` KVC
+//! key plus `underPageBackgroundColor`. (The `_setDrawsBackground:`
+//! selector used by an earlier iteration is gone from macOS 26's
+//! WKWebView; its respondsToSelector guard skipped silently and left the
+//! white wall that made Glass read as opaque.) The CSS layer then paints
+//! translucent surfaces (see `[data-color-theme='glass']` in
+//! theme-variables.css) over the real refraction. The monitor iframe
+//! stays fully opaque: its area paints solid colors, and the glass view
+//! sits behind it, not around it.
 //!
 //! Toggling is idempotent and reversible: switching away removes the glass
 //! view and restores the default opaque window (`backgroundColor: nil` +
@@ -22,6 +28,8 @@
 //! `set_liquid_glass` command hops there via `run_on_main_thread`. Do not
 //! call `apply_liquid_glass` from anywhere else.
 
+#[cfg(target_os = "macos")]
+use crate::window::sync_corner_radius;
 use tauri::{AppHandle, Manager, Runtime, WebviewWindow};
 
 /// The macOS major that first ships NSGlassEffectView.
@@ -139,7 +147,11 @@ fn glass_appkit<R: Runtime>(window: &WebviewWindow<R>, enabled: bool) -> Result<
             let _: () = msg_send![win, setBackgroundColor: std::ptr::null_mut::<objc2::runtime::AnyObject>()];
         }
 
-        set_webview_background(content, !enabled);
+        // Flipping the window's opaque state resets the content layer's
+        // corner clipping, so the rounded mask is re-asserted in BOTH
+        // directions — losing it is what showed white square corners in
+        // every solid theme after a glass round-trip (issue #41 retest).
+        sync_corner_radius(window);
     }
     log::info!(
         "Liquid glass {}",
@@ -208,87 +220,6 @@ unsafe fn install_glass_view(content: *mut objc2_app_kit::NSView) -> Result<(), 
     Ok(())
 }
 
-/// Stop (or resume) the WKWebView painting its own background, so the
-/// glass behind it shows through. Uses the `_drawsBackground` private
-/// setter guarded by a respondsToSelector check — the same mechanism wry
-/// uses for `transparent: true` windows. Walks the whole tree defensively;
-/// the webview is the only WKWebView in this app.
-#[cfg(target_os = "macos")]
-unsafe fn set_webview_background(root: *mut objc2_app_kit::NSView, draws: bool) {
-    use objc2::runtime::AnyClass;
-
-    let Some(webview_class) = AnyClass::get(c"WKWebView") else {
-        return;
-    };
-    walk_views(root.cast(), webview_class, draws);
-}
-
-/// Recursive descendant walk applying `_setDrawsBackground:` to every
-/// WKWebView found.
-#[cfg(target_os = "macos")]
-unsafe fn walk_views(
-    view: *mut objc2::runtime::AnyObject,
-    webview_class: &'static objc2::runtime::AnyClass,
-    draws: bool,
-) {
-    use objc2::msg_send;
-    use objc2::runtime::AnyObject;
-
-    let class: &'static objc2::runtime::AnyClass = msg_send![view, class];
-    if class_is(class, webview_class) {
-        let responds: bool = msg_send![
-            view,
-            respondsToSelector: sel_utils::set_draws_background_sel()
-        ];
-        if responds {
-            let _: () = msg_send![view, _setDrawsBackground: draws];
-            return; // the webview has no descendant webviews
-        }
-    }
-    let subviews: *mut AnyObject = msg_send![view, subviews];
-    let count: usize = msg_send![subviews, count];
-    for i in 0..count {
-        let child: *mut AnyObject = msg_send![subviews, objectAtIndex: i];
-        walk_views(child, webview_class, draws);
-    }
-}
-
-/// Class-or-superclass match. The walk is bounded: AppKit hierarchies are
-/// shallow (a handful of levels), and a bound turns any pathological
-/// cycle into a false negative instead of a hang. No real WKWebView
-/// ancestor chain comes anywhere near 16.
-#[cfg(target_os = "macos")]
-unsafe fn class_is(
-    class: &'static objc2::runtime::AnyClass,
-    of: &'static objc2::runtime::AnyClass,
-) -> bool {
-    let mut current = class;
-    for _ in 0..16 {
-        if current == of {
-            return true;
-        }
-        match current.superclass() {
-            Some(superclass) => current = superclass,
-            None => return false,
-        }
-    }
-    false
-}
-
-/// Registering the private selector once (it is not in objc2's static
-/// selector table).
-#[cfg(target_os = "macos")]
-mod sel_utils {
-    use objc2::runtime::Sel;
-    use std::sync::OnceLock;
-
-    static SET_DRAWS_BACKGROUND: OnceLock<Sel> = OnceLock::new();
-
-    pub fn set_draws_background_sel() -> Sel {
-        *SET_DRAWS_BACKGROUND.get_or_init(|| Sel::register(c"_setDrawsBackground:"))
-    }
-}
-
 // ── Commands ────────────────────────────────────────────────────────────
 
 /// v1.2.3 (issue #41): whether this system can render the Glass theme.
@@ -316,6 +247,20 @@ pub async fn set_liquid_glass(app: AppHandle, enabled: bool) -> Result<(), Strin
     let window = app
         .get_webview_window("main")
         .ok_or("main window not found")?;
+    // The webview's background goes through the public API FIRST, from
+    // this async context: it round-trips through the event loop (wry
+    // flips the private `drawsBackground` KVC key and sets
+    // `underPageBackgroundColor`), and awaiting that from inside the
+    // main-thread closure below would wait on the very loop the closure
+    // runs on. `None` resets to wry's default opaque white.
+    let background = if enabled {
+        Some(tauri::utils::config::Color(0, 0, 0, 0))
+    } else {
+        None
+    };
+    window
+        .set_background_color(background)
+        .map_err(|e| format!("Failed to set the webview background: {e}"))?;
     let (tx, rx) = std::sync::mpsc::channel();
     app.run_on_main_thread(move || {
         let result = apply_liquid_glass(&window, enabled);
