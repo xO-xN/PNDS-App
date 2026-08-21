@@ -89,9 +89,10 @@ Then use with Tailwind: `bg-success text-success-foreground`
 
 ## Color Themes (v1.2.3, issue #38)
 
-The app's color themes are one axis the `.dark`/light axis is NOT: PNDS is
-fixed-light, and a color theme swaps the entire light palette. The mechanism
-is the root node's `data-color-theme` attribute:
+The app's color themes are NOT the `.dark` axis: the shadcn `.dark` class
+is never applied (see Dark Mode below — that section describes why), and a
+color theme is one complete palette — light or dark — swapped via the root
+node's `data-color-theme` attribute:
 
 - Each theme is **one complete token set** in `theme-variables.css` — a
   `[data-color-theme='…']` block overriding both the `--pnds-*` design
@@ -109,13 +110,16 @@ is the root node's `data-color-theme` attribute:
 - Components consume tokens via Tailwind arbitrary values — `bg-(--pnds-bg)`,
   `text-(--pnds-text)/60`, `shadow-(--pnds-card-shadow)` — never literal
   colors. Status fills carry their own label token
-  (`text-(--pnds-accent-foreground)`), because the label that passes 4.5:1
-  differs per theme (white on Lavender's accent, dark on Sand's amber). The
-  accent used **as small text** goes through `--pnds-accent-text`, the
-  darker twin tuned for ≥4.5:1 on card surfaces (Sand's fill amber reads
-  ~3.1:1 as text).
-- Every text/background pair in a solid theme is checked ≥4.5:1 against its
-  own label/surface (spec #36 story 9); recheck when touching theme values.
+  (`text-(--pnds-accent-foreground)`, `text-(--pnds-warning-foreground)`),
+  because the label that passes 4.5:1 differs per theme (white on
+  Lavender's accent, dark on Sand's amber, dark on the lightened status
+  colors of the dark themes — those lighten one step in the dark and take
+  dark labels, per spec #36). The accent used **as small text** goes
+  through `--pnds-accent-text`, the darker twin tuned for ≥4.5:1 on card
+  surfaces (Sand's fill amber reads ~3.1:1 as text).
+- Every text/background pair in each solid theme is checked ≥4.5:1 against
+  its own label/surface (spec #36 story 9); recheck when touching theme
+  values.
 - Intentionally NOT themed: the traffic-light glyphs, the PndsLogo's
   brand-color dots (the halo rings behind them ARE tokens), the shadcn
   vendored scrims (`bg-black/50`), and the Appearance section's accent

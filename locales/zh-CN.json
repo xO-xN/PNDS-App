@@ -41,6 +41,8 @@
   "settings.colorTheme": "主题",
   "settings.theme.lavender": "薰衣草",
   "settings.theme.sand": "暖沙",
+  "settings.theme.stage": "暗场",
+  "settings.theme.midnight": "午夜",
   "settings.language": "语言",
   "settings.languageSystem": "跟随系统",
   "settings.audio": "音频",

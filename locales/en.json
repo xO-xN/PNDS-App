@@ -41,6 +41,8 @@
   "settings.colorTheme": "Theme",
   "settings.theme.lavender": "Lavender",
   "settings.theme.sand": "Sand",
+  "settings.theme.stage": "Stage",
+  "settings.theme.midnight": "Midnight",
   "settings.language": "Language",
   "settings.languageSystem": "Follow System",
   "settings.audio": "Audio",

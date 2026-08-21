@@ -3,18 +3,18 @@ import { updatePreferences } from '@/lib/preferences'
 import { useSettingsStore } from '@/store/settings-store'
 
 /**
- * v1.2.3 (issue #38 / spec #36): the app color theme. A theme is one
+ * v1.2.3 (issues #38/#40 / spec #36): the app color theme. A theme is one
  * complete token set in theme-variables.css selected by the root node's
  * `data-color-theme` attribute — this module owns that attribute.
  *
- * T2 ships the two light themes; the persisted enum also carries
- * stage/midnight/glass (validated in Rust) for the later v1.2.3 tickets,
- * and `colorThemeFromPrefs` maps anything this build cannot render back
- * to Lavender, so a preference from a newer App never renders wrong.
+ * The four solid themes ship in T2/T4; the persisted enum also carries
+ * `glass` (validated in Rust) for the later v1.2.3 ticket, and
+ * `colorThemeFromPrefs` maps anything this build cannot render back to
+ * Lavender, so a preference from a newer App never renders wrong.
  */
 
 /** The themes this build implements (the settings panel's offer). */
-export type ColorTheme = 'lavender' | 'sand'
+export type ColorTheme = 'lavender' | 'sand' | 'stage' | 'midnight'
 
 export interface ColorThemeOption {
   value: ColorTheme
@@ -29,14 +29,16 @@ export interface ColorThemeOption {
 export const COLOR_THEME_OPTIONS: readonly ColorThemeOption[] = [
   { value: 'lavender', accent: '#5a4ff3' },
   { value: 'sand', accent: '#d97706' },
+  { value: 'stage', accent: '#34d399' },
+  { value: 'midnight', accent: '#818cf8' },
 ]
 
 export const DEFAULT_COLOR_THEME: ColorTheme = 'lavender'
 
 /**
  * Map the persisted `colorTheme` preference to a theme this build can
- * render: unknown, absent, or not-yet-shipped values (stage, midnight,
- * glass until T3/T4) fall back to Lavender — spec #36 story 10.
+ * render: unknown, absent, or not-yet-shipped values (glass until its
+ * ticket lands) fall back to Lavender — spec #36 story 10.
  */
 export function colorThemeFromPrefs(
   saved: string | null | undefined

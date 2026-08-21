@@ -15,9 +15,11 @@ import { ThemeProviderContext, type Theme } from '@/lib/theme-context'
  * light theme. The persisted `theme` preference and the `theme-changed`
  * event are ignored (kept out to avoid implying the UI supports dark).
  *
- * Color themes (v1.2.3, issue #38) are a separate axis handled by
+ * Color themes (v1.2.3, issues #38/#40) are a separate axis handled by
  * src/lib/color-theme.ts: the root node's `data-color-theme` attribute
- * swaps the whole token set, and every v1.2.3 theme is light.
+ * swaps the whole token set (two light, two dark). This light/dark class
+ * axis stays pinned — the shadcn `.dark` variant is not how the app's
+ * dark themes render; they remap the same light-variant tokens.
  */
 export function ThemeProvider({
   children,

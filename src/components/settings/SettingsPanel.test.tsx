@@ -188,8 +188,8 @@ describe('SettingsPanel (v1.2.0 issue #13)', () => {
 /** Issue #38 (v1.2.3 T2): the Appearance section — a NativeSelect offering
  * the shipped themes with the current accent swatch beside it; selecting
  * one applies the root data-color-theme attribute immediately and persists
- * the colorTheme preference. */
-describe('SettingsPanel Appearance section (issue #38)', () => {
+ * the colorTheme preference. #40 added the two dark themes. */
+describe('SettingsPanel Appearance section (issues #38/#40)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     useSettingsStore.setState({
@@ -210,7 +210,7 @@ describe('SettingsPanel Appearance section (issue #38)', () => {
     delete document.documentElement.dataset.colorTheme
   })
 
-  it('offers the two shipped themes with the current one selected', () => {
+  it('offers the four shipped themes with the current one selected', () => {
     useSettingsStore.getState().openSettings()
     render(<SettingsPanel />)
 
@@ -218,7 +218,7 @@ describe('SettingsPanel Appearance section (issue #38)', () => {
     const labels = within(select)
       .getAllByRole('option')
       .map(option => option.textContent)
-    expect(labels).toEqual(['Lavender', 'Sand'])
+    expect(labels).toEqual(['Lavender', 'Sand', 'Stage', 'Midnight'])
     expect(select).toHaveValue('lavender')
   })
 
@@ -265,6 +265,27 @@ describe('SettingsPanel Appearance section (issue #38)', () => {
     await waitFor(() => {
       expect(commands.savePreferences).toHaveBeenCalledWith(
         expect.objectContaining({ colorTheme: 'lavender' })
+      )
+    })
+  })
+
+  // #40: the dark themes ride the same mechanism — one representative
+  // switch covers apply + persist for them.
+  it('selecting Midnight applies the root attribute immediately and persists', async () => {
+    useSettingsStore.getState().openSettings()
+    render(<SettingsPanel />)
+
+    fireEvent.change(screen.getByLabelText('Theme'), {
+      target: { value: 'midnight' },
+    })
+
+    expect(document.documentElement.dataset.colorTheme).toBe('midnight')
+    expect(screen.getByTestId('color-theme-accent')).toHaveStyle({
+      background: '#818cf8',
+    })
+    await waitFor(() => {
+      expect(commands.savePreferences).toHaveBeenCalledWith(
+        expect.objectContaining({ colorTheme: 'midnight' })
       )
     })
   })

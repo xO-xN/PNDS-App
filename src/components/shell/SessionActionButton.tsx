@@ -108,7 +108,7 @@ export function SessionActionButton() {
         onClick={() => void restart()}
         className={cn(
           baseClass,
-          'bg-(--pnds-warning) text-(--pnds-text) hover:bg-(--pnds-warning-hover)'
+          'bg-(--pnds-warning) text-(--pnds-warning-foreground) hover:bg-(--pnds-warning-hover)'
         )}
       >
         {busy ? t('session.stopping') : t('sidebar.change')}

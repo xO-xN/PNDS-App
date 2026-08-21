@@ -217,12 +217,11 @@
   width: 14px;
   height: 14px;
   border-radius: 9999px;
-  /* The knob is the theme's card white (v1.2.3, issue #38); its shadow is
-     the text colour at low alpha so it warms with the theme. */
+  /* The knob is the theme's card white; its shadow is a themed drop
+     (text-tinted in light themes, black-based in dark — see
+     --pnds-knob-shadow). */
   background: var(--pnds-card);
   /* (4px trough − 14px knob) / 2 */
   margin-top: -5px;
-  box-shadow:
-    0 1px 2px color-mix(in srgb, var(--pnds-text) 20%, transparent),
-    0 2px 6px color-mix(in srgb, var(--pnds-text) 15%, transparent);
+  box-shadow: var(--pnds-knob-shadow);
 }
