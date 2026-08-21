@@ -450,14 +450,18 @@
   --sidebar-border: rgb(23 26 43 / 12%);
   --sidebar-ring: var(--pnds-accent);
 
-  /* PNDS design tokens — white α-layers. bg is the window-wide wash over
-     the native glass (most translucent); nested surfaces grow more
-     opaque so stacked chrome keeps its hierarchy. */
-  --pnds-bg: rgb(255 255 255 / 38%);
-  --pnds-sidebar-bg: rgb(255 255 255 / 45%);
-  --pnds-card: rgb(255 255 255 / 72%);
-  --pnds-pill: rgb(255 255 255 / 40%);
-  --pnds-pill-hover: rgb(255 255 255 / 52%);
+  /* PNDS design tokens — white α-layers. bg is the single wash the AppShell
+     branch roots paint over the native glass (most translucent); nested
+     surfaces grow more opaque so stacked chrome keeps its hierarchy. Thin
+     on purpose: the Regular glass material behind already frosts the
+     desktop, and heavier coats read as an opaque white window (issue #41
+     retest). The screens (Welcome/Loading/Error) never add their own wash
+     — that was the double coat. */
+  --pnds-bg: rgb(255 255 255 / 24%);
+  --pnds-sidebar-bg: rgb(255 255 255 / 32%);
+  --pnds-card: rgb(255 255 255 / 66%);
+  --pnds-pill: rgb(255 255 255 / 30%);
+  --pnds-pill-hover: rgb(255 255 255 / 44%);
   --pnds-accent: #5a4ff3;
   --pnds-accent-hover: #4a3fe0;
   --pnds-accent-foreground: #ffffff;

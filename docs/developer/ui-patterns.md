@@ -115,14 +115,21 @@ node's `data-color-theme` attribute:
   and the render-time fallback (persisted `glass` on an older system
   renders Lavender — the preference is not rewritten, so it revives on a
   supported machine). Selecting it also toggles the native dressing via
-  `set_liquid_glass`: an `NSGlassEffectView` behind the webview plus a
-  transparent window (src-tauri/src/glass.rs); the CSS block paints
-  high-opacity white layers over it (`--pnds-glass-filter` frosts
-  translucent surfaces — `.pnds-glass-blur` on app chrome, the shadcn
-  data-slot hooks for portal surfaces). The monitor iframe area stays
-  opaque. No frosted fallback on older systems — the option is simply
-  gated off (spec #36). Glass is exempt from the 4.5:1 guarantee: its
-  backdrop is the live desktop, so contrast is approximated.
+  `set_liquid_glass`: an `NSGlassEffectView` (default Regular style, the
+  lensing material) behind the webview plus a transparent window
+  (src-tauri/src/glass.rs); the CSS block paints one thin white wash over
+  it (bg 24%, sidebar 32%, card 66% — heavier coats read as an opaque
+  white window). **Exactly one wash per region**: the AppShell branch
+  roots own the base coat (`bg-(--pnds-bg)` — the rounded alignment with
+  the native window mask in window.rs, and the anchor the sidebar's /90
+  coat blends over), and the screens (Welcome/Loading/Error) never paint
+  their own — a screen-side second coat is invisible in solid themes but
+  doubles the white in Glass. `--pnds-glass-filter` frosts translucent
+  surfaces (`.pnds-glass-blur` on app chrome, the shadcn data-slot hooks
+  for portal surfaces). The monitor iframe area stays opaque. No frosted
+  fallback on older systems — the option is simply gated off (spec #36).
+  Glass is exempt from the 4.5:1 guarantee: its backdrop is the live
+  desktop, so contrast is approximated.
 - Components consume tokens via Tailwind arbitrary values — `bg-(--pnds-bg)`,
   `text-(--pnds-text)/60`, `shadow-(--pnds-card-shadow)` — never literal
   colors. Status fills carry their own label token

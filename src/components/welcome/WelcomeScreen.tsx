@@ -17,7 +17,11 @@ export function WelcomeScreen() {
   const preflightError = useProjectStore(state => state.preflightError)
 
   return (
-    <div className="relative flex min-h-full flex-col items-center justify-center bg-(--pnds-bg) p-8 animate-[fade-in_0.8s_ease-in]">
+    // No bg wash here: the AppShell branch root owns the base coat (the
+    // rounded alignment with the native window mask, and the anchor the
+    // sidebar's /90 coat blends over). A second wash on top is invisible
+    // in solid themes but doubles the white in Glass (issue #41).
+    <div className="relative flex min-h-full flex-col items-center justify-center p-8 animate-[fade-in_0.8s_ease-in]">
       <header className="text-center">
         <h1 className="text-[44px] font-light leading-tight tracking-wide text-(--pnds-text)">
           {t('welcome.title')}
