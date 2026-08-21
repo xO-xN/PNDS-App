@@ -12,7 +12,7 @@ The former local task folders (`docs/tasks-todo/`, `docs/tasks-done/`) and the `
 
 ## Release History
 
-### V1.2.3 — 选择与运行解耦 + 界面主题（未发版）
+### V1.2.3 — 选择与运行解耦 + 界面主题（2026-08-21 发布）
 
 Scope locked by spec issues [#35](https://github.com/xO-xN/PNDS-App/issues/35)（工程卡选择与运行解耦，T1/T3/T6 = #37/#39/#42）与 [#36](https://github.com/xO-xN/PNDS-App/issues/36)（界面主题系统，T2/T4/T5 = #38/#40/#41），收尾 #43。
 
