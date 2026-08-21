@@ -34,18 +34,6 @@ pub const GLASS_MACOS_MAJOR: isize = 26;
 /// material's own curvature.
 const GLASS_CORNER_RADIUS: f64 = 16.0;
 
-/// NSGlassEffectViewStyle raw value (NSGlassEffectView.h, macOS 26 SDK).
-/// Regular = 0 is the standard lensing material — frosted refraction of
-/// whatever sits behind the window, which is the look this theme wants.
-/// The other variant, Clear = 1, is the near-untinted transparent style:
-/// it shows the desktop almost unfiltered and reads as a plain
-/// see-through window rather than glass. Set explicitly even though 0 is
-/// the default, so the choice is code, not an accident of defaults. The
-/// header also exposes `tintColor` (brand-tints the material itself) if
-/// that is ever wanted. isize: the property takes the NSInteger-typed
-/// enum, the same ABI rule as the ordering mode below.
-const GLASS_STYLE_REGULAR: isize = 0;
-
 /// NSViewAutoresizingMask: width- and height-sizable (the glass view
 /// tracks window resizes and fullscreen transitions). NSUInteger-typed, so
 /// the mask is a usize.
@@ -207,7 +195,6 @@ unsafe fn install_glass_view(content: *mut objc2_app_kit::NSView) -> Result<(), 
     }
     let _: () = msg_send![glass, setAutoresizingMask: AUTORESIZING_W_H];
     let _: () = msg_send![glass, setCornerRadius: GLASS_CORNER_RADIUS];
-    let _: () = msg_send![glass, setStyle: GLASS_STYLE_REGULAR];
 
     // NSWindowBelow = -1, typed as the selector demands: the ordering mode
     // is NSInteger, so an i32 -1 would zero-extend on arm64 into a huge
@@ -353,13 +340,5 @@ mod tests {
         assert!(!is_macos_26(15));
         assert!(!is_macos_26(14));
         assert_eq!(GLASS_MACOS_MAJOR, 26);
-    }
-
-    /// The style raw value matches NSGlassEffectViewStyleRegular from the
-    /// SDK header — objc2-app-kit 0.6 predates the API, so keeping the
-    /// mapping straight is on us.
-    #[test]
-    fn glass_style_regular_is_header_value() {
-        assert_eq!(GLASS_STYLE_REGULAR, 0);
     }
 }
