@@ -337,6 +337,123 @@ pub fn sync_corner_radius<R: Runtime>(window: &WebviewWindow<R>) {
     }
 }
 
+/// The context-menu suppression script (see `suppress_default_context_menu`
+/// — the string is shared with the frontend fallback registration).
+const CONTEXT_MENU_SCRIPT: &str = "document.addEventListener('contextmenu', function (e) {\
+    var t = e.target;\
+    var editable = t && (t.isContentEditable || /^(INPUT|TEXTAREA)$/.test(t.tagName));\
+    if (!editable) e.preventDefault();\
+}, false);";
+
+/// v1.2.3 (user request): right-click belongs exclusively to the app's
+/// designed context menus (the sidebar's folder/project Radix menus) —
+/// WKWebView's default web menu (Reload, Open Frame in New Window, Back,
+/// …) is suppressed in EVERY frame: the app UI and the monitor iframes
+/// alike. Implemented as a `WKUserScript` with `forMainFrameOnly: false`
+/// — the same all-frames contract as Tauri's
+/// `initialization_script_for_all_frames`, which cannot reach this
+/// config-declared window (builder-time API). The script only calls
+/// `preventDefault()`, so the Radix menus still open (they handle the
+/// `contextmenu` event themselves), and editable fields keep the native
+/// copy/paste menu — the one native menu that is a text affordance
+/// rather than a web page menu. The user script covers frames loaded
+/// after this call; `eval` covers the main document that is already
+/// loading when setup() runs (the frontend registers the same listener
+/// as a third belt — see main.tsx). Main thread only, like the
+/// corner-radius sync above; call once at startup.
+#[cfg(target_os = "macos")]
+pub fn suppress_default_context_menu<R: Runtime>(window: &WebviewWindow<R>) {
+    use objc2::msg_send;
+    use objc2::runtime::{AnyClass, AnyObject};
+    use objc2_app_kit::{NSView, NSWindow};
+    use objc2_foundation::NSString;
+
+    let ns_window = match window.ns_window() {
+        Ok(w) => w,
+        Err(e) => {
+            log::warn!("ns_window failed: {e} — context menu not suppressed");
+            return;
+        }
+    };
+    // SAFETY: borrowed NSWindow/NSView pointers owned by Tauri (the same
+    // contract as set_corner_radius); the WKUserScript we create is handed
+    // to the user content controller (retained there) and never referenced
+    // again on our side.
+    unsafe {
+        let win: *mut NSWindow = ns_window.cast();
+        let content: *mut NSView = msg_send![win, contentView];
+        let Some(wk_class) = AnyClass::get(c"WKWebView") else {
+            log::warn!("WKWebView class not found — context menu not suppressed");
+            return;
+        };
+        let Some(wk) = find_first_of_class(content.cast(), wk_class, 0) else {
+            log::warn!("No WKWebView in the window — context menu not suppressed");
+            return;
+        };
+        let ucc: *mut AnyObject = msg_send![wk, userContentController];
+        let script_class = match AnyClass::get(c"WKUserScript") {
+            Some(cls) => cls,
+            None => {
+                log::warn!("WKUserScript class not found — context menu not suppressed");
+                return;
+            }
+        };
+        let source = NSString::from_str(CONTEXT_MENU_SCRIPT);
+        let alloc: *mut AnyObject = msg_send![script_class, alloc];
+        // WKUserScriptInjectionTimeAtDocumentStart = 0, typed isize: the
+        // enum is NSInteger-backed (the ABI rule that bit glass.rs before).
+        let script: *mut AnyObject = msg_send![
+            alloc,
+            initWithSource: &*source,
+            injectionTime: 0isize,
+            forMainFrameOnly: false
+        ];
+        if script.is_null() {
+            log::warn!("WKUserScript init failed — context menu not suppressed");
+            return;
+        }
+        let _: () = msg_send![ucc, addUserScript: script];
+    }
+    // The user script starts at the NEXT document creation; the app page
+    // is already loading when setup() runs, so evaluate once for it. The
+    // monitor iframes navigate later and get the user script.
+    if let Err(e) = window.eval(CONTEXT_MENU_SCRIPT) {
+        log::warn!("context-menu eval failed: {e}");
+    }
+    log::info!("Default webview context menu suppressed (all frames)");
+}
+
+/// Depth-bounded walk for the first view of an exact class — AppKit
+/// hierarchies are shallow; the bound turns any pathological cycle into a
+/// false negative instead of a hang (the WKWebView sits two levels under
+/// the content view in practice).
+#[cfg(target_os = "macos")]
+unsafe fn find_first_of_class(
+    view: *mut objc2::runtime::AnyObject,
+    target: &'static objc2::runtime::AnyClass,
+    depth: usize,
+) -> Option<*mut objc2::runtime::AnyObject> {
+    use objc2::msg_send;
+    use objc2::runtime::{AnyClass, AnyObject};
+
+    if depth > 16 {
+        return None;
+    }
+    let class: &'static AnyClass = msg_send![view, class];
+    if class == target {
+        return Some(view);
+    }
+    let subviews: *mut AnyObject = msg_send![view, subviews];
+    let count: usize = msg_send![subviews, count];
+    for i in 0..count {
+        let child: *mut AnyObject = msg_send![subviews, objectAtIndex: i];
+        if let Some(hit) = find_first_of_class(child, target, depth + 1) {
+            return Some(hit);
+        }
+    }
+    None
+}
+
 /// Radius selection: square in fullscreen, 16px in windowed mode.
 fn window_corner_radius(is_fullscreen: bool) -> f64 {
     if is_fullscreen {

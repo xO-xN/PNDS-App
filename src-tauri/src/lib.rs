@@ -134,6 +134,11 @@ pub fn run() {
             // the content rounding. Fullscreen windows are square.
             if let Some(window) = app.get_webview_window("main") {
                 crate::window::sync_corner_radius(&window);
+                // v1.2.3 (user request): no default web right-click menu
+                // anywhere — right-click belongs to the designed context
+                // menus only (all frames, incl. the monitor iframes).
+                #[cfg(target_os = "macos")]
+                crate::window::suppress_default_context_menu(&window);
             }
 
             Ok(())
