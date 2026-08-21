@@ -81,11 +81,19 @@ export async function openProject(path: string): Promise<void> {
 /** Runs preflight and, on success, seeds session defaults (§6.1, §7). */
 export async function runPreflight(path: string): Promise<void> {
   useProjectStore.getState().startPreflight()
-  useSessionStore.getState().resetSession()
+  // v1.2.3 (#39): the session mirror is only reset when NO live session
+  // exists (idle, or a dead `error` the user is fleeing). Preflighting
+  // another project while one runs must neither drop the monitor view nor
+  // forge a frontend stop — the backend preflight already spares the
+  // running session (issue #37).
+  const status = useSessionStore.getState().sessionStatus
+  if (status !== 'starting' && status !== 'ready' && status !== 'stopping') {
+    useSessionStore.getState().resetSession()
+  }
   logger.info('Running project preflight', { path })
   const result = await commands.preflightProject(path)
   if (result.status === 'error') {
-    useProjectStore.getState().preflightFailed(result.error)
+    useProjectStore.getState().preflightFailed(path, result.error)
     logger.warn('Preflight failed', { path, error: result.error })
     return
   }

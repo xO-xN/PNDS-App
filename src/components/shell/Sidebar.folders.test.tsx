@@ -50,7 +50,6 @@ describe('Sidebar folders (v1.1.2)', () => {
       recentProjectPaths: [PROJECT_PATH, OTHER_PATH, THIRD_PATH],
       projectFolders: [],
       pendingPreflightPath: null,
-      pendingSwitchPath: null,
       preflightStatus: 'idle',
       preflightError: null,
     })
@@ -247,7 +246,6 @@ describe('Utilities folder protection (v1.1.2 T7, spec issue #11)', () => {
         },
       ],
       pendingPreflightPath: null,
-      pendingSwitchPath: null,
       activeFolderId: null,
       renameTarget: null,
       preflightStatus: 'idle',

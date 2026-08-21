@@ -69,7 +69,6 @@ describe('interaction consistency (v1.2.2, issue #32)', () => {
       projectFolders: [],
       activeFolderId: null,
       pendingPreflightPath: null,
-      pendingSwitchPath: null,
       preflightStatus: 'ready',
       preflightError: null,
     })

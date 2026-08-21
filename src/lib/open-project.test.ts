@@ -60,7 +60,6 @@ describe('openProject (no trust gate)', () => {
       recentProjectPaths: ['/a', '/b'],
       projectFolders: [],
       pendingPreflightPath: null,
-      pendingSwitchPath: null,
       activeFolderId: null,
       manifestProjectNames: {},
       preflightStatus: 'idle',
@@ -161,6 +160,73 @@ describe('openProject (no trust gate)', () => {
   })
 })
 
+/**
+ * v1.2.3 (#39): preflight never resets a LIVE session — opening another
+ * project while A runs (card click, ⌘O, drag-drop, double-click .pnds —
+ * all funnel through here) must not drop the monitor view or forge a
+ * frontend stop. With no live session (idle, or a dead `error` the user
+ * is fleeing) the reset still runs.
+ */
+describe('openProject vs a live session (#39)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(commands.preflightProject).mockResolvedValue({
+      status: 'ok',
+      data: manifest,
+    })
+    useProjectStore.setState({
+      currentProject: { path: '/a', manifest },
+      recentProjectPaths: ['/a', '/b'],
+      projectFolders: [],
+      pendingPreflightPath: null,
+      activeFolderId: null,
+      manifestProjectNames: {},
+      preflightStatus: 'ready',
+      preflightError: null,
+    })
+  })
+
+  it('keeps a ready session untouched while preflighting another project', async () => {
+    useSessionStore.setState({
+      sessionStatus: 'ready',
+      projectName: 'Project A',
+      sessionProjectPath: '/a',
+    })
+
+    await openProject('/b')
+
+    expect(commands.preflightProject).toHaveBeenCalledWith('/b')
+    expect(commands.stopProject).not.toHaveBeenCalled()
+    const session = useSessionStore.getState()
+    expect(session.sessionStatus).toBe('ready')
+    expect(session.projectName).toBe('Project A')
+    expect(session.sessionProjectPath).toBe('/a')
+  })
+
+  it('keeps a starting session untouched too', async () => {
+    useSessionStore.setState({ sessionStatus: 'starting' })
+
+    await openProject('/b')
+
+    expect(useSessionStore.getState().sessionStatus).toBe('starting')
+  })
+
+  it('still resets when no session is live (idle and error)', async () => {
+    useSessionStore.setState({ sessionStatus: 'error', projectName: 'Dead' })
+    await openProject('/b')
+    expect(useSessionStore.getState().sessionStatus).toBe('idle')
+
+    useSessionStore.setState({ sessionStatus: 'stopping' })
+    await openProject('/a')
+    // stopping is still live: no reset
+    expect(useSessionStore.getState().sessionStatus).toBe('stopping')
+
+    useSessionStore.setState({ sessionStatus: 'idle' })
+    await openProject('/a')
+    expect(useSessionStore.getState().sessionStatus).toBe('idle')
+  })
+})
+
 describe('promptOpenProject picker (v1.2.0 issue #16)', () => {
   const PICKED_DIR = '/Users/test/Score 5'
   const PICKED_BUNDLE = '/Users/test/Score 5-1.0.0.pnds'
@@ -251,7 +317,6 @@ describe('openProject capacity caps (v1.2.1 issue #26)', () => {
       recentProjectPaths: [],
       projectFolders: [],
       pendingPreflightPath: null,
-      pendingSwitchPath: null,
       activeFolderId: null,
       manifestProjectNames: {},
       preflightStatus: 'idle',

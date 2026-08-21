@@ -43,7 +43,6 @@ describe('selectProject', () => {
       recentProjectPaths: ['/a', '/b'],
       projectFolders: [],
       pendingPreflightPath: null,
-      pendingSwitchPath: null,
       preflightStatus: 'idle',
       preflightError: null,
     })
@@ -84,10 +83,12 @@ describe('selectProject', () => {
 
     selectProject('/a')
     expect(useProjectStore.getState().currentProject).not.toBeNull()
-    expect(useProjectStore.getState().pendingSwitchPath).toBeNull()
+    expect(commands.preflightProject).not.toHaveBeenCalled()
   })
 
-  it('requests the §8.3 switch confirmation while a session runs', () => {
+  /** v1.2.3 (#39): selection is free while a session runs — selecting B
+   * preflights it and never stops or resets A's session. */
+  it('selects and preflights another project while a session runs', () => {
     useProjectStore.setState({
       currentProject: { path: '/a', manifest },
       preflightStatus: 'ready',
@@ -96,17 +97,19 @@ describe('selectProject', () => {
 
     selectProject('/b')
 
-    expect(commands.preflightProject).not.toHaveBeenCalled()
-    expect(useProjectStore.getState().pendingSwitchPath).toBe('/b')
+    expect(commands.preflightProject).toHaveBeenCalledWith('/b')
+    expect(commands.stopProject).not.toHaveBeenCalled()
+    expect(useSessionStore.getState().sessionStatus).toBe('ready')
   })
 
-  it('ignores everything while the session is busy', () => {
+  /** v1.2.3 (#39): busy (starting/stopping) no longer blocks selection —
+   * the backend preflight is session-safe (issue #37). */
+  it('selects while the session is busy (starting)', () => {
     useSessionStore.setState({ sessionStatus: 'starting' })
 
     selectProject('/b')
 
-    expect(commands.preflightProject).not.toHaveBeenCalled()
-    expect(useProjectStore.getState().pendingSwitchPath).toBeNull()
+    expect(commands.preflightProject).toHaveBeenCalledWith('/b')
   })
 
   it('guards against a duplicate in-flight preflight of the same path', () => {
@@ -139,7 +142,6 @@ describe('moveProjectSelection', () => {
       recentProjectPaths: ['/a', '/b', '/c'],
       projectFolders: [],
       pendingPreflightPath: null,
-      pendingSwitchPath: null,
       activeFolderId: null,
       renameTarget: null,
       preflightStatus: 'idle',
@@ -221,7 +223,7 @@ describe('moveProjectSelection', () => {
     expect(commands.preflightProject).toHaveBeenCalledWith('/a')
   })
 
-  it('keeps a live session and routes the move through the switch confirmation', () => {
+  it('keeps the session running and moves the selection underneath it (#39)', () => {
     useProjectStore.setState({
       projectFolders: [
         { id: 'f1', name: 'Set list', projectPaths: ['/a', '/b'] },
@@ -234,11 +236,12 @@ describe('moveProjectSelection', () => {
     moveProjectSelection(1)
 
     // The drill keeps a live session's project (T6 rule); the move then
-    // requests the §8.3 switch instead of preflighting underneath it.
+    // freely selects and preflights the next member (v1.2.3 #39) — no
+    // switch confirmation, nothing stopped.
     expect(useProjectStore.getState().activeFolderId).toBe('f1')
-    expect(useProjectStore.getState().currentProject?.path).toBe('/a')
-    expect(useProjectStore.getState().pendingSwitchPath).toBe('/b')
-    expect(commands.preflightProject).not.toHaveBeenCalled()
+    expect(commands.preflightProject).toHaveBeenCalledWith('/b')
+    expect(commands.stopProject).not.toHaveBeenCalled()
+    expect(useSessionStore.getState().sessionStatus).toBe('ready')
   })
 
   it('moves within the folder order while drilled in', () => {
@@ -257,13 +260,12 @@ describe('moveProjectSelection', () => {
     expect(commands.preflightProject).not.toHaveBeenCalledWith('/c')
   })
 
-  it('is inert while the session is busy', () => {
+  it('moves freely while the session is busy (starting)', () => {
     useSessionStore.setState({ sessionStatus: 'starting' })
 
     moveProjectSelection(1)
 
-    expect(commands.preflightProject).not.toHaveBeenCalled()
-    expect(useProjectStore.getState().pendingSwitchPath).toBeNull()
+    expect(commands.preflightProject).toHaveBeenCalledWith('/a')
   })
 
   it('does nothing when the current view shows no projects', () => {
@@ -321,7 +323,6 @@ describe('moveFolderSelection', () => {
       recentProjectPaths: ['/a', '/b', '/c'],
       projectFolders: folders,
       pendingPreflightPath: null,
-      pendingSwitchPath: null,
       activeFolderId: null,
       preflightStatus: 'idle',
       preflightError: null,

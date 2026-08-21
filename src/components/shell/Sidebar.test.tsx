@@ -151,7 +151,6 @@ describe('Sidebar', () => {
       recentProjectPaths: [],
       projectFolders: [],
       pendingPreflightPath: null,
-      pendingSwitchPath: null,
       preflightStatus: 'idle',
       preflightError: null,
     })
@@ -790,7 +789,7 @@ describe('Sidebar', () => {
     ])
   })
 
-  it('asks for confirmation before switching projects while running (§8.3)', async () => {
+  it('selects another project freely while running — no dialog, no stop (#39)', async () => {
     seedLoadedProject()
     const user = userEvent.setup()
     useProjectStore.setState({ recentProjectPaths: [PROJECT_PATH, OTHER_PATH] })
@@ -803,13 +802,14 @@ describe('Sidebar', () => {
     render(<Sidebar variant="overlay" />)
     await user.click(screen.getByText('PNDS Score 1'))
 
-    const dialog = await screen.findByRole('alertdialog')
-    await user.click(within(dialog).getByRole('button', { name: /^load$/i }))
-
+    // v1.2.3 (#39): the click selects + preflights; no confirmation, the
+    // session is never stopped.
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
     await waitFor(() => {
-      expect(commands.stopProject).toHaveBeenCalled()
       expect(commands.preflightProject).toHaveBeenCalledWith(OTHER_PATH)
     })
+    expect(commands.stopProject).not.toHaveBeenCalled()
+    expect(useSessionStore.getState().sessionStatus).toBe('ready')
   })
 
   it('does not start on LAN pick alone; Load becomes the trigger (§7)', async () => {

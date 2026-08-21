@@ -116,7 +116,6 @@ describe('Cmd+↑/↓ project navigation and Esc close (v1.1.2 T7)', () => {
       recentProjectPaths: [FIRST_PATH, SECOND_PATH, THIRD_PATH],
       projectFolders: [],
       pendingPreflightPath: null,
-      pendingSwitchPath: null,
       confirmCloseProjectOpen: false,
       activeFolderId: null,
       renameTarget: null,
@@ -190,9 +189,10 @@ describe('Cmd+↑/↓ project navigation and Esc close (v1.1.2 T7)', () => {
       fireEvent.keyDown(oscInput, { key: 'ArrowDown', metaKey: true })
       expect(commands.preflightProject).not.toHaveBeenCalledWith(FIRST_PATH)
 
-      // The switch-confirm dialog owns the keyboard while open.
+      // A modal dialog owns the keyboard while open (the ⌘W close confirm
+      // still exists; the switch confirm is gone with v1.2.3 #39).
       seedRunningSession(FIRST_PATH)
-      useProjectStore.getState().requestSwitch(SECOND_PATH)
+      useProjectStore.getState().setConfirmCloseProjectOpen(true)
       const entry = screen.getAllByTestId('project-entry')[0]
       if (!entry) throw new Error('Expected a visible project entry')
       fireEvent.keyDown(entry, {
@@ -249,45 +249,22 @@ describe('Cmd+↑/↓ project navigation and Esc close (v1.1.2 T7)', () => {
       expect(commands.preflightProject).not.toHaveBeenCalledWith(FIRST_PATH)
     })
 
-    it('runs the §8.3 switch confirmation when a session is live', async () => {
-      const user = userEvent.setup()
+    it('moves the selection freely while a session is live (#39)', async () => {
       seedRunningSession(FIRST_PATH)
       render(<AppShell />)
 
-      // Sidebar hidden, session running: the shortcut still fires.
+      // Sidebar hidden, session running: the shortcut still fires — and
+      // v1.2.3 (#39) freely selects under the session, no confirmation.
       pressCmdArrow('ArrowDown')
 
-      const dialog = await screen.findByRole('alertdialog')
-      expect(dialog).toHaveTextContent(/PNDS Score 1/)
-      await user.click(within(dialog).getByRole('button', { name: /^load$/i }))
-
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
       await waitFor(() => {
-        expect(commands.stopProject).toHaveBeenCalled()
         expect(commands.preflightProject).toHaveBeenCalledWith(SECOND_PATH)
       })
+      expect(commands.stopProject).not.toHaveBeenCalled()
     })
 
-    it('Enter confirms the switch dialog — the primary (dark) button is the default', async () => {
-      const user = userEvent.setup()
-      seedRunningSession(FIRST_PATH)
-      render(<AppShell />)
-
-      pressCmdArrow('ArrowDown')
-
-      const dialog = await screen.findByRole('alertdialog')
-      expect(document.activeElement).toBe(
-        within(dialog).getByRole('button', { name: /^load$/i })
-      )
-
-      await user.keyboard('{Enter}')
-      await waitFor(() => {
-        expect(commands.stopProject).toHaveBeenCalled()
-        expect(commands.preflightProject).toHaveBeenCalledWith(SECOND_PATH)
-      })
-    })
-
-    it('drills a live session into its folder and confirms the in-folder next', async () => {
-      const user = userEvent.setup()
+    it('drills a live session into its folder and selects the in-folder next (#39)', async () => {
       seedRunningSession(SECOND_PATH)
       useProjectStore.setState({
         projectFolders: [
@@ -303,12 +280,11 @@ describe('Cmd+↑/↓ project navigation and Esc close (v1.1.2 T7)', () => {
       pressCmdArrow('ArrowDown')
 
       expect(useProjectStore.getState().activeFolderId).toBe('f1')
-      const dialog = await screen.findByRole('alertdialog')
-      expect(dialog).toHaveTextContent(/PNDS Score 2/)
-      // Cancel keeps the running project untouched.
-      await user.click(within(dialog).getByRole('button', { name: /^back$/i }))
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+      await waitFor(() => {
+        expect(commands.preflightProject).toHaveBeenCalledWith(THIRD_PATH)
+      })
       expect(commands.stopProject).not.toHaveBeenCalled()
-      expect(useProjectStore.getState().currentProject?.path).toBe(SECOND_PATH)
     })
   })
 
@@ -398,24 +374,6 @@ describe('Cmd+↑/↓ project navigation and Esc close (v1.1.2 T7)', () => {
       expect(commands.startProject).not.toHaveBeenCalled()
       expect(useProjectStore.getState().currentProject).not.toBeNull()
       expect(useProjectStore.getState().confirmCloseProjectOpen).toBe(false)
-    })
-
-    it('cancels the switch dialog instead of stopping the session', async () => {
-      seedRunningSession(FIRST_PATH)
-      render(<AppShell />)
-
-      pressCmdArrow('ArrowDown')
-      const dialog = await screen.findByRole('alertdialog')
-
-      // Esc is delivered on the dialog — Radix owns it there; the key
-      // must never stop the show underneath the open dialog.
-      fireEvent.keyDown(dialog, { key: 'Escape' })
-
-      await waitFor(() => {
-        expect(useProjectStore.getState().pendingSwitchPath).toBeNull()
-      })
-      expect(commands.stopProject).not.toHaveBeenCalled()
-      expect(useProjectStore.getState().currentProject?.path).toBe(FIRST_PATH)
     })
 
     it('cancels an inline rename without stopping anything', () => {

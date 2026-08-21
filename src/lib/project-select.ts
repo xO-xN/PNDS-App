@@ -8,28 +8,25 @@ import type { ProjectFolder } from '@/lib/tauri-bindings'
  * 统一). Both the card click and the Cmd+number keyboard layer go through
  * here so the semantics can never drift:
  *
- * - busy (starting/stopping) → no-op
  * - the current project → cleared while idle (v1.2.0: Cmd+N pressing the
  *   selected project's number also deselects — click and keyboard no
  *   longer differ; a live session keeps its project)
- * - session running → §8.3 switch confirmation (`pendingSwitchPath`)
  * - otherwise → preflight-only selection, starting stays explicit (§8)
+ *
+ * v1.2.3 (#39): selection is free while a session runs — selecting B never
+ * touches A's session (no confirmation, no stop, no store reset; the Rust
+ * preflight spares the running session, issue #37). Starting B while A
+ * runs is confirmed at the Load button, not here.
  */
 export function selectProject(path: string): void {
   const project = useProjectStore.getState()
-  const status = useSessionStore.getState().sessionStatus
-  if (status === 'starting' || status === 'stopping') return
 
   if (path === project.currentProject?.path) {
     if (project.pendingPreflightPath === path) return
+    const status = useSessionStore.getState().sessionStatus
     if (status === 'idle') {
       project.clearProject()
     }
-    return
-  }
-
-  if (status !== 'idle') {
-    project.requestSwitch(path)
     return
   }
 
@@ -109,7 +106,7 @@ export function moveFolderSelection(direction: 1 | -1): void {
 /**
  * v1.1.2 T7 (spec issue #4/#11): ⌘↓/⌘↑ — move the selection one project
  * along the current visible order, with the same semantics as clicking a
- * card (idle selects, a live session goes through the switch confirmation).
+ * card (idle selects; a live session just keeps running underneath, #39).
  * The ends clamp — the selection never wraps.
  *
  * When the current project sits inside a folder and the user is at the top
@@ -118,9 +115,6 @@ export function moveFolderSelection(direction: 1 | -1): void {
  * own order before the drill resets an idle selection.
  */
 export function moveProjectSelection(direction: 1 | -1): void {
-  const status = useSessionStore.getState().sessionStatus
-  if (status === 'starting' || status === 'stopping') return
-
   const project = useProjectStore.getState()
   const currentPath = project.currentProject?.path ?? null
 
@@ -160,7 +154,7 @@ export function moveProjectSelection(direction: 1 | -1): void {
     // the current project into its folder keeps it selected.
     if (
       drilledIn &&
-      status === 'idle' &&
+      useSessionStore.getState().sessionStatus === 'idle' &&
       useProjectStore.getState().currentProject === null
     ) {
       selectProject(nextPath)

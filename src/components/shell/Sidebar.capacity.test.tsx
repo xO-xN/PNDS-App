@@ -54,7 +54,6 @@ describe('Sidebar capacity caps (v1.2.1 #26, menu since v1.2.2 #28)', () => {
       recentProjectPaths: [LOOSE_PATH],
       projectFolders: [],
       pendingPreflightPath: null,
-      pendingSwitchPath: null,
       activeFolderId: null,
       preflightStatus: 'idle',
       preflightError: null,

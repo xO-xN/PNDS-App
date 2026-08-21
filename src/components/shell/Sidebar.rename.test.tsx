@@ -3,7 +3,6 @@ import {
   screen,
   fireEvent,
   waitFor,
-  within,
   createFolderOrFail,
 } from '@/test/test-utils'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -118,7 +117,6 @@ describe('⌘R project rename (v1.1.2 T6)', () => {
       recentProjectPaths: [],
       projectFolders: [],
       pendingPreflightPath: null,
-      pendingSwitchPath: null,
       activeFolderId: null,
       preflightStatus: 'idle',
       preflightError: null,
@@ -365,17 +363,20 @@ describe('⌘R project rename (v1.1.2 T6)', () => {
     expect(useProjectStore.getState().currentProject?.path).toBe(FIRST_PATH)
   })
 
-  it('the switch confirmation follows the display-name override', async () => {
+  it('a free selection while running follows the display-name override (#39)', async () => {
     seedRunningSession(FIRST_PATH)
     useProjectStore.setState({
       projectDisplayNames: { [SECOND_PATH]: 'Encore Set' },
     })
     render(<AppShell />)
 
+    // v1.2.3 (#39): ⌘2 freely selects the card (no confirmation dialog) —
+    // the click lands on the override-named card.
     fireEvent.keyDown(window, { key: '2', metaKey: true })
-    const dialog = await screen.findByRole('alertdialog')
-    expect(within(dialog).getAllByText(/Encore Set/).length).toBeGreaterThan(0)
-    expect(within(dialog).queryByText(/PNDS Score 1/)).not.toBeInTheDocument()
+    await waitFor(() => {
+      expect(commands.preflightProject).toHaveBeenCalledWith(SECOND_PATH)
+    })
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
   })
 
   it('the monitor title strip follows the display-name override', () => {

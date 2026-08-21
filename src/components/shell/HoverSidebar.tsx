@@ -62,7 +62,6 @@ export function HoverSidebar() {
       >
         <Sidebar
           variant="overlay"
-          onRequestClose={() => setHoverVisible(false)}
           onPopupOpenChange={setPopupOpen}
           onDialogOpenChange={setDialogOpen}
         />

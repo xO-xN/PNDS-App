@@ -3,10 +3,8 @@ import {
   screen,
   fireEvent,
   waitFor,
-  within,
   createFolderOrFail,
 } from '@/test/test-utils'
-import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { commands } from '@/lib/tauri-bindings'
 import { useProjectStore } from '@/store/project-store'
@@ -129,7 +127,6 @@ describe('Cmd keyboard layer (v1.1.2)', () => {
       recentProjectPaths: [],
       projectFolders: [],
       pendingPreflightPath: null,
-      pendingSwitchPath: null,
       preflightStatus: 'idle',
       preflightError: null,
     })
@@ -219,8 +216,7 @@ describe('Cmd keyboard layer (v1.1.2)', () => {
       expect(commands.preflightProject).not.toHaveBeenCalled()
     })
 
-    it('runs the §8.3 switch confirmation while a session runs, then stops and opens the target', async () => {
-      const user = userEvent.setup()
+    it('freely selects and preflights while a session runs — no stop (#39)', async () => {
       vi.mocked(commands.preflightProject).mockResolvedValue({
         status: 'ok',
         data: manifest,
@@ -231,14 +227,13 @@ describe('Cmd keyboard layer (v1.1.2)', () => {
       // Sidebar hidden, session running: the shortcut still fires.
       pressCmdDigit('2')
 
-      const dialog = await screen.findByRole('alertdialog')
-      expect(dialog).toHaveTextContent(/PNDS Score 1/)
-      await user.click(within(dialog).getByRole('button', { name: /^load$/i }))
-
+      // v1.2.3 (#39): ⌘2 selects + preflights the target under the running
+      // session — no confirmation dialog, nothing stopped.
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
       await waitFor(() => {
-        expect(commands.stopProject).toHaveBeenCalled()
         expect(commands.preflightProject).toHaveBeenCalledWith(SECOND_PATH)
       })
+      expect(commands.stopProject).not.toHaveBeenCalled()
     })
   })
 
@@ -254,24 +249,6 @@ describe('Cmd keyboard layer (v1.1.2)', () => {
 
       releaseCmd()
       expect(popover.className).toContain('opacity-0')
-    })
-
-    it('keeps the sidebar while a switch confirmation is open, even after Cmd is released', async () => {
-      const user = userEvent.setup()
-      seedRunningSession(FIRST_PATH)
-      render(<AppShell />)
-      const popover = screen.getByTestId('sidebar-popover')
-
-      pressCmdDigit('2')
-      await screen.findByRole('alertdialog')
-      releaseCmd()
-      expect(popover.className).toContain('opacity-100')
-
-      // Closing the dialog retracts it again (nothing else holds it open).
-      await user.click(screen.getByRole('button', { name: /^back$/i }))
-      await waitFor(() => {
-        expect(popover.className).toContain('opacity-0')
-      })
     })
 
     it('a hover-revealed sidebar ignores Cmd press and release', () => {
@@ -394,19 +371,6 @@ describe('Cmd keyboard layer (v1.1.2)', () => {
       expect(useSessionStore.getState().pendingChanges).toBe(false)
     })
 
-    it('Enter is inert while the switch confirmation dialog is open', async () => {
-      seedRunningSession(FIRST_PATH)
-      render(<AppShell />)
-
-      pressCmdDigit('2')
-      await screen.findByRole('alertdialog')
-      fireEvent.keyDown(window, { key: 'Enter' })
-
-      // Radix owns Enter inside the dialog; the global layer must not
-      // start anything underneath it.
-      expect(commands.startProject).not.toHaveBeenCalled()
-    })
-
     it('Enter is inert while typing in the OSC target input', () => {
       seedLoadableIdle()
       useSessionStore.setState({ audioMode: 'external' })
@@ -477,18 +441,6 @@ describe('Cmd keyboard layer (v1.1.2)', () => {
       fireEvent.keyDown(probe, { key: 'ArrowLeft', metaKey: true })
       expect(useProjectStore.getState().activeFolderId).toBeNull()
       probe.remove()
-    })
-
-    it('is inert while the switch confirmation dialog is open', async () => {
-      seedFolderRow()
-      seedRunningSession(FIRST_PATH)
-      render(<AppShell />)
-
-      // Live session: ⌘2 opens the §8.3 switch confirmation on top.
-      pressCmdDigit('2')
-      await screen.findByRole('alertdialog')
-      pressCmdArrow('ArrowRight')
-      expect(useProjectStore.getState().activeFolderId).toBeNull()
     })
   })
 })

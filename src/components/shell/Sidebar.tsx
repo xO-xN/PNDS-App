@@ -12,6 +12,7 @@ import {
   Command,
   Music,
   FolderOpen,
+  AlertCircle,
 } from 'lucide-react'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import i18n from '@/i18n/config'
@@ -26,11 +27,8 @@ import {
 import { isSessionBusy, useSessionStore } from '@/store/session-store'
 import { useKeyboardStore } from '@/store/keyboard-store'
 import { notifications } from '@/lib/notifications'
-import {
-  openProject,
-  promptOpenProject,
-  stopAndReset,
-} from '@/lib/open-project'
+import { promptOpenProject, stopAndReset } from '@/lib/open-project'
+import { Spinner } from '@/components/ui/spinner'
 import {
   selectProject,
   setActiveFolderView,
@@ -82,11 +80,10 @@ import { cn } from '@/lib/utils'
 interface SidebarProps {
   /** welcome/loading: statically visible; running: floats over the monitor */
   variant: 'static' | 'overlay'
-  onRequestClose?: () => void
   /** Overlay mode: a settings popup menu is open — keep the sidebar visible. */
   onPopupOpenChange?: (open: boolean) => void
-  /** Overlay mode: a sidebar dialog (switch / folder delete) is open —
-   * releasing Cmd must not retract the peeked sidebar. */
+  /** Overlay mode: a sidebar dialog (folder delete) is open — releasing
+   * Cmd must not retract the peeked sidebar. */
   onDialogOpenChange?: (open: boolean) => void
 }
 
@@ -415,7 +412,6 @@ function ListEmptyState({
  */
 export function Sidebar({
   variant,
-  onRequestClose,
   onPopupOpenChange,
   onDialogOpenChange,
 }: SidebarProps) {
@@ -426,7 +422,10 @@ export function Sidebar({
   const pendingPreflightPath = useProjectStore(
     state => state.pendingPreflightPath
   )
-  const pendingSwitchPath = useProjectStore(state => state.pendingSwitchPath)
+  const failedPreflightPath = useProjectStore(
+    state => state.failedPreflightPath
+  )
+  const preflightErrors = useProjectStore(state => state.preflightErrors)
   const confirmCloseProjectOpen = useProjectStore(
     state => state.confirmCloseProjectOpen
   )
@@ -439,6 +438,10 @@ export function Sidebar({
   )
   const renameTarget = useProjectStore(state => state.renameTarget)
   const sessionStatus = useSessionStore(state => state.sessionStatus)
+  // v1.2.3 (#39): the running indicators follow the SESSION's project, not
+  // the selection — selecting B while A runs moves the pill but never the
+  // accent bar or the folder in-use dot.
+  const sessionProjectPath = useSessionStore(state => state.sessionProjectPath)
   const commandKeyPressed = useKeyboardStore(state => state.commandKeyPressed)
   const lanIp = useSessionStore(state => state.lanIp)
   const monitorPort = useSessionStore(
@@ -553,7 +556,7 @@ export function Sidebar({
   // v1.2.0 (issue #16): the one listing name for `path` (display-names.ts)
   // — a v1.1.2 T6 display-name override (spec issue #10) wins, then the
   // manifest-declared name learned at preflight, then the title-cased path
-  // basename. Cards, the drag clone and the switch dialog all read this.
+  // basename. Cards and the drag clone read this.
   const cardName = (path: string) =>
     projectDisplayName(
       path,
@@ -572,15 +575,6 @@ export function Sidebar({
   const handleShare = async () => {
     if (!running || !lanIp || !monitorPort) return
     await openUrl(`http://${lanIp}:${monitorPort}/`)
-  }
-
-  const confirmSwitch = async () => {
-    const path = useProjectStore.getState().pendingSwitchPath
-    useProjectStore.getState().clearSwitchRequest()
-    if (!path) return
-    await stopAndReset()
-    await openProject(path)
-    onRequestClose?.()
   }
 
   /** v1.1.2 T7: the lone-Esc close confirmation's submit — same teardown
@@ -1103,9 +1097,11 @@ export function Sidebar({
   // through this one selectedPath chain, so every entry point avoids
   // alike. The math is revealScrollTarget (list-reveal.ts): minimal
   // movement, clamped to the scroll bounds; a card already clear produces
-  // no scroll call at all.
+  // no scroll call at all. v1.2.3 (#39): the chain ends at the last FAILED
+  // preflight — a failed selection keeps its pill; selection is free even
+  // onto a bad project.
   const selectedPath =
-    pendingPreflightPath ?? pendingSwitchPath ?? currentProject?.path ?? null
+    pendingPreflightPath ?? currentProject?.path ?? failedPreflightPath ?? null
 
   // The card-selection pill follows that same chain. Every commit
   // re-applies — selection, view switches, reorders and drag frames all
@@ -1123,14 +1119,14 @@ export function Sidebar({
   // commit corrects it.)
   useEffect(() => {
     const reapply = () => {
-      const { pendingPreflightPath, pendingSwitchPath, currentProject } =
+      const { pendingPreflightPath, currentProject, failedPreflightPath } =
         useProjectStore.getState()
       applyCardSelectionPill(
         cardPillRef.current,
         projectContentRef.current,
         pendingPreflightPath ??
-          pendingSwitchPath ??
           currentProject?.path ??
+          failedPreflightPath ??
           null,
         false
       )
@@ -1168,10 +1164,7 @@ export function Sidebar({
 
   // Report dialog visibility so the hover sidebar keeps peeking while a
   // confirm flow is open (spec issue #4: 确认框期间松开 Cmd 不收回).
-  const dialogOpen =
-    pendingSwitchPath !== null ||
-    pendingDeleteFolderId !== null ||
-    confirmCloseProjectOpen
+  const dialogOpen = pendingDeleteFolderId !== null || confirmCloseProjectOpen
   useEffect(() => {
     onDialogOpenChange?.(dialogOpen)
   }, [dialogOpen, onDialogOpenChange])
@@ -1357,10 +1350,13 @@ export function Sidebar({
                   // draggable, and it pins last.
                   const isProtected = isProtectedFolder(folder.id)
                   const isActive = activeFolderId === folder.id
+                  // v1.2.3 (#39): the "in use" dot follows the SESSION's
+                  // project — selecting another card while one runs never
+                  // moves it.
                   const inUse =
                     sessionLive &&
-                    currentProject !== null &&
-                    folder.projectPaths.includes(currentProject.path)
+                    sessionProjectPath !== null &&
+                    folder.projectPaths.includes(sessionProjectPath)
                   // A folder drag yields its siblings exactly like a project
                   // drag, horizontally (spec issue #9: 文件夹卡在文件夹区内
                   // 可拖拽排序).
@@ -1599,11 +1595,17 @@ export function Sidebar({
               const isDragged = drag?.kind === 'project' && drag.path === path
               const renamingProject =
                 renameTarget?.kind === 'project' && renameTarget.path === path
-              // v1.2.2 (issue #29): the running-project bar shares the
-              // folder segment dot's semantics — from the moment the session
-              // starts, not only once ready; an idle selection stays
-              // white-card-only.
-              const showRunningBar = isCurrent && sessionLive
+              // v1.2.3 (#39): the running bar follows the SESSION's project
+              // (from the moment the session starts, not only once ready) —
+              // an idle selection stays white-card-only, and selecting
+              // another card while one runs never moves the bar.
+              const isSessionCard = sessionLive && path === sessionProjectPath
+              const showRunningBar = isSessionCard
+              // v1.2.3 (#39): the selected project's preflight verdict shows
+              // on its card — a small spinner while checking, a danger icon
+              // (tooltip = the raw error) when it failed.
+              const isChecking = pendingPreflightPath === path
+              const preflightError = preflightErrors[path]
               const cardOffset =
                 projectInsertionIndex === null || dragProjectIndex < 0
                   ? 0
@@ -1652,8 +1654,8 @@ export function Sidebar({
                     suppressTransition
                       ? 'transition-none'
                       : 'transition-[background-color,transform] duration-200',
-                    // selectedPath covers pending preflight, the pending
-                    // switch proposal and the current project — the pill
+                    // selectedPath covers pending preflight, the current
+                    // project and the last failed selection — the pill
                     // slides to whichever card the chain names.
                     path === selectedPath
                       ? 'active:bg-(--pnds-bg)'
@@ -1665,7 +1667,8 @@ export function Sidebar({
                 >
                   {/* v1.2.2 (issue #29): the running project's left-edge accent
                     bar — rounded, inset from the card's corners (the
-                    placement prototype's 3px/14px spec). */}
+                    placement prototype's 3px/14px spec). v1.2.3 (#39): it
+                    marks the session's project, independent of selection. */}
                   {showRunningBar && (
                     <span
                       data-testid="running-bar"
@@ -1690,7 +1693,7 @@ export function Sidebar({
                   ) : (
                     <button
                       type="button"
-                      disabled={busy || (isCurrent && running)}
+                      disabled={busy}
                       title={path}
                       tabIndex={-1}
                       className="flex-1 truncate text-center text-[15px] text-(--pnds-text)/85 disabled:opacity-60"
@@ -1699,8 +1702,9 @@ export function Sidebar({
                     </button>
                   )}
 
-                  {/* Right slot: ⌘N hint while Cmd is held (v1.1.2), else ✕
-                  remove from history — never for the open project. */}
+                  {/* Right slot: ⌘N hint while Cmd is held (v1.1.2), the
+                  project's preflight verdict (v1.2.3 #39), else ✕ remove
+                  from history — never for the open or running project. */}
                   {showBadge ? (
                     <span
                       data-testid="project-number-badge"
@@ -1711,7 +1715,29 @@ export function Sidebar({
                         {index + 1}
                       </span>
                     </span>
-                  ) : isCurrent ? (
+                  ) : isChecking ? (
+                    <span
+                      data-testid="card-preflight-checking"
+                      className="flex w-5 shrink-0 items-center justify-center"
+                    >
+                      <Spinner
+                        className="size-3.5 text-(--pnds-text)/45"
+                        aria-label={t('sidebar.checkingProject')}
+                      />
+                    </span>
+                  ) : preflightError ? (
+                    <span
+                      data-testid="card-preflight-error"
+                      title={preflightError}
+                      className="flex w-5 shrink-0 items-center justify-center"
+                    >
+                      <AlertCircle
+                        size={14}
+                        aria-label={t('sidebar.preflightFailedCard')}
+                        className="text-(--pnds-danger)"
+                      />
+                    </span>
+                  ) : isCurrent || isSessionCard ? (
                     <span className="w-5 shrink-0" />
                   ) : (
                     <button
@@ -1825,40 +1851,6 @@ export function Sidebar({
           </div>,
           document.body
         )}
-
-      {/* §8.3 switch confirmation (Figma "Loading another project") */}
-      <AlertDialog
-        open={pendingSwitchPath !== null}
-        onOpenChange={openState => {
-          if (!openState) {
-            useProjectStore.getState().clearSwitchRequest()
-          }
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {t('switchProject.title', {
-                name: pendingSwitchPath ? cardName(pendingSwitchPath) : '',
-              })}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {t('switchProject.description', {
-                name: pendingSwitchPath ? cardName(pendingSwitchPath) : '',
-              })}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{t('switchProject.back')}</AlertDialogCancel>
-            {/* autoFocus makes the primary (filled) action the Enter
-                default — Radix would otherwise focus the first tabbable,
-                which is Cancel. */}
-            <AlertDialogAction autoFocus onClick={() => void confirmSwitch()}>
-              {t('switchProject.confirm')}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       {/* v1.2.0: the close-project confirmation — opened by ⌘W while a
           session runs (the v1.1.2 lone-Esc entry was retired; Esc has no

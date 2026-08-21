@@ -6,7 +6,28 @@ import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 import { useWindowStore } from '@/store/window-store'
 import { AppShell } from './AppShell'
-import type { SessionSnapshot } from '@/lib/tauri-bindings'
+import type { Manifest, SessionSnapshot } from '@/lib/tauri-bindings'
+
+const readyManifest: Manifest = {
+  schemaVersion: 1,
+  id: 'inarticulate-iii',
+  name: 'Inarticulate III',
+  version: '0.1.0',
+  description: null,
+  scoreServer: {
+    entry: 'server.js',
+    workingDirectory: '.',
+    performerPort: 6868,
+    monitorPort: 6869,
+  },
+  audio: {
+    defaultMode: 'internal',
+    supportedModes: ['internal', 'external', 'none'],
+    synthdefs: [],
+    scsynth: { sampleRate: 48000, blockSize: 64, audioBusChannels: 128 },
+    standaloneTarget: null,
+  },
+}
 
 const readySnapshot: SessionSnapshot = {
   status: 'ready',
@@ -50,7 +71,6 @@ describe('AppShell', () => {
       recentProjectPaths: [],
       projectFolders: [],
       pendingPreflightPath: null,
-      pendingSwitchPath: null,
       preflightStatus: 'idle',
       preflightError: null,
     })
@@ -145,6 +165,49 @@ describe('AppShell', () => {
     const popover = screen.getByTestId('sidebar-popover')
     expect(popover.className).toContain('opacity-0')
     expect(popover.className).toContain('pointer-events-none')
+  })
+
+  /** v1.2.3 (#39): opening another project while a session runs (any of the
+   * five entry paths — they all funnel through openProject) selects +
+   * preflights it and never drops the monitor view back to the welcome
+   * screen. */
+  it('keeps the monitor when another project is opened while running (#39)', async () => {
+    const { openProject } = await import('@/lib/open-project')
+    vi.mocked(commands.preflightProject).mockResolvedValue({
+      status: 'ok',
+      data: readyManifest,
+    })
+    useSessionStore.setState({
+      sessionStatus: 'ready',
+      projectName: 'Inarticulate III',
+      sessionProjectPath: '/p',
+      lanIp: '192.168.1.10',
+      health: {
+        status: 'ready',
+        projectId: 'inarticulate-iii',
+        audioMode: 'none',
+        audio: { status: 'disabled', target: null, error: null },
+        scoreServer: { performerPort: 6868, monitorPort: 6869, error: null },
+      },
+    })
+    useProjectStore.setState({
+      currentProject: { path: '/p', manifest: readyManifest },
+      recentProjectPaths: ['/p', '/q'],
+      preflightStatus: 'ready',
+    })
+    // The mount-time restore must re-report the running session (the
+    // default mock would answer with an idle snapshot and wipe it).
+    vi.mocked(commands.getSessionState).mockResolvedValue({
+      status: 'ok',
+      data: readySnapshot,
+    })
+    render(<AppShell />)
+
+    await openProject('/q')
+
+    expect(commands.preflightProject).toHaveBeenCalledWith('/q')
+    expect(screen.getByTitle('Project monitor')).toBeInTheDocument()
+    expect(useSessionStore.getState().sessionStatus).toBe('ready')
   })
 
   it('retracts a popped-out overlay sidebar when entering fullscreen (§7.4)', () => {

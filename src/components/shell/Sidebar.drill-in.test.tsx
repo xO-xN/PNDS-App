@@ -66,7 +66,6 @@ describe('Sidebar folder drill-in (v1.1.2 T3)', () => {
       recentProjectPaths: [FIRST_PATH, SECOND_PATH, THIRD_PATH],
       projectFolders: [],
       pendingPreflightPath: null,
-      pendingSwitchPath: null,
       activeFolderId: null,
       preflightStatus: 'idle',
       preflightError: null,
@@ -127,21 +126,29 @@ describe('Sidebar folder drill-in (v1.1.2 T3)', () => {
     expect(screen.queryByText('No projects opened yet')).not.toBeInTheDocument()
   })
 
-  it('the folder holding the running project shows the in-use dot', () => {
+  it('the folder holding the session project shows the in-use dot (#39)', () => {
     seedFolder()
     useProjectStore.setState({
-      currentProject: { path: SECOND_PATH, manifest },
+      currentProject: { path: FIRST_PATH, manifest },
       preflightStatus: 'ready',
     })
-    useSessionStore.setState({ sessionStatus: 'ready' })
+    useSessionStore.setState({
+      sessionStatus: 'ready',
+      sessionProjectPath: SECOND_PATH,
+    })
     render(<Sidebar variant="static" />)
 
+    // v1.2.3 (#39): the dot follows the SESSION's project (SECOND, inside
+    // the folder) even while another card is selected.
     const segment = screen.getByTestId('folder-segment')
     expect(within(segment).getByTestId('folder-in-use-dot')).toBeInTheDocument()
 
     // A merely preflighted (idle) selection is not "in use".
     act(() => {
-      useSessionStore.setState({ sessionStatus: 'idle' })
+      useSessionStore.setState({
+        sessionStatus: 'idle',
+        sessionProjectPath: null,
+      })
     })
     expect(
       within(screen.getByTestId('folder-segment')).queryByTestId(
@@ -150,13 +157,16 @@ describe('Sidebar folder drill-in (v1.1.2 T3)', () => {
     ).not.toBeInTheDocument()
   })
 
-  it('a folder without the running project never shows the dot', () => {
+  it('a folder without the session project never shows the dot', () => {
     seedFolder()
     useProjectStore.setState({
       currentProject: { path: FIRST_PATH, manifest },
       preflightStatus: 'ready',
     })
-    useSessionStore.setState({ sessionStatus: 'ready' })
+    useSessionStore.setState({
+      sessionStatus: 'ready',
+      sessionProjectPath: FIRST_PATH,
+    })
     render(<Sidebar variant="static" />)
 
     expect(screen.queryByTestId('folder-in-use-dot')).not.toBeInTheDocument()

@@ -44,7 +44,6 @@ describe('Sidebar folder drags (v1.1.2 T5, folder switch)', () => {
       recentProjectPaths: [FIRST_PATH, SECOND_PATH, THIRD_PATH],
       projectFolders: [],
       pendingPreflightPath: null,
-      pendingSwitchPath: null,
       activeFolderId: null,
       preflightStatus: 'idle',
       preflightError: null,

@@ -61,7 +61,6 @@ describe('Sidebar project list (v1.2.2, issue #29)', () => {
       recentProjectPaths: [FIRST_PATH, SECOND_PATH],
       projectFolders: [],
       pendingPreflightPath: null,
-      pendingSwitchPath: null,
       activeFolderId: null,
       renameTarget: null,
       preflightStatus: 'idle',
@@ -227,7 +226,7 @@ describe('Sidebar project list (v1.2.2, issue #29)', () => {
   })
 
   describe('the running bar', () => {
-    it('appears on the current card once the session starts, not while idle', () => {
+    it('appears on the session project card once the session starts, not while idle (#39)', () => {
       useProjectStore.setState({
         currentProject: { path: FIRST_PATH, manifest },
         preflightStatus: 'ready',
@@ -243,7 +242,10 @@ describe('Sidebar project list (v1.2.2, issue #29)', () => {
         within(idleCard).queryByTestId('running-bar')
       ).not.toBeInTheDocument()
 
-      useSessionStore.setState({ sessionStatus: 'starting' })
+      useSessionStore.setState({
+        sessionStatus: 'starting',
+        sessionProjectPath: FIRST_PATH,
+      })
       rerender(<Sidebar variant="static" />)
       const startingCard = screen.getByTestId('current-project-card')
       expect(
@@ -259,7 +261,10 @@ describe('Sidebar project list (v1.2.2, issue #29)', () => {
       ).toBeInTheDocument()
 
       // Stopping the session: the bar goes, the white selection stays.
-      useSessionStore.setState({ sessionStatus: 'idle' })
+      useSessionStore.setState({
+        sessionStatus: 'idle',
+        sessionProjectPath: null,
+      })
       rerender(<Sidebar variant="static" />)
       const stoppedCard = screen.getByTestId('current-project-card')
       expect(
@@ -268,17 +273,98 @@ describe('Sidebar project list (v1.2.2, issue #29)', () => {
       expect(stoppedCard.className).not.toContain('hover:bg-')
     })
 
-    it('never marks a non-current card, even mid-session', () => {
+    /** v1.2.3 (#39): the bar follows the SESSION's project — selecting
+     * another card while one runs moves the pill but never the bar. */
+    it('stays on the session project while another card is selected (#39)', () => {
+      useProjectStore.setState({
+        currentProject: { path: SECOND_PATH, manifest },
+        preflightStatus: 'ready',
+      })
+      useSessionStore.setState({
+        sessionStatus: 'ready',
+        sessionProjectPath: FIRST_PATH,
+      })
+      render(<Sidebar variant="static" />)
+
+      // The pill (selection) sits on B; the running bar stays on A.
+      const cardA = document.querySelector<HTMLElement>(
+        `[data-project-path="${CSS.escape(FIRST_PATH)}"]`
+      )
+      const cardB = document.querySelector<HTMLElement>(
+        `[data-project-path="${CSS.escape(SECOND_PATH)}"]`
+      )
+      if (!cardA || !cardB) throw new Error('Expected both project cards')
+      expect(within(cardA).getByTestId('running-bar')).toBeInTheDocument()
+      expect(within(cardB).queryByTestId('running-bar')).not.toBeInTheDocument()
+      expect(
+        within(cardA).queryByTestId('card-preflight-error')
+      ).not.toBeInTheDocument()
+    })
+
+    it('never marks a card the session does not own, even mid-session', () => {
       useProjectStore.setState({
         currentProject: { path: FIRST_PATH, manifest },
         preflightStatus: 'ready',
       })
-      useSessionStore.setState({ sessionStatus: 'ready' })
+      useSessionStore.setState({
+        sessionStatus: 'ready',
+        sessionProjectPath: FIRST_PATH,
+      })
       render(<Sidebar variant="static" />)
 
       const [entry] = screen.getAllByTestId('project-entry')
       if (!entry) throw new Error('Expected a non-current project card')
       expect(within(entry).queryByTestId('running-bar')).not.toBeInTheDocument()
+    })
+  })
+
+  /** v1.2.3 (#39): the selected project's preflight verdict shows on its
+   * card — a spinner while checking, a danger icon (tooltip = the raw
+   * error) when it failed. */
+  describe('the card preflight verdict (#39)', () => {
+    it('shows a spinner on the card being checked', () => {
+      useProjectStore.setState({
+        pendingPreflightPath: SECOND_PATH,
+        preflightStatus: 'checking',
+      })
+      render(<Sidebar variant="static" />)
+
+      const cardB = document.querySelector<HTMLElement>(
+        `[data-project-path="${CSS.escape(SECOND_PATH)}"]`
+      )
+      if (!cardB) throw new Error('Expected the second project card')
+      expect(
+        within(cardB).getByTestId('card-preflight-checking')
+      ).toBeInTheDocument()
+      expect(
+        within(cardB).queryByTestId('card-preflight-error')
+      ).not.toBeInTheDocument()
+    })
+
+    it('shows the error state on a failed card, with the raw error as tooltip', () => {
+      useProjectStore.setState({
+        failedPreflightPath: SECOND_PATH,
+        preflightStatus: 'error',
+        preflightErrors: {
+          [SECOND_PATH]: 'Port 6868 is already in use.',
+        },
+      })
+      render(<Sidebar variant="static" />)
+
+      const cardB = document.querySelector<HTMLElement>(
+        `[data-project-path="${CSS.escape(SECOND_PATH)}"]`
+      )
+      if (!cardB) throw new Error('Expected the second project card')
+      const errorBadge = within(cardB).getByTestId('card-preflight-error')
+      expect(errorBadge).toBeInTheDocument()
+      expect(errorBadge).toHaveAttribute(
+        'title',
+        'Port 6868 is already in use.'
+      )
+      // The failed selection keeps its pill.
+      expect(
+        within(cardB).queryByTestId('card-preflight-checking')
+      ).not.toBeInTheDocument()
     })
   })
 
@@ -309,7 +395,10 @@ describe('Sidebar project list (v1.2.2, issue #29)', () => {
         currentProject: { path: FIRST_PATH, manifest },
         preflightStatus: 'ready',
       })
-      useSessionStore.setState({ sessionStatus: 'ready' })
+      useSessionStore.setState({
+        sessionStatus: 'ready',
+        sessionProjectPath: FIRST_PATH,
+      })
       render(<Sidebar variant="overlay" />)
 
       expect(

@@ -43,6 +43,13 @@ interface SessionState {
   health: HealthPayload | null
   outputTail: string[]
   projectName: string | null
+  /**
+   * v1.2.3 (#39): the running session's own project path, mirrored from the
+   * backend snapshot. The running bar, the folder in-use dot and the monitor
+   * title follow it — never the selection, which can roam freely while a
+   * session runs.
+   */
+  sessionProjectPath: string | null
   /** OSC target reported by the backend (internal: dynamic; external: §6.6). */
   oscTarget: string | null
   /** Master volume percent (§6.4; every new session starts at 80). */
@@ -118,6 +125,7 @@ export const useSessionStore = create<SessionState>()(set => ({
   health: null,
   outputTail: [],
   projectName: null,
+  sessionProjectPath: null,
   oscTarget: null,
   volume: DEFAULT_SESSION_VOLUME,
   muted: false,
@@ -182,6 +190,7 @@ export const useSessionStore = create<SessionState>()(set => ({
         health: snapshot.health,
         outputTail: snapshot.outputTail,
         projectName: snapshot.projectName,
+        sessionProjectPath: snapshot.projectPath,
         oscTarget: snapshot.oscTarget,
         volume: snapshot.volume,
         // v1.2.2 (#30): mute is session-only — every new run returns to
@@ -233,6 +242,7 @@ export const useSessionStore = create<SessionState>()(set => ({
       health: null,
       outputTail: [],
       projectName: null,
+      sessionProjectPath: null,
       volume: DEFAULT_SESSION_VOLUME,
       muted: false,
       prevVolume: 0,

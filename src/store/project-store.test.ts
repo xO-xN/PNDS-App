@@ -38,7 +38,6 @@ describe('project-store', () => {
       recentProjectPaths: [],
       projectFolders: [],
       pendingPreflightPath: null,
-      pendingSwitchPath: null,
       activeFolderId: null,
       manifestProjectNames: {},
       preflightStatus: 'idle',
@@ -103,11 +102,33 @@ describe('project-store', () => {
     useProjectStore.getState().preflightSucceeded('/p', manifest)
     useProjectStore
       .getState()
-      .preflightFailed('manifest.json missing required field')
+      .preflightFailed('/p', 'manifest.json missing required field')
     const state = useProjectStore.getState()
     expect(state.preflightStatus).toBe('error')
     expect(state.preflightError).toContain('missing required field')
     expect(state.currentProject).toBeNull()
+  })
+
+  /** v1.2.3 (#39): a failed selection keeps its card — the pill stays via
+   * `failedPreflightPath` and the error is recorded per path for the card. */
+  it('keeps the failed selection and records the per-card error (#39)', () => {
+    useProjectStore.getState().startPreflight()
+    useProjectStore.getState().preflightFailed('/p', 'Port 6868 is busy')
+
+    let state = useProjectStore.getState()
+    expect(state.failedPreflightPath).toBe('/p')
+    expect(state.preflightErrors['/p']).toBe('Port 6868 is busy')
+
+    // The next successful preflight clears the card's error again.
+    useProjectStore.getState().preflightSucceeded('/p', manifest)
+    state = useProjectStore.getState()
+    expect(state.failedPreflightPath).toBeNull()
+    expect(state.preflightErrors['/p']).toBeUndefined()
+
+    // startPreflight (a new check) also drops the stale failed selection.
+    useProjectStore.getState().preflightFailed('/q', 'broken')
+    useProjectStore.getState().startPreflight()
+    expect(useProjectStore.getState().failedPreflightPath).toBeNull()
   })
 
   it('clearProject resets the session state but keeps the history', () => {
@@ -157,7 +178,6 @@ describe('project-store folders (v1.1.2, spec issue #4)', () => {
       recentProjectPaths: ['/a', '/b', '/c'],
       projectFolders: [],
       pendingPreflightPath: null,
-      pendingSwitchPath: null,
       activeFolderId: null,
       preflightStatus: 'idle',
       preflightError: null,
@@ -289,7 +309,6 @@ describe('folder-aware view derivation (v1.1.2 T3, spec issue #7)', () => {
       recentProjectPaths: ['/a', '/b', '/c', '/d'],
       projectFolders: [],
       pendingPreflightPath: null,
-      pendingSwitchPath: null,
       activeFolderId: null,
       preflightStatus: 'idle',
       preflightError: null,
@@ -359,7 +378,6 @@ describe('folder name uniqueness (v1.2.2, user feedback)', () => {
       recentProjectPaths: [],
       projectFolders: [],
       pendingPreflightPath: null,
-      pendingSwitchPath: null,
       activeFolderId: null,
       renameTarget: null,
       preflightStatus: 'idle',
@@ -427,7 +445,6 @@ describe('visible reorder from drags (v1.1.2 T4, spec issue #8)', () => {
       recentProjectPaths: ['/a', '/b', '/c', '/d', '/e'],
       projectFolders: [],
       pendingPreflightPath: null,
-      pendingSwitchPath: null,
       activeFolderId: null,
       preflightStatus: 'idle',
       preflightError: null,
@@ -488,7 +505,6 @@ describe('folder reorder from drags (v1.1.2 T5, spec issue #9)', () => {
       recentProjectPaths: ['/a'],
       projectFolders: [],
       pendingPreflightPath: null,
-      pendingSwitchPath: null,
       activeFolderId: null,
       preflightStatus: 'idle',
       preflightError: null,
@@ -540,7 +556,6 @@ describe('protected folders (v1.1.2 T7, spec issue #11)', () => {
         },
       ],
       pendingPreflightPath: null,
-      pendingSwitchPath: null,
       activeFolderId: null,
       preflightStatus: 'idle',
       preflightError: null,
@@ -598,7 +613,6 @@ describe('project-store persistence (structural actions commit + save)', () => {
       recentProjectPaths: [],
       projectFolders: [],
       pendingPreflightPath: null,
-      pendingSwitchPath: null,
       activeFolderId: null,
       projectDisplayNames: {},
       manifestProjectNames: {},
@@ -762,7 +776,6 @@ describe('capacity limits (v1.2.1, issue #26)', () => {
       recentProjectPaths: [],
       projectFolders: [],
       pendingPreflightPath: null,
-      pendingSwitchPath: null,
       activeFolderId: null,
       preflightStatus: 'idle',
       preflightError: null,

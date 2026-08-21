@@ -158,7 +158,6 @@ describe('Sidebar project-list scrolling (issue #25)', () => {
       recentProjectPaths: [],
       projectFolders: [],
       pendingPreflightPath: null,
-      pendingSwitchPath: null,
       activeFolderId: null,
       preflightStatus: 'idle',
       preflightError: null,
@@ -300,7 +299,7 @@ describe('Sidebar project-list scrolling (issue #25)', () => {
       expect(revealCalls).toEqual([{ element: scroller, top: 400 }])
     })
 
-    it('a keyboard switch request during a live session reveals the target card too', async () => {
+    it('a keyboard selection during a live session reveals the target card too (#39)', async () => {
       seedRunningSession(pathAt(0))
       render(<AppShell />)
 
@@ -309,9 +308,9 @@ describe('Sidebar project-list scrolling (issue #25)', () => {
 
       fireEvent.keyDown(window, { key: '7', metaKey: true })
 
-      // The switch confirmation opens for the target — its card was
-      // revealed even though the selection itself did not move.
-      await screen.findByRole('alertdialog')
+      // v1.2.3 (#39): the selection moves freely under the live session —
+      // its card is revealed (no confirmation dialog anymore).
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
       // ⌘7 = index 6: content bottom 773 → 773 - 400 + 26 = 399.
       expect(revealCalls).toEqual([{ element: scroller, top: 399 }])
     })

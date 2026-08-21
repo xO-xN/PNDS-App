@@ -58,7 +58,6 @@ describe('Sidebar folder switch (v1.2.2, issue #28)', () => {
       recentProjectPaths: [FIRST_PATH, SECOND_PATH],
       projectFolders: [],
       pendingPreflightPath: null,
-      pendingSwitchPath: null,
       activeFolderId: null,
       renameTarget: null,
       preflightStatus: 'idle',
