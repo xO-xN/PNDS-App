@@ -399,10 +399,12 @@
   --pnds-font-text: 'Archivo', -apple-system, 'Segoe UI', 'Roboto', sans-serif;
 
   --pnds-bg: #fff1c9;
-  /* Pure white — with the panel-level shadow removed (#41 feedback),
-     color does the separating: white panel on the cream bg, no clash.
-     The 1px black outline alone defines the edge. */
-  --pnds-sidebar-bg: #ffffff;
+  /* Amber — the third attempt at the shadowless panel: white clashed
+     with the white cards/audio surfaces below it, pale cream with the
+     bg. Amber is the theme's own yellow at panel strength: same warm
+     family as the bg (harmony), unmistakably distinct from every white
+     surface (cards, audio area), black text at 12.9:1. */
+  --pnds-sidebar-bg: #ffc107;
   --pnds-card: #ffffff;
   --pnds-pill: #ffe58f;
   --pnds-pill-hover: #ffd966;
