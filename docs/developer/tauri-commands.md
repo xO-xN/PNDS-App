@@ -202,8 +202,8 @@ vi.mock('@/lib/tauri-bindings', () => ({
 | `loadPreferences`          | none                                  | `Result<AppPreferences, string>`        | Load preferences                                                                   |
 | `savePreferences`          | `preferences: AppPreferences`         | `Result<null, string>`                  | Save preferences                                                                   |
 | `sendNativeNotification`   | `title: string, body: string \| null` | `Result<null, string>`                  | System notification                                                                |
-| `preflightProject`         | `path: string`                        | `Result<Manifest, string>`              | Project preflight (§5/§7/§8.2)                                                     |
-| `cleanupOrphanedProcesses` | none                                  | `Result<number, string>`                | Kill stale session children (§8.2)                                                 |
+| `preflightProject`         | `path: string`                        | `Result<Manifest, string>`              | Project preflight (§5/§7/§8.2); never harms the live session (issue #37)           |
+| `cleanupOrphanedProcesses` | none                                  | `Result<number, string>`                | Kill stale session children (§8.2); skips the live session's (issue #37)           |
 | `startProject`             | `path, mode, lanIp: string`           | `Result<null, string>`                  | Start score server session (§8.1)                                                  |
 | `stopProject`              | none                                  | `Result<null, string>`                  | Graceful session stop (§8.2)                                                       |
 | `getSessionState`          | none                                  | `Result<SessionSnapshot, string>`       | Current session snapshot                                                           |

@@ -11,6 +11,7 @@ mod project;
 mod types;
 mod window;
 
+use std::collections::HashSet;
 use tauri::{Manager, RunEvent, WindowEvent};
 
 /// Application entry point. Sets up all plugins and initializes the app.
@@ -108,9 +109,10 @@ pub fn run() {
 
             // §8.2: terminate child processes left behind by an abnormal
             // previous exit (crash, force-quit). Best-effort at startup.
+            // No session can be live yet, so nothing is exempt.
             if let Ok(dir) = commands::project::app_data_dir(app.handle()) {
                 let registry = crate::project::children::ChildRegistry::new(dir);
-                match registry.cleanup_orphans() {
+                match registry.cleanup_orphans(&HashSet::new()) {
                     Ok(n) if n > 0 => log::info!("Startup cleanup terminated {n} orphan(s)"),
                     Ok(_) => {}
                     Err(e) => log::warn!("Startup orphan cleanup failed: {e}"),

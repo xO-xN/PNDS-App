@@ -108,7 +108,7 @@ performerPort  → performer server
 monitorPort    → monitor server
 ```
 
-App 在启动前确认两个端口可用。冲突时失败，不自动换端口，也不修改 manifest。
+App 在启动前确认两个端口可用。冲突时失败，不自动换端口，也不修改 manifest。仅被当前活跃 session 自身子进程占用的端口视为可用（session 停止时即释放；判定基于占用 PID 与活跃 session 子进程 PID 的匹配）；被任何第三方进程占用仍按冲突失败。
 
 LAN 地址规则：
 
@@ -380,6 +380,8 @@ App 停止顺序：
 ```
 
 App 退出后不得遗留其拥有的 Node 或 scsynth。崩溃或 force quit 后，下一次 App 启动必须使用记录的 PID 和命令行确认归属，再进行 best-effort orphan cleanup。
+
+Orphan cleanup 永远跳过属于当前活跃 session 的子进程（以 SessionManager 持有的进程句柄 PID 判定）：运行中对其他工程执行 preflight 不得伤害正在运行的 session，其归属记录同步保留；无活跃 session 时（App 启动、error 后 Retry）清理行为不变。
 
 任何启动或运行时失败在对外进入 `error` 前，必须先执行当前 generation 的失败清理：停止 Node、释放 master group、停止 scsynth并清空进程句柄。若强制终止无法确认，child registry 必须保留归属记录；从 `error` 直接 Retry 时，start flow 在端口 preflight 前对该 generation 执行定向 orphan cleanup。Retry 不调用面向正常 session 的公开 stop flow。
 

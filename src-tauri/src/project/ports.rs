@@ -52,9 +52,13 @@ pub(crate) fn parse_lsof_pids(stdout: &str) -> Vec<u32> {
     pids
 }
 
-/// Runs lsof for the listeners on `port`. `/usr/sbin/lsof` is tried first —
-/// GUI processes get a minimal PATH that usually lacks /usr/sbin.
-fn lsof_listening_pids(port: u16) -> Vec<u32> {
+/// PIDs of every process LISTENing on `port`, regardless of bind address
+/// (wildcard, loopback, or a specific interface). The authoritative occupancy
+/// signal for port conflicts — a plain wildcard bind misses specific-address
+/// holders on macOS (SO_REUSEADDR lets it succeed anyway). `/usr/sbin/lsof`
+/// is tried first — GUI processes get a minimal PATH that usually lacks
+/// /usr/sbin.
+pub(crate) fn listening_pids(port: u16) -> Vec<u32> {
     let args = ["-nP", "-w", "-Fp", &format!("-iTCP:{port}"), "-sTCP:LISTEN"];
     for binary in ["/usr/sbin/lsof", "lsof"] {
         if let Ok(output) = Command::new(binary).args(args.iter()).output() {
@@ -78,21 +82,11 @@ fn occupant_identity(pid: u32) -> Option<PortOccupant> {
     })
 }
 
-/// Whether any process is LISTENing on `port`, regardless of bind address
-/// (wildcard, loopback, or a specific interface). The authoritative signal
-/// for port conflicts — a plain wildcard bind misses specific-address
-/// holders on macOS (SO_REUSEADDR lets it succeed anyway).
-pub(crate) fn port_has_listener(port: u16) -> bool {
-    !lsof_listening_pids(port).is_empty()
-}
-
 /// Occupancy of `port`: the first listener's full identity, or None when the
 /// port is free (or lsof is unavailable — the status then reads "available",
 /// and the authoritative check remains the preflight bind).
 pub fn port_status(port: u16) -> PortStatus {
-    let occupant = lsof_listening_pids(port)
-        .into_iter()
-        .find_map(occupant_identity);
+    let occupant = listening_pids(port).into_iter().find_map(occupant_identity);
     PortStatus { port, occupant }
 }
 

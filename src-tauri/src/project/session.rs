@@ -7,7 +7,7 @@
 
 use serde::{Deserialize, Serialize};
 use specta::Type;
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::io::{BufRead, BufReader};
 use std::net::UdpSocket;
 use std::path::{Path, PathBuf};
@@ -462,7 +462,11 @@ impl SessionManager {
         // still owns its ports. Re-run the targeted (pid + marker) cleanup
         // BEFORE the port preflight, so a Retry after a hard failure is
         // not blocked by the corpse of its own last attempt.
-        match registry.cleanup_orphans() {
+        //
+        // Nothing is exempt: `start` already dropped this manager's child
+        // handles, so a corpse from an unconfirmed kill must still read as
+        // a conflict here — it is not the live session's process anymore.
+        match registry.cleanup_orphans(&HashSet::new()) {
             Ok(n) if n > 0 => log::info!("Start cleanup terminated {n} orphan(s) before preflight"),
             Ok(_) => {}
             Err(e) => log::warn!("Orphan cleanup before start failed: {e}"),
@@ -470,6 +474,7 @@ impl SessionManager {
         preflight::check_ports_available(
             manifest.score_server.performer_port,
             manifest.score_server.monitor_port,
+            &HashSet::new(),
         )?;
 
         // §7.1/§7.6: for internal sessions resolve the output device and
@@ -1211,6 +1216,23 @@ impl SessionManager {
         let inner = self.lock();
         inner.child.is_some()
     }
+
+    /// PIDs of the child processes this manager currently owns handles for
+    /// (node score server + scsynth). Empty when no session is live; empties
+    /// as teardown reaps each child. Preflight passes these to the orphan
+    /// cleanup and the port check so that checking project B never harms the
+    /// running project A (v1.2.3, issue #37).
+    pub fn active_child_pids(&self) -> HashSet<u32> {
+        let inner = self.lock();
+        let mut pids = HashSet::new();
+        if let Some(pid) = inner.child.as_ref().map(|c| c.id()) {
+            pids.insert(pid);
+        }
+        if let Some(pid) = inner.scsynth.as_ref().map(|c| c.id()) {
+            pids.insert(pid);
+        }
+        pids
+    }
 }
 
 /// Builds a readable error line from a health payload in `error` status (§9.1).
@@ -1391,6 +1413,32 @@ mod tests {
             .map(|s| s.success())
             .unwrap_or(false);
         assert!(!alive);
+    }
+
+    /// v1.2.3 (issue #37): the manager exposes exactly the pids it owns
+    /// handles for, so preflight can exempt the live session's children
+    /// (node + scsynth) from orphan cleanup and port conflicts. The set
+    /// empties once stop() has reaped the children.
+    #[test]
+    fn active_child_pids_track_owned_children_until_stop() {
+        let app = tauri::test::mock_app().handle().clone();
+        let manager = SessionManager::default();
+        let dir = tempfile::tempdir().unwrap();
+        assert!(manager.active_child_pids().is_empty());
+
+        let node = Command::new("sleep").arg("30").spawn().unwrap();
+        let scsynth = Command::new("sleep").arg("31").spawn().unwrap();
+        let expected: HashSet<u32> = [node.id(), scsynth.id()].into_iter().collect();
+        {
+            let mut inner = manager.lock();
+            inner.child = Some(node);
+            inner.scsynth = Some(scsynth);
+            inner.status = "ready".to_string();
+        }
+        assert_eq!(manager.active_child_pids(), expected);
+
+        manager.stop(&app, dir.path()).unwrap();
+        assert!(manager.active_child_pids().is_empty());
     }
 
     /// §9.3: an error-state session has NO lingering children — the failed

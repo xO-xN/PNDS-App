@@ -5,6 +5,7 @@
 //! The child-process lifecycle (spawn, record, kill escalation, orphan
 //! cleanup) has moved to `project/children.rs`.
 
+use std::collections::HashSet;
 use std::path::Path;
 
 /// §4 + spec §2: a project with non-empty production dependencies
@@ -56,13 +57,19 @@ pub fn check_dependencies(project_root: &Path) -> Result<(), String> {
 /// §7: both HTTP ports must be free. No auto-rebinding, no manifest edits —
 /// a conflict fails preflight with an actionable message.
 ///
+/// v1.2.3 (issue #37): a port whose listeners ALL belong to the live
+/// session's own children passes — those sockets are released when that
+/// session stops, so preflighting project B while A runs must not read A
+/// as a conflict. Attribution is by pid: any holder the live session does
+/// not own is still a conflict.
+///
 /// Detection is layered, because a plain wildcard bind is NOT enough on
 /// macOS: Rust's TcpListener sets SO_REUSEADDR, and BSD semantics let a
 /// wildcard bind succeed even while another process listens on a specific
 /// address of the same port (e.g. 127.0.0.1:6868). The score server then
 /// can't actually serve and the session dies as an opaque 30s health
 /// timeout instead of a readable conflict. So:
-/// 1. lsof LISTEN check — authoritative, sees every bind address, and
+/// 1. lsof LISTEN pids — authoritative, sees every bind address, and
 ///    agrees with what the settings Ports section reports;
 /// 2. wildcard bind — catches listeners lsof couldn't be asked about;
 /// 3. loopback bind — catches the specific-address case if lsof failed.
@@ -71,10 +78,20 @@ pub fn check_dependencies(project_root: &Path) -> Result<(), String> {
 /// #14) matches this message with `/^Port (\d+) is already in use\./m` to
 /// offer [Release and Retry]. The first line's wording is load-bearing;
 /// `port_conflict_message_is_parseable` pins it.
-pub fn check_ports_available(performer_port: u16, monitor_port: u16) -> Result<(), String> {
+pub fn check_ports_available(
+    performer_port: u16,
+    monitor_port: u16,
+    live_session_pids: &HashSet<u32>,
+) -> Result<(), String> {
     for port in [performer_port, monitor_port] {
-        if crate::project::ports::port_has_listener(port)
-            || std::net::TcpListener::bind(("0.0.0.0", port)).is_err()
+        let listeners = crate::project::ports::listening_pids(port);
+        if !listeners.is_empty() {
+            if listeners.iter().all(|pid| live_session_pids.contains(pid)) {
+                continue; // ours; released when the live session stops
+            }
+            return Err(port_conflict_message(port));
+        }
+        if std::net::TcpListener::bind(("0.0.0.0", port)).is_err()
             || std::net::TcpListener::bind(("127.0.0.1", port)).is_err()
         {
             return Err(port_conflict_message(port));
@@ -199,7 +216,7 @@ mod tests {
     fn occupied_port_is_reported() {
         let listener = std::net::TcpListener::bind(("0.0.0.0", 0)).unwrap();
         let port = listener.local_addr().unwrap().port();
-        let err = check_ports_available(port, 0).unwrap_err();
+        let err = check_ports_available(port, 0, &HashSet::new()).unwrap_err();
         assert!(
             err.contains(&format!("Port {port} is already in use")),
             "unexpected: {err}"
@@ -218,11 +235,54 @@ mod tests {
     fn loopback_bound_listener_is_reported() {
         let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
         let port = listener.local_addr().unwrap().port();
-        let err = check_ports_available(port, 0).unwrap_err();
+        let err = check_ports_available(port, 0, &HashSet::new()).unwrap_err();
         assert!(
             err.contains(&format!("Port {port} is already in use")),
             "unexpected: {err}"
         );
+    }
+
+    /// v1.2.3 (issue #37): a port held ONLY by the live session's own
+    /// children passes — those sockets are released when the session stops,
+    /// so preflighting project B while A runs must not read A as a
+    /// conflict. This test process plays the session: it binds both
+    /// listeners, so lsof attributes them to the test's own pid.
+    #[test]
+    fn port_held_only_by_the_live_session_passes() {
+        let performer = std::net::TcpListener::bind(("0.0.0.0", 0)).unwrap();
+        let monitor = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let live = HashSet::from([std::process::id()]);
+        check_ports_available(
+            performer.local_addr().unwrap().port(),
+            monitor.local_addr().unwrap().port(),
+            &live,
+        )
+        .unwrap();
+    }
+
+    /// v1.2.3 (issue #37): the pass rule is attributed by pid. A live
+    /// session exists (a real, unrelated pid is exempt) but the listener
+    /// belongs to someone else — still the existing conflict error.
+    #[test]
+    fn port_held_by_a_third_party_still_conflicts_during_a_live_session() {
+        let out = std::process::Command::new("/bin/sh")
+            .args(["-c", "sleep 41 >/dev/null 2>&1 & echo $!"])
+            .output()
+            .unwrap();
+        let session_pid: u32 = String::from_utf8_lossy(&out.stdout).trim().parse().unwrap();
+        let listener = std::net::TcpListener::bind(("0.0.0.0", 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        let err = check_ports_available(port, 0, &HashSet::from([session_pid])).unwrap_err();
+        assert!(
+            err.contains(&format!("Port {port} is already in use")),
+            "unexpected: {err}"
+        );
+
+        // The exempt pid was only a fixture; clean it up.
+        let _ = std::process::Command::new("/bin/kill")
+            .args(["-9", &session_pid.to_string()])
+            .status();
     }
 
     /// v1.2.0 (issue #14): the ErrorScreen port-conflict linkage parses the

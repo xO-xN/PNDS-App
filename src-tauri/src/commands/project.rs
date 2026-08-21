@@ -23,27 +23,44 @@ pub(crate) fn app_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
 
 /// Cleans up child processes left behind by an abnormal previous exit.
 /// Also runs automatically at app startup and at the start of preflight.
+/// Children of the live session are never touched (v1.2.3, issue #37).
 #[tauri::command]
 #[specta::specta]
-pub async fn cleanup_orphaned_processes(app: AppHandle) -> Result<u32, String> {
+pub async fn cleanup_orphaned_processes(
+    app: AppHandle,
+    state: State<'_, SessionManager>,
+) -> Result<u32, String> {
     let dir = app_data_dir(&app)?;
-    crate::project::children::ChildRegistry::new(dir).cleanup_orphans()
+    let live_pids = state.active_child_pids();
+    crate::project::children::ChildRegistry::new(dir).cleanup_orphans(&live_pids)
 }
 
 /// Full preflight for a candidate project directory (§8.1 step 1):
 /// orphan cleanup → manifest validation → dependency check → port check.
 /// Returns the validated manifest so the frontend can show project info.
+///
+/// v1.2.3 (issue #37): preflight never harms the running session — its
+/// children are exempt from the orphan cleanup, and ports held only by
+/// them pass (they are released when the session stops). Ports held by
+/// any other process still conflict.
 #[tauri::command]
 #[specta::specta]
-pub async fn preflight_project(app: AppHandle, path: String) -> Result<Manifest, String> {
+pub async fn preflight_project(
+    app: AppHandle,
+    state: State<'_, SessionManager>,
+    path: String,
+) -> Result<Manifest, String> {
     let root = PathBuf::from(&path);
     if !root.is_dir() {
         return Err(format!("Project directory not found: {path}"));
     }
 
+    let live_pids = state.active_child_pids();
+
     // §8.2: stale children must be gone before port checks are meaningful.
     let dir = app_data_dir(&app)?;
-    let terminated = crate::project::children::ChildRegistry::new(dir.clone()).cleanup_orphans()?;
+    let terminated =
+        crate::project::children::ChildRegistry::new(dir.clone()).cleanup_orphans(&live_pids)?;
     if terminated > 0 {
         log::info!("Preflight terminated {terminated} orphaned process(es)");
     }
@@ -53,6 +70,7 @@ pub async fn preflight_project(app: AppHandle, path: String) -> Result<Manifest,
     preflight::check_ports_available(
         manifest.score_server.performer_port,
         manifest.score_server.monitor_port,
+        &live_pids,
     )?;
 
     log::info!(

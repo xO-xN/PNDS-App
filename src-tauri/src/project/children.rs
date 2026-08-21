@@ -7,6 +7,7 @@
 //! (`terminate`, `process_alive`, the orphan registry).
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::process::{Child, Command};
 use std::time::{Duration, Instant};
@@ -162,7 +163,13 @@ impl ChildRegistry {
     /// marker recorded when the App spawned it. Records whose process
     /// survives even SIGKILL are kept on disk so the next start tries
     /// again before its port preflight.
-    pub fn cleanup_orphans(&self) -> Result<u32, String> {
+    ///
+    /// `live_session_pids` exempts children the SessionManager still owns
+    /// handles for (v1.2.3, issue #37): a child of the *live* session is
+    /// not an orphan, so preflighting another project must leave both the
+    /// process and its record alone — teardown or the next launch (after a
+    /// crash) handles it. Callers with no live session pass an empty set.
+    pub fn cleanup_orphans(&self, live_session_pids: &HashSet<u32>) -> Result<u32, String> {
         let path = self.file();
         if !path.exists() {
             return Ok(0);
@@ -174,8 +181,15 @@ impl ChildRegistry {
         });
 
         let mut terminated = 0u32;
-        let mut unresolved: Vec<SessionChild> = Vec::new();
+        // Records that must stay on disk: children the live session still
+        // owns, and orphans that survived even SIGKILL.
+        let mut survivors: Vec<SessionChild> = Vec::new();
         for child in &children {
+            if live_session_pids.contains(&child.pid) {
+                log::debug!("Skipping pid {}: owned by the live session", child.pid);
+                survivors.push(child.clone());
+                continue;
+            }
             if !process_alive(child.pid) {
                 continue;
             }
@@ -205,7 +219,7 @@ impl ChildRegistry {
                             "Orphan pid {} survived SIGKILL; keeping the ownership record",
                             child.pid
                         );
-                        unresolved.push(child.clone());
+                        survivors.push(child.clone());
                     }
                 }
                 other => {
@@ -221,11 +235,11 @@ impl ChildRegistry {
         if terminated > 0 {
             log::info!("Cleaned up {terminated} orphaned process(es) from previous session");
         }
-        if unresolved.is_empty() {
+        if survivors.is_empty() {
             if let Err(e) = std::fs::remove_file(&path) {
                 log::warn!("Failed to remove session children file: {e}");
             }
-        } else if let Err(e) = self.write(&unresolved) {
+        } else if let Err(e) = self.write(&survivors) {
             log::warn!("Failed to rewrite session children file: {e}");
         }
         Ok(terminated)
@@ -251,6 +265,11 @@ mod tests {
     use super::*;
     use std::process::Command;
 
+    /// The no-live-session callers (app startup, the §9.3 retry path).
+    fn no_live_session() -> HashSet<u32> {
+        HashSet::new()
+    }
+
     #[test]
     fn escalate_kills_child() {
         let mut child = Command::new("sleep").arg("30").spawn().unwrap();
@@ -269,7 +288,7 @@ mod tests {
         let pid = child.id();
         reg.record(pid, "definitely-not-this-command".into());
 
-        assert_eq!(reg.cleanup_orphans().unwrap(), 0);
+        assert_eq!(reg.cleanup_orphans(&no_live_session()).unwrap(), 0);
         assert!(child.try_wait().unwrap().is_none(), "must not be killed");
 
         assert!(kill_escalate(&mut child, pid, Duration::from_secs(2)));
@@ -292,7 +311,37 @@ mod tests {
         let pid: u32 = String::from_utf8_lossy(&out.stdout).trim().parse().unwrap();
         reg.record(pid, "sleep 41".into());
 
-        assert_eq!(reg.cleanup_orphans().unwrap(), 1);
+        assert_eq!(reg.cleanup_orphans(&no_live_session()).unwrap(), 1);
+        assert!(!process_alive(pid));
+        assert!(!reg.file().exists());
+    }
+
+    /// v1.2.3 (issue #37): a child the live session still owns is not an
+    /// orphan — cleanup must leave both the process and its record alone,
+    /// or preflighting project B would kill the running project A. Once no
+    /// session owns it, the same record is cleaned as before.
+    #[test]
+    fn cleanup_spares_children_owned_by_the_live_session() {
+        let dir = tempfile::tempdir().unwrap();
+        let reg = ChildRegistry::new(dir.path().to_path_buf());
+        let out = Command::new("/bin/sh")
+            .args(["-c", "sleep 41 >/dev/null 2>&1 & echo $!"])
+            .output()
+            .unwrap();
+        let pid: u32 = String::from_utf8_lossy(&out.stdout).trim().parse().unwrap();
+        reg.record(pid, "sleep 41".into());
+
+        let live = HashSet::from([pid]);
+        assert_eq!(reg.cleanup_orphans(&live).unwrap(), 0);
+        assert!(process_alive(pid), "the live session's child must survive");
+        assert_eq!(
+            reg.read().unwrap().len(),
+            1,
+            "the ownership record must survive for teardown / crash recovery"
+        );
+
+        // Without the exemption the child is a true orphan again.
+        assert_eq!(reg.cleanup_orphans(&no_live_session()).unwrap(), 1);
         assert!(!process_alive(pid));
         assert!(!reg.file().exists());
     }
@@ -301,7 +350,7 @@ mod tests {
     fn cleanup_without_record_is_noop() {
         let dir = tempfile::tempdir().unwrap();
         let reg = ChildRegistry::new(dir.path().to_path_buf());
-        assert_eq!(reg.cleanup_orphans().unwrap(), 0);
+        assert_eq!(reg.cleanup_orphans(&no_live_session()).unwrap(), 0);
     }
 
     #[test]
@@ -309,7 +358,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let reg = ChildRegistry::new(dir.path().to_path_buf());
         reg.record(4_000_000, "node".into());
-        assert_eq!(reg.cleanup_orphans().unwrap(), 0);
+        assert_eq!(reg.cleanup_orphans(&no_live_session()).unwrap(), 0);
         assert!(!reg.file().exists());
     }
 
