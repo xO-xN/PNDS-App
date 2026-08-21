@@ -125,7 +125,12 @@ node's `data-color-theme` attribute:
   window-frame roots (`data-app-frame`) keep `--app-corner-radius` so
   the CSS edge stays aligned with the native window mask (window.rs),
   and the traffic-light dots (`data-os-circle`, set in
-  TrafficLights.tsx) stay circular.
+  TrafficLights.tsx) stay circular. Type is per-theme: `--pnds-font-ui`
+  / `--pnds-font-text` tokens (defined per theme block, read by `body`
+  and `.font-manrope`) — Brutal swaps both to Archivo (bundled woff2 in
+  public/fonts, OFL), everything else keeps Comfortaa/Manrope. The
+  PndsLogo canvas wordmark stays brand (not themed), like the logo
+  dots.
 - **Sand is the medium-depth theme** (palette retune on #41's request):
   warm-white text on dim warm-taupe surfaces — deliberately between the
   light and dark themes. Its accent-text twin inverts direction: the

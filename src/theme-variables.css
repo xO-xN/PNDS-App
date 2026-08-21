@@ -143,6 +143,14 @@
 
 :root {
   /* PNDS design tokens (from Figma "PNDS UI Design", 2026-07) */
+
+  /* Per-theme type (#41): the UI face (body default) and the text face
+     (errors, details — the .font-manrope role) are tokens so a theme can
+     ship its own voice. Bundled woff2 faces only (offline); see App.css
+     for the @font-face declarations. */
+  --pnds-font-ui: 'Comfortaa', -apple-system, 'Segoe UI', 'Roboto', sans-serif;
+  --pnds-font-text: 'Manrope', -apple-system, 'Segoe UI', sans-serif;
+
   --pnds-bg: #eef0f8;
   --pnds-sidebar-bg: #e2e5f3;
   --pnds-card: #ffffff;
@@ -383,6 +391,13 @@
      8-10:1, accent-text ≥4.8:1 on every surface (the darker orange
      twin — the fill orange cannot pass as text on cream). Hard offset
      shadows only; the soft-elevation vocabulary is banned here. */
+
+  /* The theme's voice: Archivo — a square, sturdy grotesk; the rounded
+     Comfortaa fights the brutalist language. Both faces go Archivo (the
+     Manrope text-role distinction is not part of this vocabulary). */
+  --pnds-font-ui: 'Archivo', -apple-system, 'Segoe UI', 'Roboto', sans-serif;
+  --pnds-font-text: 'Archivo', -apple-system, 'Segoe UI', 'Roboto', sans-serif;
+
   --pnds-bg: #fff1c9;
   /* Fallback under the sidebar collage (the gradient rule below). */
   --pnds-sidebar-bg: #ffc107;
