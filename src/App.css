@@ -142,8 +142,12 @@
     color: inherit;
   }
 
-  /* Allow text selection in specific areas */
-  input,
+  /* Allow text selection in specific areas. Range inputs are excluded at
+     the source: a slider is a control, not a text field, and this layered
+     cursor:text !important beats any unlayered !important (the layer
+     comparison inverts for important declarations), so excluding here is
+     the only fix that actually holds (#30 feedback, re-fixed). */
+  input:not([type='range']),
   textarea,
   [contenteditable='true'] {
     user-select: text !important;
@@ -196,8 +200,9 @@
   -webkit-appearance: none;
   appearance: none;
   background: transparent;
-  /* The global input rule sets cursor: text !important; a slider is a
-     control, not a text field — keep the arrow (#30 feedback). */
+  /* The global text rule now excludes range inputs at the source (this
+     class cannot win the layered !important fight above); this pins the
+     arrow anyway — documentation and a second line of defense (#30). */
   cursor: default !important;
 }
 

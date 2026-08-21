@@ -56,6 +56,12 @@ export function HoverSidebar() {
             ? 'translate-x-0 opacity-100'
             : 'pointer-events-none -translate-x-5 opacity-0'
         )}
+        // The ⌘-peek promise in the module doc: releasing ⌘ keeps the
+        // sidebar while the pointer is inside it. The hover strip only
+        // covers the left edge, so an entry straight into the popover
+        // (the ⌘-summoned case) must also latch hoverVisible — otherwise
+        // releasing ⌘ retracts the sidebar under the pointer.
+        onMouseEnter={() => setHoverVisible(true)}
         onMouseLeave={() => {
           if (!popupOpen && !dialogOpen) setHoverVisible(false)
         }}
