@@ -20,10 +20,11 @@ pub struct AppPreferences {
     pub theme: String,
     /// v1.2.3 (issue #38): the app color theme driving the root node's
     /// `data-color-theme` attribute. Enum-validated at the save boundary;
-    /// `stage`/`midnight`/`glass` are accepted already because the enum is
-    /// the shipped v1.2.3 set — the frontend falls back to `lavender` for
-    /// themes its build does not implement yet. App-local, never touches
-    /// project manifests.
+    /// the legacy `midnight` (renamed to `brutal` in #41's second
+    /// redirect) and `glass` (abandoned ticket) values stay accepted so
+    /// stored preferences keep validating — the frontend maps the former
+    /// to `brutal` and falls back to `lavender` for anything its build
+    /// cannot render. App-local, never touches project manifests.
     #[serde(default = "default_color_theme")]
     pub color_theme: String,
     /// User's preferred language (V1 ships English-only)
@@ -124,13 +125,16 @@ pub fn validate_theme(theme: &str) -> Result<(), String> {
 }
 
 /// v1.2.3 (issue #38): validates the color-theme preference against the
-/// v1.2.3 theme enum. Unsupported values are rejected at the save boundary;
-/// on load the frontend maps anything it cannot render to Lavender.
+/// v1.2.3 theme enum. `midnight` (renamed to `brutal` in #41's second
+/// redirect) and `glass` (the abandoned liquid-glass ticket) stay valid
+/// persisted values; the frontend maps the former to `brutal` and the
+/// latter to Lavender at render, so no stored preference ever renders
+/// wrong. Unsupported values are rejected at the save boundary.
 pub fn validate_color_theme(theme: &str) -> Result<(), String> {
     match theme {
-        "lavender" | "sand" | "stage" | "midnight" | "glass" => Ok(()),
+        "lavender" | "sand" | "stage" | "brutal" | "midnight" | "glass" => Ok(()),
         _ => Err(
-            "Invalid colorTheme: must be 'lavender', 'sand', 'stage', 'midnight', or 'glass'"
+            "Invalid colorTheme: must be 'lavender', 'sand', 'stage', 'brutal', 'midnight', or 'glass'"
                 .to_string(),
         ),
     }
@@ -326,11 +330,13 @@ mod tests {
         assert!(reserialized.contains("\"colorTheme\":\"sand\""));
     }
 
-    /// v1.2.3 (issue #38): the whole v1.2.3 theme enum validates; anything
-    /// else is rejected with a readable error at the save boundary.
+    /// v1.2.3 (issue #38): the whole v1.2.3 theme enum validates — the
+    /// shipped names plus the legacy persisted values (`midnight` renamed
+    /// to `brutal`, `glass` abandoned); anything else is rejected with a
+    /// readable error at the save boundary.
     #[test]
     fn validates_color_theme() {
-        for theme in ["lavender", "sand", "stage", "midnight", "glass"] {
+        for theme in ["lavender", "sand", "stage", "brutal", "midnight", "glass"] {
             assert!(validate_color_theme(theme).is_ok(), "{theme} must be valid");
         }
         assert_eq!(default_color_theme(), "lavender");

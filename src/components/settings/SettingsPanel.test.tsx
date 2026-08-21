@@ -218,7 +218,7 @@ describe('SettingsPanel Appearance section (issues #38/#40)', () => {
     const labels = within(select)
       .getAllByRole('option')
       .map(option => option.textContent)
-    expect(labels).toEqual(['Lavender', 'Sand', 'Stage', 'Midnight'])
+    expect(labels).toEqual(['Lavender', 'Sand', 'Stage', 'Brutal'])
     expect(select).toHaveValue('lavender')
   })
 
@@ -271,21 +271,21 @@ describe('SettingsPanel Appearance section (issues #38/#40)', () => {
 
   // #40: the dark themes ride the same mechanism — one representative
   // switch covers apply + persist for them.
-  it('selecting Midnight applies the root attribute immediately and persists', async () => {
+  it('selecting Brutal applies the root attribute immediately and persists', async () => {
     useSettingsStore.getState().openSettings()
     render(<SettingsPanel />)
 
     fireEvent.change(screen.getByLabelText('Theme'), {
-      target: { value: 'midnight' },
+      target: { value: 'brutal' },
     })
 
-    expect(document.documentElement.dataset.colorTheme).toBe('midnight')
+    expect(document.documentElement.dataset.colorTheme).toBe('brutal')
     expect(screen.getByTestId('color-theme-accent')).toHaveStyle({
-      background: '#ffff00',
+      background: '#ff5722',
     })
     await waitFor(() => {
       expect(commands.savePreferences).toHaveBeenCalledWith(
-        expect.objectContaining({ colorTheme: 'midnight' })
+        expect.objectContaining({ colorTheme: 'brutal' })
       )
     })
   })

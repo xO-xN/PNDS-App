@@ -42,7 +42,6 @@
   "settings.theme.lavender": "Lavender",
   "settings.theme.sand": "Sand",
   "settings.theme.stage": "Stage",
-  "settings.theme.midnight": "Midnight",
   "settings.language": "Language",
   "settings.languageSystem": "Follow System",
   "settings.audio": "Audio",
@@ -175,5 +174,6 @@
   "error.releaseFailed": "Could not release the port",
   "bundle.installFailed": "Could not open the bundle",
   "sidebar.utilitiesFolder": "Utilities",
-  "sidebar.folderNameTaken": "A folder named “{{name}}” already exists."
+  "sidebar.folderNameTaken": "A folder named “{{name}}” already exists.",
+  "settings.theme.brutal": "Brutal"
 }

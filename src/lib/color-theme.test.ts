@@ -23,12 +23,16 @@ describe('colorThemeFromPrefs (issue #38: persisted value → renderable theme)'
     expect(colorThemeFromPrefs('lavender')).toBe('lavender')
     expect(colorThemeFromPrefs('sand')).toBe('sand')
     expect(colorThemeFromPrefs('stage')).toBe('stage')
-    expect(colorThemeFromPrefs('midnight')).toBe('midnight')
+    expect(colorThemeFromPrefs('brutal')).toBe('brutal')
+  })
+
+  it('maps renamed themes to their successor (#41: midnight → brutal)', () => {
+    expect(colorThemeFromPrefs('midnight')).toBe('brutal')
   })
 
   it('falls back to Lavender for absent, unknown, or not-yet-shipped values', () => {
-    // glass is valid in the persisted enum (a later v1.2.3 ticket) but
-    // this build cannot render it — spec #36 story 10.
+    // glass is valid in the persisted enum (the abandoned liquid-glass
+    // ticket) but this build cannot render it — spec #36 story 10.
     expect(colorThemeFromPrefs(null)).toBe('lavender')
     expect(colorThemeFromPrefs(undefined)).toBe('lavender')
     expect(colorThemeFromPrefs('banana')).toBe('lavender')

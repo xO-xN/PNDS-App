@@ -342,8 +342,16 @@
    Indigo sits mid-luminance: the dark label passes at rest (6.3:1) but a
    darkened hover would drop below 4.5:1 against it, so accent-hover
    lightens (8.0:1) like Sand's amber. */
-[data-color-theme='midnight'] {
-  /* shadcn semantic mapping — same structure as every theme. */
+/* Brutal — 粗野: Neo-brutalism theme, renamed from "midnight" (issue #41,
+   second redirect; reference set: hand-drawn brutalism templates and
+   neobrutalism covers). Cream base, pure black text, white cards with
+   black hard-offset shadows, orange accent, and a flat multi-color
+   block collage for the sidebar (below). Legacy `midnight` preferences
+   render this theme (mapped in color-theme.ts). */
+[data-color-theme='brutal'] {
+  /* shadcn semantic mapping — primary is pure black (the strong text
+     colour, like the other light themes); ring is the accent. Borders
+     are full black — visible structure is the point. */
   --background: var(--pnds-card);
   --foreground: var(--pnds-text);
   --card: var(--pnds-card);
@@ -351,7 +359,7 @@
   --popover: var(--pnds-card);
   --popover-foreground: var(--pnds-text);
   --primary: var(--pnds-text);
-  --primary-foreground: var(--pnds-bg);
+  --primary-foreground: #ffffff;
   --secondary: var(--pnds-pill);
   --secondary-foreground: var(--pnds-text);
   --muted: var(--pnds-pill);
@@ -359,57 +367,56 @@
   --accent: var(--pnds-pill-hover);
   --accent-foreground: var(--pnds-text);
   --destructive: var(--pnds-danger);
-  --border: #ffffff;
-  --input: #ffffff;
+  --border: #000000;
+  --input: #000000;
   --ring: var(--pnds-accent);
   --sidebar: var(--pnds-sidebar-bg);
   --sidebar-foreground: var(--pnds-text);
   --sidebar-primary: var(--pnds-text);
-  --sidebar-primary-foreground: var(--pnds-bg);
+  --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: var(--pnds-pill-hover);
   --sidebar-accent-foreground: var(--pnds-text);
-  --sidebar-border: #ffffff;
+  --sidebar-border: #000000;
   --sidebar-ring: var(--pnds-accent);
 
-  /* Neo-brutalism (issue #41 redirect): deep-violet surfaces (the flat
-     black of the first cut went too gray — the color lives in the base),
-     pure white text, acid yellow as the one accent, full-opacity white
-     borders, and HARD offset shadows in the accent — the soft-elevation
-     vocabulary is banned here. Ladder keeps bg < sidebar < pill < card.
-     Contrast: text 15-19:1, secondary 7.5-9.3:1, accent-text 14:1 on
-     card, danger-as-text 4.5:1 on card. */
-  --pnds-bg: #14101f;
-  --pnds-sidebar-bg: #1b1531;
-  --pnds-card: #2a2044;
-  --pnds-pill: #241b3f;
-  --pnds-pill-hover: #32245c;
-  --pnds-accent: #ffff00;
-  --pnds-accent-hover: #e8d500;
-  --pnds-accent-foreground: #14101f;
-  --pnds-accent-text: #ffff00;
-  --pnds-text: #ffffff;
-  --pnds-text-secondary: #b8b3d6;
-  --pnds-card-shadow: 4px 4px 0 #ffff00;
-  --pnds-knob-shadow: 2px 2px 0 #ffff00;
-  /* Logo halos: violet rings echoing the base, flat (no glow). */
-  --pnds-logo-halo: #4a3d7a;
-  --pnds-logo-halo-core: #5c4d96;
-  --pnds-logo-halo-animated: #7a68c4;
-  --pnds-monitor-bar: rgb(0 0 0 / 45%);
-  --pnds-monitor-bar-text: #ffffff;
+  /* PNDS design tokens. Contrast: text 17-21:1 everywhere, secondary
+     8-10:1, accent-text ≥4.8:1 on every surface (the darker orange
+     twin — the fill orange cannot pass as text on cream). Hard offset
+     shadows only; the soft-elevation vocabulary is banned here. */
+  --pnds-bg: #fff1c9;
+  /* Fallback under the sidebar collage (the gradient rule below). */
+  --pnds-sidebar-bg: #ffc107;
+  --pnds-card: #ffffff;
+  --pnds-pill: #ffe58f;
+  --pnds-pill-hover: #ffd966;
+  --pnds-accent: #ff5722;
+  --pnds-accent-hover: #e64a19;
+  --pnds-accent-foreground: #000000;
+  --pnds-accent-text: #b23a0a;
+  --pnds-text: #000000;
+  --pnds-text-secondary: #4a4028;
+  --pnds-card-shadow: 4px 4px 0 #000000;
+  --pnds-knob-shadow: 2px 2px 0 #000000;
+  /* Logo halos: the theme's own block colors as flat rings. */
+  --pnds-logo-halo: #7fd8ce;
+  --pnds-logo-halo-core: #ffd966;
+  --pnds-logo-halo-animated: #ff9ec4;
+  --pnds-monitor-bar: rgb(0 0 0 / 35%);
+  --pnds-monitor-bar-text: rgb(255 255 255 / 90%);
 
-  /* Pure-red danger / orange warning with near-black labels (6.0:1 and
-     9.1:1 on their fills; as text on card 4.5:1 and 7.4:1). Hover keeps
-     labels ≥4.8:1. */
-  --pnds-danger: #ff4757;
-  --pnds-danger-hover: #e63946;
-  --pnds-danger-foreground: #1a0006;
-  --pnds-warning: #ff9f1c;
-  --pnds-warning-hover: #eb8c00;
-  --pnds-warning-foreground: #1a1200;
+  /* Deepened light-theme red: the shared #e11d48 would read 4.2:1 as
+     text on the cream bg — this one passes both roles (6.1:1 white
+     label, 6.1:1 as text on card). Warning keeps the light-theme amber
+     with a black label (11.5:1). */
+  --pnds-danger: #c2103c;
+  --pnds-danger-hover: #a80d33;
+  --pnds-danger-foreground: #ffffff;
+  --pnds-warning: #ffb020;
+  --pnds-warning-hover: #f0a20c;
+  --pnds-warning-foreground: var(--pnds-text);
 }
 
-/* ── Neo-brutalism surface behavior (issue #41 redirect) ──────────────
+/* ── Brutal surface behavior (issue #41) ───────────────────────────────
    The two structural signatures the token set cannot express, scoped to
    this theme only: flat corners (brutalism's 0px radius) and instant
    state changes (hover tints, the selection pill, and reveals all snap
@@ -419,17 +426,36 @@
    would leak the webview background at the corners), and the traffic
    -light dots stay circular (macOS system metaphor, via TrafficLights'
    data-os-circle). */
-[data-color-theme='midnight'] *,
-[data-color-theme='midnight'] *::before,
-[data-color-theme='midnight'] *::after {
+[data-color-theme='brutal'] *,
+[data-color-theme='brutal'] *::before,
+[data-color-theme='brutal'] *::after {
   border-radius: 0 !important;
   transition-duration: 0s !important;
 }
 
-[data-color-theme='midnight'] [data-app-frame] {
+[data-color-theme='brutal'] [data-app-frame] {
   border-radius: var(--app-corner-radius) !important;
 }
 
-[data-color-theme='midnight'] [data-os-circle] {
+[data-color-theme='brutal'] [data-os-circle] {
   border-radius: 9999px !important;
+}
+
+/* The sidebar's multi-color block collage — the theme's signature, per
+   the reference covers' flat block posters: hard-stop color bands
+   stacked top-to-bottom (teal / yellow / pink / blue, all ≥5.9:1 with
+   black text in case anything rides a band directly), a hard black
+   outline, and a hard black offset shadow replacing the variant's soft
+   shadow utilities. The background-image layer renders above the
+   sidebar-bg token, which stays as the fallback. */
+[data-color-theme='brutal'] [data-sidebar-surface] {
+  background-image: linear-gradient(
+    to bottom,
+    #00a99d 0 22%,
+    #ffc107 22% 47%,
+    #ff5c8a 47% 72%,
+    #5b84e8 72% 100%
+  );
+  border-color: #000000;
+  box-shadow: 6px 6px 0 #000000;
 }

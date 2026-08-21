@@ -110,17 +110,22 @@ node's `data-color-theme` attribute:
   Lavender), and the settings panel's Appearance section applies changes
   immediately and persists `colorTheme` (enum-validated in Rust:
   lavender/sand/stage/midnight/glass).
-- **Midnight is the Neo-brutalism theme** (issue #41 redirect): deep
-  violet surfaces, pure white text, an acid-yellow accent with black
-  labels, full-opacity white borders, and hard offset shadows in the
-  accent (`4px 4px 0 #ffff00`, no blur). Two structural rules scope to
-  it in theme-variables.css: every corner flattens to 0 and every
-  transition snaps to 0s — hover tints, the selection pill, and reveals
-  are instant in this theme (a deliberate trade against v1.2.2's sliding
-  pill). Exemptions: the AppShell window-frame roots (`data-app-frame`)
-  keep `--app-corner-radius` so the CSS edge stays aligned with the
-  native window mask (window.rs), and the traffic-light dots
-  (`data-os-circle`, set in TrafficLights.tsx) stay circular.
+- **Brutal is the Neo-brutalism theme** (issue #41, second redirect —
+  renamed from `midnight`; the persisted legacy value maps to `brutal` in
+  color-theme.ts and stays valid in the Rust enum): a cream base
+  (`#fff1c9`), pure black text, white cards with black hard-offset
+  shadows (`4px 4px 0 #000`, no blur), an orange accent (`#ff5722`, black
+  labels), full black borders, and the sidebar as a flat multi-color
+  block collage — hard-stop teal/yellow/pink/blue bands via a scoped
+  `[data-sidebar-surface]` rule (Sidebar's aside carries the attribute).
+  Two structural rules scope to it in theme-variables.css: every corner
+  flattens to 0 and every transition snaps to 0s — hover tints, the
+  selection pill, and reveals are instant in this theme (a deliberate
+  trade against v1.2.2's sliding pill). Exemptions: the AppShell
+  window-frame roots (`data-app-frame`) keep `--app-corner-radius` so
+  the CSS edge stays aligned with the native window mask (window.rs),
+  and the traffic-light dots (`data-os-circle`, set in
+  TrafficLights.tsx) stay circular.
 - **Sand is the medium-depth theme** (palette retune on #41's request):
   warm-white text on dim warm-taupe surfaces — deliberately between the
   light and dark themes. Its accent-text twin inverts direction: the

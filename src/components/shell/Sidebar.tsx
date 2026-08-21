@@ -1213,6 +1213,7 @@ export function Sidebar({
   return (
     <aside
       data-testid="sidebar"
+      data-sidebar-surface=""
       className={cn(
         'relative flex w-[320px] flex-col overflow-hidden rounded-[var(--app-corner-radius)] text-sm',
         variant === 'static' &&

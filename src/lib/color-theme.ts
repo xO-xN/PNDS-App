@@ -8,13 +8,14 @@ import { useSettingsStore } from '@/store/settings-store'
  * node's `data-color-theme` attribute — this module owns that attribute.
  *
  * The four solid themes ship in T2/T4/T5; the persisted enum also carries
- * `glass` (validated in Rust) from the abandoned liquid-glass ticket, and
- * `colorThemeFromPrefs` maps anything this build cannot render back to
- * Lavender, so a preference from a newer App never renders wrong.
+ * legacy values (`midnight` — renamed to `brutal`; `glass` from the
+ * abandoned liquid-glass ticket), and `colorThemeFromPrefs` maps anything
+ * this build cannot render back to Lavender, so a preference from a
+ * newer or older App never renders wrong.
  */
 
 /** The themes this build implements (the settings panel's offer). */
-export type ColorTheme = 'lavender' | 'sand' | 'stage' | 'midnight'
+export type ColorTheme = 'lavender' | 'sand' | 'stage' | 'brutal'
 
 export interface ColorThemeOption {
   value: ColorTheme
@@ -30,19 +31,31 @@ export const COLOR_THEME_OPTIONS: readonly ColorThemeOption[] = [
   { value: 'lavender', accent: '#5a4ff3' },
   { value: 'sand', accent: '#d97706' },
   { value: 'stage', accent: '#34d399' },
-  { value: 'midnight', accent: '#ffff00' },
+  { value: 'brutal', accent: '#ff5722' },
 ]
 
 export const DEFAULT_COLOR_THEME: ColorTheme = 'lavender'
 
 /**
+ * Persisted values this build renders under a new name — `midnight` was
+ * renamed to `brutal` (issue #41's second redirect); the stored
+ * preference migrates silently instead of snapping to Lavender.
+ */
+const LEGACY_THEME_NAMES: Record<string, ColorTheme> = {
+  midnight: 'brutal',
+}
+
+/**
  * Map the persisted `colorTheme` preference to a theme this build can
- * render: unknown, absent, or not-yet-shipped values (glass until its
- * ticket lands) fall back to Lavender — spec #36 story 10.
+ * render: renamed values map to their successor, unknown/absent/not-yet
+ * -shipped values (glass until its ticket lands) fall back to Lavender —
+ * spec #36 story 10.
  */
 export function colorThemeFromPrefs(
   saved: string | null | undefined
 ): ColorTheme {
+  const legacy = saved ? LEGACY_THEME_NAMES[saved] : undefined
+  if (legacy) return legacy
   return COLOR_THEME_OPTIONS.some(option => option.value === saved)
     ? (saved as ColorTheme)
     : DEFAULT_COLOR_THEME

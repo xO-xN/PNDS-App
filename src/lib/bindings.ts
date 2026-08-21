@@ -413,10 +413,11 @@ theme: string;
 /**
  * v1.2.3 (issue #38): the app color theme driving the root node's
  * `data-color-theme` attribute. Enum-validated at the save boundary;
- * `stage`/`midnight`/`glass` are accepted already because the enum is
- * the shipped v1.2.3 set — the frontend falls back to `lavender` for
- * themes its build does not implement yet. App-local, never touches
- * project manifests.
+ * the legacy `midnight` (renamed to `brutal` in #41's second
+ * redirect) and `glass` (abandoned ticket) values stay accepted so
+ * stored preferences keep validating — the frontend maps the former
+ * to `brutal` and falls back to `lavender` for anything its build
+ * cannot render. App-local, never touches project manifests.
  */
 colorTheme?: string; 
 /**
