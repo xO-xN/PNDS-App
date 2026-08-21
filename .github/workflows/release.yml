@@ -85,6 +85,7 @@ jobs:
 
             **Themes (Settings → Appearance)**
             - Four complete color themes: **Lavender** (light, default), **Sand** (medium depth), **Stage** (dark) and **Brutal** — a Neo-brutalism take with squared window corners, Archivo type, a solid cream sidebar and an amber accent. The choice persists across launches.
+            - **Projects can follow the App theme** (optional, new contract): the App pushes the current theme's palette to the monitor page on load, on theme switches and on window regains; a project that listens recolors with the App, one that doesn't is untouched. The built-in utilities will adopt it in their next updates.
             - Known note: the macOS 26 "liquid glass" theme was explored this cycle and dropped — the transparency pipeline did not hold up on target systems. A stored preference for it (or for the old "Midnight" name) safely falls back.
 
             **Other fixes**

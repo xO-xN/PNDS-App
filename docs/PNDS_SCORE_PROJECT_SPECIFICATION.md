@@ -259,6 +259,45 @@ monitor 页面必须：
 
 进入或退出 macOS 全屏时，App 只改变窗口尺寸与装饰状态，不重启 Node、不重载 monitor iframe。工程必须依靠标准 resize 事件完成适配。
 
+### 5.3 Theme Following（可选）
+
+v1.2.3 起，App 会在 monitor iframe 加载完成、主题切换与窗口重获焦点时，通过跨域 `postMessage` 向 monitor 页面推送当前主题。工程**可选**支持：不监听的工程行为完全不变。
+
+消息（App → monitor 页，单向）：
+
+```json
+{
+  "type": "pnds:theme",
+  "version": 1,
+  "theme": "lavender",
+  "palette": {
+    "bg": "#eef0f8",
+    "sidebar-bg": "#e2e5f3",
+    "card": "#ffffff",
+    "pill": "#e8ebf7",
+    "accent": "#5a4ff3",
+    "accent-hover": "#4a3fe0",
+    "accent-foreground": "#ffffff",
+    "text": "#171a2b",
+    "text-secondary": "#5d6484",
+    "danger": "#e11d48",
+    "danger-hover": "#c2143c",
+    "danger-foreground": "#ffffff",
+    "warning": "#ffb020",
+    "warning-hover": "#f0a20c",
+    "warning-foreground": "#171a2b"
+  }
+}
+```
+
+约定：
+
+- `palette` 是最终颜色值（键名与 App 的语义 token 同名）——大多数工程只消费 palette，无需知道主题概念；App 新增主题时工程零改动自动跟随。`theme` 名留给需要整套设计语言分叉的工程（如按主题切换圆角/字重）。
+- 送达语义是 best-effort、"最新值覆盖"：App 不保证恰好一次（挂起的 WebView 可能丢消息，App 在焦点重获时重推）。页面必须幂等地应用消息（把值写入自己的 CSS 变量即可）。
+- 页面首帧配色如需避免闪变，可在加载时读取 URL 查询参数 `?theme=<name>` 作为初值（App 今后可能携带；工程亦应容忍其缺席）。
+- performer 页不参与（不在 App 中打开，永远使用工程自带配色）。
+- App 不会注入或改写 monitor 页的任何内容——是否、如何使用推送完全由工程决定。
+
 ---
 
 ## 6. Internal 音频工程要求

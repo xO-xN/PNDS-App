@@ -2,6 +2,8 @@ import { useEffect, useRef } from 'react'
 import { listen } from '@tauri-apps/api/event'
 import { useSessionStore } from '@/store/session-store'
 import { useProjectStore } from '@/store/project-store'
+import { useSettingsStore } from '@/store/settings-store'
+import { pushThemeToFrame } from '@/lib/theme-bridge'
 import { HoverSidebar } from './HoverSidebar'
 
 /**
@@ -34,8 +36,20 @@ export function MonitorView() {
   const reloadNonce = useSessionStore(state => state.monitorReloadNonce)
   // §v1.1.1: browser-style zoom (50–200%), session-only.
   const monitorZoom = useSessionStore(state => state.monitorZoom)
-  const scale = monitorZoom / 100
+  // v1.2.3 (#44): the theme bridge — push the App theme into the monitor
+  // iframe so supporting projects (the built-in utilities first) recolor
+  // with the App. Optional for projects; never touches the page itself.
+  const colorTheme = useSettingsStore(state => state.colorThemeSetting)
+  const iframeRef = useRef<HTMLIFrameElement | null>(null)
   const monitorPort = health?.scoreServer?.monitorPort
+  const monitorOrigin = `http://${lanIp}:${monitorPort}`
+  // Initial push + re-push on theme switch and monitor reload. (The
+  // focus-regain re-push lives in the reclaim effect below, keyed on the
+  // same values so its closure is never stale.)
+  useEffect(() => {
+    pushThemeToFrame(iframeRef.current, monitorOrigin, colorTheme)
+  }, [colorTheme, reloadNonce, monitorOrigin])
+  const scale = monitorZoom / 100
 
   // WKWebView hands the keyboard first responder to a freshly loaded
   // out-of-process iframe when no element in the main frame holds focus.
@@ -59,6 +73,10 @@ export function MonitorView() {
   // nothing meaningful holds focus: never steal from a sidebar input or
   // an open dialog.
   useEffect(() => {
+    // #44: the theme rides along on every keyboard-reclaim path — a
+    // suspended OOPIF drops messages, so each regain re-pushes the theme
+    // (latest value wins, the page applies it idempotently). Keyed on the
+    // theme/origin so the closure never goes stale.
     const reclaimIfLost = () => {
       const active = document.activeElement
       if (
@@ -68,6 +86,7 @@ export function MonitorView() {
       ) {
         reclaimKeyboardFocus()
       }
+      pushThemeToFrame(iframeRef.current, monitorOrigin, colorTheme)
     }
     const handleVisibility = () => {
       if (!document.hidden) reclaimIfLost()
@@ -89,7 +108,7 @@ export function MonitorView() {
       clearInterval(heartbeat)
       void unlisten.then(off => off())
     }
-  }, [])
+  }, [monitorOrigin, colorTheme])
 
   if (!lanIp || !monitorPort) {
     // Should not happen for a ready session; fail visibly rather than blank.
@@ -125,10 +144,16 @@ export function MonitorView() {
       >
         <iframe
           key={reloadNonce}
+          ref={node => {
+            iframeRef.current = node
+          }}
           src={`http://${lanIp}:${monitorPort}/`}
           title="Project monitor"
           className="block h-full w-full border-0"
-          onLoad={reclaimKeyboardFocus}
+          onLoad={() => {
+            reclaimKeyboardFocus()
+            pushThemeToFrame(iframeRef.current, monitorOrigin, colorTheme)
+          }}
         />
       </div>
 
