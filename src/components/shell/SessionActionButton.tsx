@@ -1,21 +1,36 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { stopAndReset } from '@/lib/open-project'
-import { canStart, start, restart } from '@/lib/session-flow'
+import { canStart, start, restart, startReplacing } from '@/lib/session-flow'
 import { useProjectStore } from '@/store/project-store'
-import { isSessionBusy, useSessionStore } from '@/store/session-store'
+import {
+  isSessionBusy,
+  isSessionLive,
+  useSessionStore,
+} from '@/store/session-store'
 import { hasOpenOverlay, isEditableTarget } from '@/hooks/use-command-keyboard'
 import { cn } from '@/lib/utils'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 
 /**
  * Sidebar session action (§8). Selecting a project only preflights it.
  *
- * Rendered as the full-bleed footer of the settings card: the rows above
- * are all deferred, and this is their submit. In Welcome/Loading it is the
- * accent-colored Load once preflight + LAN are in place (§6.1, §7). While
- * the session runs it is a red Close — unless the user has changed a
- * setting (mode / device / LAN / OSC target), which turns it into an amber
- * Change (§8.3) that applies the pending config with a full restart.
+ * Rendered as the full-bleed footer of the settings card. v1.2.3 (#39/T4):
+ * the footer follows the SELECTION — the running card keeps Close/Change
+ * and the live volume rows, while any other selected card shows its own
+ * pending start config with a Load button. Loading B over a live session
+ * asks once ("will first close the running project") and then stops the
+ * old session and starts B in one go; an `error` session is already dead
+ * and starts without asking.
  *
  * v1.1.2: Enter is a keyboard alias for the submit — Load when idle and
  * loadable, Change/restart while a pending config change waits. v1.2.0:
@@ -28,14 +43,22 @@ export function SessionActionButton() {
   const currentProject = useProjectStore(state => state.currentProject)
   const preflightStatus = useProjectStore(state => state.preflightStatus)
   const sessionStatus = useSessionStore(state => state.sessionStatus)
+  const sessionProjectPath = useSessionStore(state => state.sessionProjectPath)
+  const sessionProjectName = useSessionStore(state => state.projectName)
   const audioMode = useSessionStore(state => state.audioMode)
   const lanIp = useSessionStore(state => state.lanIp)
   const oscTargetInput = useSessionStore(state => state.oscTargetInput)
   const deviceError = useSessionStore(state => state.deviceError)
   const pendingChanges = useSessionStore(state => state.pendingChanges)
+  const [confirmSwitchOpen, setConfirmSwitchOpen] = useState(false)
 
   const running = sessionStatus === 'ready'
   const busy = isSessionBusy(sessionStatus)
+  const live = isSessionLive(sessionStatus)
+  // v1.2.3 (#39/T4): false while a different card is selected over a live
+  // session — the footer then belongs to that card's pending start config.
+  const selectionIsRunningCard =
+    live && currentProject?.path === sessionProjectPath
   const loadable = canStart({
     currentProject,
     preflightStatus,
@@ -44,7 +67,23 @@ export function SessionActionButton() {
     audioMode,
     oscTargetInput,
     deviceError,
+    selectionIsRunningCard,
   })
+
+  /** Load/Enter submit: confirm-and-replace over a live session, plain
+   * start otherwise (idle, or a dead `error` the Retry semantics cover). */
+  const submitLoad = () => {
+    if (live && !selectionIsRunningCard) {
+      setConfirmSwitchOpen(true)
+      return
+    }
+    void start()
+  }
+
+  const confirmSwitch = async () => {
+    setConfirmSwitchOpen(false)
+    await startReplacing()
+  }
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -62,8 +101,9 @@ export function SessionActionButton() {
       // project behind a confirm is ⌘W's job (menu.ts).
       if (event.key !== 'Enter') return
       // Enter never stops a live show — Close stays dialog/mouse-only.
-      if (running && !pendingChanges) return
-      if (running || loadable) {
+      if (running && !pendingChanges && selectionIsRunningCard) return
+      if (selectionIsRunningCard) {
+        if (!running && !loadable) return
         event.preventDefault()
         // v1.2.2 (#29 feedback): capture-phase + stopPropagation — a
         // focused control must not swallow the alias. With focus on the
@@ -72,18 +112,29 @@ export function SessionActionButton() {
         // the first Enter opened the popup instead of Change.
         event.stopPropagation()
         void (running ? restart() : start())
+        return
+      }
+      // v1.2.3 (#39/T4): Enter loads the SELECTED card — over a live
+      // session it opens the same confirm-and-replace as the button.
+      if (!loadable) return
+      event.preventDefault()
+      event.stopPropagation()
+      if (live) {
+        setConfirmSwitchOpen(true)
+      } else {
+        void start()
       }
     }
     window.addEventListener('keydown', handleKeyDown, true)
     return () => window.removeEventListener('keydown', handleKeyDown, true)
-  }, [running, busy, pendingChanges, loadable])
+  }, [running, busy, pendingChanges, loadable, selectionIsRunningCard, live])
 
   // Full-bleed footer: the card clips the bottom corners, so no radius
   // and no shadow here — the card owns both.
   const baseClass = 'h-10 w-full text-[14px] transition-colors'
 
-  // Close (running, no pending change)
-  if (running && !pendingChanges) {
+  // Close (the running card is selected, no pending change)
+  if (running && selectionIsRunningCard && !pendingChanges) {
     return (
       <button
         type="button"
@@ -98,9 +149,9 @@ export function SessionActionButton() {
     )
   }
 
-  // Change (running, pending config changes — no preflight gate; restart
-  // handles its own validation)
-  if (running && pendingChanges) {
+  // Change (the running card is selected, pending config changes — no
+  // preflight gate; restart handles its own validation)
+  if (running && selectionIsRunningCard && pendingChanges) {
     return (
       <button
         type="button"
@@ -116,7 +167,7 @@ export function SessionActionButton() {
     )
   }
 
-  // Load (idle)
+  // Load (idle, a dead error, or another card selected over a live session)
   const label =
     sessionStatus === 'starting'
       ? t('session.starting')
@@ -125,18 +176,53 @@ export function SessionActionButton() {
         : t('sidebar.loadProject')
 
   return (
-    <button
-      type="button"
-      disabled={!loadable || busy}
-      onClick={() => void start()}
-      className={cn(
-        baseClass,
-        loadable
-          ? 'bg-(--pnds-accent) text-(--pnds-accent-foreground) hover:bg-(--pnds-accent-hover)'
-          : 'bg-(--pnds-text)/6 text-(--pnds-text)/30'
-      )}
-    >
-      {label}
-    </button>
+    <>
+      <button
+        type="button"
+        disabled={!loadable || busy}
+        onClick={submitLoad}
+        className={cn(
+          baseClass,
+          loadable
+            ? 'bg-(--pnds-accent) text-(--pnds-accent-foreground) hover:bg-(--pnds-accent-hover)'
+            : 'bg-(--pnds-text)/6 text-(--pnds-text)/30'
+        )}
+      >
+        {label}
+      </button>
+
+      {/* v1.2.3 (#39/T4): loading a different project over a live session
+          is an explicit, named authorization — the running show stops. */}
+      <AlertDialog
+        open={confirmSwitchOpen}
+        onOpenChange={openState => {
+          if (!openState) setConfirmSwitchOpen(false)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t('startOver.title', {
+                name: currentProject?.manifest.name ?? '',
+              })}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('startOver.description', {
+                running: sessionProjectName ?? '',
+              })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t('startOver.cancel')}</AlertDialogCancel>
+            {/* autoFocus makes the primary (filled) action the Enter
+                default — Radix would otherwise focus the first tabbable,
+                which is Cancel. */}
+            <AlertDialogAction autoFocus onClick={() => void confirmSwitch()}>
+              {t('startOver.confirm')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   )
 }

@@ -4,7 +4,7 @@ import { createFolderOrFail } from '@/test/test-utils'
 import { notifications } from '@/lib/notifications'
 import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
-import { openProject, promptOpenProject } from './open-project'
+import { openProject, promptOpenProject, stopAndReset } from './open-project'
 
 vi.mock('@/lib/notifications', () => ({
   notifications: {
@@ -376,5 +376,49 @@ describe('openProject capacity caps (v1.2.1 issue #26)', () => {
 
     expect(notifications.warning).not.toHaveBeenCalled()
     expect(commands.preflightProject).toHaveBeenCalledWith('/top-0')
+  })
+})
+
+/** v1.2.3 (#39/T4): closing the running project keeps a DIFFERENT selected
+ * card selected — the footer turns into that card's ready-to-Load card. */
+describe('stopAndReset vs a free selection (#39)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(commands.stopProject).mockResolvedValue({
+      status: 'ok',
+      data: null,
+    })
+    useProjectStore.setState({
+      currentProject: { path: '/b', manifest },
+      recentProjectPaths: ['/a', '/b'],
+      preflightStatus: 'ready',
+      preflightError: null,
+    })
+  })
+
+  it("keeps the selection when it is not the stopped session's project", async () => {
+    useSessionStore.setState({
+      sessionStatus: 'ready',
+      sessionProjectPath: '/a',
+      projectName: 'Project A',
+    })
+
+    await stopAndReset()
+
+    expect(useProjectStore.getState().currentProject?.path).toBe('/b')
+    expect(useProjectStore.getState().preflightStatus).toBe('ready')
+    expect(useSessionStore.getState().sessionStatus).toBe('idle')
+  })
+
+  it('clears the selection when the running card itself was selected', async () => {
+    useSessionStore.setState({
+      sessionStatus: 'ready',
+      sessionProjectPath: '/b',
+      projectName: 'Project B',
+    })
+
+    await stopAndReset()
+
+    expect(useProjectStore.getState().currentProject).toBeNull()
   })
 })

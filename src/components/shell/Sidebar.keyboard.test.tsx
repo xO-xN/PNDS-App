@@ -73,6 +73,7 @@ function seedRunningSession(currentPath: string) {
   })
   useSessionStore.setState({
     sessionStatus: 'ready',
+    sessionProjectPath: currentPath,
     projectName: 'Inarticulate III',
     lanIp: '192.168.1.10',
     audioMode: 'internal',

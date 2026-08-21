@@ -188,7 +188,7 @@ describe('moveProjectSelection', () => {
     expect(commands.preflightProject).toHaveBeenCalledWith('/c')
   })
 
-  it('drills into the current project\'s folder before moving ("next song")', () => {
+  it("stays in the current view — never auto-drills into the selection's folder (#39 feedback)", () => {
     useProjectStore.setState({
       projectFolders: [
         { id: 'f1', name: 'Set list', projectPaths: ['/a', '/b'] },
@@ -199,28 +199,11 @@ describe('moveProjectSelection', () => {
 
     moveProjectSelection(1)
 
-    // The view followed the current project into the folder, and the move
-    // landed on the folder's own next member (not the ungrouped list).
-    expect(useProjectStore.getState().activeFolderId).toBe('f1')
-    expect(commands.preflightProject).toHaveBeenCalledWith('/b')
-    expect(commands.preflightProject).not.toHaveBeenCalledWith('/c')
-  })
-
-  it('restores the selection when the drill clamps at the folder start', () => {
-    // Idle current project, first member of its folder, top-level view:
-    // ↑ clamps, but the drill reset the idle selection — it is restored.
-    useProjectStore.setState({
-      projectFolders: [
-        { id: 'f1', name: 'Set list', projectPaths: ['/a', '/b'] },
-      ],
-      currentProject: { path: '/a', manifest },
-      preflightStatus: 'ready',
-    })
-
-    moveProjectSelection(-1)
-
-    expect(useProjectStore.getState().activeFolderId).toBe('f1')
-    expect(commands.preflightProject).toHaveBeenCalledWith('/a')
+    // Top level shows only /c now — the move stays HERE instead of
+    // bouncing back into the selected project's folder.
+    expect(useProjectStore.getState().activeFolderId).toBeNull()
+    expect(commands.preflightProject).toHaveBeenCalledWith('/c')
+    expect(commands.preflightProject).not.toHaveBeenCalledWith('/b')
   })
 
   it('keeps the session running and moves the selection underneath it (#39)', () => {
@@ -235,11 +218,11 @@ describe('moveProjectSelection', () => {
 
     moveProjectSelection(1)
 
-    // The drill keeps a live session's project (T6 rule); the move then
-    // freely selects and preflights the next member (v1.2.3 #39) — no
-    // switch confirmation, nothing stopped.
-    expect(useProjectStore.getState().activeFolderId).toBe('f1')
-    expect(commands.preflightProject).toHaveBeenCalledWith('/b')
+    // The move stays in the top-level view (its only member is /c) and
+    // freely selects + preflights it (v1.2.3 #39) — no switch
+    // confirmation, nothing stopped.
+    expect(useProjectStore.getState().activeFolderId).toBeNull()
+    expect(commands.preflightProject).toHaveBeenCalledWith('/c')
     expect(commands.stopProject).not.toHaveBeenCalled()
     expect(useSessionStore.getState().sessionStatus).toBe('ready')
   })

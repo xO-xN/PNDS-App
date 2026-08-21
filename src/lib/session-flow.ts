@@ -14,7 +14,14 @@ import { isValidOscTarget } from '@/lib/preferences'
  * `start()` / `restart()` for the actual IPC.
  */
 
-/** Whether a session can be started right now (§8.1 gating). */
+/**
+ * Whether a session can be started right now (§8.1 gating).
+ *
+ * `selectionIsRunningCard` (v1.2.3 #39/T4): false when the selected card
+ * is NOT the session's own project — then Load means "start this over
+ * whatever runs" and the idle/error sessionStatus gate does not apply
+ * (the confirm-and-replace flow stops the old session itself).
+ */
 export function canStart(input: {
   currentProject: unknown
   preflightStatus: string
@@ -23,6 +30,7 @@ export function canStart(input: {
   audioMode: string
   oscTargetInput: string
   deviceError: string | null
+  selectionIsRunningCard?: boolean
 }): boolean {
   const {
     currentProject,
@@ -32,6 +40,7 @@ export function canStart(input: {
     audioMode,
     oscTargetInput,
     deviceError,
+    selectionIsRunningCard = true,
   } = input
 
   if (
@@ -40,7 +49,9 @@ export function canStart(input: {
     // §9.3: Retry starts from the error state without an explicit stop —
     // the failed generation was already cleaned up before the error
     // snapshot was emitted.
-    (sessionStatus !== 'idle' && sessionStatus !== 'error') ||
+    (selectionIsRunningCard &&
+      sessionStatus !== 'idle' &&
+      sessionStatus !== 'error') ||
     !lanIp
   ) {
     return false
@@ -138,6 +149,61 @@ export async function restart(): Promise<void> {
     // audio_mode is the PREVIOUS session's mode, and applySnapshot
     // overwrites the user's pending selection (?? only guards null).
     const target = audioMode === 'external' ? oscTargetInput : null
+    const result = await commands.startProject(
+      currentProject.path,
+      audioMode,
+      lanIp,
+      target
+    )
+    if (result.status === 'error') {
+      useSessionStore.getState().failLocal(result.error)
+    }
+  } finally {
+    startInFlight = false
+  }
+}
+
+/**
+ * v1.2.3 (#39/T4): start the SELECTED project over a live session — the
+ * confirm-and-replace switch. Stops the running session (a raw
+ * `stopProject`, never `stopAndReset`: the selection stays) and then
+ * starts the selected project with its pending config. The caller owns
+ * the "will close the running project" confirmation; an `error` session
+ * is already dead and may be replaced the same way (the stop is
+ * idempotent).
+ */
+export async function startReplacing(): Promise<void> {
+  if (startInFlight) return
+  const { currentProject, preflightStatus } = useProjectStore.getState()
+  const { audioMode, lanIp, sessionStatus, oscTargetInput, deviceError } =
+    useSessionStore.getState()
+  if (
+    !canStart({
+      currentProject,
+      preflightStatus,
+      sessionStatus,
+      lanIp,
+      audioMode,
+      oscTargetInput,
+      deviceError,
+      selectionIsRunningCard: false,
+    })
+  ) {
+    return
+  }
+  if (!currentProject || !lanIp) return
+
+  logger.info('Switching session', {
+    path: currentProject.path,
+    mode: audioMode,
+  })
+  useSessionStore.getState().setPendingChanges(false)
+  startInFlight = true
+  try {
+    // Capture BEFORE the awaits — the old session's snapshots must not
+    // yank the new selection's pending config (see restart()).
+    const target = audioMode === 'external' ? oscTargetInput : null
+    await commands.stopProject()
     const result = await commands.startProject(
       currentProject.path,
       audioMode,

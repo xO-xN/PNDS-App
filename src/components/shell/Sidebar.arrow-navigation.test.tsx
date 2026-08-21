@@ -61,6 +61,7 @@ function seedRunningSession(currentPath: string) {
   })
   useSessionStore.setState({
     sessionStatus: 'ready',
+    sessionProjectPath: currentPath,
     projectName: 'Inarticulate III',
     lanIp: '192.168.1.10',
     audioMode: 'internal',
@@ -204,7 +205,7 @@ describe('Cmd+↑/↓ project navigation and Esc close (v1.1.2 T7)', () => {
   })
 
   describe('folder-aware movement', () => {
-    it("auto-drills into the current project's folder, then moves inside it", () => {
+    it("stays in the current view — no auto-drill into the selection's folder (#39 feedback)", () => {
       useProjectStore.setState({
         projectFolders: [
           {
@@ -220,12 +221,11 @@ describe('Cmd+↑/↓ project navigation and Esc close (v1.1.2 T7)', () => {
 
       pressCmdArrow('ArrowDown')
 
-      // The view followed the current project into its folder…
-      expect(screen.getByTestId('folder-segment')).toBeInTheDocument()
-      expect(useProjectStore.getState().activeFolderId).toBe('f1')
-      // …and the move landed on the folder's next member.
-      expect(commands.preflightProject).toHaveBeenCalledWith(THIRD_PATH)
-      expect(commands.preflightProject).not.toHaveBeenCalledWith(FIRST_PATH)
+      // The view stays at the top level — the move lands on the view's
+      // own next member, never bounces into the selection's folder.
+      expect(useProjectStore.getState().activeFolderId).toBeNull()
+      expect(commands.preflightProject).toHaveBeenCalledWith(FIRST_PATH)
+      expect(commands.preflightProject).not.toHaveBeenCalledWith(THIRD_PATH)
     })
 
     it('moves within the folder order while drilled in', () => {
@@ -264,7 +264,7 @@ describe('Cmd+↑/↓ project navigation and Esc close (v1.1.2 T7)', () => {
       expect(commands.stopProject).not.toHaveBeenCalled()
     })
 
-    it('drills a live session into its folder and selects the in-folder next (#39)', async () => {
+    it('a live session keeps the view — the move selects a top-level member, not the session folder (#39)', async () => {
       seedRunningSession(SECOND_PATH)
       useProjectStore.setState({
         projectFolders: [
@@ -279,10 +279,10 @@ describe('Cmd+↑/↓ project navigation and Esc close (v1.1.2 T7)', () => {
 
       pressCmdArrow('ArrowDown')
 
-      expect(useProjectStore.getState().activeFolderId).toBe('f1')
+      expect(useProjectStore.getState().activeFolderId).toBeNull()
       expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
       await waitFor(() => {
-        expect(commands.preflightProject).toHaveBeenCalledWith(THIRD_PATH)
+        expect(commands.preflightProject).toHaveBeenCalledWith(FIRST_PATH)
       })
       expect(commands.stopProject).not.toHaveBeenCalled()
     })

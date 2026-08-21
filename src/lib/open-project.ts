@@ -81,17 +81,19 @@ export async function openProject(path: string): Promise<void> {
 /** Runs preflight and, on success, seeds session defaults (§6.1, §7). */
 export async function runPreflight(path: string): Promise<void> {
   useProjectStore.getState().startPreflight()
-  // v1.2.3 (#39): with a live session (starting/ready/stopping) preflight
-  // is select-only: no reset (that would drop the monitor view and forge a
-  // frontend stop — the backend preflight already spares the running
-  // session, issue #37) and no start-config seeding either (audio mode,
-  // OSC target and LAN IP mirror the RUNNING session — Share reads
-  // lanIp). Seeding the selected project's start config while another
-  // one runs is the settings-card follow-selection work (v1.2.3 T4).
+  // v1.2.3 (#39/T4): with a live session preflight is select-only — no
+  // reset (that would drop the monitor view and forge a frontend stop;
+  // the backend preflight already spares the running session, issue
+  // #37). The seeding below still runs so the settings card follows the
+  // SELECTION's pending start config (v1.2.3 T4), except when the
+  // running card itself was re-selected — the backend snapshot owns the
+  // live config there (applySnapshot keeps it in sync).
   const live = isSessionLive(useSessionStore.getState().sessionStatus)
   if (!live) {
     useSessionStore.getState().resetSession()
   }
+  const reselectedRunningCard =
+    live && useSessionStore.getState().sessionProjectPath === path
   logger.info('Running project preflight', { path })
   const result = await commands.preflightProject(path)
   if (result.status === 'error') {
@@ -104,7 +106,7 @@ export async function runPreflight(path: string): Promise<void> {
   // already-known name saves nothing.
   useProjectStore.getState().preflightSucceeded(path, result.data)
   logger.info('Preflight passed', { project: result.data.name })
-  if (live) return
+  if (reselectedRunningCard) return
 
   useSessionStore.getState().setAudioMode(result.data.audio.defaultMode)
 
@@ -129,8 +131,14 @@ export async function runPreflight(path: string): Promise<void> {
  * Stops the session and returns the project to a plain sidebar entry:
  * after this, the project is clickable again and re-running it goes
  * through preflight as usual (§8.2, §10.4).
+ *
+ * v1.2.3 (#39/T4): when a DIFFERENT card is selected (⌘W closing the
+ * running project underneath a free selection), the selection survives —
+ * its settings card turns into a ready-to-Load card (spec #35 story 11).
  */
 export async function stopAndReset(): Promise<void> {
+  // Read BEFORE the stop — the final idle snapshot clears sessionProjectPath.
+  const stoppedSessionPath = useSessionStore.getState().sessionProjectPath
   const result = await commands.stopProject()
   if (result.status === 'error') {
     logger.warn('stopProject failed during reset', { error: result.error })
@@ -139,6 +147,13 @@ export async function stopAndReset(): Promise<void> {
   // emitted its final idle snapshot. Clear the selection here rather than in
   // the generic snapshot handler, because restart() also crosses the idle
   // barrier and must keep the selected project for the next start.
-  useProjectStore.getState().clearProject()
+  const { currentProject } = useProjectStore.getState()
+  const keepSelection =
+    currentProject !== null &&
+    stoppedSessionPath !== null &&
+    currentProject.path !== stoppedSessionPath
+  if (!keepSelection) {
+    useProjectStore.getState().clearProject()
+  }
   useSessionStore.getState().resetSession()
 }

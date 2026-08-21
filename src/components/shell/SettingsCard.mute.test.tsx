@@ -57,6 +57,7 @@ function seedRunningSession(
   })
   useSessionStore.setState({
     sessionStatus: 'ready',
+    sessionProjectPath: '/Users/test/Inarticulate III',
     audioMode: 'internal',
     volume: 80,
     muted: false,

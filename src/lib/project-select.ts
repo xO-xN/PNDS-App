@@ -105,35 +105,23 @@ export function moveFolderSelection(direction: 1 | -1): void {
 
 /**
  * v1.1.2 T7 (spec issue #4/#11): ⌘↓/⌘↑ — move the selection one project
- * along the current visible order, with the same semantics as clicking a
- * card (idle selects; a live session just keeps running underneath, #39).
- * The ends clamp — the selection never wraps.
- *
- * When the current project sits inside a folder and the user is at the top
- * level, the move drills into that folder first and continues inside it
- * ("下一首曲子" mental model), so the target is computed from the folder's
- * own order before the drill resets an idle selection.
+ * along the CURRENT view's visible order, with the same semantics as
+ * clicking a card (idle selects; a live session just keeps running
+ * underneath, #39). The ends clamp — the selection never wraps, and the
+ * move never leaves the view it was pressed in.
  */
 export function moveProjectSelection(direction: 1 | -1): void {
   const project = useProjectStore.getState()
   const currentPath = project.currentProject?.path ?? null
 
-  // Auto-drill: the move follows the current project into its folder.
-  let viewFolderId = project.activeFolderId
-  if (viewFolderId === null && currentPath !== null) {
-    viewFolderId =
-      project.projectFolders.find(folder =>
-        folder.projectPaths.includes(currentPath)
-      )?.id ?? null
-  }
-  const drilledIn =
-    viewFolderId !== null && viewFolderId !== project.activeFolderId
-  if (drilledIn) setActiveFolderView(viewFolderId)
-
+  // v1.2.3 (user feedback on #39): the move acts on the CURRENT view —
+  // never auto-drills back into the selected project's folder. Switching
+  // to Home with ⌘←/→ and pressing ⌘↓ must select a Home project, not
+  // bounce to wherever the selection lives.
   const visible = visibleProjectPaths(
     project.recentProjectPaths,
     project.projectFolders,
-    viewFolderId
+    project.activeFolderId
   )
   if (visible.length === 0) return
 
@@ -146,21 +134,7 @@ export function moveProjectSelection(direction: 1 | -1): void {
         : visible.length - 1
       : Math.min(Math.max(currentIndex + direction, 0), visible.length - 1)
   const nextPath = visible[nextIndex]
-  if (nextPath === undefined) return
-
-  if (nextPath === currentPath) {
-    // Clamped at the end of the list — the selection does not move. But
-    // the drill above reset an idle selection; restore it so following
-    // the current project into its folder keeps it selected.
-    if (
-      drilledIn &&
-      useSessionStore.getState().sessionStatus === 'idle' &&
-      useProjectStore.getState().currentProject === null
-    ) {
-      selectProject(nextPath)
-    }
-    return
-  }
+  if (nextPath === undefined || nextPath === currentPath) return
 
   selectProject(nextPath)
 }

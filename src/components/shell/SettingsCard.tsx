@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { Volume2, VolumeX } from 'lucide-react'
 import { toast } from 'sonner'
 import { useProjectStore } from '@/store/project-store'
-import { useSessionStore } from '@/store/session-store'
+import { isSessionLive, useSessionStore } from '@/store/session-store'
 import { commands } from '@/lib/tauri-bindings'
 import { logger } from '@/lib/logger'
 import {
@@ -59,6 +59,7 @@ export function SettingsCard({ onPopupOpenChange }: SettingsCardProps) {
   const { t } = useTranslation()
   const currentProject = useProjectStore(state => state.currentProject)
   const sessionStatus = useSessionStore(state => state.sessionStatus)
+  const sessionProjectPath = useSessionStore(state => state.sessionProjectPath)
   const audioMode = useSessionStore(state => state.audioMode)
   const lanIp = useSessionStore(state => state.lanIp)
   const lanAddresses = useSessionStore(state => state.lanAddresses)
@@ -74,9 +75,16 @@ export function SettingsCard({ onPopupOpenChange }: SettingsCardProps) {
   // §6.3: capability failure lives in the store so canStart can gate Load.
   const deviceError = useSessionStore(state => state.deviceError)
 
+  // v1.2.3 (#39/T4): the settings rows follow the SELECTION. While a
+  // different card is selected over a live session, the deferred rows hold
+  // that card's pending start config (seeded by its preflight); the volume
+  // row belongs to the RUNNING session and waits (adjusting it means going
+  // back to the running card — the persistent mini-control is future work).
+  const selectionOnRunningCard =
+    !isSessionLive(sessionStatus) || currentProject?.path === sessionProjectPath
+
   const modes = currentProject?.manifest.audio.supportedModes ?? []
   const projectLoaded = currentProject !== null
-  const running = sessionStatus !== 'idle'
   const volume = useSessionStore(state => state.volume)
   const muted = useSessionStore(state => state.muted)
   const oscTargetValid = isValidOscTarget(oscTargetInput)
@@ -151,13 +159,21 @@ export function SettingsCard({ onPopupOpenChange }: SettingsCardProps) {
       projectChannels
     )
   )
-  const volumeEnabled = useSessionStore(state =>
+  // v1.2.3 (#39/T4): volume is the running session's live control — only
+  // the running card (or no session at all) may adjust it.
+  const volumeAdjustable = useSessionStore(state =>
     volumeAdjustableAt(state, projectChannels)
   )
+  const volumeEnabled = selectionOnRunningCard && volumeAdjustable
   const volumeDisplay = fixedGain ? 100 : volume
 
+  // A config change only flags the RUNNING session's Change button while
+  // the running card is selected; editing another card's pending config
+  // is pre-configuration, not a pending change.
   const flagChange = () => {
-    if (running) useSessionStore.getState().setPendingChanges(true)
+    if (selectionOnRunningCard && sessionStatus !== 'idle') {
+      useSessionStore.getState().setPendingChanges(true)
+    }
   }
 
   const handleModeChange = (mode: string) => {

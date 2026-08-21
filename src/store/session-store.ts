@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { HealthPayload, SessionSnapshot } from '@/lib/tauri-bindings'
+import { useProjectStore } from '@/store/project-store'
 
 export type SessionStatus = 'idle' | 'starting' | 'ready' | 'error' | 'stopping'
 
@@ -191,6 +192,14 @@ export const useSessionStore = create<SessionState>()(set => ({
       // session (first start, restart, or a Retry out of `error`).
       const newRun =
         snapshot.status === 'starting' && state.sessionStatus !== 'starting'
+      // v1.2.3 (#39/T4): while a DIFFERENT card is selected, the start-config
+      // rows (audio mode / LAN / device) below hold the SELECTION's pending
+      // config — a snapshot from the running session must not yank them
+      // back. Facts of the running session itself (status, health, volume,
+      // channel plan…) always follow the snapshot.
+      const configOwnedBySession =
+        snapshot.projectPath === null ||
+        snapshot.projectPath === useProjectStore.getState().currentProject?.path
       return {
         sessionStatus: snapshot.status as SessionStatus,
         sessionError: snapshot.error,
@@ -207,11 +216,17 @@ export const useSessionStore = create<SessionState>()(set => ({
         // §7.1: backend-owned channel facts; keep the user's pre-start
         // selection when the backend has none (idle snapshots).
         channelPlan: snapshot.channelPlan ?? state.channelPlan,
-        outputDevice: snapshot.outputDevice ?? state.outputDevice,
+        outputDevice: configOwnedBySession
+          ? (snapshot.outputDevice ?? state.outputDevice)
+          : state.outputDevice,
         // Backend-owned session facts; when absent (idle snapshots), keep the
         // user's pre-start selection so Welcome controls don't reset.
-        lanIp: snapshot.lanIp ?? state.lanIp,
-        audioMode: snapshot.audioMode ?? state.audioMode,
+        lanIp: configOwnedBySession
+          ? (snapshot.lanIp ?? state.lanIp)
+          : state.lanIp,
+        audioMode: configOwnedBySession
+          ? (snapshot.audioMode ?? state.audioMode)
+          : state.audioMode,
         startupStage: snapshot.startupStage,
         runId: newRun ? state.runId + 1 : state.runId,
         // After a committed session event, any pending is resolved.

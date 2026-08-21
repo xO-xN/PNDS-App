@@ -298,7 +298,10 @@ describe('Sidebar', () => {
   it('defers mode changes: Change button appears, clicks restarts (§8.3)', async () => {
     const user = userEvent.setup()
     seedLoadedProject()
-    useSessionStore.setState({ sessionStatus: 'ready' })
+    useSessionStore.setState({
+      sessionStatus: 'ready',
+      sessionProjectPath: PROJECT_PATH,
+    })
     vi.mocked(commands.listOutputDevices).mockResolvedValue(deviceList)
 
     render(<Sidebar variant="overlay" />)
@@ -488,6 +491,7 @@ describe('Sidebar', () => {
     seedLoadedProject16()
     useSessionStore.setState({
       sessionStatus: 'ready',
+      sessionProjectPath: PROJECT_PATH,
       channelPlan: {
         projectChannels: 16,
         deviceChannels: 16,
@@ -515,6 +519,7 @@ describe('Sidebar', () => {
     seedLoadedProject()
     useSessionStore.setState({
       sessionStatus: 'ready',
+      sessionProjectPath: PROJECT_PATH,
       channelPlan: {
         projectChannels: 2,
         deviceChannels: 2,
@@ -560,7 +565,10 @@ describe('Sidebar', () => {
   it('closes the running project via the Close button', async () => {
     const user = userEvent.setup()
     seedLoadedProject()
-    useSessionStore.setState({ sessionStatus: 'ready' })
+    useSessionStore.setState({
+      sessionStatus: 'ready',
+      sessionProjectPath: PROJECT_PATH,
+    })
 
     render(<Sidebar variant="overlay" />)
     await user.click(screen.getByRole('button', { name: /^close$/i }))
@@ -575,7 +583,10 @@ describe('Sidebar', () => {
   it('keeps the selected project when changing the output device during a restart', async () => {
     const user = userEvent.setup()
     seedLoadedProject()
-    useSessionStore.setState({ sessionStatus: 'ready' })
+    useSessionStore.setState({
+      sessionStatus: 'ready',
+      sessionProjectPath: PROJECT_PATH,
+    })
     vi.mocked(commands.listOutputDevices).mockResolvedValue(deviceList)
     vi.mocked(commands.stopProject).mockImplementation(async () => {
       useSessionStore.getState().applySnapshot(idleSnapshot)
@@ -605,6 +616,7 @@ describe('Sidebar', () => {
     seedLoadedProject()
     useSessionStore.setState({
       sessionStatus: 'ready',
+      sessionProjectPath: PROJECT_PATH,
       audioMode: 'external',
       oscTargetInput: '127.0.0.1:3333',
     })
@@ -793,7 +805,10 @@ describe('Sidebar', () => {
     seedLoadedProject()
     const user = userEvent.setup()
     useProjectStore.setState({ recentProjectPaths: [PROJECT_PATH, OTHER_PATH] })
-    useSessionStore.setState({ sessionStatus: 'ready' })
+    useSessionStore.setState({
+      sessionStatus: 'ready',
+      sessionProjectPath: PROJECT_PATH,
+    })
     vi.mocked(commands.preflightProject).mockResolvedValue({
       status: 'ok',
       data: manifest,
@@ -851,5 +866,127 @@ describe('Sidebar', () => {
     useSessionStore.setState({ audioMode: 'external' })
     rerender(<Sidebar variant="static" />)
     expect(screen.getByLabelText(/osc target/i)).toBeInTheDocument()
+  })
+})
+
+/**
+ * v1.2.3 (#39/T4): the settings footer follows the SELECTION — selecting
+ * another card over a running session turns the footer into that card's
+ * Load (its pending config above), while the running card keeps
+ * Close/Change and the live volume. Loading over the live session asks
+ * once, then stops the old one and starts the selection.
+ */
+describe('settings footer follows the selection (#39/T4)', () => {
+  /** A runs; B is selected with its own preflighted config. */
+  function seedRunningWithOtherSelected() {
+    seedLoadedProject()
+    useProjectStore.setState({
+      recentProjectPaths: [PROJECT_PATH, OTHER_PATH],
+      currentProject: { path: OTHER_PATH, manifest },
+      preflightStatus: 'ready',
+    })
+    useSessionStore.setState({
+      sessionStatus: 'ready',
+      sessionProjectPath: PROJECT_PATH,
+      projectName: 'Inarticulate III',
+      lanIp: '192.168.1.10',
+      lanAddresses: ['192.168.1.10'],
+      audioMode: 'internal',
+      deviceError: null,
+    })
+  }
+
+  it("shows the selection's Load over the running session", () => {
+    seedRunningWithOtherSelected()
+    render(<Sidebar variant="overlay" />)
+
+    const load = screen.getByRole('button', { name: /^load$/i })
+    expect(load).toBeEnabled()
+    // The running session keeps Close semantics only for its own card.
+    expect(
+      screen.queryByRole('button', { name: /^close$/i })
+    ).not.toBeInTheDocument()
+    // Volume is the running session\'s live control — it waits while
+    // another card is selected.
+    expect(
+      screen.getByRole('slider', { name: /^master volume$/i })
+    ).toBeDisabled()
+  })
+
+  it('keeps Close on the running card, with volume live', () => {
+    seedLoadedProject()
+    useSessionStore.setState({
+      sessionStatus: 'ready',
+      sessionProjectPath: PROJECT_PATH,
+      lanIp: '192.168.1.10',
+    })
+    render(<Sidebar variant="overlay" />)
+
+    expect(screen.getByRole('button', { name: /^close$/i })).toBeInTheDocument()
+    expect(
+      screen.getByRole('slider', { name: /^master volume$/i })
+    ).toBeEnabled()
+  })
+
+  it('Load confirms, then stops the old session and starts the selection', async () => {
+    const user = userEvent.setup()
+    seedRunningWithOtherSelected()
+    render(<Sidebar variant="overlay" />)
+
+    await user.click(screen.getByRole('button', { name: /^load$/i }))
+
+    const dialog = await screen.findByRole('alertdialog')
+    expect(dialog).toHaveTextContent(/Inarticulate III/)
+    await user.click(within(dialog).getByRole('button', { name: /^start$/i }))
+
+    await waitFor(() => {
+      expect(commands.stopProject).toHaveBeenCalledTimes(1)
+      expect(commands.startProject).toHaveBeenCalledWith(
+        OTHER_PATH,
+        'internal',
+        '192.168.1.10',
+        null
+      )
+    })
+    // The selection survives the switch.
+    expect(useProjectStore.getState().currentProject?.path).toBe(OTHER_PATH)
+  })
+
+  it('Enter opens the same confirm — Enter again confirms it', async () => {
+    seedRunningWithOtherSelected()
+    render(<Sidebar variant="overlay" />)
+
+    fireEvent.keyDown(window, { key: 'Enter' })
+    const dialog = await screen.findByRole('alertdialog')
+    expect(dialog).toHaveTextContent(/start/i)
+
+    fireEvent.keyDown(dialog, { key: 'Enter' })
+    await waitFor(() => {
+      expect(commands.stopProject).toHaveBeenCalledTimes(1)
+      expect(commands.startProject).toHaveBeenCalledWith(
+        OTHER_PATH,
+        'internal',
+        '192.168.1.10',
+        null
+      )
+    })
+  })
+
+  it('a dead error session loads the selection without asking', async () => {
+    seedRunningWithOtherSelected()
+    useSessionStore.setState({ sessionStatus: 'error' })
+    render(<Sidebar variant="overlay" />)
+
+    fireEvent.keyDown(window, { key: 'Enter' })
+
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    await waitFor(() => {
+      expect(commands.startProject).toHaveBeenCalledWith(
+        OTHER_PATH,
+        'internal',
+        '192.168.1.10',
+        null
+      )
+    })
   })
 })

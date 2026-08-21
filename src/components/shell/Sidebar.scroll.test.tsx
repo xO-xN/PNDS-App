@@ -6,6 +6,7 @@ import {
   mockBoundingClientRect,
 } from '@/test/test-utils'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { waitFor } from '@testing-library/react'
 import { commands } from '@/lib/tauri-bindings'
 import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
@@ -73,6 +74,7 @@ function seedRunningSession(currentPath: string) {
   })
   useSessionStore.setState({
     sessionStatus: 'ready',
+    sessionProjectPath: currentPath,
     projectName: 'Score 1',
     lanIp: '192.168.1.10',
     audioMode: 'internal',
@@ -352,7 +354,7 @@ describe('Sidebar project-list scrolling (issue #25)', () => {
       expect(revealCalls).toEqual([{ element: scroller, top: 284 }])
     })
 
-    it("auto-drilling into the current project's folder reveals the next member inside it", () => {
+    it('no auto-drill: the move stays in the top-level view (#39 feedback)', async () => {
       const folderId = createFolderOrFail('Set list')
       const store = useProjectStore.getState()
       store.moveProjectToFolder(folderId, pathAt(3))
@@ -363,21 +365,21 @@ describe('Sidebar project-list scrolling (issue #25)', () => {
         currentProject: { path: pathAt(4), manifest },
         preflightStatus: 'ready',
       })
+      vi.mocked(commands.preflightProject).mockResolvedValue({
+        status: 'ok',
+        data: manifest,
+      })
       render(<AppShell />)
-
-      const scroller = screen.getByTestId('project-list-scroll')
-      pinColumnGeometry(scroller, { scrollTop: 300 })
-      revealCalls.length = 0
 
       fireEvent.keyDown(window, { key: 'ArrowDown', metaKey: true })
 
-      expect(useProjectStore.getState().activeFolderId).toBe(folderId)
-      // The folder view mounts fresh card nodes (the members were absent
-      // from the unfiled view, so no rects were pinned for them) — the
-      // reveal's arithmetic is covered above and in the pure tests; here
-      // it must simply have fired on the drill, for the column.
-      expect(revealCalls).toHaveLength(1)
-      expect(revealCalls[0]?.element).toBe(scroller)
+      // The view stays put; the move enters the top-level list (the
+      // selection's folder is NOT followed).
+      expect(useProjectStore.getState().activeFolderId).toBeNull()
+      await waitFor(() => {
+        expect(commands.preflightProject).toHaveBeenCalledWith(pathAt(0))
+      })
+      expect(commands.preflightProject).not.toHaveBeenCalledWith(pathAt(5))
     })
   })
 })

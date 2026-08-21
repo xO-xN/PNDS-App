@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { commands } from '@/lib/tauri-bindings'
 import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
-import { canStart, start, restart } from './session-flow'
+import { canStart, start, restart, startReplacing } from './session-flow'
 import type { Manifest, SessionSnapshot } from '@/lib/tauri-bindings'
 
 const manifest: Manifest = {
@@ -251,5 +251,93 @@ describe('session-flow Retry (§9.3)', () => {
     await restart()
     expect(commands.stopProject).toHaveBeenCalledTimes(1)
     expect(commands.startProject).toHaveBeenCalledTimes(1)
+  })
+})
+
+/**
+ * v1.2.3 (#39/T4): loading a different project over a live session —
+ * canStart relaxes its session gate for a non-running selection, and
+ * startReplacing stops the old session then starts the selected project
+ * with its pending config.
+ */
+describe('startReplacing (confirm-and-replace switch)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useProjectStore.setState({
+      currentProject: { path: '/b', manifest },
+      recentProjectPaths: ['/a', '/b'],
+      preflightStatus: 'ready',
+      preflightError: null,
+    })
+    useSessionStore.getState().resetSession()
+    // A runs; the selection is B with its own pending config.
+    useSessionStore.setState({
+      sessionStatus: 'ready',
+      sessionProjectPath: '/a',
+      projectName: 'Project A',
+      lanIp: '192.168.1.10',
+      lanAddresses: ['192.168.1.10'],
+      audioMode: 'external',
+      oscTargetInput: '127.0.0.1:3333',
+      deviceError: null,
+    })
+  })
+
+  it('canStart allows a non-running selection over a ready session', () => {
+    expect(
+      canStart({
+        ...base,
+        sessionStatus: 'ready',
+        selectionIsRunningCard: false,
+      })
+    ).toBe(true)
+    // The running card itself still follows the idle/error gate.
+    expect(canStart({ ...base, sessionStatus: 'ready' })).toBe(false)
+  })
+
+  it('stops the old session, then starts the selection with its config', async () => {
+    const order: string[] = []
+    vi.mocked(commands.stopProject).mockImplementation(async () => {
+      order.push('stop')
+      return { status: 'ok', data: null }
+    })
+    vi.mocked(commands.startProject).mockImplementation(async () => {
+      order.push('start')
+      return { status: 'ok', data: null }
+    })
+
+    await startReplacing()
+
+    expect(order).toEqual(['stop', 'start'])
+    expect(commands.startProject).toHaveBeenCalledWith(
+      '/b',
+      'external',
+      '192.168.1.10',
+      '127.0.0.1:3333'
+    )
+    // The selection survives the switch — stopAndReset is not used.
+    expect(useProjectStore.getState().currentProject?.path).toBe('/b')
+  })
+
+  it('is latched — a second call while in flight does nothing', async () => {
+    let release: (value: { status: 'ok'; data: null }) => void = () => undefined
+    vi.mocked(commands.stopProject).mockImplementation(
+      () =>
+        new Promise(resolve => {
+          release = () => resolve({ status: 'ok', data: null })
+        })
+    )
+    const first = startReplacing()
+    await startReplacing() // in flight — must not queue a second stop
+    release({ status: 'ok', data: null })
+    await first
+    expect(commands.stopProject).toHaveBeenCalledTimes(1)
+  })
+
+  it('refuses without a loadable selection', async () => {
+    useProjectStore.setState({ preflightStatus: 'error' })
+    await startReplacing()
+    expect(commands.stopProject).not.toHaveBeenCalled()
+    expect(commands.startProject).not.toHaveBeenCalled()
   })
 })
