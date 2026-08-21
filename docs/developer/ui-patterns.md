@@ -6,7 +6,10 @@ This app uses a modern CSS stack optimized for Tauri desktop applications:
 
 - **Tailwind CSS v4** with CSS-based configuration
 - **shadcn/ui v4** component library
-- **OKLCH color space** for perceptually uniform colors
+- **CSS custom-property color tokens** — the stock shadcn `:root`/`.dark`
+  values are OKLCH; the PNDS/theme tokens are hex (they come from the
+  Figma palette and the reviewed spec tables, and every value is
+  contrast-audited, so the space matters less than the single source)
 - **Desktop-specific defaults** for native app feel
 
 ## Tailwind v4 Configuration
