@@ -6,7 +6,7 @@ import {
   PROJECT_LIMIT_PER_DIRECTORY,
   useProjectStore,
 } from '@/store/project-store'
-import { useSessionStore } from '@/store/session-store'
+import { useSessionStore, isSessionLive } from '@/store/session-store'
 import { installAndOpenBundle, isBundlePath } from '@/lib/bundle-project'
 import { DEFAULT_OSC_TARGET, loadPreferences } from '@/lib/preferences'
 
@@ -81,13 +81,15 @@ export async function openProject(path: string): Promise<void> {
 /** Runs preflight and, on success, seeds session defaults (§6.1, §7). */
 export async function runPreflight(path: string): Promise<void> {
   useProjectStore.getState().startPreflight()
-  // v1.2.3 (#39): the session mirror is only reset when NO live session
-  // exists (idle, or a dead `error` the user is fleeing). Preflighting
-  // another project while one runs must neither drop the monitor view nor
-  // forge a frontend stop — the backend preflight already spares the
-  // running session (issue #37).
-  const status = useSessionStore.getState().sessionStatus
-  if (status !== 'starting' && status !== 'ready' && status !== 'stopping') {
+  // v1.2.3 (#39): with a live session (starting/ready/stopping) preflight
+  // is select-only: no reset (that would drop the monitor view and forge a
+  // frontend stop — the backend preflight already spares the running
+  // session, issue #37) and no start-config seeding either (audio mode,
+  // OSC target and LAN IP mirror the RUNNING session — Share reads
+  // lanIp). Seeding the selected project's start config while another
+  // one runs is the settings-card follow-selection work (v1.2.3 T4).
+  const live = isSessionLive(useSessionStore.getState().sessionStatus)
+  if (!live) {
     useSessionStore.getState().resetSession()
   }
   logger.info('Running project preflight', { path })
@@ -102,6 +104,7 @@ export async function runPreflight(path: string): Promise<void> {
   // already-known name saves nothing.
   useProjectStore.getState().preflightSucceeded(path, result.data)
   logger.info('Preflight passed', { project: result.data.name })
+  if (live) return
 
   useSessionStore.getState().setAudioMode(result.data.audio.defaultMode)
 

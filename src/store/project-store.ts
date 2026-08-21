@@ -287,11 +287,17 @@ function sameJson(a: unknown, b: unknown): boolean {
   return JSON.stringify(a) === JSON.stringify(b)
 }
 
-/** A copy of the record without `key` (v1.2.3 #39: preflight error clear). */
-function deleteKey(record: Record<string, string>, key: string) {
-  const { [key]: _, ...rest } = record
-  return rest
-}
+/**
+ * v1.2.3 (#39): the one selected-path chain — the in-flight preflight, the
+ * current project, then the last FAILED selection (a failed selection
+ * keeps its pill; selection is free even onto a bad project). The
+ * sidebar's pill, reveal-scroll and resize re-measure all read this.
+ */
+export const selectSelectedPath = (state: ProjectState): string | null =>
+  state.pendingPreflightPath ??
+  state.currentProject?.path ??
+  state.failedPreflightPath ??
+  null
 
 /**
  * Structural actions persist the app-side project index as part of their
@@ -615,13 +621,14 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
 
   preflightSucceeded: (path, manifest) => {
     const before = get()
+    // v1.2.3 (#39): a pass clears the card's error state.
+    const { [path]: _, ...clearedPreflightErrors } = before.preflightErrors
     set(state => ({
       currentProject: { path, manifest },
       preflightStatus: 'ready',
       preflightError: null,
       failedPreflightPath: null,
-      // v1.2.3 (#39): a pass clears the card's error state.
-      preflightErrors: deleteKey(state.preflightErrors, path),
+      preflightErrors: clearedPreflightErrors,
       // v1.2.0 (issue #16): learn the manifest-declared name so every
       // listing shows it, not just the selected project. Persisted when
       // the learn actually changed something (a reopen of a known name

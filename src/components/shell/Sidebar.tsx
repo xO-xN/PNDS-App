@@ -21,6 +21,7 @@ import {
   PROJECT_LIMIT_PER_DIRECTORY,
   folderLimitReached,
   isProtectedFolder,
+  selectSelectedPath,
   useProjectStore,
   visibleProjectPaths,
 } from '@/store/project-store'
@@ -363,8 +364,9 @@ function ListEmptyState({
  * semi-transparent floating clone while the remaining cards yield a
  * full-card-sized gap at the midpoint-judged drop slot (v1.1.2 T4); the ✕
  * (remove from history) only appears on projects that are not currently
- * open. Switching while a session runs asks for confirmation first
- * (§8.3, Figma "Loading another project").
+ * open or running. v1.2.3 (#39): selecting while a session runs is free
+ * (select + preflight, never a confirmation); starting B on top of A is
+ * confirmed at the Load action, not here.
  *
  * v1.2.1 (folder switch): folders are a segmented control above the
  * project column — the unfiled segment (the default view) first, then one
@@ -421,9 +423,6 @@ export function Sidebar({
   const currentProject = useProjectStore(state => state.currentProject)
   const pendingPreflightPath = useProjectStore(
     state => state.pendingPreflightPath
-  )
-  const failedPreflightPath = useProjectStore(
-    state => state.failedPreflightPath
   )
   const preflightErrors = useProjectStore(state => state.preflightErrors)
   const confirmCloseProjectOpen = useProjectStore(
@@ -1100,8 +1099,7 @@ export function Sidebar({
   // no scroll call at all. v1.2.3 (#39): the chain ends at the last FAILED
   // preflight — a failed selection keeps its pill; selection is free even
   // onto a bad project.
-  const selectedPath =
-    pendingPreflightPath ?? currentProject?.path ?? failedPreflightPath ?? null
+  const selectedPath = useProjectStore(selectSelectedPath)
 
   // The card-selection pill follows that same chain. Every commit
   // re-applies — selection, view switches, reorders and drag frames all
@@ -1119,15 +1117,10 @@ export function Sidebar({
   // commit corrects it.)
   useEffect(() => {
     const reapply = () => {
-      const { pendingPreflightPath, currentProject, failedPreflightPath } =
-        useProjectStore.getState()
       applyCardSelectionPill(
         cardPillRef.current,
         projectContentRef.current,
-        pendingPreflightPath ??
-          currentProject?.path ??
-          failedPreflightPath ??
-          null,
+        selectSelectedPath(useProjectStore.getState()),
         false
       )
     }

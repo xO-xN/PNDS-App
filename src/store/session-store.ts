@@ -28,6 +28,13 @@ export function isSessionBusy(status: SessionStatus): boolean {
   return status === 'starting' || status === 'stopping'
 }
 
+/** v1.2.3 (#39): true while a session exists at all (starting/ready/
+ * stopping). Callers that must not disturb or speak for the session —
+ * preflight resetting, start-config seeding — gate on this. */
+export function isSessionLive(status: SessionStatus): boolean {
+  return status === 'starting' || status === 'ready' || status === 'stopping'
+}
+
 /** §6.4: every new session's master starts at 80%. */
 export const DEFAULT_SESSION_VOLUME = 80
 
