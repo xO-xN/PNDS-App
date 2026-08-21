@@ -114,16 +114,17 @@ node's `data-color-theme` attribute:
   (`supports_liquid_glass`) drives the Appearance option's disabled state
   and the render-time fallback (persisted `glass` on an older system
   renders Lavender — the preference is not rewritten, so it revives on a
-  supported machine). Selecting it also toggles the native dressing via
-  `set_liquid_glass`: an `NSGlassEffectView` (default Regular style, the
-  lensing material) behind the webview plus a transparent window
-  (src-tauri/src/glass.rs). The webview stops painting its background
-  through the public `set_background_color` API (wry's `drawsBackground`
-  KVC key + `underPageBackgroundColor` — the legacy `_setDrawsBackground:`
-  selector is gone from macOS 26's WKWebView and silently skipped), and
-  both toggle directions re-assert the native rounded-corner mask
-  (`window::sync_corner_radius`), which flipping the window's opaque
-  state resets. The CSS block paints one thin white wash over
+  supported machine). The window and webview are transparent FROM
+  CREATION (`app.macOSPrivateApi` + `windows[].transparent` in
+  tauri.conf.json) — wry writes the private `drawsBackground` key into
+  the WKWebViewConfiguration while building the webview, the one
+  transparency path that still works on macOS 26 (the runtime
+  `_setDrawsBackground:` selector is gone, and flipping the window's
+  opaque state at runtime reset the corner mask and painted white
+  corners). `set_liquid_glass` therefore only inserts/removes an
+  `NSGlassEffectView` (default Regular style, the lensing material)
+  behind the webview (src-tauri/src/glass.rs) — it touches nothing
+  window-level. The CSS block paints one thin white wash over
   it (bg 24%, sidebar 32%, card 66% — heavier coats read as an opaque
   white window). **Exactly one wash per region**: the AppShell branch
   roots own the base coat (`bg-(--pnds-bg)` — the rounded alignment with

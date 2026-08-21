@@ -4,32 +4,34 @@
 //! AppKit API, though the spec planned for a private one; the runtime
 //! class-lookup guard below keeps the enable path safe either way. The
 //! effect view is inserted as a sibling *below* the WKWebView (the same
-//! placement `window-vibrancy` uses for NSVisualEffectView), and the
-//! window is made non-opaque with a clear background. The webview itself
-//! stops painting its background through `set_background_color` — the
-//! public Tauri API that routes into wry's private `drawsBackground` KVC
-//! key plus `underPageBackgroundColor`. (The `_setDrawsBackground:`
-//! selector used by an earlier iteration is gone from macOS 26's
-//! WKWebView; its respondsToSelector guard skipped silently and left the
-//! white wall that made Glass read as opaque.) The CSS layer then paints
-//! translucent surfaces (see `[data-color-theme='glass']` in
-//! theme-variables.css) over the real refraction. The monitor iframe
-//! stays fully opaque: its area paints solid colors, and the glass view
-//! sits behind it, not around it.
+//! placement `window-vibrancy` and `tauri-plugin-liquid-glass` use).
 //!
-//! Toggling is idempotent and reversible: switching away removes the glass
-//! view and restores the default opaque window (`backgroundColor: nil` +
-//! `opaque: YES`), which is the pre-glass windowBackground state — this
-//! app never installs an NSVisualEffectView, so there is nothing else to
-//! restore. Theme switches while a session runs only touch window
-//! dressing; no session, audio, or webview lifecycle is involved.
+//! The window and webview are transparent FROM CREATION
+//! (`app.macOSPrivateApi` + `windows[].transparent` in tauri.conf.json):
+//! wry sets the private `drawsBackground` key on the
+//! WKWebViewConfiguration while building the webview — the one
+//! transparency path that still works on macOS 26 (the runtime
+//! `_setDrawsBackground:` selector is gone, and flipping the window's
+//! opaque state at runtime both reset the content layer's corner mask
+//! and painted white window corners — both regressions from earlier
+//! iterations of this module). This module therefore touches NOTHING
+//! window-level: it only inserts and removes the effect view. The CSS
+//! layer paints translucent surfaces (see `[data-color-theme='glass']`
+//! in theme-variables.css) over the real refraction; solid themes paint
+//! opaque tokens over the same transparent webview, so the desktop only
+//! shows where the design says so. The monitor iframe stays fully
+//! opaque: its area paints solid colors, and the glass view sits behind
+//! it, not around it.
+//!
+//! Toggling is idempotent and reversible: enabling installs the view if
+//! absent, disabling removes it if present. Theme switches while a
+//! session runs only touch window dressing; no session, audio, or
+//! webview lifecycle is involved.
 //!
 //! Threading: every AppKit call below runs on the main thread — the
 //! `set_liquid_glass` command hops there via `run_on_main_thread`. Do not
 //! call `apply_liquid_glass` from anywhere else.
 
-#[cfg(target_os = "macos")]
-use crate::window::sync_corner_radius;
 use tauri::{AppHandle, Manager, Runtime, WebviewWindow};
 
 /// The macOS major that first ships NSGlassEffectView.
@@ -119,7 +121,6 @@ fn macos_version() -> (isize, isize, isize) {
 #[cfg(target_os = "macos")]
 fn glass_appkit<R: Runtime>(window: &WebviewWindow<R>, enabled: bool) -> Result<(), String> {
     use objc2::msg_send;
-    use objc2::runtime::AnyClass;
     use objc2_app_kit::{NSView, NSWindow};
 
     let ns_window = window
@@ -129,29 +130,14 @@ fn glass_appkit<R: Runtime>(window: &WebviewWindow<R>, enabled: bool) -> Result<
         let win: *mut NSWindow = ns_window.cast();
         let content: *mut NSView = msg_send![win, contentView];
 
+        // Effect-view management only — the window and webview stay in
+        // their birth state (transparent via tauri.conf.json) in every
+        // theme. See the module doc before touching anything else here.
         if enabled {
             install_glass_view(content)?;
-            // Non-opaque window + clear background so the desktop feeds
-            // the glass refraction through the transparent webview.
-            let clear: *mut objc2::runtime::AnyObject =
-                msg_send![AnyClass::get(c"NSColor").unwrap(), clearColor];
-            let _: () = msg_send![win, setOpaque: false];
-            let _: () = msg_send![win, setBackgroundColor: clear];
-        } else {
-            if let Some(glass) = find_glass_view(content) {
-                let _: () = msg_send![glass, removeFromSuperview];
-            }
-            // nil background color restores the window's default (opaque)
-            // background — the pre-glass state.
-            let _: () = msg_send![win, setOpaque: true];
-            let _: () = msg_send![win, setBackgroundColor: std::ptr::null_mut::<objc2::runtime::AnyObject>()];
+        } else if let Some(glass) = find_glass_view(content) {
+            let _: () = msg_send![glass, removeFromSuperview];
         }
-
-        // Flipping the window's opaque state resets the content layer's
-        // corner clipping, so the rounded mask is re-asserted in BOTH
-        // directions — losing it is what showed white square corners in
-        // every solid theme after a glass round-trip (issue #41 retest).
-        sync_corner_radius(window);
     }
     log::info!(
         "Liquid glass {}",
@@ -247,20 +233,6 @@ pub async fn set_liquid_glass(app: AppHandle, enabled: bool) -> Result<(), Strin
     let window = app
         .get_webview_window("main")
         .ok_or("main window not found")?;
-    // The webview's background goes through the public API FIRST, from
-    // this async context: it round-trips through the event loop (wry
-    // flips the private `drawsBackground` KVC key and sets
-    // `underPageBackgroundColor`), and awaiting that from inside the
-    // main-thread closure below would wait on the very loop the closure
-    // runs on. `None` resets to wry's default opaque white.
-    let background = if enabled {
-        Some(tauri::utils::config::Color(0, 0, 0, 0))
-    } else {
-        None
-    };
-    window
-        .set_background_color(background)
-        .map_err(|e| format!("Failed to set the webview background: {e}"))?;
     let (tx, rx) = std::sync::mpsc::channel();
     app.run_on_main_thread(move || {
         let result = apply_liquid_glass(&window, enabled);
