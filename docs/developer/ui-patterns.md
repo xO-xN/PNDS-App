@@ -122,7 +122,11 @@ node's `data-color-theme` attribute:
   flattens to 0 and every transition snaps to 0s — hover tints, the
   selection pill, and reveals are instant in this theme (a deliberate
   trade against v1.2.2's sliding pill). Exemptions: the AppShell
-  the window itself squares too: `set_window_corners_square` (window.rs)
+  One motion survives: the sidebar's enter/exit slide (`data-sidebar
+-motion`, #41 feedback — 200ms restored); everything else snaps. The
+  selected project card floats like the sidebar itself — the selection
+  pill gets a hard black offset shadow (`data-selection-pill`). The
+  window itself squares too: `set_window_corners_square` (window.rs)
   drops the native 16px mask while the theme is active — synced before
   the root attribute lands so neither edge lags the other — and the
   traffic-light dots (`data-os-circle`, set in TrafficLights.tsx) stay

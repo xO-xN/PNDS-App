@@ -50,6 +50,7 @@ export function HoverSidebar() {
           dropped instantly on toggle (fresh instance starts collapsed). */}
       <div
         data-testid="sidebar-popover"
+        data-sidebar-motion=""
         className={cn(
           'absolute bottom-3 left-3 top-3 z-50 transition-all duration-200 ease-out',
           sidebarVisible

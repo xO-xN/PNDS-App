@@ -1578,6 +1578,7 @@ export function Sidebar({
             <div
               ref={cardPillRef}
               data-testid="card-selection-pill"
+              data-selection-pill=""
               aria-hidden="true"
               className={cn(
                 'pointer-events-none absolute inset-x-5 top-0 z-0 rounded-xl bg-(--pnds-card) shadow-sm',

@@ -453,6 +453,20 @@
   border-radius: 9999px !important;
 }
 
+/* #41 feedback — the sidebar's slide is Brutal's one motion: the
+   enter/exit animation (HoverSidebar's popover transition) is exempted
+   from the instant rule above. Everything else stays snap-instant. */
+[data-color-theme='brutal'] [data-sidebar-motion] {
+  transition-duration: 200ms !important;
+}
+
+/* #41 feedback — the selected project card floats like the sidebar
+   itself: a hard black offset shadow lifts the selection pill off the
+   column (the pill stays flat-cornered and instant like the rest). */
+[data-color-theme='brutal'] [data-selection-pill] {
+  box-shadow: 3px 3px 0 #000000;
+}
+
 /* The sidebar's multi-color block collage — the theme's signature, per
    the reference covers' flat block posters: hard-stop color bands
    stacked top-to-bottom (teal / yellow / pink / blue, all ≥5.9:1 with
