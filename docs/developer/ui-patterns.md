@@ -115,9 +115,11 @@ node's `data-color-theme` attribute:
   color-theme.ts and stays valid in the Rust enum): a cream base
   (`#fff1c9`), pure black text, white cards with black hard-offset
   shadows (`4px 4px 0 #000`, no blur), an orange accent (`#ff5722`, black
-  labels), full black borders, and the sidebar as a flat multi-color
-  block collage — hard-stop teal/yellow/pink/blue bands via a scoped
-  `[data-sidebar-surface]` rule (Sidebar's aside carries the attribute).
+  labels), full black borders, and a solid pale-cream sidebar panel
+  (`#fffbe0`, black outline + hard offset shadow via a scoped
+  `[data-sidebar-surface]` rule — Sidebar's aside carries the
+  attribute; a pixel-font PNDS wordmark lived here briefly and was
+  removed on feedback).
   Two structural rules scope to it in theme-variables.css: every corner
   flattens to 0 and every transition snaps to 0s — hover tints, the
   selection pill, and reveals are instant in this theme (a deliberate

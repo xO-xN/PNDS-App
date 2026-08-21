@@ -495,30 +495,11 @@
   transition-timing-function: cubic-bezier(0.4, 0.1, 0.2, 1);
 }
 
-/* The sidebar's signature: a solid pale-cream panel with the vertical
-   PNDS wordmark — 8-bit pixel face (Press Start 2P), rotated 90°,
-   solid black, layered UNDER the cards the way the reference
-   composes UI over its big type. Hard black outline and hard offset
-   shadow replace the variant's soft shadow utilities. The wordmark is
-   a pseudo-element: pure chrome, no component markup, pointer-events
-   none. */
+/* The sidebar: a solid pale-cream panel (#fffbe0 above) with a hard
+   black outline and hard offset shadow replacing the variant's soft
+   shadow utilities — the wordmark experiment was removed on feedback,
+   the quiet panel stays. */
 [data-color-theme='brutal'] [data-sidebar-surface] {
   border-color: #000000;
   box-shadow: 6px 6px 0 #000000;
-}
-
-[data-color-theme='brutal'] [data-sidebar-surface]::before {
-  content: 'PNDS';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  z-index: 0;
-  font-family: 'Press Start 2P', monospace;
-  font-size: clamp(64px, 16vh, 132px);
-  letter-spacing: 0.12em;
-  line-height: 1;
-  color: #000000;
-  white-space: nowrap;
-  pointer-events: none;
-  transform: translate(-50%, -50%) rotate(90deg);
 }
