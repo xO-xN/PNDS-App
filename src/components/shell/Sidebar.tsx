@@ -265,6 +265,15 @@ function applyCardSelectionPill(
   } else {
     pill.style.transition = 'none'
   }
+  if (anchor !== card.dataset.projectPath) {
+    // #41 (Brutal): a NEW card became the selection — restart the theme's
+    // one-shot rise animation so the card lifts off its black plane. The
+    // reset-reflow-restore idiom re-triggers a CSS keyframe; in themes
+    // without the animation this is a harmless pair of style writes.
+    pill.style.animation = 'none'
+    void pill.offsetWidth
+    pill.style.animation = ''
+  }
   pill.style.transform = `translateY(${card.offsetTop}px)`
   pill.style.height = `${card.offsetHeight}px`
   pill.style.opacity = hidden ? '0' : '1'
@@ -1620,6 +1629,7 @@ export function Sidebar({
                     isCurrent ? 'current-project-card' : 'project-entry'
                   }
                   data-project-path={path}
+                  data-selected-card={path === selectedPath ? '' : undefined}
                   onPointerDown={e => {
                     // Renaming owns the card; the drag must not steal focus.
                     if (renamingProject) return

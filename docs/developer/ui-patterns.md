@@ -124,8 +124,10 @@ node's `data-color-theme` attribute:
   trade against v1.2.2's sliding pill). Exemptions: the AppShell
   One motion survives: the sidebar's enter/exit slide (`data-sidebar
 -motion`, #41 feedback — 200ms restored); everything else snaps. The
-  selected project card floats like the sidebar itself — the selection
-  pill gets a hard black offset shadow (`data-selection-pill`). The
+  selected project card RISES off the black plane — a one-shot keyframe
+  lifts pill and row 2px in sync while the hard shadow grows beneath
+  (`data-selection-pill` + `data-selected-card`; the keyframe restarts
+  from applyCardSelectionPill on every selection change). The
   window itself squares too: `set_window_corners_square` (window.rs)
   drops the native 16px mask while the theme is active — synced before
   the root attribute lands so neither edge lags the other — and the

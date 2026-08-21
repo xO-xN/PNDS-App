@@ -460,11 +460,37 @@
   transition-duration: 200ms !important;
 }
 
-/* #41 feedback — the selected project card floats like the sidebar
-   itself: a hard black offset shadow lifts the selection pill off the
-   column (the pill stays flat-cornered and instant like the rest). */
+/* #41 feedback — the selected project card rises off the black plane:
+   the pill's one-shot keyframe lifts it 2px while its hard shadow grows
+   in beneath (`translate`, the individual property — the imperative
+   transform positioning in applyCardSelectionPill is untouched, and
+   that function restarts this keyframe whenever the selection anchor
+   changes). The row (data-selected-card) rides along via its own
+   translate transition, same curve, so text and card lift as one;
+   transform stays OUT of the row's transition list because the drag
+   -reorder offsets drive that property imperatively. Reduced motion
+   completes the keyframe instantly — `both` still lands the resting
+   float. */
+@keyframes pnds-brutal-card-rise {
+  from {
+    translate: 0 0;
+    box-shadow: 0 0 0 #000000;
+  }
+  to {
+    translate: 0 -2px;
+    box-shadow: 3px 3px 0 #000000;
+  }
+}
+
 [data-color-theme='brutal'] [data-selection-pill] {
-  box-shadow: 3px 3px 0 #000000;
+  animation: pnds-brutal-card-rise 200ms cubic-bezier(0.4, 0.1, 0.2, 1) both;
+}
+
+[data-color-theme='brutal'] [data-selected-card] {
+  translate: 0 -2px;
+  transition-property: translate;
+  transition-duration: 200ms !important;
+  transition-timing-function: cubic-bezier(0.4, 0.1, 0.2, 1);
 }
 
 /* The sidebar's multi-color block collage — the theme's signature, per
