@@ -122,6 +122,11 @@ async sendNativeNotification(title: string, body: string | null) : Promise<Resul
  * Full preflight for a candidate project directory (§8.1 step 1):
  * orphan cleanup → manifest validation → dependency check → port check.
  * Returns the validated manifest so the frontend can show project info.
+ * 
+ * v1.2.3 (issue #37): preflight never harms the running session — its
+ * children are exempt from the orphan cleanup, and ports held only by
+ * them pass (they are released when the session stops). Ports held by
+ * any other process still conflict.
  */
 async preflightProject(path: string) : Promise<Result<Manifest, string>> {
     try {
@@ -134,6 +139,7 @@ async preflightProject(path: string) : Promise<Result<Manifest, string>> {
 /**
  * Cleans up child processes left behind by an abnormal previous exit.
  * Also runs automatically at app startup and at the start of preflight.
+ * Children of the live session are never touched (v1.2.3, issue #37).
  */
 async cleanupOrphanedProcesses() : Promise<Result<number, string>> {
     try {
@@ -396,14 +402,14 @@ async openAppLogDir() : Promise<Result<null, string>> {
  * Application preferences that persist to disk.
  * Only contains settings that should be saved between sessions.
  */
-export type AppPreferences = {
+export type AppPreferences = { 
 /**
  * Legacy light/dark/system field — load-only since v1.2.3: the App is
  * fixed-light and the UI theme lives in `color_theme` below. Kept (and
  * still validated) so pre-v1.2.3 files round-trip losslessly; reserved
  * for a future "follow the system" mode.
  */
-theme: string;
+theme: string; 
 /**
  * v1.2.3 (issue #38): the app color theme driving the root node's
  * `data-color-theme` attribute. Enum-validated at the save boundary;
@@ -412,7 +418,7 @@ theme: string;
  * themes its build does not implement yet. App-local, never touches
  * project manifests.
  */
-colorTheme?: string;
+colorTheme?: string; 
 /**
  * User's preferred language (V1 ships English-only)
  * If None, uses system locale detection
