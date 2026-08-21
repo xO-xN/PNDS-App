@@ -399,8 +399,10 @@
   --pnds-font-text: 'Archivo', -apple-system, 'Segoe UI', 'Roboto', sans-serif;
 
   --pnds-bg: #fff1c9;
-  /* Fallback under the sidebar collage (the gradient rule below). */
-  --pnds-sidebar-bg: #ffc107;
+  /* Solid pale cream — lighter than the bg so the sidebar panel reads
+     (the collage era is over; the PNDS wordmark rule below is the
+     sidebar's signature now). */
+  --pnds-sidebar-bg: #fffbe0;
   --pnds-card: #ffffff;
   --pnds-pill: #ffe58f;
   --pnds-pill-hover: #ffd966;
@@ -493,21 +495,30 @@
   transition-timing-function: cubic-bezier(0.4, 0.1, 0.2, 1);
 }
 
-/* The sidebar's multi-color block collage — the theme's signature, per
-   the reference covers' flat block posters: hard-stop color bands
-   stacked top-to-bottom (teal / yellow / pink / blue, all ≥5.9:1 with
-   black text in case anything rides a band directly), a hard black
-   outline, and a hard black offset shadow replacing the variant's soft
-   shadow utilities. The background-image layer renders above the
-   sidebar-bg token, which stays as the fallback. */
+/* The sidebar's signature: a solid pale-cream panel with the vertical
+   PNDS wordmark — 8-bit pixel face (Press Start 2P), rotated 90°,
+   solid black, layered UNDER the cards the way the reference
+   composes UI over its big type. Hard black outline and hard offset
+   shadow replace the variant's soft shadow utilities. The wordmark is
+   a pseudo-element: pure chrome, no component markup, pointer-events
+   none. */
 [data-color-theme='brutal'] [data-sidebar-surface] {
-  background-image: linear-gradient(
-    to bottom,
-    #00a99d 0 22%,
-    #ffc107 22% 47%,
-    #ff5c8a 47% 72%,
-    #5b84e8 72% 100%
-  );
   border-color: #000000;
   box-shadow: 6px 6px 0 #000000;
+}
+
+[data-color-theme='brutal'] [data-sidebar-surface]::before {
+  content: 'PNDS';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 0;
+  font-family: 'Press Start 2P', monospace;
+  font-size: clamp(64px, 16vh, 132px);
+  letter-spacing: 0.12em;
+  line-height: 1;
+  color: #000000;
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translate(-50%, -50%) rotate(90deg);
 }
