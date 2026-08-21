@@ -19,9 +19,9 @@ import { useSettingsStore } from '@/store/settings-store'
  * §7.4: hidden while the native (unified) title bar shows its own lights
  * during fullscreen — the two must never render at once.
  *
- * #41 (Brutal): the window chrome reduces to a single square ✕ with a
- * black outline and hard shadow — minimize/fullscreen keep their
- * keyboard (⌘M / ⌃⌘F) and menu paths.
+ * #41 (Brutal): the window chrome reduces to one BARE ✕ glyph — no dot,
+ * box, or shadow, bigger than the lights, hover-tinted — minimize/
+ * fullscreen keep their keyboard (⌘M / ⌃⌘F) and menu paths.
  */
 const BUTTONS = [
   {
@@ -50,20 +50,34 @@ export function TrafficLights() {
   const visible = useWindowStore(state => state.showCustomTrafficLights)
   const brutal = useSettingsStore(state => state.colorThemeSetting) === 'brutal'
   if (!visible) return null
-  const buttons = brutal ? [BUTTONS[0]] : BUTTONS
+
+  // #41 (Brutal, follow-up): the chrome is one BARE ✕ — no dot, no box,
+  // no shadow, just the glyph, larger than the lights, with hover as its
+  // only interaction (theme text at rest, accent on hover, instant).
+  if (brutal) {
+    const { labelKey, action } = BUTTONS[0]
+    return (
+      <button
+        type="button"
+        aria-label={t(labelKey)}
+        onClick={action}
+        className="pnds-focus-ring flex h-7 w-7 items-center justify-center text-(--pnds-text) transition-transform hover:scale-110 hover:text-(--pnds-accent) active:scale-95"
+      >
+        <X size={18} strokeWidth={3} aria-hidden="true" />
+      </button>
+    )
+  }
+
   return (
     <div className="group flex items-center gap-2">
-      {buttons.map(({ labelKey, bg, icon: Icon, action }) => (
+      {BUTTONS.map(({ labelKey, bg, icon: Icon, action }) => (
         <button
           key={labelKey}
           type="button"
-          data-os-circle={brutal ? undefined : ''}
+          data-os-circle=""
           aria-label={t(labelKey)}
           onClick={action}
-          className={
-            'pnds-focus-ring flex h-3 w-3 items-center justify-center rounded-full text-black/60 transition-transform hover:scale-110 active:scale-95' +
-            (brutal ? ' border border-black shadow-[2px_2px_0_#000]' : '')
-          }
+          className="pnds-focus-ring flex h-3 w-3 items-center justify-center rounded-full text-black/60 transition-transform hover:scale-110 active:scale-95"
           style={{ backgroundColor: bg }}
         >
           <Icon
