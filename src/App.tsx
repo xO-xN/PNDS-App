@@ -11,6 +11,7 @@ import {
 import { logger } from './lib/logger'
 import { commands } from './lib/tauri-bindings'
 import { DEFAULT_SAMPLE_RATE } from './lib/preferences'
+import { colorThemeFromPrefs, setColorThemeAttribute } from './lib/color-theme'
 import { drainPendingBundleOpens } from './lib/bundle-project'
 import { handleDroppedPaths } from './lib/drag-drop'
 import { initWindowState, markQuitting } from './store/window-store'
@@ -52,6 +53,15 @@ function App() {
         useSettingsStore
           .getState()
           .setLanguageSetting(languageSettingFromPrefs(savedLanguage))
+        // v1.2.3 (issue #38): apply the saved color theme to the root node
+        // and seed the Appearance-section selection from the same read.
+        // Unknown or not-yet-shipped values fall back to Lavender, so an
+        // error read also lands on the default rather than no attribute.
+        const colorTheme = colorThemeFromPrefs(
+          result.status === 'ok' ? result.data.colorTheme : null
+        )
+        setColorThemeAttribute(colorTheme)
+        useSettingsStore.getState().setColorThemeSetting(colorTheme)
         // Issue #21: seed the Audio-section rate from the same read — the
         // effective rate (preference ?? 48000) the select shows on open.
         if (result.status === 'ok') {

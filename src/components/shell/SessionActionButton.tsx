@@ -90,7 +90,7 @@ export function SessionActionButton() {
         onClick={() => void stopAndReset()}
         className={cn(
           baseClass,
-          'bg-(--pnds-danger) text-white hover:bg-(--pnds-danger-hover)'
+          'bg-(--pnds-danger) text-(--pnds-danger-foreground) hover:bg-(--pnds-danger-hover)'
         )}
       >
         {t('sidebar.closeProject')}
@@ -132,7 +132,7 @@ export function SessionActionButton() {
       className={cn(
         baseClass,
         loadable
-          ? 'bg-(--pnds-accent) text-white hover:bg-(--pnds-accent-hover)'
+          ? 'bg-(--pnds-accent) text-(--pnds-accent-foreground) hover:bg-(--pnds-accent-hover)'
           : 'bg-(--pnds-text)/6 text-(--pnds-text)/30'
       )}
     >

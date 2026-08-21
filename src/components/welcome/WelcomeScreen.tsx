@@ -53,7 +53,7 @@ export function WelcomeScreen() {
         {preflightStatus === 'error' && preflightError && (
           <div
             role="alert"
-            className="font-manrope max-w-xl whitespace-pre-wrap rounded-xl border border-red-800/20 bg-red-500/10 p-4 text-start text-sm text-red-900"
+            className="font-manrope max-w-xl whitespace-pre-wrap rounded-xl border border-(--pnds-danger)/20 bg-(--pnds-danger)/10 p-4 text-start text-sm text-(--pnds-text)"
           >
             {preflightError}
           </div>

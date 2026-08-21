@@ -396,7 +396,23 @@ async openAppLogDir() : Promise<Result<null, string>> {
  * Application preferences that persist to disk.
  * Only contains settings that should be saved between sessions.
  */
-export type AppPreferences = { theme: string; 
+export type AppPreferences = {
+/**
+ * Legacy light/dark/system field — load-only since v1.2.3: the App is
+ * fixed-light and the UI theme lives in `color_theme` below. Kept (and
+ * still validated) so pre-v1.2.3 files round-trip losslessly; reserved
+ * for a future "follow the system" mode.
+ */
+theme: string;
+/**
+ * v1.2.3 (issue #38): the app color theme driving the root node's
+ * `data-color-theme` attribute. Enum-validated at the save boundary;
+ * `stage`/`midnight`/`glass` are accepted already because the enum is
+ * the shipped v1.2.3 set — the frontend falls back to `lavender` for
+ * themes its build does not implement yet. App-local, never touches
+ * project manifests.
+ */
+colorTheme?: string;
 /**
  * User's preferred language (V1 ships English-only)
  * If None, uses system locale detection

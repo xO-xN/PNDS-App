@@ -8,6 +8,11 @@ import { notifications } from '@/lib/notifications'
 import { checkForUpdates } from '@/lib/updater'
 import { commands } from '@/lib/tauri-bindings'
 import {
+  applyColorThemeSetting,
+  COLOR_THEME_OPTIONS,
+  type ColorTheme,
+} from '@/lib/color-theme'
+import {
   useSettingsStore,
   type LanguageSetting,
   type SettingsSection,
@@ -29,21 +34,23 @@ import { AudioSection } from './AudioSection'
 
 /**
  * v1.2.0 (issue #13): the in-app settings panel — a single scrolling page
- * with five sections (spec issue #12). General (language), Audio (issue
- * #21), Ports (issue #14), Developer Tools (issue #16) and About are live;
- * the Projects history section (#15) was removed after user review —
- * history management lives in the sidebar alone. Opened by ⌘, / the menu
- * item, closed by Esc or ⌘, again. The About menu item routes here with
- * `focusSection`.
+ * with six sections (spec issue #12). General (language), Appearance
+ * (issue #38), Audio (issue #21), Ports (issue #14), Developer Tools
+ * (issue #16) and About are live; the Projects history section (#15) was
+ * removed after user review — history management lives in the sidebar
+ * alone. Opened by ⌘, / the menu item, closed by Esc or ⌘, again. The
+ * About menu item routes here with `focusSection`.
  */
 export function SettingsPanel() {
   const { t } = useTranslation()
   const settingsOpen = useSettingsStore(state => state.settingsOpen)
   const focusSection = useSettingsStore(state => state.focusSection)
   const languageSetting = useSettingsStore(state => state.languageSetting)
-  // The selection is seeded once at app startup (App.tsx init flow, from
+  const colorThemeSetting = useSettingsStore(state => state.colorThemeSetting)
+  // The selections are seeded once at app startup (App.tsx init flow, from
   // the same preferences read that initializes the language); afterwards
-  // the store is authoritative — applyLanguageSetting updates it on change.
+  // the store is authoritative — applyLanguageSetting / applyColorThemeSetting
+  // update it on change.
 
   // Reveal the routed section (About menu item) after the portal mounts.
   useEffect(() => {
@@ -123,6 +130,50 @@ export function SettingsPanel() {
 
         <Separator />
 
+        {/* ── Appearance (v1.2.3 issue #38) ── */}
+        <section
+          id={sectionId('appearance')}
+          aria-labelledby="settings-appearance-title"
+          className="flex flex-col gap-3 py-4"
+        >
+          <h3 id="settings-appearance-title" className="text-sm font-semibold">
+            {t('settings.appearance')}
+          </h3>
+          <div className="flex items-center justify-between gap-4">
+            <Label htmlFor="settings-color-theme">
+              {t('settings.colorTheme')}
+            </Label>
+            <div className="flex items-center gap-2">
+              {/* The accent swatch of the current theme — the one colour a
+                  native menu cannot preview per item, shown beside the
+                  value instead (spec #36 story 11). */}
+              <span
+                data-testid="color-theme-accent"
+                aria-hidden="true"
+                className="size-2.5 shrink-0 rounded-full"
+                style={{
+                  background: accentOf(colorThemeSetting),
+                }}
+              />
+              <NativeSelect
+                id="settings-color-theme"
+                value={colorThemeSetting}
+                onChange={event =>
+                  void applyColorThemeSetting(event.target.value as ColorTheme)
+                }
+              >
+                {COLOR_THEME_OPTIONS.map(option => (
+                  <NativeSelectOption key={option.value} value={option.value}>
+                    {t(`settings.theme.${option.value}`)}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+            </div>
+          </div>
+        </section>
+
+        <Separator />
+
         {/* ── Audio / Ports / Developer Tools ── */}
         <AudioSection section="audio" />
         <Separator />
@@ -177,6 +228,13 @@ export function SettingsPanel() {
 
 function sectionId(section: SettingsSection): string {
   return `settings-section-${section}`
+}
+
+/** The accent swatch colour shown for a theme selection. */
+function accentOf(theme: ColorTheme): string {
+  return (
+    COLOR_THEME_OPTIONS.find(option => option.value === theme)?.accent ?? ''
+  )
 }
 
 /** Reveal a managed directory in Finder; surface failures as a toast. */

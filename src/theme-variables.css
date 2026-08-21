@@ -117,3 +117,133 @@
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
 }
+
+/*
+ * Color themes (v1.2.3, issue #38 / spec #36)
+ *
+ * A theme is one complete token set selected by the root node's
+ * `data-color-theme` attribute (applied by src/lib/color-theme.ts). The
+ * `:root` blocks above double as the Lavender theme: Lavender is defined as
+ * "the current look", and :root is also the pre-JavaScript fallback — until
+ * startup applies the saved theme, the app renders Lavender, which is the
+ * default. Every further theme is a single `[data-color-theme='…']` block
+ * overriding both the PNDS tokens and the shadcn semantic mapping; the
+ * blocks below :root win the cascade at equal specificity by order, and
+ * each block is self-contained so themes cannot leak values from each
+ * other.
+ *
+ * Contrast: every text/background pair in each solid theme is checked
+ * ≥4.5:1 (spec #36 user story 9) — text & text-secondary against bg,
+ * sidebar and card; accent/danger/warning against their own label token.
+ */
+
+:root {
+  /* PNDS design tokens (from Figma "PNDS UI Design", 2026-07) */
+  --pnds-bg: #eef0f8;
+  --pnds-sidebar-bg: #e2e5f3;
+  --pnds-card: #ffffff;
+  /* Controls are recessed fields inside the white card, so the pill is a
+     tint *below* the card. What makes a field read as live is the value
+     being at full text strength — not the fill. */
+  --pnds-pill: #e8ebf7;
+  --pnds-pill-hover: #dee2f2;
+  --pnds-accent: #5a4ff3;
+  --pnds-accent-hover: #4a3fe0;
+  --pnds-accent-foreground: #ffffff;
+  /* The accent as *text* on card/bg surfaces (≥4.5:1). The fill value
+     itself is tuned for large fields, not 12px labels — Sand's amber
+     reads ~3.1:1 as text, hence the darker twin (issue #38). */
+  --pnds-accent-text: #5a4ff3;
+  --pnds-text: #171a2b;
+  --pnds-text-secondary: #5d6484;
+  /* Elevation of card-level surfaces (sidebar cards, folder pills). */
+  --pnds-card-shadow: 0 1px 3px rgb(23 26 43 / 10%);
+  /* Logo background halos — the one part of the logo lockup that follows
+     the theme (the dots are brand colours). The animated canvas resolves
+     its own pair from the -animated token. */
+  --pnds-logo-halo: #b8ccf0;
+  --pnds-logo-halo-core: #cdbff2;
+  --pnds-logo-halo-animated: #dee2ff;
+  /* Monitor title strip: a scrim over the project page — light themes
+     keep the current dark scrim so any monitor content stays legible. */
+  --pnds-monitor-bar: rgb(0 0 0 / 30%);
+  --pnds-monitor-bar-text: rgb(255 255 255 / 85%);
+
+  /* Session action states. Each is checked for >=4.5:1 against its own
+     label color, so don't lighten them without rechecking. */
+  --pnds-danger: #e11d48;
+  --pnds-danger-hover: #c2143c;
+  --pnds-danger-foreground: #ffffff;
+  --pnds-warning: #ffb020; /* dark label, not white */
+  --pnds-warning-hover: #f0a20c;
+}
+
+/* Sand — 暖沙: warm light theme (v1.2.3 T2, issue #38). Base palette from
+   spec #36: bg #f6f1e8, sidebar #efe8db, card #fffdf8, accent #d97706. */
+[data-color-theme='sand'] {
+  /* shadcn semantic mapping — the settings panel, its popovers and the
+     confirm dialogs are shadcn surfaces, so they follow the theme too.
+     Structure mirrors Lavender's :root: primary is the strong text colour
+     (Lavender's oklch(0.205) ≈ its text), so confirm buttons stay dark
+     under both light themes; ring is the accent, matching the app-wide
+     accent focus-ring language of v1.2.2. */
+  --background: var(--pnds-card);
+  --foreground: var(--pnds-text);
+  --card: var(--pnds-card);
+  --card-foreground: var(--pnds-text);
+  --popover: var(--pnds-card);
+  --popover-foreground: var(--pnds-text);
+  --primary: var(--pnds-text);
+  --primary-foreground: var(--pnds-card);
+  --secondary: var(--pnds-pill);
+  --secondary-foreground: var(--pnds-text);
+  --muted: var(--pnds-pill);
+  --muted-foreground: var(--pnds-text-secondary);
+  --accent: var(--pnds-pill-hover);
+  --accent-foreground: var(--pnds-text);
+  --destructive: var(--pnds-danger);
+  --border: #e3dccb;
+  --input: #e3dccb;
+  --ring: var(--pnds-accent);
+  --sidebar: var(--pnds-sidebar-bg);
+  --sidebar-foreground: var(--pnds-text);
+  --sidebar-primary: var(--pnds-text);
+  --sidebar-primary-foreground: var(--pnds-card);
+  --sidebar-accent: var(--pnds-pill-hover);
+  --sidebar-accent-foreground: var(--pnds-text);
+  --sidebar-border: #e3dccb;
+  --sidebar-ring: var(--pnds-accent);
+
+  /* PNDS design tokens. Amber's luminance is high, so the accent carries
+     a dark label; that same label is why accent-hover *lightens* instead
+     of darkening — a darker amber would fall below 4.5:1 against it
+     (rest 4.8:1, hover 5.4:1; a darkened #b45309 would read 3.1:1). The
+     accent as small text uses the darker --pnds-accent-text twin. */
+  --pnds-bg: #f6f1e8;
+  --pnds-sidebar-bg: #efe8db;
+  --pnds-card: #fffdf8;
+  --pnds-pill: #f1eadd;
+  --pnds-pill-hover: #e7e0d3;
+  --pnds-accent: #d97706;
+  --pnds-accent-hover: #de8413;
+  --pnds-accent-foreground: #2b2416;
+  --pnds-accent-text: #a84a08;
+  --pnds-text: #2b2416;
+  --pnds-text-secondary: #6f6552;
+  --pnds-card-shadow: 0 1px 3px rgb(43 36 22 / 10%);
+  /* Logo halos warm with the theme — amber tints of the accent. */
+  --pnds-logo-halo: #efd2af;
+  --pnds-logo-halo-core: #e8c69a;
+  --pnds-logo-halo-animated: #f7ecd4;
+  --pnds-monitor-bar: rgb(0 0 0 / 30%);
+  --pnds-monitor-bar-text: rgb(255 255 255 / 85%);
+
+  /* Status colors keep the light-theme values (spec #36); both read
+     ≥4.5:1 against the Sand labels — danger 4.7:1 vs white, warning
+     8.4:1 vs the warm text. */
+  --pnds-danger: #e11d48;
+  --pnds-danger-hover: #c2143c;
+  --pnds-danger-foreground: #ffffff;
+  --pnds-warning: #ffb020;
+  --pnds-warning-hover: #f0a20c;
+}

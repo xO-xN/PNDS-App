@@ -126,6 +126,21 @@ function randomBgPositions(): {
 }
 
 // ── Canvas draw ─────────────────────────────────────────────────────────
+/** The animated logo's halo follows the color theme (issue #38) — canvas
+ *  fillStyles cannot consume CSS custom properties, so resolve the token
+ *  per draw (cheap: no layout involved). The Lavender literal is the
+ *  fallback for environments where the stylesheet is absent (jsdom). */
+function haloRgba(alpha: number): string {
+  const hex =
+    getComputedStyle(document.documentElement)
+      .getPropertyValue('--pnds-logo-halo-animated')
+      .trim() || '#dee2ff'
+  const r = parseInt(hex.slice(1, 3), 16)
+  const g = parseInt(hex.slice(3, 5), 16)
+  const b = parseInt(hex.slice(5, 7), 16)
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+}
+
 function drawFrame(
   ctx: CanvasRenderingContext2D,
   f: number,
@@ -189,13 +204,13 @@ function drawFrame(
   }
 
   // Background circles (light then dark for proper layering)
-  ctx.fillStyle = 'rgba(222,226,255,0.39)' // 100/255 ≈ 0.39
+  ctx.fillStyle = haloRgba(0.39)
   const cx2 = CX + (bx2 - CX) * (1 - t),
     cy2 = CY + (by2 - CY) * (1 - t)
   ctx.beginPath()
   ctx.arc(cx2, cy2, d2 / 2, 0, Math.PI * 2)
   ctx.fill()
-  ctx.fillStyle = 'rgba(222,226,255,0.59)' // 150/255 ≈ 0.59
+  ctx.fillStyle = haloRgba(0.59)
   const cx1 = CX + (bx1 - CX) * (1 - t),
     cy1 = CY + (by1 - CY) * (1 - t)
   ctx.beginPath()

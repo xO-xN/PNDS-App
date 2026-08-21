@@ -1230,7 +1230,7 @@ export function Sidebar({
         variant === 'static' &&
           'm-3 border border-(--pnds-text)/5 bg-(--pnds-sidebar-bg) shadow-sm',
         variant === 'overlay' &&
-          'h-full border border-white/30 bg-(--pnds-sidebar-bg)/90 shadow-2xl backdrop-blur-xl'
+          'h-full border border-(--pnds-card)/30 bg-(--pnds-sidebar-bg)/90 shadow-2xl backdrop-blur-xl'
       )}
     >
       {/* Top row: custom traffic lights (left), share/refresh (right).
@@ -1778,7 +1778,7 @@ export function Sidebar({
       {/* Deferred settings + their submit are one object (§10.2): the card
           clips the button into a full-bleed footer. */}
       <div className="px-5 pb-5 pt-6">
-        <div className="overflow-hidden rounded-xl bg-(--pnds-card) shadow-[0_1px_3px_rgba(23,26,43,0.1)]">
+        <div className="overflow-hidden rounded-xl bg-(--pnds-card) shadow-(--pnds-card-shadow)">
           <SettingsCard onPopupOpenChange={onPopupOpenChange} />
           <SessionActionButton />
         </div>

@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager};
 
-use crate::types::{validate_sample_rate, validate_theme, AppPreferences};
+use crate::types::{validate_color_theme, validate_sample_rate, validate_theme, AppPreferences};
 
 /// In-memory cache of the preferences file. Managed by Tauri.
 #[derive(Default)]
@@ -87,6 +87,10 @@ pub async fn load_preferences(app: AppHandle) -> Result<AppPreferences, String> 
 pub async fn save_preferences(app: AppHandle, preferences: AppPreferences) -> Result<(), String> {
     // Validate theme value
     validate_theme(&preferences.theme)?;
+    // v1.2.3 (issue #38): the color theme must be a member of the theme
+    // enum; the frontend additionally falls back to Lavender for values its
+    // build cannot render.
+    validate_color_theme(&preferences.color_theme)?;
     // Issue #20: the global sample rate must be a positive integer (Hz).
     validate_sample_rate(preferences.sample_rate)?;
 

@@ -201,7 +201,7 @@ export function PortsSection({ section }: { section: SettingsSection }) {
                   {sessionLive ? (
                     <span
                       data-testid="port-running"
-                      className="text-xs text-(--pnds-accent)"
+                      className="text-xs text-(--pnds-accent-text)"
                     >
                       {t('settings.portRunningHere')}
                     </span>

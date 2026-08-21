@@ -7,6 +7,7 @@ describe('settings-store (v1.2.0 issue #13: settings panel state)', () => {
       settingsOpen: false,
       focusSection: null,
       languageSetting: 'system',
+      colorThemeSetting: 'lavender',
       sampleRateSetting: 48000,
     })
   })
@@ -57,5 +58,13 @@ describe('settings-store (v1.2.0 issue #13: settings panel state)', () => {
     expect(useSettingsStore.getState().sampleRateSetting).toBe(48000)
     useSettingsStore.getState().setSampleRateSetting(96000)
     expect(useSettingsStore.getState().sampleRateSetting).toBe(96000)
+  })
+
+  // Issue #38 (v1.2.3): the Appearance-section theme — Lavender until
+  // App.tsx seeds the saved value at startup.
+  it('defaults the color-theme selection to lavender and stores changes', () => {
+    expect(useSettingsStore.getState().colorThemeSetting).toBe('lavender')
+    useSettingsStore.getState().setColorThemeSetting('sand')
+    expect(useSettingsStore.getState().colorThemeSetting).toBe('sand')
   })
 })

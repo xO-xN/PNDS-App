@@ -1,12 +1,17 @@
 import { create } from 'zustand'
 import { DEFAULT_SAMPLE_RATE } from '@/lib/preferences'
+// Type-only: a runtime import here would cycle (color-theme imports this
+// store for applyColorThemeSetting), and the cycle evaluates this module
+// while color-theme's constants are still uninitialized.
+import type { ColorTheme } from '@/lib/color-theme'
 
 /** The sections of the settings panel (spec issue #12, single-page scroll
- * layout; issue #21 added Audio). The Projects history section (#15) was
- * removed after user review — history management lives in the sidebar
- * alone. */
+ * layout; issue #21 added Audio, issue #38 added Appearance). The Projects
+ * history section (#15) was removed after user review — history management
+ * lives in the sidebar alone. */
 export type SettingsSection =
   | 'general'
+  | 'appearance'
   | 'audio'
   | 'ports'
   | 'developer'
@@ -25,6 +30,10 @@ interface SettingsState {
   /** Current General-section language selection, seeded once at app
    * startup from preferences (App.tsx) and set optimistically on change. */
   languageSetting: LanguageSetting
+  /** Issue #38 (v1.2.3): the Appearance-section color theme — seeded once
+   * at app startup from preferences (App.tsx, which also applies it to the
+   * root node) and set optimistically on change. */
+  colorThemeSetting: ColorTheme
   /** Issue #21: the effective sample rate shown in the Audio section —
    * the saved preference, or 48000 when unset. Seeded once at app startup
    * from the same preferences read as the language, then updated
@@ -34,6 +43,7 @@ interface SettingsState {
   closeSettings: () => void
   toggleSettings: () => void
   setLanguageSetting: (setting: LanguageSetting) => void
+  setColorThemeSetting: (theme: ColorTheme) => void
   setSampleRateSetting: (rate: number) => void
 }
 
@@ -41,6 +51,8 @@ export const useSettingsStore = create<SettingsState>()(set => ({
   settingsOpen: false,
   focusSection: null,
   languageSetting: 'system',
+  // Mirrors DEFAULT_COLOR_THEME in lib/color-theme (see the import note).
+  colorThemeSetting: 'lavender',
   sampleRateSetting: DEFAULT_SAMPLE_RATE,
 
   openSettings: section =>
@@ -56,6 +68,8 @@ export const useSettingsStore = create<SettingsState>()(set => ({
     ),
 
   setLanguageSetting: languageSetting => set({ languageSetting }),
+
+  setColorThemeSetting: colorThemeSetting => set({ colorThemeSetting }),
 
   setSampleRateSetting: sampleRateSetting => set({ sampleRateSetting }),
 }))

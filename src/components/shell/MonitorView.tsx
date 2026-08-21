@@ -123,10 +123,12 @@ export function MonitorView() {
         />
       </div>
 
-      {/* Top-center title / window drag region (§10.1) */}
+      {/* Top-center title / window drag region (§10.1). Themed via the
+          monitor-bar tokens (v1.2.3 issue #38) — a scrim over the project
+          page, so light themes keep the dark value. */}
       <div
         data-tauri-drag-region
-        className="absolute left-1/2 top-0 z-40 -translate-x-1/2 cursor-default select-none rounded-b-xl bg-black/30 px-5 py-1.5 text-xs font-medium tracking-wide text-white/85 backdrop-blur-md"
+        className="absolute left-1/2 top-0 z-40 -translate-x-1/2 cursor-default select-none rounded-b-xl bg-(--pnds-monitor-bar) px-5 py-1.5 text-xs font-medium tracking-wide text-(--pnds-monitor-bar-text) backdrop-blur-md"
       >
         PNDS - {displayOverride ?? projectName}
       </div>

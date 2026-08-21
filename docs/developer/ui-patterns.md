@@ -87,6 +87,41 @@ To add a new semantic color:
 
 Then use with Tailwind: `bg-success text-success-foreground`
 
+## Color Themes (v1.2.3, issue #38)
+
+The app's color themes are one axis the `.dark`/light axis is NOT: PNDS is
+fixed-light, and a color theme swaps the entire light palette. The mechanism
+is the root node's `data-color-theme` attribute:
+
+- Each theme is **one complete token set** in `theme-variables.css` — a
+  `[data-color-theme='…']` block overriding both the `--pnds-*` design
+  tokens and the shadcn semantic mapping (`--background`, `--primary`, …).
+  Blocks after `:root` win at equal specificity by order, so a block never
+  needs `!important` and themes cannot leak values into each other.
+- The `:root` token sets **double as Lavender**, the default theme — it is
+  defined as "the current look" and doubles as the pre-JavaScript fallback
+  (until startup applies the saved attribute, the app renders Lavender).
+- `src/lib/color-theme.ts` owns the attribute: the startup preferences read
+  applies the saved theme (unknown or not-yet-shipped values fall back to
+  Lavender), and the settings panel's Appearance section applies changes
+  immediately and persists `colorTheme` (enum-validated in Rust:
+  lavender/sand/stage/midnight/glass).
+- Components consume tokens via Tailwind arbitrary values — `bg-(--pnds-bg)`,
+  `text-(--pnds-text)/60`, `shadow-(--pnds-card-shadow)` — never literal
+  colors. Status fills carry their own label token
+  (`text-(--pnds-accent-foreground)`), because the label that passes 4.5:1
+  differs per theme (white on Lavender's accent, dark on Sand's amber). The
+  accent used **as small text** goes through `--pnds-accent-text`, the
+  darker twin tuned for ≥4.5:1 on card surfaces (Sand's fill amber reads
+  ~3.1:1 as text).
+- Every text/background pair in a solid theme is checked ≥4.5:1 against its
+  own label/surface (spec #36 story 9); recheck when touching theme values.
+- Intentionally NOT themed: the traffic-light glyphs, the PndsLogo's
+  brand-color dots (the halo rings behind them ARE tokens), the shadcn
+  vendored scrims (`bg-black/50`), and the Appearance section's accent
+  swatch — it previews each theme's accent by definition, so it cannot be
+  one token.
+
 ## Dark Mode
 
 ### How It Works

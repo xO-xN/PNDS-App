@@ -52,13 +52,14 @@ export function AnimatedPndsLogo({ stage, size = 190 }: PndsLogoProps) {
       className="relative"
       style={{ width: size, height: size }}
     >
-      {/* Background circles — appear at stages 2 and 4 */}
+      {/* Background circles — appear at stages 2 and 4. The halos follow
+          the color theme (issue #38); the dots stay brand-coloured. */}
       <div
-        className="absolute inset-0 rounded-full bg-[#b8ccf0]/40 transition-opacity duration-500"
+        className="absolute inset-0 rounded-full bg-(--pnds-logo-halo)/40 transition-opacity duration-500"
         style={{ opacity: stage >= 2 ? 1 : 0 }}
       />
       <div
-        className="absolute inset-[15%] rounded-full bg-[#cdbff2]/50 transition-opacity duration-500"
+        className="absolute inset-[15%] rounded-full bg-(--pnds-logo-halo-core)/50 transition-opacity duration-500"
         style={{ opacity: stage >= 4 ? 1 : 0 }}
       />
 
@@ -113,8 +114,8 @@ export function PndsLogo({ size = 180 }: { size?: number }) {
       className="relative"
       style={{ width: size, height: size }}
     >
-      <div className="absolute inset-0 rounded-full bg-[#b8ccf0]/40" />
-      <div className="absolute inset-[15%] rounded-full bg-[#cdbff2]/50" />
+      <div className="absolute inset-0 rounded-full bg-(--pnds-logo-halo)/40" />
+      <div className="absolute inset-[15%] rounded-full bg-(--pnds-logo-halo-core)/50" />
       {DOT_POSITIONS.map((p, i) => (
         <span
           key={i}

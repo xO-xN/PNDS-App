@@ -13,7 +13,19 @@ use std::collections::HashMap;
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct AppPreferences {
+    /// Legacy light/dark/system field — load-only since v1.2.3: the App is
+    /// fixed-light and the UI theme lives in `color_theme` below. Kept (and
+    /// still validated) so pre-v1.2.3 files round-trip losslessly; reserved
+    /// for a future "follow the system" mode.
     pub theme: String,
+    /// v1.2.3 (issue #38): the app color theme driving the root node's
+    /// `data-color-theme` attribute. Enum-validated at the save boundary;
+    /// `stage`/`midnight`/`glass` are accepted already because the enum is
+    /// the shipped v1.2.3 set — the frontend falls back to `lavender` for
+    /// themes its build does not implement yet. App-local, never touches
+    /// project manifests.
+    #[serde(default = "default_color_theme")]
+    pub color_theme: String,
     /// User's preferred language (V1 ships English-only)
     /// If None, uses system locale detection
     pub language: Option<String>,
@@ -65,6 +77,7 @@ impl Default for AppPreferences {
     fn default() -> Self {
         Self {
             theme: "system".to_string(),
+            color_theme: default_color_theme(),
             language: None, // None means use system locale
             output_device: None,
             sample_rate: None,
@@ -91,6 +104,13 @@ impl AppPreferences {
 /// `audio.scsynth.sampleRate` that is absent (see `ScsynthConfig`).
 pub const DEFAULT_SAMPLE_RATE: u32 = 48_000;
 
+/// v1.2.3 (issue #38): the value an absent `colorTheme` resolves to — the
+/// Lavender theme, which is the pre-v1.2.3 look, so existing installs see
+/// no change.
+pub fn default_color_theme() -> String {
+    "lavender".to_string()
+}
+
 // ============================================================================
 // Validation Functions
 // ============================================================================
@@ -100,6 +120,19 @@ pub fn validate_theme(theme: &str) -> Result<(), String> {
     match theme {
         "light" | "dark" | "system" => Ok(()),
         _ => Err("Invalid theme: must be 'light', 'dark', or 'system'".to_string()),
+    }
+}
+
+/// v1.2.3 (issue #38): validates the color-theme preference against the
+/// v1.2.3 theme enum. Unsupported values are rejected at the save boundary;
+/// on load the frontend maps anything it cannot render to Lavender.
+pub fn validate_color_theme(theme: &str) -> Result<(), String> {
+    match theme {
+        "lavender" | "sand" | "stage" | "midnight" | "glass" => Ok(()),
+        _ => Err(
+            "Invalid colorTheme: must be 'lavender', 'sand', 'stage', 'midnight', or 'glass'"
+                .to_string(),
+        ),
     }
 }
 
@@ -258,6 +291,52 @@ mod tests {
         let err = validate_sample_rate(Some(0)).expect_err("0 Hz must be rejected");
         assert!(
             err.contains("positive integer"),
+            "readable error, got: {err}"
+        );
+    }
+
+    /// v1.2.3 (issue #38): preference files written before `colorTheme`
+    /// existed must load as the default Lavender theme (serde default fills
+    /// the field in), and the legacy `theme` field round-trips untouched.
+    #[test]
+    fn deserializes_preferences_without_color_theme() {
+        let legacy = r#"{
+            "theme": "dark",
+            "language": null,
+            "recentProjects": ["/a"]
+        }"#;
+        let prefs: AppPreferences = serde_json::from_str(legacy).expect("legacy prefs parse");
+        assert_eq!(prefs.color_theme, "lavender");
+        assert_eq!(prefs.theme, "dark");
+    }
+
+    /// v1.2.3 (issue #38): a saved color theme survives a load-save round
+    /// trip, and the field serializes camelCase like every other preference.
+    #[test]
+    fn roundtrips_color_theme() {
+        let modern = r#"{
+            "theme": "system",
+            "colorTheme": "sand",
+            "language": null,
+            "recentProjects": ["/a"]
+        }"#;
+        let prefs: AppPreferences = serde_json::from_str(modern).expect("modern prefs parse");
+        assert_eq!(prefs.color_theme, "sand");
+        let reserialized = serde_json::to_string(&prefs).expect("prefs serialize");
+        assert!(reserialized.contains("\"colorTheme\":\"sand\""));
+    }
+
+    /// v1.2.3 (issue #38): the whole v1.2.3 theme enum validates; anything
+    /// else is rejected with a readable error at the save boundary.
+    #[test]
+    fn validates_color_theme() {
+        for theme in ["lavender", "sand", "stage", "midnight", "glass"] {
+            assert!(validate_color_theme(theme).is_ok(), "{theme} must be valid");
+        }
+        assert_eq!(default_color_theme(), "lavender");
+        let err = validate_color_theme("banana").expect_err("must be rejected");
+        assert!(
+            err.contains("Invalid colorTheme"),
             "readable error, got: {err}"
         );
     }

@@ -57,28 +57,11 @@
 @layer base {
   :root {
     --app-corner-radius: 16px;
-
-    /* PNDS design tokens (from Figma "PNDS UI Design", 2026-07) */
-    --pnds-bg: #eef0f8;
-    --pnds-sidebar-bg: #e2e5f3;
-    --pnds-card: #ffffff;
-    /* Controls are recessed fields inside the white card, so the pill is a
-       tint *below* the card. What makes a field read as live is the value
-       being at full text strength — not the fill. */
-    --pnds-pill: #e8ebf7;
-    --pnds-pill-hover: #dee2f2;
-    --pnds-accent: #5a4ff3;
-    --pnds-accent-hover: #4a3fe0;
-    --pnds-text: #171a2b;
-    --pnds-text-secondary: #5d6484;
-
-    /* Session action states. Each is checked for >=4.5:1 against its own
-       label color, so don't lighten them without rechecking. */
-    --pnds-danger: #e11d48;
-    --pnds-danger-hover: #c2143c;
-    --pnds-warning: #ffb020; /* dark label, not white */
-    --pnds-warning-hover: #f0a20c;
   }
+
+  /* The PNDS color tokens and the per-theme token sets live in
+     theme-variables.css (v1.2.3, issue #38): :root doubles as the Lavender
+     theme and [data-color-theme='…'] blocks override it. */
 
   @keyframes spin-shrink {
     0% {
@@ -234,10 +217,12 @@
   width: 14px;
   height: 14px;
   border-radius: 9999px;
-  background: #ffffff;
+  /* The knob is the theme's card white (v1.2.3, issue #38); its shadow is
+     the text colour at low alpha so it warms with the theme. */
+  background: var(--pnds-card);
   /* (4px trough − 14px knob) / 2 */
   margin-top: -5px;
   box-shadow:
-    0 1px 2px rgb(23 26 43 / 20%),
-    0 2px 6px rgb(23 26 43 / 15%);
+    0 1px 2px color-mix(in srgb, var(--pnds-text) 20%, transparent),
+    0 2px 6px color-mix(in srgb, var(--pnds-text) 15%, transparent);
 }

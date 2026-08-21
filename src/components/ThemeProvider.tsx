@@ -5,15 +5,19 @@ import { ThemeProviderContext, type Theme } from '@/lib/theme-context'
  * Theme provider.
  *
  * PNDS is a fixed-light application: every surface uses the app's own
- * `--pnds-*` palette (see App.css), which has no dark variant, and the
- * remaining shadcn surfaces (e.g. popover menus) read `--popover` etc.
- * Those variables are only defined for the light theme — the `.dark` class
- * from a system-wide dark appearance would repaint the menus black while
- * the rest of the app stays light.
+ * `--pnds-*` palette (see theme-variables.css), which has no dark variant,
+ * and the remaining shadcn surfaces (e.g. popover menus) read `--popover`
+ * etc. Those variables are only defined for the light theme — the `.dark`
+ * class from a system-wide dark appearance would repaint the menus black
+ * while the rest of the app stays light.
  *
  * So instead of following the OS (`system`), this provider always pins the
  * light theme. The persisted `theme` preference and the `theme-changed`
  * event are ignored (kept out to avoid implying the UI supports dark).
+ *
+ * Color themes (v1.2.3, issue #38) are a separate axis handled by
+ * src/lib/color-theme.ts: the root node's `data-color-theme` attribute
+ * swaps the whole token set, and every v1.2.3 theme is light.
  */
 export function ThemeProvider({
   children,

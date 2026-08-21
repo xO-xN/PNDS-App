@@ -39,6 +39,7 @@ beforeEach(() => {
     settingsOpen: false,
     focusSection: null,
     languageSetting: 'system',
+    colorThemeSetting: 'lavender',
   })
   vi.mocked(commands.loadPreferences).mockResolvedValue({
     status: 'ok',
@@ -49,6 +50,7 @@ beforeEach(() => {
 afterEach(async () => {
   cleanup()
   await i18n.changeLanguage('en')
+  delete document.documentElement.dataset.colorTheme
 })
 
 describe('SettingsPanel (v1.2.0 issue #13)', () => {
@@ -57,12 +59,15 @@ describe('SettingsPanel (v1.2.0 issue #13)', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
-  it('renders the five sections of the single-page panel', () => {
+  it('renders the six sections of the single-page panel', () => {
     useSettingsStore.getState().openSettings()
     render(<SettingsPanel />)
 
     expect(screen.getByRole('dialog')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'General' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: 'Appearance' })
+    ).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Audio' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Ports' })).toBeInTheDocument()
     expect(
@@ -176,6 +181,91 @@ describe('SettingsPanel (v1.2.0 issue #13)', () => {
       const about = document.getElementById('settings-section-about')
       expect(about).not.toBeNull()
       expect(scrollIntoView).toHaveBeenCalled()
+    })
+  })
+})
+
+/** Issue #38 (v1.2.3 T2): the Appearance section — a NativeSelect offering
+ * the shipped themes with the current accent swatch beside it; selecting
+ * one applies the root data-color-theme attribute immediately and persists
+ * the colorTheme preference. */
+describe('SettingsPanel Appearance section (issue #38)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useSettingsStore.setState({
+      settingsOpen: false,
+      focusSection: null,
+      languageSetting: 'system',
+      colorThemeSetting: 'lavender',
+      sampleRateSetting: 48000,
+    })
+    vi.mocked(commands.loadPreferences).mockResolvedValue({
+      status: 'ok',
+      data: { theme: 'system', language: null },
+    })
+  })
+
+  afterEach(() => {
+    cleanup()
+    delete document.documentElement.dataset.colorTheme
+  })
+
+  it('offers the two shipped themes with the current one selected', () => {
+    useSettingsStore.getState().openSettings()
+    render(<SettingsPanel />)
+
+    const select = screen.getByLabelText('Theme')
+    const labels = within(select)
+      .getAllByRole('option')
+      .map(option => option.textContent)
+    expect(labels).toEqual(['Lavender', 'Sand'])
+    expect(select).toHaveValue('lavender')
+  })
+
+  it('shows the accent swatch of the selected theme', () => {
+    useSettingsStore.getState().openSettings()
+    render(<SettingsPanel />)
+
+    expect(screen.getByTestId('color-theme-accent')).toHaveStyle({
+      background: '#5a4ff3',
+    })
+  })
+
+  it('selecting Sand applies the root attribute immediately and persists', async () => {
+    useSettingsStore.getState().openSettings()
+    render(<SettingsPanel />)
+
+    fireEvent.change(screen.getByLabelText('Theme'), {
+      target: { value: 'sand' },
+    })
+
+    // Immediate: the root data-color-theme flips without a restart.
+    expect(document.documentElement.dataset.colorTheme).toBe('sand')
+    expect(useSettingsStore.getState().colorThemeSetting).toBe('sand')
+    expect(screen.getByTestId('color-theme-accent')).toHaveStyle({
+      background: '#d97706',
+    })
+    await waitFor(() => {
+      expect(commands.savePreferences).toHaveBeenCalledWith(
+        expect.objectContaining({ colorTheme: 'sand' })
+      )
+    })
+  })
+
+  it('switching back to Lavender restores the root attribute', async () => {
+    useSettingsStore.setState({ colorThemeSetting: 'sand' })
+    useSettingsStore.getState().openSettings()
+    render(<SettingsPanel />)
+
+    fireEvent.change(screen.getByLabelText('Theme'), {
+      target: { value: 'lavender' },
+    })
+
+    expect(document.documentElement.dataset.colorTheme).toBe('lavender')
+    await waitFor(() => {
+      expect(commands.savePreferences).toHaveBeenCalledWith(
+        expect.objectContaining({ colorTheme: 'lavender' })
+      )
     })
   })
 })

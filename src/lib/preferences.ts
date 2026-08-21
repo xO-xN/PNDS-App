@@ -51,11 +51,13 @@ export async function loadPreferences(): Promise<AppPreferences | null> {
   return result.data
 }
 
-/** The fields `updatePreferences` may patch; `theme` stays load-only. */
+/** The fields `updatePreferences` may patch; the legacy `theme` field
+ * stays load-only (reserved for a future system light/dark follow). */
 export type PreferencesPatch = Partial<
   Pick<
     AppPreferences,
     | 'language'
+    | 'colorTheme'
     | 'sampleRate'
     | 'outputDevice'
     | 'recentProjects'
