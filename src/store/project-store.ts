@@ -69,11 +69,17 @@ interface ProjectState {
   /** Path whose preflight is in flight (drives the entry highlight). */
   pendingPreflightPath: string | null
   /**
-   * Path awaiting §8.3 switch confirmation while a session runs. Lives in
-   * the store (not the Sidebar) so the keyboard layer can request the same
-   * dialog (spec issue #4: 单一选中语义源).
+   * v1.2.3 (#39): the last path whose preflight FAILED. The selection
+   * (white pill) stays on the failed card — the error shows on the card —
+   * because selection is free and must not bounce off a bad project.
+   * Cleared by the next preflight of any project.
    */
-  pendingSwitchPath: string | null
+  failedPreflightPath: string | null
+  /**
+   * v1.2.3 (#39): last preflight error per project path — the card-level
+   * error state. Cleared for a path by its next successful preflight.
+   */
+  preflightErrors: Record<string, string>
   /**
    * v1.1.2 T7: the plain-Esc close-project confirmation is open. Cmd+Esc
    * and the Close button close directly; a lone Esc must confirm first.
@@ -113,8 +119,6 @@ interface ProjectState {
   /** Empties the history; folder memberships go with it (folders stay). */
   clearRecentProjects: () => void
   setPendingPreflight: (path: string | null) => void
-  requestSwitch: (path: string) => void
-  clearSwitchRequest: () => void
   setConfirmCloseProjectOpen: (open: boolean) => void
   /** Drills the sidebar into a folder, or back to the top level (null). */
   setActiveFolderId: (id: string | null) => void
@@ -183,7 +187,7 @@ interface ProjectState {
   applyFolderReorder: (orderedFolderIds: string[]) => void
   startPreflight: () => void
   preflightSucceeded: (path: string, manifest: Manifest) => void
-  preflightFailed: (message: string) => void
+  preflightFailed: (path: string, message: string) => void
   clearProject: () => void
 }
 
@@ -305,7 +309,8 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
   recentProjectPaths: [],
   projectFolders: [],
   pendingPreflightPath: null,
-  pendingSwitchPath: null,
+  failedPreflightPath: null,
+  preflightErrors: {},
   confirmCloseProjectOpen: false,
   activeFolderId: null,
   projectDisplayNames: {},
