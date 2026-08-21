@@ -11,7 +11,11 @@ import {
 import { logger } from './lib/logger'
 import { commands } from './lib/tauri-bindings'
 import { DEFAULT_SAMPLE_RATE } from './lib/preferences'
-import { colorThemeFromPrefs, setColorThemeAttribute } from './lib/color-theme'
+import {
+  colorThemeFromPrefs,
+  setColorThemeAttribute,
+  syncWindowCorners,
+} from './lib/color-theme'
 import { drainPendingBundleOpens } from './lib/bundle-project'
 import { handleDroppedPaths } from './lib/drag-drop'
 import { initWindowState, markQuitting } from './store/window-store'
@@ -60,6 +64,9 @@ function App() {
         const colorTheme = colorThemeFromPrefs(
           result.status === 'ok' ? result.data.colorTheme : null
         )
+        // #41: Brutal squares the native window corners — set the mask
+        // before the attribute so the native edge never lags the CSS.
+        await syncWindowCorners(colorTheme)
         setColorThemeAttribute(colorTheme)
         useSettingsStore.getState().setColorThemeSetting(colorTheme)
         // Issue #21: seed the Audio-section rate from the same read — the

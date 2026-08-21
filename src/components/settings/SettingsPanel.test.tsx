@@ -239,8 +239,11 @@ describe('SettingsPanel Appearance section (issues #38/#40)', () => {
       target: { value: 'sand' },
     })
 
-    // Immediate: the root data-color-theme flips without a restart.
-    expect(document.documentElement.dataset.colorTheme).toBe('sand')
+    // #41: the root attribute lands after the window-corner sync (one
+    // IPC tick) — the store stays same-tick, the attribute waits.
+    await waitFor(() => {
+      expect(document.documentElement.dataset.colorTheme).toBe('sand')
+    })
     expect(useSettingsStore.getState().colorThemeSetting).toBe('sand')
     expect(screen.getByTestId('color-theme-accent')).toHaveStyle({
       background: '#d97706',
@@ -261,7 +264,9 @@ describe('SettingsPanel Appearance section (issues #38/#40)', () => {
       target: { value: 'lavender' },
     })
 
-    expect(document.documentElement.dataset.colorTheme).toBe('lavender')
+    await waitFor(() => {
+      expect(document.documentElement.dataset.colorTheme).toBe('lavender')
+    })
     await waitFor(() => {
       expect(commands.savePreferences).toHaveBeenCalledWith(
         expect.objectContaining({ colorTheme: 'lavender' })
@@ -279,7 +284,9 @@ describe('SettingsPanel Appearance section (issues #38/#40)', () => {
       target: { value: 'brutal' },
     })
 
-    expect(document.documentElement.dataset.colorTheme).toBe('brutal')
+    await waitFor(() => {
+      expect(document.documentElement.dataset.colorTheme).toBe('brutal')
+    })
     expect(screen.getByTestId('color-theme-accent')).toHaveStyle({
       background: '#ff5722',
     })

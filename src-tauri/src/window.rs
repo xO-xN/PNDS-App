@@ -76,6 +76,11 @@ pub struct WindowManager {
     /// Suppresses the fade-out when the app is quitting (⌘Q): the exit
     /// path runs its own cleanup without waiting for an animation.
     pub quitting: AtomicBool,
+    /// v1.2.3 (issue #41): Brutal's window is square — the native 16px
+    /// corner mask drops to 0 while that theme is active. Set by the
+    /// frontend whenever the effective theme changes; every
+    /// `sync_corner_radius` call site consults it.
+    pub square_corners: AtomicBool,
 }
 
 impl Default for WindowManager {
@@ -84,6 +89,7 @@ impl Default for WindowManager {
             fade_gen: Arc::new(FadeGen::default()),
             fullscreen: AtomicBool::new(false),
             quitting: AtomicBool::new(false),
+            square_corners: AtomicBool::new(false),
         }
     }
 }
@@ -128,8 +134,9 @@ pub async fn toggle_fullscreen(app: AppHandle) -> Result<WindowStateSnapshot, St
     state.fullscreen.store(next, Ordering::SeqCst);
 
     // §7.4: fullscreen windows are square; windowed restores the 16px
-    // corner radius so the native edge matches the content rounding.
-    sync_corner_radius(&window);
+    // corner radius so the native edge matches the content rounding
+    // (#41: unless the square-corners theme flag says otherwise).
+    sync_corner_radius(&window, state.square_corners.load(Ordering::SeqCst));
 
     // Fullscreen changes only resize the window — the monitor document
     // instance stays untouched (no reload nonce, no iframe key change,
@@ -325,13 +332,35 @@ fn set_alpha<R: Runtime>(_window: &WebviewWindow<R>, _value: f64) -> Result<(), 
     Ok(())
 }
 
-/// Re-applies the native window corner radius for the current window state
-/// (§7.4): 16px in windowed mode, 0 in fullscreen. Call on startup and on
-/// every fullscreen transition (native green button or ⌃⌘F) so the radius
-/// survives the macOS native fullscreen round-trip.
-pub fn sync_corner_radius<R: Runtime>(window: &WebviewWindow<R>) {
+/// v1.2.3 (issue #41): Brutal's window is square — the native corner
+/// mask (16px in every other theme) drops to 0 while that theme is
+/// active. The frontend calls this whenever the effective theme changes
+/// (startup + every Appearance switch); fullscreen is square regardless.
+/// The AppKit work hops to the main thread — driving the view hierarchy
+/// from a tokio worker aborts (the glass.rs lesson).
+#[tauri::command]
+#[specta::specta]
+pub async fn set_window_corners_square(app: AppHandle, square: bool) -> Result<(), String> {
+    app.state::<WindowManager>()
+        .square_corners
+        .store(square, Ordering::SeqCst);
+    let window = app
+        .get_webview_window("main")
+        .ok_or("main window not found")?;
+    app.run_on_main_thread(move || {
+        sync_corner_radius(&window, square);
+    })
+    .map_err(|e| format!("Failed to schedule the corner task: {e}"))
+}
+
+/// Re-applies the native window corner radius for the current window
+/// state (§7.4): 16px in windowed mode, 0 in fullscreen — and 0 in any
+/// state while the square-corners theme flag is set (#41). Call on
+/// startup, on every fullscreen transition (native green button or
+/// ⌃⌘F), and on every theme change so the radius survives them all.
+pub fn sync_corner_radius<R: Runtime>(window: &WebviewWindow<R>, square_corners: bool) {
     let is_fullscreen = window.is_fullscreen().unwrap_or(false);
-    let radius = window_corner_radius(is_fullscreen);
+    let radius = window_corner_radius(is_fullscreen, square_corners);
     if let Err(e) = set_corner_radius(window, radius) {
         log::warn!("setCornerRadius({radius}) failed: {e}");
     }
@@ -454,9 +483,10 @@ unsafe fn find_first_of_class(
     None
 }
 
-/// Radius selection: square in fullscreen, 16px in windowed mode.
-fn window_corner_radius(is_fullscreen: bool) -> f64 {
-    if is_fullscreen {
+/// Radius selection: square in fullscreen or under the square-corners
+/// theme flag, 16px in windowed mode.
+fn window_corner_radius(is_fullscreen: bool, square_corners: bool) -> f64 {
+    if is_fullscreen || square_corners {
         0.0
     } else {
         CORNER_RADIUS
@@ -559,10 +589,14 @@ mod tests {
     }
 
     /// §7.4: the native corner radius is 16px in windowed mode (matching
-    /// the frontend `--app-corner-radius` token) and square in fullscreen.
+    /// the frontend `--app-corner-radius` token) and square in fullscreen
+    /// — and square in every state while the Brutal theme flag is set
+    /// (#41).
     #[test]
     fn corner_radius_is_square_in_fullscreen() {
-        assert_eq!(window_corner_radius(false), 16.0);
-        assert_eq!(window_corner_radius(true), 0.0);
+        assert_eq!(window_corner_radius(false, false), 16.0);
+        assert_eq!(window_corner_radius(true, false), 0.0);
+        assert_eq!(window_corner_radius(false, true), 0.0);
+        assert_eq!(window_corner_radius(true, true), 0.0);
     }
 }

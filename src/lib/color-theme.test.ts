@@ -70,4 +70,17 @@ describe('applyColorThemeSetting (issue #38: apply + persist)', () => {
 
     expect(document.documentElement.dataset.colorTheme).toBe('sand')
   })
+
+  // #41: Brutal squares the native window corners; every other theme
+  // keeps the 16px mask. The sync runs before the attribute so the
+  // native edge never lags the CSS edge.
+  it('syncs the window corner style with the theme (#41)', async () => {
+    await applyColorThemeSetting('brutal')
+    expect(commands.setWindowCornersSquare).toHaveBeenCalledWith(true)
+    expect(document.documentElement.dataset.colorTheme).toBe('brutal')
+
+    await applyColorThemeSetting('lavender')
+    expect(commands.setWindowCornersSquare).toHaveBeenCalledWith(false)
+    expect(document.documentElement.dataset.colorTheme).toBe('lavender')
+  })
 })

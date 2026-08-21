@@ -1,4 +1,5 @@
 import { logger } from '@/lib/logger'
+import { commands } from '@/lib/tauri-bindings'
 import { updatePreferences } from '@/lib/preferences'
 import { useSettingsStore } from '@/store/settings-store'
 
@@ -67,6 +68,24 @@ export function setColorThemeAttribute(theme: ColorTheme): void {
 }
 
 /**
+ * Brutal's window is square (#41): the native 16px corner mask
+ * (window.rs) drops to 0 while that theme is active. Called BEFORE the
+ * root attribute lands so the mask never lags the CSS edge — switching
+ * into Brutal squares the mask first, switching away rounds it first.
+ * A failure is logged, never thrown: the CSS edge still renders (its
+ * own square-corner rule), this only keeps the native edge in step.
+ */
+export async function syncWindowCorners(theme: ColorTheme): Promise<void> {
+  const result = await commands.setWindowCornersSquare(theme === 'brutal')
+  if (result.status === 'error') {
+    logger.warn('Failed to sync the window corner style', {
+      error: result.error,
+      theme,
+    })
+  }
+}
+
+/**
  * Apply an Appearance-section selection — set the root attribute (the UI
  * repaints immediately, session or not), update the settings store, and
  * persist through the serialized preference queue so the choice survives
@@ -75,6 +94,7 @@ export function setColorThemeAttribute(theme: ColorTheme): void {
  */
 export async function applyColorThemeSetting(theme: ColorTheme): Promise<void> {
   try {
+    await syncWindowCorners(theme)
     setColorThemeAttribute(theme)
     useSettingsStore.getState().setColorThemeSetting(theme)
     await updatePreferences({ colorTheme: theme })

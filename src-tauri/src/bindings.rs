@@ -5,6 +5,7 @@ pub fn generate_bindings() -> Builder<tauri::Wry> {
 
     Builder::<tauri::Wry>::new().commands(collect_commands![
         crate::window::toggle_fullscreen,
+        crate::window::set_window_corners_square,
         crate::window::close_window_with_fade,
         crate::window::fade_in_window,
         crate::window::get_window_state,

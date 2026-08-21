@@ -122,10 +122,12 @@ node's `data-color-theme` attribute:
   flattens to 0 and every transition snaps to 0s — hover tints, the
   selection pill, and reveals are instant in this theme (a deliberate
   trade against v1.2.2's sliding pill). Exemptions: the AppShell
-  window-frame roots (`data-app-frame`) keep `--app-corner-radius` so
-  the CSS edge stays aligned with the native window mask (window.rs),
-  and the traffic-light dots (`data-os-circle`, set in
-  TrafficLights.tsx) stay circular. Type is per-theme: `--pnds-font-ui`
+  the window itself squares too: `set_window_corners_square` (window.rs)
+  drops the native 16px mask while the theme is active — synced before
+  the root attribute lands so neither edge lags the other — and the
+  traffic-light dots (`data-os-circle`, set in TrafficLights.tsx) stay
+  circular. Other themes keep the rounded window and the
+  `data-app-frame` rounding untouched. Type is per-theme: `--pnds-font-ui`
   / `--pnds-font-text` tokens (defined per theme block, read by `body`
   and `.font-manrope`) — Brutal swaps both to Archivo (bundled woff2 in
   public/fonts, OFL), everything else keeps Comfortaa/Manrope. The

@@ -436,20 +436,17 @@
    this theme only: flat corners (brutalism's 0px radius) and instant
    state changes (hover tints, the selection pill, and reveals all snap
    — the same move the global reduced-motion rule makes in App.css).
-   Exemptions keep functional geometry: window-frame containers align
-   with the native window mask (window.rs CORNER_RADIUS — squaring them
-   would leak the webview background at the corners), and the traffic
-   -light dots stay circular (macOS system metaphor, via TrafficLights'
-   data-os-circle). */
+   The window frames square too: the native corner mask drops to 0 with
+   the theme (window.rs `set_window_corners_square`, called before the
+   attribute lands), so nothing leaks at the corners — the data-app-frame
+   rounding exemption other states rely on is deliberately absent. The
+   traffic-light dots stay circular (macOS system metaphor, via
+   TrafficLights' data-os-circle). */
 [data-color-theme='brutal'] *,
 [data-color-theme='brutal'] *::before,
 [data-color-theme='brutal'] *::after {
   border-radius: 0 !important;
   transition-duration: 0s !important;
-}
-
-[data-color-theme='brutal'] [data-app-frame] {
-  border-radius: var(--app-corner-radius) !important;
 }
 
 [data-color-theme='brutal'] [data-os-circle] {

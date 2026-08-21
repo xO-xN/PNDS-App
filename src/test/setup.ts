@@ -150,6 +150,10 @@ vi.mock('@/lib/tauri-bindings', () => ({
       status: 'ok',
       data: { fullscreen: true, showCustomTrafficLights: false, generation: 1 },
     }),
+    // #41: the default (square=false) keeps windowed corners rounded.
+    setWindowCornersSquare: vi
+      .fn()
+      .mockResolvedValue({ status: 'ok', data: null }),
     closeWindowWithFade: vi
       .fn()
       .mockResolvedValue({ status: 'ok', data: null }),

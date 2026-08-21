@@ -131,9 +131,15 @@ pub fn run() {
 
             // §7.4: the native window corner radius must match the shared
             // frontend token (16px) so the window's real edge aligns with
-            // the content rounding. Fullscreen windows are square.
+            // the content rounding. Fullscreen windows are square. The
+            // square-corners flag is still false here — the frontend sets
+            // it right after applying the saved Brutal theme.
             if let Some(window) = app.get_webview_window("main") {
-                crate::window::sync_corner_radius(&window);
+                let square = app
+                    .state::<crate::window::WindowManager>()
+                    .square_corners
+                    .load(std::sync::atomic::Ordering::SeqCst);
+                crate::window::sync_corner_radius(&window, square);
                 // v1.2.3 (user request): no default web right-click menu
                 // anywhere — right-click belongs to the designed context
                 // menus only (all frames, incl. the monitor iframes).
@@ -170,8 +176,14 @@ pub fn run() {
                         let _ = app_handle.emit("pnds:window", state.snapshot());
                         log::info!("Fullscreen state synced via resize: {is_fs}");
                         // §7.4: square the native corners in fullscreen and
-                        // restore the 16px radius on the way back.
-                        crate::window::sync_corner_radius(&window);
+                        // restore the 16px radius on the way back (#41:
+                        // unless the square-corners theme flag is set).
+                        crate::window::sync_corner_radius(
+                            &window,
+                            state
+                                .square_corners
+                                .load(std::sync::atomic::Ordering::SeqCst),
+                        );
                     }
                 }
             }

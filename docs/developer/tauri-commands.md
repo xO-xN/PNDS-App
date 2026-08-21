@@ -212,6 +212,7 @@ vi.mock('@/lib/tauri-bindings', () => ({
 | `setMasterVolume`          | `percent: number`                     | `Result<null, string>`                  | Master gain (§6.4)                                                                 |
 | `getWindowState`           | none                                  | `Result<WindowStateSnapshot, string>`   | Fullscreen/fade mirror (§7.4)                                                      |
 | `toggleFullscreen`         | none                                  | `Result<WindowStateSnapshot, string>`   | The one fullscreen action (§7.4)                                                   |
+| `setWindowCornersSquare`   | `square: boolean`                     | `Result<null, string>`                  | Brutal's square window — drops the 16px native corner mask (#41)                   |
 | `closeWindowWithFade`      | none                                  | `Result<null, string>`                  | Fade out then hide (§7.4)                                                          |
 | `fadeInWindow`             | none                                  | `Result<null, string>`                  | First show / dock reopen fade (§7.4)                                               |
 | `markQuitting`             | none                                  | `Result<null, string>`                  | Cancel in-flight fades (⌘Q, §7.4)                                                  |

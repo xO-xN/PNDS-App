@@ -21,6 +21,22 @@ async toggleFullscreen() : Promise<Result<WindowStateSnapshot, string>> {
 }
 },
 /**
+ * v1.2.3 (issue #41): Brutal's window is square — the native corner
+ * mask (16px in every other theme) drops to 0 while that theme is
+ * active. The frontend calls this whenever the effective theme changes
+ * (startup + every Appearance switch); fullscreen is square regardless.
+ * The AppKit work hops to the main thread — driving the view hierarchy
+ * from a tokio worker aborts (the glass.rs lesson).
+ */
+async setWindowCornersSquare(square: boolean) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("set_window_corners_square", { square }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * §7.4 fade-out then hide (red light / Close Window). Interruptible:
  * a newer request cancels the ramp and the terminal action still runs
  * from a deterministic state.
