@@ -17,6 +17,10 @@
 //! app never installs an NSVisualEffectView, so there is nothing else to
 //! restore. Theme switches while a session runs only touch window
 //! dressing; no session, audio, or webview lifecycle is involved.
+//!
+//! Threading: every AppKit call below runs on the main thread — the
+//! `set_liquid_glass` command hops there via `run_on_main_thread`. Do not
+//! call `apply_liquid_glass` from anywhere else.
 
 use tauri::{AppHandle, Manager, Runtime, WebviewWindow};
 
@@ -299,13 +303,27 @@ pub async fn supports_liquid_glass() -> Result<bool, String> {
 /// v1.2.3 (issue #41): apply/remove the native liquid-glass dressing.
 /// Called by the frontend whenever the effective theme changes — including
 /// away from glass, which restores the default opaque window.
+///
+/// The AppKit work MUST run on the main thread: this async command executes
+/// on a tokio worker, and driving the view hierarchy from there throws an
+/// ObjC exception ("modifying the autolayout engine from a background
+/// thread") that Rust cannot catch — an instant abort (the crash reported
+/// on first Glass selection). `run_on_main_thread` hops over and the
+/// channel waits out the (sub-millisecond) result so errors still surface.
 #[tauri::command]
 #[specta::specta]
 pub async fn set_liquid_glass(app: AppHandle, enabled: bool) -> Result<(), String> {
     let window = app
         .get_webview_window("main")
         .ok_or("main window not found")?;
-    apply_liquid_glass(&window, enabled)
+    let (tx, rx) = std::sync::mpsc::channel();
+    app.run_on_main_thread(move || {
+        let result = apply_liquid_glass(&window, enabled);
+        let _ = tx.send(result);
+    })
+    .map_err(|e| format!("Failed to schedule the glass task on the main thread: {e}"))?;
+    rx.recv()
+        .map_err(|_| "The main-thread glass task did not report back".to_string())?
 }
 
 #[cfg(test)]
