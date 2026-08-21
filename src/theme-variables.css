@@ -399,10 +399,10 @@
   --pnds-font-text: 'Archivo', -apple-system, 'Segoe UI', 'Roboto', sans-serif;
 
   --pnds-bg: #fff1c9;
-  /* Solid pale cream — lighter than the bg so the sidebar panel reads
-     (the collage era is over; the PNDS wordmark rule below is the
-     sidebar's signature now). */
-  --pnds-sidebar-bg: #fffbe0;
+  /* Pure white — with the panel-level shadow removed (#41 feedback),
+     color does the separating: white panel on the cream bg, no clash.
+     The 1px black outline alone defines the edge. */
+  --pnds-sidebar-bg: #ffffff;
   --pnds-card: #ffffff;
   --pnds-pill: #ffe58f;
   --pnds-pill-hover: #ffd966;
@@ -495,11 +495,12 @@
   transition-timing-function: cubic-bezier(0.4, 0.1, 0.2, 1);
 }
 
-/* The sidebar: a solid pale-cream panel (#fffbe0 above) with a hard
-   black outline and hard offset shadow replacing the variant's soft
-   shadow utilities — the wordmark experiment was removed on feedback,
-   the quiet panel stays. */
+/* The sidebar: a solid white panel (#ffffff above, separated from the
+   cream bg by color itself — the panel-level hard shadow is gone on
+   feedback) with a 1px black outline defining the edge. The variant's
+   soft shadow utilities are overridden to none so nothing floats the
+   whole panel. */
 [data-color-theme='brutal'] [data-sidebar-surface] {
   border-color: #000000;
-  box-shadow: 6px 6px 0 #000000;
+  box-shadow: none;
 }
