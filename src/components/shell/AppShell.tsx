@@ -174,7 +174,7 @@ export function AppShell() {
       <>
         <div
           className={cn(
-            'flex h-screen w-screen overflow-hidden bg-(--pnds-bg)',
+            'flex h-screen w-screen overflow-hidden',
             !fullscreen && 'rounded-[var(--app-corner-radius)]'
           )}
         >
@@ -199,7 +199,7 @@ export function AppShell() {
       <>
         <div
           className={cn(
-            'relative h-screen w-screen overflow-hidden bg-(--pnds-bg)',
+            'relative h-screen w-screen overflow-hidden',
             !fullscreen && 'rounded-[var(--app-corner-radius)]'
           )}
         >
@@ -217,11 +217,17 @@ export function AppShell() {
   }
 
   // ── Welcome (sidebar always open, full height) ──
+  // None of the branch roots above paints `bg-(--pnds-bg)`: each screen
+  // (Welcome/Loading/Error) owns its single wash. Stacking a shell wash
+  // under it doubled the white coat and buried the Glass theme's
+  // transparency (issue #41 retest) — and the ready state, whose root is
+  // unpainted, is the reference look the sidebar must match in every
+  // state.
   return (
     <>
       <div
         className={cn(
-          'flex h-screen w-screen overflow-hidden bg-(--pnds-bg)',
+          'flex h-screen w-screen overflow-hidden',
           !fullscreen && 'rounded-2xl'
         )}
       >

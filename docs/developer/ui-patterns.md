@@ -116,13 +116,22 @@ node's `data-color-theme` attribute:
   renders Lavender — the preference is not rewritten, so it revives on a
   supported machine). Selecting it also toggles the native dressing via
   `set_liquid_glass`: an `NSGlassEffectView` behind the webview plus a
-  transparent window (src-tauri/src/glass.rs); the CSS block paints
-  high-opacity white layers over it (`--pnds-glass-filter` frosts
+  transparent window (src-tauri/src/glass.rs — the view is pinned to the
+  **Regular** style explicitly; `Clear`, the other variant, is the
+  near-untinted style that reads as a plain transparent window, and
+  `tintColor` remains available if the material should ever carry the
+  brand tint). The CSS block paints thin white α-washes over the material
+  (bg 24%, sidebar 32%, card 66%; `--pnds-glass-filter` frosts
   translucent surfaces — `.pnds-glass-blur` on app chrome, the shadcn
-  data-slot hooks for portal surfaces). The monitor iframe area stays
-  opaque. No frosted fallback on older systems — the option is simply
-  gated off (spec #36). Glass is exempt from the 4.5:1 guarantee: its
-  backdrop is the live desktop, so contrast is approximated.
+  data-slot hooks for portal surfaces). **One wash per region, never
+  stacked**: the AppShell branch roots paint no `bg-(--pnds-bg)` — each
+  screen (Welcome/Loading/Error) owns its single wash, which is what
+  keeps the sidebar at the same transparency in every window state
+  (double-coating is what made Glass read as an opaque white window in
+  the #41 retest). The monitor iframe area stays opaque. No frosted
+  fallback on older systems — the option is simply gated off (spec #36).
+  Glass is exempt from the 4.5:1 guarantee: its backdrop is the live
+  desktop, so contrast is approximated.
 - Components consume tokens via Tailwind arbitrary values — `bg-(--pnds-bg)`,
   `text-(--pnds-text)/60`, `shadow-(--pnds-card-shadow)` — never literal
   colors. Status fills carry their own label token

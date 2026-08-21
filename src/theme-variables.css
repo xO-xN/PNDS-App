@@ -452,12 +452,16 @@
 
   /* PNDS design tokens — white α-layers. bg is the window-wide wash over
      the native glass (most translucent); nested surfaces grow more
-     opaque so stacked chrome keeps its hierarchy. */
-  --pnds-bg: rgb(255 255 255 / 38%);
-  --pnds-sidebar-bg: rgb(255 255 255 / 45%);
-  --pnds-card: rgb(255 255 255 / 72%);
-  --pnds-pill: rgb(255 255 255 / 40%);
-  --pnds-pill-hover: rgb(255 255 255 / 52%);
+     opaque so stacked chrome keeps its hierarchy. Deliberately thin:
+     the Regular glass material behind already frosts the desktop, and
+     heavier coats read as an opaque white window (the issue #41 retest
+     report). One wash per region, never stacked — the screens own the
+     wash, the AppShell branches never paint one. */
+  --pnds-bg: rgb(255 255 255 / 24%);
+  --pnds-sidebar-bg: rgb(255 255 255 / 32%);
+  --pnds-card: rgb(255 255 255 / 66%);
+  --pnds-pill: rgb(255 255 255 / 30%);
+  --pnds-pill-hover: rgb(255 255 255 / 44%);
   --pnds-accent: #5a4ff3;
   --pnds-accent-hover: #4a3fe0;
   --pnds-accent-foreground: #ffffff;
