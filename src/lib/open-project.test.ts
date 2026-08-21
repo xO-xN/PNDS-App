@@ -396,11 +396,14 @@ describe('stopAndReset vs a free selection (#39)', () => {
     })
   })
 
-  it("keeps the selection when it is not the stopped session's project", async () => {
+  it("keeps the selection when it is not the stopped session's project — and re-seeds a usable Load", async () => {
     useSessionStore.setState({
       sessionStatus: 'ready',
       sessionProjectPath: '/a',
       projectName: 'Project A',
+      lanIp: '192.168.1.10',
+      lanAddresses: ['192.168.1.10'],
+      audioMode: 'internal',
     })
 
     await stopAndReset()
@@ -408,6 +411,10 @@ describe('stopAndReset vs a free selection (#39)', () => {
     expect(useProjectStore.getState().currentProject?.path).toBe('/b')
     expect(useProjectStore.getState().preflightStatus).toBe('ready')
     expect(useSessionStore.getState().sessionStatus).toBe('idle')
+    // The kept card is usable, not just highlighted: the re-preflight
+    // re-seeded its start config (review fix for the ⌘W dead-end).
+    expect(commands.preflightProject).toHaveBeenCalledWith('/b')
+    expect(useSessionStore.getState().lanIp).toBe('192.168.1.10')
   })
 
   it('clears the selection when the running card itself was selected', async () => {
