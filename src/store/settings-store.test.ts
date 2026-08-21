@@ -8,7 +8,6 @@ describe('settings-store (v1.2.0 issue #13: settings panel state)', () => {
       focusSection: null,
       languageSetting: 'system',
       colorThemeSetting: 'lavender',
-      liquidGlassSupported: false,
       sampleRateSetting: 48000,
     })
   })
@@ -67,13 +66,5 @@ describe('settings-store (v1.2.0 issue #13: settings panel state)', () => {
     expect(useSettingsStore.getState().colorThemeSetting).toBe('lavender')
     useSettingsStore.getState().setColorThemeSetting('sand')
     expect(useSettingsStore.getState().colorThemeSetting).toBe('sand')
-  })
-
-  // Issue #41 (v1.2.3): the Glass gate — pessimistic until App.tsx seeds
-  // the version-gate result at startup.
-  it('defaults the Glass gate to unsupported and stores the seed', () => {
-    expect(useSettingsStore.getState().liquidGlassSupported).toBe(false)
-    useSettingsStore.getState().setLiquidGlassSupported(true)
-    expect(useSettingsStore.getState().liquidGlassSupported).toBe(true)
   })
 })

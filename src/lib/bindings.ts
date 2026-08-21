@@ -83,39 +83,6 @@ async quitApp() : Promise<Result<null, string>> {
 }
 },
 /**
- * v1.2.3 (issue #41): whether this system can render the Glass theme.
- * Drives the Appearance option's disabled state and the persisted-value
- * fallback (glass on an old system renders Lavender instead).
- */
-async supportsLiquidGlass() : Promise<Result<boolean, string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("supports_liquid_glass") };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * v1.2.3 (issue #41): apply/remove the native liquid-glass dressing.
- * Called by the frontend whenever the effective theme changes — including
- * away from glass, which restores the default opaque window.
- * 
- * The AppKit work MUST run on the main thread: this async command executes
- * on a tokio worker, and driving the view hierarchy from there throws an
- * ObjC exception ("modifying the autolayout engine from a background
- * thread") that Rust cannot catch — an instant abort (the crash reported
- * on first Glass selection). `run_on_main_thread` hops over and the
- * channel waits out the (sub-millisecond) result so errors still surface.
- */
-async setLiquidGlass(enabled: boolean) : Promise<Result<null, string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("set_liquid_glass", { enabled }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
  * Loads user preferences from disk.
  * Returns default preferences if the file doesn't exist.
  */

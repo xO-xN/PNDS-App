@@ -94,12 +94,6 @@ vi.mock('@/lib/tauri-bindings', () => ({
       .fn()
       .mockResolvedValue({ status: 'ok', data: { theme: 'system' } }),
     savePreferences: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
-    // v1.2.3 (issue #41): the Glass version gate — pessimistic by default
-    // so the option renders disabled; glass tests override to true.
-    supportsLiquidGlass: vi
-      .fn()
-      .mockResolvedValue({ status: 'ok', data: false }),
-    setLiquidGlass: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
     sendNativeNotification: vi
       .fn()
       .mockResolvedValue({ status: 'ok', data: null }),

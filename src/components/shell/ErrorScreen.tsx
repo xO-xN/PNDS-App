@@ -121,10 +121,7 @@ export function ErrorScreen() {
   }
 
   return (
-    // No bg wash: the AppShell branch root owns the base coat — a second
-    // coat here is invisible in solid themes but doubles the white in
-    // Glass (issue #41).
-    <div className="flex min-h-full flex-col items-center justify-center gap-5 p-8">
+    <div className="flex min-h-full flex-col items-center justify-center gap-5 bg-(--pnds-bg) p-8">
       <h1 className="text-2xl font-semibold text-(--pnds-text)">
         {t('error.title')}
       </h1>
@@ -139,7 +136,7 @@ export function ErrorScreen() {
       {conflictPort !== null && conflictOccupant !== false && (
         <div
           data-testid="port-conflict-block"
-          className="w-full max-w-xl rounded-xl border border-(--pnds-text)/10 bg-(--pnds-card) p-4 text-sm pnds-glass-blur"
+          className="w-full max-w-xl rounded-xl border border-(--pnds-text)/10 bg-(--pnds-card) p-4 text-sm"
         >
           <p className="font-medium text-(--pnds-text)">
             {t('error.portConflictOccupant', { port: conflictPort })}

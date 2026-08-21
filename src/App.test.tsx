@@ -7,7 +7,6 @@ import App from './App'
 
 describe('App', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
     delete document.documentElement.dataset.colorTheme
   })
 
@@ -54,44 +53,5 @@ describe('App', () => {
     await waitFor(() => {
       expect(document.documentElement.dataset.colorTheme).toBe('lavender')
     })
-  })
-
-  // v1.2.3 (issue #41): a persisted `glass` preference renders only where
-  // the Rust version gate allows — on older systems it falls back to
-  // Lavender (rendered; the preference itself is not rewritten).
-  it('renders a persisted glass theme on a supported system', async () => {
-    vi.mocked(commands.supportsLiquidGlass).mockResolvedValue({
-      status: 'ok',
-      data: true,
-    })
-    vi.mocked(commands.loadPreferences).mockResolvedValue({
-      status: 'ok',
-      data: { theme: 'system', colorTheme: 'glass', language: null },
-    })
-    render(<App />)
-
-    await waitFor(() => {
-      expect(document.documentElement.dataset.colorTheme).toBe('glass')
-    })
-    await waitFor(() => {
-      expect(commands.setLiquidGlass).toHaveBeenCalledWith(true)
-    })
-  })
-
-  it('falls back to Lavender for a persisted glass theme below macOS 26', async () => {
-    vi.mocked(commands.supportsLiquidGlass).mockResolvedValue({
-      status: 'ok',
-      data: false,
-    })
-    vi.mocked(commands.loadPreferences).mockResolvedValue({
-      status: 'ok',
-      data: { theme: 'system', colorTheme: 'glass', language: null },
-    })
-    render(<App />)
-
-    await waitFor(() => {
-      expect(document.documentElement.dataset.colorTheme).toBe('lavender')
-    })
-    expect(commands.setLiquidGlass).not.toHaveBeenCalledWith(true)
   })
 })

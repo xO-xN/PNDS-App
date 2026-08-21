@@ -169,14 +169,6 @@
   outline-offset: 1px;
 }
 
-/* Glass frosting for the app's own translucent surfaces (v1.2.3 T5,
-   issue #41): the var is `none` in every solid theme, so the class is a
-   permanent no-op there. The shadcn portal surfaces get the same var via
-   their data-slot hooks in theme-variables.css. */
-.pnds-glass-blur {
-  backdrop-filter: var(--pnds-glass-filter);
-}
-
 /* Reduced motion (v1.2.2, issue #32): with the system preference set, CSS
    transitions and animations complete near-instantly instead of playing —
    every state change (hover tints, the folder pill's slide, the sidebar's

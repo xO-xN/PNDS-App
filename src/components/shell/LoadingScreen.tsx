@@ -31,10 +31,7 @@ export function LoadingScreen({ onDissolveEnd }: Props) {
   }
 
   return (
-    // No bg wash: the AppShell branch root owns the base coat — a second
-    // coat here is invisible in solid themes but doubles the white in
-    // Glass (issue #41).
-    <div className="flex h-full w-full flex-col items-center justify-center">
+    <div className="flex h-full w-full flex-col items-center justify-center bg-(--pnds-bg)">
       <PndsLogoCanvas
         size={380}
         ready={reallyReady}

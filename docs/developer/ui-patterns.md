@@ -90,7 +90,7 @@ To add a new semantic color:
 
 Then use with Tailwind: `bg-success text-success-foreground`
 
-## Color Themes (v1.2.3, issues #38/#40/#41)
+## Color Themes (v1.2.3, issue #38)
 
 The app's color themes are NOT the `.dark` axis: the shadcn `.dark` class
 is never applied (see Dark Mode below — that section describes why), and a
@@ -106,37 +106,10 @@ node's `data-color-theme` attribute:
   defined as "the current look" and doubles as the pre-JavaScript fallback
   (until startup applies the saved attribute, the app renders Lavender).
 - `src/lib/color-theme.ts` owns the attribute: the startup preferences read
-  applies the saved theme (unknown values fall back to Lavender), and the
-  settings panel's Appearance section applies changes immediately and
-  persists `colorTheme` (enum-validated in Rust:
+  applies the saved theme (unknown or not-yet-shipped values fall back to
+  Lavender), and the settings panel's Appearance section applies changes
+  immediately and persists `colorTheme` (enum-validated in Rust:
   lavender/sand/stage/midnight/glass).
-- **Glass (issue #41)** is macOS 26+ only: the Rust gate
-  (`supports_liquid_glass`) drives the Appearance option's disabled state
-  and the render-time fallback (persisted `glass` on an older system
-  renders Lavender — the preference is not rewritten, so it revives on a
-  supported machine). The window and webview are transparent FROM
-  CREATION (`app.macOSPrivateApi` + `windows[].transparent` in
-  tauri.conf.json) — wry writes the private `drawsBackground` key into
-  the WKWebViewConfiguration while building the webview, the one
-  transparency path that still works on macOS 26 (the runtime
-  `_setDrawsBackground:` selector is gone, and flipping the window's
-  opaque state at runtime reset the corner mask and painted white
-  corners). `set_liquid_glass` therefore only inserts/removes an
-  `NSGlassEffectView` (default Regular style, the lensing material)
-  behind the webview (src-tauri/src/glass.rs) — it touches nothing
-  window-level. The CSS block paints one thin white wash over
-  it (bg 24%, sidebar 32%, card 66% — heavier coats read as an opaque
-  white window). **Exactly one wash per region**: the AppShell branch
-  roots own the base coat (`bg-(--pnds-bg)` — the rounded alignment with
-  the native window mask in window.rs, and the anchor the sidebar's /90
-  coat blends over), and the screens (Welcome/Loading/Error) never paint
-  their own — a screen-side second coat is invisible in solid themes but
-  doubles the white in Glass. `--pnds-glass-filter` frosts translucent
-  surfaces (`.pnds-glass-blur` on app chrome, the shadcn data-slot hooks
-  for portal surfaces). The monitor iframe area stays opaque. No frosted
-  fallback on older systems — the option is simply gated off (spec #36).
-  Glass is exempt from the 4.5:1 guarantee: its backdrop is the live
-  desktop, so contrast is approximated.
 - Components consume tokens via Tailwind arbitrary values — `bg-(--pnds-bg)`,
   `text-(--pnds-text)/60`, `shadow-(--pnds-card-shadow)` — never literal
   colors. Status fills carry their own label token

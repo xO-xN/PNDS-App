@@ -5,7 +5,6 @@
 
 mod bindings;
 mod commands;
-mod glass;
 mod open_panel;
 mod process_activity;
 mod project;
