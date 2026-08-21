@@ -186,15 +186,15 @@
   --pnds-warning-foreground: var(--pnds-text);
 }
 
-/* Sand — 暖沙: warm light theme (v1.2.3 T2, issue #38). Base palette from
-   spec #36: bg #f6f1e8, sidebar #efe8db, card #fffdf8, accent #d97706. */
+/* Sand — 暖沙: warm MEDIUM-depth theme — deliberately between the light
+   and dark themes (v1.2.3 T2 #38, palette retuned on #41's request).
+   Warm-white text on dim warm-taupe surfaces; amber accent unchanged. */
 [data-color-theme='sand'] {
   /* shadcn semantic mapping — the settings panel, its popovers and the
      confirm dialogs are shadcn surfaces, so they follow the theme too.
-     Structure mirrors Lavender's :root: primary is the strong text colour
-     (Lavender's oklch(0.205) ≈ its text), so confirm buttons stay dark
-     under both light themes; ring is the accent, matching the app-wide
-     accent focus-ring language of v1.2.2. */
+     Structure mirrors the dark themes: primary is the strong text colour
+     (warm white here), ring is the accent, matching the app-wide accent
+     focus-ring language of v1.2.2. */
   --background: var(--pnds-card);
   --foreground: var(--pnds-text);
   --card: var(--pnds-card);
@@ -210,8 +210,8 @@
   --accent: var(--pnds-pill-hover);
   --accent-foreground: var(--pnds-text);
   --destructive: var(--pnds-danger);
-  --border: #e3dccb;
-  --input: #e3dccb;
+  --border: #cfc4ae;
+  --input: #cfc4ae;
   --ring: var(--pnds-accent);
   --sidebar: var(--pnds-sidebar-bg);
   --sidebar-foreground: var(--pnds-text);
@@ -219,44 +219,45 @@
   --sidebar-primary-foreground: var(--pnds-card);
   --sidebar-accent: var(--pnds-pill-hover);
   --sidebar-accent-foreground: var(--pnds-text);
-  --sidebar-border: #e3dccb;
+  --sidebar-border: #cfc4ae;
   --sidebar-ring: var(--pnds-accent);
 
   /* PNDS design tokens. Amber's luminance is high, so the accent carries
-     a dark label; that same label is why accent-hover *lightens* instead
-     of darkening — a darker amber would fall below 4.5:1 against it
-     (rest 4.8:1, hover 5.4:1; a darkened #b45309 would read 3.1:1). The
-     accent as small text uses the darker --pnds-accent-text twin. */
-  --pnds-bg: #f6f1e8;
-  --pnds-sidebar-bg: #efe8db;
-  --pnds-card: #fffdf8;
-  --pnds-pill: #f1eadd;
-  --pnds-pill-hover: #e7e0d3;
+     a dark label; that same label is why accent-hover *lightens* — a
+     darker amber would fall below 4.5:1 against it (rest 5.2:1, hover
+     6.3:1). The accent-text twin inverts on this mid-dark ladder: it is
+     the LIGHTER amber (#fbbf24), ≥4.5:1 on every surface. Ladder keeps
+     bg < sidebar < pill < card. Text 7.2-9.7:1, secondary 5.6-7.5:1. */
+  --pnds-bg: #474036;
+  --pnds-sidebar-bg: #4e463b;
+  --pnds-card: #5c5344;
+  --pnds-pill: #544a3e;
+  --pnds-pill-hover: #655a4c;
   --pnds-accent: #d97706;
-  --pnds-accent-hover: #de8413;
-  --pnds-accent-foreground: #2b2416;
-  --pnds-accent-text: #a84a08;
-  --pnds-text: #2b2416;
-  --pnds-text-secondary: #6f6552;
-  --pnds-card-shadow: 0 1px 3px rgb(43 36 22 / 10%);
-  --pnds-knob-shadow:
-    0 1px 2px rgb(43 36 22 / 20%), 0 2px 6px rgb(43 36 22 / 15%);
-  /* Logo halos warm with the theme — amber tints of the accent. */
-  --pnds-logo-halo: #efd2af;
-  --pnds-logo-halo-core: #e8c69a;
-  --pnds-logo-halo-animated: #f7ecd4;
-  --pnds-monitor-bar: rgb(0 0 0 / 30%);
-  --pnds-monitor-bar-text: rgb(255 255 255 / 85%);
+  --pnds-accent-hover: #e8871a;
+  --pnds-accent-foreground: #241d12;
+  --pnds-accent-text: #fbbf24;
+  --pnds-text: #fff8ec;
+  --pnds-text-secondary: #e5dcca;
+  --pnds-card-shadow: 0 1px 3px rgb(0 0 0 / 40%);
+  --pnds-knob-shadow: 0 1px 2px rgb(0 0 0 / 45%), 0 2px 6px rgb(0 0 0 / 35%);
+  /* Logo halos warm with the theme — mid amber rings for the dim base. */
+  --pnds-logo-halo: #6e5325;
+  --pnds-logo-halo-core: #8a6a2e;
+  --pnds-logo-halo-animated: #a8823c;
+  --pnds-monitor-bar: rgb(0 0 0 / 35%);
+  --pnds-monitor-bar-text: rgb(255 255 255 / 90%);
 
-  /* Status colors keep the light-theme values (spec #36); both read
-     ≥4.5:1 against the Sand labels — danger 4.7:1 vs white, warning
-     8.4:1 vs the warm text. */
-  --pnds-danger: #e11d48;
-  --pnds-danger-hover: #c2143c;
-  --pnds-danger-foreground: #ffffff;
-  --pnds-warning: #ffb020;
-  --pnds-warning-hover: #f0a20c;
-  --pnds-warning-foreground: var(--pnds-text);
+  /* On the mid-dark card a red deep enough for a white label can't also
+     pass 4.5:1 as text — so danger lightens past the text floor and
+     takes a near-black label (11.0:1 on the fill, 4.8:1 as text on
+     card). Warning follows with the same dark-label pattern (10.6:1). */
+  --pnds-danger: #ffbcc0;
+  --pnds-danger-hover: #ffada1;
+  --pnds-danger-foreground: #2b1210;
+  --pnds-warning: #ffc46b;
+  --pnds-warning-hover: #f5b455;
+  --pnds-warning-foreground: #241d12;
 }
 
 /* Stage — 暗场: near-black high-contrast theme for dark-stage
@@ -370,34 +371,36 @@
   --sidebar-border: #ffffff;
   --sidebar-ring: var(--pnds-accent);
 
-  /* Neo-brutalism (issue #41 redirect): flat near-black surfaces, pure
-     white text, acid yellow as the one color, full-opacity white
-     borders, and HARD offset shadows — the soft-elevation vocabulary is
-     banned here. Ladder keeps bg < sidebar < pill < card. Contrast:
-     text 17-19:1, secondary 8:1, accent-text 16:1 on card. */
-  --pnds-bg: #0a0a0a;
-  --pnds-sidebar-bg: #0f0f0f;
-  --pnds-card: #1c1c1c;
-  --pnds-pill: #151515;
-  --pnds-pill-hover: #242424;
+  /* Neo-brutalism (issue #41 redirect): deep-violet surfaces (the flat
+     black of the first cut went too gray — the color lives in the base),
+     pure white text, acid yellow as the one accent, full-opacity white
+     borders, and HARD offset shadows in the accent — the soft-elevation
+     vocabulary is banned here. Ladder keeps bg < sidebar < pill < card.
+     Contrast: text 15-19:1, secondary 7.5-9.3:1, accent-text 14:1 on
+     card, danger-as-text 4.5:1 on card. */
+  --pnds-bg: #14101f;
+  --pnds-sidebar-bg: #1b1531;
+  --pnds-card: #2a2044;
+  --pnds-pill: #241b3f;
+  --pnds-pill-hover: #32245c;
   --pnds-accent: #ffff00;
   --pnds-accent-hover: #e8d500;
-  --pnds-accent-foreground: #0a0a0a;
+  --pnds-accent-foreground: #14101f;
   --pnds-accent-text: #ffff00;
   --pnds-text: #ffffff;
-  --pnds-text-secondary: #b3b3b3;
-  --pnds-card-shadow: 4px 4px 0 #ffffff;
-  --pnds-knob-shadow: 2px 2px 0 #ffffff;
-  /* Logo halos: dim acid rings, flat (no glow vocabulary). */
-  --pnds-logo-halo: #4d4d00;
-  --pnds-logo-halo-core: #66660d;
-  --pnds-logo-halo-animated: #85851d;
+  --pnds-text-secondary: #b8b3d6;
+  --pnds-card-shadow: 4px 4px 0 #ffff00;
+  --pnds-knob-shadow: 2px 2px 0 #ffff00;
+  /* Logo halos: violet rings echoing the base, flat (no glow). */
+  --pnds-logo-halo: #4a3d7a;
+  --pnds-logo-halo-core: #5c4d96;
+  --pnds-logo-halo-animated: #7a68c4;
   --pnds-monitor-bar: rgb(0 0 0 / 45%);
   --pnds-monitor-bar-text: #ffffff;
 
-  /* Pure-red danger / orange warning with near-black labels (5.9:1 and
-     9.0:1 on their fills; as text on card 5.1:1 and 8.3:1). Hover keeps
-     labels ≥4.7:1. */
+  /* Pure-red danger / orange warning with near-black labels (6.0:1 and
+     9.1:1 on their fills; as text on card 4.5:1 and 7.4:1). Hover keeps
+     labels ≥4.8:1. */
   --pnds-danger: #ff4757;
   --pnds-danger-hover: #e63946;
   --pnds-danger-foreground: #1a0006;

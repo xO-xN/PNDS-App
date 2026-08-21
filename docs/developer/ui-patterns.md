@@ -110,17 +110,26 @@ node's `data-color-theme` attribute:
   Lavender), and the settings panel's Appearance section applies changes
   immediately and persists `colorTheme` (enum-validated in Rust:
   lavender/sand/stage/midnight/glass).
-- **Midnight is the Neo-brutalism theme** (issue #41 redirect): flat
-  near-black surfaces, pure white text, an acid-yellow accent with black
-  labels, full-opacity white borders, and hard offset shadows
-  (`4px 4px 0 #fff`, no blur). Two structural rules scope to it in
-  theme-variables.css: every corner flattens to 0 and every transition
-  snaps to 0s — hover tints, the selection pill, and reveals are instant
-  in this theme (a deliberate trade against v1.2.2's sliding pill).
-  Exemptions: the AppShell window-frame roots (`data-app-frame`) keep
-  `--app-corner-radius` so the CSS edge stays aligned with the native
-  window mask (window.rs), and the traffic-light dots (`data-os-circle`,
-  set in TrafficLights.tsx) stay circular.
+- **Midnight is the Neo-brutalism theme** (issue #41 redirect): deep
+  violet surfaces, pure white text, an acid-yellow accent with black
+  labels, full-opacity white borders, and hard offset shadows in the
+  accent (`4px 4px 0 #ffff00`, no blur). Two structural rules scope to
+  it in theme-variables.css: every corner flattens to 0 and every
+  transition snaps to 0s — hover tints, the selection pill, and reveals
+  are instant in this theme (a deliberate trade against v1.2.2's sliding
+  pill). Exemptions: the AppShell window-frame roots (`data-app-frame`)
+  keep `--app-corner-radius` so the CSS edge stays aligned with the
+  native window mask (window.rs), and the traffic-light dots
+  (`data-os-circle`, set in TrafficLights.tsx) stay circular.
+- **Sand is the medium-depth theme** (palette retune on #41's request):
+  warm-white text on dim warm-taupe surfaces — deliberately between the
+  light and dark themes. Its accent-text twin inverts direction: the
+  accent-as-text is the LIGHTER amber (`#fbbf24`), because a darker
+  amber can't reach 4.5:1 on the mid-dark card. Danger follows the same
+  physics — light enough to pass as text on the card, labeled near-black
+  (the theme set spans light / medium / dark / brutalist, so the
+  "lighten vs darken the status color" rule is per-theme, not
+  per-lightness-class).
 - Components consume tokens via Tailwind arbitrary values — `bg-(--pnds-bg)`,
   `text-(--pnds-text)/60`, `shadow-(--pnds-card-shadow)` — never literal
   colors. Status fills carry their own label token
