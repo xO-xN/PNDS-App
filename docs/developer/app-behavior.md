@@ -158,6 +158,8 @@ Rust session manager 是运行状态真源。React 不得用本地 reset 伪造�
 - `⌘Q` 不等待动画，立即进入进程清理和退出；
 - 动画被打断后必须恢复一致 opacity，不能留下不可见但可交互的窗口。
 
+v1.3.0（#51）冷启动防闪模式——**隐藏创建 → 生效 → 显示**：主窗口以 `visible: false` 创建；前端在保存的主题（含深色）写入 DOM 后才调用 `fadeInWindow` 显示并淡入，窗口首个可见帧即为正确配色（深色用户不再先见浅色默认调色板）。显示门控在前端启动链（主题未落地不显示，读取失败也必须显示——DOM 保持 Lavender 默认仍是正确配色）；Rust 侧 `fade_in_window` 对已可见窗口是 no-op（dev reload 不得重淡入），lib.rs 的兜底线程在宽限期（4 秒）后强制显示仍未显现的窗口——应用绝不能保持不可见但运行。**持久化窗口状态不得包含 `VISIBLE` 标志**（`persisted_state_flags()`）——window-state 插件的恢复路径会自行 show，绕过门控。新窗口若要求首帧即正确（帮助中心，T8），复用同一模式。
+
 ## Sidebar
 
 必须包含：Recent Projects 与打开工程；当前工程名称；Audio Mode；External OSC target；CoreAudio device 与通道能力；master gain；Load/Change/Close；Share 与手动 monitor Refresh；全屏入口。

@@ -88,7 +88,13 @@ export async function requestClose(): Promise<void> {
   await closeWindowWithFade()
 }
 
-/** First show / dock reopen: fade in from transparent. */
+/**
+ * First show — the cold-start reveal (#51). The main window is created
+ * hidden so its first visible frame is already themed; App.tsx calls
+ * this once the saved theme has landed. Rust shows-and-fades a hidden
+ * window and NO-OPs on an already-visible one (dev reloads must never
+ * re-fade a live window).
+ */
 export async function fadeInWindow(): Promise<void> {
   const result = await commands.fadeInWindow()
   if (result.status === 'error') {

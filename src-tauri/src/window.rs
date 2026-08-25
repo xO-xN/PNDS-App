@@ -14,6 +14,13 @@
 //!     path is untouched).
 //!   - Every code path must leave the window fully opaque — never an
 //!     invisible-but-interactive window.
+//!   - v1.3.0 (#51) cold-start pattern — HIDDEN CREATE → APPLY → SHOW:
+//!     the window is created `visible: false`; the frontend reveals it
+//!     via `fade_in_window` only after the saved theme has landed (no
+//!     light-default flash for dark users), and the backstop thread in
+//!     lib.rs force-shows it if the reveal never arrives. New windows
+//!     that must not flash on their first frame (the Help center, T8)
+//!     reuse this same pattern.
 
 use serde::Serialize;
 use specta::Type;
@@ -26,6 +33,25 @@ use tauri::{AppHandle, Emitter, Manager, Runtime, WebviewWindow};
 const FADE_DURATION: Duration = Duration::from_millis(160);
 /// Poll cadence for the opacity ramp (~60 fps).
 const FADE_STEP: Duration = Duration::from_millis(16);
+
+/// v1.3.0 (#51): grace period for the cold-start reveal. The main window
+/// is created hidden (`visible: false` in tauri.conf.json) and the
+/// frontend reveals it with `fade_in_window` once the saved theme has
+/// landed. If that signal never arrives (early JS error, hung IPC), the
+/// backstop thread in lib.rs force-shows the window after this delay —
+/// the app must never stay invisible.
+pub const COLD_START_REVEAL_BACKSTOP: Duration = Duration::from_secs(4);
+
+/// v1.3.0 (#51): persisted window state must NOT include VISIBLE — the
+/// window-state plugin's restore path shows the window itself when that
+/// flag is set, which would bypass the hidden-create reveal gate (the
+/// theme-gated first frame). Visibility is exclusively ours: the
+/// cold-start reveal (`fade_in_window`) and the dock-reopen path.
+pub fn persisted_state_flags() -> tauri_plugin_window_state::StateFlags {
+    tauri_plugin_window_state::StateFlags::all()
+        .difference(tauri_plugin_window_state::StateFlags::VISIBLE)
+}
+
 /// How long the macOS native fullscreen transition takes. The window is
 /// transparent during it, so we fade in again only after it settles —
 /// otherwise the ramp fights the system animation (causing flicker).
@@ -173,9 +199,12 @@ pub async fn close_window_with_fade(app: AppHandle) -> Result<(), String> {
     let state = app.state::<WindowManager>();
 
     // Save window state before hiding (mirrors the CloseRequested path).
+    // #51: VISIBLE stays out of the persisted flags — a saved `visible`
+    // would auto-show the window on the next cold start, bypassing the
+    // theme-gated reveal.
     {
-        use tauri_plugin_window_state::{AppHandleExt, StateFlags};
-        if let Err(e) = app.save_window_state(StateFlags::all()) {
+        use tauri_plugin_window_state::AppHandleExt;
+        if let Err(e) = app.save_window_state(crate::window::persisted_state_flags()) {
             log::warn!("Failed to save window state: {e}");
         }
     }
@@ -191,7 +220,14 @@ pub async fn close_window_with_fade(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// §7.4: first show / dock reopen — fade in from transparent.
+/// First show / dock reopen — fade in from transparent.
+///
+/// v1.3.0 (#51): this is now the cold-start reveal. The main window is
+/// created hidden; the frontend calls this once the saved theme has
+/// landed, so the window's first visible frame is already themed (dark
+/// users never see the Lavender default first). Shows-and-fades when
+/// hidden, and is a NO-OP when already visible — dev reloads and other
+/// repeat callers must never re-fade a live window.
 #[tauri::command]
 #[specta::specta]
 pub async fn fade_in_window(app: AppHandle) -> Result<(), String> {
@@ -199,12 +235,22 @@ pub async fn fade_in_window(app: AppHandle) -> Result<(), String> {
         .get_webview_window("main")
         .ok_or("main window not found")?;
     let state = app.state::<WindowManager>();
-    let generation = state.fade_gen.next();
     if state.quitting.load(Ordering::SeqCst) {
         return Ok(());
     }
+    // A failed visibility query errs on SHOWING: skipping the reveal
+    // could leave the window hidden past the backstop window.
+    if window.is_visible().unwrap_or(false) {
+        return Ok(());
+    }
+    let generation = state.fade_gen.next();
     set_opacity(&window, 0.0);
+    window
+        .show()
+        .map_err(|e| format!("Failed to show the hidden window: {e}"))?;
+    let _ = window.set_focus();
     spawn_ramp(window, state.fade_gen.clone(), generation, 1.0);
+    log::info!("Cold-start reveal: window shown and fading in");
     Ok(())
 }
 
@@ -287,6 +333,22 @@ pub fn spawn_ramp<R: Runtime>(
             let _ = set_alpha(&window, 1.0);
         }
     });
+}
+
+/// v1.3.0 (#51): the cold-start reveal backstop — called from a
+/// background thread after the grace period. Force-shows a still-hidden
+/// window: the app must never stay invisible-but-running. A failed
+/// visibility query errs on showing (an extra show on a visible window
+/// is harmless).
+pub fn force_show_if_hidden<R: Runtime>(app: &AppHandle<R>) {
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+    if !window.is_visible().unwrap_or(false) {
+        log::warn!("Cold-start reveal never arrived; showing the window");
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
 }
 
 /// Public wrapper for the RunEvent paths (CloseRequested / Reopen).

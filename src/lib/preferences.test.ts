@@ -4,6 +4,7 @@ import {
   updatePreferences,
   updateOscTarget,
   isValidOscTarget,
+  loadPreferences,
 } from './preferences'
 
 type Disk = Partial<AppPreferences> & { theme: string }
@@ -97,6 +98,18 @@ describe('updatePreferences — serialized save queue', () => {
     await updatePreferences({ language: 'en' })
 
     expect(commands.savePreferences).not.toHaveBeenCalled()
+  })
+})
+
+/** #51: the load wrapper's contract is "null on ANY failure" — a
+ * rejecting invoke (IPC unavailable) must resolve to null, never surface
+ * an unhandled rejection in fire-and-forget mount chains. */
+describe('loadPreferences — failure contract', () => {
+  it('returns null when the invoke rejects', async () => {
+    vi.mocked(commands.loadPreferences).mockImplementation(() =>
+      Promise.reject(new Error('ipc unavailable'))
+    )
+    await expect(loadPreferences()).resolves.toBeNull()
   })
 })
 

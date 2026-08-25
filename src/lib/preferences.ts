@@ -43,12 +43,20 @@ function enqueueSave(save: () => Promise<void>): Promise<void> {
 }
 
 export async function loadPreferences(): Promise<AppPreferences | null> {
-  const result = await commands.loadPreferences()
-  if (result.status === 'error') {
-    logger.warn('Failed to load preferences', { error: result.error })
+  // #51: the invoke itself can reject (IPC unavailable) — the wrapper's
+  // contract is "null on any failure", so callers like AppShell's
+  // fire-and-forget mount chain never see an unhandled rejection.
+  try {
+    const result = await commands.loadPreferences()
+    if (result.status === 'error') {
+      logger.warn('Failed to load preferences', { error: result.error })
+      return null
+    }
+    return result.data
+  } catch (error) {
+    logger.warn('Failed to load preferences', { error })
     return null
   }
-  return result.data
 }
 
 /** The fields `updatePreferences` may patch; the legacy `theme` field

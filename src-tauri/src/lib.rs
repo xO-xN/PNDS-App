@@ -43,7 +43,10 @@ pub fn run() {
     {
         app_builder = app_builder.plugin(
             tauri_plugin_window_state::Builder::new()
-                .with_state_flags(tauri_plugin_window_state::StateFlags::all())
+                // #51: VISIBLE excluded — the plugin's restore path would
+                // show the window itself, bypassing the hidden-create
+                // reveal gate (the theme-gated first frame).
+                .with_state_flags(crate::window::persisted_state_flags())
                 .build(),
         );
     }
@@ -147,6 +150,20 @@ pub fn run() {
                 crate::window::suppress_default_context_menu(&window);
             }
 
+            // v1.3.0 (#51): cold-start reveal backstop. The main window is
+            // created hidden and the frontend reveals it (fade_in_window)
+            // once the saved theme has landed; if that signal never
+            // arrives — early JS error, hung IPC — force the window
+            // visible after the grace period. The app must never stay
+            // invisible-but-running.
+            {
+                let handle = app.handle().clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(crate::window::COLD_START_REVEAL_BACKSTOP);
+                    crate::window::force_show_if_hidden(&handle);
+                });
+            }
+
             Ok(())
         })
         .invoke_handler(builder.invoke_handler())
@@ -233,8 +250,11 @@ pub fn run() {
                     api.prevent_close();
 
                     // Save window state before hiding
-                    use tauri_plugin_window_state::{AppHandleExt, StateFlags};
-                    if let Err(e) = app_handle.save_window_state(StateFlags::all()) {
+                    use tauri_plugin_window_state::AppHandleExt;
+                    // #51: VISIBLE excluded — see persisted_state_flags.
+                    if let Err(e) =
+                        app_handle.save_window_state(crate::window::persisted_state_flags())
+                    {
                         log::warn!("Failed to save window state: {e}");
                     }
 

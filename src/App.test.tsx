@@ -7,6 +7,7 @@ import App from './App'
 
 describe('App', () => {
   beforeEach(() => {
+    vi.clearAllMocks()
     delete document.documentElement.dataset.colorTheme
   })
 
@@ -52,6 +53,57 @@ describe('App', () => {
 
     await waitFor(() => {
       expect(document.documentElement.dataset.colorTheme).toBe('lavender')
+    })
+  })
+
+  /**
+   * v1.3.0 (#51): the cold-start reveal gate. The window is created
+   * hidden and only shown (fadeInWindow) once the saved theme has
+   * landed — never before, and even when the preference read fails
+   * (an invisible-but-running app helps nobody).
+   */
+  describe('cold-start reveal gate (#51)', () => {
+    it('does not reveal while the preference read is in flight', async () => {
+      let resolvePrefs!: (
+        value: Awaited<ReturnType<typeof commands.loadPreferences>>
+      ) => void
+      vi.mocked(commands.loadPreferences).mockImplementation(
+        () =>
+          new Promise(resolve => {
+            resolvePrefs = resolve
+          })
+      )
+      render(<App />)
+
+      // Let the startup chain reach its await on the preferences read.
+      await Promise.resolve()
+      expect(commands.fadeInWindow).not.toHaveBeenCalled()
+      expect(document.documentElement.dataset.colorTheme).toBeUndefined()
+
+      // The read lands → the theme applies → THEN the window reveals.
+      resolvePrefs({
+        status: 'ok',
+        data: { theme: 'system', colorTheme: 'brutal', language: null },
+      })
+      await waitFor(() => {
+        expect(commands.fadeInWindow).toHaveBeenCalledTimes(1)
+      })
+      // The reveal happened after the themed first paint, not before.
+      expect(document.documentElement.dataset.colorTheme).toBe('brutal')
+    })
+
+    it('reveals even when the preference read fails', async () => {
+      // mockImplementation (not mockRejectedValue): the latter eagerly
+      // creates the rejected promise and trips Vitest's unhandled
+      // rejection detector outside the await under test.
+      vi.mocked(commands.loadPreferences).mockImplementation(() =>
+        Promise.reject(new Error('ipc unavailable'))
+      )
+      render(<App />)
+
+      await waitFor(() => {
+        expect(commands.fadeInWindow).toHaveBeenCalled()
+      })
     })
   })
 })

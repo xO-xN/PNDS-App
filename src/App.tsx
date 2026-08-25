@@ -18,7 +18,11 @@ import {
 } from './lib/color-theme'
 import { drainPendingBundleOpens } from './lib/bundle-project'
 import { handleDroppedPaths } from './lib/drag-drop'
-import { initWindowState, markQuitting } from './store/window-store'
+import {
+  initWindowState,
+  markQuitting,
+  fadeInWindow,
+} from './store/window-store'
 import { useSettingsStore } from './store/settings-store'
 import './App.css'
 import {
@@ -81,6 +85,15 @@ function App() {
         setupMenuLanguageListener()
       } catch (error) {
         logger.warn('Failed to initialize language or menu', { error })
+      } finally {
+        // v1.3.0 (#51): cold-start reveal. The window is created hidden
+        // (tauri.conf.json visible:false) so its first visible frame is
+        // already themed — dark users never see the Lavender default
+        // first. The reveal is gated on the theme having landed above;
+        // it runs even when initialization failed (the DOM then keeps
+        // its Lavender default, still a themed paint, and the Rust-side
+        // backstop would force-show anyway — just far later).
+        await fadeInWindow()
       }
     }
 
