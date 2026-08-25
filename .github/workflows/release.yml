@@ -18,7 +18,7 @@ jobs:
   publish-tauri:
     permissions:
       contents: write
-    # V1 scope: macOS Apple Silicon only (see docs/PNDS_APP_REQUIREMENTS.md §2)
+    # V1 scope: macOS Apple Silicon only (see docs/developer/app-behavior.md 平台与交付范围)
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -65,6 +65,28 @@ jobs:
           releaseName: 'PNDS ${{ github.ref_name || inputs.version }}'
           releaseBody: |
             ## PNDS ${{ github.ref_name || inputs.version }}
+
+            ### What's New in V1.3.0 — addresses on the menu, language-following tools & the offline Help center
+
+            **Performer & Conductor addresses, always on the menu**
+            - The Window menu permanently carries the selected project's two complete addresses (the chosen LAN IP joined with the performer and monitor ports). One click copies one address — the toast names what landed in the clipboard — ready to paste into a chat for the performers. The segment follows project selection and the LAN choice live; with no project selected the items wait as disabled labels, never a made-up address.
+
+            **A language bridge for tools & templates**
+            - The App now pushes its resolved language to monitor pages through a new `pnds:locale` message and a `?lang=` first-frame parameter — the same one-way, best-effort, latest-value-wins contract as the theme bridge, and just as optional: a page that never listens is untouched.
+            - All three built-in utilities follow the app language now — Local Network Diagnostics v0.3.0, Multichannel Signal Generator v1.2.0, and **Telematic Network Diagnostics v0.2.0 joins the Utilities folder** as the third built-in tool. PNDS-Template ships the reference implementation, so new projects follow the language by default.
+
+            **Help menu & the offline Help center**
+            - A new top-level Help menu: **Search Help ⌘?** (⇧⌘/ — the same physical chord) plus direct entries to the User Tutorial, the Creator Guide and the Reference Manual.
+            - The Help center is a window of its own: live search over the entire documentation corpus — ranked hits showing document, section and snippet; a click opens the page, scrolls to the hit section and keeps the matched terms highlighted; a sidebar browses every document by book. Cross-document links navigate inside the window (external links open in your browser), and the window follows the app's language and theme live. It is fully offline — the documentation ships inside the app.
+            - The UI copy is bilingual; the documentation corpus itself is Chinese in this release (the English translation is planned for a follow-up).
+
+            **No more flashes**
+            - Opening a project cross-fades from the loading screen to the monitor once the page is actually ready (with a timeout backstop); reloading the monitor does the same.
+            - The very first visible frame is already themed: cold start no longer flashes the light default before your saved theme lands, and theme-following monitor pages render correctly on their first frame (`?theme=`).
+
+            **Other fixes**
+            - The snug select no longer clips its label's right edge; settings polish and a smoother project-switch fade (user reports).
+            - The Help center's documents read in the standard system typeface, and links inside the documentation stay inside the Help center instead of navigating the window away (user report).
 
             ### What's New in V1.2.3 — browse freely mid-show & four themes
 
