@@ -7,11 +7,13 @@ const RESOURCES = '/Applications/PNDS.app/Contents/Resources/utilities'
 const TOOL_PATHS = [
   `${RESOURCES}/local-network-diagnostics`,
   `${RESOURCES}/multichannel-signal-generator`,
+  `${RESOURCES}/telematic-network-diagnostics`,
 ]
 
 const TOOL_NAMES = [
   'Local Network Diagnostics',
   'Multichannel Signal Generator',
+  'Telematic Network Diagnostics',
 ]
 
 function mockTools(tools: { path: string; name?: string }[]) {
@@ -56,10 +58,11 @@ describe('ensureUtilitiesFolder', () => {
     expect(state.recentProjectPaths).toEqual(TOOL_PATHS)
     // The manifest names are learned up front, so the entries read by
     // name on a clean install before their first preflight.
-    const [lnd, msg] = TOOL_PATHS
-    if (!lnd || !msg) throw new Error('Expected two tool paths')
+    const [lnd, msg, tnd] = TOOL_PATHS
+    if (!lnd || !msg || !tnd) throw new Error('Expected three tool paths')
     expect(state.manifestProjectNames[lnd]).toBe(TOOL_NAMES[0])
     expect(state.manifestProjectNames[msg]).toBe(TOOL_NAMES[1])
+    expect(state.manifestProjectNames[tnd]).toBe(TOOL_NAMES[2])
     // saveProjectIndex runs through the serialized save queue — the store's
     // structural commits (history adds + the folder seed) each persist.
     await vi.waitFor(() => {
@@ -124,7 +127,7 @@ describe('ensureUtilitiesFolder', () => {
 
     // The user moved a tool out and removed it from history.
     const second = TOOL_PATHS[1]
-    if (!second) throw new Error('Expected two tool paths')
+    if (!second) throw new Error('Expected a second tool path')
     const store = useProjectStore.getState()
     store.removeProjectFromFolder(UTILITIES_FOLDER_ID, second)
     store.removeRecentProject(second)
@@ -137,8 +140,11 @@ describe('ensureUtilitiesFolder', () => {
     await ensureUtilitiesFolder()
 
     const state = useProjectStore.getState()
-    expect(state.recentProjectPaths).toEqual([TOOL_PATHS[0]])
-    expect(state.projectFolders[0]?.projectPaths).toEqual([TOOL_PATHS[0]])
+    expect(state.recentProjectPaths).toEqual([TOOL_PATHS[0], TOOL_PATHS[2]])
+    expect(state.projectFolders[0]?.projectPaths).toEqual([
+      TOOL_PATHS[0],
+      TOOL_PATHS[2],
+    ])
     expect(commands.savePreferences).not.toHaveBeenCalled()
   })
 

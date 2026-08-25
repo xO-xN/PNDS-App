@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // Fetch the built-in utility tools bundled with PNDS App (v1.2.0, issue #18).
 //
-// The Utilities folder's two tools (Local Network Diagnostics, Multichannel
-// Signal Generator) are released by their own repositories as `.pnds`
+// The Utilities folder's three tools (Local Network Diagnostics,
+// Multichannel Signal Generator, Telematic Network Diagnostics) are
+// released by their own repositories as `.pnds`
 // bundles — the canonical distribution format for every PNDS project. This
 // script is the build-time half of docs/PNDS_PROJECT_BUNDLE_SPECIFICATION.md
 // §5: for every entry in the committed registry (utilities.json) it

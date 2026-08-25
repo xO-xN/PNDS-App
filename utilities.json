@@ -3,16 +3,23 @@
     {
       "id": "local-network-diagnostics",
       "repo": "xO-xN/Local-Network-Diagnostics",
-      "tag": "v0.2.0",
-      "artifact": "local-network-diagnostics-v0.2.0.pnds",
-      "sha256": "4635fe1b80ebed96ae32293e65142b4a9d0e9ab45b6a930c37e3f45335cd8e5b"
+      "tag": "v0.3.0",
+      "artifact": "local-network-diagnostics-v0.3.0.pnds",
+      "sha256": "dde90b9fc40067cad9397862b31159f7539c960516e9477de13091ca0d8724d2"
     },
     {
       "id": "multichannel-signal-generator",
       "repo": "xO-xN/Multichannel-Signal-Generator",
-      "tag": "v1.1.0",
-      "artifact": "multichannel-signal-generator-v1.1.0.pnds",
-      "sha256": "0e6dca5e88e4bbc34561e3958dbf7491e25a7a62180a6e970a70f8ab0ffd18f6"
+      "tag": "v1.2.0",
+      "artifact": "multichannel-signal-generator-v1.2.0.pnds",
+      "sha256": "a02935d0a177cc8f2ab5fe98d7f5a101924aa3450b23f1b8d576f3760ab632dc"
+    },
+    {
+      "id": "telematic-network-diagnostics",
+      "repo": "xO-xN/Telematic-Network-Diagnostics",
+      "tag": "v0.2.0",
+      "artifact": "telematic-network-diagnostics-v0.2.0.pnds",
+      "sha256": "69d06cf276f533593926d00734c018af4efd8625a4c4a056744f94deac7f33ad"
     }
   ]
 }

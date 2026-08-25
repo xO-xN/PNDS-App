@@ -1,6 +1,7 @@
 //! Built-in utility tools (v1.2.0, issue #18).
 //!
-//! The Utilities folder's two tools are pinned by the committed registry
+//! The Utilities folder's three tools (v1.3.0, issue #55: LND, MSG and
+//! the newly added TND) are pinned by the committed registry
 //! (`utilities.json` at the repository root) and shipped UNPACKED with the
 //! app resources: `scripts/fetch-utilities.mjs` (chained into
 //! beforeBuildCommand) downloads each tool's pinned `.pnds` release,
@@ -309,14 +310,18 @@ mod tests {
         assert_eq!(utilities[0].name, "Good Tool");
     }
 
-    /// The committed registry: parses, orders the two real tools, and pins
+    /// The committed registry: parses, orders the three real tools, and pins
     /// well-formed checksums the fetch script verified at build time.
     #[test]
-    fn embedded_registry_pins_the_two_tools() {
+    fn embedded_registry_pins_the_three_tools() {
         let registry = builtin_tool_registry().unwrap();
         assert_eq!(
             registry.iter().map(|t| t.id.as_str()).collect::<Vec<_>>(),
-            ["local-network-diagnostics", "multichannel-signal-generator"],
+            [
+                "local-network-diagnostics",
+                "multichannel-signal-generator",
+                "telematic-network-diagnostics"
+            ],
             "registry order is the Utilities order"
         );
         for tool in registry {
