@@ -42,3 +42,14 @@ export { i18n }
 
 // Helper to get available languages
 export const availableLanguages = Object.keys(resources)
+
+/**
+ * v1.3.0 (#54): the RESOLVED language code the locale bridge offers —
+ * the registered tag ("en" / "zh-CN") i18next actually serves, never the
+ * General setting ('system' has no code to send). Render-safe read for
+ * values snapshotted at navigation time (the monitor URL's `?lang=`
+ * first-frame parameter), mirroring `currentColorThemeSetting`.
+ */
+export function currentResolvedLanguage(): string {
+  return i18n.resolvedLanguage ?? i18n.language ?? 'en'
+}

@@ -1,21 +1,24 @@
 /**
  * v1.3.0 (#49): the monitor URL constructor — the single place the App
  * builds the address its monitor iframe navigates to. Carries the
- * first-frame parameters so following pages can paint the correct
- * colors before any postMessage arrives (no light-then-dark flash):
+ * first-frame parameters so following pages paint the correct
+ * colors and language before any postMessage arrives (no light-then-dark
+ * flash, no wrong-language flash):
  *
- * - `?theme=<name>` — the App ALWAYS sends it on load and reload;
- * - `?lang=<code>` — slot reserved for the locale bridge (v1.3.0 T2).
+ * - `?theme=<name>` — the App ALWAYS sends it on load and reload (#49);
+ * - `?lang=<code>` — same first-frame semantics, from the locale
+ *   bridge (#54).
  *
- * Contract: docs/reference/network.md "Theme Following". Pages must
- * still tolerate both parameters being absent.
+ * Contract: docs/reference/network.md "Theme Following" and
+ * "Locale Following". Pages must still tolerate both parameters being
+ * absent.
  */
 
 /** First-frame URL parameters. Empty-string values are treated as absent. */
 export interface MonitorUrlParams {
   /** Current color-theme name (e.g. "brutal"). */
   theme?: string
-  /** Reserved for the locale bridge: parsed language code (e.g. "zh-CN"). */
+  /** Resolved language code (e.g. "zh-CN") pushed by the locale bridge. */
   lang?: string
 }
 

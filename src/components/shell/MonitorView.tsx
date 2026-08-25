@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { listen } from '@tauri-apps/api/event'
+import { useTranslation } from 'react-i18next'
 import { useSessionStore } from '@/store/session-store'
 import { useProjectStore } from '@/store/project-store'
 import {
@@ -7,7 +8,9 @@ import {
   currentColorThemeSetting,
 } from '@/store/settings-store'
 import { pushThemeToFrame } from '@/lib/theme-bridge'
+import { pushLocaleToFrame } from '@/lib/locale-bridge'
 import { buildMonitorUrl } from '@/lib/monitor-url'
+import { currentResolvedLanguage } from '@/i18n/config'
 import {
   monitorNavigationRevealed,
   MONITOR_REVEAL_TIMEOUT_MS,
@@ -50,18 +53,29 @@ export function MonitorView() {
   // iframe so supporting projects (the built-in utilities first) recolor
   // with the App. Optional for projects; never touches the page itself.
   const colorTheme = useSettingsStore(state => state.colorThemeSetting)
+  // v1.3.0 (#54): the locale bridge — same pattern as the theme bridge,
+  // pushing the RESOLVED language code (never the 'system' setting, which
+  // has no code to send). useTranslation re-renders on languageChanged,
+  // so a switch re-runs the push effects below. The fallback chain
+  // intentionally repeats currentResolvedLanguage()'s: this one reads the
+  // hook's instance (subscription-reactive), while the URL memo below
+  // must go through the accessor (a render-scope value here would become
+  // a memo dependency and defrost the navigation snapshot).
+  const { i18n } = useTranslation()
+  const locale = i18n.resolvedLanguage ?? i18n.language ?? 'en'
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
   const monitorPort = health?.scoreServer?.monitorPort
   const monitorOrigin = `http://${lanIp}:${monitorPort}`
-  // v1.3.0 (#49): `?theme=` rides in the URL as a first-frame parameter,
-  // so following pages paint the right colors before any postMessage
-  // arrives. The src is snapshotted per iframe NAVIGATION — mount,
-  // address change, reload — which is exactly the memo's dep list: a
-  // live theme switch must NOT retarget the src (that would reload the
-  // live monitor page); the bridge pushes the new theme instead, and
-  // the next navigation re-snapshots it. The theme is therefore read
-  // from the store inside the memo (latest value), never from the
-  // render-time `colorTheme` (which would defrost the snapshot).
+  // v1.3.0 (#49/#54): `?theme=` and `?lang=` ride in the URL as
+  // first-frame parameters, so following pages paint the right colors
+  // and language before any postMessage arrives. The src is snapshotted
+  // per iframe NAVIGATION — mount, address change, reload — which is
+  // exactly the memo's dep list: a live theme or language switch must
+  // NOT retarget the src (that would reload the live monitor page); the
+  // bridges push the new values instead, and the next navigation
+  // re-snapshots them. Both are therefore read from their live sources
+  // inside the memo (latest values), never from the render-time
+  // `colorTheme` / `locale` (which would defrost the snapshot).
   const iframeSrc = useMemo(() => {
     // The nonce only widens the memo: each bump remounts the iframe
     // (its React key), and the fresh load re-snapshots the theme. The
@@ -70,6 +84,7 @@ export function MonitorView() {
     void reloadNonce
     return buildMonitorUrl(lanIp ?? '', monitorPort ?? 0, {
       theme: currentColorThemeSetting(),
+      lang: currentResolvedLanguage(),
     })
   }, [lanIp, monitorPort, reloadNonce])
   // v1.3.0 (#50): the reveal gate. Every navigation reports readiness
@@ -86,12 +101,13 @@ export function MonitorView() {
     }, MONITOR_REVEAL_TIMEOUT_MS)
     return () => clearTimeout(id)
   }, [reloadNonce, revealed])
-  // Initial push + re-push on theme switch and monitor reload. (The
-  // focus-regain re-push lives in the reclaim effect below, keyed on the
-  // same values so its closure is never stale.)
+  // Initial push + re-push on theme/language switch and monitor reload.
+  // (The focus-regain re-push lives in the reclaim effect below, keyed on
+  // the same values so its closure is never stale.)
   useEffect(() => {
     pushThemeToFrame(iframeRef.current, monitorOrigin, colorTheme)
-  }, [colorTheme, reloadNonce, monitorOrigin])
+    pushLocaleToFrame(iframeRef.current, monitorOrigin, locale)
+  }, [colorTheme, locale, reloadNonce, monitorOrigin])
   const scale = monitorZoom / 100
 
   // WKWebView hands the keyboard first responder to a freshly loaded
@@ -116,10 +132,11 @@ export function MonitorView() {
   // nothing meaningful holds focus: never steal from a sidebar input or
   // an open dialog.
   useEffect(() => {
-    // #44: the theme rides along on every keyboard-reclaim path — a
-    // suspended OOPIF drops messages, so each regain re-pushes the theme
-    // (latest value wins, the page applies it idempotently). Keyed on the
-    // theme/origin so the closure never goes stale.
+    // #44/#54: both bridges ride along on every keyboard-reclaim path —
+    // a suspended OOPIF drops messages, so each regain re-pushes the
+    // theme and the language (latest value wins, the page applies them
+    // idempotently). Keyed on the values so the closure never goes
+    // stale.
     const reclaimIfLost = () => {
       const active = document.activeElement
       if (
@@ -130,6 +147,7 @@ export function MonitorView() {
         reclaimKeyboardFocus()
       }
       pushThemeToFrame(iframeRef.current, monitorOrigin, colorTheme)
+      pushLocaleToFrame(iframeRef.current, monitorOrigin, locale)
     }
     const handleVisibility = () => {
       if (!document.hidden) reclaimIfLost()
@@ -151,7 +169,7 @@ export function MonitorView() {
       clearInterval(heartbeat)
       void unlisten.then(off => off())
     }
-  }, [monitorOrigin, colorTheme])
+  }, [monitorOrigin, colorTheme, locale])
 
   if (!lanIp || !monitorPort) {
     // Should not happen for a ready session; fail visibly rather than blank.
@@ -196,6 +214,7 @@ export function MonitorView() {
           onLoad={() => {
             reclaimKeyboardFocus()
             pushThemeToFrame(iframeRef.current, monitorOrigin, colorTheme)
+            pushLocaleToFrame(iframeRef.current, monitorOrigin, locale)
             // #50: the load event IS the reveal signal — the splash (or
             // the reload cover) may now dissolve off this navigation.
             useSessionStore.getState().markMonitorLoaded()

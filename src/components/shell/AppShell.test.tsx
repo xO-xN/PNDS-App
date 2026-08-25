@@ -159,10 +159,11 @@ describe('AppShell', () => {
     render(<AppShell />)
 
     const monitor = screen.getByTitle('Project monitor')
-    // #49: the URL now always carries the theme first-frame parameter.
+    // #49/#54: the URL now always carries the theme and language
+    // first-frame parameters.
     expect(monitor).toHaveAttribute(
       'src',
-      'http://192.168.1.10:6869/?theme=lavender'
+      'http://192.168.1.10:6869/?theme=lavender&lang=en'
     )
     expect(screen.getByText('PNDS - Inarticulate III')).toBeInTheDocument()
     expect(screen.getByTestId('sidebar-hover-zone')).toBeInTheDocument()
@@ -217,7 +218,7 @@ describe('AppShell', () => {
     const monitor = screen.getByTitle('Project monitor')
     expect(monitor).toHaveAttribute(
       'src',
-      'http://192.168.1.10:6869/?theme=lavender'
+      'http://192.168.1.10:6869/?theme=lavender&lang=en'
     )
     expect(useSessionStore.getState().sessionStatus).toBe('ready')
   })
