@@ -520,7 +520,17 @@ projectDisplayNames?: Partial<{ [key in string]: string }>;
  * override above always wins) so a bundle install reads as its manifest
  * name, not its `<id>-<version>` directory. Never touches manifests.
  */
-projectManifestNames?: Partial<{ [key in string]: string }> }
+projectManifestNames?: Partial<{ [key in string]: string }>; 
+/**
+ * v1.3.0 (issue #55): resource paths of the built-in utilities this
+ * install has already offered to the Utilities folder. Every shipped
+ * tool is offered exactly once — a newly shipped tool (TND joining
+ * in v1.3.0) reaches upgrade installs on their next launch, while a
+ * user's later removal sticks because the path stays recorded.
+ * Absent in pre-v1.3.0 files: a shipped path already present in the
+ * index counts as offered, so the record backfills silently.
+ */
+offeredUtilities?: string[] } 
 export type AudioConfig = { defaultMode: string; supportedModes: string[]; 
 /**
  * Discrete project output signals (spec §3.3): 1..=64, default 2.

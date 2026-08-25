@@ -72,6 +72,7 @@ export type PreferencesPatch = Partial<
     | 'projectFolders'
     | 'projectDisplayNames'
     | 'projectManifestNames'
+    | 'offeredUtilities'
   >
 >
 

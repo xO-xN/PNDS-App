@@ -63,6 +63,15 @@ pub struct AppPreferences {
     /// name, not its `<id>-<version>` directory. Never touches manifests.
     #[serde(default)]
     pub project_manifest_names: HashMap<String, String>,
+    /// v1.3.0 (issue #55): resource paths of the built-in utilities this
+    /// install has already offered to the Utilities folder. Every shipped
+    /// tool is offered exactly once — a newly shipped tool (TND joining
+    /// in v1.3.0) reaches upgrade installs on their next launch, while a
+    /// user's later removal sticks because the path stays recorded.
+    /// Absent in pre-v1.3.0 files: a shipped path already present in the
+    /// index counts as offered, so the record backfills silently.
+    #[serde(default)]
+    pub offered_utilities: Vec<String>,
 }
 
 /// A named one-level group of project paths (spec issue #4).
@@ -87,6 +96,7 @@ impl Default for AppPreferences {
             project_folders: Vec::new(),
             project_display_names: HashMap::new(),
             project_manifest_names: HashMap::new(),
+            offered_utilities: Vec::new(),
         }
     }
 }
@@ -253,6 +263,33 @@ mod tests {
         );
         let reserialized = serde_json::to_string(&prefs).expect("prefs serialize");
         assert!(reserialized.contains("\"projectManifestNames\""));
+    }
+
+    /// v1.3.0 (issue #55): preference files written before
+    /// `offeredUtilities` existed must load losslessly (serde default).
+    #[test]
+    fn deserializes_preferences_without_offered_utilities() {
+        let legacy = r#"{
+            "theme": "dark",
+            "language": null,
+            "recentProjects": ["/a"]
+        }"#;
+        let prefs: AppPreferences = serde_json::from_str(legacy).expect("legacy prefs parse");
+        assert!(prefs.offered_utilities.is_empty());
+    }
+
+    #[test]
+    fn roundtrips_offered_utilities() {
+        let modern = r#"{
+            "theme": "system",
+            "language": null,
+            "recentProjects": [],
+            "offeredUtilities": ["/Applications/PNDS.app/Contents/Resources/utilities/telematic-network-diagnostics"]
+        }"#;
+        let prefs: AppPreferences = serde_json::from_str(modern).expect("modern prefs parse");
+        assert_eq!(prefs.offered_utilities.len(), 1);
+        let reserialized = serde_json::to_string(&prefs).expect("prefs serialize");
+        assert!(reserialized.contains("\"offeredUtilities\""));
     }
 
     /// Issue #20: preference files written before `sampleRate` existed must

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { commands } from '@/lib/tauri-bindings'
+import { commands, type AppPreferences } from '@/lib/tauri-bindings'
 import { useProjectStore, UTILITIES_FOLDER_ID } from '@/store/project-store'
 import { ensureUtilitiesFolder } from './utilities-folder'
 
@@ -26,6 +26,14 @@ function mockTools(tools: { path: string; name?: string }[]) {
   })
 }
 
+/** The minimal readable disk state; tests add the offer record etc. */
+function mockPrefs(preferences: Partial<AppPreferences> = {}) {
+  vi.mocked(commands.loadPreferences).mockResolvedValue({
+    status: 'ok',
+    data: { theme: 'system', language: null, ...preferences },
+  })
+}
+
 /**
  * v1.2.0 (issue #18): the Utilities folder — seeded once from the built-in
  * tools (unpacked into the app resources at stable paths and run in place),
@@ -35,6 +43,10 @@ describe('ensureUtilitiesFolder', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockTools(TOOL_PATHS.map(path => ({ path })))
+    // The default disk shape: preferences readable, the offer record as
+    // a previous launch persisted it (tests that need another shape
+    // override this).
+    mockPrefs()
     useProjectStore.setState({
       currentProject: null,
       recentProjectPaths: [],
@@ -79,6 +91,13 @@ describe('ensureUtilitiesFolder', () => {
         })
       )
     })
+    // The seed also records every admitted tool as offered — the one-time
+    // offer record later removals rely on.
+    await vi.waitFor(() => {
+      expect(commands.savePreferences).toHaveBeenCalledWith(
+        expect.objectContaining({ offeredUtilities: TOOL_PATHS })
+      )
+    })
   })
 
   it('seeds below the user’s existing folders (bottom-pinned)', async () => {
@@ -119,9 +138,9 @@ describe('ensureUtilitiesFolder', () => {
 
   it('is a no-op once the folder exists — later edits stick across launches', async () => {
     await ensureUtilitiesFolder()
-    // Let every queued seeding save land (the history adds and the folder
-    // commit each persist) before clearing, so only a hypothetical
-    // reseeding save could be observed below.
+    // Let every queued seeding save land (the history adds, the folder
+    // commit and the offer record each persist) before clearing, so only
+    // a hypothetical reseeding save could be observed below.
     await new Promise(resolve => setTimeout(resolve, 0))
     expect(commands.savePreferences).toHaveBeenCalled()
 
@@ -136,6 +155,9 @@ describe('ensureUtilitiesFolder', () => {
     // observed below.
     await new Promise(resolve => setTimeout(resolve, 0))
     vi.mocked(commands.savePreferences).mockClear()
+    // Disk state for the next launch: the offer record the seed wrote
+    // survives the removals (that is exactly what keeps them sticking).
+    mockPrefs({ offeredUtilities: TOOL_PATHS })
 
     await ensureUtilitiesFolder()
 
@@ -145,6 +167,101 @@ describe('ensureUtilitiesFolder', () => {
       TOOL_PATHS[0],
       TOOL_PATHS[2],
     ])
+    expect(commands.savePreferences).not.toHaveBeenCalled()
+  })
+
+  it('offers a newly shipped tool to an upgrade install (issue #55)', async () => {
+    // A v1.2.x install: the folder seeded with the first two tools, years
+    // before TND shipped and before offeredUtilities was recorded. The
+    // bundle now ships three tools — TND must join without touching the
+    // existing pair.
+    const [lnd, msg, tnd] = TOOL_PATHS
+    if (!lnd || !msg || !tnd) throw new Error('Expected three tool paths')
+    useProjectStore.setState({
+      recentProjectPaths: [lnd, msg],
+      projectFolders: [
+        {
+          id: UTILITIES_FOLDER_ID,
+          name: 'Utilities',
+          projectPaths: [lnd, msg],
+        },
+      ],
+    })
+
+    await ensureUtilitiesFolder()
+
+    const state = useProjectStore.getState()
+    expect(state.recentProjectPaths).toEqual([lnd, msg, tnd])
+    expect(state.projectFolders[0]?.projectPaths).toEqual([lnd, msg, tnd])
+    // The offer is recorded with the pre-record pair backfilled, so the
+    // next launch treats all three tools as already offered.
+    await vi.waitFor(() => {
+      expect(commands.savePreferences).toHaveBeenCalledWith(
+        expect.objectContaining({ offeredUtilities: [lnd, msg, tnd] })
+      )
+    })
+  })
+
+  it('retries a cap-refused offer on a later launch', async () => {
+    // The upgrade install arrives with the ungrouped top level at the
+    // 30-project cap: TND's history add is refused, so it is neither
+    // admitted nor recorded as offered — a later launch with room tries
+    // again. The pre-record pair still backfills into the record.
+    const [lnd, msg, tnd] = TOOL_PATHS
+    if (!lnd || !msg || !tnd) throw new Error('Expected three tool paths')
+    useProjectStore.setState({
+      recentProjectPaths: [
+        ...Array.from({ length: 30 }, (_, i) => `/legacy-${i}`),
+        lnd,
+        msg,
+      ],
+      projectFolders: [
+        {
+          id: UTILITIES_FOLDER_ID,
+          name: 'Utilities',
+          projectPaths: [lnd, msg],
+        },
+      ],
+    })
+
+    await ensureUtilitiesFolder()
+
+    const state = useProjectStore.getState()
+    expect(state.recentProjectPaths).not.toContain(tnd)
+    expect(state.projectFolders[0]?.projectPaths).toEqual([lnd, msg])
+    await vi.waitFor(() => {
+      expect(commands.savePreferences).toHaveBeenCalledWith(
+        expect.objectContaining({ offeredUtilities: [lnd, msg] })
+      )
+    })
+  })
+
+  it('skips the offer merge when preferences cannot be read', async () => {
+    // Without the offer record the merge cannot distinguish a new tool
+    // from a removed one — it must do nothing rather than re-offer
+    // blindly and wait for the next launch instead.
+    const [lnd, msg] = TOOL_PATHS
+    if (!lnd || !msg) throw new Error('Expected two tool paths')
+    useProjectStore.setState({
+      recentProjectPaths: [lnd, msg],
+      projectFolders: [
+        {
+          id: UTILITIES_FOLDER_ID,
+          name: 'Utilities',
+          projectPaths: [lnd, msg],
+        },
+      ],
+    })
+    vi.mocked(commands.loadPreferences).mockResolvedValue({
+      status: 'error',
+      error: 'preferences unavailable',
+    })
+
+    await ensureUtilitiesFolder()
+
+    const state = useProjectStore.getState()
+    expect(state.recentProjectPaths).toEqual([lnd, msg])
+    expect(state.projectFolders[0]?.projectPaths).toEqual([lnd, msg])
     expect(commands.savePreferences).not.toHaveBeenCalled()
   })
 
