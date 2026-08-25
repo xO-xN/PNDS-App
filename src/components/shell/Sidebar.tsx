@@ -26,6 +26,7 @@ import {
   visibleProjectPaths,
 } from '@/store/project-store'
 import { isSessionBusy, useSessionStore } from '@/store/session-store'
+import { useSettingsStore } from '@/store/settings-store'
 import { useKeyboardStore } from '@/store/keyboard-store'
 import { notifications } from '@/lib/notifications'
 import { promptOpenProject, stopAndReset } from '@/lib/open-project'
@@ -77,6 +78,15 @@ import { SettingsCard } from './SettingsCard'
 import { SessionActionButton } from './SessionActionButton'
 import { TrafficLights } from './TrafficLights'
 import { cn } from '@/lib/utils'
+import octoSidebar2x from '@/assets/octo-sidebar-2x.png'
+
+/** #71 (Brutal): how far the octopus's clamped hands and face reach
+ *  below its shelf line, in CSS px — calibrated on octo-sidebar-2x.png
+ *  (24px at the 2× asset = 12px at its card-width display). Dropping
+ *  the image this far below the settings card's top edge lands the
+ *  shelf line exactly on that edge; the 24px beside it mirrors the
+ *  footer's pt-6 — change one, change the other. */
+const OCTO_SHELF_OVERHANG_PX = 12
 
 interface SidebarProps {
   /** welcome/loading: statically visible; running: floats over the monitor */
@@ -427,6 +437,8 @@ export function Sidebar({
   onDialogOpenChange,
 }: SidebarProps) {
   const { t } = useTranslation()
+  // #71: the shelf octopus is Brutal-only decoration riding the footer.
+  const brutal = useSettingsStore(state => state.colorThemeSetting) === 'brutal'
   const recentProjectPaths = useProjectStore(state => state.recentProjectPaths)
   const projectFolders = useProjectStore(state => state.projectFolders)
   const currentProject = useProjectStore(state => state.currentProject)
@@ -1568,11 +1580,16 @@ export function Sidebar({
             scroller (user feedback on #29): a mask needs no color matching,
             so the translucent overlay sidebar composites correctly, and the
             second layer keeps the right scrollbar lane unmasked — the
-            native indicator must not fade. */}
+            native indicator must not fade.
+            v1.3.1 (#71): the mask makes this scroller a stacking context,
+            so its cards' z-10 could never clear a positioned footer
+            sibling — the z-10 here (flex items honor z-index) hoists
+            the whole column above the Brutal octopus, restoring the
+            "long lists cover it" order. */}
         <div
           ref={projectScrollRef}
           data-testid="project-list-scroll"
-          className="min-h-0 flex-1 overflow-y-auto overscroll-contain [mask-composite:add] [-webkit-mask-composite:source-over] [mask-image:linear-gradient(to_bottom,transparent_0px,#000_20px,#000_calc(100%_-_20px),transparent_100%),linear-gradient(to_right,transparent_calc(100%_-_15px),#000_calc(100%_-_15px))]"
+          className="z-10 min-h-0 flex-1 overflow-y-auto overscroll-contain [mask-composite:add] [-webkit-mask-composite:source-over] [mask-image:linear-gradient(to_bottom,transparent_0px,#000_20px,#000_calc(100%_-_20px),transparent_100%),linear-gradient(to_right,transparent_calc(100%_-_15px),#000_calc(100%_-_15px))]"
         >
           <div
             ref={projectContentRef}
@@ -1809,8 +1826,29 @@ export function Sidebar({
       </nav>
 
       {/* Deferred settings + their submit are one object (§10.2): the card
-          clips the button into a full-bleed footer. */}
-      <div className="px-5 pb-5 pt-6">
+          clips the button into a full-bleed footer. The wrapper doubles as
+          the Brutal octopus's anchor (#71): a relative wrapper + absolute
+          layer keeps the follow pure CSS — rows changing the card's height
+          (audio mode / device / volume) carry the octopus along, while it
+          stays outside the project scroller. It paints over the card but
+          under the project column (the scroller's z-10) and never takes a
+          pointer. */}
+      <div data-testid="settings-footer" className="relative px-5 pb-5 pt-6">
+        {brutal && (
+          /* A stretching div, not the img: a replaced element ignores the
+             inset stretch (it would render at intrinsic size), while this
+             div pins to exactly the card's width. */
+          <div
+            data-testid="octo-sidebar"
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-5 z-0"
+            style={{
+              bottom: `calc(100% - 24px - ${OCTO_SHELF_OVERHANG_PX}px)`,
+            }}
+          >
+            <img src={octoSidebar2x} alt="" className="w-full" />
+          </div>
+        )}
         <div className="overflow-hidden rounded-xl bg-(--pnds-card) shadow-(--pnds-card-shadow)">
           <SettingsCard onPopupOpenChange={onPopupOpenChange} />
           <SessionActionButton />

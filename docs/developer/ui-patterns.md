@@ -138,7 +138,19 @@ node's `data-color-theme` attribute:
   and `.font-manrope`) — Brutal swaps both to Archivo (bundled woff2 in
   public/fonts, OFL), everything else keeps Comfortaa/Manrope. The
   PndsLogo canvas wordmark stays brand (not themed), like the logo
-  dots.
+  dots. Brutal also carries the sidebar's one illustration (#71): the
+  shelf octopus riding the settings footer — rendered only when
+  `colorThemeSetting === 'brutal'` (same component-level gate as the
+  traffic-light ✕ in TrafficLights.tsx), `absolute` inside the footer
+  wrapper (which is `relative`) so it follows the settings card's
+  height changes in pure CSS while staying outside the project
+  scroller, `pointer-events-none` and `z-0` — over the card, under the
+  project column (the masked scroller is itself a stacking context, so
+  it carries `z-10` to keep its cards above the octopus). The bundled
+  `src/assets/octo-sidebar-2x.png` (2× the footer content width;
+  design master in `assets/mascot/octo-sidebar.png`) is pinned onto
+  the card's top edge by `OCTO_SHELF_OVERHANG_PX` in Sidebar.tsx,
+  calibrated per asset.
 - **Sand is the medium-depth theme**: warm-white text on dim warm-taupe
   surfaces — deliberately between the light and dark themes. Its
   accent-text twin inverts direction: the accent-as-text is the LIGHTER
