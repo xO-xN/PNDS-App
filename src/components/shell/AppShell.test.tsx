@@ -1,7 +1,8 @@
 import { render, screen, act, fireEvent } from '@/test/test-utils'
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { listen } from '@tauri-apps/api/event'
 import { commands } from '@/lib/tauri-bindings'
+import { logger } from '@/lib/logger'
 import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 import { useWindowStore } from '@/store/window-store'
@@ -415,5 +416,156 @@ describe('AppShell', () => {
     // Both tools are folder members, so the Home segment stays empty.
     expect(screen.queryByTestId('project-entry')).not.toBeInTheDocument()
     expect(useProjectStore.getState().recentProjectPaths).toEqual(TOOLS)
+  })
+
+  /** v1.3.0 (#50): the loading→monitor reveal gate, end to end at the
+   * shell level. The splash must survive session-ready (it overlaps the
+   * already-mounting monitor iframe), hold its final logo frame until
+   * the iframe's OWN load event releases the gate, then cross-fade away
+   * — never flipping an unloaded iframe on screen. */
+  describe('AppShell reveal gate (#50)', () => {
+    /** Minimal Canvas2D stub — enough for the logo animation loop to run
+     * and redraw inside jsdom (which has no canvas implementation). */
+    const canvasCtxStub = () =>
+      ({
+        canvas: { width: 600 },
+        clearRect: vi.fn(),
+        beginPath: vi.fn(),
+        arc: vi.fn(),
+        fill: vi.fn(),
+        fillText: vi.fn(),
+        fillStyle: '',
+        globalAlpha: 1,
+        font: '',
+        textAlign: '',
+        textBaseline: '',
+      }) as unknown as CanvasRenderingContext2D
+
+    /** Drives the faked clock one raf frame at a time. Each step is an
+     * AWAITED act: the logo canvas advances its phases through a
+     * queueMicrotask setState, which must land INSIDE act or React 18's
+     * act environment defers the update and the animation never
+     * restarts. */
+    const driveFrames = async (frames: number) => {
+      for (let i = 0; i < frames; i++) {
+        await act(async () => {
+          vi.advanceTimersByTime(16)
+        })
+      }
+    }
+
+    beforeEach(() => {
+      vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(
+        canvasCtxStub()
+      )
+      // raf + performance must be faked for the animation's frame math.
+      vi.useFakeTimers({
+        toFake: [
+          'setTimeout',
+          'clearTimeout',
+          'setInterval',
+          'clearInterval',
+          'requestAnimationFrame',
+          'performance',
+          'Date',
+        ],
+      })
+    })
+    afterEach(() => {
+      vi.useRealTimers()
+      vi.restoreAllMocks()
+    })
+
+    it('holds the splash over the mounting monitor until the iframe loads, then cross-fades', async () => {
+      render(<AppShell />)
+
+      // Cold-restore style: the ready snapshot arrives after mount, so the
+      // dissolve gate is armed (no escape hatch).
+      act(() => {
+        sessionHandler?.({ payload: readySnapshot })
+      })
+
+      // The monitor iframe mounts BENEATH the splash — its load clock
+      // starts with the splash, not after it.
+      const monitor = screen.getByTitle('Project monitor')
+      // Ready ≠ released: the splash is still up…
+      expect(screen.getByText(/cancel/i)).toBeInTheDocument()
+
+      // …and stays up through the whole entrance + closure animation
+      // (~50 + ~90 frames), holding its final frame: with the iframe not
+      // yet loaded, nothing may flip the monitor in.
+      await driveFrames(220)
+      expect(screen.getByText(/cancel/i)).toBeInTheDocument()
+
+      // The iframe's load event releases the gate; the 400ms cross-fade
+      // runs and unmounts the splash over the ALREADY-LOADED monitor.
+      act(() => {
+        fireEvent.load(monitor)
+      })
+      await act(async () => {
+        vi.advanceTimersByTime(400)
+      })
+
+      expect(screen.queryByText(/cancel/i)).not.toBeInTheDocument()
+      expect(screen.getByTitle('Project monitor')).toBeInTheDocument()
+      expect(useSessionStore.getState().monitorLoaded).toBe(true)
+    })
+
+    it('holds even a completed closure when the iframe stalls, until the timeout backstop releases', async () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined)
+      render(<AppShell />)
+      act(() => {
+        sessionHandler?.({ payload: readySnapshot })
+      })
+
+      // Animation completes; the iframe never loads.
+      await driveFrames(220)
+      expect(screen.getByText(/cancel/i)).toBeInTheDocument()
+
+      // The backstop fires (MONITOR_REVEAL_TIMEOUT_MS from the mount),
+      // releases the gate, and the cross-fade completes without the
+      // iframe ever reporting readiness.
+      await act(async () => {
+        vi.advanceTimersByTime(10_000)
+      })
+      await act(async () => {
+        vi.advanceTimersByTime(400)
+      })
+
+      expect(useSessionStore.getState().monitorLoadTimedOut).toBe(true)
+      expect(warn).toHaveBeenCalledTimes(1)
+      expect(screen.queryByText(/cancel/i)).not.toBeInTheDocument()
+    })
+
+    it('keeps the splash instance across the starting→ready handover (no entrance replay)', async () => {
+      render(<AppShell />)
+
+      // The normal open path: starting first…
+      act(() => {
+        sessionHandler?.({ payload: { ...readySnapshot, status: 'starting' } })
+      })
+      // …the entrance plays out and the composition HOLDS while waiting.
+      await driveFrames(60)
+
+      act(() => {
+        sessionHandler?.({ payload: readySnapshot })
+      })
+
+      // If the splash remounted at the handover (branch switch), the
+      // entrance would replay (~53 frames) BEFORE the ~94-frame closure —
+      // 100 frames cannot reach closureDone then, and the release below
+      // would never dissolve the splash. The preserved instance closes
+      // directly from the held composition, so 100 frames suffice.
+      await driveFrames(100)
+      act(() => {
+        fireEvent.load(screen.getByTitle('Project monitor'))
+      })
+      await act(async () => {
+        vi.advanceTimersByTime(400)
+      })
+
+      expect(screen.queryByText(/cancel/i)).not.toBeInTheDocument()
+      expect(screen.getByTitle('Project monitor')).toBeInTheDocument()
+    })
   })
 })

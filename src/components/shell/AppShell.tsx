@@ -35,6 +35,12 @@ function restoreSessionState(): void {
  * brief moment after the session reaches "ready", so the logo canvas can
  * play its closure animation and fade out while the monitor fades in (§10.3
  * two-phase contract: the dissolve layer overlaps the monitor).
+ *
+ * v1.3.0 (#50): that overlap is now literal — the ready state mounts the
+ * MonitorView (its iframe starts loading immediately) WITH the splash on
+ * top, and the splash only cross-fades away once the reveal gate releases
+ * (the iframe's own load event, or the timeout backstop). No unloaded
+ * iframe can flash between the two layers.
  */
 export function AppShell() {
   const sessionStatus = useSessionStore(state => state.sessionStatus)
@@ -147,22 +153,49 @@ export function AppShell() {
     return () => clearInterval(id)
   }, [sessionStatus])
 
-  // ── Running (dissolve must have finished) ──
-  if (sessionStatus === 'ready' && loadingDone) {
+  // ── Loading / Running (the splash overlays the monitor until the
+  //    reveal gate releases — #50). ONE branch covers starting and
+  //    ready so the splash instance SURVIVES the transition: the
+  //    children keep fixed positions (monitor / splash / sidebar), and
+  //    a remounted splash would replay its entrance right when the
+  //    held composition should hand over to the closure. ──
+  if (sessionStatus === 'starting' || sessionStatus === 'ready') {
     return (
       <>
         <div
           data-app-frame=""
           className={cn(
-            'h-screen w-screen overflow-hidden',
+            'relative h-screen w-screen overflow-hidden bg-(--pnds-bg)',
             !fullscreen && 'rounded-[var(--app-corner-radius)]'
           )}
         >
           {/* §7.4: fullscreen toggles dissolve at the NSWindow layer
               (Rust fades the whole window out, macOS switches, window
               fades in). MonitorView is keyed by fullscreen so a
-              popped-out overlay sidebar is dropped instantly. */}
-          <MonitorView key={fullscreen ? 'fullscreen' : 'windowed'} />
+              popped-out overlay sidebar is dropped instantly. Mounts
+              only once ready — #50: its iframe loads beneath the
+              splash, and its own load event releases the gate. */}
+          {sessionStatus === 'ready' && (
+            <MonitorView key={fullscreen ? 'fullscreen' : 'windowed'} />
+          )}
+          {/* #50: the splash sits over the already-mounting monitor and
+              cross-fades away (LoadingScreen owns the release gating)
+              once the iframe beneath is ready — the monitor's first
+              paint shows through the fade instead of flashing in
+              blank. Same child position in the starting-only frames,
+              so the transition never remounts it. */}
+          {!loadingDone && (
+            <div className="absolute inset-0 z-50">
+              <LoadingScreen
+                key={runId}
+                onDissolveEnd={() => setLoadingDone(true)}
+              />
+            </div>
+          )}
+          {/* §10.1: hover-revealed sidebar stays reachable during
+              loading, including fullscreen. Ready frames drop it here —
+              MonitorView brings its own. */}
+          {sessionStatus === 'starting' && <HoverSidebar />}
         </div>
         <Toaster position="bottom-right" />
       </>
@@ -186,33 +219,6 @@ export function AppShell() {
           <main className="flex-1 overflow-auto">
             <ErrorScreen />
           </main>
-        </div>
-        <Toaster position="bottom-right" />
-      </>
-    )
-  }
-
-  // ── Loading / Dissolve (full-screen Logo, no sidebar) ──
-  const loadingPhase =
-    sessionStatus === 'starting' || (sessionStatus === 'ready' && !loadingDone)
-
-  if (loadingPhase) {
-    return (
-      <>
-        <div
-          data-app-frame=""
-          className={cn(
-            'relative h-screen w-screen overflow-hidden bg-(--pnds-bg)',
-            !fullscreen && 'rounded-[var(--app-corner-radius)]'
-          )}
-        >
-          <LoadingScreen
-            key={runId}
-            onDissolveEnd={() => setLoadingDone(true)}
-          />
-          {/* §10.1: hover-revealed sidebar stays reachable during loading,
-              including fullscreen. */}
-          <HoverSidebar />
         </div>
         <Toaster position="bottom-right" />
       </>

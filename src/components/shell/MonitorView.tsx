@@ -8,6 +8,12 @@ import {
 } from '@/store/settings-store'
 import { pushThemeToFrame } from '@/lib/theme-bridge'
 import { buildMonitorUrl } from '@/lib/monitor-url'
+import {
+  monitorNavigationRevealed,
+  MONITOR_REVEAL_TIMEOUT_MS,
+  MONITOR_REVEAL_FADE_TRANSITION,
+} from '@/lib/monitor-reveal'
+import { cn } from '@/lib/utils'
 import { HoverSidebar } from './HoverSidebar'
 
 /**
@@ -66,6 +72,20 @@ export function MonitorView() {
       theme: currentColorThemeSetting(),
     })
   }, [lanIp, monitorPort, reloadNonce])
+  // v1.3.0 (#50): the reveal gate. Every navigation reports readiness
+  // from its own load event; the backstop below bounds the wait. The
+  // cover hides the still-loading iframe (visible on reloads, when no
+  // splash sits above it) behind the App theme until the gate opens.
+  const revealed = useSessionStore(state =>
+    monitorNavigationRevealed(state.monitorLoaded, state.monitorLoadTimedOut)
+  )
+  useEffect(() => {
+    if (revealed) return
+    const id = setTimeout(() => {
+      useSessionStore.getState().markMonitorTimedOut()
+    }, MONITOR_REVEAL_TIMEOUT_MS)
+    return () => clearTimeout(id)
+  }, [reloadNonce, revealed])
   // Initial push + re-push on theme switch and monitor reload. (The
   // focus-regain re-push lives in the reclaim effect below, keyed on the
   // same values so its closure is never stale.)
@@ -176,9 +196,28 @@ export function MonitorView() {
           onLoad={() => {
             reclaimKeyboardFocus()
             pushThemeToFrame(iframeRef.current, monitorOrigin, colorTheme)
+            // #50: the load event IS the reveal signal — the splash (or
+            // the reload cover) may now dissolve off this navigation.
+            useSessionStore.getState().markMonitorLoaded()
           }}
         />
       </div>
+
+      {/* #50: reveal cover — appears INSTANTLY over a rebuilding iframe
+          (a fading-in cover would flash it through), fades out with the
+          splash's cross-fade timing once the gate releases. Sits under
+          the title strip (z-40) so the drag region never disappears. */}
+      <div
+        aria-hidden
+        data-testid="monitor-reveal-cover"
+        className={cn(
+          'absolute inset-0 z-30 bg-(--pnds-bg)',
+          revealed && 'pointer-events-none opacity-0'
+        )}
+        style={
+          revealed ? { transition: MONITOR_REVEAL_FADE_TRANSITION } : undefined
+        }
+      />
 
       {/* Top-center title / window drag region (§10.1). Themed via the
           monitor-bar tokens (v1.2.3 issue #38) — a scrim over the project

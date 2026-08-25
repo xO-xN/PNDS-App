@@ -2,6 +2,8 @@ import { fireEvent, render, screen, act } from '@/test/test-utils'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { useSessionStore } from '@/store/session-store'
 import { useSettingsStore } from '@/store/settings-store'
+import { MONITOR_REVEAL_TIMEOUT_MS } from '@/lib/monitor-reveal'
+import { logger } from '@/lib/logger'
 import { MonitorView } from './MonitorView'
 
 /** The health block MonitorView needs to render a ready session. */
@@ -223,5 +225,79 @@ describe('MonitorView iframe URL (#49)', () => {
     })
 
     expect(frameSrc()).toBe('http://192.168.1.10:6869/?theme=stage')
+  })
+})
+
+/**
+ * v1.3.0 (#50): the reveal gate wiring — the iframe's own load event
+ * reports the navigation ready, the cover hides a rebuilding iframe
+ * behind the App theme until then, and the timeout backstop releases
+ * (with a log) so the cover can never stick.
+ */
+describe('MonitorView reveal gate (#50)', () => {
+  beforeEach(() => {
+    useSessionStore.setState({
+      sessionStatus: 'ready',
+      projectName: 'Inarticulate III',
+      lanIp: '192.168.1.10',
+      health: readyHealth,
+      monitorReloadNonce: 0,
+      monitorLoaded: false,
+      monitorLoadTimedOut: false,
+    })
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+  })
+
+  const cover = () => screen.getByTestId('monitor-reveal-cover')
+  const coverHeld = () => expect(cover().className).not.toContain('opacity-0')
+  const coverReleased = () => {
+    expect(cover().className).toContain('opacity-0')
+    expect(cover().className).toContain('pointer-events-none')
+  }
+
+  it('covers the iframe until its load event reports readiness', () => {
+    render(<MonitorView />)
+    coverHeld()
+
+    fireEvent.load(screen.getByTitle('Project monitor'))
+
+    expect(useSessionStore.getState().monitorLoaded).toBe(true)
+    coverReleased()
+  })
+
+  it('re-holds the cover INSTANTLY on a monitor reload (no fade-in flash)', () => {
+    render(<MonitorView />)
+    fireEvent.load(screen.getByTitle('Project monitor'))
+    coverReleased()
+
+    act(() => {
+      useSessionStore.getState().bumpMonitorReload()
+    })
+
+    // The rebuilding iframe is hidden again the same frame — a fading-in
+    // cover would flash it through.
+    coverHeld()
+    expect(cover().style.transition).toBe('')
+
+    fireEvent.load(screen.getByTitle('Project monitor'))
+    coverReleased()
+  })
+
+  it('releases via the timeout backstop and logs, when the iframe never loads', () => {
+    vi.useFakeTimers()
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined)
+    render(<MonitorView />)
+    coverHeld()
+
+    act(() => {
+      vi.advanceTimersByTime(MONITOR_REVEAL_TIMEOUT_MS)
+    })
+
+    expect(useSessionStore.getState().monitorLoadTimedOut).toBe(true)
+    expect(warn).toHaveBeenCalledTimes(1)
+    coverReleased()
   })
 })

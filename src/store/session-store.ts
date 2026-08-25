@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { HealthPayload, SessionSnapshot } from '@/lib/tauri-bindings'
+import { logger } from '@/lib/logger'
 import { useProjectStore } from '@/store/project-store'
 
 export type SessionStatus = 'idle' | 'starting' | 'ready' | 'error' | 'stopping'
@@ -97,6 +98,15 @@ interface SessionState {
   prevVolume: number
   /** Incremented to force the monitor iframe to reload (sidebar refresh). */
   monitorReloadNonce: number
+  /** v1.3.0 (#50): the CURRENT iframe navigation reported its load —
+   * the loading→monitor cross-fade (and the reload cover) may release.
+   * Reset by every reload bump and every new run; see
+   * lib/monitor-reveal.ts for the release conditions. */
+  monitorLoaded: boolean
+  /** v1.3.0 (#50): the timeout backstop fired for the current
+   * navigation — the gate releases anyway so the splash never sticks
+   * (logged when armed by markMonitorTimedOut). */
+  monitorLoadTimedOut: boolean
   /** Selected audio mode; defaults to the manifest's defaultMode (§6.1). */
   audioMode: string
   /** Selected LAN IPv4 (§7); null until the user chooses when multiple exist. */
@@ -144,6 +154,8 @@ interface SessionState {
   applySnapshot: (snapshot: SessionSnapshot) => void
   failLocal: (message: string) => void
   bumpMonitorReload: () => void
+  markMonitorLoaded: () => void
+  markMonitorTimedOut: () => void
   zoomIn: () => void
   zoomOut: () => void
   resetZoom: () => void
@@ -165,6 +177,8 @@ export const useSessionStore = create<SessionState>()(set => ({
   muted: false,
   prevVolume: 0,
   monitorReloadNonce: 0,
+  monitorLoaded: false,
+  monitorLoadTimedOut: false,
   audioMode: 'internal',
   lanIp: null,
   lanAddresses: [],
@@ -256,6 +270,11 @@ export const useSessionStore = create<SessionState>()(set => ({
           : state.audioMode,
         startupStage: snapshot.startupStage,
         runId: newRun ? state.runId + 1 : state.runId,
+        // #50: every new run mounts a fresh monitor iframe — its reveal
+        // gate starts held. Mid-run snapshots (health refreshes) keep the
+        // released state.
+        monitorLoaded: newRun ? false : state.monitorLoaded,
+        monitorLoadTimedOut: newRun ? false : state.monitorLoadTimedOut,
         // After a committed session event, any pending is resolved.
         pendingChanges: false,
       }
@@ -264,7 +283,25 @@ export const useSessionStore = create<SessionState>()(set => ({
   failLocal: message => set({ sessionStatus: 'error', sessionError: message }),
 
   bumpMonitorReload: () =>
-    set(state => ({ monitorReloadNonce: state.monitorReloadNonce + 1 })),
+    set(state => ({
+      monitorReloadNonce: state.monitorReloadNonce + 1,
+      // #50: the rebuilt iframe must report readiness (or trip the
+      // backstop) before the reveal gate opens again.
+      monitorLoaded: false,
+      monitorLoadTimedOut: false,
+    })),
+
+  markMonitorLoaded: () => set({ monitorLoaded: true }),
+
+  markMonitorTimedOut: () => {
+    set({ monitorLoadTimedOut: true })
+    // #50: the backstop exists so the show can always proceed; the log
+    // keeps the late/stalled load diagnosable after the fact.
+    logger.warn(
+      'Monitor iframe did not report ready in time; releasing the reveal gate',
+      { monitorReloadNonce: useSessionStore.getState().monitorReloadNonce }
+    )
+  },
 
   // §v1.1.1: zoom only acts while the monitor is showing (session ready).
   zoomIn: () =>
@@ -297,6 +334,8 @@ export const useSessionStore = create<SessionState>()(set => ({
       muted: false,
       prevVolume: 0,
       startupStage: 0,
+      monitorLoaded: false,
+      monitorLoadTimedOut: false,
       audioMode: 'internal',
       lanIp: null,
       lanAddresses: [],

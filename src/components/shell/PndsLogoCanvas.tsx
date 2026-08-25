@@ -37,10 +37,13 @@ type Phase = 'entrance' | 'wait' | 'closure' | 'done'
 interface Props {
   /** Size (px) — canvas is always 600px internal, scaled via CSS. */
   size?: number
-  /** Fires once the session is ready and the monitor iframe has loaded. */
+  /** Fires once the session is ready — starts the closure phase. */
   ready: boolean
-  /** Called when the dissolve animation finishes. */
-  onDissolveEnd?: () => void
+  /** Called once the closure animation completes; the canvas then
+   * holds its final frame (#50: the PARENT owns the cross-fade — it
+   * dissolves the whole splash only once the monitor reveal gate
+   * releases, not when the closure ends). */
+  onClosureEnd?: () => void
   /** Length of the autonomous entrance phase in 60fps frames. Internal
    *  sessions wait for scsynth/CoreAudio boot, so their entrance runs
    *  longer (120 frames = 2s); external/none keep the classic ~0.83s. */
@@ -273,17 +276,17 @@ function drawFrame(
 
 /** PNDS logo animation (p5-prototype → Canvas2D). Phase 1 is autonomous
  *  dot entrance (~0.8 s); then the animation pauses until `ready` becomes
- *  true, at which point it plays the closure & dissolve. */
+ *  true, at which point it plays the closure and holds its final frame —
+ *  `onClosureEnd` reports that moment; dissolving is the parent's job. */
 export function PndsLogoCanvas({
   size = 190,
   ready,
-  onDissolveEnd,
+  onClosureEnd,
   entranceFrames = ENTRANCE_FRAMES,
 }: Props) {
   const [phase, setPhase] = useState<Phase>('entrance')
-  const [dissolving, setDissolving] = useState(false)
   const frameRef = useRef(0)
-  const dissolveEndRef = useRef(onDissolveEnd)
+  const closureEndRef = useRef(onClosureEnd)
   const colsRef = useRef(pickSessionColors())
   const bgRef = useRef(randomBgPositions())
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -291,8 +294,8 @@ export function PndsLogoCanvas({
   // Keep the latest parent callback without restarting the animation loop when
   // AppShell re-renders for intermediate session snapshots.
   useEffect(() => {
-    dissolveEndRef.current = onDissolveEnd
-  }, [onDissolveEnd])
+    closureEndRef.current = onClosureEnd
+  }, [onClosureEnd])
 
   // Reset on mount (state already defaults to 'entrance' / false).
   useEffect(() => {
@@ -349,11 +352,11 @@ export function PndsLogoCanvas({
             return
           }
         } else {
-          // closure complete → stay at final frame, then dissolve
+          // closure complete → hold the final frame (#50: the parent
+          // cross-fades the whole splash once the reveal gate releases)
           drawFrame(ctx, maxFrames, 'closure', cols, bg, entranceFrames)
-          setDissolving(true)
           setPhase('done')
-          setTimeout(() => dissolveEndRef.current?.(), 400)
+          closureEndRef.current?.()
           return
         }
       }
@@ -371,12 +374,7 @@ export function PndsLogoCanvas({
       width={W}
       height={W}
       className="block"
-      style={{
-        width: size,
-        height: size,
-        transition: 'opacity 0.4s ease-in',
-        opacity: dissolving ? 0 : 1,
-      }}
+      style={{ width: size, height: size }}
     />
   )
 }
