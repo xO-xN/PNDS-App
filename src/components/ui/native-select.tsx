@@ -4,8 +4,16 @@ import { ChevronDownIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 /** Box metrics shared by the sizer span and the select overlay, so the
- *  sizer's width is exactly the select's rendered width. */
-const BOX_METRICS = 'h-9 px-3 py-2 pr-9 text-sm'
+ *  sizer's width is exactly the select's rendered width. The sizer also
+ *  carries a TRANSPARENT border and the UI font: the select is bordered
+ *  (a borderless sizer left every label clipped 2px on the right), and
+ *  native form controls do not inherit the app font — without pinning
+ *  both to the same family the measurement and the rendering disagree
+ *  per label. */
+const BOX_METRICS =
+  'h-9 rounded-md border border-transparent px-3 py-2 pr-9 text-sm'
+/** The app UI font token — see BOX_METRICS. */
+const UI_FONT_STYLE = { fontFamily: 'var(--pnds-font-ui)' } as const
 
 /** Options as a flat list — callers naturally hoist the option list
  *  into a variable (a single Fragment child), which Children.toArray
@@ -51,6 +59,7 @@ function NativeSelect({
         aria-hidden="true"
         data-slot="native-select-sizer"
         className={cn('invisible block whitespace-nowrap', BOX_METRICS)}
+        style={UI_FONT_STYLE}
       >
         {sizer}
       </span>
@@ -63,6 +72,7 @@ function NativeSelect({
           'aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive',
           className
         )}
+        style={UI_FONT_STYLE}
         value={value}
         {...props}
       >
