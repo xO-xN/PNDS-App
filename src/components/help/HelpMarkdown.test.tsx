@@ -101,4 +101,35 @@ describe('HelpMarkdown (#53)', () => {
       screen.getByRole('heading', { level: 1, name: '最小' })
     ).toHaveAttribute('id', '最小')
   })
+
+  it('marks every occurrence of the highlight terms, case-insensitively', () => {
+    const { container } = render(
+      <HelpMarkdown
+        markdown={'# 标题\n\n正文包含 Target 词与另一个 target 出现。'}
+        highlightTerms={['target']}
+      />
+    )
+
+    const marks = Array.from(container.querySelectorAll('mark'))
+    expect(marks.map(mark => mark.textContent)).toEqual(['Target', 'target'])
+  })
+
+  it('highlights inside headings without disturbing their anchors', () => {
+    render(
+      <HelpMarkdown
+        markdown={'# 端口分配\n\n正文。'}
+        highlightTerms={['端口']}
+      />
+    )
+
+    const heading = screen.getByRole('heading', { level: 1, name: '端口分配' })
+    expect(heading).toHaveAttribute('id', '端口分配')
+    expect(heading.querySelector('mark')?.textContent).toBe('端口')
+  })
+
+  it('renders without marks when no terms are given', () => {
+    const { container } = render(<HelpMarkdown markdown={'目标关键词'} />)
+
+    expect(container.querySelectorAll('mark')).toHaveLength(0)
+  })
 })

@@ -1,8 +1,50 @@
 import ReactMarkdown from 'react-markdown'
 import rehypeSlug from 'rehype-slug'
 import remarkGfm from 'remark-gfm'
+import type { ElementContent, Nodes, Root } from 'hast'
 
+import { splitTextOnTerms } from '@/lib/help-markdown'
 import { cn } from '@/lib/utils'
+
+/**
+ * Wraps every case-insensitive occurrence of the terms in <mark>,
+ * via the shared `splitTextOnTerms` segmenter (the same algorithm that
+ * marks the hit-list snippets). The walk stays purely structural (text
+ * nodes only), so nothing else about the tree — least of all
+ * rehype-slug's heading ids, computed before this plugin runs —
+ * changes.
+ */
+function rehypeHighlightTerms(terms: readonly string[]) {
+  return () => (tree: Root) => {
+    const walk = (node: Nodes) => {
+      if (!('children' in node)) return
+      const children = node.children as ElementContent[]
+      for (let index = 0; index < children.length; index += 1) {
+        const child = children[index]
+        if (child === undefined) continue
+        if (child.type === 'text') {
+          const segments = splitTextOnTerms(child.value, terms)
+          if (segments === null) continue
+          const replacement: ElementContent[] = segments.map(segment =>
+            segment.marked
+              ? ({
+                  type: 'element',
+                  tagName: 'mark',
+                  properties: {},
+                  children: [{ type: 'text', value: segment.text }],
+                } satisfies ElementContent)
+              : { type: 'text', value: segment.text }
+          )
+          children.splice(index, 1, ...replacement)
+          index += replacement.length - 1
+        } else {
+          walk(child)
+        }
+      }
+    }
+    walk(tree)
+  }
+}
 
 /**
  * v1.3.0 (#53): the help corpus's runtime markdown renderer — the app
@@ -13,14 +55,24 @@ import { cn } from '@/lib/utils'
  * pinned by a test, so a search hit's anchor always has a heading to
  * scroll to. Styling rides on descendant selectors instead of component
  * overrides: nothing but the plugin pipeline touches the tree.
+ *
+ * v1.3.0 (#56): `highlightTerms` marks query terms in place (the search
+ * hit's jump-and-highlight); the marker runs AFTER rehype-slug, so
+ * highlighted heading text never disturbs an anchor.
  */
 export function HelpMarkdown({
   markdown,
   className,
+  highlightTerms,
 }: {
   markdown: string
   className?: string
+  highlightTerms?: readonly string[]
 }) {
+  const terms = (highlightTerms ?? []).filter(term => term !== '')
+  const rehypePlugins =
+    terms.length > 0 ? [rehypeSlug, rehypeHighlightTerms(terms)] : [rehypeSlug]
+
   return (
     <div
       className={cn(
@@ -43,10 +95,11 @@ export function HelpMarkdown({
         '[&_pre]:my-3 [&_pre]:overflow-x-auto [&_pre]:rounded-md [&_pre]:bg-muted [&_pre]:p-3 [&_pre]:font-mono [&_pre]:text-xs',
         '[&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:font-mono [&_pre_code]:text-xs',
         '[&_:not(pre)_code]:rounded-sm [&_:not(pre)_code]:bg-muted [&_:not(pre)_code]:px-1 [&_:not(pre)_code]:py-0.5 [&_:not(pre)_code]:font-mono [&_:not(pre)_code]:text-xs',
+        '[&_mark]:rounded-sm [&_mark]:bg-accent [&_mark]:px-0.5 [&_mark]:text-accent-foreground',
         className
       )}
     >
-      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSlug]}>
+      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={rehypePlugins}>
         {markdown}
       </ReactMarkdown>
     </div>

@@ -35,6 +35,66 @@ export interface HelpSection {
 const ATX_HEADING = /^(#{1,6}) +(.*?)\s*$/
 const FENCE_OPEN = /^( {0,3})(`{3,}|~{3,})(.*)$/
 
+/** One slice of a term-split string: plain run or a matched term. */
+export interface TextSegment {
+  text: string
+  marked: boolean
+}
+
+/**
+ * v1.3.0 (#56): splits a plain string on case-insensitive occurrences of
+ * the terms — the one algorithm behind BOTH highlight surfaces (the hit
+ * list's snippet and the document body's <mark>s). Earliest match wins;
+ * at equal positions the longer term wins. Returns null when nothing
+ * matched, or when lowercasing changed the text's length (locale
+ * oddities like ß would mis-slice index math) — callers then render the
+ * text untouched.
+ */
+export function splitTextOnTerms(
+  value: string,
+  terms: readonly string[]
+): TextSegment[] | null {
+  const lowered = terms.map(term => term.toLowerCase()).filter(t => t !== '')
+  if (lowered.length === 0) return null
+  const lower = value.toLowerCase()
+  if (lower.length !== value.length) return null
+
+  const segments: TextSegment[] = []
+  let at = 0
+  let matched = false
+  while (at < value.length) {
+    let bestAt = -1
+    let bestLength = 0
+    for (const term of lowered) {
+      const found = lower.indexOf(term, at)
+      if (
+        found !== -1 &&
+        (bestAt === -1 ||
+          found < bestAt ||
+          (found === bestAt && term.length > bestLength))
+      ) {
+        bestAt = found
+        bestLength = term.length
+      }
+    }
+    if (bestAt === -1) break
+    matched = true
+    if (bestAt > at) {
+      segments.push({ text: value.slice(at, bestAt), marked: false })
+    }
+    segments.push({
+      text: value.slice(bestAt, bestAt + bestLength),
+      marked: true,
+    })
+    at = bestAt + bestLength
+  }
+  if (!matched) return null
+  if (at < value.length) {
+    segments.push({ text: value.slice(at), marked: false })
+  }
+  return segments
+}
+
 interface SectionBuffer {
   id: string
   title: string

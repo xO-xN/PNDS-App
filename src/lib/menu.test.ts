@@ -92,6 +92,13 @@ const notificationsMock = vi.hoisted(() => ({
 }))
 vi.mock('@/lib/notifications', () => ({ notifications: notificationsMock }))
 
+const helpWindowMock = vi.hoisted(() => ({
+  openHelpWindow: vi.fn().mockResolvedValue(undefined),
+  closeHelpWindow: vi.fn().mockResolvedValue(undefined),
+  HELP_WINDOW_LABEL: 'help',
+}))
+vi.mock('@/lib/help-window', () => helpWindowMock)
+
 /** Custom items by id, asserting presence so callers stay non-null. With
  * store-driven rebuilds the captures hold several builds' items — the
  * LATEST build's entry is the live one. */
@@ -166,13 +173,16 @@ describe('buildAppMenu (v1.2.0 issue #13)', () => {
     expect(submenuItems('File')).toContain(closeWindow)
   })
 
-  it('⌘W opens the close-project confirm while a session runs (v1.2.0)', () => {
+  it('⌘W opens the close-project confirm while a session runs (v1.2.0)', async () => {
     useProjectStore.setState({ confirmCloseProjectOpen: false })
     useSessionStore.setState({ sessionStatus: 'ready' })
 
+    // #56: the action dispatches on the focused window (async).
     item('close-window').action?.()
+    await vi.waitFor(() =>
+      expect(useProjectStore.getState().confirmCloseProjectOpen).toBe(true)
+    )
 
-    expect(useProjectStore.getState().confirmCloseProjectOpen).toBe(true)
     expect(commands.closeWindowWithFade).not.toHaveBeenCalled()
     useSessionStore.setState({ sessionStatus: 'idle' })
     useProjectStore.setState({ confirmCloseProjectOpen: false })
@@ -445,5 +455,95 @@ describe('buildAppMenu address segment (v1.3.0, #52)', () => {
     }
     expect(installedB.setAsAppMenu).toHaveBeenCalledTimes(1)
     expect(supersededA.setAsAppMenu).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * v1.3.0 (#56): the Help menu — a top-level submenu after Window (the
+ * macOS Help position) with the ⌘? search entry and the three document
+ * entries, plus the ⌘W dispatch that must act on the FRONT window once
+ * a second window (the help center) exists.
+ */
+describe('buildAppMenu help menu (v1.3.0, #56)', () => {
+  it('adds the Help submenu last with the search entry and three documents', () => {
+    expect(captured.submenus.map(s => s.text).slice(-2)).toEqual([
+      'Window',
+      'Help',
+    ])
+
+    // ⇧⌘/ is the physical chord behind ⌘? — one accelerator claims both.
+    expect(item('help-search')).toMatchObject({
+      text: 'Search Help',
+      accelerator: 'Cmd+Shift+Slash',
+    })
+    expect(item('help-tutorial').text).toBe('User Tutorial')
+    expect(item('help-creator-guide').text).toBe('Creator Guide')
+    expect(item('help-reference').text).toBe('Reference Manual')
+    expect(predefinedIn('Help')).toContain('Separator')
+  })
+
+  it('localizes the Help menu with the app language', async () => {
+    try {
+      await i18n.changeLanguage('zh-CN')
+      await buildAppMenu()
+
+      expect([...captured.submenus].reverse()[0]?.text).toBe('帮助')
+      expect(item('help-search').text).toBe('搜索帮助')
+      expect(item('help-tutorial').text).toBe('使用教程')
+      expect(item('help-creator-guide').text).toBe('创作指南')
+      expect(item('help-reference').text).toBe('参考手册')
+    } finally {
+      await i18n.changeLanguage('en')
+    }
+  })
+
+  it('opens the help center on the right target from each entry', () => {
+    item('help-search').action?.()
+    item('help-tutorial').action?.()
+    item('help-creator-guide').action?.()
+    item('help-reference').action?.()
+
+    expect(helpWindowMock.openHelpWindow).toHaveBeenNthCalledWith(1, {
+      kind: 'search',
+    })
+    expect(helpWindowMock.openHelpWindow).toHaveBeenNthCalledWith(2, {
+      kind: 'doc',
+      docId: 'app-tutorial',
+    })
+    expect(helpWindowMock.openHelpWindow).toHaveBeenNthCalledWith(3, {
+      kind: 'doc',
+      docId: 'template-guide',
+    })
+    expect(helpWindowMock.openHelpWindow).toHaveBeenNthCalledWith(4, {
+      kind: 'doc',
+      docId: 'reference-readme',
+    })
+  })
+
+  it('routes ⌘W to the focused window', async () => {
+    // The help center is front: ⌘W closes it, never the main flow.
+    vi.mocked(commands.closeWindowWithFade).mockClear()
+    vi.mocked(commands.focusedWindowLabel).mockResolvedValue({
+      status: 'ok',
+      data: 'help',
+    })
+    item('close-window').action?.()
+    await vi.waitFor(() =>
+      expect(helpWindowMock.closeHelpWindow).toHaveBeenCalledTimes(1)
+    )
+    expect(commands.closeWindowWithFade).not.toHaveBeenCalled()
+
+    // The main window is front: the existing close flow runs.
+    helpWindowMock.closeHelpWindow.mockClear()
+    vi.mocked(commands.closeWindowWithFade).mockClear()
+    vi.mocked(commands.focusedWindowLabel).mockResolvedValue({
+      status: 'ok',
+      data: 'main',
+    })
+    item('close-window').action?.()
+    await vi.waitFor(() =>
+      expect(commands.closeWindowWithFade).toHaveBeenCalledTimes(1)
+    )
+    expect(helpWindowMock.closeHelpWindow).not.toHaveBeenCalled()
   })
 })

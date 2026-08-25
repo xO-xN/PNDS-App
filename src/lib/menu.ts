@@ -14,6 +14,12 @@
  * v1.3.0 (issue #52): the Window menu carries a permanent address segment
  * (Performer / Conductor) — see setupMenuStateListener for its rebuild
  * triggers beyond language changes.
+ *
+ * v1.3.0 (issue #56): the Help menu (macOS's last submenu) — ⌘? (the
+ * physical chord ⇧⌘/) opens the help center on its search box, the
+ * three document entries open it on the matching corpus page. ⌘W now
+ * dispatches on the FOCUSED window: with the help center front it
+ * closes that window, not the main flow behind it.
  */
 import {
   Menu,
@@ -28,6 +34,12 @@ import { buildMonitorUrl } from '@/lib/monitor-url'
 import { notifications } from '@/lib/notifications'
 import { promptOpenProject } from '@/lib/open-project'
 import { checkForUpdates } from '@/lib/updater'
+import {
+  closeHelpWindow,
+  HELP_WINDOW_LABEL,
+  openHelpWindow,
+} from '@/lib/help-window'
+import { commands } from '@/lib/tauri-bindings'
 import { useProjectStore } from '@/store/project-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { useSessionStore } from '@/store/session-store'
@@ -57,6 +69,26 @@ async function copyAddress(url: string): Promise<void> {
     logger.warn('Failed to copy address to clipboard', { error, url })
     notifications.error(i18n.t('toast.error.generic'))
   }
+}
+
+/**
+ * v1.3.0 (#56): ⌘W acts on the FRONT window. The menu's Close Window
+ * accelerator fires app-wide, so with the help center focused it must
+ * close that window — running the main window's close flow instead
+ * would hide the app (or pop its session confirm) behind the user's
+ * back. An unfocused moment or a query failure falls back to main.
+ */
+async function closeFrontWindow(): Promise<void> {
+  const focused = await commands.focusedWindowLabel()
+  if (focused.status === 'ok' && focused.data === HELP_WINDOW_LABEL) {
+    await closeHelpWindow()
+    return
+  }
+  if (useSessionStore.getState().sessionStatus === 'ready') {
+    useProjectStore.getState().setConfirmCloseProjectOpen(true)
+    return
+  }
+  void requestClose()
 }
 
 /**
@@ -148,16 +180,14 @@ export async function buildAppMenu(): Promise<Menu> {
         // on this window. v1.2.0: with a running project ⌘W closes the
         // project behind the app-styled confirm (the retired plain-Esc
         // flow); everywhere else it keeps the red-light window-close flow.
+        // v1.3.0 (#56): the action dispatches on the focused window —
+        // see closeFrontWindow.
         await MenuItem.new({
           id: 'close-window',
           text: t('menu.closeWindow'),
           accelerator: 'Cmd+W',
           action: () => {
-            if (useSessionStore.getState().sessionStatus === 'ready') {
-              useProjectStore.getState().setConfirmCloseProjectOpen(true)
-              return
-            }
-            void requestClose()
+            void closeFrontWindow()
           },
         }),
       ],
@@ -298,8 +328,52 @@ export async function buildAppMenu(): Promise<Menu> {
       ],
     })
 
+    // v1.3.0 (#56): the Help menu — macOS's last submenu. ⌘? is the
+    // physical chord ⇧⌘/ (one accelerator claims both spellings); the
+    // three document entries open the help center on the matching corpus
+    // page, the reference manual landing on its own README index. The
+    // window is created hidden and reveals itself once themed (#51's
+    // anti-flash pattern), so dark users never see a light first frame.
+    const helpSubmenu = await Submenu.new({
+      text: t('menu.help'),
+      items: [
+        await MenuItem.new({
+          id: 'help-search',
+          text: t('menu.helpSearch'),
+          accelerator: 'Cmd+Shift+Slash',
+          action: () => void openHelpWindow({ kind: 'search' }),
+        }),
+        await PredefinedMenuItem.new({ item: 'Separator' }),
+        await MenuItem.new({
+          id: 'help-tutorial',
+          text: t('menu.helpTutorial'),
+          action: () =>
+            void openHelpWindow({ kind: 'doc', docId: 'app-tutorial' }),
+        }),
+        await MenuItem.new({
+          id: 'help-creator-guide',
+          text: t('menu.helpCreatorGuide'),
+          action: () =>
+            void openHelpWindow({ kind: 'doc', docId: 'template-guide' }),
+        }),
+        await MenuItem.new({
+          id: 'help-reference',
+          text: t('menu.helpReference'),
+          action: () =>
+            void openHelpWindow({ kind: 'doc', docId: 'reference-readme' }),
+        }),
+      ],
+    })
+
     const menu = await Menu.new({
-      items: [appSubmenu, fileSubmenu, editSubmenu, viewSubmenu, windowSubmenu],
+      items: [
+        appSubmenu,
+        fileSubmenu,
+        editSubmenu,
+        viewSubmenu,
+        windowSubmenu,
+        helpSubmenu,
+      ],
     })
 
     // Superseded mid-build (a newer rebuild is in flight): install

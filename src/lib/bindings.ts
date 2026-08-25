@@ -50,11 +50,23 @@ async closeWindowWithFade() : Promise<Result<null, string>> {
 }
 },
 /**
- * §7.4: first show / dock reopen — fade in from transparent.
+ * First show / dock reopen — fade in from transparent.
+ *
+ * v1.3.0 (#51): this is now the cold-start reveal. The main window is
+ * created hidden; the frontend calls this once the saved theme has
+ * landed, so the window's first visible frame is already themed (dark
+ * users never see the Lavender default first). Shows-and-fades when
+ * hidden, and is a NO-OP when already visible — dev reloads and other
+ * repeat callers must never re-fade a live window.
+ *
+ * v1.3.0 (#56): `label` extends the same reveal to secondary windows
+ * (the help center), created hidden on the frontend side and revealed
+ * by their own page once ready; omitted, it stays the main window's
+ * reveal.
  */
-async fadeInWindow() : Promise<Result<null, string>> {
+async fadeInWindow(label: string | null) : Promise<Result<null, string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("fade_in_window") };
+    return { status: "ok", data: await TAURI_INVOKE("fade_in_window", { label }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -93,6 +105,20 @@ async markQuitting() : Promise<Result<null, string>> {
 async quitApp() : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("quit_app") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * v1.3.0 (#56): the focused window's label ("main" when nothing else
+ * is focused) — the File > Close Window ⌘W action must act on the
+ * FRONT window: with the help center open, ⌘W closes it instead of
+ * running the main window's close flow behind it.
+ */
+async focusedWindowLabel() : Promise<Result<string, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("focused_window_label") };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };

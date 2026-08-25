@@ -13,6 +13,7 @@ pub fn generate_bindings() -> Builder<tauri::Wry> {
         crate::window::get_window_state,
         crate::window::mark_quitting,
         crate::window::quit_app,
+        crate::window::focused_window_label,
         preferences::load_preferences,
         preferences::save_preferences,
         notifications::send_native_notification,

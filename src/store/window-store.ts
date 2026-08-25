@@ -96,7 +96,9 @@ export async function requestClose(): Promise<void> {
  * re-fade a live window).
  */
 export async function fadeInWindow(): Promise<void> {
-  const result = await commands.fadeInWindow()
+  // #56: null = the main window (the command's label default); the help
+  // center passes its own label for its reveal.
+  const result = await commands.fadeInWindow(null)
   if (result.status === 'error') {
     console.error('fadeInWindow failed:', result.error)
   }

@@ -158,6 +158,10 @@ vi.mock('@/lib/tauri-bindings', () => ({
       .fn()
       .mockResolvedValue({ status: 'ok', data: null }),
     fadeInWindow: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
+    // v1.3.0 (#56): ⌘W dispatch — default: the main window is front.
+    focusedWindowLabel: vi
+      .fn()
+      .mockResolvedValue({ status: 'ok', data: 'main' }),
     markQuitting: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
     quitApp: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
     // Default: no built-in utility staged (Utilities seeding is a no-op;

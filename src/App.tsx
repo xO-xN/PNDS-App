@@ -8,6 +8,7 @@ import {
   setupMenuLanguageListener,
   setupMenuStateListener,
 } from './lib/menu'
+import { setupHelpWindowBridge } from './lib/help-window'
 import {
   initializeLanguage,
   languageSettingFromPrefs,
@@ -90,6 +91,10 @@ function App() {
         // v1.3.0 (#52): the Window menu's address segment follows the
         // selected project and the LAN choice — same whole-menu rebuild.
         setupMenuStateListener()
+        // v1.3.0 (#56): an open help center live-follows the app —
+        // language switches and Appearance theme changes are pushed to
+        // it, and its boot handshake replays the last navigate target.
+        setupHelpWindowBridge()
       } catch (error) {
         logger.warn('Failed to initialize language or menu', { error })
       } finally {

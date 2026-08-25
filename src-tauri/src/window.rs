@@ -220,6 +220,22 @@ pub async fn close_window_with_fade(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// v1.3.0 (#56): the generation counter a reveal ramps on — main shares
+/// the WindowManager's counter (its fade interrupts must stay coherent),
+/// every other label gets a DEDICATED counter: bumping main's shared
+/// counter from a secondary window would cancel an in-flight main ramp
+/// mid-opacity and strand it half-transparent (the contract: never an
+/// invisible-but-interactive window). A fresh counter suffices for a
+/// secondary window — the one-shot reveal is the only fade it has, so
+/// there is nothing else to supersede.
+fn reveal_generation(state: &WindowManager, label: &str) -> Arc<FadeGen> {
+    if label == "main" {
+        Arc::clone(&state.fade_gen)
+    } else {
+        Arc::new(FadeGen::default())
+    }
+}
+
 /// First show / dock reopen — fade in from transparent.
 ///
 /// v1.3.0 (#51): this is now the cold-start reveal. The main window is
@@ -228,12 +244,18 @@ pub async fn close_window_with_fade(app: AppHandle) -> Result<(), String> {
 /// users never see the Lavender default first). Shows-and-fades when
 /// hidden, and is a NO-OP when already visible — dev reloads and other
 /// repeat callers must never re-fade a live window.
+///
+/// v1.3.0 (#56): `label` extends the same reveal to secondary windows
+/// (the help center), created hidden on the frontend side and revealed
+/// by their own page once ready; omitted, it stays the main window's
+/// reveal.
 #[tauri::command]
 #[specta::specta]
-pub async fn fade_in_window(app: AppHandle) -> Result<(), String> {
+pub async fn fade_in_window(app: AppHandle, label: Option<String>) -> Result<(), String> {
+    let label = label.unwrap_or_else(|| "main".to_string());
     let window = app
-        .get_webview_window("main")
-        .ok_or("main window not found")?;
+        .get_webview_window(&label)
+        .ok_or(format!("{label} window not found"))?;
     let state = app.state::<WindowManager>();
     if state.quitting.load(Ordering::SeqCst) {
         return Ok(());
@@ -243,15 +265,31 @@ pub async fn fade_in_window(app: AppHandle) -> Result<(), String> {
     if window.is_visible().unwrap_or(false) {
         return Ok(());
     }
-    let generation = state.fade_gen.next();
+    let gen = reveal_generation(&state, &label);
+    let generation = gen.next();
     set_opacity(&window, 0.0);
     window
         .show()
         .map_err(|e| format!("Failed to show the hidden window: {e}"))?;
     let _ = window.set_focus();
-    spawn_ramp(window, state.fade_gen.clone(), generation, 1.0);
-    log::info!("Cold-start reveal: window shown and fading in");
+    spawn_ramp(window, gen, generation, 1.0);
+    log::info!("Cold-start reveal: {label} window shown and fading in");
     Ok(())
+}
+
+/// v1.3.0 (#56): the focused window's label ("main" when nothing else
+/// is focused) — the File > Close Window ⌘W action must act on the
+/// FRONT window: with the help center open, ⌘W closes it instead of
+/// running the main window's close flow behind it.
+#[tauri::command]
+#[specta::specta]
+pub async fn focused_window_label(app: AppHandle) -> Result<String, String> {
+    Ok(app
+        .webview_windows()
+        .into_iter()
+        .find(|(_, window)| window.is_focused().unwrap_or(false))
+        .map(|(label, _)| label)
+        .unwrap_or_else(|| "main".to_string()))
 }
 
 /// Queries the current window snapshot (initial state on frontend mount).
@@ -612,6 +650,26 @@ mod tests {
         assert!(!gen.is_current(first));
         assert!(!gen.is_current(second));
         assert!(gen.is_current(third));
+    }
+
+    /// #56: a secondary window's reveal runs on an ISOLATED counter — it
+    /// must neither advance nor be superseded by main's shared generation.
+    #[test]
+    fn secondary_reveals_do_not_touch_the_main_generation() {
+        let manager = WindowManager::default();
+
+        let main_gen = reveal_generation(&manager, "main");
+        let first = main_gen.next();
+        assert!(main_gen.is_current(first));
+
+        let main_before = manager.snapshot().generation;
+        let help_gen = reveal_generation(&manager, "help");
+        let _ = help_gen.next();
+        assert_eq!(
+            manager.snapshot().generation,
+            main_before,
+            "a help reveal must not advance (and so cancel) main's ramps"
+        );
     }
 
     /// Snapshot reflects the cached fullscreen flag and bumps generation.

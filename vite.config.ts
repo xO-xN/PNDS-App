@@ -29,6 +29,9 @@ export default defineConfig(async () => ({
     rolldownOptions: {
       input: {
         main: resolve(__dirname, 'index.html'),
+        // v1.3.0 (#56): the help center's own minimal webview page — the
+        // second window must not boot the whole main app shell.
+        help: resolve(__dirname, 'help.html'),
       },
     },
   },

@@ -40,6 +40,24 @@ Rust 侧 `help_corpus` 返回 `{ id, markdown }[]`（id 是稳定契约，markdo
 
 四处都改齐，`check:all`（两侧漂移测试）会替你查漏。
 
-## T8 待接
+## T8 窗口接线（#56，已完成）
 
-Help 窗口（#56）消费这套底座：`commands.helpCorpus()` → `buildHelpCorpus` → `buildHelpIndex`；命中点击用 `sectionId` 滚动到标题（锚点 parity 即为此）；正文用 `HelpMarkdown` 渲染。界面文案进 locales，本版语料仅中文。
+帮助中心是**第二个 webview 窗口**（label `help`），独立最小入口 `help.html` + `src/help-main.tsx`（vite 多页构建，`build.rolldownOptions.input`）——不引导主 App 的 store / 菜单 / 会话机制，react-markdown 只进 help 分块不进主包。启动链复刻 App.tsx 的 #51 防闪：`loadPreferences → setColorThemeAttribute → initializeLanguage`（主题先于首帧落地）→ 渲染 `HelpCenterApp`；**窗口由 `HelpCenterApp` 在语料就绪（或失败出错误态）后调 `commands.fadeInWindow('help')` 揭示**——内容未到也揭示，窗口绝不卡在隐藏态。
+
+| 部件                                   | 位置                                                                        |
+| -------------------------------------- | --------------------------------------------------------------------------- |
+| 菜单 Help 子菜单（⌘? + 三入口）        | `src/lib/menu.ts`（Window 之后，macOS 惯例末位）                            |
+| 窗口生命周期（创建/复用/导航/⌘W）      | `src/lib/help-window.ts`                                                    |
+| 帮助中心 UI（搜索/命中/侧栏/文档视图） | `src/components/help/HelpCenter.tsx`                                        |
+| 高亮                                   | `HelpMarkdown` 的 `highlightTerms` + `splitTextOnTerms`（同一算法两处消费） |
+| 入口                                   | `help.html` / `src/help-main.tsx`（boot 顺序见上）                          |
+
+关键行为：
+
+- **打开**：`openHelpWindow(target)`——窗口不存在则**隐藏创建**并把目标编进 URL（`?doc=<id>` / `?search=1`）；已存在则 `setFocus` + `emitTo('help', 'pnds:help-navigate', target)`。已存在但卡在隐藏态 → 重跑揭示而不是聚焦看不见的窗口。
+- **⌘W 分发**：File > Close Window 的 action 先问 `commands.focusedWindowLabel()`——help 在前台就关 help（普通销毁，不进主窗口的关闭流），否则走原主窗口流（会话确认 / 红灯流）。
+- **⌘?**：注册为 `Cmd+Shift+Slash`（⌘? 与 ⇧⌘/ 是同一物理键序，一个加速键两个拼写都吃到）。
+- **实时跟随桥**：主窗口 `setupHelpWindowBridge()`（App.tsx 装配，help-window.ts 实现）——`languageChanged` 推 `pnds:help-locale`、settings store 的 `colorThemeSetting` 变化推 `pnds:help-theme`（帮助页 `changeLanguage` / `setColorThemeAttribute`）。标题只在创建时本地化（chrome 非界面文案）。
+- **boot 握手**：页面监听注册完毕后 `emit('pnds:help-ready')`，主窗口回放 `lastTarget`——窗口刚创建、页面监听未就绪时被丢掉的导航目标不会静默丢失。
+- **窗口属性**：`resizable`、标准标题栏、⌘W/红灯正常关闭即销毁；window-state 插件（Rust 侧）记尺寸位置（VISIBLE 已被全局排除在持久化外）。capabilities：`default.json` 的 `windows` 含 `help`（`core:window:allow-set-focus` 供主窗口聚焦它）；`desktop.json` 保持 main-only，不给 help 顺带放宽 updater。
+- **Rust 侧**：`fade_in_window(label)` 参数化（缺省 main）；**非 main 窗口用独立 FadeGen 计数**（`reveal_generation`，有单测钉住隔离性）——不共享主计数器，否则 help 揭示会打断主窗口进行中的渐变（半透明卡死，契约禁止）。
