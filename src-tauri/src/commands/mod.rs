@@ -4,6 +4,7 @@
 //! Import specific commands via their submodule (e.g. `commands::preferences::load_preferences`).
 
 pub mod bundle;
+pub mod help;
 pub mod notifications;
 pub mod preferences;
 pub mod project;

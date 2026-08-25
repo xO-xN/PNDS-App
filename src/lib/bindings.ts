@@ -379,6 +379,20 @@ async builtinUtilities() : Promise<Result<BuiltinUtility[], string>> {
 }
 },
 /**
+ * v1.3.0 (issue #53): the help center's corpus — every shipped document
+ * as raw markdown, in manifest order. Reads the files on every call so
+ * dev edits show up without a restart; at the corpus's scale this is a
+ * few milliseconds.
+ */
+async helpCorpus() : Promise<Result<HelpCorpusDocument[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("help_corpus") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * Reveals the app data directory in Finder, creating it if needed.
  */
 async openAppDataDir() : Promise<Result<null, string>> {
@@ -552,6 +566,12 @@ export type HealthPayload = {
  */
 status: string; projectId?: string | null; audioMode?: string | null; audio?: HealthAudio | null; scoreServer?: HealthScoreServer | null }
 export type HealthScoreServer = { performerPort?: number | null; monitorPort?: number | null; error?: string | null }
+/**
+ * One help document exactly as the frontend receives it: its stable id
+ * and the raw markdown. Titles and sections are the frontend's to derive
+ * (it owns the markdown structure pass).
+ */
+export type HelpCorpusDocument = { id: string; markdown: string }
 export type Manifest = { schemaVersion: number; id: string; name: string; version: string; description: string | null; scoreServer: ScoreServer; audio: AudioConfig }
 export type PackResult = { outputPath: string; sha256: string }
 /**

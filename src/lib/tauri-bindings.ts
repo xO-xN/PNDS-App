@@ -30,6 +30,7 @@ export type {
   HealthAudio,
   HealthPayload,
   HealthScoreServer,
+  HelpCorpusDocument,
   Manifest,
   PackResult,
   PortOccupant,

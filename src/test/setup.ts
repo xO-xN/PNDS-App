@@ -163,6 +163,9 @@ vi.mock('@/lib/tauri-bindings', () => ({
     // Default: no built-in utility staged (Utilities seeding is a no-op;
     // tests that exercise it override this mock).
     builtinUtilities: vi.fn().mockResolvedValue({ status: 'ok', data: [] }),
+    // v1.3.0 (issue #53): help corpus — default: no documents; the help
+    // window's tests (T8) override this with fixture documents.
+    helpCorpus: vi.fn().mockResolvedValue({ status: 'ok', data: [] }),
     // v1.2.0 (issue #13): Settings About section reveal buttons
     openAppDataDir: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
     openAppLogDir: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
