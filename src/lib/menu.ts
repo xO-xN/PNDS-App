@@ -10,6 +10,10 @@
  * File > Add Project… ⌘O opens the project folder picker, About routes to
  * the panel's About section (the native dialog is retired), and the dead
  * Window > Zoom item is gone.
+ *
+ * v1.3.0 (issue #52): the Window menu carries a permanent address segment
+ * (Performer / Conductor) — see setupMenuStateListener for its rebuild
+ * triggers beyond language changes.
  */
 import {
   Menu,
@@ -17,8 +21,11 @@ import {
   Submenu,
   PredefinedMenuItem,
 } from '@tauri-apps/api/menu'
+import { writeText } from '@tauri-apps/plugin-clipboard-manager'
 import i18n from '@/i18n/config'
 import { logger } from '@/lib/logger'
+import { buildMonitorUrl } from '@/lib/monitor-url'
+import { notifications } from '@/lib/notifications'
 import { promptOpenProject } from '@/lib/open-project'
 import { checkForUpdates } from '@/lib/updater'
 import { useProjectStore } from '@/store/project-store'
@@ -39,10 +46,33 @@ import { toggleMasterMute } from '@/lib/volume-control'
 
 const APP_NAME = 'PNDS'
 
+/** v1.3.0 (#52): click-to-copy for the Window menu address items. The
+ * toast names the copied URL — two look-alike items must never leave the
+ * operator guessing which one landed in the clipboard. */
+async function copyAddress(url: string): Promise<void> {
+  try {
+    await writeText(url)
+    notifications.success(i18n.t('menu.addressCopied', { url }))
+  } catch (error) {
+    logger.warn('Failed to copy address to clipboard', { error, url })
+    notifications.error(i18n.t('toast.error.generic'))
+  }
+}
+
+/**
+ * Sequence token for in-flight menu builds. Every buildAppMenu entry
+ * bumps it; a build installs itself only if it is still the latest —
+ * selection, LAN and language changes can each fire a rebuild in quick
+ * succession, and an older build finishing last must not install its
+ * stale addresses over a newer one (last write wins).
+ */
+let menuBuildSeq = 0
+
 /**
  * Build and set the application menu with translated labels.
  */
 export async function buildAppMenu(): Promise<Menu> {
+  const seq = ++menuBuildSeq
   const t = i18n.t.bind(i18n)
 
   try {
@@ -214,9 +244,47 @@ export async function buildAppMenu(): Promise<Menu> {
       ],
     })
 
+    // v1.3.0 (#52): the permanent address segment. Each URL joins the
+    // selected project's manifest port with the settings-card LAN choice
+    // (the same value a start passes to Rust) through the monitor URL
+    // constructor — the copied text is by construction the same origin
+    // the monitor iframe navigates to. No project or no LAN yet → the
+    // items fall back to bare disabled labels, never a made-up address.
+    const lanIp = useSessionStore.getState().lanIp
+    const scoreServer =
+      useProjectStore.getState().currentProject?.manifest.scoreServer
+    const addressUrls =
+      lanIp !== null && scoreServer
+        ? {
+            performer: buildMonitorUrl(lanIp, scoreServer.performerPort),
+            conductor: buildMonitorUrl(lanIp, scoreServer.monitorPort),
+          }
+        : null
+
     const windowSubmenu = await Submenu.new({
       text: t('menu.window'),
       items: [
+        await MenuItem.new({
+          id: 'performer-address',
+          text: addressUrls
+            ? t('menu.performerAddress', { url: addressUrls.performer })
+            : t('menu.performer'),
+          enabled: addressUrls !== null,
+          action: () => {
+            if (addressUrls) void copyAddress(addressUrls.performer)
+          },
+        }),
+        await MenuItem.new({
+          id: 'conductor-address',
+          text: addressUrls
+            ? t('menu.conductorAddress', { url: addressUrls.conductor })
+            : t('menu.conductor'),
+          enabled: addressUrls !== null,
+          action: () => {
+            if (addressUrls) void copyAddress(addressUrls.conductor)
+          },
+        }),
+        await PredefinedMenuItem.new({ item: 'Separator' }),
         // v1.2.0 (issue #13): the predefined Maximize ("Zoom") item is
         // dropped — it does nothing on this undecorated window.
         // §7.4: the single fullscreen action — same handler as ⌃⌘F and
@@ -234,6 +302,9 @@ export async function buildAppMenu(): Promise<Menu> {
       items: [appSubmenu, fileSubmenu, editSubmenu, viewSubmenu, windowSubmenu],
     })
 
+    // Superseded mid-build (a newer rebuild is in flight): install
+    // nothing — the newer build owns the menu bar from here.
+    if (seq !== menuBuildSeq) return menu
     await menu.setAsAppMenu()
     logger.info('Application menu built successfully')
     return menu
@@ -258,4 +329,53 @@ export function setupMenuLanguageListener(): () => void {
   }
   i18n.on('languageChanged', handler)
   return () => i18n.off('languageChanged', handler)
+}
+
+/**
+ * v1.3.0 (#52): the Window menu's address segment mirrors two store
+ * slices — the selected project (its manifest ports) and the settings-card
+ * LAN choice — so both drive the same whole-menu rebuild as the language
+ * listener. The stores are plain Zustand creates (no
+ * subscribeWithSelector), so the slice filtering is done here: a rebuild
+ * fires only when a watched value actually changed, never on the session
+ * store's unrelated churn (volume drags, health snapshots).
+ */
+export function setupMenuStateListener(): () => void {
+  const rebuild = async () => {
+    try {
+      await buildAppMenu()
+    } catch (error) {
+      logger.error('Failed to rebuild menu on state change', { error })
+    }
+  }
+  const unsubProject = subscribeIfChanged(
+    useProjectStore,
+    state => state.currentProject,
+    rebuild
+  )
+  const unsubSession = subscribeIfChanged(
+    useSessionStore,
+    state => state.lanIp,
+    rebuild
+  )
+  return () => {
+    unsubProject()
+    unsubSession()
+  }
+}
+
+/** Plain-store subscription that fires only when `select`'s value changes
+ * between sets (reference equality — both watched slices are references). */
+function subscribeIfChanged<T, U>(
+  store: { getState(): T; subscribe(listener: (state: T) => void): () => void },
+  select: (state: T) => U,
+  onChange: () => void
+): () => void {
+  let previous = select(store.getState())
+  return store.subscribe(state => {
+    const next = select(state)
+    if (next === previous) return
+    previous = next
+    onChange()
+  })
 }

@@ -3,7 +3,11 @@ import { listen } from '@tauri-apps/api/event'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { check } from '@tauri-apps/plugin-updater'
 import { relaunch } from '@tauri-apps/plugin-process'
-import { buildAppMenu, setupMenuLanguageListener } from './lib/menu'
+import {
+  buildAppMenu,
+  setupMenuLanguageListener,
+  setupMenuStateListener,
+} from './lib/menu'
 import {
   initializeLanguage,
   languageSettingFromPrefs,
@@ -83,6 +87,9 @@ function App() {
         await buildAppMenu()
         logger.debug('Application menu built')
         setupMenuLanguageListener()
+        // v1.3.0 (#52): the Window menu's address segment follows the
+        // selected project and the LAN choice — same whole-menu rebuild.
+        setupMenuStateListener()
       } catch (error) {
         logger.warn('Failed to initialize language or menu', { error })
       } finally {
