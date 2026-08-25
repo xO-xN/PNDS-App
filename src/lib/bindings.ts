@@ -593,11 +593,13 @@ export type HealthPayload = {
 status: string; projectId?: string | null; audioMode?: string | null; audio?: HealthAudio | null; scoreServer?: HealthScoreServer | null }
 export type HealthScoreServer = { performerPort?: number | null; monitorPort?: number | null; error?: string | null }
 /**
- * One help document exactly as the frontend receives it: its stable id
+ * One help document exactly as the frontend receives it: its stable id,
+ * its docs/-relative path (the base the help window resolves the
+ * corpus's cross-document markdown links against — #56 user report),
  * and the raw markdown. Titles and sections are the frontend's to derive
  * (it owns the markdown structure pass).
  */
-export type HelpCorpusDocument = { id: string; markdown: string }
+export type HelpCorpusDocument = { id: string; path: string; markdown: string }
 export type Manifest = { schemaVersion: number; id: string; name: string; version: string; description: string | null; scoreServer: ScoreServer; audio: AudioConfig }
 export type PackResult = { outputPath: string; sha256: string }
 /**

@@ -46,13 +46,31 @@ const RAW_CORPUS: Record<string, string> = {
   'reference-p5js': referenceP5js,
 }
 
+/** id → docs/-relative path, mirroring the Rust-side document list. */
+const DOC_PATHS: Record<string, string> = {
+  'app-tutorial': 'app-tutorial.md',
+  'template-guide': 'template-guide.md',
+  'reference-readme': 'reference/README.md',
+  'reference-digital-score': 'reference/digital-score.md',
+  'reference-network': 'reference/network.md',
+  'reference-audio-modes': 'reference/audio-modes.md',
+  'reference-runtime-contract': 'reference/runtime-contract.md',
+  'reference-structure': 'reference/structure.md',
+  'reference-manifest': 'reference/manifest.md',
+  'reference-pnds-bundle': 'reference/pnds-bundle.md',
+  'reference-supercollider': 'reference/supercollider.md',
+  'reference-osc': 'reference/osc.md',
+  'reference-p5js': 'reference/p5js.md',
+}
+
 function readRealCorpus(): RawHelpDocument[] {
   return HELP_BOOKS.flatMap(book => [...book.documentIds]).map(id => {
     const markdown = RAW_CORPUS[id]
-    if (markdown === undefined) {
+    const path = DOC_PATHS[id]
+    if (markdown === undefined || path === undefined) {
       throw new Error(`no raw docs/ import wired for help document "${id}"`)
     }
-    return { id, markdown }
+    return { id, path, markdown }
   })
 }
 

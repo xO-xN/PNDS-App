@@ -75,6 +75,16 @@ export function HelpMarkdown({
 
   return (
     <div
+      // #56 user report: documentation reads in the platform's standard
+      // sans stack, not the app's brand display faces (Manrope/Comfortaa)
+      // — the corpus is reference text, not UI. Inline and explicit on
+      // purpose: the theme's `font-sans` token self-references an
+      // undefined var, so the utility would silently inherit the brand
+      // font instead.
+      style={{
+        fontFamily:
+          "ui-sans-serif, system-ui, -apple-system, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif",
+      }}
       className={cn(
         'text-sm leading-relaxed',
         '[&_:is(h1,h2,h3,h4,h5,h6)]:scroll-mt-6',

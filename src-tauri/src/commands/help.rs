@@ -18,13 +18,16 @@ use std::path::PathBuf;
 use specta::Type;
 use tauri::{AppHandle, Manager};
 
-/// One help document exactly as the frontend receives it: its stable id
-/// and the raw markdown. Titles and sections are the frontend's to derive
-/// (it owns the markdown structure pass).
+/// One help document exactly as the frontend receives it: its stable id,
+/// its docs/-relative path (the base the help window resolves the
+/// corpus's cross-document markdown links against — #56 user report),
+/// and the raw markdown. Titles and sections are the frontend's to
+/// derive (it owns the markdown structure pass).
 #[derive(Debug, Clone, serde::Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct HelpCorpusDocument {
     pub id: String,
+    pub path: String,
     pub markdown: String,
 }
 
@@ -98,6 +101,7 @@ pub async fn help_corpus(app: AppHandle) -> Result<Vec<HelpCorpusDocument>, Stri
             read_document(id, &document_candidates(&app, docs_relative)).map(|markdown| {
                 HelpCorpusDocument {
                     id: (*id).to_string(),
+                    path: (*docs_relative).to_string(),
                     markdown,
                 }
             })

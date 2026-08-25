@@ -21,6 +21,8 @@ export type HelpBookId = 'tutorial' | 'creator-guide' | 'reference'
 /** One help document exactly as the `help_corpus` command ships it. */
 export interface RawHelpDocument {
   id: string
+  /** docs/-relative path — the link-resolution base (#56 user report). */
+  path: string
   markdown: string
 }
 
@@ -30,6 +32,8 @@ export interface HelpDocument {
   book: HelpBookId
   /** Display title: the document's `#` heading, falling back to its id. */
   title: string
+  /** docs/-relative path — the base the corpus's markdown links resolve from. */
+  path: string
   markdown: string
   sections: HelpSection[]
 }
@@ -95,7 +99,7 @@ export function buildHelpCorpus(
   }
 
   return expected.map(({ book, id }) => {
-    const { markdown } = byId.get(id) as RawHelpDocument
+    const { markdown, path } = byId.get(id) as RawHelpDocument
     const sections = splitSections(markdown)
     const titleSection = sections.find(
       section => section.level === 1 && section.title !== ''
@@ -104,6 +108,7 @@ export function buildHelpCorpus(
       id,
       book: book.id,
       title: titleSection?.title ?? id,
+      path,
       markdown,
       sections,
     }

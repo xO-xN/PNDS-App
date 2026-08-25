@@ -61,3 +61,5 @@ Rust 侧 `help_corpus` 返回 `{ id, markdown }[]`（id 是稳定契约，markdo
 - **boot 握手**：页面监听注册完毕后 `emit('pnds:help-ready')`，主窗口回放 `lastTarget`——窗口刚创建、页面监听未就绪时被丢掉的导航目标不会静默丢失。
 - **窗口属性**：`resizable`、标准标题栏、⌘W/红灯正常关闭即销毁；window-state 插件（Rust 侧）记尺寸位置（VISIBLE 已被全局排除在持久化外）。capabilities：`default.json` 的 `windows` 含 `help`（`core:window:allow-set-focus` 供主窗口聚焦它）；`desktop.json` 保持 main-only，不给 help 顺带放宽 updater。
 - **Rust 侧**：`fade_in_window(label)` 参数化（缺省 main）；**非 main 窗口用独立 FadeGen 计数**（`reveal_generation`，有单测钉住隔离性）——不共享主计数器，否则 help 揭示会打断主窗口进行中的渐变（半透明卡死，契约禁止）。
+- **文档间链接**（#56 用户报告后补）：语料 md 里的链接**绝不允许**触发 webview 导航——曾把整个主 App 引导进帮助窗口导致窗口报废。`HelpCenter` 在根节点拦截所有 `<a>` 点击，交给 `resolveHelpLink`（`lib/help-links.ts`）：相对 `.md` 目标按**链接所在文档自己的 docs/ 路径**解析（`..` 在 docs/ 根处钳制——部分语料按仓库根基准书写），`#fragment` 作小节锚点（未命中回退页首）；带 scheme 的 URL（https/mailto…）走系统浏览器（opener 插件）；解析不到 → 无操作。为此 `help_corpus` 的每份文档带 `path`（docs/ 相对路径，随 Rust 清单一并下发）。
+- **文档字体**：正文用平台标准无衬线栈（内联在 `HelpMarkdown` 上）而非品牌字体——语料是参考文本不是 UI。注意主题的 `font-sans` token 是自引用未定义变量（`@theme inline { --font-sans: var(--font-sans) }`），工具类会静默回退继承品牌字体，所以显式内联。

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { emit } from '@tauri-apps/api/event'
+import { openUrl } from '@tauri-apps/plugin-opener'
 import { render, screen, fireEvent, waitFor, cleanup } from '@/test/test-utils'
 import i18n from '@/i18n/config'
 import { commands } from '@/lib/tauri-bindings'
@@ -30,10 +31,14 @@ vi.mock('@tauri-apps/api/event', () => ({
   emit: vi.fn().mockResolvedValue(undefined),
 }))
 
+vi.mock('@tauri-apps/plugin-opener', () => ({
+  openUrl: vi.fn().mockResolvedValue(undefined),
+}))
+
 const TUTORIAL_MD = [
   '# PNDS App 使用教程',
   '',
-  '欢迎使用 PNDS。',
+  '欢迎使用 PNDS，[模板仓库](https://github.com/xO-xN/PNDS-Template)在此。',
   '',
   '## 首次启动',
   '',
@@ -41,13 +46,23 @@ const TUTORIAL_MD = [
   '',
   '## 端口与地址',
   '',
-  'performer 页面端口 6868，monitor 页面端口 6869。',
+  'performer 页面端口 6868，monitor 页面端口 6869，',
+  '模式区别见[音频模式](../reference/audio-modes.md)。',
 ].join('\n')
+
+/** docs/-relative paths, as the Rust command ships them. */
+function fixtureDocPath(id: string): string {
+  if (id === 'app-tutorial') return 'app-tutorial.md'
+  if (id === 'template-guide') return 'template-guide.md'
+  if (id === 'reference-readme') return 'reference/README.md'
+  return `reference/${id.replace('reference-', '')}.md`
+}
 
 /** The full manifest must ship (buildHelpCorpus validates), stubs suffice. */
 const FIXTURE_DOCS = HELP_BOOKS.flatMap(book => [...book.documentIds]).map(
   id => ({
     id,
+    path: fixtureDocPath(id),
     markdown: id === 'app-tutorial' ? TUTORIAL_MD : `# ${id}\n\n正文。`,
   })
 )
@@ -199,5 +214,39 @@ describe('HelpCenterApp (#56)', () => {
 
     await screen.findByPlaceholderText('Search the docs…')
     expect(emit).toHaveBeenCalledWith('pnds:help-ready')
+  })
+
+  it('navigates between documents on corpus links; external links leave via the system browser', async () => {
+    render(<HelpCenterApp />)
+
+    expect(
+      await screen.findByRole('heading', {
+        level: 1,
+        name: 'PNDS App 使用教程',
+      })
+    ).toBeInTheDocument()
+
+    // A cross-document link (the corpus's repo-root-style ../ form) opens
+    // the target document in-window — never a webview navigation.
+    fireEvent.click(screen.getByRole('link', { name: '音频模式' }))
+    expect(
+      await screen.findByRole('heading', {
+        level: 1,
+        name: 'reference-audio-modes',
+      })
+    ).toBeInTheDocument()
+
+    // External links go to the system browser; the window stays put.
+    fireEvent.click(screen.getByRole('button', { name: 'PNDS App 使用教程' }))
+    fireEvent.click(await screen.findByRole('link', { name: '模板仓库' }))
+    expect(openUrl).toHaveBeenCalledWith(
+      'https://github.com/xO-xN/PNDS-Template'
+    )
+    expect(
+      screen.getByRole('heading', {
+        level: 1,
+        name: 'PNDS App 使用教程',
+      })
+    ).toBeInTheDocument()
   })
 })

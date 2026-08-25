@@ -24,6 +24,7 @@ function doc(
     id,
     book,
     title: sections[0]?.title ?? id,
+    path: `${id}.md`,
     markdown,
     sections,
   }

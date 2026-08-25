@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { emit, listen } from '@tauri-apps/api/event'
+import { openUrl } from '@tauri-apps/plugin-opener'
 import { useTranslation } from 'react-i18next'
 
 import i18n from '@/i18n/config'
@@ -10,6 +11,7 @@ import {
   type HelpDocument,
 } from '@/lib/help-corpus'
 import { setColorThemeAttribute, type ColorTheme } from '@/lib/color-theme'
+import { resolveHelpLink } from '@/lib/help-links'
 import { buildHelpIndex, searchHelp, type HelpIndex } from '@/lib/help-search'
 import type { HelpTarget } from '@/lib/help-window'
 import { HELP_WINDOW_LABEL } from '@/lib/help-window'
@@ -195,19 +197,56 @@ export function HelpCenterApp({
       ? null
       : (corpus.find(d => d.id === activeDoc.docId) ?? null)
 
-  // Land on the anchor once the document view is painted; plain doc
-  // opens reset the scroll to the top.
+  // Land on the anchor once the document view is painted; an unmatched
+  // anchor and plain doc opens reset the scroll to the top.
   useEffect(() => {
     if (activeDoc === null) return
     if (activeDoc.anchor !== null) {
-      document.getElementById(activeDoc.anchor)?.scrollIntoView()
-    } else if (docViewport.current) {
+      const target = document.getElementById(activeDoc.anchor)
+      if (target) {
+        target.scrollIntoView()
+        return
+      }
+    }
+    if (docViewport.current) {
       docViewport.current.scrollTop = 0
     }
   }, [activeDoc])
 
+  // #56 user report: a corpus link must NEVER navigate this webview —
+  // that once booted the whole main app inside the help window. Every
+  // link click resolves first: cross-document targets navigate in-window
+  // (with their #fragment as the anchor), external URLs go to the system
+  // browser, and anything unresolvable is a dead no-op.
+  const onRootClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    const clicked = event.target as HTMLElement | null
+    const anchor = clicked?.closest('a[href]')
+    if (!(anchor instanceof HTMLAnchorElement)) return
+    event.preventDefault()
+    if (activeDocument === null) return
+    const href = anchor.getAttribute('href') ?? ''
+    const target = resolveHelpLink(href, activeDocument, corpus)
+    if (target === null) {
+      logger.debug('Ignored an unresolved help link', { href })
+      return
+    }
+    if (target.kind === 'external') {
+      openUrl(target.url).catch(error => {
+        logger.warn('Failed to open an external help link', {
+          error,
+          url: target.url,
+        })
+      })
+      return
+    }
+    setActiveDoc({ docId: target.docId, anchor: target.anchor, terms: [] })
+  }
+
   return (
-    <div className="bg-background text-foreground flex h-dvh flex-col">
+    <div
+      className="bg-background text-foreground flex h-dvh flex-col"
+      onClick={onRootClick}
+    >
       <div className="flex min-h-0 flex-1">
         <nav
           className="w-56 shrink-0 overflow-y-auto border-e py-2"

@@ -18,18 +18,22 @@ import {
 const FIXTURES: RawHelpDocument[] = [
   {
     id: 'reference-osc',
+    path: 'reference/osc.md',
     markdown: '# OSC 协议\n\n## target 注入\n\nApp 启动时注入 target。',
   },
   {
     id: 'app-tutorial',
+    path: 'app-tutorial.md',
     markdown: '# PNDS App 使用教程\n\n## 首次启动\n\n打开应用。',
   },
   {
     id: 'template-guide',
+    path: 'template-guide.md',
     markdown: '# PNDS Template 创作指南\n\n## 准备工作\n\nNode.js 24。',
   },
   {
     id: 'reference-readme',
+    path: 'reference/README.md',
     markdown: '# PNDS 参考手册\n\n按问题检索。',
   },
   // The rest of the manifest as minimal stubs — the tests only exercise
@@ -44,7 +48,11 @@ const FIXTURES: RawHelpDocument[] = [
     'reference-pnds-bundle',
     'reference-supercollider',
     'reference-p5js',
-  ].map(id => ({ id, markdown: `# ${id}\n\n正文。` })),
+  ].map(id => ({
+    id,
+    path: `reference/${id.replace('reference-', '')}.md`,
+    markdown: `# ${id}\n\n正文。`,
+  })),
 ]
 
 describe('help-corpus (#53)', () => {
@@ -78,7 +86,10 @@ describe('help-corpus (#53)', () => {
 
   it('fails loudly when the raw set carries a document outside the manifest', () => {
     expect(() =>
-      buildHelpCorpus([...FIXTURES, { id: 'stray-page', markdown: '# 游离页' }])
+      buildHelpCorpus([
+        ...FIXTURES,
+        { id: 'stray-page', path: 'stray.md', markdown: '# 游离页' },
+      ])
     ).toThrow(/stray-page/)
   })
 
@@ -86,7 +97,7 @@ describe('help-corpus (#53)', () => {
     const corpus = buildHelpCorpus(
       FIXTURES.map(doc =>
         doc.id === 'reference-osc'
-          ? { id: doc.id, markdown: '## 只有二级\n\n无一级标题。' }
+          ? { ...doc, markdown: '## 只有二级\n\n无一级标题。' }
           : doc
       )
     )
