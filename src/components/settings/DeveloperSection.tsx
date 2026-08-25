@@ -26,6 +26,8 @@ import {
 } from '@/components/ui/alert-dialog'
 import type { SettingsSection } from '@/store/settings-store'
 
+import { SectionTitle } from './SectionTitle'
+
 /** One "label: monospace value" line of a tool result panel. */
 function DetailRow({
   label,
@@ -183,9 +185,9 @@ export function DeveloperSection({ section }: { section: SettingsSection }) {
       aria-labelledby={`settings-${section}-title`}
       className="flex flex-col gap-3 py-4"
     >
-      <h3 id={`settings-${section}-title`} className="text-sm font-semibold">
+      <SectionTitle id={`settings-${section}-title`}>
         {t('settings.developerTools')}
-      </h3>
+      </SectionTitle>
 
       <div className="flex flex-col gap-2 rounded-lg border border-(--pnds-text)/10 px-3 py-2">
         {/* Row 1: the target — label plus the path (or selection guidance).

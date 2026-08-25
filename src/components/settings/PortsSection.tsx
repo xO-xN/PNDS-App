@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { cn } from '@/lib/utils'
 import { PortOccupantDetails } from './PortOccupantDetails'
+import { SectionTitle } from './SectionTitle'
 import type { SettingsSection } from '@/store/settings-store'
 
 /** Runtime Contract default ports — shown when no project is selected. */
@@ -154,9 +155,9 @@ export function PortsSection({ section }: { section: SettingsSection }) {
       className="flex flex-col gap-3 py-4"
     >
       <div className="flex items-center justify-between gap-4">
-        <h3 id={`settings-${section}-title`} className="text-sm font-semibold">
+        <SectionTitle id={`settings-${section}-title`}>
           {t('settings.ports')}
-        </h3>
+        </SectionTitle>
         <Button
           variant="outline"
           size="sm"

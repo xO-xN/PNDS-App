@@ -178,6 +178,8 @@ Loading 保持两阶段 Logo 契约（v1.3.0 #50 起，第 3–5 步由 reveal �
 
 若 ready 早于第一阶段结束，先完成第一阶段再收束。若启动失败，立即停止后续动画并进入 Error Page。每次 loading session 独立随机颜色；颜色不代表启动阶段。
 
+停止与切换（v1.3.0 用户反馈）：live session 停止（切换工程 / 关闭工程）时，shell 让旧 monitor 继续挂载，StopCover 主题色盖层淡入盖住输出画面（旧页面消隐而非被切断）；后端到达 idle 后，Welcome 在盖层下挂载、由同一淡出揭开（关闭工程路径），或由切换的 starting 快照直接接管为 loading splash——全程不闪现 Welcome。揭开记忆由 session-store 的 `stopUncoverPending` 承载（applySnapshot 事件上下文维护：stopping→idle 置位、重复 idle 保持、其他生命周期清除）。
+
 reload monitor（⌘⇧R / 侧栏 Refresh）走同一套门控：重建的 iframe 由主题色 cover 即时遮盖（无淡入——淡入会闪出未就绪画面），新导航上报就绪或超时后交叉淡出。放行条件与生命周期在 `src/lib/monitor-reveal.ts`（纯函数 + 常量）与 session-store（`monitorLoaded` / `monitorLoadTimedOut`）实现并测试。
 
 Error Page 必须显示：简明摘要；Retry；Back/Close；可展开和复制的技术详情。技术详情至少包含工程路径、模式、LAN IP、target、设备、失败阶段、输出尾部和 health payload。

@@ -153,6 +153,49 @@ describe('session-store', () => {
     })
   })
 
+  /** v1.3.0 (user report): the stop→idle memory that drives the
+   * Welcome uncover fade — armed by idle-from-stopping, sticky across
+   * repeated idle snapshots, cleared by the next lifecycle. */
+  describe('stop uncover pending (user report)', () => {
+    it('arms when idle arrives from stopping', () => {
+      useSessionStore
+        .getState()
+        .applySnapshot(snapshot({ status: 'ready', projectPath: '/p' }))
+      expect(useSessionStore.getState().stopUncoverPending).toBe(false)
+
+      useSessionStore
+        .getState()
+        .applySnapshot(snapshot({ status: 'stopping', projectPath: '/p' }))
+      expect(useSessionStore.getState().stopUncoverPending).toBe(false)
+
+      useSessionStore.getState().applySnapshot(snapshot({ status: 'idle' }))
+      expect(useSessionStore.getState().stopUncoverPending).toBe(true)
+    })
+
+    it('stays armed across repeated idle snapshots (a late restore cannot cut the fade)', () => {
+      useSessionStore.getState().applySnapshot(snapshot({ status: 'stopping' }))
+      useSessionStore.getState().applySnapshot(snapshot({ status: 'idle' }))
+      useSessionStore.getState().applySnapshot(snapshot({ status: 'idle' }))
+      expect(useSessionStore.getState().stopUncoverPending).toBe(true)
+    })
+
+    it('clears on the next lifecycle and via clearStopUncover (the fade end)', () => {
+      useSessionStore.getState().applySnapshot(snapshot({ status: 'stopping' }))
+      useSessionStore.getState().applySnapshot(snapshot({ status: 'idle' }))
+
+      useSessionStore.getState().clearStopUncover()
+      expect(useSessionStore.getState().stopUncoverPending).toBe(false)
+
+      // Re-arm, then a switch's `starting` clears it too.
+      useSessionStore.getState().applySnapshot(snapshot({ status: 'stopping' }))
+      useSessionStore.getState().applySnapshot(snapshot({ status: 'idle' }))
+      useSessionStore
+        .getState()
+        .applySnapshot(snapshot({ status: 'starting', projectPath: '/q' }))
+      expect(useSessionStore.getState().stopUncoverPending).toBe(false)
+    })
+  })
+
   describe('close-confirm predicate (§v1.1.1)', () => {
     it('confirms for starting/ready sessions, never for idle/error/stopping', () => {
       expect(shouldConfirmClose('starting')).toBe(true)

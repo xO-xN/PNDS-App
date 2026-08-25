@@ -1,4 +1,4 @@
-import { render, screen, act, fireEvent } from '@/test/test-utils'
+import { render, screen, act, fireEvent, waitFor } from '@/test/test-utils'
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { listen } from '@tauri-apps/api/event'
 import { commands } from '@/lib/tauri-bindings'
@@ -417,6 +417,114 @@ describe('AppShell', () => {
     // Both tools are folder members, so the Home segment stays empty.
     expect(screen.queryByTestId('project-entry')).not.toBeInTheDocument()
     expect(useProjectStore.getState().recentProjectPaths).toEqual(TOOLS)
+  })
+
+  /** v1.3.0 (user report on the switch fade): stopping a live session
+   * must dissolve the outgoing monitor under the StopCover (not cut to
+   * a Welcome flash for the whole teardown), and the idle that follows
+   * uncovers the next screen with a fade. A switch's `starting`
+   * supersedes the cover with the loading splash directly. */
+  describe('stop-transition cover (user report)', () => {
+    it('keeps the monitor mounted under a fading cover while stopping', () => {
+      // A REVEALED monitor (loadingDone via the ready-first escape
+      // hatch — the real switch confirm happens long after the reveal).
+      useSessionStore.setState({
+        sessionStatus: 'ready',
+        projectName: 'Inarticulate III',
+        lanIp: '192.168.1.10',
+        health: readySnapshot.health,
+      })
+      render(<AppShell />)
+
+      act(() => {
+        sessionHandler?.({
+          payload: { ...readySnapshot, status: 'stopping' },
+        })
+      })
+
+      // The outgoing page stays visible beneath the cover fading in —
+      // never a Welcome flash during the teardown.
+      expect(screen.getByTitle('Project monitor')).toBeInTheDocument()
+      expect(screen.getByTestId('stop-cover')).toBeInTheDocument()
+      expect(
+        screen.queryByRole('heading', { name: /Welcome/i })
+      ).not.toBeInTheDocument()
+    })
+
+    it('uncovers the Welcome with a fade when the stop lands on idle', async () => {
+      useSessionStore.setState({
+        sessionStatus: 'ready',
+        projectName: 'Inarticulate III',
+        lanIp: '192.168.1.10',
+        health: readySnapshot.health,
+      })
+      render(<AppShell />)
+      act(() => {
+        sessionHandler?.({
+          payload: { ...readySnapshot, status: 'stopping' },
+        })
+      })
+      act(() => {
+        sessionHandler?.({
+          payload: { ...readySnapshot, status: 'idle', health: null },
+        })
+      })
+
+      // Welcome mounts UNDER the still-covering layer...
+      expect(
+        screen.getByRole('heading', { name: /Welcome/i })
+      ).toBeInTheDocument()
+      expect(screen.getByTestId('stop-cover')).toBeInTheDocument()
+
+      // ...and the fade end clears it.
+      await waitFor(
+        () => {
+          expect(screen.queryByTestId('stop-cover')).not.toBeInTheDocument()
+        },
+        { timeout: 2000 }
+      )
+      expect(useSessionStore.getState().stopUncoverPending).toBe(false)
+    })
+
+    it('hands a switch through idle straight to the loading splash', async () => {
+      useSessionStore.setState({
+        sessionStatus: 'ready',
+        projectName: 'Inarticulate III',
+        lanIp: '192.168.1.10',
+        health: readySnapshot.health,
+      })
+      render(<AppShell />)
+      act(() => {
+        sessionHandler?.({
+          payload: { ...readySnapshot, status: 'stopping' },
+        })
+      })
+      // The backend always crosses idle between stop and start. The
+      // awaited act flushes the dissolve-gate reset (a queueMicrotask
+      // in AppShell) before the next snapshot arrives.
+      await act(async () => {
+        sessionHandler?.({
+          payload: { ...readySnapshot, status: 'idle', health: null },
+        })
+      })
+      act(() => {
+        sessionHandler?.({
+          payload: {
+            ...readySnapshot,
+            status: 'starting',
+            projectName: 'Next Project',
+          },
+        })
+      })
+
+      // The splash takes over; no cover, no monitor, no Welcome flash.
+      expect(screen.queryByTestId('stop-cover')).not.toBeInTheDocument()
+      expect(screen.getByText(/cancel/i)).toBeInTheDocument()
+      expect(screen.queryByTitle('Project monitor')).not.toBeInTheDocument()
+      expect(
+        screen.queryByRole('heading', { name: /Welcome/i })
+      ).not.toBeInTheDocument()
+    })
   })
 
   /** v1.3.0 (#50): the loading→monitor reveal gate, end to end at the

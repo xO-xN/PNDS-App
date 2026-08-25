@@ -28,6 +28,7 @@ import {
 import { Label } from '@/components/ui/label'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { Separator } from '@/components/ui/separator'
+import { SectionTitle } from './SectionTitle'
 import { DeveloperSection } from './DeveloperSection'
 import { PortsSection } from './PortsSection'
 import { AudioSection } from './AudioSection'
@@ -107,9 +108,9 @@ export function SettingsPanel() {
           aria-labelledby="settings-general-title"
           className="flex flex-col gap-3 py-4"
         >
-          <h3 id="settings-general-title" className="text-sm font-semibold">
+          <SectionTitle id="settings-general-title">
             {t('settings.general')}
-          </h3>
+          </SectionTitle>
           <div className="flex items-center justify-between gap-4">
             <Label htmlFor="settings-language">{t('settings.language')}</Label>
             <NativeSelect
@@ -136,9 +137,9 @@ export function SettingsPanel() {
           aria-labelledby="settings-appearance-title"
           className="flex flex-col gap-3 py-4"
         >
-          <h3 id="settings-appearance-title" className="text-sm font-semibold">
+          <SectionTitle id="settings-appearance-title">
             {t('settings.appearance')}
-          </h3>
+          </SectionTitle>
           <div className="flex items-center justify-between gap-4">
             <Label htmlFor="settings-color-theme">
               {t('settings.colorTheme')}
@@ -188,9 +189,9 @@ export function SettingsPanel() {
           aria-labelledby="settings-about-title"
           className="flex flex-col gap-3 py-4"
         >
-          <h3 id="settings-about-title" className="text-sm font-semibold">
+          <SectionTitle id="settings-about-title">
             {t('settings.about')}
-          </h3>
+          </SectionTitle>
           <div className="flex items-center justify-between gap-4">
             <Label>{t('settings.version')}</Label>
             <span className="text-muted-foreground text-sm">

@@ -107,6 +107,14 @@ interface SessionState {
    * navigation — the gate releases anyway so the splash never sticks
    * (logged when armed by markMonitorTimedOut). */
   monitorLoadTimedOut: boolean
+  /** v1.3.0 (user report): a stop just completed (idle arrived from
+   * `stopping`) — the shell uncovers the next screen with the
+   * StopCover fade instead of cutting to it. Set by applySnapshot
+   * (event context, mirroring the backend's stop sequence); cleared by
+   * the fade's end (clearStopUncover) or the next lifecycle. Sticky
+   * across repeated idle snapshots so a late restore cannot cut the
+   * fade short. */
+  stopUncoverPending: boolean
   /** Selected audio mode; defaults to the manifest's defaultMode (§6.1). */
   audioMode: string
   /** Selected LAN IPv4 (§7); null until the user chooses when multiple exist. */
@@ -156,6 +164,7 @@ interface SessionState {
   bumpMonitorReload: () => void
   markMonitorLoaded: () => void
   markMonitorTimedOut: () => void
+  clearStopUncover: () => void
   zoomIn: () => void
   zoomOut: () => void
   resetZoom: () => void
@@ -179,6 +188,7 @@ export const useSessionStore = create<SessionState>()(set => ({
   monitorReloadNonce: 0,
   monitorLoaded: false,
   monitorLoadTimedOut: false,
+  stopUncoverPending: false,
   audioMode: 'internal',
   lanIp: null,
   lanAddresses: [],
@@ -275,6 +285,13 @@ export const useSessionStore = create<SessionState>()(set => ({
         // released state.
         monitorLoaded: newRun ? false : state.monitorLoaded,
         monitorLoadTimedOut: newRun ? false : state.monitorLoadTimedOut,
+        // #user-report: idle-from-stopping arms the Welcome uncover
+        // fade; repeated idle snapshots keep it, any other lifecycle
+        // clears it.
+        stopUncoverPending:
+          snapshot.status === 'idle'
+            ? state.sessionStatus === 'stopping' || state.stopUncoverPending
+            : false,
         // After a committed session event, any pending is resolved.
         pendingChanges: false,
       }
@@ -292,6 +309,8 @@ export const useSessionStore = create<SessionState>()(set => ({
     })),
 
   markMonitorLoaded: () => set({ monitorLoaded: true }),
+
+  clearStopUncover: () => set({ stopUncoverPending: false }),
 
   markMonitorTimedOut: () => {
     set({ monitorLoadTimedOut: true })
@@ -336,6 +355,7 @@ export const useSessionStore = create<SessionState>()(set => ({
       startupStage: 0,
       monitorLoaded: false,
       monitorLoadTimedOut: false,
+      stopUncoverPending: false,
       audioMode: 'internal',
       lanIp: null,
       lanAddresses: [],

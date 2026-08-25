@@ -15,6 +15,7 @@ import { MonitorView } from './MonitorView'
 import { HoverSidebar } from './HoverSidebar'
 import { LoadingScreen } from './LoadingScreen'
 import { ErrorScreen } from './ErrorScreen'
+import { StopCover } from './StopCover'
 
 /** Pulls the authoritative session state from Rust into the store — the
  * mount restore, the visibility/focus catch-ups and the loading poll all
@@ -52,6 +53,18 @@ export function AppShell() {
   // loadingDone gates the dissolve; if the page renders with a ready session
   // already in store (test escape hatch — real app never does this), skip it.
   const [loadingDone, setLoadingDone] = useState(sessionStatus === 'ready')
+  // v1.3.0 (user report): a stop just completed — the Welcome below is
+  // uncovered through the StopCover fade instead of a cut. The flag is
+  // applySnapshot-owned (event context): idle-from-stopping arms it,
+  // repeated idle snapshots keep it, any other lifecycle clears it.
+  const stopUncoverPending = useSessionStore(state => state.stopUncoverPending)
+  // A stop's health mirror decides whether a monitor page lingers: a
+  // LIVE session's stopping snapshot still carries it (the outgoing
+  // page dissolves under the cover), while a stop of a session that
+  // never reached ready (cancel during loading, stop out of error)
+  // carries none — no MonitorView must mount for it (its no-address
+  // fallback would flash an error text instead of a fade).
+  const health = useSessionStore(state => state.health)
 
   // v1.1.2: shell-level Cmd keyboard layer (badges, Cmd+1..9, sidebar
   // peek) — registered once, active in every window state (spec issue #4).
@@ -135,9 +148,17 @@ export function AppShell() {
     })
   }, [])
 
-  // Reset the dissolve gate whenever we leave the running/loading state.
+  // Reset the dissolve gate whenever we leave the loading/running/
+  // stopping lifecycle. Stopping itself KEEPS the flag: a revealed
+  // monitor's stop must keep the StopCover (not swap back to a splash),
+  // while a never-ready stop keeps its splash — both until the state
+  // after the stop sorts them out (idle resets, starting re-loads).
   useEffect(() => {
-    if (sessionStatus !== 'starting' && sessionStatus !== 'ready') {
+    if (
+      sessionStatus !== 'starting' &&
+      sessionStatus !== 'ready' &&
+      sessionStatus !== 'stopping'
+    ) {
       queueMicrotask(() => setLoadingDone(false))
     }
   }, [sessionStatus])
@@ -153,13 +174,19 @@ export function AppShell() {
     return () => clearInterval(id)
   }, [sessionStatus])
 
-  // ── Loading / Running (the splash overlays the monitor until the
-  //    reveal gate releases — #50). ONE branch covers starting and
-  //    ready so the splash instance SURVIVES the transition: the
-  //    children keep fixed positions (monitor / splash / sidebar), and
-  //    a remounted splash would replay its entrance right when the
-  //    held composition should hand over to the closure. ──
-  if (sessionStatus === 'starting' || sessionStatus === 'ready') {
+  // ── Loading / Running / Stopping (the splash overlays the monitor
+  //    until the reveal gate releases — #50). ONE branch covers the
+  //    three states so the splash instance SURVIVES the transitions:
+  //    the children keep fixed positions (monitor / splash / sidebar),
+  //    and a remounted splash would replay its entrance right when the
+  //    held composition should hand over to the closure. A stopping
+  //    session keeps the just-live monitor mounted so the StopCover
+  //    dissolves the outgoing page instead of cutting it. ──
+  if (
+    sessionStatus === 'starting' ||
+    sessionStatus === 'ready' ||
+    sessionStatus === 'stopping'
+  ) {
     return (
       <>
         <div
@@ -173,9 +200,14 @@ export function AppShell() {
               (Rust fades the whole window out, macOS switches, window
               fades in). MonitorView is keyed by fullscreen so a
               popped-out overlay sidebar is dropped instantly. Mounts
-              only once ready — #50: its iframe loads beneath the
-              splash, and its own load event releases the gate. */}
-          {sessionStatus === 'ready' && (
+              once ready — #50: its iframe loads beneath the splash,
+              and its own load event releases the gate — and LINGERS
+              through stopping so the fading cover dissolves the old
+              page (its frozen iframe paints long after the server is
+              gone; a mid-stop address fallback can at worst navigate
+              the dying page, already hidden under the cover). */}
+          {(sessionStatus === 'ready' ||
+            (sessionStatus === 'stopping' && health !== null)) && (
             <MonitorView key={fullscreen ? 'fullscreen' : 'windowed'} />
           )}
           {/* #50: the splash sits over the already-mounting monitor and
@@ -183,18 +215,27 @@ export function AppShell() {
               once the iframe beneath is ready — the monitor's first
               paint shows through the fade instead of flashing in
               blank. Same child position in the starting-only frames,
-              so the transition never remounts it. */}
-          {!loadingDone && (
+              so the transition never remounts it. Stopping swaps in
+              the plain StopCover (user report): the outgoing monitor
+              fades under it, and the next state supersedes it. */}
+          {/* The splash has precedence while it is up (a stop confirmed
+              from under it keeps it — no monitor swap mid-splash); the
+              StopCover only takes over when the outgoing monitor is
+              actually showing. */}
+          {!loadingDone ? (
             <div className="absolute inset-0 z-50">
               <LoadingScreen
                 key={runId}
                 onDissolveEnd={() => setLoadingDone(true)}
               />
             </div>
+          ) : (
+            sessionStatus === 'stopping' &&
+            health !== null && <StopCover phase="in" />
           )}
           {/* §10.1: hover-revealed sidebar stays reachable during
               loading, including fullscreen. Ready frames drop it here —
-              MonitorView brings its own. */}
+              MonitorView brings its own; stopping keeps MonitorView's. */}
           {sessionStatus === 'starting' && <HoverSidebar />}
         </div>
         <Toaster position="bottom-right" />
@@ -231,8 +272,8 @@ export function AppShell() {
       <div
         data-app-frame=""
         className={cn(
-          'flex h-screen w-screen overflow-hidden bg-(--pnds-bg)',
-          !fullscreen && 'rounded-2xl'
+          'relative flex h-screen w-screen overflow-hidden bg-(--pnds-bg)',
+          !fullscreen && 'rounded-[var(--app-corner-radius)]'
         )}
       >
         {/* Start page: the sidebar stays PERMANENTLY visible, including in
@@ -241,6 +282,15 @@ export function AppShell() {
         <main className="flex-1 overflow-auto">
           <WelcomeScreen />
         </main>
+        {/* #user-report: a stop that lands on Welcome (close project)
+            uncovers it — the cover fades out over the freshly mounted
+            start page instead of cutting to it. */}
+        {stopUncoverPending && (
+          <StopCover
+            phase="out"
+            onFadedOut={() => useSessionStore.getState().clearStopUncover()}
+          />
+        )}
       </div>
       <Toaster position="bottom-right" />
     </>

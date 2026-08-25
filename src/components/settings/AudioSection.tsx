@@ -9,6 +9,8 @@ import { Label } from '@/components/ui/label'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import type { SettingsSection } from '@/store/settings-store'
 
+import { SectionTitle } from './SectionTitle'
+
 /** 48000 → "48 kHz", 44100 → "44.1 kHz" — compact enough for the row,
  * precise enough for the audio domain. */
 function formatSampleRate(rate: number): string {
@@ -79,9 +81,9 @@ export function AudioSection({ section }: { section: SettingsSection }) {
       aria-labelledby={`settings-${section}-title`}
       className="flex flex-col gap-3 py-4"
     >
-      <h3 id={`settings-${section}-title`} className="text-sm font-semibold">
+      <SectionTitle id={`settings-${section}-title`}>
         {t('settings.audio')}
-      </h3>
+      </SectionTitle>
       <div className="flex items-center justify-between gap-4">
         <Label htmlFor="settings-sample-rate">{t('settings.sampleRate')}</Label>
         <NativeSelect
