@@ -9,22 +9,19 @@
 //! project into the stable path `utilities/<id>/` — no version in the path,
 //! so app updates swap the contents without ever stale-dating the history
 //! entries. The app runs the tools IN PLACE from the resources; there is no
-//! first-run install into the app data directory (Project Bundle
-//! Specification §5 records this decision). Opening one runs the standard
+//! first-run install into the app data directory (//! docs/reference/pnds-bundle.md「内置工具的形态」 records this decision). Opening one runs the standard
 //! preflight → spawn → health → monitor session flow.
 //!
-//! When nothing is staged (a dev checkout that has not run
-//! `npm run utilities:fetch`), the repository's `utilities/` mirrors are
-//! used instead, so `tauri dev` still has a working Utilities folder.
+//! The tools' sources live in their own repositories (sibling checkouts of
+//! this repo); this repository carries only the registry and the pinned
+//! checksums. Nothing is staged in a dev checkout until
+//! `npm run utilities:fetch` runs (beforeBuildCommand does it for release
+//! builds); until then the Utilities folder lists nothing.
 
 use serde::Deserialize;
 use specta::Type;
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Manager};
-
-/// Directory names of the repository utility mirrors, in Utilities order —
-/// the dev fallback when no staged tool resources exist.
-const UTILITY_NAMES: [&str; 2] = ["Local Network Diagnostics", "Multichannel Signal Generator"];
 
 /// The parsed registry file (repo root `utilities.json`).
 #[derive(Debug, Deserialize)]
@@ -145,33 +142,11 @@ fn staged_dir_candidates(app: &AppHandle) -> Vec<PathBuf> {
     candidates
 }
 
-/// Roots that may hold the `utilities/` tree for the dev fallback: the app
-/// bundle's resources (release), then — in debug builds only — the
-/// repository checkout that `tauri dev` runs from.
-fn utilities_base_candidates(app: &AppHandle) -> Vec<PathBuf> {
-    let mut candidates = Vec::new();
-    if let Ok(resources) = app.path().resource_dir() {
-        candidates.push(resources);
-    }
-    #[cfg(debug_assertions)]
-    candidates.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(".."));
-    candidates
-}
-
-/// Utility project directories under `base` that contain a manifest — a
-/// missing entry is skipped rather than seeding a dead path.
-fn resolve_from_base(base: &Path) -> Vec<PathBuf> {
-    UTILITY_NAMES
-        .iter()
-        .map(|name| base.join("utilities").join(name))
-        .filter(|path| path.join("manifest.json").is_file())
-        .collect()
-}
-
 /// v1.2.0 (issue #18): the built-in utility tools behind the Utilities
 /// folder. Returns each tool's stable project path (run in place from the
 /// app resources) and manifest name, in registry order. With nothing staged
-/// (a dev checkout), the repository's utility mirrors are returned instead.
+/// (a dev checkout that has not run `npm run utilities:fetch`), the list is
+/// empty.
 #[tauri::command]
 #[specta::specta]
 pub async fn builtin_utilities(app: AppHandle) -> Result<Vec<BuiltinUtility>, String> {
@@ -196,31 +171,8 @@ pub async fn builtin_utilities(app: AppHandle) -> Result<Vec<BuiltinUtility>, St
         );
     }
     // Nothing staged (a dev checkout without `npm run utilities:fetch`):
-    // fall back to the repository mirrors so `tauri dev` still has a
-    // Utilities folder. In release builds this resolves to nothing.
-    let dev_tools = utilities_base_candidates(&app)
-        .iter()
-        .find_map(|base| {
-            let resolved = resolve_from_base(base);
-            (!resolved.is_empty()).then_some(resolved)
-        })
-        .unwrap_or_default();
-    Ok(dev_tools
-        .into_iter()
-        .map(|path| {
-            let dir_name = path
-                .file_name()
-                .map(|n| n.to_string_lossy().into_owned())
-                .unwrap_or_default();
-            let name = crate::project::manifest::load_manifest(&path)
-                .map(|manifest| manifest.name)
-                .unwrap_or(dir_name);
-            BuiltinUtility {
-                path: path.to_string_lossy().into_owned(),
-                name,
-            }
-        })
-        .collect())
+    // an empty Utilities folder, not an error.
+    Ok(Vec::new())
 }
 
 #[cfg(test)]
@@ -342,24 +294,5 @@ mod tests {
 
         duplicate[1].sha256 = "1".repeat(64);
         assert!(validate_registry(&duplicate).is_ok());
-    }
-
-    #[test]
-    fn dev_fallback_resolves_only_manifest_carrying_utilities() {
-        let base = tempfile::tempdir().unwrap();
-        let with_manifest = base.path().join("utilities").join(UTILITY_NAMES[0]);
-        let without_manifest = base.path().join("utilities").join(UTILITY_NAMES[1]);
-        fs::create_dir_all(&with_manifest).unwrap();
-        fs::create_dir_all(&without_manifest).unwrap();
-        fs::write(with_manifest.join("manifest.json"), "{}").unwrap();
-
-        let resolved = resolve_from_base(base.path());
-        assert_eq!(resolved, vec![with_manifest]);
-    }
-
-    #[test]
-    fn dev_fallback_resolves_nothing_without_utilities() {
-        let base = tempfile::tempdir().unwrap();
-        assert!(resolve_from_base(base.path()).is_empty());
     }
 }

@@ -28,14 +28,13 @@ Guide to all Tauri plugins installed in this app, plus built-in features and gui
 | **notification**      | System notifications              | `@tauri-apps/plugin-notification`      |
 | **process**           | Exit/restart app                  | `@tauri-apps/plugin-process`           |
 | **os**                | OS information                    | `@tauri-apps/plugin-os`                |
-| **global-shortcut**   | System-wide keyboard shortcuts    | None (configured in Rust)              |
 | **updater**           | In-app updates                    | `@tauri-apps/plugin-updater`           |
 
-### Platform-Specific
+### Logging
 
-| Plugin            | Purpose               | Platform   |
-| ----------------- | --------------------- | ---------- |
-| **tauri-nspanel** | Native panel behavior | macOS only |
+| Plugin  | Purpose                     | Frontend Package         |
+| ------- | --------------------------- | ------------------------ |
+| **log** | Structured app-wide logging | `@tauri-apps/plugin-log` |
 
 ## Plugin Usage Patterns
 
@@ -69,80 +68,38 @@ Automatically saves and restores window position, size, and state (maximized, et
 
 - Window state is saved when the app closes
 - State is restored when the app opens
-- Only applies to windows listed in capabilities (main window only, not quick-panes)
+- Only applies to windows listed in capabilities (main window only)
 
 **No frontend code needed** - works automatically.
 
 ### Context Menus
 
-Native context menus using the built-in Tauri Menu API (no plugin required).
-
-**Usage** (`src/lib/context-menu.ts`):
-
-```typescript
-import { showContextMenu, showEditContextMenu } from '@/lib/context-menu'
-
-// Custom menu
-await showContextMenu([
-  { id: 'copy', label: 'Copy', accelerator: 'CmdOrCtrl+C', action: handleCopy },
-  { type: 'separator' },
-  { id: 'delete', label: 'Delete', action: handleDelete },
-])
-
-// Standard edit menu (Cut, Copy, Paste, Select All)
-await showEditContextMenu()
-
-// Text input menu (includes Undo/Redo)
-await showTextInputContextMenu()
-```
+Right-click menus are React components, not a plugin: the designed menus use the shadcn/Radix context-menu primitive (`src/components/ui/context-menu.tsx`; see `Sidebar.tsx` for usage). The WebView's default right-click menu is suppressed app-wide from Rust (`window::suppress_default_context_menu`, called in `lib.rs` setup), so right-click belongs to the designed menus only.
 
 ### Dialog
 
-Native file open/save dialogs and message boxes.
+Native file open/save dialogs and message boxes. The app uses `open` (the developer-tools pickers in `src/components/settings/DeveloperSection.tsx`); the project/bundle ⌘O picker is a custom NSOpenPanel command instead (`pickProjectOrBundle`).
 
 ```typescript
-import { open, save, message, ask, confirm } from '@tauri-apps/plugin-dialog'
+import { open } from '@tauri-apps/plugin-dialog'
 
 // Open file dialog
 const file = await open({
   multiple: false,
   filters: [{ name: 'Text', extensions: ['txt', 'md'] }],
 })
-
-// Save dialog
-const path = await save({
-  defaultPath: 'document.txt',
-})
-
-// Message box
-await message('Operation complete!', { title: 'Success', kind: 'info' })
-
-// Confirmation dialog
-const confirmed = await confirm('Are you sure?', {
-  title: 'Confirm',
-  kind: 'warning',
-})
 ```
 
 ### Notifications
 
-System notifications.
-
-```typescript
-import { sendNotification } from '@tauri-apps/plugin-notification'
-
-sendNotification({
-  title: 'Download Complete',
-  body: 'Your file has been downloaded.',
-})
-```
-
-Or use the typed command:
+System notifications go through the typed command (which wraps the Rust plugin):
 
 ```typescript
 import { commands } from '@/lib/tauri-bindings'
 await commands.sendNativeNotification('Title', 'Body text')
 ```
+
+`src/lib/notifications.ts` layers this behind one `notify()` helper that picks between an in-app toast and a native notification.
 
 ### Clipboard
 
@@ -177,10 +134,7 @@ Built into Tauri v2 via the `tray-icon` feature. See [Tauri docs](https://v2.tau
 
 ### App Menus
 
-The Menu API is built into `@tauri-apps/api/menu`. This app uses it for:
-
-- Application menu (File, Edit, View, etc.)
-- Context menus via `src/lib/context-menu.ts`
+The Menu API is built into `@tauri-apps/api/menu`. This app uses it for the application menu (app / File / Edit / View / Window submenus), built from JavaScript for i18n — see `src/lib/menu.ts` and [menus.md](./menus.md).
 
 ## Plugins to Consider Adding
 

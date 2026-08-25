@@ -68,15 +68,9 @@ See [writing-ast-grep-rules.md](./writing-ast-grep-rules.md) for creating new ru
 
 ### React Compiler
 
-Handles memoization automatically at build time. You do **not** need to manually add:
-
-- `useMemo` for computed values
-- `useCallback` for function references
-- `React.memo` for components
-
-The compiler analyzes code and adds memoization where beneficial.
-
-**Note:** The `getState()` pattern is still critical - it avoids store subscriptions, not memoization. See [state-management.md](./state-management.md).
+Handles memoization automatically at build time; the rules (what you never
+write by hand) and the `getState()` caveat live in
+[state-management.md](./state-management.md).
 
 ### Rust Tooling
 
@@ -103,8 +97,6 @@ Detects duplicated code blocks. Not in `check:all` - use periodically.
 ```bash
 npm run jscpd
 ```
-
-Use the `/cleanup` command for guided analysis and cleanup of both knip and jscpd findings.
 
 ## CI Integration
 

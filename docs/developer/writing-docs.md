@@ -10,7 +10,7 @@ These docs are primarily for AI coding agents, secondarily for humans. They shou
 - Guide AI agents away from common mistakes (old patterns, anti-patterns)
 - Be "evergreen" - updated as the app evolves
 
-They should **not** teach libraries (AI knows Zustand, React Query, etc.) or duplicate code.
+They should **not** teach libraries (AI knows Zustand, React, etc.) or duplicate code.
 
 ## When to Write a New Doc
 
@@ -45,10 +45,10 @@ Keep examples minimal. Use ✅/❌ format:
 
 ```typescript
 // ❌ BAD: Subscribes to entire store
-const { visible } = useUIStore()
+const { settingsOpen } = useSettingsStore()
 
 // ✅ GOOD: Selector for specific value
-const visible = useUIStore(state => state.visible)
+const settingsOpen = useSettingsStore(state => state.settingsOpen)
 ```
 
 Reference actual files when helpful: "See `src/lib/menu.ts` for the full implementation."

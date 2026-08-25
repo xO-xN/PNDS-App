@@ -13,44 +13,36 @@ Two-layer "onion" architecture for state management.
 └─────────────────────────────────────┘
 ```
 
-> v1.2.0: the TanStack Query layer was removed. It was scaffolded but
-> never adopted — every real fetch went through on-mount effects calling
-> typed commands directly. If a future feature genuinely needs query
-> caching and automatic refetching, reintroduce a query layer then, sized
-> to that feature.
+There is no query/cache layer: every fetch is an on-mount effect (or a flow function) calling a typed command directly. If a future feature genuinely needs query caching and automatic refetching, introduce a query layer then, sized to that feature.
 
 ### Layer 1: Zustand (Global UI State)
 
 Use for transient global state:
 
-- Panel visibility, layout state
-- Command palette open/closed
+- Panel and dialog visibility (settings panel, close/quit confirms)
+- Project selection, folders, and rename state
+- Mirrors of Rust-owned state (session status, window fullscreen)
 - UI modes and navigation
 
 Persisted state (preferences, project index) does not need a query layer:
 `src/lib/preferences.ts` owns the preference file (load + serialized
 update queue), and `project-store`'s structural actions persist as part of
-their commit (see [Persisting Store State](#persisting-store-state-v120-pattern)).
+their commit (see [Persisting Store State](#persisting-store-state)).
+
+The real stores (`src/store/`) use plain `create`, no middleware:
 
 ```typescript
 import { create } from 'zustand'
-import { devtools } from 'zustand/middleware'
 
-interface UIState {
-  sidebarVisible: boolean
-  toggleSidebar: () => void
+interface KeyboardState {
+  commandKeyPressed: boolean
+  setCommandKeyPressed: (pressed: boolean) => void
 }
 
-export const useUIStore = create<UIState>()(
-  devtools(
-    set => ({
-      sidebarVisible: true,
-      toggleSidebar: () =>
-        set(state => ({ sidebarVisible: !state.sidebarVisible })),
-    }),
-    { name: 'ui-store' }
-  )
-)
+export const useKeyboardStore = create<KeyboardState>()(set => ({
+  commandKeyPressed: false,
+  setCommandKeyPressed: pressed => set({ commandKeyPressed: pressed }),
+}))
 ```
 
 ### Layer 2: useState (Component State)
@@ -72,26 +64,20 @@ const [windowWidth, setWindowWidth] = useState(window.innerWidth)
 
 **Problem**: Subscribing to store data in callbacks causes render cascades.
 
-**Solution**: Use `getState()` for callbacks that need current state.
+**Solution**: Use `getState()` for callbacks and module-level flow functions that need current state. Real example from `src/store/window-store.ts` — the one close flow shared by the ⌘W menu item and the red traffic light reads the session status without subscribing to it:
 
 ```typescript
-// ❌ BAD: Causes render cascade on every store change
-const { currentFile, isDirty, saveFile } = useEditorStore()
-
-const handleSave = useCallback(() => {
-  if (currentFile && isDirty) {
-    void saveFile()
+export async function requestClose(): Promise<void> {
+  const { sessionStatus } = useSessionStore.getState()
+  if (shouldConfirmClose(sessionStatus)) {
+    useWindowStore.getState().setConfirmCloseOpen(true)
+    return
   }
-}, [currentFile, isDirty, saveFile]) // Re-creates on every change!
-
-// ✅ GOOD: No cascade, stable callback
-const handleSave = useCallback(() => {
-  const { currentFile, isDirty, saveFile } = useEditorStore.getState()
-  if (currentFile && isDirty) {
-    void saveFile()
-  }
-}, []) // Stable dependency array
+  await closeWindowWithFade()
+}
 ```
+
+The same pattern drives menu actions in `src/lib/menu.ts` (e.g. `useSettingsStore.getState().toggleSettings()`), event listeners in `AppShell.tsx`, and dialog handlers.
 
 **When to use `getState()`:**
 
@@ -112,8 +98,9 @@ and reads the store inside instead. But referencing
 rule: any `use*`-named binding used as a value looks like a hook passed
 around as a regular value.
 
-**Solution**: export a plain accessor from the store module
-(`src/store/settings-store.ts`):
+**Solution**: export a plain accessor from the module owning the state
+(the theme lives in `src/store/settings-store.ts`, the resolved language
+in `src/i18n/config.ts`, #54):
 
 ```typescript
 export function currentColorThemeSetting(): ColorTheme {
@@ -130,6 +117,7 @@ const iframeSrc = useMemo(() => {
   void reloadNonce // cache key only: each bump remounts the iframe
   return buildMonitorUrl(lanIp, monitorPort, {
     theme: currentColorThemeSetting(),
+    lang: currentResolvedLanguage(),
   })
 }, [lanIp, monitorPort, reloadNonce])
 ```
@@ -144,27 +132,33 @@ a selector instead.
 
 ```typescript
 // ❌ BAD: Object destructuring subscribes to entire store
-const { currentFile } = useEditorStore()
+const { sessionStatus } = useSessionStore()
 
 // ✅ GOOD: Selector only re-renders when this specific value changes
-const currentFile = useEditorStore(state => state.currentFile)
+const sessionStatus = useSessionStore(state => state.sessionStatus)
 
 // ✅ GOOD: Derived selector for minimal re-renders
-const hasCurrentFile = useEditorStore(state => !!state.currentFile)
-const currentFileName = useEditorStore(state => state.currentFile?.name)
+const running = useSessionStore(state => state.sessionStatus === 'ready')
 ```
 
 ### CSS Visibility vs Conditional Rendering
 
-For stateful UI components (like `react-resizable-panels`), use CSS visibility:
+For stateful UI that toggles visibility, keep the component mounted and hide it with CSS. Real example — `HoverSidebar` (`src/components/shell/HoverSidebar.tsx`) keeps the sidebar mounted so the slide/fade animates both ways:
 
-```typescript
-// ❌ BAD: Conditional rendering breaks stateful components
-{sidebarVisible ? <ResizablePanel /> : null}
-
-// ✅ GOOD: CSS visibility preserves component tree
-<ResizablePanel className={sidebarVisible ? '' : 'hidden'} />
+```tsx
+<div
+  className={cn(
+    'absolute bottom-3 left-3 top-3 z-50 transition-all duration-200 ease-out',
+    sidebarVisible
+      ? 'translate-x-0 opacity-100'
+      : 'pointer-events-none -translate-x-5 opacity-0'
+  )}
+>
+  <Sidebar variant="overlay" />
+</div>
 ```
+
+The component-side pattern (keep mounted, animate with CSS) is documented in [ui-patterns.md](./ui-patterns.md#visibility-with-css).
 
 ### React Compiler (Automatic Memoization)
 
@@ -178,20 +172,17 @@ This app uses React Compiler which automatically handles memoization. You do **n
 
 ## Store Boundaries
 
-**UIStore** - Use for:
+The real stores in `src/store/` and what belongs in each:
 
-- Panel visibility
-- Layout state
-- Command palette state
-- UI modes and navigation
+- **`project-store`** — project history, folders, selection, preflight state, rename target; structural actions persist the project index themselves
+- **`session-store`** — mirror of the Rust SessionManager (status, volume, zoom) plus derived helpers (`shouldConfirmClose`, `isSessionBusy`)
+- **`settings-store`** — in-app settings panel (open/section) and the General/Appearance/Audio selections
+- **`window-store`** — mirror of Rust window state (fullscreen, traffic-light visibility) and the close/quit confirm dialogs
+- **`keyboard-store`** — raw keyboard modifier state (⌘ held)
 
-**Feature-specific stores** - Use for:
+Shared domain state goes in the matching store; anything component-local stays in `useState`.
 
-- Domain-specific state (e.g., `useDocumentStore`)
-- Feature flags and configuration
-- Temporary workflow state
-
-## Persisting Store State (v1.2.0 pattern)
+## Persisting Store State
 
 `src/lib/preferences.ts` is the only preferences writer: every field save
 goes through `updatePreferences(patch)` (or `updateOscTarget` for the
@@ -215,13 +206,8 @@ bulk setters (`restoreProjectIndex`, `setProjectDisplayNames`,
 
 1. Create store file in `src/store/`, following the plain `create` pattern
    of the existing stores (`project-store.ts`, `session-store.ts`,
-   `window-store.ts`, `keyboard-store.ts`)
-2. Add a no-destructure rule entry to
-   `.ast-grep/rules/zustand/no-destructure.yml`
-
-```yaml
-rule:
-  any:
-    - pattern: const { $$$PROPS } = useUIStore($$$ARGS)
-    - pattern: const { $$$PROPS } = useNewStore($$$ARGS) # Add new store
-```
+   `settings-store.ts`, `window-store.ts`, `keyboard-store.ts`)
+2. Add a pattern entry for the new store to
+   `.ast-grep/rules/zustand/no-destructure.yml` — see
+   [writing-ast-grep-rules.md](./writing-ast-grep-rules.md) for the rule's
+   current patterns and structure

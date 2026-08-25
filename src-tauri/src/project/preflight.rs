@@ -1,6 +1,6 @@
 //! Preflight checks: dependency check and port availability.
-//! See `docs/PNDS_APP_REQUIREMENTS.md` §4, §7, §8.2 and
-//! `docs/PNDS_SCORE_PROJECT_SPECIFICATION.md` §2.
+//! See `docs/reference/runtime-contract.md` §4, §8 and the preflight
+//! checklist in `docs/developer/app-behavior.md` (工程选择与历史).
 //!
 //! The child-process lifecycle (spawn, record, kill escalation, orphan
 //! cleanup) has moved to `project/children.rs`.
@@ -8,7 +8,8 @@
 use std::collections::HashSet;
 use std::path::Path;
 
-/// §4 + spec §2: a project with non-empty production dependencies
+/// Compliance rule (docs/reference/structure.md): a project with
+/// non-empty production dependencies
 /// (`dependencies` or `optionalDependencies`) must ship a usable
 /// `node_modules/`. Zero-dependency projects need none. `devDependencies`
 /// are irrelevant at runtime, `engines.node` is advisory and never affects

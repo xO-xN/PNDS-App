@@ -20,12 +20,11 @@ Tailwind v4 uses CSS-based configuration instead of `tailwind.config.js`.
 
 ```
 src/
-├── App.css              # Main window styles + Tailwind imports
-├── quick-pane.css       # Quick pane window styles
-└── theme-variables.css  # Shared theme variables (colors, radii)
+├── App.css              # Tailwind imports, @font-face, desktop base styles
+└── theme-variables.css  # shadcn token mapping + PNDS tokens + color themes
 ```
 
-**Multi-window theming**: `theme-variables.css` is imported by both `App.css` and `quick-pane.css` so all windows share the same theme tokens. When adding new color variables, add them to `theme-variables.css`.
+`App.css` imports `theme-variables.css`, so there is a single style entry point for the one `main` window. When adding new color variables, add them to `theme-variables.css`.
 
 ### Structure
 
@@ -59,6 +58,8 @@ src/
 }
 ```
 
+The `:root` and `.dark` blocks above are the stock shadcn values kept in `theme-variables.css`; the app never applies the `.dark` class (see [The Light/Dark Axis](#the-lightdark-axis) and [Color Token Formats](#color-token-formats)).
+
 ### Key Concepts
 
 | Directive              | Purpose                                              |
@@ -69,7 +70,7 @@ src/
 
 ### Adding Custom Colors
 
-To add a new semantic color:
+To add a new semantic color (hex values, matching the existing PNDS tokens):
 
 ```css
 @theme inline {
@@ -78,22 +79,17 @@ To add a new semantic color:
 }
 
 :root {
-  --success: oklch(0.7 0.15 145);
-  --success-foreground: oklch(1 0 0);
-}
-
-.dark {
-  --success: oklch(0.6 0.15 145);
-  --success-foreground: oklch(1 0 0);
+  --success: #16a34a;
+  --success-foreground: #ffffff;
 }
 ```
 
 Then use with Tailwind: `bg-success text-success-foreground`
 
-## Color Themes (v1.2.3, issue #38)
+## Color Themes
 
 The app's color themes are NOT the `.dark` axis: the shadcn `.dark` class
-is never applied (see Dark Mode below — that section describes why), and a
+is never applied (see [The Light/Dark Axis](#the-lightdark-axis)), and a
 color theme is one complete palette — light or dark — swapped via the root
 node's `data-color-theme` attribute:
 
@@ -109,10 +105,11 @@ node's `data-color-theme` attribute:
   applies the saved theme (unknown or not-yet-shipped values fall back to
   Lavender), and the settings panel's Appearance section applies changes
   immediately and persists `colorTheme` (enum-validated in Rust:
-  lavender/sand/stage/midnight/glass).
-- **Brutal is the Neo-brutalism theme** (issue #41, second redirect —
-  renamed from `midnight`; the persisted legacy value maps to `brutal` in
-  color-theme.ts and stays valid in the Rust enum): a cream base
+  lavender/sand/stage/brutal, plus the legacy `midnight`/`glass` values
+  which the frontend maps at render).
+- **Brutal is the Neo-brutalism theme** (renamed from `midnight`; the
+  persisted legacy value maps to `brutal` in color-theme.ts and stays
+  valid in the Rust enum): a cream base
   (`#fff1c9`), pure black text, white cards with black hard-offset
   shadows (`4px 4px 0 #000`, no blur), an orange accent (`#ff5722`, black
   labels), full black borders, and a solid amber sidebar panel
@@ -120,13 +117,13 @@ node's `data-color-theme` attribute:
   white surface; 1px black outline, no panel-level shadow; via a scoped
   `[data-sidebar-surface]` rule — Sidebar's aside carries the
   attribute; a pixel-font PNDS wordmark, a hard panel shadow, and a
-  white panel lived here briefly and were removed on feedback).
+  white panel were tried here and removed on feedback).
   Two structural rules scope to it in theme-variables.css: every corner
   flattens to 0 and every transition snaps to 0s — hover tints, the
   selection pill, and reveals are instant in this theme (a deliberate
-  trade against v1.2.2's sliding pill). Exemptions: the AppShell
-  One motion survives: the sidebar's enter/exit slide (`data-sidebar
--motion`, #41 feedback — 200ms restored); everything else snaps. The
+  trade against the sliding-pill motion). One motion survives: the
+  sidebar's enter/exit slide (`data-sidebar-motion`, restored at 200ms);
+  everything else snaps. The
   selected project card RISES off the black plane — a one-shot keyframe
   lifts pill and row 2px in sync while the hard shadow grows beneath
   (`data-selection-pill` + `data-selected-card`; the keyframe restarts
@@ -142,15 +139,14 @@ node's `data-color-theme` attribute:
   public/fonts, OFL), everything else keeps Comfortaa/Manrope. The
   PndsLogo canvas wordmark stays brand (not themed), like the logo
   dots.
-- **Sand is the medium-depth theme** (palette retune on #41's request):
-  warm-white text on dim warm-taupe surfaces — deliberately between the
-  light and dark themes. Its accent-text twin inverts direction: the
-  accent-as-text is the LIGHTER amber (`#fbbf24`), because a darker
-  amber can't reach 4.5:1 on the mid-dark card. Danger follows the same
-  physics — light enough to pass as text on the card, labeled near-black
-  (the theme set spans light / medium / dark / brutalist, so the
-  "lighten vs darken the status color" rule is per-theme, not
-  per-lightness-class).
+- **Sand is the medium-depth theme**: warm-white text on dim warm-taupe
+  surfaces — deliberately between the light and dark themes. Its
+  accent-text twin inverts direction: the accent-as-text is the LIGHTER
+  amber (`#fbbf24`), because a darker amber can't reach 4.5:1 on the
+  mid-dark card. Danger follows the same physics — light enough to pass
+  as text on the card, labeled near-black (the theme set spans light /
+  medium / dark / brutalist, so the "lighten vs darken the status color"
+  rule is per-theme, not per-lightness-class).
 - Components consume tokens via Tailwind arbitrary values — `bg-(--pnds-bg)`,
   `text-(--pnds-text)/60`, `shadow-(--pnds-card-shadow)` — never literal
   colors. Status fills carry their own label token
@@ -158,73 +154,43 @@ node's `data-color-theme` attribute:
   because the label that passes 4.5:1 differs per theme (white on
   Lavender's accent, dark on Sand's amber, dark on the lightened status
   colors of the dark themes — those lighten one step in the dark and take
-  dark labels, per spec #36). The accent used **as small text** goes
+  dark labels). The accent used **as small text** goes
   through `--pnds-accent-text`, the darker twin tuned for ≥4.5:1 on card
   surfaces (Sand's fill amber reads ~3.1:1 as text).
 - Every text/background pair in each solid theme is checked ≥4.5:1 against
-  its own label/surface (spec #36 story 9); recheck when touching theme
-  values.
+  its own label/surface; recheck when touching theme values.
 - Intentionally NOT themed: the traffic-light glyphs, the PndsLogo's
   brand-color dots (the halo rings behind them ARE tokens), the shadcn
   vendored scrims (`bg-black/50`), and the Appearance section's accent
   swatch — it previews each theme's accent by definition, so it cannot be
   one token.
 
-## Dark Mode
+## The Light/Dark Axis
 
-### How It Works
+The app is **fixed light**. `ThemeProvider` (`src/components/ThemeProvider.tsx`)
+pins the `light` class on `<html>` and never applies `.dark`, regardless of
+OS appearance: the app's own `--pnds-*` palette has no dark variant, and the
+stock shadcn `.dark` block in `theme-variables.css` would repaint the
+remaining shadcn surfaces (popover menus) black while the rest stayed light.
 
-1. **ThemeProvider** (`src/components/ThemeProvider.tsx`) manages theme state
-2. Adds `.dark` class to `<html>` element when dark mode is active
-3. CSS variables in `.dark` override `:root` values
-4. Tailwind's `dark:` variant applies styles conditionally
+The provider's context (`src/lib/theme-context.ts`) keeps a `setTheme`
+no-op so the shadcn ecosystem's `useTheme` shape is satisfied; there is no
+theme-switching hook. Dark palettes are color themes — a dark color theme
+(stage) remaps the same light-variant tokens via `data-color-theme`, not
+via the `.dark` class. See [Color Themes](#color-themes).
 
-### Theme Options
+## Color Token Formats
 
-- `light` - Force light mode
-- `dark` - Force dark mode
-- `system` - Follow OS preference (default)
+Two token families live in `theme-variables.css`:
 
-### Using in Components
+- **Stock shadcn semantic tokens** (`:root` and the unused `.dark` block)
+  use OKLCH — `oklch(0.145 0 0)` — as shipped by the shadcn theme builder.
+- **PNDS tokens** (`--pnds-*`, the shadcn mapping overrides inside each
+  `[data-color-theme]` block) use hex values from the Figma palette. Every
+  value is contrast-audited, so the color space matters less than the
+  single source.
 
-```tsx
-// Access theme in components
-import { useTheme } from '@/hooks/use-theme'
-
-function MyComponent() {
-  const { theme, setTheme } = useTheme()
-
-  return <button onClick={() => setTheme('dark')}>Current: {theme}</button>
-}
-```
-
-### Why `.dark` Class (Not `light-dark()`)
-
-This app uses the `.dark` class approach rather than CSS `light-dark()` because:
-
-- Standard pattern for shadcn/ui ecosystem
-- JavaScript control over theme switching
-- Supports "system" preference detection
-- Compatible with all shadcn components
-
-## OKLCH Colors
-
-All colors use the OKLCH color space for perceptual uniformity.
-
-### Format
-
-```css
-oklch(lightness chroma hue)
-oklch(0.7 0.15 250)  /* L: 0-1, C: 0-0.4, H: 0-360 */
-```
-
-### Why OKLCH
-
-- **Perceptually uniform** - Equal steps in values = equal perceived change
-- **Wide gamut** - Access to P3 display colors
-- **Intuitive** - Lightness is predictable (unlike HSL)
-
-### Color Palette Structure
+### Semantic Palette Structure
 
 | Token                                    | Purpose                   |
 | ---------------------------------------- | ------------------------- |
@@ -270,10 +236,10 @@ textarea {
 }
 ```
 
-**Why:** Native apps use arrow cursor, not text cursor on labels. v1.2.2
-(issue #32) retired the old `.cursor-pointer` utility: every control —
-segments, cards, icon buttons, `<summary>` disclosure — keeps the arrow;
-affordance comes from hover/press styling, never the hand cursor.
+**Why:** Native apps use arrow cursor, not text cursor on labels. The old
+`.cursor-pointer` utility is retired app-wide: every control — segments,
+cards, icon buttons, `<summary>` disclosure — keeps the arrow; affordance
+comes from hover/press styling, never the hand cursor.
 
 ### Focus Ring
 
@@ -288,7 +254,7 @@ One shared class for every interactive control in the app's own UI (the
 shadcn settings primitives keep their design-system ring). `:focus-visible`
 only — mouse clicks never show a ring, Tab navigation always does. New
 controls take the class instead of hand-rolled `focus-visible:outline-*`
-variants (v1.2.2, issue #32).
+variants.
 
 ### Scroll Behavior
 
@@ -316,31 +282,25 @@ Apply `data-tauri-drag-region` to elements that should drag the window (like tit
 
 ```
 src/components/
-├── layout/           # App structure
-│   ├── MainWindow.tsx
-│   ├── LeftSideBar.tsx
-│   ├── RightSideBar.tsx
-│   └── MainWindowContent.tsx
-├── titlebar/         # Window chrome
-│   ├── TitleBar.tsx
-│   ├── MacOSWindowControls.tsx
-│   └── WindowsWindowControls.tsx
-├── ui/               # shadcn primitives
-│   ├── button.tsx
-│   ├── dialog.tsx
-│   └── ...
-├── command-palette/  # Command palette feature
-├── preferences/      # Preferences dialog
-├── ThemeProvider.tsx
-└── ErrorBoundary.tsx
+├── shell/             # App shell and window states
+│   ├── AppShell.tsx   # Routes welcome / loading / ready / error
+│   ├── Sidebar.tsx, HoverSidebar.tsx, MonitorView.tsx, LoadingScreen.tsx
+│   ├── TrafficLights.tsx (window controls), SettingsCard.tsx, PndsLogo.tsx
+│   ├── CloseConfirmDialog.tsx, QuitConfirmDialog.tsx, ErrorScreen.tsx
+│   └── index.ts       # Public exports
+├── settings/          # In-app settings panel (SettingsPanel + sections)
+├── ui/                # shadcn/ui primitives (button, dialog, ...)
+├── welcome/           # WelcomeScreen (no project loaded)
+├── ErrorBoundary.tsx
+└── ThemeProvider.tsx
 ```
 
 ### Conventions
 
-- **layout/** - Structural components that define app regions
-- **titlebar/** - Platform-specific window controls
-- **ui/** - shadcn/ui primitives (don't modify directly)
-- **Feature folders** - Group related components together
+- **shell/** - Structural components that define the app's regions and window states
+- **settings/** / **welcome/** - Feature folders grouping related components
+- **ui/** - shadcn/ui primitives (yours to modify)
+- **shell/**, **settings/**, and **welcome/** expose a public `index.ts`; import from the folder, not deep paths
 
 ## shadcn/ui Usage
 
@@ -409,12 +369,12 @@ Layout components should:
 - Not set external margins (let parent control spacing)
 
 ```tsx
-interface SideBarProps {
+interface PanelProps {
   children?: React.ReactNode
   className?: string
 }
 
-export function LeftSideBar({ children, className }: SideBarProps) {
+export function Panel({ children, className }: PanelProps) {
   return (
     <div className={cn('flex flex-col h-full overflow-hidden', className)}>
       {children}
@@ -425,13 +385,19 @@ export function LeftSideBar({ children, className }: SideBarProps) {
 
 ### Visibility with CSS
 
-For panels that toggle visibility, prefer CSS over conditional rendering:
+For panels that toggle visibility, prefer CSS over conditional rendering. Real example — `HoverSidebar` keeps the sidebar mounted so the slide/fade animates both ways:
 
 ```tsx
-// Good: Preserves component state
-;<ResizablePanel className={cn(!visible && 'hidden')}>
-  <SideBar />
-</ResizablePanel>
+;<div
+  className={cn(
+    'absolute bottom-3 left-3 top-3 z-50 transition-all duration-200 ease-out',
+    sidebarVisible
+      ? 'translate-x-0 opacity-100'
+      : 'pointer-events-none -translate-x-5 opacity-0'
+  )}
+>
+  <Sidebar variant="overlay" />
+</div>
 
 // Avoid: Loses component state on hide/show
 {
@@ -439,7 +405,7 @@ For panels that toggle visibility, prefer CSS over conditional rendering:
 }
 ```
 
-This preserves scroll position, form state, and resize dimensions.
+This preserves scroll position, form state, and animation continuity.
 
 ## Best Practices
 
@@ -456,8 +422,8 @@ This preserves scroll position, form state, and resize dimensions.
 - Use raw color values (`bg-white`, `text-gray-900`)
 - Hardcode light/dark specific values
 - Override shadcn components in place (copy and modify instead)
-- Add `cursor-pointer` — the hand cursor is retired app-wide (v1.2.2 #32);
-  affordance comes from hover/press styling
+- Add `cursor-pointer` — the hand cursor is retired app-wide; affordance
+  comes from hover/press styling
 - Hand-roll `focus-visible:outline-*` variants — use the shared
   `pnds-focus-ring` class
 - Use viewport-based responsive design (this is a fixed-size desktop app)

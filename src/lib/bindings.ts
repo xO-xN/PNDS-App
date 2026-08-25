@@ -9,7 +9,7 @@
 
 export const commands = {
 /**
- * §7.4: the one and only fullscreen toggle. All three entry points
+ * The one and only fullscreen toggle. All three entry points
  * (menu, ⌃⌘F, sidebar button) funnel through this command.
  */
 async toggleFullscreen() : Promise<Result<WindowStateSnapshot, string>> {
@@ -37,7 +37,7 @@ async setWindowCornersSquare(square: boolean) : Promise<Result<null, string>> {
 }
 },
 /**
- * §7.4 fade-out then hide (red light / Close Window). Interruptible:
+ * Fade-out then hide (red light / Close Window). Interruptible:
  * a newer request cancels the ramp and the terminal action still runs
  * from a deterministic state.
  */
@@ -51,14 +51,14 @@ async closeWindowWithFade() : Promise<Result<null, string>> {
 },
 /**
  * First show / dock reopen — fade in from transparent.
- *
+ * 
  * v1.3.0 (#51): this is now the cold-start reveal. The main window is
  * created hidden; the frontend calls this once the saved theme has
  * landed, so the window's first visible frame is already themed (dark
  * users never see the Lavender default first). Shows-and-fades when
  * hidden, and is a NO-OP when already visible — dev reloads and other
  * repeat callers must never re-fade a live window.
- *
+ * 
  * v1.3.0 (#56): `label` extends the same reveal to secondary windows
  * (the help center), created hidden on the frontend side and revealed
  * by their own page once ready; omitted, it stays the main window's
@@ -99,7 +99,7 @@ async markQuitting() : Promise<Result<null, string>> {
  * v1.1.2 T7: the actual process exit behind ⌘Q. The macOS menu item is a
  * custom MenuItem (not the predefined Quit) so React can confirm with a
  * live session first; once confirmed (or with no live session) this
- * marks quitting — no fade, per §7.4 — and exits. Session teardown runs
+ * marks quitting — no fade — and exits. Session teardown runs
  * in the `ExitRequested` handler.
  */
 async quitApp() : Promise<Result<null, string>> {
@@ -161,7 +161,7 @@ async sendNativeNotification(title: string, body: string | null) : Promise<Resul
 }
 },
 /**
- * Full preflight for a candidate project directory (§8.1 step 1):
+ * Full preflight for a candidate project directory (§8 step 2):
  * orphan cleanup → manifest validation → dependency check → port check.
  * Returns the validated manifest so the frontend can show project info.
  * 
@@ -192,9 +192,9 @@ async cleanupOrphanedProcesses() : Promise<Result<number, string>> {
 }
 },
 /**
- * Starts the score server of a validated project (§8.1). Progress and
+ * Starts the score server of a validated project (§8). Progress and
  * health updates are delivered via `pnds:session` events. `osc_target` is
- * required (and validated) only for external mode (§6.6).
+ * required (and validated) only for external mode (§9).
  */
 async startProject(path: string, mode: string, lanIp: string, oscTarget: string | null) : Promise<Result<null, string>> {
     try {
@@ -205,7 +205,7 @@ async startProject(path: string, mode: string, lanIp: string, oscTarget: string 
 }
 },
 /**
- * Stops the running score server (§8.2). Idempotent.
+ * Stops the running score server (§11). Idempotent.
  */
 async stopProject() : Promise<Result<null, string>> {
     try {
@@ -227,7 +227,7 @@ async getSessionState() : Promise<Result<SessionSnapshot, string>> {
 }
 },
 /**
- * §6.4: set the master volume (0-100, dB-linear; live via OSC in internal
+ * §7.5: set the master volume (0-100, dB-linear; live via OSC in internal
  * mode). External/none modes store the value but apply nothing.
  */
 async setMasterVolume(percent: number) : Promise<Result<null, string>> {
@@ -239,7 +239,7 @@ async setMasterVolume(percent: number) : Promise<Result<null, string>> {
 }
 },
 /**
- * Usable LAN IPv4 addresses (§7). The user must choose when more than
+ * Usable LAN IPv4 addresses (§4). The user must choose when more than
  * one exists; loopback is never offered.
  */
 async listLanAddresses() : Promise<Result<string[], string>> {
@@ -289,7 +289,7 @@ async checkPortStatus(port: number) : Promise<Result<PortStatus, string>> {
 },
 /**
  * v1.2.0 (issue #14): release an occupied port — SIGTERM → grace → SIGKILL
- * on the freshly-resolved occupant (same escalation as §8.2 child cleanup).
+ * on the freshly-resolved occupant (same escalation as §11 child cleanup).
  * Returns the port's post-release status; the caller refreshes from it.
  */
 async releasePort(port: number) : Promise<Result<PortStatus, string>> {
@@ -394,7 +394,8 @@ async compileProjectSynthdefs(path: string) : Promise<Result<SynthdefCompileResu
  * v1.2.0 (issue #18): the built-in utility tools behind the Utilities
  * folder. Returns each tool's stable project path (run in place from the
  * app resources) and manifest name, in registry order. With nothing staged
- * (a dev checkout), the repository's utility mirrors are returned instead.
+ * (a dev checkout that has not run `npm run utilities:fetch`), the list is
+ * empty.
  */
 async builtinUtilities() : Promise<Result<BuiltinUtility[], string>> {
     try {
@@ -482,7 +483,7 @@ colorTheme?: string;
  */
 language: string | null; 
 /**
- * §6.5: chosen CoreAudio output device name. `None` = system default.
+ * Chosen CoreAudio output device name. `None` = system default.
  * This is an app-local preference and never touches project manifests.
  */
 outputDevice?: string | null; 
@@ -495,12 +496,12 @@ outputDevice?: string | null;
  */
 sampleRate?: number | null; 
 /**
- * §6.6: last valid external OSC target per project id.
+ * Last valid external OSC target per project id.
  */
 oscTargets?: Partial<{ [key in string]: string }>; 
 /**
- * §4.1: recently-opened (and trusted) project paths. Appended on first
- * trust, kept across launches. Removing from the sidebar drops it here.
+ * Recently-opened project paths. Appended on open, kept across
+ * launches. Removing from the sidebar drops it here.
  */
 recentProjects?: string[]; 
 /**
@@ -530,16 +531,16 @@ projectManifestNames?: Partial<{ [key in string]: string }>;
  * Absent in pre-v1.3.0 files: a shipped path already present in the
  * index counts as offered, so the record backfills silently.
  */
-offeredUtilities?: string[] } 
+offeredUtilities?: string[] }
 export type AudioConfig = { defaultMode: string; supportedModes: string[]; 
 /**
- * Discrete project output signals (spec §3.3): 1..=64, default 2.
+ * Discrete project output signals (manifest.md): 1..=64, default 2.
  * Not a speaker layout — the App never downmixes.
  */
 outputChannels?: number; synthdefs: string[] | null; scsynth: ScsynthConfig | null; 
 /**
  * Debug-only fallback for standalone runs. The App must never use it;
- * internal mode OSC targets are always dynamically assigned (§5.2).
+ * internal mode OSC targets are always dynamically assigned (manifest.md).
  */
 standaloneTarget: string | null }
 /**
@@ -589,11 +590,11 @@ bridgedChannels: number;
 privateBusStart: number }
 export type HealthAudio = { 
 /**
- * `starting | ready | error | disabled` (disabled = none mode, §9.1)
+ * `starting | ready | error | disabled` (disabled = none mode, §9)
  */
 status: string; target?: string | null; error?: string | null }
 /**
- * §9.1 health payload. Only the contract fields are modeled; the App must
+ * Runtime-contract §5 health payload. Only the contract fields are modeled; the App must
  * not rely on anything else.
  */
 export type HealthPayload = { 
@@ -606,8 +607,8 @@ export type HealthScoreServer = { performerPort?: number | null; monitorPort?: n
  * One help document exactly as the frontend receives it: its stable id,
  * its docs/-relative path (the base the help window resolves the
  * corpus's cross-document markdown links against — #56 user report),
- * and the raw markdown. Titles and sections are the frontend's to derive
- * (it owns the markdown structure pass).
+ * and the raw markdown. Titles and sections are the frontend's to
+ * derive (it owns the markdown structure pass).
  */
 export type HelpCorpusDocument = { id: string; path: string; markdown: string }
 export type Manifest = { schemaVersion: number; id: string; name: string; version: string; description: string | null; scoreServer: ScoreServer; audio: AudioConfig }
@@ -656,7 +657,7 @@ status: string; projectName: string | null; projectPath: string | null; audioMod
  */
 volume: number; 
 /**
- * §10.3 five-stage loading animation dot (1–5).
+ * Five-stage loading animation dot (1–5); app-behavior「Loading」.
  */
 startupStage: number; 
 /**
@@ -698,7 +699,7 @@ showCustomTrafficLights: boolean;
 /**
  * Monotonic counter — bumped on every fullscreen/fade transition so
  * the frontend can re-sync. Independent of the monitor reload nonce:
- * fullscreen changes never reload the monitor (§7.2).
+ * fullscreen changes never reload the monitor.
  */
 generation: number }
 

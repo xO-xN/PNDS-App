@@ -16,13 +16,13 @@ This app uses [react-i18next](https://react.i18next.com/) for internationalizati
 ```
 /locales/
 ├── en.json              # English (default)
-├── ar.json              # Arabic (RTL example)
-└── [lang].json          # Additional languages
+└── zh-CN.json           # Simplified Chinese
 
 /src/i18n/
-├── config.ts            # i18next configuration
+├── config.ts            # i18next configuration (resources, supportedLngs, RTL list)
+├── config.test.ts       # Pins the nonExplicitSupportedLngs regression
 ├── i18n.d.ts            # TypeScript type definitions
-├── language-init.ts     # System locale detection
+├── language-init.ts     # System locale detection and applyLanguageSetting
 └── index.ts             # Exports
 ```
 
@@ -60,26 +60,24 @@ function MyComponent() {
 
 ### Step 3: Add to Other Languages
 
-Add the same keys to all other language files (e.g., `/locales/ar.json`).
+Add the same keys to the other language file (`/locales/zh-CN.json`).
 
 ## Key Naming Conventions
 
 Use dot notation to organize keys by feature/component:
 
-| Pattern                   | Example                                 | Use Case                |
-| ------------------------- | --------------------------------------- | ----------------------- |
-| `feature.element`         | `preferences.title`                     | Simple feature strings  |
-| `feature.section.element` | `preferences.general.keyboardShortcuts` | Nested sections         |
-| `feature.action.verb`     | `commands.openPreferences.label`        | Action labels           |
-| `common.word`             | `common.enabled`                        | Shared/reusable strings |
-| `toast.type.key`          | `toast.success.preferencesSaved`        | Toast notifications     |
-| `menu.item`               | `menu.quit`                             | Native menu items       |
+| Pattern                   | Example                | Use Case               |
+| ------------------------- | ---------------------- | ---------------------- |
+| `feature.element`         | `settings.language`    | Simple feature strings |
+| `feature.section.element` | `settings.theme.sand`  | Nested sections        |
+| `menu.item`               | `menu.checkForUpdates` | Native menu items      |
+| `toast.type.key`          | `toast.error.generic`  | Toast notifications    |
 
 ### Naming Rules
 
 1. **Use camelCase** for multi-word segments: `keyboardShortcuts`, not `keyboard-shortcuts`
-2. **Be specific**: `preferences.appearance.colorTheme`, not `theme`
-3. **Group related strings**: All preference strings under `preferences.*`
+2. **Be specific**: `settings.colorTheme`, not `theme`
+3. **Group related strings**: All settings strings under `settings.*`
 4. **Use consistent suffixes**: `.label`, `.description`, `.placeholder` for form elements
 
 ## Interpolation
@@ -133,18 +131,24 @@ Copy `/locales/en.json` to `/locales/[lang].json` and translate all strings.
 
 ### Step 2: Register in Config
 
-Update `/src/i18n/config.ts`:
+Update `/src/i18n/config.ts` (both `resources` and `supportedLngs`):
 
 ```typescript
 import en from '../../locales/en.json'
-import ar from '../../locales/ar.json'
+import zhCN from '../../locales/zh-CN.json'
 import es from '../../locales/es.json' // NEW
 
 const resources = {
   en: { translation: en },
-  ar: { translation: ar },
+  'zh-CN': { translation: zhCN },
   es: { translation: es }, // NEW
 }
+
+i18n.use(initReactI18next).init({
+  resources,
+  supportedLngs: ['en', 'zh-CN', 'es'], // NEW
+  // ...
+})
 ```
 
 ### Step 3: Add RTL Support (if applicable)
@@ -157,11 +161,11 @@ const rtlLanguages = ['ar', 'he', 'fa', 'ur'] // Add your RTL language
 
 ### Step 4: Add It to the Settings Panel
 
-The General section of the settings panel (`/src/components/settings/SettingsPanel.tsx`) lists the selectable languages. Add an `<NativeSelectOption>` and extend the `LanguageSetting` union in `/src/store/settings-store.ts`.
+The General section of the settings panel (`/src/components/settings/SettingsPanel.tsx`) lists the selectable languages. Add a `<NativeSelectOption>` and extend the `LanguageSetting` union in `/src/store/settings-store.ts`.
 
 ## Runtime Language Switching
 
-The settings panel's General section switches the language at runtime (v1.2.0, issue #13):
+The settings panel's General section switches the language at runtime:
 
 - `applyLanguageSetting()` in `/src/i18n/language-init.ts` is the single entry point: it calls `i18n.changeLanguage` (the native menu rebuilds itself via the existing `languageChanged` listener) and persists the choice to `preferences.language` (`null` = follow the system locale).
 - The panel's selection state lives in `useSettingsStore.languageSetting`; it is seeded once at app startup from the same preferences read that initializes the language (`App.tsx`).
@@ -214,42 +218,7 @@ Use CSS logical properties instead of physical properties for automatic RTL supp
 
 ## Native Menus
 
-Native menus are built from JavaScript to use the same i18n system as React components.
-
-### Menu Builder Location
-
-See `/src/lib/menu.ts` for the menu builder implementation.
-
-### Adding Menu Items
-
-```typescript
-import i18n from '@/i18n/config'
-
-export async function buildAppMenu(): Promise<Menu> {
-  const t = i18n.t.bind(i18n)
-
-  const myItem = await MenuItem.new({
-    id: 'my-action',
-    text: t('menu.myAction'),
-    action: handleMyAction,
-  })
-
-  // ... add to submenu
-}
-```
-
-### Automatic Menu Rebuild
-
-Menus are automatically rebuilt when the language changes:
-
-```typescript
-// In /src/lib/menu.ts
-export function setupMenuLanguageListener(): void {
-  i18n.on('languageChanged', async () => {
-    await buildAppMenu()
-  })
-}
-```
+Native menus are built from JavaScript to use the same i18n system as React components, and they rebuild automatically on `languageChanged`. See [menus.md](./menus.md) for the builder (`src/lib/menu.ts`) and its language listener.
 
 ## System Locale Detection
 
@@ -263,31 +232,7 @@ See `/src/i18n/language-init.ts` for the implementation.
 
 ## Language Selector
 
-The language selector in Preferences > Appearance allows users to change the language:
-
-```typescript
-import { availableLanguages } from '@/i18n/config'
-import { useTranslation } from 'react-i18next'
-
-function LanguageSelector() {
-  const { i18n } = useTranslation()
-
-  const handleChange = async (lang: string) => {
-    await i18n.changeLanguage(lang)
-    // Save to preferences...
-  }
-
-  return (
-    <Select value={i18n.language} onValueChange={handleChange}>
-      {availableLanguages.map(lang => (
-        <SelectItem key={lang} value={lang}>
-          {lang.toUpperCase()}
-        </SelectItem>
-      ))}
-    </Select>
-  )
-}
-```
+The language selector lives in the settings panel's General section (Settings → General, `/src/components/settings/SettingsPanel.tsx`). It is a `NativeSelect` whose options are the `LanguageSetting` values (`system`, `en`, `zh-CN`); choosing one calls `applyLanguageSetting()` — the single entry point described in [Runtime Language Switching](#runtime-language-switching). There is no separate per-component switcher.
 
 ## TypeScript Support
 
@@ -298,7 +243,7 @@ The `i18n.d.ts` file provides type-safe translation keys:
 t('nonexistent.key') // TypeScript error
 
 // Autocomplete works for valid keys
-t('preferences.title') // ✅ Works
+t('settings.title') // ✅ Works
 ```
 
 ## Using Translations Outside React
@@ -314,14 +259,9 @@ const text = t('menu.about', { appName: 'My App' })
 
 // Or use i18n directly
 const currentLanguage = i18n.language
-await i18n.changeLanguage('ar')
+await i18n.changeLanguage('zh-CN')
 ```
 
-## Testing with RTL
+## RTL Readiness
 
-To test RTL layout:
-
-1. Open Preferences > Appearance
-2. Change language to Arabic (ar)
-3. Verify layout mirrors correctly
-4. Check all text alignment uses logical properties
+Both shipped locales (`en`, `zh-CN`) are LTR — RTL is a readiness principle, not a tested path. The i18n config already flips `document.documentElement.dir` to `rtl` for any language listed in `rtlLanguages`, so a future RTL locale mirrors automatically as long as components use CSS logical properties (see the table above). Reviewing a component for RTL means checking that it uses utilities like `ps-*`, `me-*`, and `text-start` instead of physical `pl-*`, `mr-*`, and `text-left`.

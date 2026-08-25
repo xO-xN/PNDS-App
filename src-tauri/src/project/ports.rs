@@ -3,7 +3,7 @@
 //! The Runtime Contract is unchanged: a port conflict still fails preflight —
 //! this service only adds *visibility* (who holds the port) and a manual
 //! release that runs the shared SIGTERM → grace → SIGKILL escalation from
-//! `project/children.rs` (§8.2) against the foreign pid.
+//! `project/children.rs` (§11) against the foreign pid.
 //!
 //! Occupancy is resolved with `lsof -nP -w -Fp -iTCP:{port} -sTCP:LISTEN`
 //! (machine-readable pid lines, listeners only); the full identity (process
@@ -91,7 +91,7 @@ pub fn port_status(port: u16) -> PortStatus {
 }
 
 /// Releases `port`: resolves the occupant fresh (so a stale confirm dialog
-/// can never kill a recycled pid), terminates it via the shared §8.2
+/// can never kill a recycled pid), terminates it via the shared §11
 /// escalation, and reports the port's new truth — free, or held by whoever
 /// took it over.
 pub fn release_port(port: u16) -> PortStatus {

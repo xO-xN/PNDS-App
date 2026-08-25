@@ -1,7 +1,7 @@
 //! PNDS project `manifest.json` parsing and validation.
 //!
 //! Implements the schemaVersion 1 contract from
-//! `docs/PNDS_APP_REQUIREMENTS.md` §5. All user-facing error strings are
+//! `docs/reference/manifest.md`. All user-facing error strings are
 //! English (the V1 UI is English-only).
 
 use serde::{Deserialize, Serialize};
@@ -9,7 +9,7 @@ use serde_json::Value;
 use specta::Type;
 use std::path::{Component, Path, PathBuf};
 
-/// Audio mode names defined by the V1 contract (§6.1).
+/// Audio mode names defined by the runtime contract (§6).
 const VALID_MODES: [&str; 3] = ["internal", "external", "none"];
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
@@ -38,18 +38,18 @@ pub struct ScoreServer {
 pub struct AudioConfig {
     pub default_mode: String,
     pub supported_modes: Vec<String>,
-    /// Discrete project output signals (spec §3.3): 1..=64, default 2.
+    /// Discrete project output signals (manifest.md): 1..=64, default 2.
     /// Not a speaker layout — the App never downmixes.
     #[serde(default = "default_output_channels")]
     pub output_channels: u32,
     pub synthdefs: Option<Vec<String>>,
     pub scsynth: Option<ScsynthConfig>,
     /// Debug-only fallback for standalone runs. The App must never use it;
-    /// internal mode OSC targets are always dynamically assigned (§5.2).
+    /// internal mode OSC targets are always dynamically assigned (manifest.md).
     pub standalone_target: Option<String>,
 }
 
-/// spec §3.3: `audio.outputChannels` defaults to 2 when omitted.
+/// manifest.md: `audio.outputChannels` defaults to 2 when omitted.
 fn default_output_channels() -> u32 {
     2
 }
@@ -115,9 +115,9 @@ fn get<'a>(value: &'a Value, path: &str) -> Option<&'a Value> {
     Some(cur)
 }
 
-/// Schema-level validation with friendly, field-specific errors (§5.2).
+/// Schema-level validation with friendly, field-specific errors (manifest.md).
 fn validate_schema(value: &Value) -> Result<(), String> {
-    // §5.4: the schema version gate runs before anything else.
+    // manifest.md: the schema version gate runs before anything else.
     match value.get("schemaVersion").and_then(Value::as_u64) {
         Some(1) => {}
         _ => {
@@ -190,7 +190,7 @@ fn validate_schema(value: &Value) -> Result<(), String> {
         ));
     }
 
-    // spec §3.3: optional, integer 1..=64, default 2.
+    // manifest.md: optional, integer 1..=64, default 2.
     let output_channels = match get(value, "audio.outputChannels") {
         None | Some(Value::Null) => 2u64,
         Some(v) => match v.as_u64() {
@@ -203,7 +203,7 @@ fn validate_schema(value: &Value) -> Result<(), String> {
         },
     };
 
-    // §5.2 conditional requirements for internal mode.
+    // manifest.md conditional requirements for internal mode.
     if modes.contains(&"internal") {
         match get(value, "audio.synthdefs").and_then(Value::as_array) {
             Some(arr) if !arr.is_empty() && arr.iter().all(|v| v.as_str().is_some()) => {}
@@ -228,7 +228,7 @@ fn validate_schema(value: &Value) -> Result<(), String> {
             }
         }
 
-        // spec §3.4: bus capacity must cover hardware buses plus the N
+        // manifest.md: bus capacity must cover hardware buses plus the N
         // private project buses.
         let bus_channels = get(value, "audio.scsynth.audioBusChannels")
             .and_then(Value::as_u64)
@@ -244,7 +244,7 @@ fn validate_schema(value: &Value) -> Result<(), String> {
     Ok(())
 }
 
-/// Resolves a manifest-relative path, enforcing §5.4: relative only, no
+/// Resolves a manifest-relative path, enforcing manifest.md: relative only, no
 /// escape, and the real (symlink-resolved) path must stay inside the project.
 fn resolve_within(
     root: &Path,
@@ -276,7 +276,7 @@ fn resolve_within(
     Ok(canonical)
 }
 
-/// Filesystem-level validation (§5.4).
+/// Filesystem-level validation (manifest.md).
 fn validate_paths(manifest: &Manifest, root: &Path) -> Result<(), String> {
     let canonical_root = root
         .canonicalize()
@@ -326,25 +326,33 @@ mod tests {
     use super::*;
     use std::fs;
 
-    /// The shipped `utilities/Multichannel Signal Generator` utility project
-    /// must keep passing the App parser and preflight (§11: bundled
-    /// verification project contract).
+    /// The Multichannel Signal Generator — the App's bundled validation tool (app-behavior「内置验证工具」)
+    /// verification project, unpacked from its pinned `.pnds` by
+    /// `npm run utilities:fetch` — must keep passing the App parser and
+    /// preflight. Skipped in a checkout that has not staged the tools.
     #[test]
     fn tone_test_example_passes_app_parser() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../utilities/Multichannel Signal Generator");
+            .join("resources/utilities/multichannel-signal-generator");
+        if !root.join("manifest.json").is_file() {
+            eprintln!(
+                "skipped: {} is not staged — run `npm run utilities:fetch`",
+                root.display()
+            );
+            return;
+        }
         let manifest = load_manifest(&root).unwrap();
         assert_eq!(manifest.audio.output_channels, 16);
         assert_eq!(manifest.audio.supported_modes, vec!["internal"]);
         assert!(manifest.audio.scsynth.as_ref().unwrap().audio_bus_channels >= 32);
         // One production dependency (qrcode, monitor QR endpoint) -> the
-        // preflight requires node_modules present (spec §2).
+        // preflight requires node_modules present (structure.md).
         crate::project::preflight::check_dependencies(&root).unwrap();
         // (Port availability is checked at session start, not here: a
         // running PNDS App legitimately occupies the example ports.)
     }
 
-    /// Writes a valid §5.1 manifest plus the files it references.
+    /// Writes a valid manifest.md manifest plus the files it references.
     fn write_valid_project(dir: &Path) {
         fs::create_dir_all(dir.join("supercollider/synthdefs")).unwrap();
         fs::write(dir.join("server.js"), "// score server").unwrap();

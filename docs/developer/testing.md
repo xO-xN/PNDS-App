@@ -13,7 +13,7 @@ npm run rust:test      # Rust tests
 
 ## TypeScript Testing
 
-Uses **Vitest** + **@testing-library/react**. Configuration in `vitest.config.ts`.
+Uses **Vitest** + **@testing-library/react**. Configuration in `vitest.config.ts` (jsdom environment, tests colocated under `src/`).
 
 ### Test File Location
 
@@ -24,27 +24,28 @@ src/components/ui/Button.tsx
 src/components/ui/Button.test.tsx
 ```
 
-### Mocking Tauri APIs (Critical)
+### What src/test/setup.ts Provides
 
-Tauri commands must be mocked since tests run outside the Tauri environment. Mocks are configured in `src/test/setup.ts`:
+`vitest.config.ts` loads `src/test/setup.ts` for every test file. It contains two kinds of setup.
+
+**jsdom polyfills and globals** — jsdom lacks the layout and pointer APIs the UI stack assumes:
+
+- Pointer-capture stubs (`hasPointerCapture` / `setPointerCapture` / `releasePointerCapture`) that Radix Select relies on
+- `scrollIntoView` and `scrollTo` no-ops (no scroll layout in jsdom)
+- A `window.matchMedia` mock
+- A test `__APP_VERSION__` global
+- An `afterEach` that resets `document.body.style.pointerEvents`, which Radix modal layers set while open and an abrupt cleanup can leave behind
+
+**Global Tauri mocks** — so no test performs real IPC:
+
+- `@tauri-apps/api/event` (`listen` resolves a no-op unlisten) and `@tauri-apps/api/webviewWindow` (`onDragDropEvent`)
+- `@tauri-apps/plugin-updater`, `plugin-dialog` (cancelled by default), `plugin-clipboard-manager`, and `plugin-log`
+- One global `vi.mock('@/lib/tauri-bindings')` stubbing every typed command with a default resolved value, plus `unwrapResult`:
 
 ```typescript
-// src/test/setup.ts
-import { vi } from 'vitest'
-
-// Mock Tauri event APIs
-vi.mock('@tauri-apps/api/event', () => ({
-  listen: vi.fn().mockResolvedValue(() => {}),
-}))
-
-vi.mock('@tauri-apps/plugin-updater', () => ({
-  check: vi.fn().mockResolvedValue(null),
-}))
-
-// Mock typed Tauri bindings (tauri-specta generated)
+// src/test/setup.ts (excerpt)
 vi.mock('@/lib/tauri-bindings', () => ({
   commands: {
-    greet: vi.fn().mockResolvedValue('Hello, test!'),
     loadPreferences: vi
       .fn()
       .mockResolvedValue({ status: 'ok', data: { theme: 'system' } }),
@@ -52,39 +53,62 @@ vi.mock('@/lib/tauri-bindings', () => ({
     sendNativeNotification: vi
       .fn()
       .mockResolvedValue({ status: 'ok', data: null }),
-    saveEmergencyData: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
-    loadEmergencyData: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
-    cleanupOldRecoveryFiles: vi
-      .fn()
-      .mockResolvedValue({ status: 'ok', data: 0 }),
+    preflightProject: vi.fn().mockResolvedValue({
+      status: 'error',
+      error: 'preflightProject not mocked',
+    }),
+    getSessionState: vi.fn().mockResolvedValue({
+      status: 'ok',
+      data: {
+        /* idle session snapshot */
+      },
+    }),
+    stopProject: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
+    // ...one default per command
   },
+  unwrapResult: vi.fn((result: { status: string; data?: unknown }) => {
+    if (result.status === 'ok') return result.data
+    throw result
+  }),
 }))
 ```
 
-### Testing with Mocked Commands
+Note `preflightProject`: commands whose default would silently satisfy an assertion are mocked to an explicit error, so a test that forgot to set up its data fails loudly.
+
+### Overriding Command Mocks Per Test
+
+Test files do not re-mock the module — they override the global stub where needed. Import `commands`, type it with `vi.mocked`, and set the value the test means (see `src/components/shell/AppShell.test.tsx` and `src/lib/preferences.test.ts`):
 
 ```typescript
 import { vi } from 'vitest'
 import { commands } from '@/lib/tauri-bindings'
 
-const mockCommands = vi.mocked(commands)
+beforeEach(() => {
+  vi.clearAllMocks() // clears call history; keeps the setup.ts implementations
+})
 
-test('loads preferences', async () => {
-  mockCommands.loadPreferences.mockResolvedValue({
+test('restores projects from saved preferences', async () => {
+  vi.mocked(commands.loadPreferences).mockResolvedValueOnce({
     status: 'ok',
-    data: { theme: 'dark' },
+    data: {
+      theme: 'system',
+      language: null,
+      outputDevice: null,
+      oscTargets: {},
+      recentProjects: ['/Users/test/Inarticulate III'],
+    },
   })
 
-  // Test code that calls loadPreferences
+  render(<AppShell />)
+  await screen.findByTestId('project-entry')
 })
 ```
 
+For load-modify-write flows, `src/lib/preferences.test.ts` swaps both preferences commands for a tiny in-memory disk via `mockImplementation`, so the save queue's cycles are observable through what survives on "disk".
+
 ### Test Wrapper for Providers
 
-`render` from `@/test/test-utils` already wraps components in the i18n
-and mock-theme providers. No query-client setup is needed (the TanStack
-Query layer was removed in v1.2.0; tests mock `@/lib/tauri-bindings`
-instead — see the setup section above).
+`render` from `@/test/test-utils` wraps components in the i18n provider and a mock theme provider, and exposes geometry helpers like `mockBoundingClientRect` and `mockOffsets`. There is no query-client wrapper — the app has no query-cache layer; tests mock `@/lib/tauri-bindings` as described above.
 
 Usage:
 
@@ -98,37 +122,29 @@ test('component renders', () => {
 
 ### Testing Zustand Stores
 
+The stores in `src/store/` (project, session, settings, window, keyboard) are plain Zustand stores — tests seed state with `setState`, call actions through `getState()`, and assert on `getState()` (see `src/store/settings-store.test.ts`):
+
 ```typescript
-import { renderHook, act } from '@testing-library/react'
-import { useUIStore } from '@/store/ui-store'
+import { useSettingsStore } from '@/store/settings-store'
 
-test('toggles sidebar visibility', () => {
-  const { result } = renderHook(() => useUIStore())
+beforeEach(() => {
+  useSettingsStore.setState({ settingsOpen: false, focusSection: null })
+})
 
-  expect(result.current.leftSidebarVisible).toBe(true)
+test('openSettings records the section to reveal', () => {
+  useSettingsStore.getState().openSettings('about')
 
-  act(() => {
-    result.current.setLeftSidebarVisible(false)
-  })
-
-  expect(result.current.leftSidebarVisible).toBe(false)
+  expect(useSettingsStore.getState().settingsOpen).toBe(true)
+  expect(useSettingsStore.getState().focusSection).toBe('about')
 })
 ```
 
 ### Testing Pointer-Drag Geometry (e.g. Sidebar Reorder)
 
-jsdom has no layout and no hit-testing, so pointer dragging cannot be
-simulated end-to-end. Split the work at that seam (see the sidebar's
-`src/lib/drag-reorder.ts`, v1.1.2 T4):
+jsdom has no layout and no hit-testing, so pointer dragging cannot be simulated end-to-end. Split the work at that seam (see the sidebar's `src/lib/drag-reorder.ts`):
 
-- All drop/yield decisions — midpoint halves, insertion index, per-card
-  yield offsets, static hit-testing — are pure functions, unit-tested with
-  plain numbers.
-- The component only measures rects and mutates the floating clone
-  imperatively on `pointermove`; its tests pin the rects it derives
-  geometry from via `mockBoundingClientRect` (`src/test/test-utils.tsx`)
-  and fire pointer events with explicit coordinates. The drag "feel"
-  remains a manual acceptance step.
+- All drop/yield decisions — midpoint halves, insertion index, per-card yield offsets, static hit-testing — are pure functions, unit-tested with plain numbers.
+- The component only measures rects and mutates the floating clone imperatively on `pointermove`; its tests pin the rects it derives geometry from via `mockBoundingClientRect` (`src/test/test-utils.tsx`) and fire pointer events with explicit coordinates. The drag "feel" remains a manual acceptance step.
 
 ## Rust Testing
 
@@ -180,22 +196,21 @@ fn test_file_operations() {
 
 ## Adding New Command Mocks
 
-When adding new Tauri commands, update `src/test/setup.ts`:
+When adding new Tauri commands, add a default to the global stub in `src/test/setup.ts`:
 
 ```typescript
-vi.mock('@/lib/tauri-bindings', () => ({
-  commands: {
-    // ... existing mocks
-    myNewCommand: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
-  },
-}))
+// src/test/setup.ts — inside the existing vi.mock('@/lib/tauri-bindings')
+commands: {
+  // ... existing mocks
+  myNewCommand: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
+}
 ```
 
 ## Best Practices
 
-| Do                                    | Don't                         |
-| ------------------------------------- | ----------------------------- |
-| Mock Tauri commands in setup.ts       | Call real Tauri APIs in tests |
-| Use `vi.mocked()` for type-safe mocks | Use untyped mock assertions   |
-| Test user-visible behavior            | Test implementation details   |
-| Use `tempfile` for Rust file tests    | Write to real file system     |
+| Do                                             | Don't                         |
+| ---------------------------------------------- | ----------------------------- |
+| Add command defaults to `src/test/setup.ts`    | Call real Tauri APIs in tests |
+| Use `vi.mocked()` for type-safe mock overrides | Use untyped mock assertions   |
+| Test user-visible behavior                     | Test implementation details   |
+| Use `tempfile` for Rust file tests             | Write to real file system     |

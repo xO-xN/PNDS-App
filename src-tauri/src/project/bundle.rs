@@ -1,6 +1,6 @@
 //! PNDS `.pnds` project bundle service (v1.2.0, issue #16).
 //!
-//! Implements `docs/PNDS_PROJECT_BUNDLE_SPECIFICATION.md`: a `.pnds` file is
+//! Implements `docs/reference/pnds-bundle.md`: a `.pnds` file is
 //! a zip(deflate) archive holding exactly one root directory with the
 //! complete runnable project plus a top-level `pnds-bundle.json`. It is a
 //! transport container only — sessions always run from the extracted
@@ -21,13 +21,13 @@ use zip::ZipWriter;
 
 use crate::project::manifest::Manifest;
 
-/// The bundle format version this App writes and accepts (spec §3.4).
+/// The bundle format version this App writes and accepts .
 pub const BUNDLE_FORMAT_VERSION: u32 = 1;
 
-/// Top-level metadata entry inside every `.pnds` (spec §2).
+/// Top-level metadata entry inside every `.pnds` .
 pub const METADATA_ENTRY: &str = "pnds-bundle.json";
 
-/// App-managed install root under the app data dir (spec §4.1).
+/// App-managed install root under the app data dir .
 pub const BUNDLES_DIR: &str = "bundles";
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
@@ -53,9 +53,9 @@ pub struct PackResult {
     pub sha256: String,
 }
 
-// ───────────────────────────── packing (spec §3) ─────────────────────────────
+// ───────────────────────────── packing ─────────────────────────────
 
-/// The shared packability gate (spec §3.1): full manifest validation (which
+/// The shared packability gate : full manifest validation (which
 /// intercepts missing synthdef artifacts), the production-dependency /
 /// node_modules check, and the output path derivation. The pack UI's
 /// pre-check and the pack itself must agree, so both go through here.
@@ -90,7 +90,7 @@ pub fn pack_project(
         ));
     }
 
-    // §3.2: stage in the system temp dir so the source tree is never touched.
+    // stage in the system temp dir so the source tree is never touched.
     let staging =
         tempfile::tempdir().map_err(|e| format!("Failed to create the staging directory: {e}"))?;
     let root_name = zip_root_name(&manifest);
@@ -101,7 +101,7 @@ pub fn pack_project(
         fs::create_dir_all(parent)
             .map_err(|e| format!("Failed to create {}: {e}", parent.display()))?;
     }
-    // §3.3: write to a sibling temp file, then atomically rename into place.
+    // write to a sibling temp file, then atomically rename into place.
     let tmp_output = output.with_file_name(format!(
         ".{}.part",
         output
@@ -129,7 +129,7 @@ pub fn pack_project(
 }
 
 /// The `<parent>/<sanitized name>-<version>.pnds` path for a project
-/// (spec §3.3). Also the "does it already exist" probe the UI confirms with.
+/// . Also the "does it already exist" probe the UI confirms with.
 pub fn bundle_output_path(project_root: &Path, manifest: &Manifest) -> Result<PathBuf, String> {
     let name = sanitize_name_component(&manifest.name);
     if name.is_empty() {
@@ -143,7 +143,7 @@ pub fn bundle_output_path(project_root: &Path, manifest: &Manifest) -> Result<Pa
 }
 
 /// Zip root directory name: the sanitized project display name, falling
-/// back to the id (spec §2: openers must not depend on this name).
+/// back to the id (openers must not depend on this name).
 fn zip_root_name(manifest: &Manifest) -> String {
     let name = sanitize_name_component(&manifest.name);
     if name.is_empty() {
@@ -153,7 +153,7 @@ fn zip_root_name(manifest: &Manifest) -> String {
     }
 }
 
-/// Replaces filename-hostile characters with `-` (spec §3.3).
+/// Replaces filename-hostile characters with `-` .
 fn sanitize_name_component(raw: &str) -> String {
     let cleaned: String = raw
         .chars()
@@ -167,7 +167,7 @@ fn sanitize_name_component(raw: &str) -> String {
 }
 
 /// A manifest value that becomes a single directory/file name segment must
-/// not contain separators or traversal (also guards install dirs, §4.2).
+/// not contain separators or traversal (also guards install dirs).
 fn ensure_path_segment(value: &str, field: &str) -> Result<(), String> {
     let invalid = value.is_empty()
         || value == "."
@@ -182,7 +182,7 @@ fn ensure_path_segment(value: &str, field: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// True for entries the bundle never carries (spec §3.2). `.DS_Store` and
+/// True for entries the bundle never carries . `.DS_Store` and
 /// `.git*` are junk at any depth; `docs/` / `test/` / `tests/` are only
 /// dropped at the project root (deeper directories are runtime assets).
 fn is_excluded(name: &str, is_dir: bool, at_root: bool) -> bool {
@@ -196,7 +196,7 @@ fn is_excluded(name: &str, is_dir: bool, at_root: bool) -> bool {
 /// targets are materialized as regular files/directories (via `fs::copy`,
 /// which follows the link and preserves the target's unix permission bits);
 /// out-of-root symlinks are skipped — they would be broken on any other
-/// machine anyway (spec §3.2).
+/// machine anyway .
 fn copy_runtime_tree(src_root: &Path, src: &Path, dst: &Path) -> Result<(), String> {
     let canonical_root = src_root
         .canonicalize()
@@ -326,7 +326,7 @@ fn add_tree_to_zip(
             .large_file(true);
         if metadata.is_dir() {
             // Explicit directory entries keep empty runtime directories in
-            // the archive (spec §2: original structure preserved).
+            // the archive (original structure preserved).
             #[cfg(unix)]
             let dir_options = options.unix_permissions(0o755);
             #[cfg(not(unix))]
@@ -406,7 +406,7 @@ fn civil_from_days(days: i64) -> (i64, u32, u32) {
     (if month <= 2 { year + 1 } else { year }, month, day)
 }
 
-// ──────────────────────────── installing (spec §4) ───────────────────────────
+// ──────────────────────────── installing ───────────────────────────
 
 /// Validates the bundle at `bundle_path` and installs it into
 /// `<bundles_root>/<id>-<version>/` (always a full reinstall when the
@@ -421,18 +421,18 @@ pub fn install_bundle(bundles_root: &Path, bundle_path: &Path) -> Result<PathBuf
     fs::create_dir_all(bundles_root)
         .map_err(|e| format!("Failed to create {}: {e}", bundles_root.display()))?;
     let target = bundles_root.join(format!("{id}-{version}"));
-    // §4.2: same id+version always reinstalls over the old directory.
+    // same id+version always reinstalls over the old directory.
     if target.exists() {
         fs::remove_dir_all(&target)
             .map_err(|e| format!("Failed to replace {}: {e}", target.display()))?;
     }
 
     if let Err(error) = extract_root_entries(&mut archive, &root, &target).and_then(|()| {
-        // §4.1 step 4: the installed project must pass the full manifest
+        // Install step 4: the installed project must pass the full manifest
         // check.
         crate::project::manifest::load_manifest(&target)
     }) {
-        // Never leave a half-extracted install behind (§4.4: the bundles
+        // Never leave a half-extracted install behind ( (the bundles
         // dir must not accumulate garbage) — the next open retries clean.
         let _ = fs::remove_dir_all(&target);
         return Err(error);
@@ -442,7 +442,7 @@ pub fn install_bundle(bundles_root: &Path, bundle_path: &Path) -> Result<PathBuf
 
 /// The shared validation prologue: `(root directory, manifest id, version)`.
 fn archive_identity(archive: &mut ZipArchive<File>) -> Result<(String, String, String), String> {
-    // §4.1: metadata gate first.
+    // metadata gate first.
     let metadata: BundleMetadata = archive
         .by_name(METADATA_ENTRY)
         .map_err(|_| format!("The bundle is missing {METADATA_ENTRY}"))
@@ -487,7 +487,7 @@ fn archive_identity(archive: &mut ZipArchive<File>) -> Result<(String, String, S
     Ok((root, id, version))
 }
 
-/// The single top-level directory that holds the project (spec §2). Every
+/// The single top-level directory that holds the project . Every
 /// other top-level entry must be `pnds-bundle.json`. Standard zip writers
 /// emit explicit `<root>/` directory entries; those count as the root, not
 /// as stray top-level files.
@@ -528,7 +528,7 @@ fn single_root_directory(archive: &mut ZipArchive<File>) -> Result<String, Strin
     }
 }
 
-/// Extracts every `<root>/…` entry into `target`, enforcing the §4.3 safety
+/// Extracts every `<root>/…` entry into `target`, enforcing the zip-slip safety
 /// rules: relative paths only, no `..` traversal, no symlink entries.
 fn extract_root_entries(
     archive: &mut ZipArchive<File>,
@@ -589,7 +589,7 @@ fn extract_root_entries(
     Ok(())
 }
 
-// ─────────────────────────── reclaiming (spec §4.4) ──────────────────────────
+// ─────────────────────────── reclaiming ──────────────────────────
 
 /// Deletes the extracted bundle directory behind a history entry, but only
 /// when it is a direct child of the App-managed `bundles/` root. Every other
@@ -662,7 +662,7 @@ mod tests {
         )
         .unwrap();
 
-        // Junk that must never enter the bundle (spec §3.2).
+        // Junk that must never enter the bundle .
         fs::create_dir_all(dir.join(".git/objects")).unwrap();
         fs::write(dir.join(".git/HEAD"), "ref: refs/heads/main").unwrap();
         fs::write(dir.join(".gitignore"), "node_modules\n").unwrap();
@@ -813,7 +813,7 @@ mod tests {
         }
     }
 
-    /// Spec §3.2: in-root symlinks are materialized (with their permission
+    /// in-root symlinks are materialized (with their permission
     /// bits — node_modules/.bin shims depend on them), out-of-root ones are
     /// skipped, and a directory symlink must not break the pack.
     #[cfg(unix)]
@@ -1129,7 +1129,7 @@ mod tests {
         );
         let err = install_bundle(&parent.path().join("bundles"), &bundle).unwrap_err();
         assert!(err.contains("scoreServer.entry"), "unexpected: {err}");
-        // §4.4: a failed install must not leave a half-extracted directory.
+        // a failed install must not leave a half-extracted directory.
         assert!(!parent.path().join("bundles/p-1.0.0").exists());
     }
 

@@ -53,34 +53,42 @@ npx ast-grep scan -r .ast-grep/rules/zustand/no-destructure.yml
 
 ## Example: No Zustand Destructuring
 
-**File:** `.ast-grep/rules/zustand/no-destructure.yml`
+**File:** `.ast-grep/rules/zustand/no-destructure.yml` (canonical — keep this doc in sync with it)
 
 ```yaml
 id: no-destructure-zustand
 message: |
-  Don't destructure Zustand stores - use selectors instead.
+  Never destructure from Zustand stores. Use selector syntax instead.
 
-  BAD: const { visible } = useUIStore()
-  GOOD: const visible = useUIStore(state => state.visible)
+  BAD: const { leftSidebarVisible } = useUIStore()
+  GOOD: const leftSidebarVisible = useUIStore(state => state.leftSidebarVisible)
+
+  For multiple values, use multiple selectors or useShallow.
 severity: error
 language: Tsx
 rule:
   any:
     - pattern: const { $$$PROPS } = useUIStore($$$ARGS)
-    - pattern: const { $$$PROPS } = usePreferencesStore($$$ARGS)
+    - pattern: const { $$$PROPS } = useKeyboardStore($$$ARGS)
+    - pattern: const { $$$PROPS } = useSettingsStore($$$ARGS)
 note: |
-  Destructuring subscribes to the entire store, causing unnecessary re-renders.
-  See docs/developer/state-management.md for details.
+  Destructuring causes render cascades - every store update triggers re-renders
+  even if destructured values haven't changed.
+
+  See: docs/developer/architecture-guide.md (Performance Patterns)
 ```
+
+The rule matches by store hook name, so every store must be listed.
 
 ## Adding New Stores to Existing Rules
 
-When you add a new Zustand store, update the no-destructure rule:
+When you add a new Zustand store, extend the `any` list in
+`.ast-grep/rules/zustand/no-destructure.yml` with its hook name:
 
 ```yaml
 rule:
   any:
-    - pattern: const { $$$PROPS } = useUIStore($$$ARGS)
+    # ... existing store patterns ...
     - pattern: const { $$$PROPS } = useNewStore($$$ARGS) # Add new store
 ```
 

@@ -4,41 +4,44 @@ Patterns for saving and loading data to disk.
 
 ## Choosing a Storage Method
 
-| Need               | Solution           | When to Use                                                           |
-| ------------------ | ------------------ | --------------------------------------------------------------------- |
-| App preferences    | Preferences System | Strongly-typed settings (theme, shortcuts)                            |
-| Emergency recovery | Recovery System    | Crash recovery, backup before risky operations                        |
-| Relational data    | SQLite             | User data requiring queries, relationships                            |
-| External API data  | External APIs      | Remote data with caching (see [external-apis.md](./external-apis.md)) |
+| Need              | Solution           | When to Use                                              |
+| ----------------- | ------------------ | -------------------------------------------------------- |
+| App preferences   | Preferences System | Strongly-typed settings (language, audio, project index) |
+| Relational data   | SQLite             | User data requiring queries, relationships               |
+| External API data | External APIs      | Remote data (see [external-apis.md](./external-apis.md)) |
 
 ```
 Need to persist data?
 ├─ App settings? → Preferences (Rust struct + src/lib/preferences.ts)
 ├─ User data with queries/relationships? → SQLite (see below)
-├─ Remote API data? → external-apis.md
-└─ Emergency/crash recovery? → Recovery System
+└─ Remote API data? → external-apis.md
 ```
 
-All data goes through Rust for type safety and security. The frontend reads via typed commands from `@/lib/tauri-bindings` (on-mount effects today; preferences go through `src/lib/preferences.ts`).
+All data goes through Rust for type safety and security. The frontend reads via typed commands from `@/lib/tauri-bindings` — there is no query-cache layer; components load in on-mount effects and await commands directly. Every preference read and write flows through `src/lib/preferences.ts`.
 
 ## File Locations
 
 ```
-~/Library/Application Support/com.myapp.app/  (macOS)
-├── preferences.json                          # App preferences
-└── recovery/                                 # Emergency data
-    └── *.json
+~/Library/Application Support/com.xo-xn.pnds-app/  (macOS)
+└── preferences.json    # App preferences (the app identifier comes from src-tauri/tauri.conf.json)
 ```
+
+Logs are not stored here — `tauri-plugin-log` writes to the OS log directory (see [logging.md](./logging.md)).
 
 ## Atomic Write Pattern (Critical)
 
-All file writes use atomic operations to prevent corruption:
+All file writes use atomic operations to prevent corruption. The reference implementation is `save_preferences` in `src-tauri/src/commands/preferences.rs`:
 
 ```rust
-// Write to temp file first, then rename (atomic)
-let temp_path = file_path.with_extension("tmp");
-std::fs::write(&temp_path, content)?;
-std::fs::rename(&temp_path, &file_path)?;
+// Write to a temporary file first, then rename (atomic operation)
+let temp_path = prefs_path.with_extension("tmp");
+std::fs::write(&temp_path, json_content)?;
+
+if let Err(rename_err) = std::fs::rename(&temp_path, &prefs_path) {
+    // Clean up the temp file to avoid leaving orphaned files on disk
+    let _ = std::fs::remove_file(&temp_path);
+    return Err(format!("Failed to finalize preferences file: {rename_err}"));
+}
 ```
 
 **Why**: If the app crashes during write, you either have the old file or the new file - never a corrupted partial file.
@@ -47,67 +50,78 @@ std::fs::rename(&temp_path, &file_path)?;
 
 ### Rust Side
 
+The struct lives in `src-tauri/src/types.rs` with a `Default` implementation (used when no file exists yet):
+
 ```rust
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct AppPreferences {
-    pub theme: String,
-    // Add new preferences here
+    pub theme: String,          // Legacy field, load-only
+    pub color_theme: String,
+    pub language: Option<String>,
+    pub output_device: Option<String>,
+    pub sample_rate: Option<u32>,
+    pub osc_targets: HashMap<String, String>,
+    pub recent_projects: Vec<String>,
+    pub project_folders: Vec<ProjectFolder>,
+    pub project_display_names: HashMap<String, String>,
+    pub project_manifest_names: HashMap<String, String>,
+    pub offered_utilities: Vec<String>, // Utilities once-offer record (v1.3.0, issue #55)
 }
 
 impl Default for AppPreferences {
     fn default() -> Self {
         Self {
             theme: "system".to_string(),
+            // ... every remaining field gets a neutral default
         }
     }
 }
 ```
 
+`save_preferences` (in `src-tauri/src/commands/preferences.rs`) validates values at the save boundary (`validate_theme`, `validate_color_theme`, `validate_sample_rate`), writes atomically, and updates an in-memory `PreferencesCache` so repeated loads skip the disk.
+
 ### React Side
 
+Every preference read and write goes through `src/lib/preferences.ts`. Loads degrade to `null` on error; saves are load-modify-write cycles serialized through one queue so overlapping patches cannot clobber each other:
+
 ```typescript
-// Frontend: typed commands + explicit status handling
-const result = await commands.loadPreferences()
-const prefs = result.status === 'ok' ? result.data : defaultPreferences
+// src/lib/preferences.ts (excerpt)
+export async function loadPreferences(): Promise<AppPreferences | null> {
+  const result = await commands.loadPreferences()
+  if (result.status === 'error') {
+    logger.warn('Failed to load preferences', { error: result.error })
+    return null
+  }
+  return result.data
+}
 
-export function useUpdatePreferences() {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: (preferences: AppPreferences) =>
-      commands.savePreferences(preferences),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['preferences'] })
-    },
+export async function updatePreferences(
+  patch: PreferencesPatch
+): Promise<void> {
+  return enqueueSave(async () => {
+    const prefs = await loadPreferences()
+    if (!prefs) return
+    await commands.savePreferences({ ...prefs, ...patch })
   })
 }
 ```
 
-## Emergency Recovery System
-
-For saving data before crashes or risky operations:
+Components consume it in an on-mount effect (see `AppShell.tsx`):
 
 ```typescript
-// Save emergency data
-await commands.saveEmergencyData({
-  filename: 'unsaved-work',
-  data: { content: userContent, timestamp: Date.now() },
-})
-
-// Load on startup
-const recoveryData = await commands.loadEmergencyData({
-  filename: 'unsaved-work',
-})
-if (recoveryData.status === 'ok' && recoveryData.data) {
-  // Show recovery dialog
-}
+useEffect(() => {
+  void loadPreferences().then(prefs => {
+    if (!prefs) return
+    // seed stores from the loaded values
+  })
+}, [])
 ```
-
-Recovery files are automatically cleaned up after 7 days via `cleanupOldRecoveryFiles`.
 
 ## Adding New Persistent Data
 
 ### 1. Define Rust struct
+
+In `src-tauri/src/types.rs`, with derives and a `Default`:
 
 ```rust
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
@@ -129,6 +143,14 @@ Follow the pattern in `src-tauri/src/commands/preferences.rs`:
 - `load_*` command with Default fallback
 - `save_*` command with atomic write
 
+Write inside Tauri's `app_data_dir()` — never to arbitrary paths. If a command accepts a user-supplied filename, validate it to prevent path traversal:
+
+```rust
+if filename.contains("..") || filename.contains("/") || filename.contains("\\") {
+    return Err("Invalid filename".to_string());
+}
+```
+
 ### 3. Register commands
 
 Add to `src-tauri/src/bindings.rs` and regenerate bindings:
@@ -137,32 +159,26 @@ Add to `src-tauri/src/bindings.rs` and regenerate bindings:
 npm run rust:bindings
 ```
 
-### 4. Create React hooks
+### 4. Load on the frontend
+
+There is no data-fetching hook layer. Load in the consuming component's on-mount effect (or a flow module in `src/lib/`) with explicit status handling:
 
 ```typescript
-export function useMyData() {
-  return useQuery({
-    queryKey: ['my-data'],
-    queryFn: async () => unwrapResult(await commands.loadMyData()),
+useEffect(() => {
+  let stale = false
+  commands.loadMyData().then(result => {
+    if (stale) return
+    if (result.status === 'error') {
+      setError(result.error)
+      return
+    }
+    setData(result.data)
   })
-}
+  return () => {
+    stale = true
+  }
+}, [])
 ```
-
-## Security
-
-### Filename Validation
-
-Always validate filenames to prevent path traversal:
-
-```rust
-if filename.contains("..") || filename.contains("/") || filename.contains("\\") {
-    return Err("Invalid filename".to_string());
-}
-```
-
-### Directory Permissions
-
-Use Tauri's `app_data_dir()` for safe storage locations - never write to arbitrary paths.
 
 ## SQLite Database (When Needed)
 

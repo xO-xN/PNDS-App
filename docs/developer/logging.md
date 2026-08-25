@@ -8,9 +8,9 @@ Simple logging setup for both Rust backend and TypeScript frontend.
 
 ```rust
 log::info!("Application starting up");
-log::debug!("Debug info: {}", some_value);
+log::debug!("Debug info: {some_value}");
 log::warn!("Something unexpected happened");
-log::error!("Error occurred: {}", error);
+log::error!("Error occurred: {error}");
 ```
 
 ### TypeScript (Frontend)
@@ -78,8 +78,8 @@ async fn save_data(data: MyData) -> Result<(), String> {
             Ok(())
         }
         Err(e) => {
-            log::error!("Failed to save data: {}", e);
-            Err(format!("Save failed: {}", e))
+            log::error!("Failed to save: {e}");
+            Err(format!("Save failed: {e}"))
         }
     }
 }

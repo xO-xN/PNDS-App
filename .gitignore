@@ -35,12 +35,8 @@ src-tauri/Frameworks/
 src-tauri/plugins/
 /Frameworks
 
-# Bundled example score projects: their dependencies and nested VCS
-# history stay out of this repository.
-utilities/*/node_modules/
-utilities/*/.git/
-
 # Unpacked utility tools staged for app bundling (npm run utilities:fetch)
-# and the download cache it keeps to skip re-fetching on rebuilds.
+# and the download cache it keeps to skip re-fetching on rebuilds. Tool
+# sources live in their own sibling repositories (see utilities.json).
 src-tauri/resources/utilities/
 .cache/

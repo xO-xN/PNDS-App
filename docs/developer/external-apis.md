@@ -2,16 +2,16 @@
 
 Patterns for calling external HTTP APIs from Tauri applications.
 
-> **Note:** HTTP client dependencies are not installed in this app. Install `reqwest` (Rust) and optionally `tauri-plugin-keyring` (for token storage) when your app needs external API calls.
+> **Note:** No HTTP client is installed in this app — not on the Rust side and not as a frontend wrapper. When a feature needs external HTTP, add a Rust-side command with `reqwest` (below), or consider `tauri-plugin-http` (see [tauri-plugins.md](./tauri-plugins.md)). For token storage, use the `keyring` crate (OS keychain) rather than plain files.
 
 ## Rust vs Frontend: When to Use Which
 
 **Default recommendation: Use Rust backend (reqwest)**
 
-| Approach         | Pros                                           | Cons                            |
-| ---------------- | ---------------------------------------------- | ------------------------------- |
-| Rust (reqwest)   | CORS bypass, secure token storage, type safety | More code per endpoint          |
-| Frontend (fetch) | Less boilerplate, familiar API                 | CORS restrictions, exposed keys |
+| Approach         | Pros                                           | Cons                                  |
+| ---------------- | ---------------------------------------------- | ------------------------------------- |
+| Rust (reqwest)   | CORS bypass, secure token storage, type safety | More code per endpoint                |
+| Frontend (fetch) | No extra dependencies, familiar API            | CSP must allow the host, exposed keys |
 
 ### Use Rust Backend For
 
@@ -26,12 +26,16 @@ Patterns for calling external HTTP APIs from Tauri applications.
 - Rapid prototyping before moving to Rust
 - Third-party SDKs requiring browser context
 
+The webview's `fetch` is subject to the app CSP: `connect-src` in `src-tauri/tauri.conf.json` currently allows only `'self'`, `tauri:`, `ipc:`, and `http://ipc.localhost` — a plain `fetch` to an external host fails until that host is added to `connect-src`.
+
 ## Setup
 
 ```bash
 # Rust HTTP client
 cd src-tauri && cargo add reqwest --features json,rustls-tls
 ```
+
+For simple cases, `tauri-plugin-http` (the `http` row in tauri-plugins.md's "Plugins to Consider Adding") is the lighter alternative.
 
 For secure token storage, see the Authentication section below.
 
@@ -79,43 +83,30 @@ pub async fn fetch_user(user_id: u32) -> Result<User, String> {
 }
 ```
 
-### React Service
+### Frontend: call the typed command directly
+
+There is no query-cache layer (no TanStack Query, no service hooks). Load on mount or in an event handler, with explicit status handling:
 
 ```typescript
-// Frontend integration (typed command call)
-export const userQueryKeys = {
-  all: ['users'] as const,
-  user: (id: number) => [...userQueryKeys.all, id] as const,
-}
+import { commands, type User } from '@/lib/tauri-bindings'
 
-export function useUser(userId: number) {
-  return useQuery({
-    queryKey: userQueryKeys.user(userId),
-    queryFn: async () => unwrapResult(await commands.fetchUser(userId)),
-    staleTime: 1000 * 60 * 5, // Cache for 5 minutes
+const [user, setUser] = useState<User | null>(null)
+const [error, setError] = useState<string | null>(null)
+
+useEffect(() => {
+  let stale = false
+  commands.fetchUser(userId).then(result => {
+    if (stale) return
+    if (result.status === 'error') {
+      setError(result.error)
+      return
+    }
+    setUser(result.data)
   })
-}
-
-export function useUpdateUser() {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: async ({
-      userId,
-      data,
-    }: {
-      userId: number
-      data: Partial<User>
-    }) => {
-      const result = await commands.updateUser(userId, data)
-      if (result.status === 'error') throw new Error(result.error)
-      return result.data
-    },
-    onSuccess: (_, { userId }) => {
-      queryClient.invalidateQueries({ queryKey: userQueryKeys.user(userId) })
-    },
-  })
-}
+  return () => {
+    stale = true
+  }
+}, [userId])
 ```
 
 ## Authentication
@@ -185,18 +176,18 @@ pub async fn fetch_protected_data() -> Result<Data, String> {
 
 ## Error Handling
 
-See [error-handling.md](./error-handling.md) for complete patterns. Key points for API calls:
+See [error-handling.md](./error-handling.md) for complete patterns. Key points for API calls — no query layer retries for you, so retry with an explicit budget and only for transient (network) failures:
 
 ```typescript
-// Configure retry for network errors, not validation errors
-const { data } = useQuery({
-  queryKey: ['api-data'],
-  queryFn: fetchData,
-  retry: (failureCount, error) => {
-    if (error.message.includes('validation')) return false
-    return failureCount < 3
-  },
-})
+// Retry transient network errors, not validation errors
+for (let attempt = 1; ; attempt++) {
+  const result = await commands.fetchUser(userId)
+  if (result.status === 'ok') return result.data
+  if (attempt >= 3 || isPermanent(result.error)) {
+    logger.warn('fetchUser failed', { attempt, error: result.error })
+    return null
+  }
+}
 ```
 
 ## Offline Handling

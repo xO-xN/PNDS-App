@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>Octo 头像版 — PNDS 章鱼指挥家（小尺寸图标用）</title>
+
+  <defs>
+    <clipPath id="mouthClip">
+      <path d="M 176 342 Q 232 360 292 340 Q 296 384 250 400 Q 232 404 214 400 Q 170 384 176 342 Z"/>
+    </clipPath>
+  </defs>
+
+  <!-- 画布：奶油底 + 黑框 -->
+  <rect width="512" height="512" fill="#fff1c9"/>
+  <rect x="14" y="14" width="484" height="484" fill="none" stroke="#000" stroke-width="10"/>
+
+  <g transform="rotate(-3 256 270)">
+
+    <!-- 硬投影 -->
+    <g transform="translate(13 13)">
+      <path d="M 118 352 C 96 300 96 200 148 138 C 196 80 316 80 364 138 C 416 200 416 300 394 352 Q 256 384 118 352 Z" fill="#000"/>
+      <path d="M 392 300 C 436 286 452 250 446 216" fill="none" stroke="#000" stroke-width="42" stroke-linecap="round"/>
+    </g>
+
+    <!-- 右侧小腕：举指挥棒 -->
+    <path d="M 392 300 C 436 286 452 250 446 216" fill="none" stroke="#000" stroke-width="42" stroke-linecap="round"/>
+    <path d="M 392 300 C 436 286 452 250 446 216" fill="none" stroke="#ff5722" stroke-width="28" stroke-linecap="round"/>
+    <line x1="446" y1="218" x2="486" y2="132" stroke="#000" stroke-width="9" stroke-linecap="round"/>
+
+    <!-- 头（占满画面） -->
+    <path d="M 118 352 C 96 300 96 200 148 138 C 196 80 316 80 364 138 C 416 200 416 300 394 352 Q 256 384 118 352 Z"
+          fill="#ff5722" stroke="#000" stroke-width="10"/>
+
+    <!-- 脸板 -->
+    <path d="M 140 240 L 372 240 L 388 300 L 350 360 L 162 360 L 124 300 Z"
+          fill="#fffbe0" stroke="#000" stroke-width="8"/>
+
+    <!-- 眉毛 -->
+    <rect x="166" y="212" width="72" height="14" fill="#000" transform="rotate(-10 202 219)"/>
+    <rect x="272" y="204" width="78" height="14" fill="#000" transform="rotate(14 311 211)"/>
+
+    <!-- Googly eyes -->
+    <circle cx="206" cy="286" r="40" fill="#fff" stroke="#000" stroke-width="8"/>
+    <circle cx="308" cy="280" r="47" fill="#fff" stroke="#000" stroke-width="8"/>
+    <circle cx="218" cy="279" r="15" fill="#000"/>
+    <circle cx="322" cy="268" r="18" fill="#000"/>
+    <rect x="211" y="268" width="11" height="11" fill="#fff"/>
+    <rect x="313" y="256" width="13" height="13" fill="#fff"/>
+
+    <!-- 嘴 -->
+    <path d="M 176 342 Q 232 360 292 340 Q 296 384 250 400 Q 232 404 214 400 Q 170 384 176 342 Z" fill="#000"/>
+    <g clip-path="url(#mouthClip)">
+      <rect x="198" y="346" width="18" height="14" fill="#fff"/>
+      <rect x="224" y="348" width="18" height="14" fill="#fff"/>
+      <rect x="250" y="345" width="18" height="14" fill="#fff"/>
+      <ellipse cx="234" cy="392" rx="26" ry="12" fill="#c2103c"/>
+    </g>
+
+    <!-- 腮红 -->
+    <rect x="138" y="316" width="30" height="18" fill="#c2103c" transform="rotate(-8 153 325)"/>
+    <rect x="344" y="308" width="30" height="18" fill="#c2103c" transform="rotate(8 359 317)"/>
+  </g>
+</svg>

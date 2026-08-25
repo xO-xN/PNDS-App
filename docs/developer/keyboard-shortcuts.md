@@ -6,23 +6,24 @@ Keyboard input reaches the app through two layers: native menu accelerators
 
 ## Current Shortcuts
 
-| Shortcut      | Action                                                         | Layer                             |
-| ------------- | -------------------------------------------------------------- | --------------------------------- |
-| Cmd+W         | Close-confirm flow (v1.1.1)                                    | Menu (`menu.ts`)                  |
-| Cmd+Q         | Quit-confirm flow with a live session (v1.1.2 T7)              | Menu (`menu.ts`)                  |
-| Cmd+= / Cmd+- | Monitor zoom in/out (v1.1.1)                                   | Menu (`menu.ts`)                  |
-| Cmd+0         | Monitor zoom: actual size (v1.1.1)                             | Menu (`menu.ts`)                  |
-| Cmd+Shift+R   | Reload monitor (v1.1.1)                                        | Menu (`menu.ts`)                  |
-| Cmd+M         | Master mute toggle (v1.2.2 #30)                                | Menu (`menu.ts`)                  |
-| Cmd+R         | Rename selected project / folder (v1.1.2)                      | Menu + Web (shared `startRename`) |
-| Ctrl+Cmd+F    | Toggle fullscreen (§7.4)                                       | Menu (`menu.ts`)                  |
-| Cmd (hold)    | Number badges + sidebar peek while running                     | Web (`use-command-keyboard.ts`)   |
-| Cmd+1..9      | Select the Nth visible project (v1.1.2)                        | Web (`use-command-keyboard.ts`)   |
-| Cmd+↓ / Cmd+↑ | Next/previous project in the visible order (v1.1.2 T7)         | Web (`use-command-keyboard.ts`)   |
-| Cmd+← / Cmd+→ | Previous/next folder view, clamped at the ends (v1.2.2)        | Web (`use-command-keyboard.ts`)   |
-| ← / →         | Switch folder views on the focused switch segment (v1.2.2 #28) | Web (`Sidebar.tsx` tabs)          |
-| Enter         | Load (idle) / Change-restart (pending)                         | Web (`SessionActionButton.tsx`)   |
-| Esc           | Close-project confirmation (v1.1.2 T7)                         | Web (`SessionActionButton.tsx`)   |
+| Shortcut      | Action                                                                                                       | Layer                             |
+| ------------- | ------------------------------------------------------------------------------------------------------------ | --------------------------------- |
+| Cmd+W         | Close-confirm flow (v1.1.1); #56: dispatches on the FOCUSED window (closes the help center when it is front) | Menu (`menu.ts`)                  |
+| Cmd+Shift+/   | Open the help center on search (= ⌘?, same physical chord; v1.3.0 #56)                                       | Menu (`menu.ts`)                  |
+| Cmd+Q         | Quit-confirm flow with a live session (v1.1.2 T7)                                                            | Menu (`menu.ts`)                  |
+| Cmd+= / Cmd+- | Monitor zoom in/out (v1.1.1)                                                                                 | Menu (`menu.ts`)                  |
+| Cmd+0         | Monitor zoom: actual size (v1.1.1)                                                                           | Menu (`menu.ts`)                  |
+| Cmd+Shift+R   | Reload monitor (v1.1.1)                                                                                      | Menu (`menu.ts`)                  |
+| Cmd+M         | Master mute toggle (v1.2.2 #30)                                                                              | Menu (`menu.ts`)                  |
+| Cmd+R         | Rename selected project / folder (v1.1.2)                                                                    | Menu + Web (shared `startRename`) |
+| Ctrl+Cmd+F    | Toggle fullscreen (app-behavior Window 与全屏)                                                               | Menu (`menu.ts`)                  |
+| Cmd (hold)    | Number badges + sidebar peek while running                                                                   | Web (`use-command-keyboard.ts`)   |
+| Cmd+1..9      | Select the Nth visible project (v1.1.2)                                                                      | Web (`use-command-keyboard.ts`)   |
+| Cmd+↓ / Cmd+↑ | Next/previous project in the visible order (v1.1.2 T7)                                                       | Web (`use-command-keyboard.ts`)   |
+| Cmd+← / Cmd+→ | Previous/next folder view, clamped at the ends (v1.2.2)                                                      | Web (`use-command-keyboard.ts`)   |
+| ← / →         | Switch folder views on the focused switch segment (v1.2.2 #28)                                               | Web (`Sidebar.tsx` tabs)          |
+| Enter         | Load (idle) / Change-restart (pending)                                                                       | Web (`SessionActionButton.tsx`)   |
+| Esc           | Close-project confirmation (v1.1.2 T7)                                                                       | Web (`SessionActionButton.tsx`)   |
 
 ## Web Cmd Layer (v1.1.2)
 
@@ -39,7 +40,8 @@ Its behaviors (spec issue #4, later additions noted):
 - **Cmd+↓/Cmd+↑** → moves the selection one project along the visible
   order through `moveProjectSelection` (`src/lib/project-select.ts`), with
   the same click-equal semantics as Cmd+1..9 (idle selects, a running
-  session goes through the §8.3 switch confirmation). The ends clamp —
+  session goes through the switch confirmation, app-behavior「状态与
+  Session」). The ends clamp —
   never wrap — and when the current project sits inside a folder while the
   user is at the top level, the move drills into that folder first and
   continues inside it ("下一首曲子" mental model, v1.1.2 T7).
@@ -130,7 +132,7 @@ loses focus.
 ## Mute Shortcut (v1.2.2, issue #30 feedback)
 
 Every volume entry routes through `src/lib/volume-control.ts` — the one
-module that owns the §7.5 fixed-gain derivation, the `volumeAdjustable`
+module that owns the fixed-gain derivation (runtime-contract §7.5), the `volumeAdjustable`
 gate, and the `setMasterVolume` forwarding — so the slider, the speaker
 button and the menu item can never drift. All entries are no-ops unless
 a live internal ≤2-channel session is running.
@@ -154,7 +156,7 @@ replaces it with a custom `quit-app` MenuItem that calls `requestQuit()`
 same `shouldConfirmClose` gate as ⌘W) the app-styled `QuitConfirmDialog`
 opens; its confirm stops the session and then exits. Without a live
 session the app exits immediately — `markQuitting()` first so the exit
-never waits for a fade (§7.4), then the `quitApp` Rust command, whose
+never waits for a fade (app-behavior「Window 与全屏」), then the `quitApp` Rust command, whose
 `ExitRequested` handler performs the session teardown.
 
 ```typescript

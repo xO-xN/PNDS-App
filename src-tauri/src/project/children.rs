@@ -1,6 +1,6 @@
 //! Child-process registry: unified lifecycle for score-server (Node) and
 //! audio-server (scsynth) processes. Owns the session-children bookkeeping
-//! (§8.2) and the SIGTERM → grace → SIGKILL escalation policy.
+//! (§11) and the SIGTERM → grace → SIGKILL escalation policy.
 //!
 //! Formerly these responsibilities were split between `session.rs`
 //! (`stop_child_gracefully` + record calls) and `preflight.rs`
@@ -12,7 +12,7 @@ use std::path::PathBuf;
 use std::process::{Child, Command};
 use std::time::{Duration, Instant};
 
-/// Default escalation window (§8.2). Overridable per call.
+/// Default escalation window (§11). Overridable per call.
 pub const SHUTDOWN_GRACE_WINDOW: Duration = Duration::from_secs(5);
 /// Orphan cleanup and port release use a shorter window.
 pub(crate) const ORPHAN_GRACE_WINDOW: Duration = Duration::from_secs(2);
@@ -31,12 +31,12 @@ pub struct SessionChild {
 // Shared kill escalation
 // ---------------------------------------------------------------------------
 
-/// §8.2: graceful stop — SIGTERM, poll, escalate to SIGKILL on timeout.
+/// §11: graceful stop — SIGTERM, poll, escalate to SIGKILL on timeout.
 /// The **single** implementation of the policy for processes the App owns
 /// (a live `Child` handle).
 ///
 /// Returns `true` only when the child was **reaped** — i.e. the process is
-/// provably gone. An unconfirmed kill (§9.3) means the caller must keep the
+/// provably gone. An unconfirmed kill (§11) means the caller must keep the
 /// registry's ownership record so the next start re-runs the targeted
 /// orphan cleanup before it checks ports.
 #[must_use]
@@ -63,7 +63,7 @@ pub fn kill_escalate(child: &mut Child, pid: u32, timeout: Duration) -> bool {
     }
 }
 
-/// The same §8.2 escalation for a pid the App does NOT own a handle of
+/// The same §11 escalation for a pid the App does NOT own a handle of
 /// (port release, and the orphan cleanup below): SIGTERM → poll → SIGKILL.
 /// The orphan cleanup inlines this flow only because it also rewrites the
 /// record file between the two signals; everything else goes through here.
@@ -154,7 +154,7 @@ impl ChildRegistry {
             .map_err(|e| format!("Failed to write session children file: {e}"))
     }
 
-    /// §8.2 / §9.3: terminates child processes left behind by an abnormal
+    /// §11 / §11: terminates child processes left behind by an abnormal
     /// previous exit or by a generation whose teardown could not confirm
     /// the kill. Returns how many were terminated.
     ///
@@ -212,7 +212,7 @@ impl ChildRegistry {
                     if wait_until_gone(child.pid, ORPHAN_GRACE_WINDOW) {
                         terminated += 1;
                     } else {
-                        // §9.3: still alive after SIGKILL. Keep the ownership
+                        // §11: still alive after SIGKILL. Keep the ownership
                         // record — the port it holds is ours, and the next
                         // start must retry this cleanup before preflight.
                         log::warn!(
@@ -265,7 +265,7 @@ mod tests {
     use super::*;
     use std::process::Command;
 
-    /// The no-live-session callers (app startup, the §9.3 retry path).
+    /// The no-live-session callers (app startup, the §11 retry path).
     fn no_live_session() -> HashSet<u32> {
         HashSet::new()
     }
@@ -278,7 +278,7 @@ mod tests {
         assert!(child.try_wait().unwrap().is_some());
     }
 
-    /// §9.3: an unmatched marker never gets killed, and the record is
+    /// §11: an unmatched marker never gets killed, and the record is
     /// dropped (the pid was recycled by an unrelated process).
     #[test]
     fn cleanup_skips_pids_whose_command_no_longer_matches() {
@@ -294,7 +294,7 @@ mod tests {
         assert!(kill_escalate(&mut child, pid, Duration::from_secs(2)));
     }
 
-    /// §9.3: a recorded, still-matching orphan is terminated and the record
+    /// §11: a recorded, still-matching orphan is terminated and the record
     /// file is removed once nothing is left unresolved.
     ///
     /// The orphan is spawned **detached** (re-parented to launchd) so it

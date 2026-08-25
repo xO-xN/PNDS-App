@@ -110,7 +110,7 @@ pub fn run() {
                 app.package_info().name
             );
 
-            // §8.2: terminate child processes left behind by an abnormal
+            // terminate child processes left behind by an abnormal
             // previous exit (crash, force-quit). Best-effort at startup.
             // No session can be live yet, so nothing is exempt.
             if let Ok(dir) = commands::project::app_data_dir(app.handle()) {
@@ -122,7 +122,7 @@ pub fn run() {
                 }
             }
 
-            // §7.2: prewarm the audio subsystem in the background so the
+            // prewarm the audio subsystem in the background so the
             // first real session load boots scsynth on a warm CoreAudio
             // (coreaudiod's one-time init runs here, off the critical
             // path, instead of during the first load).
@@ -132,7 +132,7 @@ pub fn run() {
             // NOTE: Application menu is built from JavaScript for i18n support
             // See src/lib/menu.ts for the menu implementation
 
-            // §7.4: the native window corner radius must match the shared
+            // the native window corner radius must match the shared
             // frontend token (16px) so the window's real edge aligns with
             // the content rounding. Fullscreen windows are square. The
             // square-corners flag is still false here — the frontend sets
@@ -170,7 +170,7 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app_handle, event| match &event {
-            // §7.4: keep the cached fullscreen flag in sync regardless of
+            // keep the cached fullscreen flag in sync regardless of
             // how the user left fullscreen (menu/⌃⌘F/sidebar command, the
             // native green button, or Escape). Without this, exiting via
             // the native controls would leave the sidebar's custom traffic
@@ -192,7 +192,7 @@ pub fn run() {
                         use tauri::Emitter;
                         let _ = app_handle.emit("pnds:window", state.snapshot());
                         log::info!("Fullscreen state synced via resize: {is_fs}");
-                        // §7.4: square the native corners in fullscreen and
+                        // square the native corners in fullscreen and
                         // restore the 16px radius on the way back (#41:
                         // unless the square-corners theme flag is set).
                         crate::window::sync_corner_radius(
@@ -258,7 +258,7 @@ pub fn run() {
                         log::warn!("Failed to save window state: {e}");
                     }
 
-                    // §7.4: fade out, then hide — unless the app is
+                    // fade out, then hide — unless the app is
                     // quitting (⌘Q), which hides immediately.
                     if let Some(window) = app_handle.get_webview_window("main") {
                         let quitting = {
@@ -289,7 +289,7 @@ pub fn run() {
             RunEvent::Reopen { .. } => {
                 if let Some(window) = app_handle.get_webview_window("main") {
                     if !window.is_visible().unwrap_or(true) {
-                        // §7.4: fade in on reopen. Start fully transparent
+                        // fade in on reopen. Start fully transparent
                         // so the ramp is visible, then restore state.
                         crate::window::set_opacity_public(&window, 0.0);
                         let _ = window.show();
@@ -360,7 +360,7 @@ pub fn run() {
             RunEvent::Exit => {
                 log::info!("Application exiting — performing cleanup");
 
-                // §8.2: never leave an orphaned score server behind.
+                // never leave an orphaned score server behind.
                 {
                     let session = app_handle.state::<crate::project::session::SessionManager>();
                     if session.has_active_session() {

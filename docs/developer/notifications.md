@@ -79,16 +79,18 @@ function SaveButton() {
 }
 ```
 
-### Command Palette Integration
+### Testing Notifications
 
-The notification system includes test commands accessible via the command palette (Cmd+K):
+To exercise both paths from code (e.g. temporarily in a component or effect):
 
-- **Test Success Toast** - Show success toast
-- **Test Error Toast** - Show error toast
-- **Test Info Toast** - Show info toast
-- **Test Warning Toast** - Show warning toast
-- **Test Native Success Notification** - Show native notification
-- **Test Native Info Notification** - Show native notification with details
+```typescript
+import { notify, notifications } from '@/lib/notifications'
+
+notifications.success('Test', 'Toast works')
+await notify('Native test', 'Sent as a native notification', { native: true })
+```
+
+If the native call fails, the toast fallback fires — a native notification that never appears while the fallback toast does points at macOS notification permissions.
 
 ### Advanced Usage
 
@@ -144,7 +146,7 @@ Native notifications require the `notification:default` permission in `src-tauri
 2. **Keep messages concise**: Short titles and clear messages work best
 3. **Use appropriate types**: Match notification type to the action result
 4. **Handle errors**: The system includes automatic fallback handling
-5. **Test both modes**: Use the command palette test commands to verify functionality
+5. **Test both modes**: Trigger a toast and a native notification from code before relying on them
 
 ## Troubleshooting
 
@@ -157,14 +159,6 @@ Native notifications require the `notification:default` permission in `src-tauri
 
 ### Toast Notifications Not Appearing
 
-1. **Check Toaster component**: Ensure `<Toaster />` is rendered in MainWindow
+1. **Check Toaster component**: Ensure `<Toaster />` is rendered in AppShell
 2. **Check theme**: Toasts should adapt to current theme automatically
 3. **Check positioning**: Default position is bottom-right
-
-### Command Palette Tests
-
-Use the built-in test commands to verify both toast and native notifications are working correctly:
-
-1. Open command palette (Cmd+K)
-2. Search for "notification" or "toast"
-3. Run test commands to verify functionality

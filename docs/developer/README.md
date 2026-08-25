@@ -1,67 +1,42 @@
-# Developer Documentation
+# 开发文档
 
-Technical documentation for building and extending this app. These docs describe established patterns and are intended for both human developers and AI coding agents.
+App 开发的规则层：既定模式与系统做法，按问题检索——查什么 → 读哪个文件。平台契约（工程格式 / 运行协议 / `.pnds`）的索引在 [`docs/reference/README.md`](../reference/README.md)；**App 产品行为与验收 → [app-behavior.md](./app-behavior.md)**。
 
-Before implementation, read the applicable platform specifications:
+## 架构与状态
 
-- [Score Project Specification](../PNDS_SCORE_PROJECT_SPECIFICATION.md)
-- [Runtime Contract](../PNDS_RUNTIME_CONTRACT.md)
-- [App Requirements](../PNDS_APP_REQUIREMENTS.md)
-- [Project Bundle Specification](../PNDS_PROJECT_BUNDLE_SPECIFICATION.md)
+- **App 的心智模型、分层与系统总览** → [architecture-guide.md](./architecture-guide.md)
+- **Rust 侧模块组织与约定** → [rust-architecture.md](./rust-architecture.md)
+- **useState / Zustand / 持久化怎么选，selector 语法与 getState** → [state-management.md](./state-management.md)
+- **错误如何传播、用户反馈与重试模式** → [error-handling.md](./error-handling.md)
 
-## Architecture & Patterns
+## 命令与系统桥
 
-| Document                                      | Description                                             |
-| --------------------------------------------- | ------------------------------------------------------- |
-| [Architecture Guide](./architecture-guide.md) | High-level overview, mental models, system architecture |
-| [Rust Architecture](./rust-architecture.md)   | Rust module organization and patterns                   |
-| [State Management](./state-management.md)     | Two-layer state onion, Zustand, persistence pattern     |
-| [Error Handling](./error-handling.md)         | Error propagation, user feedback, retry patterns        |
+- **新增 / 使用类型安全的 Tauri command（tauri-specta 工作流）** → [tauri-commands.md](./tauri-commands.md)
+- **原生菜单构建与 i18n** → [menus.md](./menus.md)
+- **全局快捷键、修饰键与确认流** → [keyboard-shortcuts.md](./keyboard-shortcuts.md)
+- **Tauri 插件的使用与配置** → [tauri-plugins.md](./tauri-plugins.md)
 
-## Core Systems
+## UI 与文案
 
-| Document                                      | Description                                     |
-| --------------------------------------------- | ----------------------------------------------- |
-| [Command System](./command-system.md)         | Unified action dispatch, command registration   |
-| [Keyboard Shortcuts](./keyboard-shortcuts.md) | Global shortcut handling, platform modifiers    |
-| [Menus](./menus.md)                           | Native menu building with i18n                  |
-| [Quick Panes](./quick-panes.md)               | Multi-window quick entry pattern                |
-| [Tauri Commands](./tauri-commands.md)         | Type-safe Rust-TypeScript bridge (tauri-specta) |
-| [Tauri Plugins](./tauri-plugins.md)           | Plugin usage and configuration                  |
+- **CSS 架构、颜色 token、shadcn/ui 用法** → [ui-patterns.md](./ui-patterns.md)
+- **翻译系统、语言切换、RTL 支持** → [i18n-patterns.md](./i18n-patterns.md)
+- **toast 与原生通知** → [notifications.md](./notifications.md)
 
-## UI & UX
+## 数据与外部交互
 
-| Document                                   | Description                                 |
-| ------------------------------------------ | ------------------------------------------- |
-| [UI Patterns](./ui-patterns.md)            | CSS architecture, shadcn/ui components      |
-| [Internationalization](./i18n-patterns.md) | Translation system, RTL support             |
-| [Notifications](./notifications.md)        | Toast and native notifications              |
-| [Cross-Platform](./cross-platform.md)      | Platform detection, OS-specific adaptations |
+- **文件存储模式与原子写入** → [data-persistence.md](./data-persistence.md)
+- **HTTP 请求与外部 API 调用** → [external-apis.md](./external-apis.md)
+- **帮助语料装载、运行时渲染与离线搜索** → [help-center.md](./help-center.md)
 
-## Data & Storage
+## 质量与工具
 
-| Document                                  | Description                                  |
-| ----------------------------------------- | -------------------------------------------- |
-| [Data Persistence](./data-persistence.md) | File storage patterns, atomic writes, SQLite |
-| [External APIs](./external-apis.md)       | HTTP API calls, authentication, caching      |
+- **check:all 里每个工具的分工** → [static-analysis.md](./static-analysis.md)
+- **怎么写 ast-grep 规则** → [writing-ast-grep-rules.md](./writing-ast-grep-rules.md)
+- **测试模式与 Tauri mock** → [testing.md](./testing.md)
+- **前端体积管理** → [bundle-optimization.md](./bundle-optimization.md)
+- **Rust / TS 日志** → [logging.md](./logging.md)
+- **本目录文档的写法与更新规则** → [writing-docs.md](./writing-docs.md)
 
-## Quality & Tooling
+## 发布
 
-| Document                                              | Description                                             |
-| ----------------------------------------------------- | ------------------------------------------------------- |
-| [Static Analysis](./static-analysis.md)               | ESLint, Prettier, ast-grep, knip, jscpd, React Compiler |
-| [Writing ast-grep Rules](./writing-ast-grep-rules.md) | AI reference for creating custom rules                  |
-| [Testing](./testing.md)                               | Test patterns, Tauri mocking                            |
-| [Bundle Optimization](./bundle-optimization.md)       | Bundle size management                                  |
-| [Logging](./logging.md)                               | Rust and TypeScript logging                             |
-| [Writing Docs](./writing-docs.md)                     | Guide for creating and maintaining these docs           |
-
-## Release & Distribution
-
-| Document                  | Description                            |
-| ------------------------- | -------------------------------------- |
-| [Releases](./releases.md) | Release process, signing, auto-updates |
-
----
-
-**Updating these docs:** When adding new patterns or systems, update the relevant doc file and add a link here if creating a new document.
+- **发布流程、签名、自动更新与内置工具拉取** → [releases.md](./releases.md)

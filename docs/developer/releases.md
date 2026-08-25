@@ -9,7 +9,7 @@ The release system provides:
 - Automated GitHub Actions workflow for building releases
 - Version management script for updating all version files
 - Auto-updater for seamless user updates
-- Cross-platform builds (macOS, Windows, Linux)
+- macOS (Apple Silicon) builds
 
 ## Initial Setup
 
@@ -17,7 +17,7 @@ The release system provides:
 
 ```bash
 npm install -g @tauri-apps/cli
-tauri signer generate -w ~/.tauri/myapp.key
+tauri signer generate -w ~/.tauri/<updater-key>.key
 # Outputs private key (saved) and public key (displayed)
 ```
 
@@ -25,7 +25,7 @@ tauri signer generate -w ~/.tauri/myapp.key
 
 Add these secrets (Settings → Secrets and variables → Actions):
 
-- `TAURI_PRIVATE_KEY`: Content of `~/.tauri/myapp.key`
+- `TAURI_PRIVATE_KEY`: Content of `~/.tauri/<updater-key>.key`
 - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`: Password you set (if any)
 
 ### 3. Update Configuration
@@ -40,7 +40,7 @@ Add these secrets (Settings → Secrets and variables → Actions):
       "endpoints": [
         "https://github.com/xO-xN/PNDS-App/releases/latest/download/latest.json"
       ],
-      "dialog": false,
+      "dialog": true,
       "pubkey": "YOUR_PUBLIC_KEY_FROM_STEP_1"
     }
   }
@@ -78,7 +78,7 @@ Then GitHub Actions will:
    mounted SuperCollider dmg's `sclang`. The built-in utility tools are
    staged the same way by `npm run utilities:fetch`: the tool repos release
    `.pnds` bundles themselves (one project root + `pnds-bundle.json`, per the
-   Project Bundle Specification), and the script downloads each pinned
+   [Project Bundle Specification](../reference/pnds-bundle.md)), and the script downloads each pinned
    release (registry: `utilities.json`), fails the build on a sha256
    mismatch or a malformed bundle layout, and unpacks the verified project
    into the gitignored `src-tauri/resources/utilities/<id>/` (stable path,
@@ -87,7 +87,7 @@ Then GitHub Actions will:
    `Contents/Resources/utilities`, where `builtinUtilities` resolves them
    for the Utilities folder. The app runs them in place; there is no
    first-run install.
-2. Build the app for all platforms
+2. Build the app for macOS (Apple Silicon)
 3. Create a draft release
 4. Generate `latest.json` for auto-updates
 5. Upload all installers and signatures
@@ -137,8 +137,9 @@ App Launch → (5s delay) → Check GitHub → Show Dialog → Download → Inst
 
 ### Implementation
 
+The auto-updater lives in `src/App.tsx` (simplified):
+
 ```typescript
-// src/App.tsx
 import { check } from '@tauri-apps/plugin-updater'
 import { relaunch } from '@tauri-apps/plugin-process'
 
@@ -146,21 +147,16 @@ useEffect(() => {
   const checkForUpdates = async () => {
     try {
       const update = await check()
-      if (update) {
-        const shouldUpdate = confirm(`Update available: ${update.version}...`)
-        if (shouldUpdate) {
-          await update.downloadAndInstall()
-          if (confirm('Restart to apply update?')) {
-            await relaunch()
-          }
-        }
+      if (update && confirm(`Update available: ${update.version}…`)) {
+        await update.downloadAndInstall(/* progress is logged */)
+        if (confirm('Restart to apply the update?')) await relaunch()
       }
     } catch {
       // Silent fail - don't bother user with network issues
     }
   }
 
-  const timer = setTimeout(checkForUpdates, 5000)
+  const timer = setTimeout(() => void checkForUpdates(), 5000)
   return () => clearTimeout(timer)
 }, [])
 ```
@@ -169,16 +165,16 @@ useEffect(() => {
 
 Users can manually check via:
 
-- **Menu**: App → Check for Updates
-- **Command Palette**: Cmd+K → "Check for Updates"
+- **Menu**: PNDS → Check for Updates...
+- **Settings**: Settings → About → Check for Updates
+
+Both call `checkForUpdates()` (`src/lib/updater.ts`), which reports the result via toast notifications; installing an update keeps the auto-updater flow in `App.tsx`.
 
 ## Release Artifacts
 
 Each release creates:
 
-- **macOS**: `.dmg` installer
-- **Windows**: `.msi` installer (when configured)
-- **Linux**: `.deb` and `.AppImage` (when configured)
+- **macOS (Apple Silicon)**: `.dmg` installer and `.app` bundle (built with `--bundles app,dmg` on `macos-latest`)
 - **Auto-updater**: `latest.json` manifest and `.sig` signature files
 
 ## Security

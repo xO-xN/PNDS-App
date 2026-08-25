@@ -1,4 +1,4 @@
-//! Session log files (§11): one file per project session, kept in
+//! Session log files (app-behavior「日志与清理」): one file per project session, kept in
 //! `app_data_dir/logs/`. Metadata header, per-line timestamps, stdout/stderr
 //! interleaved from both children, and a stop footer. Files are rotated —
 //! the last 20 are kept; older files are removed on session start.

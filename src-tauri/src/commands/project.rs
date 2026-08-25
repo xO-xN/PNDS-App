@@ -1,7 +1,8 @@
 //! Project-related commands: preflight validation and orphan cleanup.
 //!
 //! Implements the startup sequence stage that runs before any process is
-//! spawned (docs/PNDS_APP_REQUIREMENTS.md §4, §5, §7, §8.2).
+//! spawned (docs/reference/runtime-contract.md §8 steps 1–2 and §11
+//! orphan cleanup; preflight checklist in docs/developer/app-behavior.md).
 
 use std::path::PathBuf;
 use tauri::{AppHandle, Manager, State};
@@ -35,7 +36,7 @@ pub async fn cleanup_orphaned_processes(
     crate::project::children::ChildRegistry::new(dir).cleanup_orphans(&live_pids)
 }
 
-/// Full preflight for a candidate project directory (§8.1 step 1):
+/// Full preflight for a candidate project directory (§8 step 2):
 /// orphan cleanup → manifest validation → dependency check → port check.
 /// Returns the validated manifest so the frontend can show project info.
 ///
@@ -57,7 +58,7 @@ pub async fn preflight_project(
 
     let live_pids = state.active_child_pids();
 
-    // §8.2: stale children must be gone before port checks are meaningful.
+    // §11: stale children must be gone before port checks are meaningful.
     let dir = app_data_dir(&app)?;
     let terminated =
         crate::project::children::ChildRegistry::new(dir.clone()).cleanup_orphans(&live_pids)?;
@@ -80,9 +81,9 @@ pub async fn preflight_project(
     Ok(manifest)
 }
 
-/// Starts the score server of a validated project (§8.1). Progress and
+/// Starts the score server of a validated project (§8). Progress and
 /// health updates are delivered via `pnds:session` events. `osc_target` is
-/// required (and validated) only for external mode (§6.6).
+/// required (and validated) only for external mode (§9).
 #[tauri::command]
 #[specta::specta]
 pub async fn start_project(
@@ -97,7 +98,7 @@ pub async fn start_project(
     state.start(app, dir, path, mode, lan_ip, osc_target)
 }
 
-/// Stops the running score server (§8.2). Idempotent.
+/// Stops the running score server (§11). Idempotent.
 #[tauri::command]
 #[specta::specta]
 pub async fn stop_project(app: AppHandle, state: State<'_, SessionManager>) -> Result<(), String> {
@@ -114,7 +115,7 @@ pub async fn get_session_state(
     Ok(state.snapshot())
 }
 
-/// §6.4: set the master volume (0-100, dB-linear; live via OSC in internal
+/// §7.5: set the master volume (0-100, dB-linear; live via OSC in internal
 /// mode). External/none modes store the value but apply nothing.
 #[tauri::command]
 #[specta::specta]
@@ -126,7 +127,7 @@ pub async fn set_master_volume(
     state.set_master_volume(&app, percent)
 }
 
-/// Usable LAN IPv4 addresses (§7). The user must choose when more than
+/// Usable LAN IPv4 addresses (§4). The user must choose when more than
 /// one exists; loopback is never offered.
 #[tauri::command]
 #[specta::specta]
@@ -167,7 +168,7 @@ pub async fn check_port_status(port: u16) -> Result<PortStatus, String> {
 }
 
 /// v1.2.0 (issue #14): release an occupied port — SIGTERM → grace → SIGKILL
-/// on the freshly-resolved occupant (same escalation as §8.2 child cleanup).
+/// on the freshly-resolved occupant (same escalation as §11 child cleanup).
 /// Returns the port's post-release status; the caller refreshes from it.
 #[tauri::command]
 #[specta::specta]

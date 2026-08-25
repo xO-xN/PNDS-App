@@ -1,6 +1,6 @@
 //! scsynth process management, OSC control, and the App master stage.
-//! See `docs/PNDS_RUNTIME_CONTRACT.md` §7, §8 and
-//! `docs/PNDS_APP_REQUIREMENTS.md` §6.
+//! See `docs/reference/runtime-contract.md` §7, §8 and the App-side
+//! audio host rules in `docs/developer/app-behavior.md` (音频 Host 行为).
 //!
 //! Signal path (internal mode, §7.3/§7.4):
 //!   project synths → private buses B..B+N-1 → K mono pndsMaster instances
@@ -273,7 +273,7 @@ pub const DEFAULT_VOLUME_PERCENT: f32 = 80.0;
 const SCSYNTH_BOOT_TIMEOUT: Duration = Duration::from_secs(10);
 const OSC_REPLY_TIMEOUT: Duration = Duration::from_millis(1500);
 
-/// Locates the bundled scsynth binary. V1 is Apple Silicon only (§2).
+/// Locates the bundled scsynth binary. V1 is Apple Silicon only.
 pub fn scsynth_binary_path() -> Result<PathBuf, String> {
     const TRIPLE: &str = "aarch64-apple-darwin";
     let name = format!("scsynth-{TRIPLE}");
@@ -324,7 +324,7 @@ pub fn master_synthdef_path() -> Result<PathBuf, String> {
 }
 
 /// Locates the bundled UGen plugins directory (passed via -U so the App
-/// never depends on the host's SuperCollider installation, §6.2).
+/// never depends on the host's SuperCollider installation.
 pub fn plugins_dir() -> Result<PathBuf, String> {
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
@@ -389,7 +389,7 @@ pub fn scsynth_args(
 
 /// Spawns scsynth with the §7.2 flags and returns the child (stdout/stderr
 /// are wired into the session output tail by the caller). `device` selects
-/// the output via -H (§6.5); None uses the system default.
+/// the output via -H (app-behavior「音频 Host 行为」); None uses the system default.
 ///
 /// We bundle SC 3.14.x because 3.13's -H opened devices for input even with
 /// `-i 0`, which broke output-only devices (built-in speakers, TVs). The
@@ -785,7 +785,7 @@ pub fn volume_percent_to_gain(percent: f32) -> f32 {
     10f32.powf(db / 20.0)
 }
 
-/// §6.6: validate an external OSC target in `host:port` form.
+/// §9: validate an external OSC target in `host:port` form.
 pub fn validate_osc_target(target: &str) -> Result<(), String> {
     let (host, port) = target
         .rsplit_once(':')

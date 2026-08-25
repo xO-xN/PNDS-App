@@ -8,11 +8,7 @@ Patterns for consistent error handling across Rust and TypeScript.
 Rust Command (Result<T, E>) → tauri-specta → TypeScript discriminated union → UI
 ```
 
-Rust `Result<T, E>` types become TypeScript discriminated unions:
-
-```typescript
-type Result<T, E> = { status: 'ok'; data: T } | { status: 'error'; error: E }
-```
+Rust `Result<T, E>` types become TypeScript discriminated unions — every command that can fail returns `{ status: 'ok', data }` or `{ status: 'error', error }`. The exact `Result` type definition (and the `unwrapResult` helper) is documented in [tauri-commands.md](./tauri-commands.md).
 
 ## Rust Error Types
 
@@ -177,36 +173,36 @@ For async Tauri command errors, use explicit `status` handling (or
 For multi-step operations, rollback on failure:
 
 ```typescript
-// ✅ GOOD: Rollback on failure
+// ✅ GOOD: Rollback on failure — direct awaits, manual restore
 const handleChange = async (newValue: string) => {
   const oldValue = currentValue
 
-  // Step 1: Update backend
+  // Step 1: Update backend via the typed command
   const result = await commands.updateValue(newValue)
   if (result.status === 'error') {
     toast.error('Update failed')
     return
   }
 
-  // Step 2: Persist
-  try {
-    await savePreferences.mutateAsync({ ...prefs, value: newValue })
-  } catch {
-    // Rollback step 1
-    await commands.updateValue(oldValue)
+  // Step 2: Persist via a direct await; restore the previous value on failure
+  const save = await commands.savePreferences({ ...prefs, value: newValue })
+  if (save.status === 'error') {
+    await commands.updateValue(oldValue) // Rollback step 1
     toast.error('Save failed, changes reverted')
   }
 }
 ```
 
+(Preference writes normally go through `updatePreferences` in `@/lib/preferences`, which serializes saves — reach for this two-step pattern only when an operation spans a backend change and a persistence change.)
+
 ## Quick Reference
 
-| Scenario               | Rust Error Type | TypeScript Pattern   | User Feedback    |
-| ---------------------- | --------------- | -------------------- | ---------------- |
-| Simple command         | `String`        | if/else + toast      | Toast on error   |
-| Multiple failure modes | Structured enum | Match on `.type`     | Context-specific |
-| Data fetching          | Either          | `unwrapResult`       | Query error UI   |
-| Optional feature       | Either          | Graceful degradation | Silent fallback  |
-| Critical operation     | Structured enum | Explicit + rollback  | Toast + recovery |
+| Scenario               | Rust Error Type | TypeScript Pattern       | User Feedback    |
+| ---------------------- | --------------- | ------------------------ | ---------------- |
+| Simple command         | `String`        | if/else + toast          | Toast on error   |
+| Multiple failure modes | Structured enum | Match on `.type`         | Context-specific |
+| Data loading           | Either          | On-mount effect + status | Inline error UI  |
+| Optional feature       | Either          | Graceful degradation     | Silent fallback  |
+| Critical operation     | Structured enum | Explicit + rollback      | Toast + recovery |
 
 See also: [tauri-commands.md](./tauri-commands.md) for Result type patterns, [logging.md](./logging.md) for logging best practices.

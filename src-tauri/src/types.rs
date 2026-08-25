@@ -30,7 +30,7 @@ pub struct AppPreferences {
     /// User's preferred language (V1 ships English-only)
     /// If None, uses system locale detection
     pub language: Option<String>,
-    /// §6.5: chosen CoreAudio output device name. `None` = system default.
+    /// Chosen CoreAudio output device name. `None` = system default.
     /// This is an app-local preference and never touches project manifests.
     #[serde(default)]
     pub output_device: Option<String>,
@@ -41,11 +41,11 @@ pub struct AppPreferences {
     /// never touches project manifests.
     #[serde(default)]
     pub sample_rate: Option<u32>,
-    /// §6.6: last valid external OSC target per project id.
+    /// Last valid external OSC target per project id.
     #[serde(default)]
     pub osc_targets: HashMap<String, String>,
-    /// §4.1: recently-opened (and trusted) project paths. Appended on first
-    /// trust, kept across launches. Removing from the sidebar drops it here.
+    /// Recently-opened project paths. Appended on open, kept across
+    /// launches. Removing from the sidebar drops it here.
     #[serde(default)]
     pub recent_projects: Vec<String>,
     /// v1.1.2: one-level performance folders (set lists). Membership only —

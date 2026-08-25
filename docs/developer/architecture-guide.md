@@ -14,153 +14,112 @@ High-level architectural overview and mental models for this app.
 
 ### The "Onion" State Architecture
 
-State management follows a three-layer hierarchy:
+Two layers: `useState` for component-local UI state, Zustand stores for global state (persisted slices save through `src/lib/preferences.ts`). The decision tree, selector patterns, and store inventory live in [state-management.md](./state-management.md).
 
-```
-┌─────────────────────────────────────┐
-│           useState                  │  ← Component UI State
-│  ┌─────────────────────────────────┐│
-│  │          Zustand                ││  ← Global UI State
-│  └─────────────────────────────────┘│
-└─────────────────────────────────────┘
-```
+### The Rust-React Bridge
 
-**Decision Tree:**
+Rust and React communicate through two distinct channels:
 
-```
-Is this data needed across multiple components?
-├─ No → useState
-└─ Yes → Zustand (persisted slices save through src/lib/preferences.ts)
-```
+- **React → Rust: typed commands.** Every call goes through the tauri-specta generated bindings in `@/lib/tauri-bindings` (never string-based `invoke`) — see [tauri-commands.md](./tauri-commands.md).
+- **Rust → React: events.** Rust owns the session and window state machines and pushes updates with `app.emit` (`pnds:session`, `pnds:window`, `pnds:window-focus`); React listens and mirrors them into stores. One direction only — React never writes window state itself.
 
-See [state-management.md](./state-management.md) for implementation details.
+**Menus are not part of this bridge.** The menu bar is built in JavaScript (`src/lib/menu.ts`) for i18n; each item's action closure calls stores directly via `getState()` (e.g. `useSettingsStore.getState().toggleSettings()`). There is no Rust menu-click → event → listener path. See [menus.md](./menus.md).
 
-### Event-Driven Bridge
+### Action Model
 
-Rust and React communicate through events for loose coupling:
-
-```
-Rust Menu Click → Event Emission → React Listener → Command Execution → State Update
-Keyboard Shortcut → Event Handler → Command Execution → State Update
-Command Palette → Command Selection → Command Execution → State Update
-```
-
-This ensures the same actions work consistently across all interaction methods.
-
-### Command-Centric Design
-
-All user actions flow through a centralized [command system](./command-system.md):
-
-- **Commands** are pure objects with `execute()` functions
-- **Context** provides all state and actions commands need
-- **Registration** merges commands from different domains at runtime
-
-This decouples UI triggers from implementations and enables consistent behavior.
+User actions are typed Tauri commands (anything touching disk, processes, audio, or the OS) and Zustand store actions (pure UI state: settings panel open/close, zoom, selection). Both are verified by static analysis — `ast:lint` enforces store usage rules ([static-analysis.md](./static-analysis.md)).
 
 ## Pattern Dependencies
 
 Understanding how patterns work together:
 
 ```
-Command System
-├── Depends on: State Management (context)
-├── Integrates with: Keyboard Shortcuts, Menus
-└── Enables: Consistent behavior across UI
+Typed Tauri Commands
+├── Depend on: Zustand stores (mirrors for Rust-owned state)
+├── Integrate with: Keyboard Shortcuts, Menus
+└── Enable: All disk / process / audio / OS actions
 
 State Management
 ├── Enables: Performance (getState pattern)
 ├── Supports: Data Persistence, UI State
 └── Foundation for: All other systems
 
-Event-Driven Bridge
-├── Enables: Rust-React communication
-├── Supports: Security (validation in Rust)
-└── Foundation for: Menus, Updates, Notifications
+Rust → React Events
+├── Enable: Session / window state mirroring
+├── Support: Security (validation in Rust)
+└── Foundation for: Session lifecycle, window fade/fullscreen
 ```
 
 ## Core Systems
 
 | System               | Documentation                                    |
 | -------------------- | ------------------------------------------------ |
-| Command System       | [command-system.md](./command-system.md)         |
+| State Management     | [state-management.md](./state-management.md)     |
+| Tauri Commands       | [tauri-commands.md](./tauri-commands.md)         |
 | Keyboard Shortcuts   | [keyboard-shortcuts.md](./keyboard-shortcuts.md) |
 | Native Menus         | [menus.md](./menus.md)                           |
-| Quick Panes          | [quick-panes.md](./quick-panes.md)               |
 | Data Persistence     | [data-persistence.md](./data-persistence.md)     |
 | Internationalization | [i18n-patterns.md](./i18n-patterns.md)           |
-| Cross-Platform       | [cross-platform.md](./cross-platform.md)         |
 
 ## Component Hierarchy
 
+The app is a single `main` window. `App.tsx` mounts `ErrorBoundary → ThemeProvider → AppShell` plus the state-independent overlays (`CloseConfirmDialog`, `QuitConfirmDialog`, `SettingsPanel` — reachable in every window state). `AppShell` (`src/components/shell/AppShell.tsx`) routes between four states:
+
 ```
-MainWindow (Top-level orchestrator)
-├── TitleBar (Window controls + toolbar)
-├── LeftSidebar (Collapsible panel)
-├── MainWindowContent (Primary content area)
-├── RightSidebar (Collapsible panel)
-└── Global Overlays
-    ├── PreferencesDialog (Settings)
-    ├── CommandPalette (Cmd+K)
-    └── Toaster (Notifications)
+App (App.tsx)
+└── ErrorBoundary
+    └── ThemeProvider
+        ├── AppShell                    # window-state router
+        │   ├── Welcome:  Sidebar (static) + WelcomeScreen
+        │   ├── Loading:  LoadingScreen + HoverSidebar
+        │   ├── Ready:    MonitorView (keyed by fullscreen) + Toaster
+        │   └── Error:    Sidebar (static) + ErrorScreen
+        ├── CloseConfirmDialog          # ⌘W / red light with a live session
+        ├── QuitConfirmDialog           # ⌘Q with a live session
+        └── SettingsPanel               # in-app settings (⌘,)
 ```
+
+Window controls are the custom `TrafficLights` component (`src/components/shell/`), not a native title bar.
 
 ## File Organization
 
 ```
-locales/                  # Translation JSON files
+locales/                  # Translation JSON files (en, zh-CN)
 src/
 ├── components/
-│   ├── layout/          # Layout components (MainWindow, sidebars)
-│   ├── command-palette/ # Command palette system
-│   ├── preferences/     # Preferences dialog system
-│   └── ui/              # Shadcn UI components
-├── hooks/               # Custom React hooks
-├── i18n/                # Internationalization config
+│   ├── shell/          # App shell: AppShell, Sidebar, MonitorView, HoverSidebar,
+│   │                   #   LoadingScreen, TrafficLights, dialogs, PndsLogo
+│   ├── settings/       # In-app settings panel and its sections
+│   ├── ui/             # shadcn/ui primitives
+│   └── welcome/        # Welcome screen (no project loaded)
+├── hooks/              # use-command-keyboard, use-platform
+├── i18n/               # i18next config and language init
 ├── lib/
-│   ├── commands/        # Command system implementation
-│   └── menu.ts          # Native menu builder with i18n
-├── store/               # Zustand stores
-└── types/               # Shared TypeScript types
+│   ├── bindings.ts     # Generated by tauri-specta (DO NOT EDIT)
+│   ├── tauri-bindings.ts # Re-exports with project conventions
+│   ├── menu.ts         # Native menu builder with i18n
+│   └── preferences.ts  # Preference load + serialized update queue
+├── store/              # Zustand stores (project, session, settings, window, keyboard)
+└── test/               # Test setup and utilities
 ```
-
-## Multi-Window Architecture
-
-Tauri applications can have multiple windows, each running a separate JavaScript context. Windows cannot share React state directly.
-
-**Key patterns:**
-
-1. **Separate entry points** - Each window has its own HTML file and React root
-2. **Event-based communication** - Use Tauri events to communicate between windows
-3. **Window reuse** - Create windows once at startup, then show/hide as needed
-4. **Theme synchronization** - Emit theme changes so all windows stay in sync
-
-```typescript
-// Window A: emit event
-await emit('data-updated', { value: 'new data' })
-
-// Window B: listen and react
-listen('data-updated', ({ payload }) => {
-  setData(payload.value)
-})
-```
-
-See [quick-panes.md](./quick-panes.md) for a complete implementation example.
 
 ## Security Architecture
 
 ### Tauri Capabilities
 
-Tauri v2 uses a permission-based capabilities system. Each window only gets the permissions it needs.
+Tauri v2 uses a permission-based capabilities system. The single `main` window only gets the permissions it needs.
 
 **Location:** `src-tauri/capabilities/default.json`
 
 ```json
 {
-  "identifier": "main-capability",
+  "identifier": "default",
   "windows": ["main"],
-  "permissions": ["core:window:allow-minimize", "fs:default"]
+  "permissions": ["core:default", "fs:default", "dialog:default", "os:default"]
 }
 ```
+
+(The real file lists each plugin's exact permissions; abbreviated above.)
 
 **Key rules:**
 
@@ -180,89 +139,39 @@ CSP prevents XSS attacks. Configuration is in `src-tauri/tauri.conf.json`.
 
 ### Secure Storage
 
-| Data Type       | Storage                       | Security Level |
-| --------------- | ----------------------------- | -------------- |
-| API tokens/keys | OS keychain (`keyring` crate) | High           |
-| App preferences | App data directory (JSON)     | Medium         |
-| User content    | App data directory/SQLite     | Medium         |
+The app stores no secrets today — app preferences and project history are JSON in the app data directory (see [data-persistence.md](./data-persistence.md)). If a future feature needs API tokens, use the OS keychain (`keyring` crate), never plain JSON; the patterns live in [external-apis.md](./external-apis.md).
 
-Never store sensitive tokens in `tauri-plugin-store` (plain JSON on disk). See [external-apis.md](./external-apis.md) for keychain patterns.
+### Rust-First Validation
 
-### Rust-First Security
-
-All file operations happen in Rust with built-in validation:
-
-```rust
-fn is_blocked_directory(path: &Path) -> bool {
-    let blocked_patterns = ["/System/", "/usr/", "/etc/", "/.ssh/"];
-    blocked_patterns.iter().any(|pattern| path.starts_with(pattern))
-}
-```
-
-### Input Sanitization
-
-```rust
-pub fn sanitize_filename(filename: &str) -> String {
-    filename.chars()
-        .filter(|c| !['/', '\\', ':', '*', '?', '"', '<', '>', '|'].contains(c))
-        .collect()
-}
-```
+App-managed file operations (preferences, bundles, session records) happen in Rust with built-in validation: `src-tauri/src/project/manifest.rs` validates the manifest schema with field-specific errors and enforces path containment (resolved paths must stay inside the project root), and `preflight.rs` checks dependencies and ports before anything is spawned.
 
 ### Atomic File Operations
 
-All disk writes use atomic operations to prevent corruption:
-
-```rust
-// Write to temp file, then rename (atomic)
-std::fs::write(&temp_path, content)?;
-std::fs::rename(&temp_path, &final_path)?;
-```
+All disk writes use atomic operations (write to temp file, then rename) to prevent corruption. The canonical pattern and rationale live in [data-persistence.md](./data-persistence.md).
 
 See [Tauri Security Documentation](https://v2.tauri.app/security/) for detailed guidance.
 
 ## Type-Safe Tauri Commands
 
-All Tauri commands use [tauri-specta](https://github.com/specta-rs/tauri-specta) for type safety:
-
-```typescript
-// ✅ GOOD: Type-safe with autocomplete
-import { commands } from '@/lib/tauri-bindings'
-
-const result = await commands.loadPreferences()
-if (result.status === 'ok') {
-  console.log(result.data.theme)
-}
-
-// ❌ BAD: String-based invoke (no type safety)
-const prefs = await invoke<AppPreferences>('load_preferences')
-```
-
-See [tauri-commands.md](./tauri-commands.md) for adding new commands.
+All Tauri commands use [tauri-specta](https://github.com/specta-rs/tauri-specta): Rust commands generate typed TypeScript bindings (`src/lib/bindings.ts`, re-exported via `@/lib/tauri-bindings`), so callers get autocomplete and compile-time result checking instead of string-based `invoke`. The full workflow (define → register → regenerate) lives in [tauri-commands.md](./tauri-commands.md).
 
 ## Quality Gates
 
-Before any changes are committed:
-
-```bash
-npm run check:all
-```
-
-See [static-analysis.md](./static-analysis.md) for all tools included.
+The completion bar is `npm run check:all` green — defined once in [AGENTS.md](../../AGENTS.md); the tool inventory lives in [static-analysis.md](./static-analysis.md).
 
 ## Anti-Patterns to Avoid
 
 | Anti-Pattern                    | Why It's Bad                        | Do This Instead               |
 | ------------------------------- | ----------------------------------- | ----------------------------- |
 | State in wrong layer            | Confuses ownership, breaks patterns | Follow the onion model        |
-| Direct Rust-React coupling      | Tight coupling, hard to maintain    | Use command system and events |
+| Direct Rust-React coupling      | Tight coupling, hard to maintain    | Use typed commands and events |
 | Store subscription in callbacks | Causes render cascades              | Use `getState()` pattern      |
 | Skipping input validation       | Security vulnerabilities            | Always validate in Rust       |
 | Magic/implicit patterns         | Hard for AI and humans to follow    | Prefer explicit, clear code   |
 
 ## Adding New Features
 
-1. **Commands** - Add to appropriate command group file
+1. **Commands** - Add to the appropriate module in `src-tauri/src/commands/`
 2. **State** - Choose appropriate layer (useState/Zustand; persisted slices via src/lib/preferences.ts)
 3. **UI** - Follow component architecture
 4. **Persistence** - Use established [data-persistence.md](./data-persistence.md) patterns

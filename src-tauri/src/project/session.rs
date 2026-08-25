@@ -1,9 +1,11 @@
 //! Project session: score-server (Node.js) process lifecycle and health
-//! polling. See `docs/PNDS_APP_REQUIREMENTS.md` §7, §8, §9.
+//! polling. See `docs/reference/runtime-contract.md` §3–§11; App-side
+//! session behavior in `docs/developer/app-behavior.md` (状态与 Session).
 //!
-//! Startup order (§8): preflight → (internal: resolve channel plan and boot
-//! scsynth) → spawn node → poll health → ready (internal: master stage).
-//! Shutdown (§11): SIGTERM → graceful wait → SIGKILL on timeout.
+//! Startup order (runtime-contract §8): preflight → (internal: resolve
+//! channel plan and boot scsynth) → spawn node → poll health → ready
+//! (internal: master stage). Shutdown (§11): SIGTERM → graceful wait →
+//! SIGKILL on timeout.
 
 use serde::{Deserialize, Serialize};
 use specta::Type;
@@ -20,12 +22,13 @@ use crate::project::children::{self, ChildRegistry};
 use crate::project::manifest::{load_manifest, Manifest};
 use crate::project::preflight;
 
-/// Health polling cadence and overall startup timeout (§8.1 step 5).
+/// Health polling cadence and overall startup timeout (§8).
 const HEALTH_POLL_INTERVAL: Duration = Duration::from_millis(500);
 const HEALTH_TIMEOUT: Duration = Duration::from_secs(30);
 /// Per-request timeout for each health GET.
 const HEALTH_REQUEST_TIMEOUT: Duration = Duration::from_millis(800);
-/// Number of node stdout/stderr lines kept for error reports (§10.3).
+/// Number of node stdout/stderr lines kept for error reports (the
+/// error-page technical tail, app-behavior「Error Page」).
 const OUTPUT_TAIL_LINES: usize = 50;
 /// scsynth/CoreAudio initialization can fail transiently during startup,
 /// especially immediately after another project session has been stopped.
@@ -44,7 +47,7 @@ const PREWARMED_FIRST_BOOT_DELAY: Duration = Duration::from_millis(300);
 // Types shared with the frontend
 // ============================================================================
 
-/// §9.1 health payload. Only the contract fields are modeled; the App must
+/// Runtime-contract §5 health payload. Only the contract fields are modeled; the App must
 /// not rely on anything else.
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
@@ -64,7 +67,7 @@ pub struct HealthPayload {
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct HealthAudio {
-    /// `starting | ready | error | disabled` (disabled = none mode, §9.1)
+    /// `starting | ready | error | disabled` (disabled = none mode, §9)
     pub status: String,
     #[serde(default)]
     pub target: Option<String>,
@@ -100,7 +103,7 @@ pub struct SessionSnapshot {
     /// Master volume percent (§7.5; new N<=2 sessions always start at 80,
     /// N>2 sessions are fixed at 100).
     pub volume: f32,
-    /// §10.3 five-stage loading animation dot (1–5).
+    /// Five-stage loading animation dot (1–5); app-behavior「Loading」.
     pub startup_stage: u8,
     /// §7.1: internal channel plan (N/H/K/B), present for internal sessions.
     pub channel_plan: Option<crate::project::audio::ChannelPlan>,
@@ -112,7 +115,7 @@ pub struct SessionSnapshot {
 // Pure / testable helpers
 // ============================================================================
 
-/// Locates the bundled Node.js sidecar. V1 is Apple Silicon only (§2).
+/// Locates the bundled Node.js sidecar. V1 is Apple Silicon only.
 pub fn node_binary_path() -> Result<PathBuf, String> {
     const TRIPLE: &str = "aarch64-apple-darwin";
     let name = format!("node-{TRIPLE}");
@@ -189,7 +192,7 @@ pub fn allocate_udp_port() -> Result<u16, String> {
         .map_err(|e| format!("Failed to read allocated UDP port: {e}"))
 }
 
-/// Enumerates usable LAN IPv4 addresses (§7). Loopback is never offered.
+/// Enumerates usable LAN IPv4 addresses (§4). Loopback is never offered.
 pub fn list_lan_addresses() -> Result<Vec<String>, String> {
     let addrs = if_addrs::get_if_addrs().map_err(|e| format!("Failed to list interfaces: {e}"))?;
     let mut ips: Vec<String> = addrs
@@ -229,10 +232,10 @@ fn fetch_health(performer_port: u16) -> Result<HealthPayload, String> {
 struct SessionInner {
     status: String, // idle | starting | ready | error | stopping
     child: Option<Child>,
-    /// scsynth process and its OSC port (internal mode only, §6.2).
+    /// scsynth process and its OSC port (internal mode only, §7).
     scsynth: Option<Child>,
     scsynth_port: Option<u16>,
-    /// Whether the App Master Synth has been created (§6.4).
+    /// Whether the App Master Synth has been created (§7.4).
     master_synth_ready: bool,
     project_name: Option<String>,
     project_path: Option<String>,
@@ -242,9 +245,9 @@ struct SessionInner {
     health: Option<HealthPayload>,
     error: Option<String>,
     output_tail: VecDeque<String>,
-    /// Master volume percent; every new session starts at 80 (§6.4).
+    /// Master volume percent; every new session starts at 80 (§7.5).
     volume: f32,
-    /// §10.3 five-stage loading progression (1–5).
+    /// app-behavior「Loading」: five-stage progression (1–5).
     startup_stage: u8,
     /// §7.1: internal channel plan (N/H/K/B) for the running session.
     channel_plan: Option<crate::project::audio::ChannelPlan>,
@@ -325,7 +328,7 @@ impl SessionInner {
     }
 }
 
-/// Tauri-managed session state. One running project at a time (§8.3).
+/// Tauri-managed session state. One running project at a time (app-behavior「状态与 Session」).
 pub struct SessionManager {
     inner: Arc<Mutex<SessionInner>>,
 }
@@ -380,10 +383,10 @@ impl SessionManager {
         }
     }
 
-    /// Starts a score-server session (§8.1). Validation (manifest, ports)
+    /// Starts a score-server session (§8). Validation (manifest, ports)
     /// is re-run here so a stale preflight result cannot start a process.
     ///
-    /// §9.3: this is also the **Retry** entry point — no stop is required
+    /// §11: this is also the **Retry** entry point — no stop is required
     /// first. The generation is bumped and the previous run's
     /// error/health/output is cleared before anything else, so a retry
     /// always begins from a clean `starting` snapshot. Every failure below
@@ -458,7 +461,7 @@ impl SessionManager {
         }
 
         let registry = ChildRegistry::new(app_data_dir.to_path_buf());
-        // §9.3: a previous generation whose SIGKILL was never confirmed
+        // §11: a previous generation whose SIGKILL was never confirmed
         // still owns its ports. Re-run the targeted (pid + marker) cleanup
         // BEFORE the port preflight, so a Retry after a hard failure is
         // not blocked by the corpse of its own last attempt.
@@ -488,7 +491,7 @@ impl SessionManager {
                 .scsynth
                 .as_ref()
                 .ok_or("manifest is missing audio.scsynth (required for internal mode)")?;
-            // §6.5: the output device comes from app-local preferences
+            // The output device comes from app-local preferences (app-behavior「音频 Host 行为」)
             // (never the manifest). A missing saved device falls back to
             // the system default with a warning.
             let prefs = crate::commands::preferences::load_preferences_sync(app)?;
@@ -504,7 +507,7 @@ impl SessionManager {
                         Some(name)
                     } else {
                         log::warn!(
-                            "Saved output device \"{name}\" is not available; falling back to the system default (§6.5)"
+                            "Saved output device \"{name}\" is not available; falling back to the system default"
                         );
                         None
                     }
@@ -577,7 +580,7 @@ impl SessionManager {
             inner.logger = session_log;
         }
 
-        // §8.1: internal mode boots scsynth first (and waits for /status)
+        // §8: internal mode boots scsynth first (and waits for /status)
         // before the score server starts. External/none skip this entirely.
         let osc_target = match mode.as_str() {
             "internal" => {
@@ -624,7 +627,7 @@ impl SessionManager {
                 let Some((mut sc_child, port)) = booted else {
                     return Err(last_err);
                 };
-                // §9.3: hand the handle to the session immediately. Every
+                // §11: hand the handle to the session immediately. Every
                 // failure below this point is now covered by the teardown
                 // in `fail_start` instead of leaking a live scsynth.
                 if let Some(stdout) = sc_child.stdout.take() {
@@ -643,7 +646,7 @@ impl SessionManager {
                 Some(format!("127.0.0.1:{port}"))
             }
             "external" => {
-                // §6.6: external mode requires a valid user-provided target.
+                // §9: external mode requires a valid user-provided target.
                 let target =
                     osc_target.ok_or("External mode requires an OSC target (host:port)")?;
                 crate::project::audio::validate_osc_target(&target)?;
@@ -687,7 +690,7 @@ impl SessionManager {
             entry.display()
         );
 
-        // Pipe node stdout/stderr into the session tail (§10.3 details).
+        // Pipe node stdout/stderr into the session tail (app-behavior「Error Page」).
         if let Some(stdout) = child.stdout.take() {
             self.spawn_output_reader(stdout, "node", generation);
         }
@@ -712,7 +715,7 @@ impl SessionManager {
         Ok(())
     }
 
-    /// §9.3: a synchronously failing start must leave nothing behind.
+    /// §11: a synchronously failing start must leave nothing behind.
     /// Tears down whatever this generation already spawned, clears the
     /// handles, and only then publishes the `error` snapshot — so the
     /// state the user retries from is provably clean.
@@ -727,7 +730,7 @@ impl SessionManager {
         Self::fail_generation(app, &inner, app_data_dir, generation, message.to_string());
     }
 
-    /// §9.3: the **single** failure exit for a generation, shared by the
+    /// §11: the **single** failure exit for a generation, shared by the
     /// synchronous start path, the startup supervisor and the running
     /// watchdog. Order is the contract: cleanup first, `error` snapshot
     /// second. A superseded generation is a no-op — a dying old session
@@ -771,7 +774,7 @@ impl SessionManager {
                     Ok(line) => {
                         log::debug!("[{tag}] {line}");
                         let mut guard = inner.lock().unwrap_or_else(|e| e.into_inner());
-                        // §9.3: a reader still draining a dead generation's
+                        // §11: a reader still draining a dead generation's
                         // pipe must not pollute the retry's output tail.
                         if guard.generation != generation {
                             return;
@@ -835,7 +838,7 @@ impl SessionManager {
                         let mut guard = inner.lock().unwrap_or_else(|e| e.into_inner());
                         guard.health = Some(health.clone());
                         match health.status.as_str() {
-                            // §9.1: readiness is the payload field, not HTTP 200.
+                            // §5: readiness is the payload field, not HTTP 200.
                             "ready" => {
                                 drop(guard);
 
@@ -924,7 +927,7 @@ impl SessionManager {
                 guard.generation,
             )
         };
-        // §9.3: a stop/retry that landed while health was being polled must
+        // §11: a stop/retry that landed while health was being polled must
         // not run the OSC handshake on a torn-down engine.
         if current_generation != generation {
             return false;
@@ -986,7 +989,7 @@ impl SessionManager {
             if let Some(status) = exited {
                 drop(guard);
                 log::warn!("Score server (pid {pid}) exited unexpectedly: {status}");
-                // §9.3: the failed generation must not leave the audio
+                // §11: the failed generation must not leave the audio
                 // engine behind — node/scsynth stop before the error
                 // snapshot is emitted, so Retry starts clean.
                 Self::fail_generation(
@@ -1040,7 +1043,7 @@ impl SessionManager {
         let client = crate::project::audio::OscClient::connect(&format!("127.0.0.1:{port}"))?;
         if let Err(e) = crate::project::audio::wait_for_scsynth(&client, &mut child) {
             if !children::kill_escalate(&mut child, pid, children::SHUTDOWN_GRACE_WINDOW) {
-                // §9.3: record the unconfirmed kill so the next start's
+                // §11: record the unconfirmed kill so the next start's
                 // targeted orphan cleanup frees the audio device.
                 ChildRegistry::new(app_data_dir.to_path_buf())
                     .record(pid, "scsynth-aarch64-apple-darwin".to_string());
@@ -1064,9 +1067,9 @@ impl SessionManager {
         crate::project::audio::create_master_stage(&client, &synthdef, k, b, gain)
     }
 
-    /// Stops the node score server and scsynth (§8.2): node SIGTERM with a
+    /// Stops the node score server and scsynth (§11): node SIGTERM with a
     /// grace window, master synth release, scsynth quit. Handles are always
-    /// cleared, so the session is provably child-free afterwards (§9.3).
+    /// cleared, so the session is provably child-free afterwards (§11).
     ///
     /// The session-children record is only cleared for a **confirmed** kill;
     /// an unconfirmed one keeps its ownership record so the next start
@@ -1128,7 +1131,7 @@ impl SessionManager {
         }
     }
 
-    /// §8.2 stop sequence. Idempotent.
+    /// §11 stop sequence. Idempotent.
     ///
     /// NOTE: never call `emit` while holding the inner lock — `emit` takes a
     /// snapshot, which locks again (std Mutex is not reentrant → deadlock).
@@ -1235,7 +1238,7 @@ impl SessionManager {
     }
 }
 
-/// Builds a readable error line from a health payload in `error` status (§9.1).
+/// Builds a readable error line from a health payload in `error` status (§5).
 fn health_error_message(health: &HealthPayload) -> String {
     let mut parts = Vec::new();
     if let Some(audio) = &health.audio {
@@ -1441,7 +1444,7 @@ mod tests {
         assert!(manager.active_child_pids().is_empty());
     }
 
-    /// §9.3: an error-state session has NO lingering children — the failed
+    /// §11: an error-state session has NO lingering children — the failed
     /// generation was torn down before the error snapshot. Retry starts
     /// from a clean slate.
     #[test]
@@ -1473,7 +1476,7 @@ mod tests {
         assert!(!alive, "teardown must kill the lingering node");
     }
 
-    /// §9.3: every asynchronous failure (health timeout, health `error`,
+    /// §11: every asynchronous failure (health timeout, health `error`,
     /// master-stage failure, early Node/scsynth exit) funnels through
     /// `fail_generation`. Its contract: children are gone and the handles
     /// are cleared BEFORE the `error` snapshot becomes observable.
@@ -1642,7 +1645,7 @@ mod tests {
         assert!(!manager.lock().master_synth_ready);
     }
 
-    /// §9.3: a dying old generation must never overwrite the retry that
+    /// §11: a dying old generation must never overwrite the retry that
     /// replaced it — the late failure is dropped, not published.
     #[test]
     fn stale_generation_failure_does_not_touch_the_new_session() {
@@ -1678,7 +1681,7 @@ mod tests {
         assert_eq!(snapshot.startup_stage, 2);
     }
 
-    /// §9.3: `start` opens a new generation before it does any work — the
+    /// §11: `start` opens a new generation before it does any work — the
     /// previous run's error/health/output tail never bleeds into the retry,
     /// and the very first snapshot the UI sees is `starting` at stage 1.
     #[test]
@@ -1747,7 +1750,7 @@ mod tests {
         let manager = SessionManager::default();
         let dir = tempfile::tempdir().unwrap();
 
-        // Minimal /__pnds/health responder (§9.1: readiness is the payload
+        // Minimal /__pnds/health responder (§5: readiness is the payload
         // field, not HTTP 200 — no status-line tricks needed).
         let port = {
             let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();

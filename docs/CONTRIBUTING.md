@@ -1,88 +1,41 @@
 # Contributing Guidelines
 
-Thank you for your interest in contributing!
+Thanks for contributing to PNDS App.
 
-## Quick Start
+## Prerequisites
 
-### Prerequisites
+- macOS (Apple Silicon)
+- Node.js 24
+- Rust (latest stable via rustup)
+- npm only — this repository does not use pnpm / yarn
 
-- [Node.js](https://nodejs.org/) (v18+)
-- [Rust](https://rustup.rs/) (latest stable)
-- Familiarity with React, TypeScript, and Rust
+## Getting Started
 
-### Setup
-
-```bash
+```sh
 git clone https://github.com/xO-xN/PNDS-App.git
 cd PNDS-App
 npm install
-npm run dev
-npm run check:all
 ```
 
-## How to Contribute
+## Common Commands
 
-### Issues
+| Command                 | Purpose                                                              |
+| ----------------------- | -------------------------------------------------------------------- |
+| `npm run tauri:dev`     | Run the app in development mode                                      |
+| `npm run check:all`     | Full check (typecheck / lint / ast-grep / prettier / clippy / tests) |
+| `npm run fix:all`       | Auto-fix lint / formatting / clippy                                  |
+| `npm run rust:bindings` | Regenerate the tauri-specta command bindings                         |
 
-- **Bug Reports**: Use the bug report template
-- **Feature Requests**: Use the feature request template
-- **Security Issues**: See [SECURITY.md](SECURITY.md)
+## Before Submitting
 
-### Pull Requests
+`npm run check:all` must pass; new business logic ships with tests.
 
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/amazing-feature`
-3. Make changes following the guidelines below
-4. Ensure checks pass: `npm run check:all`
-5. Commit using conventional commits
-6. Push and open a Pull Request
+## Collaboration
 
-## Code Guidelines
+- Task assignment and progress reporting happen in GitHub issues.
+- Code and documentation conventions live in [AGENTS.md](../AGENTS.md); platform contracts (project format / runtime protocol / `.pnds`) in the [reference manual](./reference/README.md).
+- Follow the existing commit-message style (`feat:` / `fix:` / `docs:` / `chore:` prefixes).
 
-### TypeScript/React
+## License
 
-- Use TypeScript for all new code
-- Follow existing component patterns
-- See `docs/developer/` for architecture patterns
-
-### Rust
-
-- Use `cargo fmt` and `cargo clippy`
-- Use `Result<T, String>` for Tauri commands
-- See `docs/developer/rust-architecture.md`
-
-## Quality Gates
-
-All PRs must pass:
-
-- TypeScript type checking
-- ESLint and Prettier
-- Rust formatting and clippy
-- Tests
-
-Run locally: `npm run check:all`
-
-## Commit Messages
-
-Use [Conventional Commits](https://www.conventionalcommits.org/):
-
-```bash
-feat: add user authentication
-fix(ui): resolve sidebar toggle issue
-docs: update installation instructions
-refactor(store): simplify state management
-test: add preferences tests
-```
-
-Types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`
-
-## Code Review
-
-- Keep PRs focused and reasonably sized
-- Write clear PR descriptions
-- Respond to feedback promptly
-- Update documentation as needed
-
-## Legal
-
-By contributing, you agree that your contributions will be licensed under the same license as the project.
+By contributing, you agree that your contributions will be licensed under MIT (see [LICENSE.md](../LICENSE.md)).

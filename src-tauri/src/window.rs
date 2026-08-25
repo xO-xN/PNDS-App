@@ -1,7 +1,7 @@
 //! Window management: centralized fullscreen action, native-window opacity
 //! fade state machine, and window-state events for the frontend.
 //!
-//! Task 5 contract (docs/PNDS_APP_REQUIREMENTS.md §7, §7.4, §10.1):
+//! Window contract (docs/developer/app-behavior.md, Window 与全屏):
 //!   - ONE fullscreen toggle action shared by the macOS Window menu,
 //!     ⌃⌘F, and the sidebar button. React never flips window state
 //!     itself — it calls `toggle_fullscreen` and renders from the
@@ -29,11 +29,10 @@ use std::sync::Arc;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager, Runtime, WebviewWindow};
 
-/// Fade duration per the contract (§7.4): 150–180 ms.
+/// Fade duration per the contract: 150–180 ms.
 const FADE_DURATION: Duration = Duration::from_millis(160);
 /// Poll cadence for the opacity ramp (~60 fps).
 const FADE_STEP: Duration = Duration::from_millis(16);
-
 /// v1.3.0 (#51): grace period for the cold-start reveal. The main window
 /// is created hidden (`visible: false` in tauri.conf.json) and the
 /// frontend reveals it with `fade_in_window` once the saved theme has
@@ -51,12 +50,11 @@ pub fn persisted_state_flags() -> tauri_plugin_window_state::StateFlags {
     tauri_plugin_window_state::StateFlags::all()
         .difference(tauri_plugin_window_state::StateFlags::VISIBLE)
 }
-
 /// How long the macOS native fullscreen transition takes. The window is
 /// transparent during it, so we fade in again only after it settles —
 /// otherwise the ramp fights the system animation (causing flicker).
 const FULLSCREEN_TRANSITION_MS: u64 = 400;
-/// Native window corner radius in windowed mode (§7.4). Matches the
+/// Native window corner radius in windowed mode. Matches the
 /// frontend's shared `--app-corner-radius` token so the window's real edge
 /// aligns with the content/sidebar rounding and no background leaks at the
 /// corners. Fullscreen windows are square.
@@ -73,7 +71,7 @@ pub struct WindowStateSnapshot {
     pub show_custom_traffic_lights: bool,
     /// Monotonic counter — bumped on every fullscreen/fade transition so
     /// the frontend can re-sync. Independent of the monitor reload nonce:
-    /// fullscreen changes never reload the monitor (§7.2).
+    /// fullscreen changes never reload the monitor.
     pub generation: u32,
 }
 
@@ -130,7 +128,7 @@ impl WindowManager {
     }
 }
 
-/// §7.4: the one and only fullscreen toggle. All three entry points
+/// The one and only fullscreen toggle. All three entry points
 /// (menu, ⌃⌘F, sidebar button) funnel through this command.
 #[tauri::command]
 #[specta::specta]
@@ -143,7 +141,7 @@ pub async fn toggle_fullscreen(app: AppHandle) -> Result<WindowStateSnapshot, St
 
     let next = !window.is_fullscreen().unwrap_or(false);
 
-    // §7.4 dissolve: fade the CURRENT picture out, let macOS run its
+    // Re-entering fullscreen: fade the CURRENT picture out, let macOS run its
     // native fullscreen transition (window transparent underneath), then
     // fade the NEW picture in. Operated at the NSWindow layer, so the
     // transition never shows a black frame or fights the iframe's render.
@@ -159,14 +157,14 @@ pub async fn toggle_fullscreen(app: AppHandle) -> Result<WindowStateSnapshot, St
         .map_err(|e| format!("Failed to toggle fullscreen: {e}"))?;
     state.fullscreen.store(next, Ordering::SeqCst);
 
-    // §7.4: fullscreen windows are square; windowed restores the 16px
+    // fullscreen windows are square; windowed restores the 16px
     // corner radius so the native edge matches the content rounding
     // (#41: unless the square-corners theme flag says otherwise).
     sync_corner_radius(&window, state.square_corners.load(Ordering::SeqCst));
 
     // Fullscreen changes only resize the window — the monitor document
     // instance stays untouched (no reload nonce, no iframe key change,
-    // no server restart; §7.2).
+    // no server restart).
     let snapshot = state.snapshot();
     if let Err(e) = app.emit("pnds:window", snapshot.clone()) {
         log::warn!("Failed to emit window snapshot: {e}");
@@ -187,7 +185,7 @@ pub async fn toggle_fullscreen(app: AppHandle) -> Result<WindowStateSnapshot, St
     Ok(snapshot)
 }
 
-/// §7.4 fade-out then hide (red light / Close Window). Interruptible:
+/// Fade-out then hide (red light / Close Window). Interruptible:
 /// a newer request cancels the ramp and the terminal action still runs
 /// from a deterministic state.
 #[tauri::command]
@@ -320,7 +318,7 @@ pub async fn mark_quitting(app: AppHandle) -> Result<(), String> {
 /// v1.1.2 T7: the actual process exit behind ⌘Q. The macOS menu item is a
 /// custom MenuItem (not the predefined Quit) so React can confirm with a
 /// live session first; once confirmed (or with no live session) this
-/// marks quitting — no fade, per §7.4 — and exits. Session teardown runs
+/// marks quitting — no fade — and exits. Session teardown runs
 /// in the `ExitRequested` handler.
 #[tauri::command]
 #[specta::specta]
@@ -428,7 +426,7 @@ fn set_alpha<R: Runtime>(window: &WebviewWindow<R>, value: f64) -> Result<(), St
 #[cfg(not(target_os = "macos"))]
 fn set_alpha<R: Runtime>(_window: &WebviewWindow<R>, _value: f64) -> Result<(), String> {
     // Non-macOS has no whole-window opacity path; the fade is a no-op
-    // there (the app is macOS-only in practice, §2).
+    // there (the app is macOS-only in practice).
     Ok(())
 }
 
@@ -454,7 +452,7 @@ pub async fn set_window_corners_square(app: AppHandle, square: bool) -> Result<(
 }
 
 /// Re-applies the native window corner radius for the current window
-/// state (§7.4): 16px in windowed mode, 0 in fullscreen — and 0 in any
+/// state : 16px in windowed mode, 0 in fullscreen — and 0 in any
 /// state while the square-corners theme flag is set (#41). Call on
 /// startup, on every fullscreen transition (native green button or
 /// ⌃⌘F), and on every theme change so the radius survives them all.
@@ -708,7 +706,7 @@ mod tests {
         assert!(last.abs() < 1e-9);
     }
 
-    /// §7.4: the native corner radius is 16px in windowed mode (matching
+    /// The native corner radius is 16px in windowed mode (matching
     /// the frontend `--app-corner-radius` token) and square in fullscreen
     /// — and square in every state while the Brutal theme flag is set
     /// (#41).
