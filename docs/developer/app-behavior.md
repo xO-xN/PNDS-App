@@ -192,6 +192,8 @@ Loading 保持两阶段 Logo 契约（v1.3.0 #50 起，第 3–5 步由 reveal �
 
 reload monitor（⌘⇧R / 侧栏 Refresh）走同一套门控：重建的 iframe 由主题色 cover 即时遮盖（无淡入——淡入会闪出未就绪画面），新导航上报就绪或超时后交叉淡出。放行条件与生命周期在 `src/lib/monitor-reveal.ts`（纯函数 + 常量）与 session-store（`monitorLoaded` / `monitorLoadTimedOut`）实现并测试。
 
+揭示淡出与主题（v1.3.0 用户反馈）：splash 交叉淡出、monitor 揭示盖层与 StopCover 三个 400ms 淡出统一带 `data-reveal-motion` 标记，theme-variables.css 据此将它们豁免于 Brutal 主题的全局 `transition-duration: 0s !important` 即时规则——防闪契约（#48）优先于主题的即时美学；Brutal 下其余状态切换仍然即时。`prefers-reduced-motion` 的全局降级不受此豁免影响（无障碍优先）。
+
 Error Page 必须显示：简明摘要；Retry；Back/Close；可展开和复制的技术详情。技术详情至少包含工程路径、模式、LAN IP、target、设备、失败阶段、输出尾部和 health payload。
 
 Retry 必须真正重新启动：

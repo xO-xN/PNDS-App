@@ -136,6 +136,13 @@ describe('AppShell', () => {
     useSessionStore.setState({ sessionStatus: 'starting' })
     render(<AppShell />)
     expect(screen.getByText(/cancel/i)).toBeInTheDocument()
+    // The splash is reveal motion (Brutal exemption, see the stop-cover
+    // test): its dissolve must fade, not snap, in every theme.
+    expect(
+      screen
+        .getByRole('button', { name: /cancel/i })
+        .closest('[data-reveal-motion]')
+    ).not.toBeNull()
 
     await act(async () => {
       screen.getByRole('button', { name: /cancel/i }).click()
@@ -445,7 +452,11 @@ describe('AppShell', () => {
       // The outgoing page stays visible beneath the cover fading in —
       // never a Welcome flash during the teardown.
       expect(screen.getByTitle('Project monitor')).toBeInTheDocument()
-      expect(screen.getByTestId('stop-cover')).toBeInTheDocument()
+      const cover = screen.getByTestId('stop-cover')
+      expect(cover).toBeInTheDocument()
+      // The cover is reveal motion: theme-variables.css exempts the
+      // marker from Brutal's instant rule, so the fade survives there.
+      expect(cover.hasAttribute('data-reveal-motion')).toBe(true)
       expect(
         screen.queryByRole('heading', { name: /Welcome/i })
       ).not.toBeInTheDocument()

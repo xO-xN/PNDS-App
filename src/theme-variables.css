@@ -464,6 +464,16 @@
   transition-duration: 200ms !important;
 }
 
+/* v1.3.0 (#50, user report): the session reveal fades are a second
+   exemption. The loading→monitor cross-fade (splash dissolve + reveal
+   cover) and the StopCover's live→next handover are one motion family
+   that exists to kill the open/stop flash (issue #48) — snapping them
+   reintroduces exactly that cut. 400ms is MONITOR_REVEAL_FADE_MS
+   (src/lib/monitor-reveal.ts); keep the two in lockstep. */
+[data-color-theme='brutal'] [data-reveal-motion] {
+  transition-duration: 400ms !important;
+}
+
 /* #41 feedback — the selected project card rises off the black plane:
    the pill's one-shot keyframe lifts it 2px while its hard shadow grows
    in beneath (`translate`, the individual property — the imperative

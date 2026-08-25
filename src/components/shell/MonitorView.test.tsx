@@ -384,6 +384,14 @@ describe('MonitorView reveal gate (#50)', () => {
     coverReleased()
   })
 
+  it('carries the reveal-motion marker so Brutal cannot snap the cross-fade', () => {
+    // theme-variables.css exempts [data-reveal-motion] from Brutal's
+    // global `transition-duration: 0s !important`; without the marker
+    // the #50 cross-fade hard-cuts under that theme (user report).
+    render(<MonitorView />)
+    expect(cover().hasAttribute('data-reveal-motion')).toBe(true)
+  })
+
   it('re-holds the cover INSTANTLY on a monitor reload (no fade-in flash)', () => {
     render(<MonitorView />)
     fireEvent.load(screen.getByTitle('Project monitor'))

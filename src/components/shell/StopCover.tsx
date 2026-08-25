@@ -49,6 +49,7 @@ export function StopCover({
     <div
       aria-hidden="true"
       data-testid="stop-cover"
+      data-reveal-motion=""
       className={cn(
         'absolute inset-0 z-50 bg-(--pnds-bg)',
         opaque ? 'opacity-100' : 'pointer-events-none opacity-0'

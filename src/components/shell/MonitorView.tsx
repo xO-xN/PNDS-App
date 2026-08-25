@@ -225,10 +225,14 @@ export function MonitorView() {
       {/* #50: reveal cover — appears INSTANTLY over a rebuilding iframe
           (a fading-in cover would flash it through), fades out with the
           splash's cross-fade timing once the gate releases. Sits under
-          the title strip (z-40) so the drag region never disappears. */}
+          the title strip (z-40) so the drag region never disappears.
+          data-reveal-motion exempts the fade from Brutal's instant rule
+          (theme-variables.css) — the cross-fade is the anti-flash
+          contract, not a surface tint. */}
       <div
         aria-hidden
         data-testid="monitor-reveal-cover"
+        data-reveal-motion=""
         className={cn(
           'absolute inset-0 z-30 bg-(--pnds-bg)',
           revealed && 'pointer-events-none opacity-0'

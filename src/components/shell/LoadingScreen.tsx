@@ -61,6 +61,7 @@ export function LoadingScreen({ onDissolveEnd }: Props) {
 
   return (
     <div
+      data-reveal-motion=""
       className={cn(
         'flex h-full w-full flex-col items-center justify-center bg-(--pnds-bg)',
         dissolving && 'opacity-0'
