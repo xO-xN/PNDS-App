@@ -1,9 +1,13 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { listen } from '@tauri-apps/api/event'
 import { useSessionStore } from '@/store/session-store'
 import { useProjectStore } from '@/store/project-store'
-import { useSettingsStore } from '@/store/settings-store'
+import {
+  useSettingsStore,
+  currentColorThemeSetting,
+} from '@/store/settings-store'
 import { pushThemeToFrame } from '@/lib/theme-bridge'
+import { buildMonitorUrl } from '@/lib/monitor-url'
 import { HoverSidebar } from './HoverSidebar'
 
 /**
@@ -43,6 +47,25 @@ export function MonitorView() {
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
   const monitorPort = health?.scoreServer?.monitorPort
   const monitorOrigin = `http://${lanIp}:${monitorPort}`
+  // v1.3.0 (#49): `?theme=` rides in the URL as a first-frame parameter,
+  // so following pages paint the right colors before any postMessage
+  // arrives. The src is snapshotted per iframe NAVIGATION — mount,
+  // address change, reload — which is exactly the memo's dep list: a
+  // live theme switch must NOT retarget the src (that would reload the
+  // live monitor page); the bridge pushes the new theme instead, and
+  // the next navigation re-snapshots it. The theme is therefore read
+  // from the store inside the memo (latest value), never from the
+  // render-time `colorTheme` (which would defrost the snapshot).
+  const iframeSrc = useMemo(() => {
+    // The nonce only widens the memo: each bump remounts the iframe
+    // (its React key), and the fresh load re-snapshots the theme. The
+    // address fallbacks never reach the DOM — the guard below replaces
+    // the whole view until a real address exists.
+    void reloadNonce
+    return buildMonitorUrl(lanIp ?? '', monitorPort ?? 0, {
+      theme: currentColorThemeSetting(),
+    })
+  }, [lanIp, monitorPort, reloadNonce])
   // Initial push + re-push on theme switch and monitor reload. (The
   // focus-regain re-push lives in the reclaim effect below, keyed on the
   // same values so its closure is never stale.)
@@ -147,7 +170,7 @@ export function MonitorView() {
           ref={node => {
             iframeRef.current = node
           }}
-          src={`http://${lanIp}:${monitorPort}/`}
+          src={iframeSrc}
           title="Project monitor"
           className="block h-full w-full border-0"
           onLoad={() => {

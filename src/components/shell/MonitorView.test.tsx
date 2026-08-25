@@ -172,3 +172,56 @@ describe('MonitorView theme bridge (#44)', () => {
     expect(second.mock.calls[0]?.[0].theme).toBe('lavender')
   })
 })
+
+/**
+ * v1.3.0 (#49): the iframe URL carries `?theme=` as a first-frame
+ * parameter — the single thing that removes the light-then-dark flash
+ * on dark themes. The src is snapshotted per navigation: a live theme
+ * switch must NOT retarget it (that would reload the live monitor; the
+ * bridge pushes updates instead), while a reload re-snapshots it.
+ */
+describe('MonitorView iframe URL (#49)', () => {
+  beforeEach(() => {
+    useSessionStore.setState({
+      sessionStatus: 'ready',
+      projectName: 'Inarticulate III',
+      lanIp: '192.168.1.10',
+      health: readyHealth,
+    })
+    useSettingsStore.setState({ colorThemeSetting: 'brutal' })
+  })
+
+  const frameSrc = () =>
+    (screen.getByTitle('Project monitor') as HTMLIFrameElement).getAttribute(
+      'src'
+    )
+
+  it('navigates to the monitor address with the current theme on first frame', () => {
+    render(<MonitorView />)
+
+    expect(frameSrc()).toBe('http://192.168.1.10:6869/?theme=brutal')
+  })
+
+  it('keeps the src frozen across a live theme switch (the bridge owns updates)', () => {
+    render(<MonitorView />)
+
+    act(() => {
+      useSettingsStore.setState({ colorThemeSetting: 'stage' })
+    })
+
+    // Still the snapshot from the last navigation — retargeting the src
+    // would reload the live monitor page.
+    expect(frameSrc()).toBe('http://192.168.1.10:6869/?theme=brutal')
+  })
+
+  it('re-snapshots the theme when the monitor reloads', () => {
+    render(<MonitorView />)
+
+    act(() => {
+      useSettingsStore.setState({ colorThemeSetting: 'stage' })
+      useSessionStore.getState().bumpMonitorReload()
+    })
+
+    expect(frameSrc()).toBe('http://192.168.1.10:6869/?theme=stage')
+  })
+})

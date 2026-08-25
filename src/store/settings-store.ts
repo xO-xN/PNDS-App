@@ -73,3 +73,14 @@ export const useSettingsStore = create<SettingsState>()(set => ({
 
   setSampleRateSetting: sampleRateSetting => set({ sampleRateSetting }),
 }))
+
+/**
+ * v1.3.0 (#49): render-safe read of the live color theme, for values
+ * snapshotted at navigation time (the monitor URL's `?theme=` first
+ * frame parameter). Referencing `useSettingsStore.getState()` directly
+ * during render trips the react-compiler hook-reference rule, so this
+ * plain accessor is the blessed shape for that pattern.
+ */
+export function currentColorThemeSetting(): ColorTheme {
+  return useSettingsStore.getState().colorThemeSetting
+}

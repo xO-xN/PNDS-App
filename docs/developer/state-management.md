@@ -100,6 +100,46 @@ const handleSave = useCallback(() => {
 - In `useEffect` with empty deps when you need current state on mount only
 - In async operations when state might change during execution
 
+### Navigation-Time Snapshots: The Accessor Pattern
+
+**Problem**: Sometimes a value derived during render must be _frozen_ per
+some navigation event (the monitor iframe URL's `?theme=` first-frame
+parameter, #49) — a later change to the source value must not rewrite it
+(retargeting the live iframe's `src` would reload the monitor page). That
+means a `useMemo` whose dep list deliberately omits the reactive binding
+and reads the store inside instead. But referencing
+`useSettingsStore.getState()` during render trips the react-compiler
+rule: any `use*`-named binding used as a value looks like a hook passed
+around as a regular value.
+
+**Solution**: export a plain accessor from the store module
+(`src/store/settings-store.ts`):
+
+```typescript
+export function currentColorThemeSetting(): ColorTheme {
+  return useSettingsStore.getState().colorThemeSetting
+}
+```
+
+Then the memo's callback contains no reactive bindings, so exhaustive-deps
+stays honest while the dep list expresses exactly when the snapshot
+refreshes (`src/components/shell/MonitorView.tsx`):
+
+```tsx
+const iframeSrc = useMemo(() => {
+  void reloadNonce // cache key only: each bump remounts the iframe
+  return buildMonitorUrl(lanIp, monitorPort, {
+    theme: currentColorThemeSetting(),
+  })
+}, [lanIp, monitorPort, reloadNonce])
+```
+
+This is also the one sanctioned exception to "no manual `useMemo`" above:
+the compiler memoizes for performance, but a _semantic_ freeze — a value
+pinned until an explicit event re-snapshots it — needs the explicit dep
+list. Don't reach for this shape for plain derived values; subscribe with
+a selector instead.
+
 ### Store Subscription Optimization
 
 ```typescript

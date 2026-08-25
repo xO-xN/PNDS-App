@@ -158,7 +158,11 @@ describe('AppShell', () => {
     render(<AppShell />)
 
     const monitor = screen.getByTitle('Project monitor')
-    expect(monitor).toHaveAttribute('src', 'http://192.168.1.10:6869/')
+    // #49: the URL now always carries the theme first-frame parameter.
+    expect(monitor).toHaveAttribute(
+      'src',
+      'http://192.168.1.10:6869/?theme=lavender'
+    )
     expect(screen.getByText('PNDS - Inarticulate III')).toBeInTheDocument()
     expect(screen.getByTestId('sidebar-hover-zone')).toBeInTheDocument()
     // Sidebar stays mounted for the slide animation but is visually hidden
@@ -210,7 +214,10 @@ describe('AppShell', () => {
     // The iframe still targets the SESSION's IP — the selection's seeded
     // lanIp (10.0.0.5) must never retarget or reload the live monitor.
     const monitor = screen.getByTitle('Project monitor')
-    expect(monitor).toHaveAttribute('src', 'http://192.168.1.10:6869/')
+    expect(monitor).toHaveAttribute(
+      'src',
+      'http://192.168.1.10:6869/?theme=lavender'
+    )
     expect(useSessionStore.getState().sessionStatus).toBe('ready')
   })
 
