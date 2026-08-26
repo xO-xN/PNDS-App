@@ -150,7 +150,13 @@ node's `data-color-theme` attribute:
   `src/assets/octo-sidebar-2x.png` (2× the footer content width;
   design master in `assets/mascot/octo-sidebar.png`) is pinned onto
   the card's top edge by `OCTO_SHELF_OVERHANG_PX` in Sidebar.tsx,
-  calibrated per asset.
+  calibrated per asset. Card legibility works by reservation, not
+  background (#71 v2): the scroll column surrenders the art's zone
+  (`OCTO_COLUMN_RESERVE_PX`) so cards page above the tentacles with
+  their transparent rest intact in every theme; the import button
+  keeps its column-tail seat clear of the art — solid card-colored
+  with the theme border and hard shadow under Brutal, the translucent
+  chip elsewhere.
 - **Sand is the medium-depth theme**: warm-white text on dim warm-taupe
   surfaces — deliberately between the light and dark themes. Its
   accent-text twin inverts direction: the accent-as-text is the LIGHTER

@@ -88,6 +88,14 @@ import octoSidebar2x from '@/assets/octo-sidebar-2x.png'
  *  footer's pt-6 — change one, change the other. */
 const OCTO_SHELF_OVERHANG_PX = 12
 
+/** #71 v2 (user report): the illustration's zone ABOVE the footer —
+ *  display height ~170px (the 560×342 asset at the ~278px card width)
+ *  minus the footer's pt-6, plus a small gap. The card column reserves
+ *  exactly this below itself so cards page ABOVE the art instead of
+ *  pressing over it (their transparent rest stays in every theme);
+ *  re-measure if the asset or the footer padding changes. */
+const OCTO_COLUMN_RESERVE_PX = 142
+
 interface SidebarProps {
   /** welcome/loading: statically visible; running: floats over the monitor */
   variant: 'static' | 'overlay'
@@ -1231,6 +1239,26 @@ export function Sidebar({
   // spot once the row is at rest.
   const pillHidden = drag?.kind === 'folder' || suppressTransition
 
+  /** v1.2.2 (issue #29): "add to the list" — same promptOpenProject as
+   *  the ⌘O menu path, hidden in the fixed Utilities view. It rides the
+   *  scroller's tail in every theme; the style splits by theme (#71 v2
+   *  follow-up: solid card-colored under Brutal, translucent chip
+   *  elsewhere). */
+  const renderImportButton = (className: string) => (
+    <button
+      type="button"
+      data-testid="add-project-button"
+      aria-label={t('sidebar.addProject')}
+      title={t('sidebar.addProject')}
+      onClick={() => void promptOpenProject()}
+      disabled={busy}
+      className={className}
+    >
+      <Plus size={14} />
+      {t('sidebar.addProject')}
+    </button>
+  )
+
   return (
     <aside
       data-testid="sidebar"
@@ -1581,14 +1609,17 @@ export function Sidebar({
             so the translucent overlay sidebar composites correctly, and the
             second layer keeps the right scrollbar lane unmasked — the
             native indicator must not fade.
-            v1.3.1 (#71): the mask makes this scroller a stacking context,
-            so its cards' z-10 could never clear a positioned footer
-            sibling — the z-10 here (flex items honor z-index) hoists
-            the whole column above the Brutal octopus, restoring the
-            "long lists cover it" order. */}
+            v1.3.1 (#71 v2): the mask makes this scroller a stacking
+            context, so its cards could never clear a positioned footer
+            sibling — the z-10 here (flex items honor z-index) keeps the
+            column above the footer's Brutal octopus layer. The Brutal
+            reserve below keeps the cards out of the art entirely (they
+            page above the tentacles, never over them); the z-10 stays
+            as the guard. */}
         <div
           ref={projectScrollRef}
           data-testid="project-list-scroll"
+          style={brutal ? { marginBottom: OCTO_COLUMN_RESERVE_PX } : undefined}
           className="z-10 min-h-0 flex-1 overflow-y-auto overscroll-contain [mask-composite:add] [-webkit-mask-composite:source-over] [mask-image:linear-gradient(to_bottom,transparent_0px,#000_20px,#000_calc(100%_-_20px),transparent_100%),linear-gradient(to_right,transparent_calc(100%_-_15px),#000_calc(100%_-_15px))]"
         >
           <div
@@ -1680,7 +1711,10 @@ export function Sidebar({
                       : 'transition-[background-color,transform] duration-200',
                     // selectedPath covers pending preflight, the current
                     // project and the last failed selection — the pill
-                    // slides to whichever card the chain names.
+                    // slides to whichever card the chain names. The
+                    // transparent rest is back in every theme (#71 v2:
+                    // the column reserves the octopus's zone, so cards
+                    // never meet the art in Brutal either).
                     path === selectedPath
                       ? 'active:bg-(--pnds-bg)'
                       : 'hover:bg-(--pnds-text)/5 active:bg-(--pnds-text)/10',
@@ -1803,24 +1837,21 @@ export function Sidebar({
             {/* v1.2.2 (issue #29): the import entry lives at the column's
               end — "add to the list" belongs to the list. The end padding
               keeps it clear of the fade band at full scroll; with no
-              projects it follows the empty state. Same promptOpenProject
-              as the ⌘O menu path. The fixed Utilities view is the one
-              exception (user feedback): its members are bundled tools,
-              not imports. */}
-            {!activeFolderIsProtected && (
-              <button
-                type="button"
-                data-testid="add-project-button"
-                aria-label={t('sidebar.addProject')}
-                title={t('sidebar.addProject')}
-                onClick={() => void promptOpenProject()}
-                disabled={busy}
-                className="pnds-focus-ring mx-auto mt-1.5 mb-1 flex shrink-0 items-center gap-1.5 rounded-[9px] bg-(--pnds-text)/5 px-[18px] py-1.5 text-xs text-(--pnds-text)/60 transition hover:bg-(--pnds-text)/10 hover:text-(--pnds-text) active:scale-[0.98] disabled:opacity-50"
-              >
-                <Plus size={14} />
-                {t('sidebar.addProject')}
-              </button>
-            )}
+              projects it follows the empty state. The fixed Utilities view
+              is the one exception (user feedback): its members are bundled
+              tools, not imports. #71 v2 follow-up: under Brutal the button
+              keeps its solid look (card color, black border, hard shadow,
+              pressed 1px into the shadow) here at the tail — the column's
+              reserve keeps it clear of the octopus below. */}
+            {!activeFolderIsProtected &&
+              renderImportButton(
+                cn(
+                  'pnds-focus-ring mx-auto mt-1.5 mb-1 flex shrink-0 items-center gap-1.5 rounded-[9px] px-[18px] py-1.5 text-xs transition disabled:opacity-50',
+                  brutal
+                    ? 'border border-(--pnds-text) bg-(--pnds-card) text-(--pnds-text) shadow-(--pnds-card-shadow) hover:bg-(--pnds-accent) active:translate-x-[1px] active:translate-y-[1px]'
+                    : 'bg-(--pnds-text)/5 text-(--pnds-text)/60 hover:bg-(--pnds-text)/10 hover:text-(--pnds-text) active:scale-[0.98]'
+                )
+              )}
           </div>
         </div>
       </nav>
@@ -1830,9 +1861,9 @@ export function Sidebar({
           the Brutal octopus's anchor (#71): a relative wrapper + absolute
           layer keeps the follow pure CSS — rows changing the card's height
           (audio mode / device / volume) carry the octopus along, while it
-          stays outside the project scroller. It paints over the card but
-          under the project column (the scroller's z-10) and never takes a
-          pointer. */}
+          stays outside the project scroller. The art keeps the column's
+          reserved zone clear (#71 v2); this wrapper is its containing
+          block. */}
       <div data-testid="settings-footer" className="relative px-5 pb-5 pt-6">
         {brutal && (
           /* A stretching div, not the img: a replaced element ignores the

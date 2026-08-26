@@ -79,4 +79,49 @@ describe('Sidebar octopus (issue #71: Brutal-only shelf illustration)', () => {
       view.unmount()
     }
   })
+
+  it('reserves the octopus zone below the card column — cards page above the art, transparent as ever', () => {
+    useSettingsStore.setState({ colorThemeSetting: 'brutal' })
+    useProjectStore.setState({ recentProjectPaths: ['/Users/test/Score 1'] })
+    const brutalView = render(<Sidebar variant="static" />)
+
+    // The reserve, not a card background, keeps the cards off the art:
+    // the scroller surrenders the art's zone and the resting card owns
+    // no background token of its own (hover:/active: are prefixed).
+    expect(screen.getByTestId('project-list-scroll').style.marginBottom).toBe(
+      '142px'
+    )
+    expect(
+      screen
+        .getByTestId('project-entry')
+        .className.split(' ')
+        .some(token => token.startsWith('bg-'))
+    ).toBe(false)
+    brutalView.unmount()
+
+    useSettingsStore.setState({ colorThemeSetting: 'lavender' })
+    render(<Sidebar variant="static" />)
+    expect(screen.getByTestId('project-list-scroll').style.marginBottom).toBe(
+      ''
+    )
+  })
+
+  it('the import button keeps its column-tail seat — solid under Brutal, chip elsewhere', () => {
+    useSettingsStore.setState({ colorThemeSetting: 'brutal' })
+    const brutalView = render(<Sidebar variant="static" />)
+
+    const button = screen.getByTestId('add-project-button')
+    expect(screen.getByTestId('project-list-scroll')).toContainElement(button)
+    expect(button.className).toContain('bg-(--pnds-card)')
+    expect(button.className).toContain('border-(--pnds-text)')
+    brutalView.unmount()
+
+    // Outside Brutal the button stays the translucent chip it always
+    // was, in the same seat.
+    useSettingsStore.setState({ colorThemeSetting: 'lavender' })
+    render(<Sidebar variant="static" />)
+    const chip = screen.getByTestId('add-project-button')
+    expect(screen.getByTestId('project-list-scroll')).toContainElement(chip)
+    expect(chip.className).toContain('bg-(--pnds-text)/5')
+  })
 })
