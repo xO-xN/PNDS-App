@@ -78,8 +78,12 @@ jobs:
             - Product naming is consistent now: English copy calls the product only "PNDS"; Chinese keeps the full product name.
 
             **Brutal gains an octopus**
-            - The Brutal sidebar has its mascot: an octopus holding a synth keyboard, seated exactly on the audio settings card — its shelf line lands on the card's top edge, with the hands and part of the face dipping inside. It rides along when the card's height changes (audio mode, device rows, volume), stays fixed while the project list scrolls under it, and never intercepts a click.
+            - The Brutal sidebar has its mascot: an octopus holding a synth keyboard, seated exactly on the audio settings card — its shelf line lands on the card's top edge, with the hands and part of the face dipping inside. It rides along when the card's height changes (audio mode, device rows, volume) and never intercepts a click; the project list keeps clear of the art — cards page above it with their transparent look intact in every theme, and the + import project button waits at the list's tail as a solid Brutal button (the translucent chip elsewhere).
             - Known note: squaring the Help window's corners to match the main window under Brutal was explored this cycle and rejected — a standard titled window cannot safely take the main window's see-through structure at runtime. The decision is recorded in the developer docs; Brutal keeps its squared main window as before.
+
+            **Smaller fixes**
+            - The Utilities folder counts each built-in tool once — moving between a dev and a release build no longer lists every tool twice (tool identity now rides the registry id, and stale copies self-heal on the next launch).
+            - ⌘← / ⌘→ folder switching wraps around at the ends like the segment arrows — with three views, the old stop at the edge read as stuck.
 
             ### What's New in V1.3.0 — addresses on the menu, language-following tools & the offline Help center
 
