@@ -799,6 +799,221 @@ describe('project-store persistence (structural actions commit + save)', () => {
 })
 
 /**
+ * v1.3.2 (issue #76): the wholesale, persisting index rebuild — the seam
+ * the v1.4.0 setlist import (spec #57) calls once per import. One call
+ * rebuilds and persists a single snapshot; the batch-vs-cap policy lives
+ * inside the action; app content rides through.
+ */
+describe('replaceProjectIndex (v1.3.2, issue #76 — setlist import seam)', () => {
+  /** Lets the serialized save queue settle before a not-called assert. */
+  async function settle(): Promise<void> {
+    await new Promise(resolve => setTimeout(resolve, 0))
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useProjectStore.setState({
+      currentProject: null,
+      recentProjectPaths: [],
+      projectFolders: [],
+      pendingPreflightPath: null,
+      activeFolderId: null,
+      projectDisplayNames: {},
+      manifestProjectNames: {},
+      utilityPaths: [],
+      preflightStatus: 'idle',
+      preflightError: null,
+    })
+  })
+
+  it('rebuilds the whole index and persists one snapshot (paths + folders + names)', async () => {
+    // A pre-existing index the import replaces wholesale.
+    useProjectStore
+      .getState()
+      .restoreProjectIndex(
+        ['/old'],
+        [{ id: 'f-old', name: 'Old', projectPaths: ['/old'] }]
+      )
+
+    useProjectStore
+      .getState()
+      .replaceProjectIndex(
+        ['/p1', '/p2'],
+        [{ id: 'f1', name: 'Gig', projectPaths: ['/p2'] }],
+        { '/p1': 'Opener' }
+      )
+
+    const state = useProjectStore.getState()
+    expect(state.recentProjectPaths).toEqual(['/p1', '/p2'])
+    expect(state.projectFolders).toEqual([
+      { id: 'f1', name: 'Gig', projectPaths: ['/p2'] },
+    ])
+    expect(state.projectDisplayNames).toEqual({ '/p1': 'Opener' })
+
+    await vi.waitFor(() => {
+      expect(commands.savePreferences).toHaveBeenCalledWith(
+        expect.objectContaining({
+          recentProjects: ['/p1', '/p2'],
+          projectFolders: [{ id: 'f1', name: 'Gig', projectPaths: ['/p2'] }],
+          projectDisplayNames: { '/p1': 'Opener' },
+        })
+      )
+    })
+    // One snapshot for the whole batch — per-item saves are exactly what
+    // the seam exists to prevent.
+    expect(commands.savePreferences).toHaveBeenCalledTimes(1)
+  })
+
+  it('admits a batch over the per-directory cap — loads as-is, then refuses additions', async () => {
+    const big = Array.from({ length: 35 }, (_, i) => `/set-${i}`)
+    useProjectStore.getState().replaceProjectIndex(big, [])
+
+    // A replace is a load, not an addition: over-limit directories load
+    // untouched (the v1.2.1 legacy-data stance) — no cap can reject the
+    // batch midway, so an import is all-or-nothing.
+    expect(useProjectStore.getState().recentProjectPaths).toHaveLength(35)
+    await vi.waitFor(() => {
+      expect(commands.savePreferences).toHaveBeenCalledWith(
+        expect.objectContaining({ recentProjects: big })
+      )
+    })
+
+    // The per-item stance is unchanged: further additions are still
+    // capped after the batch landed.
+    expect(useProjectStore.getState().addRecentProject('/new')).toBe(false)
+  })
+
+  it('an over-limit folder area loads too — createFolder still refuses more', () => {
+    useProjectStore.getState().replaceProjectIndex(
+      [],
+      ['One', 'Two', 'Three', 'Four'].map((name, i) => ({
+        id: `f-${i}`,
+        name,
+        projectPaths: [],
+      }))
+    )
+
+    expect(useProjectStore.getState().projectFolders).toHaveLength(4)
+    expect(folderLimitReached(useProjectStore.getState().projectFolders)).toBe(
+      true
+    )
+    expect(useProjectStore.getState().createFolder('Five')).toBeNull()
+    expect(useProjectStore.getState().projectFolders).toHaveLength(4)
+  })
+
+  it('app content rides through: tools and the Utilities folder survive', () => {
+    useProjectStore.setState({
+      utilityPaths: ['/tool-a', '/tool-b'],
+      recentProjectPaths: ['/tool-a', '/tool-b', '/old'],
+      projectFolders: [
+        {
+          id: UTILITIES_FOLDER_ID,
+          name: 'Utilities',
+          projectPaths: ['/tool-a', '/tool-b'],
+        },
+      ],
+    })
+
+    // A foreign setlist cannot contain this machine's tools; the import's
+    // names map cannot override them either.
+    useProjectStore
+      .getState()
+      .replaceProjectIndex(
+        ['/p1'],
+        [{ id: 'f1', name: 'Gig', projectPaths: ['/p1'] }],
+        { '/p1': 'Opener', '/tool-a': 'Hacked' }
+      )
+
+    const state = useProjectStore.getState()
+    // Tools re-append to the history and keep their folder, bottom-pinned.
+    expect(state.recentProjectPaths).toEqual(['/p1', '/tool-a', '/tool-b'])
+    expect(state.projectFolders).toEqual([
+      { id: 'f1', name: 'Gig', projectPaths: ['/p1'] },
+      {
+        id: UTILITIES_FOLDER_ID,
+        name: 'Utilities',
+        projectPaths: ['/tool-a', '/tool-b'],
+      },
+    ])
+    expect(state.projectDisplayNames).toEqual({ '/p1': 'Opener' })
+  })
+
+  it('an incoming folder cannot claim the reserved Utilities id', () => {
+    useProjectStore.setState({
+      projectFolders: [
+        {
+          id: UTILITIES_FOLDER_ID,
+          name: 'Utilities',
+          projectPaths: [],
+        },
+      ],
+    })
+
+    useProjectStore.getState().replaceProjectIndex(
+      ['/x'],
+      [
+        {
+          id: UTILITIES_FOLDER_ID,
+          name: 'Evil twin',
+          projectPaths: ['/x'],
+        },
+      ]
+    )
+
+    // The app's own Utilities folder keeps its reserved identity; the
+    // impostor is dropped and its members land ungrouped.
+    const folders = useProjectStore.getState().projectFolders
+    expect(folders).toEqual([
+      { id: UTILITIES_FOLDER_ID, name: 'Utilities', projectPaths: [] },
+    ])
+    expect(useProjectStore.getState().recentProjectPaths).toEqual(['/x'])
+  })
+
+  it('names omitted keeps the current display-name overrides', () => {
+    useProjectStore.setState({ projectDisplayNames: { '/old': 'Mine' } })
+
+    useProjectStore.getState().replaceProjectIndex(['/p1'], [])
+
+    expect(useProjectStore.getState().projectDisplayNames).toEqual({
+      '/old': 'Mine',
+    })
+  })
+
+  it('closes the open project when the replace drops it, keeps it when it stays', () => {
+    useProjectStore.getState().preflightSucceeded('/old', manifest)
+    useProjectStore.getState().replaceProjectIndex(['/p1'], [])
+
+    // Same semantics as removeRecentProject: no project open but
+    // de-indexed.
+    let state = useProjectStore.getState()
+    expect(state.currentProject).toBeNull()
+    expect(state.preflightStatus).toBe('idle')
+
+    // A project the new index still lists stays open through the replace.
+    useProjectStore.getState().preflightSucceeded('/p1', manifest)
+    useProjectStore.getState().replaceProjectIndex(['/p1'], [])
+    state = useProjectStore.getState()
+    expect(state.currentProject?.path).toBe('/p1')
+    expect(state.preflightStatus).toBe('ready')
+  })
+
+  it('replacing with an identical index writes nothing', async () => {
+    useProjectStore
+      .getState()
+      .restoreProjectIndex(['/a'], [{ id: 'f1', name: 'F', projectPaths: [] }])
+    await settle()
+    vi.mocked(commands.savePreferences).mockClear()
+
+    useProjectStore
+      .getState()
+      .replaceProjectIndex(['/a'], [{ id: 'f1', name: 'F', projectPaths: [] }])
+    await settle()
+
+    expect(commands.savePreferences).not.toHaveBeenCalled()
+  })
+})
+
+/**
  * v1.2.1 (issue #26): sidebar capacity caps — the folder area holds at
  * most 3 folders (Utilities counts), and every directory (the ungrouped
  * top level, each folder) holds at most 30 projects. The caps are

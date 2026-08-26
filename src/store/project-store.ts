@@ -158,6 +158,40 @@ interface ProjectState {
    */
   restoreProjectIndex: (paths: string[], folders: ProjectFolder[]) => void
   /**
+   * v1.3.2 (issue #76): wholesale index rebuild that persists — the seam
+   * the v1.4.0 setlist import (spec #57) calls once per import.
+   * `restoreProjectIndex` is its non-persisting boot counterpart; feeding
+   * an import through per-item `addRecentProject` instead would hit the
+   * per-directory cap mid-batch and strand a half-persisted index.
+   *
+   * Batch-vs-cap policy (decided here, v1.3.2): a replace is a load, not
+   * an addition — directories (and the folder area) may land over
+   * `PROJECT_LIMIT_PER_DIRECTORY` / `FOLDER_LIMIT` exactly like
+   * over-limit legacy data (v1.2.1): loaded as-is, further additions
+   * refused. Nothing can reject the batch midway, so an import is
+   * all-or-nothing by construction.
+   *
+   * App content rides through (v1.3.2 immutability guards): this
+   * launch's utility paths stay in the history, the Utilities folder
+   * survives with its members (bottom-pinned), and tool paths take no
+   * display-name override from `names`. `names`, when given, is the
+   * complete new override map (whole-value replace); absent keeps the
+   * current overrides. An open project that leaves the new index closes
+   * with it — the same semantics as `removeRecentProject`.
+   *
+   * set.json keying (pre-decision for the v1.4.0 format, do not
+   * relitigate): the exchange format keys entries by manifest identity
+   * (`id` + `version`), never by absolute path — `.pnds` installs land
+   * under each machine's own data directory, so path keys cannot survive
+   * a machine change. The importing machine resolves identities to its
+   * local install paths before calling; `paths` here are always local.
+   */
+  replaceProjectIndex: (
+    paths: string[],
+    folders: ProjectFolder[],
+    names?: Record<string, string>
+  ) => void
+  /**
    * Bulk folder replace that persists like any structural commit — the
    * Utilities seeding flow (issue #18) seeds and bottom-pins through it.
    * Launch restore goes through `restoreProjectIndex` instead.
@@ -213,6 +247,17 @@ function withoutFolderMember(
       ? { ...folder, projectPaths: folder.projectPaths.filter(p => p !== path) }
       : folder
   )
+}
+
+/**
+ * The Utilities folder is pinned to the bottom of the folder area
+ * (v1.2.0): a drag may compute any order — including below it — the
+ * commit always settles it last, so a bottom drop lands just above it.
+ */
+function pinProtectedBottom(folders: ProjectFolder[]): ProjectFolder[] {
+  const pinned = folders.filter(folder => isProtectedFolder(folder.id))
+  if (pinned.length === 0) return folders
+  return [...folders.filter(folder => !isProtectedFolder(folder.id)), ...pinned]
 }
 
 /**
@@ -313,19 +358,47 @@ export const selectSelectedPath = (state: ProjectState): string | null =>
 
 /**
  * Structural actions persist the app-side project index as part of their
- * commit — history and folder membership always save together (v1.1.2),
- * so no caller can forget the save. No-op guards (protected folders,
- * ignored drag sets) settle as "unchanged" and write nothing.
+ * commit — history, folder membership and display-name overrides always
+ * save together (v1.1.2; the names slice joined in v1.3.2, issue #76, so
+ * a wholesale replace commits one snapshot), so no caller can forget the
+ * save. No-op guards (protected folders, ignored drag sets) settle as
+ * "unchanged" and write nothing.
  */
 function persistIndexIfChanged(
-  before: Pick<ProjectState, 'recentProjectPaths' | 'projectFolders'>,
-  after: Pick<ProjectState, 'recentProjectPaths' | 'projectFolders'>
+  before: Pick<
+    ProjectState,
+    'recentProjectPaths' | 'projectFolders' | 'projectDisplayNames'
+  >,
+  after: Pick<
+    ProjectState,
+    'recentProjectPaths' | 'projectFolders' | 'projectDisplayNames'
+  >
 ): void {
   if (sameJson(before, after)) return
   void updatePreferences({
     recentProjects: after.recentProjectPaths,
     projectFolders: after.projectFolders,
+    projectDisplayNames: after.projectDisplayNames,
   })
+}
+
+/**
+ * The same content-guarded commit for a single name map — the learned
+ * manifest names and the display-name overrides (v1.3.2, issue #76: the
+ * three hand-rolled sameJson tails folded into one helper). Guards and
+ * repeat commits produce unchanged maps and must not write.
+ */
+function persistNameMapIfChanged(
+  before: Pick<ProjectState, 'manifestProjectNames' | 'projectDisplayNames'>,
+  after: Pick<ProjectState, 'manifestProjectNames' | 'projectDisplayNames'>,
+  key: 'manifestProjectNames' | 'projectDisplayNames'
+): void {
+  if (sameJson(before[key], after[key])) return
+  void updatePreferences(
+    key === 'manifestProjectNames'
+      ? { projectManifestNames: after.manifestProjectNames }
+      : { projectDisplayNames: after.projectDisplayNames }
+  )
 }
 
 export const useProjectStore = create<ProjectState>()((set, get) => ({
@@ -442,13 +515,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       }
       return { manifestProjectNames: merged }
     })
-    const after = get()
-    if (sameJson(before.manifestProjectNames, after.manifestProjectNames)) {
-      return
-    }
-    void updatePreferences({
-      projectManifestNames: after.manifestProjectNames,
-    })
+    persistNameMapIfChanged(before, get(), 'manifestProjectNames')
   },
 
   setProjectDisplayName: (path, name) => {
@@ -463,17 +530,58 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
         name
       ),
     }))
-    const after = get()
-    if (sameJson(before.projectDisplayNames, after.projectDisplayNames)) {
-      return
-    }
-    void updatePreferences({ projectDisplayNames: after.projectDisplayNames })
+    persistNameMapIfChanged(before, get(), 'projectDisplayNames')
   },
 
   setRenameTarget: target => set({ renameTarget: target }),
 
   restoreProjectIndex: (paths, folders) =>
     set({ recentProjectPaths: paths, projectFolders: folders }),
+
+  replaceProjectIndex: (paths, folders, names) => {
+    const before = get()
+    // App content rides through a wholesale replace: this launch's tools
+    // re-append to the history (a foreign setlist cannot contain them)
+    // and the Utilities folder survives with its members, bottom-pinned —
+    // the same immutability every other structural action enforces. An
+    // incoming folder claiming the reserved id is dropped: the identity
+    // belongs to the app's own Utilities folder alone.
+    const utilities = before.projectFolders.find(folder =>
+      isProtectedFolder(folder.id)
+    )
+    const incoming = folders.filter(folder => !isProtectedFolder(folder.id))
+    const keptTools = before.utilityPaths.filter(tool => !paths.includes(tool))
+    const nextPaths = [...paths, ...keptTools]
+    // Tools keep the names the app ships (learned from their manifests) —
+    // an import never overrides them.
+    const namesWithoutTools =
+      names === undefined
+        ? undefined
+        : Object.fromEntries(
+            Object.entries(names).filter(
+              ([path]) => !before.utilityPaths.includes(path)
+            )
+          )
+    set({
+      recentProjectPaths: nextPaths,
+      projectFolders: utilities ? [...incoming, utilities] : incoming,
+      // The open project closes with its index entry — the same semantics
+      // as removeRecentProject/clearRecentProjects, so a replace cannot
+      // leave a project open but de-indexed.
+      currentProject:
+        before.currentProject && nextPaths.includes(before.currentProject.path)
+          ? before.currentProject
+          : null,
+      ...(before.currentProject &&
+      !nextPaths.includes(before.currentProject.path)
+        ? { preflightStatus: 'idle' as const, preflightError: null }
+        : {}),
+      ...(namesWithoutTools !== undefined
+        ? { projectDisplayNames: namesWithoutTools }
+        : {}),
+    })
+    persistIndexIfChanged(before, get())
+  },
 
   setProjectFolders: folders => {
     const before = get()
@@ -643,18 +751,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       const reordered = orderedFolderIds
         .map(id => byId.get(id))
         .filter((folder): folder is ProjectFolder => folder !== undefined)
-      // The Utilities folder is pinned to the bottom of the folder area
-      // (v1.2.0): a drag may compute any order — including below it —
-      // the commit always settles it last, so a bottom drop lands just
-      // above it.
-      const pinned = reordered.filter(folder => isProtectedFolder(folder.id))
-      const ordered = pinned.length
-        ? [
-            ...reordered.filter(folder => !isProtectedFolder(folder.id)),
-            ...pinned,
-          ]
-        : reordered
-      return { projectFolders: ordered }
+      return { projectFolders: pinProtectedBottom(reordered) }
     })
     persistIndexIfChanged(before, get())
   },
@@ -686,13 +783,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
         manifest.name
       ),
     }))
-    const after = get()
-    if (sameJson(before.manifestProjectNames, after.manifestProjectNames)) {
-      return
-    }
-    void updatePreferences({
-      projectManifestNames: after.manifestProjectNames,
-    })
+    persistNameMapIfChanged(before, get(), 'manifestProjectNames')
   },
 
   preflightFailed: (path, message) =>

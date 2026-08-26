@@ -193,14 +193,25 @@ In `project-store.ts`, persistence is part of the commit — **structural
 actions save the project index themselves** (`addRecentProject`,
 `removeRecentProject`, folder lifecycle, membership moves, drag reorder
 commits, `setProjectFolders`, `setProjectDisplayName`,
-`preflightSucceeded`/`upsertManifestProjectNames` for the name maps).
-Callers never pair a mutation with a save; a missed save is no longer
-possible. No-op guards (protected folders, ignored drag sets) and repeat
-commits write nothing.
+`preflightSucceeded`/`upsertManifestProjectNames` for the name maps,
+`replaceProjectIndex` for wholesale rebuilds). Callers never pair a
+mutation with a save; a missed save is no longer possible. No-op guards
+(protected folders, ignored drag sets) and repeat commits write nothing.
 
 Launch restore must never write back: it goes through the non-persisting
 bulk setters (`restoreProjectIndex`, `setProjectDisplayNames`,
 `setManifestProjectNames`) instead of the structural actions.
+
+Wholesale rebuilds (the v1.4.0 setlist import seam, v1.3.2 issue #76) go
+through `replaceProjectIndex`: one call rebuilds history, folders and
+display-name overrides and persists a single snapshot. The batch
+deliberately bypasses the per-directory caps — a replace is a load
+(over-limit directories land as-is, exactly like legacy data), so an
+import is all-or-nothing; further additions are capped again afterwards.
+App content (this launch's utility tools, the Utilities folder) rides
+through the replace. The set.json keying decision — manifest
+`id` + `version`, never absolute paths — is recorded in the action's doc
+comment and binds the v1.4.0 exchange format.
 
 ## Adding a New Store
 
