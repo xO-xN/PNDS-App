@@ -1,6 +1,6 @@
 # 帮助中心语料与搜索（T7 基建）
 
-v1.3.0（#53）为 Help 帮助中心（T8 窗口，#56）打的底座：三本书（教程 / 创作指南 / 参考手册）**以 markdown 原文**进应用资源包，窗口打开时运行时渲染、内存建索引、纯函数搜索。全程离线。#67 起语料以 **zh-CN / en 两棵镜像树**维护（布局见 ADR-0001）；#68 起按界面语言选树——此前 `help_corpus` 仍只服务 zh-CN（App 终端仍显示中文）。
+v1.3.0（#53）为 Help 帮助中心（T8 窗口，#56）打的底座：三本书（教程 / 创作指南 / 参考手册）**以 markdown 原文**进应用资源包，窗口打开时运行时渲染、内存建索引、纯函数搜索。全程离线。#67 起语料以 **zh-CN / en 两棵镜像树**维护（布局见 ADR-0001）；#68 起 `help_corpus(locale)` 按 resolved locale（`en` / `zh-CN`，system 走既有解析）选树，帮助窗口开着切换语言即**热更新**语料与索引。
 
 **关键决策**（修订自 #48 spec）：不做构建期 HTML 转换、无任何生成产物——`docs/<tree>/*.md` 两棵树是唯一事实源，打包器原样复制；渲染与索引全部在运行时完成。代价是首次打开窗口时建一次索引（全语料毫秒级，`help-scale.test.ts` 钉住），换来语料更新零流程、dev 直读仓库文件。
 
@@ -8,7 +8,7 @@ v1.3.0（#53）为 Help 帮助中心（T8 窗口，#56）打的底座：三本�
 
 | 部件                | 位置                                                                                                                                                    |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 语料清单 + 读取命令 | `src-tauri/src/commands/help.rs`（`HELP_TREES` 两树 + `HELP_DOCUMENTS` 清单 + `help_corpus`，当前 `SERVED_TREE = "zh-CN"`）                             |
+| 语料清单 + 读取命令 | `src-tauri/src/commands/help.rs`（`HELP_TREES` 两树 + `HELP_DOCUMENTS` 清单 + `help_corpus(locale)`，`corpus_tree` 校验非法 locale）                    |
 | 资源映射            | `src-tauri/tauri.conf.json` → `bundle.resources`（两树共 26 个文件**逐条**映射进 `help/<tree>/`，显式 allowlist——developer/、agents/ 向文档因此进不来） |
 | 语料装载纯模块      | `src/lib/help-corpus.ts`（`HELP_TREES` + `HELP_BOOKS` 清单 + `buildHelpCorpus`）                                                                        |
 | markdown 结构模块   | `src/lib/help-markdown.ts`（`splitSections`）                                                                                                           |
@@ -17,9 +17,9 @@ v1.3.0（#53）为 Help 帮助中心（T8 窗口，#56）打的底座：三本�
 
 ## 语料装载
 
-Rust 侧 `help_corpus` 返回 `{ id, markdown }[]`（id 是稳定契约，markdown 是原文，路径相对语言树）。路径解析沿用 utilities 的双候选模式：release 读资源目录 `help/<tree>/`，debug（`tauri dev`）直读仓库 `../docs/<tree>/`——**dev 里改文档即时生效**，且每次调用都重新读文件。读不到任何一份 → 命令报错（宁可响亮，不静默藏页）。
+Rust 侧 `help_corpus(locale)` 返回 `{ id, path, markdown }[]`（id 是稳定契约，markdown 是原文，path 相对语言树）。`locale` 必须是 `HELP_TREES` 之一（`corpus_tree` 校验，非法值点名已注册树显式报错）；路径解析沿用 utilities 的双候选模式：release 读资源目录 `help/<tree>/`，debug（`tauri dev`）直读仓库 `../docs/<tree>/`——**dev 里改文档即时生效**，且每次调用都重新读文件。读不到任何一份 → 命令报错（`read_corpus` 有单测钉住：点名缺失文档与路径，绝不静默换语言）。
 
-`buildHelpCorpus`（TS）做放置与派生：按 `HELP_BOOKS` 排序归册、从文档自己的 `#` 标题取显示标题（缺失回退 id）、用 `splitSections` 切节。**两侧漂移都会炸**：Rust 多 shipping 一份 TS 清单没有的（或反之）→ throw。
+前端（`HelpCenter.tsx`，#68）：`locale` 状态跟随 i18next 的 `languageChanged`（boot 的 `initializeLanguage` 与主窗口 `pnds:help-locale` 推送同源），locale 变化即重取语料、重建索引——**帮助窗口开着切换语言，文档就地换语言、搜索即时跟随**，不重开窗口；切换途中旧语料留屏，失败进错误态（Retry 按当前 locale 重试）。`buildHelpCorpus`（TS）做放置与派生：按 `HELP_BOOKS` 排序归册、从文档自己的 `#` 标题取显示标题（缺失回退 id）、用 `splitSections` 切节。**两侧漂移都会炸**：Rust 多 shipping 一份 TS 清单没有的（或反之）→ throw。
 
 **两树漂移也会炸**（防漂移三件套，任一侧缺一篇即失败，绝不静默回退另一语言）：
 
@@ -63,7 +63,7 @@ Rust 侧 `help_corpus` 返回 `{ id, markdown }[]`（id 是稳定契约，markdo
 - **打开**：`openHelpWindow(target)`——窗口不存在则**隐藏创建**并把目标编进 URL（`?doc=<id>` / `?search=1`）；已存在则 `setFocus` + `emitTo('help', 'pnds:help-navigate', target)`。已存在但卡在隐藏态 → 重跑揭示而不是聚焦看不见的窗口。
 - **⌘W 分发**：File > Close Window 的 action 先问 `commands.focusedWindowLabel()`——help 在前台就关 help（普通销毁，不进主窗口的关闭流），否则走原主窗口流（会话确认 / 红灯流）。
 - **⌘?**：注册为 `Cmd+Shift+Slash`（⌘? 与 ⇧⌘/ 是同一物理键序，一个加速键两个拼写都吃到）。
-- **实时跟随桥**：主窗口 `setupHelpWindowBridge()`（App.tsx 装配，help-window.ts 实现）——`languageChanged` 推 `pnds:help-locale`、settings store 的 `colorThemeSetting` 变化推 `pnds:help-theme`（帮助页 `changeLanguage` / `setColorThemeAttribute`）。标题只在创建时本地化（chrome 非界面文案）。
+- **实时跟随桥**：主窗口 `setupHelpWindowBridge()`（App.tsx 装配，help-window.ts 实现）——`languageChanged` 推 `pnds:help-locale`、settings store 的 `colorThemeSetting` 变化推 `pnds:help-theme`（帮助页 `changeLanguage` / `setColorThemeAttribute`；#68 起语言推送同时驱动语料热更新，见「语料装载」）。标题只在创建时本地化（chrome 非界面文案）。
 - **boot 握手**：页面监听注册完毕后 `emit('pnds:help-ready')`，主窗口回放 `lastTarget`——窗口刚创建、页面监听未就绪时被丢掉的导航目标不会静默丢失。
 - **窗口属性**：`resizable`、标准标题栏、⌘W/红灯正常关闭即销毁；window-state 插件（Rust 侧）记尺寸位置（VISIBLE 已被全局排除在持久化外）。capabilities：`default.json` 的 `windows` 含 `help`（`core:window:allow-set-focus` 供主窗口聚焦它）；`desktop.json` 保持 main-only，不给 help 顺带放宽 updater。**Brutal 方角（#70）已评估并放弃**：标准标题栏窗口的圆角窗形由窗服务器在创建时定死（NSThemeFrame 结构），contentView 的 layer mask 只能裁内容、裁不动窗形；要真方角必须像主窗口那样整套自绘 chrome（去原生红绿灯、透明窗、页面接管标题栏区），与「其余三主题不受影响」冲突。运行时翻 chrome（titlebarAppearsTransparent + 非不透明 + clearColor，f4393cd→772b3cb 已撤销）实测两点：窗形依旧圆角，且磨砂带消失后页面内容直接顶进红绿灯行。除非决定帮助窗口全主题改用自绘 chrome，否则不要重试原生方角。
 - **Rust 侧**：`fade_in_window(label)` 参数化（缺省 main）；**非 main 窗口用独立 FadeGen 计数**（`reveal_generation`，有单测钉住隔离性）——不共享主计数器，否则 help 揭示会打断主窗口进行中的渐变（半透明卡死，契约禁止）。

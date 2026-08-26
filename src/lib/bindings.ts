@@ -407,13 +407,14 @@ async builtinUtilities() : Promise<Result<BuiltinUtility[], string>> {
 },
 /**
  * v1.3.0 (issue #53): the help center's corpus — every shipped document
- * as raw markdown, in manifest order. Reads the files on every call so
- * dev edits show up without a restart; at the corpus's scale this is a
- * few milliseconds.
+ * as raw markdown, in manifest order, from the locale's language tree
+ * (#68; the frontend passes the resolved UI locale). Reads the files
+ * on every call so dev edits show up without a restart; at the
+ * corpus's scale this is a few milliseconds.
  */
-async helpCorpus() : Promise<Result<HelpCorpusDocument[], string>> {
+async helpCorpus(locale: string) : Promise<Result<HelpCorpusDocument[], string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("help_corpus") };
+    return { status: "ok", data: await TAURI_INVOKE("help_corpus", { locale }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };

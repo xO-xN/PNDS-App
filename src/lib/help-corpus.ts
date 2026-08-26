@@ -20,9 +20,9 @@ import { splitSections, type HelpSection } from './help-markdown'
  * names under docs/ — and, in a release bundle, under help/. The trees
  * are mirror trees: one id/path list serves every tree, and the drift
  * tests (Rust: help.rs, frontend: help-trees.test.ts) fail the build
- * when either side drifts. #67 ships the en/ tree; #68 makes the
- * served tree a UI-language parameter — until then the App UI is
- * Chinese and zh-CN is the only tree served. */
+ * when either side drifts. Since #68 the names double as the locales
+ * the `help_corpus` command accepts — the help window asks for its
+ * resolved UI language and never falls back to the other tree. */
 export const HELP_TREES = ['zh-CN', 'en'] as const
 
 /** A language tree the help corpus ships in. */

@@ -3,7 +3,7 @@ import { emit, listen } from '@tauri-apps/api/event'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { useTranslation } from 'react-i18next'
 
-import i18n from '@/i18n/config'
+import i18n, { currentResolvedLanguage } from '@/i18n/config'
 import {
   buildHelpCorpus,
   HELP_BOOKS,
@@ -78,6 +78,13 @@ export function HelpCenterApp({
   const [index, setIndex] = useState<HelpIndex | null>(null)
   const [reloadNonce, setReloadNonce] = useState(0)
   const [query, setQuery] = useState('')
+  // #68: the corpus follows the RESOLVED UI language. The pnds:help-locale
+  // listener below runs changeLanguage; i18next's languageChanged then
+  // lands here, the loader refetches that locale's tree, and the index
+  // rebuilds — hot, without reopening the window. While a switch is in
+  // flight the previous corpus stays on screen; a failed switch surfaces
+  // the error state, never the other language's tree.
+  const [locale, setLocale] = useState(currentResolvedLanguage)
   const [activeDoc, setActiveDoc] = useState<ActiveDoc | null>(() => {
     if (initialTarget?.kind === 'doc') {
       return { docId: initialTarget.docId, anchor: null, terms: [] }
@@ -90,15 +97,16 @@ export function HelpCenterApp({
   const docViewport = useRef<HTMLDivElement>(null)
   const initialTargetRef = useRef(initialTarget)
 
-  // Boot (and Retry): load and index the corpus; the reveal rides the
-  // finally — a failed load still shows the themed error state, never a
-  // hidden window. fadeInWindow is a Rust-side no-op when visible, so
-  // retries never re-fade.
+  // Boot, Retry, and #68's hot locale switch: load and index the
+  // locale's tree; the reveal rides the finally — a failed load still
+  // shows the themed error state, never a hidden window. fadeInWindow
+  // is a Rust-side no-op when visible, so retries and hot reloads never
+  // re-fade.
   useEffect(() => {
     let stale = false
     const load = async () => {
       try {
-        const result = await commands.helpCorpus()
+        const result = await commands.helpCorpus(locale)
         if (stale) return
         if (result.status === 'error') {
           throw new Error(String(result.error))
@@ -126,7 +134,7 @@ export function HelpCenterApp({
     return () => {
       stale = true
     }
-  }, [reloadNonce])
+  }, [locale, reloadNonce])
 
   useEffect(() => {
     if (initialTargetRef.current?.kind === 'search') {
@@ -134,9 +142,20 @@ export function HelpCenterApp({
     }
   }, [])
 
+  // The locale state above tracks i18next directly: the boot's
+  // initializeLanguage and every pnds:help-locale push both land as
+  // languageChanged events, one source of truth for the loader.
+  useEffect(() => {
+    const onLanguageChanged = (language: string) => setLocale(language)
+    i18n.on('languageChanged', onLanguageChanged)
+    return () => {
+      i18n.off('languageChanged', onLanguageChanged)
+    }
+  }, [])
+
   // The main window drives this window: menu entries navigate it, and
-  // language switches push the resolved locale (the corpus stays
-  // Chinese-only this release; the UI copy follows).
+  // language switches push the resolved locale — the UI copy follows,
+  // and the corpus hot-swaps with it (#68).
   useEffect(() => {
     const unlisteners: (() => void)[] = []
     void listen<HelpTarget>('pnds:help-navigate', event => {

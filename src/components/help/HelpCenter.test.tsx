@@ -50,6 +50,22 @@ const TUTORIAL_MD = [
   '模式区别见[音频模式](../reference/audio-modes.md)。',
 ].join('\n')
 
+/** The same tutorial as the zh tree ships it — #68's locale-aware
+ * fetch pairs the trees with the locales that ask for them. */
+const TUTORIAL_MD_EN = [
+  '# PNDS App Tutorial',
+  '',
+  'Welcome to PNDS.',
+  '',
+  '## First launch',
+  '',
+  'Open the app to reach the welcome screen.',
+  '',
+  '## Ports and addresses',
+  '',
+  'The performer page listens on 6868 and the monitor page on 6869; see [audio modes](../reference/audio-modes.md).',
+].join('\n')
+
 /** docs/-relative paths, as the Rust command ships them. */
 function fixtureDocPath(id: string): string {
   if (id === 'app-tutorial') return 'app-tutorial.md'
@@ -207,6 +223,86 @@ describe('HelpCenterApp (#56)', () => {
     await waitFor(() =>
       expect(document.documentElement.dataset.colorTheme).toBe('stage')
     )
+  })
+
+  it('hot-swaps the corpus and the search index when the language switches (#68)', async () => {
+    const enDocs = FIXTURE_DOCS.map(doc =>
+      doc.id === 'app-tutorial'
+        ? { ...doc, markdown: TUTORIAL_MD_EN }
+        : { ...doc, markdown: `# ${doc.id}\n\nBody.` }
+    )
+    vi.mocked(commands.helpCorpus).mockImplementation(
+      (locale: string) =>
+        Promise.resolve(
+          locale === 'zh-CN'
+            ? { status: 'ok', data: FIXTURE_DOCS }
+            : { status: 'ok', data: enDocs }
+        ) as never
+    )
+
+    render(<HelpCenterApp />)
+
+    // The boot fetch used the resolved UI locale (en in the test env)…
+    expect(
+      await screen.findByRole('heading', {
+        level: 1,
+        name: 'PNDS App Tutorial',
+      })
+    ).toBeInTheDocument()
+    expect(commands.helpCorpus).toHaveBeenCalledWith('en')
+
+    // …and a pushed locale swap hot-swaps the open document in place —
+    // same doc id, now the zh tree's copy, without reopening anything.
+    fireHelpEvent('pnds:help-locale', { locale: 'zh-CN' })
+    expect(
+      await screen.findByRole('heading', {
+        level: 1,
+        name: 'PNDS App 使用教程',
+      })
+    ).toBeInTheDocument()
+    expect(commands.helpCorpus).toHaveBeenCalledWith('zh-CN')
+
+    // The search index followed: a standing query answers from the
+    // swapped (zh) corpus.
+    const input = screen.getByPlaceholderText('搜索文档…')
+    fireEvent.change(input, { target: { value: '端口' } })
+    expect(
+      await screen.findByRole('button', { name: /端口与地址/ })
+    ).toBeInTheDocument()
+  })
+
+  it('surfaces an explicit error — never the other language — when a tree fails mid-switch (#68)', async () => {
+    vi.mocked(commands.helpCorpus)
+      .mockResolvedValueOnce({ status: 'ok', data: FIXTURE_DOCS })
+      .mockResolvedValueOnce({
+        status: 'error',
+        error:
+          'help document "reference-osc" is unreadable (looked in …/docs/zh-CN/reference/osc.md)',
+      } as never)
+
+    render(<HelpCenterApp />)
+
+    expect(
+      await screen.findByRole('heading', {
+        level: 1,
+        name: 'PNDS App 使用教程',
+      })
+    ).toBeInTheDocument()
+
+    // The zh tree is broken: the switch must land on the error state
+    // (with Retry), not quietly keep or serve another language.
+    fireHelpEvent('pnds:help-locale', { locale: 'zh-CN' })
+    expect(await screen.findByText(/帮助内容加载失败/)).toBeInTheDocument()
+
+    // Retry re-asks for the SAME locale — the base mock resolves again.
+    fireEvent.click(screen.getByRole('button', { name: '重试' }))
+    expect(
+      await screen.findByRole('heading', {
+        level: 1,
+        name: 'PNDS App 使用教程',
+      })
+    ).toBeInTheDocument()
+    expect(commands.helpCorpus).toHaveBeenLastCalledWith('zh-CN')
   })
 
   it('announces readiness so a dropped boot-time target can be replayed', async () => {

@@ -120,12 +120,14 @@ async function pushHelpTheme(colorTheme: ColorTheme): Promise<void> {
 /**
  * v1.3.0 (#56): the main-window side of the help center bridge.
  * Keeps an OPEN help window live-following the app: language switches
- * and Appearance theme changes are pushed as events (the page applies
- * them; the corpus itself stays Chinese this release). And it closes
- * the open-while-booting race: a navigate event sent before the page
- * registered its listener is dropped, so the page announces
- * `pnds:help-ready` once listening and the last target is replayed —
- * a rapid second menu click never silently lands on the default page.
+ * and Appearance theme changes are pushed as events — the page applies
+ * the theme and, since #68, the locale drives a hot corpus swap (the
+ * help window refetches that locale's tree and rebuilds its search
+ * index; no reopen). And it closes the open-while-booting race: a
+ * navigate event sent before the page registered its listener is
+ * dropped, so the page announces `pnds:help-ready` once listening and
+ * the last target is replayed — a rapid second menu click never
+ * silently lands on the default page.
  *
  * Returns an unsubscribe for the caller's cleanup.
  */

@@ -18,9 +18,10 @@
 //! missing translation on either side fails the build, never a silent
 //! fallback to the other language).
 //!
-//! #67 registers both trees everywhere but the command still serves
-//! zh-CN only: the App UI is Chinese until #68 makes the served tree a
-//! language parameter.
+//! #68: the command takes the resolved UI locale (`en` / `zh-CN`) and
+//! serves that locale's tree. An unknown locale or an unreadable
+//! document is an explicit error — the help center never silently
+//! falls back to the other language.
 
 use std::path::PathBuf;
 
@@ -33,13 +34,9 @@ const DOCS_ROOT: &str = "../docs";
 
 /// The language trees the corpus ships in (ADR-0001), as directory
 /// names under docs/ — and, in a release bundle, under help/. The
-/// trees are isomorphic: one (id, path) list serves every tree.
+/// trees are isomorphic: one (id, path) list serves every tree. The
+/// names double as the locales the `help_corpus` command accepts.
 const HELP_TREES: &[&str] = &["zh-CN", "en"];
-
-/// The tree `help_corpus` serves today. #68 replaces this constant
-/// with the UI-language parameter; until then the App UI is Chinese
-/// and zh-CN is the only tree served.
-const SERVED_TREE: &str = "zh-CN";
 
 /// One help document exactly as the frontend receives it: its stable id,
 /// its language-tree-relative path (the base the help window resolves
@@ -114,29 +111,52 @@ fn read_document(id: &str, candidates: &[PathBuf]) -> Result<String, String> {
     ))
 }
 
-/// v1.3.0 (issue #53): the help center's corpus — every shipped document
-/// as raw markdown, in manifest order. Reads the files on every call so
-/// dev edits show up without a restart; at the corpus's scale this is a
-/// few milliseconds.
-#[tauri::command]
-#[specta::specta]
-pub async fn help_corpus(app: AppHandle) -> Result<Vec<HelpCorpusDocument>, String> {
-    debug_assert!(
-        HELP_TREES.contains(&SERVED_TREE),
-        "SERVED_TREE {SERVED_TREE:?} is not registered in HELP_TREES"
-    );
+/// The language tree a locale asks for. An unknown locale is an
+/// explicit error naming the registered trees — never a silent stand-in
+/// (`en` must not quietly serve zh-CN's corpus, and vice versa).
+fn corpus_tree(locale: &str) -> Result<&'static str, String> {
+    HELP_TREES
+        .iter()
+        .copied()
+        .find(|tree| *tree == locale)
+        .ok_or_else(|| {
+            format!("unknown help locale \"{locale}\" — the corpus ships in {HELP_TREES:?}")
+        })
+}
+
+/// Reads every registered document from one language tree through the
+/// given candidate resolver — the testable core `help_corpus` delegates
+/// to (the command adds only the AppHandle-based resolver). The first
+/// unreadable document fails the whole call, naming the document and
+/// the paths it looked in.
+fn read_corpus(
+    candidates: impl Fn(&str) -> Vec<PathBuf>,
+) -> Result<Vec<HelpCorpusDocument>, String> {
     HELP_DOCUMENTS
         .iter()
         .map(|(id, docs_relative)| {
-            read_document(id, &document_candidates(&app, SERVED_TREE, docs_relative)).map(
-                |markdown| HelpCorpusDocument {
-                    id: (*id).to_string(),
-                    path: (*docs_relative).to_string(),
-                    markdown,
-                },
-            )
+            read_document(id, &candidates(docs_relative)).map(|markdown| HelpCorpusDocument {
+                id: (*id).to_string(),
+                path: (*docs_relative).to_string(),
+                markdown,
+            })
         })
         .collect()
+}
+
+/// v1.3.0 (issue #53): the help center's corpus — every shipped document
+/// as raw markdown, in manifest order, from the locale's language tree
+/// (#68; the frontend passes the resolved UI locale). Reads the files
+/// on every call so dev edits show up without a restart; at the
+/// corpus's scale this is a few milliseconds.
+#[tauri::command]
+#[specta::specta]
+pub async fn help_corpus(
+    app: AppHandle,
+    locale: String,
+) -> Result<Vec<HelpCorpusDocument>, String> {
+    let tree = corpus_tree(&locale)?;
+    read_corpus(|docs_relative| document_candidates(&app, tree, docs_relative))
 }
 
 #[cfg(test)]
@@ -282,6 +302,41 @@ mod tests {
                 "frontend manifest (help-corpus.ts) does not list id \"{id}\""
             );
         }
+    }
+
+    /// A locale outside the registered trees is an explicit error
+    /// naming the trees — never a quiet stand-in for another language.
+    #[test]
+    fn rejects_an_unknown_locale_naming_the_registered_trees() {
+        assert_eq!(corpus_tree("zh-CN").unwrap(), "zh-CN");
+        assert_eq!(corpus_tree("en").unwrap(), "en");
+        let error = corpus_tree("fr").unwrap_err();
+        assert!(error.contains("\"fr\""), "names the locale: {error}");
+        assert!(error.contains("zh-CN"), "names the trees: {error}");
+        assert!(error.contains("en"), "names the trees: {error}");
+    }
+
+    /// Simulated missing file at the command layer (#68): the tree that
+    /// lost a document fails the whole call, naming the document and
+    /// the path it looked in — the other language's corpus is never
+    /// served in its place.
+    #[test]
+    fn read_corpus_fails_loudly_when_a_tree_is_missing_a_document() {
+        let tree = tempfile::tempdir().unwrap();
+        for (id, docs_relative) in HELP_DOCUMENTS {
+            if *id == "reference-osc" {
+                continue; // this document went missing from the tree
+            }
+            let path = tree.path().join(docs_relative);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(&path, format!("# {id}\n")).unwrap();
+        }
+        let error = read_corpus(|docs_relative| vec![tree.path().join(docs_relative)]).unwrap_err();
+        assert!(
+            error.contains("\"reference-osc\""),
+            "names the document: {error}"
+        );
+        assert!(error.contains("osc.md"), "names the path: {error}");
     }
 
     #[test]
