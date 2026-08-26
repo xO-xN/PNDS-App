@@ -1,5 +1,5 @@
 //! scsynth process management, OSC control, and the App master stage.
-//! See `docs/reference/runtime-contract.md` §7, §8 and the App-side
+//! See `docs/zh-CN/reference/runtime-contract.md` §7, §8 and the App-side
 //! audio host rules in `docs/developer/app-behavior.md` (音频 Host 行为).
 //!
 //! Signal path (internal mode, §7.3/§7.4):

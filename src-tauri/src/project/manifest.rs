@@ -1,7 +1,7 @@
 //! PNDS project `manifest.json` parsing and validation.
 //!
 //! Implements the schemaVersion 1 contract from
-//! `docs/reference/manifest.md`. All user-facing error strings are
+//! `docs/zh-CN/reference/manifest.md`. All user-facing error strings are
 //! English (the V1 UI is English-only).
 
 use serde::{Deserialize, Serialize};

@@ -1,16 +1,17 @@
-//! Help-center corpus loading (v1.3.0, issue #53).
+//! Help-center corpus loading (v1.3.0, issue #53; zh-CN tree move, #66).
 //!
 //! The three Chinese docs (使用教程 / 创作指南 / 参考手册) ship in the app
-//! resources as RAW markdown — `docs/*.md` in the repository is the only
-//! source, copied verbatim by the bundler (tauri.conf.json maps each file
-//! into `help/…`) with no build-time conversion: the help window renders
-//! markdown at runtime and builds its search index in memory (#53's
-//! decision, superseding the spec's original build-time HTML+index plan).
-//! developer/ and agents/ docs are deliberately NOT in this list.
+//! resources as RAW markdown — `docs/zh-CN/*.md` in the repository is
+//! the only source, copied verbatim by the bundler (tauri.conf.json maps
+//! each file into `help/…`) with no build-time conversion: the help
+//! window renders markdown at runtime and builds its search index in
+//! memory (#53's decision, superseding the spec's original build-time
+//! HTML+index plan). developer/ and agents/ docs are deliberately NOT
+//! in this list.
 //!
-//! Dev builds read the repository's docs/ directly (edits are live in
-//! `tauri dev`); release builds read the bundled copies. The id list is
-//! the stable contract with the frontend manifest
+//! Dev builds read the repository's language tree directly (edits are
+//! live in `tauri dev`); release builds read the bundled copies. The id
+//! list is the stable contract with the frontend manifest
 //! (src/lib/help-corpus.ts) — both sides fail loudly on drift.
 
 use std::path::PathBuf;
@@ -18,11 +19,16 @@ use std::path::PathBuf;
 use specta::Type;
 use tauri::{AppHandle, Manager};
 
+/// Where the corpus lives in a repository checkout: the zh-CN language
+/// tree (ADR-0001). The `en/` mirror tree (#67) will select this by
+/// locale; until then zh-CN is the only tree.
+const CORPUS_TREE: &str = "../docs/zh-CN";
+
 /// One help document exactly as the frontend receives it: its stable id,
-/// its docs/-relative path (the base the help window resolves the
-/// corpus's cross-document markdown links against — #56 user report),
-/// and the raw markdown. Titles and sections are the frontend's to
-/// derive (it owns the markdown structure pass).
+/// its language-tree-relative path (the base the help window resolves
+/// the corpus's cross-document markdown links against — #56 user
+/// report), and the raw markdown. Titles and sections are the
+/// frontend's to derive (it owns the markdown structure pass).
 #[derive(Debug, Clone, serde::Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct HelpCorpusDocument {
@@ -32,7 +38,8 @@ pub struct HelpCorpusDocument {
 }
 
 /// The corpus allowlist: (stable id, path relative to the repository's
-/// docs/). Order matches the frontend manifest; ids never repeat.
+/// zh-CN language tree). Order matches the frontend manifest; ids never
+/// repeat.
 const HELP_DOCUMENTS: &[(&str, &str)] = &[
     ("app-tutorial", "app-tutorial.md"),
     ("template-guide", "template-guide.md"),
@@ -54,7 +61,8 @@ const HELP_DOCUMENTS: &[(&str, &str)] = &[
 
 /// Where a document may live, most specific first: the app bundle's
 /// resources (release), then — debug builds only — the repository's
-/// docs/ (the single source of truth, live during development).
+/// zh-CN language tree (the single source of truth, live during
+/// development).
 fn document_candidates(app: &AppHandle, docs_relative: &str) -> Vec<PathBuf> {
     let mut candidates = Vec::new();
     if let Ok(resources) = app.path().resource_dir() {
@@ -63,7 +71,7 @@ fn document_candidates(app: &AppHandle, docs_relative: &str) -> Vec<PathBuf> {
     #[cfg(debug_assertions)]
     candidates.push(
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../docs")
+            .join(CORPUS_TREE)
             .join(docs_relative),
     );
     candidates
@@ -114,14 +122,15 @@ mod tests {
     use super::*;
     use std::fs;
 
-    /// The repository's docs/ carry every shipped document at its listed
-    /// path — a rename here breaks the bundle contract, so it must break
-    /// the build, not the help center at runtime.
+    /// The repository's zh-CN language tree carries every shipped
+    /// document at its listed path — a rename here breaks the bundle
+    /// contract, so it must break the build, not the help center at
+    /// runtime.
     #[test]
-    fn every_shipped_document_exists_in_docs() {
+    fn every_shipped_document_exists_in_the_language_tree() {
         for (id, docs_relative) in HELP_DOCUMENTS {
             let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("../docs")
+                .join(CORPUS_TREE)
                 .join(docs_relative);
             assert!(
                 path.is_file(),

@@ -7,10 +7,11 @@ import type { HelpDocument } from './help-corpus'
  * resolved here BEFORE any default handling:
  *
  * - relative `.md` targets resolve against the LINKING document's own
- *   docs/-relative path and become in-window navigation. `..` is CLAMPED
- *   at the docs/ root: parts of the corpus were authored as if the base
- *   were the repository root (`../reference/x.md` from docs/app-tutorial.md),
- *   and clamping reads that intent instead of escaping;
+ *   language-tree-relative path and become in-window navigation. `..` is
+ *   CLAMPED at the language-tree root: parts of the corpus were authored
+ *   as if the base were the repository root (`../reference/x.md` from
+ *   docs/zh-CN/app-tutorial.md), and clamping reads that intent instead
+ *   of escaping;
  * - `#fragment` alone anchors inside the current document;
  * - URLs with a scheme (https, mailto, …) leave via the system browser;
  * - anything that matches no document is null — the click no-ops rather
@@ -22,7 +23,7 @@ export type HelpLinkTarget =
   | { kind: 'doc'; docId: string; anchor: string | null }
   | { kind: 'external'; url: string }
 
-/** The corpus shape link resolution needs — id plus docs/-relative path. */
+/** The corpus shape link resolution needs — id plus language-tree-relative path. */
 export type LinkableDoc = Pick<HelpDocument, 'id' | 'path'>
 
 const SCHEME = /^[a-zA-Z][a-zA-Z0-9+.-]*:/
@@ -68,7 +69,7 @@ export function resolveHelpLink(
 
 /**
  * Collapses `.` and `..` segments; `..` at the root pops nothing (the
- * docs/ tree is the world — nothing exists above it to link to).
+ * language tree is the world — nothing exists above it to link to).
  */
 function normalizeDocsPath(path: string): string {
   const segments: string[] = []

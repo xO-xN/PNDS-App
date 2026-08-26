@@ -20,9 +20,9 @@ PNDS 池谱（Platform for Networked Digital Score）是创作与演奏网络数
 
 ## 文档
 
-- [PNDS App 教程](docs/app-tutorial.md)
-- [PNDS Template 创作指南](docs/template-guide.md)
-- [参考手册](docs/reference/README.md)
+- [PNDS App 教程](docs/zh-CN/app-tutorial.md)
+- [PNDS Template 创作指南](docs/zh-CN/template-guide.md)
+- [参考手册](docs/zh-CN/reference/README.md)
 
 ## 相关仓库
 

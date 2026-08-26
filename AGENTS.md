@@ -15,11 +15,11 @@ PNDS App：演出现场运行 PNDS 数字乐谱工程的 macOS（Apple Silicon�
 
 ## 按任务取读
 
-先读相关文档再动手；`docs/reference/README.md` 是契约层的完整索引：
+先读相关文档再动手；`docs/zh-CN/reference/README.md` 是契约层的完整索引：
 
-- 改 manifest / preflight / 工程结构 → `docs/reference/manifest.md`、`docs/reference/structure.md`
-- 改进程 / health / 音频 bus / 关停 → `docs/reference/runtime-contract.md`
-- 改 `.pnds` 打包 / 安装 → `docs/reference/pnds-bundle.md`
+- 改 manifest / preflight / 工程结构 → `docs/zh-CN/reference/manifest.md`、`docs/zh-CN/reference/structure.md`
+- 改进程 / health / 音频 bus / 关停 → `docs/zh-CN/reference/runtime-contract.md`
+- 改 `.pnds` 打包 / 安装 → `docs/zh-CN/reference/pnds-bundle.md`
 - App 产品行为与验收存疑（session / 窗口 / 侧栏 / 静音 / 全屏 / 错误重试 / 测试覆盖 / DoD）→ `docs/developer/app-behavior.md`
 - 写 UI / 状态 / 命令桥 / 快捷键 / i18n → `docs/developer/README.md`（问题式索引）
 - 领取与汇报任务 → GitHub issues（`docs/agents/issue-tracker.md`）；领域术语与 ADR 布局 → `docs/agents/domain.md`

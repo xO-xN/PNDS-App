@@ -1,6 +1,6 @@
 //! PNDS `.pnds` project bundle service (v1.2.0, issue #16).
 //!
-//! Implements `docs/reference/pnds-bundle.md`: a `.pnds` file is
+//! Implements `docs/zh-CN/reference/pnds-bundle.md`: a `.pnds` file is
 //! a zip(deflate) archive holding exactly one root directory with the
 //! complete runnable project plus a top-level `pnds-bundle.json`. It is a
 //! transport container only — sessions always run from the extracted

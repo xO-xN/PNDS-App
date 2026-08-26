@@ -4,9 +4,9 @@ PNDS App 的产品行为、测试覆盖与 Definition of Done 的权威文档（
 
 规范分工与冲突裁决：
 
-- 工程静态格式（manifest / 目录 / 资产）→ [`manifest.md`](../reference/manifest.md)、[`structure.md`](../reference/structure.md)
-- 进程 / 环境变量 / health / 音频 bus / 关停 → [`runtime-contract.md`](../reference/runtime-contract.md)（下文简称「运行契约」）
-- `.pnds` 打包与安装 → [`pnds-bundle.md`](../reference/pnds-bundle.md)
+- 工程静态格式（manifest / 目录 / 资产）→ [`manifest.md`](../zh-CN/reference/manifest.md)、[`structure.md`](../zh-CN/reference/structure.md)
+- 进程 / 环境变量 / health / 音频 bus / 关停 → [`runtime-contract.md`](../zh-CN/reference/runtime-contract.md)（下文简称「运行契约」）
+- `.pnds` 打包与安装 → [`pnds-bundle.md`](../zh-CN/reference/pnds-bundle.md)
 - App 产品行为与验收 → 本文档
 
 ## 产品定位
@@ -125,7 +125,7 @@ Rust session manager 是运行状态真源。React 不得用本地 reset 伪造�
 
 ## 音频 Host 行为
 
-- UI 只能显示 manifest 声明的模式；三模式的 Host 行为表 → 运行契约 §6（模式说明见 [`audio-modes.md`](../reference/audio-modes.md)）；
+- UI 只能显示 manifest 声明的模式；三模式的 Host 行为表 → 运行契约 §6（模式说明见 [`audio-modes.md`](../zh-CN/reference/audio-modes.md)）；
 - `N/H/K/B` 计算、bus 规则、只桥接前 K 路与安全丢弃 → 运行契约 §7；
 - 设备列表每项显示可用输出通道数；通道不足设备视觉灰显但仍可选择，最右红色 `Nch → Hch` 损失字样标注且设置区持续显示（无 toast/modal）→ 运行契约 §7.6；
 - 设备能力以有效采样率下的 CoreAudio/CPAL 配置为准；设备消失时回退系统默认并给出现有的设备不可用提示；
@@ -214,7 +214,7 @@ Back/Close 返回 Welcome，不自动重启。
 
 ## 内置验证工具
 
-分发形态与注册表管线（`utilities.json`、构建期拉取、`utilities/<id>/` 原地运行）→ [`pnds-bundle.md`](../reference/pnds-bundle.md)「内置工具的形态」。验证工程 Multichannel Signal Generator 由独立工具仓库维护，App 仓库只提交注册表与拉取管线。
+分发形态与注册表管线（`utilities.json`、构建期拉取、`utilities/<id>/` 原地运行）→ [`pnds-bundle.md`](../zh-CN/reference/pnds-bundle.md)「内置工具的形态」。验证工程 Multichannel Signal Generator 由独立工具仓库维护，App 仓库只提交注册表与拉取管线。
 
 对工具本身的要求（用于验证 manifest、bus、master stage、设备通道不足和 BlackHole/DAW 路由）：
 

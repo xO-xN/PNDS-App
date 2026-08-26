@@ -9,7 +9,7 @@
 //! project into the stable path `utilities/<id>/` — no version in the path,
 //! so app updates swap the contents without ever stale-dating the history
 //! entries. The app runs the tools IN PLACE from the resources; there is no
-//! first-run install into the app data directory (//! docs/reference/pnds-bundle.md「内置工具的形态」 records this decision). Opening one runs the standard
+//! first-run install into the app data directory (//! docs/zh-CN/reference/pnds-bundle.md「内置工具的形态」 records this decision). Opening one runs the standard
 //! preflight → spawn → health → monitor session flow.
 //!
 //! The tools' sources live in their own repositories (sibling checkouts of

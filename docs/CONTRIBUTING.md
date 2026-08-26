@@ -33,7 +33,7 @@ npm install
 ## Collaboration
 
 - Task assignment and progress reporting happen in GitHub issues.
-- Code and documentation conventions live in [AGENTS.md](../AGENTS.md); platform contracts (project format / runtime protocol / `.pnds`) in the [reference manual](./reference/README.md).
+- Code and documentation conventions live in [AGENTS.md](../AGENTS.md); platform contracts (project format / runtime protocol / `.pnds`) in the [reference manual](./zh-CN/reference/README.md).
 - Follow the existing commit-message style (`feat:` / `fix:` / `docs:` / `chore:` prefixes).
 
 ## License

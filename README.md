@@ -22,9 +22,9 @@ A performance needs just one Mac and a router: the App opens a project and sets 
 
 The documentation is currently Chinese-only:
 
-- [PNDS App Tutorial](docs/app-tutorial.md)
-- [PNDS Template Guide](docs/template-guide.md)
-- [Reference Manual](docs/reference/README.md)
+- [PNDS App Tutorial](docs/zh-CN/app-tutorial.md)
+- [PNDS Template Guide](docs/zh-CN/template-guide.md)
+- [Reference Manual](docs/zh-CN/reference/README.md)
 
 Looking for a score project to run? See [_Inarticulate III_](https://github.com/xO-xN/inarticulate-iii).
 

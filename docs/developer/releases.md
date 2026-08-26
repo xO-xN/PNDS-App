@@ -78,7 +78,7 @@ Then GitHub Actions will:
    mounted SuperCollider dmg's `sclang`. The built-in utility tools are
    staged the same way by `npm run utilities:fetch`: the tool repos release
    `.pnds` bundles themselves (one project root + `pnds-bundle.json`, per the
-   [Project Bundle Specification](../reference/pnds-bundle.md)), and the script downloads each pinned
+   [Project Bundle Specification](../zh-CN/reference/pnds-bundle.md)), and the script downloads each pinned
    release (registry: `utilities.json`), fails the build on a sha256
    mismatch or a malformed bundle layout, and unpacks the verified project
    into the gitignored `src-tauri/resources/utilities/<id>/` (stable path,

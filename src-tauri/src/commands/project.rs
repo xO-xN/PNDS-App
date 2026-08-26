@@ -1,7 +1,7 @@
 //! Project-related commands: preflight validation and orphan cleanup.
 //!
 //! Implements the startup sequence stage that runs before any process is
-//! spawned (docs/reference/runtime-contract.md §8 steps 1–2 and §11
+//! spawned (docs/zh-CN/reference/runtime-contract.md §8 steps 1–2 and §11
 //! orphan cleanup; preflight checklist in docs/developer/app-behavior.md).
 
 use std::path::PathBuf;

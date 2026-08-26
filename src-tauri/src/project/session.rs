@@ -1,5 +1,5 @@
 //! Project session: score-server (Node.js) process lifecycle and health
-//! polling. See `docs/reference/runtime-contract.md` §3–§11; App-side
+//! polling. See `docs/zh-CN/reference/runtime-contract.md` §3–§11; App-side
 //! session behavior in `docs/developer/app-behavior.md` (状态与 Session).
 //!
 //! Startup order (runtime-contract §8): preflight → (internal: resolve

@@ -1,6 +1,6 @@
 # 开发文档
 
-App 开发的规则层：既定模式与系统做法，按问题检索——查什么 → 读哪个文件。平台契约（工程格式 / 运行协议 / `.pnds`）的索引在 [`docs/reference/README.md`](../reference/README.md)；**App 产品行为与验收 → [app-behavior.md](./app-behavior.md)**。
+App 开发的规则层：既定模式与系统做法，按问题检索——查什么 → 读哪个文件。平台契约（工程格式 / 运行协议 / `.pnds`）的索引在 [`docs/zh-CN/reference/README.md`](../zh-CN/reference/README.md)；**App 产品行为与验收 → [app-behavior.md](./app-behavior.md)**。
 
 ## 架构与状态
 

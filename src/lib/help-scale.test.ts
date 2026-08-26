@@ -6,27 +6,28 @@ import {
 } from './help-corpus'
 import { buildHelpIndex, searchHelp } from './help-search'
 
-import appTutorial from '../../docs/app-tutorial.md?raw'
-import templateGuide from '../../docs/template-guide.md?raw'
-import referenceReadme from '../../docs/reference/README.md?raw'
-import referenceDigitalScore from '../../docs/reference/digital-score.md?raw'
-import referenceNetwork from '../../docs/reference/network.md?raw'
-import referenceAudioModes from '../../docs/reference/audio-modes.md?raw'
-import referenceRuntimeContract from '../../docs/reference/runtime-contract.md?raw'
-import referenceStructure from '../../docs/reference/structure.md?raw'
-import referenceManifest from '../../docs/reference/manifest.md?raw'
-import referencePndsBundle from '../../docs/reference/pnds-bundle.md?raw'
-import referenceSupercollider from '../../docs/reference/supercollider.md?raw'
-import referenceOsc from '../../docs/reference/osc.md?raw'
-import referenceP5js from '../../docs/reference/p5js.md?raw'
+import appTutorial from '../../docs/zh-CN/app-tutorial.md?raw'
+import templateGuide from '../../docs/zh-CN/template-guide.md?raw'
+import referenceReadme from '../../docs/zh-CN/reference/README.md?raw'
+import referenceDigitalScore from '../../docs/zh-CN/reference/digital-score.md?raw'
+import referenceNetwork from '../../docs/zh-CN/reference/network.md?raw'
+import referenceAudioModes from '../../docs/zh-CN/reference/audio-modes.md?raw'
+import referenceRuntimeContract from '../../docs/zh-CN/reference/runtime-contract.md?raw'
+import referenceStructure from '../../docs/zh-CN/reference/structure.md?raw'
+import referenceManifest from '../../docs/zh-CN/reference/manifest.md?raw'
+import referencePndsBundle from '../../docs/zh-CN/reference/pnds-bundle.md?raw'
+import referenceSupercollider from '../../docs/zh-CN/reference/supercollider.md?raw'
+import referenceOsc from '../../docs/zh-CN/reference/osc.md?raw'
+import referenceP5js from '../../docs/zh-CN/reference/p5js.md?raw'
 
 /**
  * v1.3.0 (#53): the real corpus, end to end, at full scale. The unit
- * seams run on fixtures; this one pulls the actual shipped docs/ files
- * (the same content the Rust command reads) and pins the acceptance
- * criteria that only hold at real scale: every document places, derives
- * a title, and the in-memory index builds in milliseconds — the help
- * window builds it when it opens, so it must never feel like loading.
+ * seams run on fixtures; this one pulls the actual shipped zh-CN tree
+ * files (the same content the Rust command reads) and pins the
+ * acceptance criteria that only hold at real scale: every document
+ * places, derives a title, and the in-memory index builds in
+ * milliseconds — the help window builds it when it opens, so it must
+ * never feel like loading.
  */
 
 /** The shipped set, as raw text — one import per bundled document. */
@@ -46,7 +47,7 @@ const RAW_CORPUS: Record<string, string> = {
   'reference-p5js': referenceP5js,
 }
 
-/** id → docs/-relative path, mirroring the Rust-side document list. */
+/** id → language-tree-relative path, mirroring the Rust-side document list. */
 const DOC_PATHS: Record<string, string> = {
   'app-tutorial': 'app-tutorial.md',
   'template-guide': 'template-guide.md',

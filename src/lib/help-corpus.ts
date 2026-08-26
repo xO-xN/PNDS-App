@@ -3,12 +3,12 @@ import { splitSections, type HelpSection } from './help-markdown'
 /**
  * v1.3.0 (#53): the help corpus loader. The Rust `help_corpus` command
  * reads the three Chinese docs (使用教程 / 创作指南 / 参考手册) raw from
- * the app resources — `docs/*.md` in the repository is the ONLY source,
- * shipped verbatim with no build-time conversion — and hands over
- * { id, markdown } pairs. This module is the single place that knows the
- * corpus's shape: which documents exist, which book each belongs to, the
- * display order (the reference manual follows its own README index), and
- * each document's title (its own `#` heading).
+ * the app resources — `docs/zh-CN/*.md` in the repository is the ONLY
+ * source, shipped verbatim with no build-time conversion — and hands
+ * over { id, markdown } pairs. This module is the single place that
+ * knows the corpus's shape: which documents exist, which book each
+ * belongs to, the display order (the reference manual follows its own
+ * README index), and each document's title (its own `#` heading).
  *
  * A mismatch between the shipped set and HELP_BOOKS fails loudly — the
  * help center must never silently hide a document it cannot place, nor
@@ -21,7 +21,7 @@ export type HelpBookId = 'tutorial' | 'creator-guide' | 'reference'
 /** One help document exactly as the `help_corpus` command ships it. */
 export interface RawHelpDocument {
   id: string
-  /** docs/-relative path — the link-resolution base (#56 user report). */
+  /** Language-tree-relative path — the link-resolution base (#56). */
   path: string
   markdown: string
 }
@@ -32,7 +32,7 @@ export interface HelpDocument {
   book: HelpBookId
   /** Display title: the document's `#` heading, falling back to its id. */
   title: string
-  /** docs/-relative path — the base the corpus's markdown links resolve from. */
+  /** Language-tree-relative path — the base the corpus's markdown links resolve from. */
   path: string
   markdown: string
   sections: HelpSection[]
@@ -43,7 +43,10 @@ export interface HelpDocument {
  * pages in the order its own README index answers questions; the ids are
  * the stable contract with the Rust-side document list
  * (src-tauri/src/commands/help.rs) and the bundle resources
- * (tauri.conf.json → help/…).
+ * (tauri.conf.json → help/…). Paths live on the Rust side, relative to
+ * the zh-CN language tree (docs/zh-CN/, ADR-0001) — the tree moves as
+ * one unit, so tree-relative paths keep the corpus's internal links
+ * resolving without a frontend change (#66).
  */
 export const HELP_BOOKS: readonly {
   id: HelpBookId
