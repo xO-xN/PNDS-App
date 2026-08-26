@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook, fireEvent, waitFor } from '@testing-library/react'
+import { mockOffsets } from '@/test/test-utils'
 import {
   applyIndicatorGeometry,
   clearIndicatorGeometry,
@@ -99,6 +100,9 @@ describe('useIndicatorPill (v1.3.2 issue #78 engine)', () => {
   })
 
   it('stops re-measuring on resize after unmount', () => {
+    // The resize listener is what unmounting removes. document.fonts.ready
+    // is never cancelled (same as production) — callers tolerate a late
+    // re-measure by no-oping on null refs.
     const apply = vi.fn()
     const remeasure = vi.fn()
 
@@ -112,27 +116,20 @@ describe('useIndicatorPill (v1.3.2 issue #78 engine)', () => {
   })
 })
 
-/** The test DOM has no layout, so the offset* properties stay 0 — pin the
- *  pair the axis under test reads. (document.fonts.ready is never
- *  cancelled on unmount, same as production: callers tolerate a late
- *  re-measure by no-oping on null refs, which the resize path here can't
- *  hit once the listener is gone.) */
+/** A pill target with pinned geometry — the test DOM has no layout, so
+ *  mockOffsets states the box the axis under test reads. */
 function pinnedTarget(
-  offsets: Partial<
-    Record<'offsetLeft' | 'offsetTop' | 'offsetWidth' | 'offsetHeight', number>
-  >
+  offsets: Parameters<typeof mockOffsets>[1]
 ): HTMLDivElement {
   const target = document.createElement('div')
-  for (const [key, value] of Object.entries(offsets)) {
-    Object.defineProperty(target, key, { value })
-  }
+  mockOffsets(target, offsets)
   return target
 }
 
 describe('applyIndicatorGeometry', () => {
   it('writes translateX and width on the x axis (folder-pill shape)', () => {
     const pill = document.createElement('div')
-    const target = pinnedTarget({ offsetLeft: 32, offsetWidth: 120 })
+    const target = pinnedTarget({ left: 32, width: 120 })
 
     applyIndicatorGeometry(pill, target, 'x')
 
@@ -143,7 +140,7 @@ describe('applyIndicatorGeometry', () => {
 
   it('writes translateY and height on the y axis (card-pill shape)', () => {
     const pill = document.createElement('div')
-    const target = pinnedTarget({ offsetTop: 56, offsetHeight: 88 })
+    const target = pinnedTarget({ top: 56, height: 88 })
 
     applyIndicatorGeometry(pill, target, 'y')
 
@@ -156,17 +153,9 @@ describe('applyIndicatorGeometry', () => {
 describe('clearIndicatorGeometry', () => {
   it('hands both geometry properties back to the stylesheet', () => {
     const pillX = document.createElement('div')
-    applyIndicatorGeometry(
-      pillX,
-      pinnedTarget({ offsetLeft: 32, offsetWidth: 120 }),
-      'x'
-    )
+    applyIndicatorGeometry(pillX, pinnedTarget({ left: 32, width: 120 }), 'x')
     const pillY = document.createElement('div')
-    applyIndicatorGeometry(
-      pillY,
-      pinnedTarget({ offsetTop: 56, offsetHeight: 88 }),
-      'y'
-    )
+    applyIndicatorGeometry(pillY, pinnedTarget({ top: 56, height: 88 }), 'y')
 
     clearIndicatorGeometry(pillX, 'x')
     clearIndicatorGeometry(pillY, 'y')
