@@ -205,27 +205,6 @@ pub fn run() {
                 }
             }
 
-            // v1.3.1 (#70): secondary windows (the help center) carry the
-            // corner treatment too — re-sync on their fullscreen
-            // round-trips exactly like main above, so the 16px mask never
-            // rounds a fullscreen window's edges. Ordinary resizes ride
-            // along harmlessly (the sync is idempotent).
-            RunEvent::WindowEvent {
-                label,
-                event: WindowEvent::Resized(_),
-                ..
-            } if label != "main" => {
-                if let Some(window) = app_handle.get_webview_window(label) {
-                    let state = app_handle.state::<crate::window::WindowManager>();
-                    crate::window::sync_corner_radius(
-                        &window,
-                        state
-                            .square_corners
-                            .load(std::sync::atomic::Ordering::SeqCst),
-                    );
-                }
-            }
-
             // Coming back from another desktop/space (the window becomes
             // key again): the webview's JS was suspended while occluded,
             // so its queued `pnds:session` events lag the backend, and

@@ -442,13 +442,7 @@
    — the same move the global reduced-motion rule makes in App.css).
    The window frames square too: the native corner mask drops to 0 with
    the theme (window.rs `set_window_corners_square`, called before the
-   attribute lands), so nothing leaks at the corners — and since #70 the
-   flag is app-wide: the help window squares with the main window (this
-   flattening rule reaches it through its own root attribute; its titled
-   window also flips to see-through chrome for the mask to shape —
-   window.rs `sync_window_chrome`, restored when the theme leaves
-   brutal) —
-   the data-app-frame
+   attribute lands), so nothing leaks at the corners — the data-app-frame
    rounding exemption other states rely on is deliberately absent. The
    traffic-light dots stay circular (macOS system metaphor, via
    TrafficLights' data-os-circle). */

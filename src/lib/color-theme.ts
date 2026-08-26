@@ -68,9 +68,8 @@ export function setColorThemeAttribute(theme: ColorTheme): void {
 }
 
 /**
- * Brutal's windows are square (#41): the native 16px corner mask
- * (window.rs) drops to 0 while that theme is active — app-wide since
- * #70, so an open help window follows too. Called BEFORE the
+ * Brutal's window is square (#41): the native 16px corner mask
+ * (window.rs) drops to 0 while that theme is active. Called BEFORE the
  * root attribute lands so the mask never lags the CSS edge — switching
  * into Brutal squares the mask first, switching away rounds it first.
  * A failure is logged, never thrown: the CSS edge still renders (its
