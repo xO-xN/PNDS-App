@@ -20,15 +20,21 @@ describe('WelcomeScreen', () => {
     })
   })
 
-  it('renders the plain hint — no interactive open/add control', () => {
+  it('renders the three first-use tips and no add-project line (#69)', () => {
     render(<WelcomeScreen />)
 
+    // Spec-final copy (#69): open from the sidebar, hold ⌘, see Help —
+    // "add a new project" is gone as a first-use suggestion.
     expect(
-      screen.getByText('Start a PNDS Digital Score by adding a new project')
+      screen.getByText('Open a project from the left sidebar')
     ).toBeInTheDocument()
     expect(
-      screen.getByText('or select a project on the left sidebar')
+      screen.getByText('Hold the ⌘ key to quickly control the App')
     ).toBeInTheDocument()
+    expect(
+      screen.getByText('See Help for full documentation')
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/adding a new project/i)).not.toBeInTheDocument()
     expect(screen.queryByRole('button')).not.toBeInTheDocument()
   })
 

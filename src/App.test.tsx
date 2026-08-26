@@ -22,9 +22,10 @@ describe('App', () => {
       screen.getByRole('heading', { name: 'Hi! Welcome to PNDS' })
     ).toBeInTheDocument()
     // v1.1.2 T7: the hint is plain copy — adding a project is the
-    // sidebar's "+" button, not an inline pill.
+    // sidebar's "+" button, not an inline pill. #69: the first-use tip
+    // is "open from the left sidebar"; the add-project line is gone.
     expect(
-      screen.getByText('Start a PNDS Digital Score by adding a new project')
+      screen.getByText('Open a project from the left sidebar')
     ).toBeInTheDocument()
     expect(screen.getByTestId('add-project-button')).toBeInTheDocument()
   })

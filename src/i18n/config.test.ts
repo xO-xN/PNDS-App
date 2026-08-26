@@ -46,13 +46,14 @@ describe('i18n config (v1.2.0 issue #13)', () => {
     ).toBe('16ch → 2ch')
   })
 
-  it('serves the zh-CN welcome copy (v1.2.0 review feedback)', async () => {
+  it('serves the zh-CN welcome copy (v1.2.0 review feedback; #69 tips)', async () => {
     await i18n.changeLanguage('zh-CN')
     expect(i18n.t('welcome.title')).toBe('你好！欢迎来到 PNDS 池谱')
     expect(i18n.t('welcome.subtitle')).toBe('网络数字乐谱演奏平台')
-    // The two hint lines read as one sentence across the UI's two blocks.
-    expect(
-      `${i18n.t('welcome.hintAdd')}，${i18n.t('welcome.hintSelect')}`
-    ).toBe('添加一个 PNDS 池谱，或是从左侧栏选取一个进行演出')
+    // The three first-use tips, spec-final (#65): open from the sidebar,
+    // ⌘ for quick control, Help for the full docs.
+    expect(i18n.t('welcome.hintOpenProject')).toBe('在左侧栏打开工程')
+    expect(i18n.t('welcome.cmdHint')).toBe('按住 ⌘ 键即可快速操控 App')
+    expect(i18n.t('welcome.hintHelp')).toBe('完整使用文档，请查看「帮助」')
   })
 })

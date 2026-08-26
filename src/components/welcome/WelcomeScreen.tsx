@@ -3,13 +3,15 @@ import { useProjectStore } from '@/store/project-store'
 
 /**
  * Welcome main area (§10.4; Figma "Starting Page"): hero text plus the
- * plain hint — copy only, no interactive controls. Importing lives in the
- * project column's tail entry and ⌘O (both funnel through
+ * plain first-use tips — copy only, no interactive controls. Importing
+ * lives in the project column's tail entry and ⌘O (both funnel through
  * promptOpenProject; a central CTA was tried in #31 and removed again
- * before release — the hint copy carries the first-use story). Projects
- * start by clicking a sidebar entry — preflight runs directly (v1.2.0
- * removed the trust gate, spec issue #15) and starting is explicit via
- * the Load button.
+ * before release — the tip copy carries the first-use story). #69 made
+ * the opening line "open a project from the left sidebar" and dropped
+ * the add-project suggestion: opening an existing project is the
+ * performer's main path. Projects start by clicking a sidebar entry —
+ * preflight runs directly (v1.2.0 removed the trust gate, spec issue
+ * #15) and starting is explicit via the Load button.
  */
 export function WelcomeScreen() {
   const { t } = useTranslation()
@@ -28,12 +30,16 @@ export function WelcomeScreen() {
       </header>
 
       <p className="mt-[10vh] max-w-2xl text-center text-[15px] leading-8 text-(--pnds-text)/80">
-        <span className="block">{t('welcome.hintAdd')}</span>
-        <span className="block">{t('welcome.hintSelect')}</span>
+        <span className="block">{t('welcome.hintOpenProject')}</span>
       </p>
 
+      {/* ⌘ is a keyboard affordance — select-none; the Help tip is
+          documentation copy and stays selectable. */}
       <p className="mt-6 text-sm text-(--pnds-text)/80 select-none">
-        {t('welcome.cmdHint')}
+        <span className="block">{t('welcome.cmdHint')}</span>
+      </p>
+      <p className="mt-2 text-sm text-(--pnds-text)/80">
+        <span className="block">{t('welcome.hintHelp')}</span>
       </p>
 
       {/* Bottom-docked status, out of the centered column: an appearing
