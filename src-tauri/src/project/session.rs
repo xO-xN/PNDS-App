@@ -142,39 +142,93 @@ pub fn node_binary_path() -> Result<PathBuf, String> {
     Err("Embedded Node.js runtime not found.\nRun `npm run node:fetch` and try again.".to_string())
 }
 
-/// Environment variables injected into the score server (§3, §6, §7).
-/// `none` mode receives only `PNDS_HOST_IP`. Internal receives the dynamic
-/// OSC target plus the session channel plan: `PNDS_AUDIO_OUTPUT_BUS = B`
-/// (private bus start) and `PNDS_AUDIO_OUTPUT_CHANNELS = N` (declared
-/// project outputs) — never a hardcoded stereo pair.
-pub fn build_score_server_env(
-    mode: &str,
-    lan_ip: &str,
-    osc_target: Option<&str>,
-    audio_output_bus: Option<u32>,
-    audio_output_channels: Option<u32>,
-) -> Vec<(String, String)> {
-    let mut env = vec![("PNDS_HOST_IP".to_string(), lan_ip.to_string())];
-    match mode {
+/// What to start (v1.3.2, issue #77): the conceptual inputs of one
+/// score-server start as a single record, instead of positional
+/// parameters widening through the layers (command → `start` →
+/// `start_generation` → `build_score_server_env`). The command boundary
+/// constructs it once; v1.4.0's hub variables (spec #57) will land as
+/// fields here without widening a single downstream signature.
+///
+/// The first four fields are the user's intent. The resolved fields fill
+/// in along the way — `start_generation` performs internal mode's audio
+/// resolution and settles the OSC target actually injected — so the env
+/// construction reads everything from this one record.
+pub struct StartRequest {
+    /// Score project root directory.
+    pub path: String,
+    /// Requested audio mode; must be manifest-supported.
+    pub mode: String,
+    /// The user-selected LAN IPv4 (§4) — becomes `PNDS_HOST_IP`.
+    pub lan_ip: String,
+    /// User OSC target (§9); required for external mode. Internal mode
+    /// ignores it and allocates the dynamic loopback target.
+    pub osc_target: Option<String>,
+    /// Resolved during start (internal only, §7.1): the N/H/K/B plan.
+    pub channel_plan: Option<crate::project::audio::ChannelPlan>,
+    /// Resolved during start (internal only): the CoreAudio device the
+    /// session actually runs on.
+    pub output_device: Option<String>,
+    /// Resolved during start: the OSC target actually injected —
+    /// internal's dynamic loopback, external's validated user target.
+    pub resolved_osc_target: Option<String>,
+}
+
+impl StartRequest {
+    /// The command boundary's constructor: intent only, the resolved
+    /// fields start empty and fill in during `start_generation`.
+    pub fn new(path: String, mode: String, lan_ip: String, osc_target: Option<String>) -> Self {
+        Self {
+            path,
+            mode,
+            lan_ip,
+            osc_target,
+            channel_plan: None,
+            output_device: None,
+            resolved_osc_target: None,
+        }
+    }
+}
+
+/// Environment variables injected into the score server (§3, §6, §7),
+/// read from the start record (issue #77). `none` mode receives only
+/// `PNDS_HOST_IP`. Internal receives the dynamic OSC target plus the
+/// session channel plan: `PNDS_AUDIO_OUTPUT_BUS = B` (private bus
+/// start) and `PNDS_AUDIO_OUTPUT_CHANNELS = N` (declared project
+/// outputs) — never a hardcoded stereo pair.
+pub fn build_score_server_env(request: &StartRequest) -> Vec<(String, String)> {
+    let mut env = vec![("PNDS_HOST_IP".to_string(), request.lan_ip.clone())];
+    match request.mode.as_str() {
         "internal" => {
-            let target = osc_target.expect("internal mode requires an OSC target");
-            env.push(("PNDS_OSC_TARGET".to_string(), target.to_string()));
+            env.push((
+                "PNDS_OSC_TARGET".to_string(),
+                request
+                    .resolved_osc_target
+                    .as_deref()
+                    .expect("internal mode requires the resolved OSC target")
+                    .to_string(),
+            ));
+            let plan = request
+                .channel_plan
+                .as_ref()
+                .expect("internal mode requires the resolved channel plan");
             env.push((
                 "PNDS_AUDIO_OUTPUT_BUS".to_string(),
-                audio_output_bus
-                    .expect("internal mode requires the channel plan bus start")
-                    .to_string(),
+                plan.private_bus_start.to_string(),
             ));
             env.push((
                 "PNDS_AUDIO_OUTPUT_CHANNELS".to_string(),
-                audio_output_channels
-                    .expect("internal mode requires the project output channel count")
-                    .to_string(),
+                plan.project_channels.to_string(),
             ));
         }
         "external" => {
-            let target = osc_target.expect("external mode requires an OSC target");
-            env.push(("PNDS_OSC_TARGET".to_string(), target.to_string()));
+            env.push((
+                "PNDS_OSC_TARGET".to_string(),
+                request
+                    .resolved_osc_target
+                    .as_deref()
+                    .expect("external mode requires the validated OSC target")
+                    .to_string(),
+            ));
         }
         _ => {}
     }
@@ -397,33 +451,22 @@ impl SessionManager {
         &self,
         app: AppHandle<R>,
         app_data_dir: PathBuf,
-        path: String,
-        mode: String,
-        lan_ip: String,
-        osc_target: Option<String>,
+        request: StartRequest,
     ) -> Result<(), String> {
         let generation = {
             let mut inner = self.lock();
             inner.generation += 1;
             inner.reset_run_state();
             inner.status = "starting".to_string();
-            inner.project_path = Some(path.clone());
-            inner.audio_mode = Some(mode.clone());
-            inner.lan_ip = Some(lan_ip.clone());
+            inner.project_path = Some(request.path.clone());
+            inner.audio_mode = Some(request.mode.clone());
+            inner.lan_ip = Some(request.lan_ip.clone());
             inner.startup_stage = 1;
             inner.generation
         };
         self.emit(&app);
 
-        let result = self.start_generation(
-            &app,
-            &app_data_dir,
-            generation,
-            path,
-            mode,
-            lan_ip,
-            osc_target,
-        );
+        let result = self.start_generation(&app, &app_data_dir, generation, request);
         if let Err(message) = &result {
             self.fail_start(&app, &app_data_dir, generation, message);
         }
@@ -432,28 +475,29 @@ impl SessionManager {
 
     /// The body of `start` for one generation. Never called directly:
     /// `start` owns the `starting` snapshot and the failure teardown.
-    #[allow(clippy::too_many_arguments)]
+    /// Takes the start record by value and enriches it along the way
+    /// (internal mode's audio resolution, the settled OSC target).
     fn start_generation<R: tauri::Runtime>(
         &self,
         app: &AppHandle<R>,
         app_data_dir: &Path,
         generation: u64,
-        path: String,
-        mode: String,
-        lan_ip: String,
-        osc_target: Option<String>,
+        mut request: StartRequest,
     ) -> Result<(), String> {
-        let root = PathBuf::from(&path);
+        let root = PathBuf::from(&request.path);
         let manifest = load_manifest(&root)?;
 
-        if !manifest.audio.supported_modes.contains(&mode) {
+        if !manifest.audio.supported_modes.contains(&request.mode) {
             return Err(format!(
-                "Audio mode \"{mode}\" is not supported by this project (supported: {})",
+                "Audio mode \"{}\" is not supported by this project (supported: {})",
+                request.mode,
                 manifest.audio.supported_modes.join(", ")
             ));
         }
-        if lan_ip.parse::<std::net::Ipv4Addr>().is_err() || lan_ip.starts_with("127.") {
-            return Err(format!("Invalid LAN IPv4 address: \"{lan_ip}\""));
+        if request.lan_ip.parse::<std::net::Ipv4Addr>().is_err()
+            || request.lan_ip.starts_with("127.")
+        {
+            return Err(format!("Invalid LAN IPv4 address: \"{}\"", request.lan_ip));
         }
         {
             let mut inner = self.lock();
@@ -485,7 +529,7 @@ impl SessionManager {
         // N/H/K/B. Unreadable capability or H = 0 fails before anything is
         // spawned; a channel-poor device (H < N) is bridged partially,
         // never an error.
-        let (device, channel_plan, effective_sc_cfg) = if mode == "internal" {
+        let (device, effective_sc_cfg) = if request.mode == "internal" {
             let sc_cfg = manifest
                 .audio
                 .scsynth
@@ -525,15 +569,17 @@ impl SessionManager {
                 plan.private_bus_start,
                 cap.name
             );
-            (device, Some((plan, cap.name)), Some(sc_cfg))
+            request.channel_plan = Some(plan);
+            request.output_device = Some(cap.name);
+            (device, Some(sc_cfg))
         } else {
-            (None, None, None)
+            (None, None)
         };
 
-        if let Some((plan, device_name)) = &channel_plan {
+        if let Some(plan) = &request.channel_plan {
             let mut inner = self.lock();
             inner.channel_plan = Some(plan.clone());
-            inner.output_device = Some(device_name.clone());
+            inner.output_device = request.output_device.clone();
             // §7.5: multichannel masters are fixed at 100% / 0 dB.
             if plan.project_channels > 2 {
                 inner.volume = 100.0;
@@ -547,18 +593,19 @@ impl SessionManager {
             crate::project::logs::SessionLogParams {
                 project_id: &manifest.id,
                 project_name: &manifest.name,
-                project_path: &path,
-                audio_mode: &mode,
-                lan_ip: &lan_ip,
-                osc_target: osc_target.as_deref().unwrap_or("none"),
-                output_device: channel_plan
-                    .as_ref()
-                    .map(|(_, name)| name.as_str())
-                    .unwrap_or("system default"),
+                project_path: &request.path,
+                audio_mode: &request.mode,
+                lan_ip: &request.lan_ip,
+                osc_target: request.osc_target.as_deref().unwrap_or("none"),
+                output_device: request.output_device.as_deref().unwrap_or("system default"),
             },
         )
         .ok();
-        if let (Some(log), Some((plan, device_name))) = (&mut session_log, &channel_plan) {
+        if let (Some(log), Some(plan), Some(device_name)) = (
+            &mut session_log,
+            &request.channel_plan,
+            &request.output_device,
+        ) {
             log.write_line(&format!(
                 "Audio channel plan: N={} H={} K={} B={} device=\"{device_name}\"",
                 plan.project_channels,
@@ -582,7 +629,7 @@ impl SessionManager {
 
         // §8: internal mode boots scsynth first (and waits for /status)
         // before the score server starts. External/none skip this entirely.
-        let osc_target = match mode.as_str() {
+        request.resolved_osc_target = match request.mode.as_str() {
             "internal" => {
                 // Issue #20: the config resolved above already carries the
                 // App's effective sample rate; the manifest rate is never
@@ -591,9 +638,10 @@ impl SessionManager {
                     .as_ref()
                     .ok_or("internal mode requires a resolved scsynth config")?;
                 // §7.2: scsynth opens exactly K hardware output channels.
-                let k = channel_plan
+                let k = request
+                    .channel_plan
                     .as_ref()
-                    .map(|(plan, _)| plan.bridged_channels)
+                    .map(|plan| plan.bridged_channels)
                     .ok_or("internal mode requires a resolved channel plan")?;
                 // scsynth's CoreAudio/Objective-C initialization can fail
                 // transiently; give the failed process and audio device a
@@ -647,8 +695,10 @@ impl SessionManager {
             }
             "external" => {
                 // §9: external mode requires a valid user-provided target.
-                let target =
-                    osc_target.ok_or("External mode requires an OSC target (host:port)")?;
+                let target = request
+                    .osc_target
+                    .clone()
+                    .ok_or("External mode requires an OSC target (host:port)")?;
                 crate::project::audio::validate_osc_target(&target)?;
                 Some(target)
             }
@@ -657,22 +707,18 @@ impl SessionManager {
 
         {
             let mut inner = self.lock();
-            inner.osc_target = osc_target.clone();
+            inner.osc_target = request.resolved_osc_target.clone();
         }
 
         let node = node_binary_path()?;
         let working_dir = root.join(&manifest.score_server.working_directory);
         let entry = root.join(&manifest.score_server.entry);
-        let (bus, channels) = match &channel_plan {
-            Some((plan, _)) => (Some(plan.private_bus_start), Some(plan.project_channels)),
-            None => (None, None),
-        };
-        let env = build_score_server_env(&mode, &lan_ip, osc_target.as_deref(), bus, channels);
+        let env = build_score_server_env(&request);
 
         let mut cmd = Command::new(&node);
         cmd.arg(&entry)
             .arg("--audio-mode")
-            .arg(&mode)
+            .arg(&request.mode)
             .current_dir(&working_dir)
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
@@ -686,8 +732,9 @@ impl SessionManager {
 
         registry.record(pid, entry.to_string_lossy().to_string());
         log::info!(
-            "Score server started (pid {pid}): {} --audio-mode {mode}",
-            entry.display()
+            "Score server started (pid {pid}): {} --audio-mode {}",
+            entry.display(),
+            request.mode
         );
 
         // Pipe node stdout/stderr into the session tail (app-behavior「Error Page」).
@@ -1264,14 +1311,16 @@ mod tests {
 
     #[test]
     fn env_internal_injects_osc_bus_and_channels() {
-        // A 16ch project fully bridged: B = K = 16, N = 16 — never fixed 2.
-        let env = build_score_server_env(
-            "internal",
-            "192.168.1.10",
-            Some("127.0.0.1:49328"),
-            Some(16),
-            Some(16),
+        let mut request = StartRequest::new(
+            "/p".to_string(),
+            "internal".to_string(),
+            "192.168.1.10".to_string(),
+            None,
         );
+        request.resolved_osc_target = Some("127.0.0.1:49328".to_string());
+        // A 16ch project fully bridged: B = K = 16, N = 16 — never fixed 2.
+        request.channel_plan = Some(crate::project::audio::channel_plan(16, 16));
+        let env = build_score_server_env(&request);
         let get = |k: &str| {
             env.iter()
                 .find(|(key, _)| key == k)
@@ -1282,13 +1331,8 @@ mod tests {
         assert_eq!(get("PNDS_AUDIO_OUTPUT_CHANNELS"), Some("16"));
         assert_eq!(get("PNDS_HOST_IP"), Some("192.168.1.10"));
         // Channel-poor bridge: 16ch project on a 2ch device → B = K = 2, N = 16.
-        let env = build_score_server_env(
-            "internal",
-            "192.168.1.10",
-            Some("127.0.0.1:49328"),
-            Some(2),
-            Some(16),
-        );
+        request.channel_plan = Some(crate::project::audio::channel_plan(16, 2));
+        let env = build_score_server_env(&request);
         let get = |k: &str| {
             env.iter()
                 .find(|(key, _)| key == k)
@@ -1300,13 +1344,14 @@ mod tests {
 
     #[test]
     fn env_external_injects_target_only() {
-        let env = build_score_server_env(
-            "external",
-            "192.168.1.10",
-            Some("127.0.0.1:3333"),
-            None,
-            None,
+        let mut request = StartRequest::new(
+            "/p".to_string(),
+            "external".to_string(),
+            "192.168.1.10".to_string(),
+            Some("127.0.0.1:3333".to_string()),
         );
+        request.resolved_osc_target = Some("127.0.0.1:3333".to_string());
+        let env = build_score_server_env(&request);
         let get = |k: &str| {
             env.iter()
                 .find(|(key, _)| key == k)
@@ -1319,7 +1364,13 @@ mod tests {
 
     #[test]
     fn env_none_injects_host_only() {
-        let env = build_score_server_env("none", "192.168.1.10", None, None, None);
+        let request = StartRequest::new(
+            "/p".to_string(),
+            "none".to_string(),
+            "192.168.1.10".to_string(),
+            None,
+        );
+        let env = build_score_server_env(&request);
         assert_eq!(env.len(), 1);
         assert_eq!(env[0].0, "PNDS_HOST_IP");
     }
@@ -1713,10 +1764,12 @@ mod tests {
             .start(
                 app,
                 dir.path().to_path_buf(),
-                dir.path().join("missing").to_string_lossy().to_string(),
-                "none".to_string(),
-                "192.168.1.10".to_string(),
-                None,
+                StartRequest::new(
+                    dir.path().join("missing").to_string_lossy().to_string(),
+                    "none".to_string(),
+                    "192.168.1.10".to_string(),
+                    None,
+                ),
             )
             .unwrap_err();
 

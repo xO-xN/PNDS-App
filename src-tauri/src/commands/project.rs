@@ -10,7 +10,7 @@ use tauri::{AppHandle, Manager, State};
 use crate::project::manifest::{load_manifest, Manifest};
 use crate::project::ports::PortStatus;
 use crate::project::preflight;
-use crate::project::session::{SessionManager, SessionSnapshot};
+use crate::project::session::{SessionManager, SessionSnapshot, StartRequest};
 
 /// Resolves (and creates) the app data directory used for session records.
 pub(crate) fn app_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
@@ -84,6 +84,11 @@ pub async fn preflight_project(
 /// Starts the score server of a validated project (§8). Progress and
 /// health updates are delivered via `pnds:session` events. `osc_target` is
 /// required (and validated) only for external mode (§9).
+///
+/// v1.3.2 (issue #77): the command boundary constructs the `StartRequest`
+/// record once — everything below this layer reads from the record, and
+/// future start inputs (v1.4.0's hub variables) widen fields, not the
+/// four-layer positional chain.
 #[tauri::command]
 #[specta::specta]
 pub async fn start_project(
@@ -95,7 +100,7 @@ pub async fn start_project(
     osc_target: Option<String>,
 ) -> Result<(), String> {
     let dir = app_data_dir(&app)?;
-    state.start(app, dir, path, mode, lan_ip, osc_target)
+    state.start(app, dir, StartRequest::new(path, mode, lan_ip, osc_target))
 }
 
 /// Stops the running score server (§11). Idempotent.

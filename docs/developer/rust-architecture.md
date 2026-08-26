@@ -76,6 +76,18 @@ pub fn validate_input(input: &str) -> Result<(), String> {
 }
 ```
 
+### Parameter Records (v1.3.2, issue #77)
+
+When a concept's inputs cross several layers (command → manager → generation
+body → pure helper), thread one record instead of positional parameters that
+widen at every hop — see `StartRequest` in `project/session.rs`. The command
+boundary constructs it once (its Tauri parameters stay the IPC contract);
+fields that only become known during the work (e.g. the resolved channel
+plan and OSC target of a start) live on the same record as `Option` fields
+the inner layers fill in, so the deepest helpers (like env construction)
+read everything from the record alone. New inputs become record fields
+without widening any signature.
+
 ## Platform-Specific Code
 
 This app targets macOS only. AppKit integration lives where it is used — `window.rs` (window fade, corner mask) and `open_panel.rs` (NSOpenPanel) drive AppKit directly through `objc2`/`objc2-app-kit` — and `lib.rs` guards it with `#[cfg(target_os = "macos")]`. Prefer that pattern (feature code in its module, cfg at the edges) over a catch-all platform-utils module.
