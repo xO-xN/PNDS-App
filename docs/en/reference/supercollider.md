@@ -14,7 +14,7 @@ manifest.json         "synthdefs": ["supercollider/synthdefs/my-voice.scsyndef"]
 
 - `.scd` sources live in `supercollider/source/` and are the **single source of truth** — never hand-edit a `.scsyndef`, and never keep old build scripts in the Project;
 - hyphenated names must use the quoted symbol form `SynthDef('my-voice', …)` (bare identifiers disallow hyphens);
-- the compilation entry point is **App → Settings (⌘,) → Developer Tools → 「编译 SynthDef」 (Compile SynthDef)**; it defaults to the selected Project, or pick any folder with **「浏览…」 (Browse…)**;
+- the compilation entry point is **App → Settings (⌘,) → Developer Tools → Compile SynthDef**; it defaults to the selected Project, or pick any folder with **Browse…**;
 - the App looks for `/Applications/SuperCollider.app/Contents/MacOS/sclang` first, then `sclang` on the `PATH`;
 - after compiling, the App verifies every manifest-referenced artifact by name: whatever is missing, and whatever this run actually produced, is listed precisely;
 - common failure shapes:

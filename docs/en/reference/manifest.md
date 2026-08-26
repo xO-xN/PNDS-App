@@ -122,7 +122,7 @@ When you must choose different ports, avoid:
 | 3000, 5173, 8000, 8080 | Common dev servers (Vite, React dev server, Flask, Django, proxies)           |
 | 3306, 5432, 6379       | Common databases (MySQL, PostgreSQL, Redis)                                   |
 
-Unsure whether a port is free? Open **Settings → Ports (设置 → 端口)**: with a Project selected, the App shows both manifest-declared ports' occupancy and who holds them, and can release them in one click.
+Unsure whether a port is free? Open **Settings → Ports**: with a Project selected, the App shows both manifest-declared ports' occupancy and who holds them, and can release them in one click.
 
 ## Paths and asset safety
 

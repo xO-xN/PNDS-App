@@ -31,7 +31,7 @@ Rules:
 
 ## Packing
 
-Entry point: **Settings (⌘,) → Developer Tools → 「打包工程」 (Bundle Project)**. It packs the selected Project by default; **「浏览…」 (Browse…)** picks any other folder.
+Entry point: **Settings (⌘,) → Developer Tools → Bundle Project**. It packs the selected Project by default; **Browse…** picks any other folder.
 
 Pre-pack validation (any failure refuses packing with a readable error):
 

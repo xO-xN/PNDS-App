@@ -40,7 +40,7 @@ PNDS recommends a twin-track iteration loop: **AI-assisted generation and editin
 - **AI-driven development**
   Import the Project directory into your AI coding agent. Guide the AI through conversation to understand the score's interaction logic, audio and visual rendering rules, and communication protocols, and let it write or refactor code quickly.
 - **Live loading and preview**
-  While authoring, load the local Project directory in PNDS App at any time to test interaction response, audio-visual behaviour and multi-device sync on the spot; the **「在默认浏览器打开」(open in default browser)** and **「刷新 monitor 界面」(refresh the monitor view)** buttons at the top right of the sidebar help during development.
+  While authoring, load the local Project directory in PNDS App at any time to test interaction response, audio-visual behaviour and multi-device sync on the spot; the **Open in default browser** and **Refresh the monitor view** buttons at the top right of the sidebar help during development.
 - **Continuous verification and fine-tuning**
   Iterate in small steps: verify the effect in the App immediately after each change, and keep every module behaving as intended.
 
@@ -62,7 +62,7 @@ If any step fails, fix the Project first and come back to packaging.
 When a milestone version is ready, deliver the work as follows:
 
 1. **Export a `.pnds` bundle**
-   Open the App's **Settings (设置)** → **Developer Tools (开发者工具)** and package the current Project as a `.pnds` distribution file.
+   Open the App's **Settings** → **Developer Tools** and package the current Project as a `.pnds` distribution file.
 2. **Automated release**
    Commit and push your local changes to the GitHub repository (or create a release tag); the Template's built-in **GitHub Actions** workflow then builds and distributes the work online.
 
