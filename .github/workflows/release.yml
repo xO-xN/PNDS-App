@@ -66,6 +66,20 @@ jobs:
           releaseBody: |
             ## PNDS ${{ github.ref_name || inputs.version }}
 
+            ### What's New in V1.3.2 — the Module Manual, tools that stay put & an architecture hardening pass
+
+            **A fourth book in the Help center: the Module Manual**
+            - The Help center gains the Module Manual — six paired Chinese/English documents (an overview plus qr, players, theme-follow, locale-follow and audio) sourced from the module creator documentation that ships inside the PNDS Template itself, fact-checked against the Template source. It sits between the Creator Guide and the Reference Manual, and cross-links with both.
+
+            **Built-in tools are app content — and now locked as such**
+            - The bundled utility tools (Local Network Diagnostics & co.) can no longer be dragged out of order, moved out of or into the Utilities folder, removed with ✕, or renamed with ⌘R: their position, membership, presence and names are locked, enforced by the store's structural actions. Selecting and starting them is unchanged. (User report.)
+
+            **Update checks share one lifecycle**
+            - The automatic boot check and the manual menu/Settings check now flow through one lifecycle module with typed outcomes. "Update available" and "installed" toasts carry action buttons; the native confirm/alert dialogs are retired; the boot path stays silent when there is nothing to report.
+
+            **An architecture hardening pass — zero behavior change**
+            - Four pure refactors landed alongside: the sidebar drag engine extracted into a useCardDrag controller with a geometry adapter; the folder and card pill indicators unified into one useIndicatorPill engine, so scheduling and geometry writes exist exactly once; the project store gained replaceProjectIndex — a single-call wholesale rebuild that persists in one snapshot, the seam the upcoming setlist import will call, with the set.json keying decision (manifest id + version, never absolute paths) recorded ahead of the format freeze; and the Rust start pipeline now threads one StartRequest record through all four layers, so v1.4.0's networked-hub variables will land as record fields instead of widening four signatures.
+
             ### What's New in V1.3.1 — the Help center in English, a performer-first Welcome & the Brutal octopus
 
             **The documentation speaks your language**
