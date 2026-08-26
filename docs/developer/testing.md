@@ -147,6 +147,10 @@ jsdom has no layout and no hit-testing, so pointer dragging cannot be simulated 
 - The gesture machine (press slack activation, clone transform, edge auto-scroll, scroll re-anchoring, post-commit transition suppression) is `src/hooks/use-card-drag.ts`. It consumes only injected geometry: its tests (`src/hooks/use-card-drag.test.tsx`) pass a numeric `CardDragAdapter` and a scroll container whose `scrollTop`/`scrollHeight` are pinned via `Object.defineProperty` — no `getBoundingClientRect` pinning, no rect math in the machine.
 - The host (Sidebar) measures the DOM through `src/components/shell/sidebar-drag-adapter.ts` and commits through store actions. Its end-to-end drag tests still pin the rects the adapter derives geometry from via `mockBoundingClientRect` (`src/test/test-utils.tsx`) and fire pointer events with explicit coordinates. The drag "feel" remains a manual acceptance step.
 
+### Testing Imperative Indicator Pills
+
+The pill engine (`src/hooks/use-indicator-pill.ts`, v1.3.2 issue #78) is scheduling-only: its tests inject spy configs, fire `resize` on `window`, and drive a stubbed `document.fonts.ready`. The shared geometry writes read `offsetLeft`/`offsetTop`/`offsetWidth`/`offsetHeight`, which the test DOM leaves at 0 — pin them with `mockOffsets` (`src/test/test-utils.tsx`), which covers both axis pairs. End-to-end pill behavior (slide, snap, hide) stays covered by the Sidebar tests asserting the `folder-pill` / `card-selection-pill` testids.
+
 ## Rust Testing
 
 ### Unit Tests

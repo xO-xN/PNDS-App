@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import {
@@ -42,6 +42,11 @@ import { revealScrollTarget } from '@/lib/list-reveal'
 import { projectDisplayName } from '@/lib/display-names'
 import { cardShift, insertionIndexFor, reorderedList } from '@/lib/drag-reorder'
 import { useCardDrag, type ActiveDropTarget } from '@/hooks/use-card-drag'
+import {
+  applyIndicatorGeometry,
+  clearIndicatorGeometry,
+  useIndicatorPill,
+} from '@/hooks/use-indicator-pill'
 import { sidebarDragAdapter, type DragSource } from './sidebar-drag-adapter'
 import {
   AlertDialog,
@@ -97,9 +102,11 @@ interface SidebarProps {
  * v1.2.2 (issue #28): positions the sliding pill over the active segment —
  * its offsetLeft/offsetWidth inside the track, applied as transform+width
  * so the pill animates between views instead of a background crossfade.
- * Module-level: both the per-commit layout effect and the resize/font
- * listeners call it with live values (a component-scope function would
- * churn their dependency arrays).
+ * Module-level: both the apply and re-measure paths of the indicator-pill
+ * engine (useIndicatorPill, v1.3.2 issue #78) call it with live values (a
+ * component-scope function would churn their dependency arrays). Since
+ * #78 only the policy lives here — the geometry write and the resize/font
+ * listener mode are the shared engine's.
  */
 function applyFolderPill(
   pill: HTMLDivElement | null,
@@ -111,12 +118,10 @@ function applyFolderPill(
   const segment =
     activeFolderId === null ? unfiled : (segments.get(activeFolderId) ?? null)
   if (segment === null) {
-    pill.style.transform = ''
-    pill.style.width = ''
+    clearIndicatorGeometry(pill, 'x')
     return
   }
-  pill.style.transform = `translateX(${segment.offsetLeft}px)`
-  pill.style.width = `${segment.offsetWidth}px`
+  applyIndicatorGeometry(pill, segment, 'x')
 }
 
 /**
@@ -124,7 +129,8 @@ function applyFolderPill(
  * request): the selected card's white highlight is a pill that slides
  * between cards instead of a per-card background crossfade. Geometry is
  * imperative like applyFolderPill — translateY/height from the selected
- * card's offsets inside the (positioned) list content, opacity owned here
+ * card's offsets inside the (positioned) list content (the shared
+ * applyIndicatorGeometry write since v1.3.2 issue #78), opacity owned here
  * (hidden covers project drags, the post-drop snap frames, and the
  * selection not being in the current view).
  *
@@ -178,8 +184,7 @@ function applyCardSelectionPill(
     void pill.offsetWidth
     pill.style.animation = ''
   }
-  pill.style.transform = `translateY(${card.offsetTop}px)`
-  pill.style.height = `${card.offsetHeight}px`
+  applyIndicatorGeometry(pill, card, 'y')
   pill.style.opacity = hidden ? '0' : '1'
   pill.dataset.anchor = card.dataset.projectPath
   if (!slide) {
@@ -705,36 +710,29 @@ export function Sidebar({
 
   // v1.2.2 (issue #28): the pill tracks the active segment. Like the drag
   // clone, its geometry is applied imperatively — a state update per
-  // commit would re-render the row for a purely visual shift. The layout
-  // effect runs after every commit (view switch, rename, reorder, the
-  // inline edit swapping a name for an input), so the pill never goes
-  // stale; nothing paints between the commit and the effect.
+  // commit would re-render the row for a purely visual shift. The
+  // indicator-pill engine (v1.3.2 issue #78) runs the positioning after
+  // every commit (view switch, rename, reorder, the inline edit swapping a
+  // name for an input — nothing paints stale) and re-measures on
+  // resize/font load; the re-measure reads the active folder from the
+  // store so it never goes stale itself.
   const activeFolderIdForPill = activeFolder?.id ?? null
-  useLayoutEffect(() => {
-    applyFolderPill(
-      pillRef.current,
-      activeFolderIdForPill,
-      segmentRefs.current,
-      unfiledSegmentRef.current
-    )
-  })
-  // Web fonts land after first paint and resize reflows the row — both
-  // change segment widths without any state moving, so re-measure (the
-  // active folder is read from the store so the listener never goes
-  // stale itself).
-  useEffect(() => {
-    const reapply = () => {
+  useIndicatorPill({
+    apply: () =>
+      applyFolderPill(
+        pillRef.current,
+        activeFolderIdForPill,
+        segmentRefs.current,
+        unfiledSegmentRef.current
+      ),
+    remeasure: () =>
       applyFolderPill(
         pillRef.current,
         useProjectStore.getState().activeFolderId,
         segmentRefs.current,
         unfiledSegmentRef.current
-      )
-    }
-    window.addEventListener('resize', reapply)
-    void document.fonts?.ready.then(reapply)
-    return () => window.removeEventListener('resize', reapply)
-  }, [])
+      ),
+  })
 
   // v1.2.2 (issue #29, superseding the issue #25 `nearest` reveal): the
   // selected card must sit fully clear of the column's static fade bands —
@@ -748,33 +746,27 @@ export function Sidebar({
   // onto a bad project.
   const selectedPath = useProjectStore(selectSelectedPath)
 
-  // The card-selection pill follows that same chain. Every commit
-  // re-applies — selection, view switches, reorders and drag frames all
-  // move cards.
-  useLayoutEffect(() => {
-    applyCardSelectionPill(
-      cardPillRef.current,
-      projectContentRef.current,
-      selectedPath,
-      drag?.kind === 'project' || suppressTransition
-    )
-  })
-  // Resize/fonts reflow the column without moving state — re-measure. (A
-  // resize landing mid-drag would briefly ignore the drag hide; the next
-  // commit corrects it.)
-  useEffect(() => {
-    const reapply = () => {
+  // The card-selection pill follows that same chain through the shared
+  // engine: every commit re-applies — selection, view switches, reorders
+  // and drag frames all move cards. The re-measure deliberately drops the
+  // drag/snap hide (a resize landing mid-drag would briefly ignore it;
+  // the next commit corrects it), matching the pre-#78 listener.
+  useIndicatorPill({
+    apply: () =>
+      applyCardSelectionPill(
+        cardPillRef.current,
+        projectContentRef.current,
+        selectedPath,
+        drag?.kind === 'project' || suppressTransition
+      ),
+    remeasure: () =>
       applyCardSelectionPill(
         cardPillRef.current,
         projectContentRef.current,
         selectSelectedPath(useProjectStore.getState()),
         false
-      )
-    }
-    window.addEventListener('resize', reapply)
-    void document.fonts?.ready.then(reapply)
-    return () => window.removeEventListener('resize', reapply)
-  }, [])
+      ),
+  })
 
   useEffect(() => {
     if (!selectedPath) return

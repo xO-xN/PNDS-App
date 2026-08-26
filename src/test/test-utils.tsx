@@ -72,23 +72,45 @@ export function mockBoundingClientRect(
 }
 
 /**
- * Pin an element's layout offsets (offsetLeft/offsetWidth). The folder
- * switch's sliding pill measures these directly — unlike rects, jsdom
- * never recomputes them, so tests state the boxes they mean.
+ * Pin an element's layout offsets (offsetLeft/offsetWidth for the x axis,
+ * offsetTop/offsetHeight for the y one). The indicator pills measure these
+ * directly — unlike rects, the test DOM never recomputes them, so tests
+ * state the boxes they mean. Pass the pair the axis under test reads.
  */
 export function mockOffsets(
   element: Element,
-  offsets: { left: number; width: number }
+  offsets: {
+    left?: number
+    width?: number
+    top?: number
+    height?: number
+  }
 ): void {
-  const { left, width } = offsets
-  Object.defineProperty(element, 'offsetLeft', {
-    configurable: true,
-    get: () => left,
-  })
-  Object.defineProperty(element, 'offsetWidth', {
-    configurable: true,
-    get: () => width,
-  })
+  const { left, width, top, height } = offsets
+  if (left !== undefined) {
+    Object.defineProperty(element, 'offsetLeft', {
+      configurable: true,
+      get: () => left,
+    })
+  }
+  if (width !== undefined) {
+    Object.defineProperty(element, 'offsetWidth', {
+      configurable: true,
+      get: () => width,
+    })
+  }
+  if (top !== undefined) {
+    Object.defineProperty(element, 'offsetTop', {
+      configurable: true,
+      get: () => top,
+    })
+  }
+  if (height !== undefined) {
+    Object.defineProperty(element, 'offsetHeight', {
+      configurable: true,
+      get: () => height,
+    })
+  }
 }
 
 /**
