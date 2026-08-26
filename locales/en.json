@@ -196,5 +196,17 @@
   "bundle.installFailed": "Could not open the bundle",
   "sidebar.utilitiesFolder": "Utilities",
   "sidebar.folderNameTaken": "A folder named “{{name}}” already exists.",
-  "settings.theme.brutal": "Brutal"
+  "settings.theme.brutal": "Brutal",
+  "updater.availableTitle": "Update Available",
+  "updater.availableBody": "Version {{version}} is available",
+  "updater.installAction": "Install",
+  "updater.upToDateTitle": "Up to Date",
+  "updater.upToDateBody": "You are running the latest version",
+  "updater.checkFailedTitle": "Update Check Failed",
+  "updater.checkFailedBody": "Could not check for updates: {{reason}}",
+  "updater.installedTitle": "Update Installed",
+  "updater.installedBody": "Restart the app to use the new version",
+  "updater.restartAction": "Restart",
+  "updater.installFailedTitle": "Update Failed",
+  "updater.installFailedBody": "There was a problem applying the update: {{reason}}"
 }

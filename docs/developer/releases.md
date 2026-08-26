@@ -123,52 +123,25 @@ All three files must have matching versions:
 
 ### Behavior
 
-- Checks for updates 5 seconds after app launch
-- Shows confirmation dialog when update is available
-- Downloads and installs in background
-- Offers to restart when complete
-- Fails silently on network issues
+- Checks for updates 5 seconds after app launch (boot path)
+- "Update available" toast carries an **Install** action button (no native `confirm()`/`alert()` anywhere on the update paths)
+- Downloads and installs in background, then offers a **Restart** toast action
+- Boot path stays silent on "up to date" and check failures (typically transient network issues); the manual path toasts every outcome
 
 ### Update Flow
 
 ```
-App Launch → (5s delay) → Check GitHub → Show Dialog → Download → Install → Restart
+check → typed outcome → renderer (toast) → [Install action] → download + install → [Restart action] → relaunch
 ```
 
-### Implementation
+### Implementation (v1.3.2, issue #74)
 
-The auto-updater lives in `src/App.tsx` (simplified):
+The whole lifecycle lives in `src/lib/updater.ts` — one module, both entries:
 
-```typescript
-import { check } from '@tauri-apps/plugin-updater'
-import { relaunch } from '@tauri-apps/plugin-process'
+- `checkForUpdates()` — the manual entry (app menu item, Settings About button)
+- `startBootUpdateCheck()` — the boot entry; `App.tsx` only schedules it and cancels on unmount
 
-useEffect(() => {
-  const checkForUpdates = async () => {
-    try {
-      const update = await check()
-      if (update && confirm(`Update available: ${update.version}…`)) {
-        await update.downloadAndInstall(/* progress is logged */)
-        if (confirm('Restart to apply the update?')) await relaunch()
-      }
-    } catch {
-      // Silent fail - don't bother user with network issues
-    }
-  }
-
-  const timer = setTimeout(() => void checkForUpdates(), 5000)
-  return () => clearTimeout(timer)
-}, [])
-```
-
-### Manual Update Check
-
-Users can manually check via:
-
-- **Menu**: PNDS → Check for Updates...
-- **Settings**: Settings → About → Check for Updates
-
-Both call `checkForUpdates()` (`src/lib/updater.ts`), which reports the result via toast notifications; installing an update keeps the auto-updater flow in `App.tsx`.
+The check resolves to a typed outcome (`available` / `up-to-date` / `check-failed`), and install to `installed` / `install-failed`. Outcomes are handed to a `UpdaterRenderer` — a pure rendering seam. The two renderers today are toasts (`manualToastRenderer`, `bootToastRenderer`); v1.4.0's App-styled failure dialog (spec #57 item 4) plugs in as a second renderer without touching the lifecycle. All copy lives in `/locales` under `updater.*` (en + zh-CN). Collocated tests: `src/lib/updater.test.ts`.
 
 ## Release Artifacts
 

@@ -92,6 +92,10 @@ await notify('Native test', 'Sent as a native notification', { native: true })
 
 If the native call fails, the toast fallback fires — a native notification that never appears while the fallback toast does points at macOS notification permissions.
 
+## Actionable toasts
+
+`@/lib/notifications` flattens to `title: message` and cannot carry action buttons. Flows that need a toast with an action (e.g. the updater's Install / Restart buttons, v1.3.2 issue #74) call sonner's `toast` directly inside their own module — see `src/lib/updater.ts` for the pattern (locale copy via `i18n.t`, longer `duration` so the buttons stay reachable).
+
 ### Advanced Usage
 
 ```typescript

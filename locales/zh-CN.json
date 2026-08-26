@@ -196,5 +196,17 @@
   "bundle.installFailed": "无法打开 bundle",
   "sidebar.utilitiesFolder": "工具",
   "sidebar.folderNameTaken": "已存在同名文件夹“{{name}}”。",
-  "settings.theme.brutal": "粗野"
+  "settings.theme.brutal": "粗野",
+  "updater.availableTitle": "有可用更新",
+  "updater.availableBody": "新版本 {{version}} 可供安装",
+  "updater.installAction": "安装",
+  "updater.upToDateTitle": "已是最新版本",
+  "updater.upToDateBody": "您正在使用最新版本",
+  "updater.checkFailedTitle": "检查更新失败",
+  "updater.checkFailedBody": "无法检查更新：{{reason}}",
+  "updater.installedTitle": "更新已安装",
+  "updater.installedBody": "重启应用即可使用新版本",
+  "updater.restartAction": "重启",
+  "updater.installFailedTitle": "更新失败",
+  "updater.installFailedBody": "应用更新时出现问题：{{reason}}"
 }
