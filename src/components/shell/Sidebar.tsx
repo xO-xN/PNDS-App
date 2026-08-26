@@ -40,22 +40,9 @@ import { startFolderRename } from '@/lib/project-rename'
 import { reclaimIfManagedBundle } from '@/lib/bundle-project'
 import { revealScrollTarget } from '@/lib/list-reveal'
 import { projectDisplayName } from '@/lib/display-names'
-import {
-  AUTO_SCROLL_STEP,
-  autoScrollDirection,
-  cardShift,
-  folderDropAt,
-  insertionIndexFor,
-  projectDropAt,
-  reorderedList,
-  sameDropTarget,
-  scrollShiftedHitSpace,
-  type DragHitSpace,
-  type DragSpaces,
-  type FolderDropTarget,
-  type ProjectDropTarget,
-  type Rect,
-} from '@/lib/drag-reorder'
+import { cardShift, insertionIndexFor, reorderedList } from '@/lib/drag-reorder'
+import { useCardDrag, type ActiveDropTarget } from '@/hooks/use-card-drag'
+import { sidebarDragAdapter, type DragSource } from './sidebar-drag-adapter'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -104,107 +91,6 @@ interface SidebarProps {
   /** Overlay mode: a sidebar dialog (folder delete) is open — releasing
    * Cmd must not retract the peeked sidebar. */
   onDialogOpenChange?: (open: boolean) => void
-}
-
-/**
- * Geometry captured when a card press activates into a drag
- * (v1.1.2 T4, spec issue #8).
- * It anchors the floating clone to the pointer and carries the card stride
- * the yielding cards translate by.
- */
-interface DragGhost {
-  /** Card top-left in viewport coordinates; the clone starts exactly there. */
-  x: number
-  y: number
-  width: number
-  height: number
-  /** Grab offset inside the card so the clone tracks the pointer 1:1. */
-  offsetX: number
-  offsetY: number
-  /** Card pitch (height + list gap) the yielding cards translate by. */
-  stride: number
-}
-
-/**
- * v1.1.2 T5 (spec issue #9): one drag source — a visible project card or a
- * top-level folder card.
- */
-type DragSource =
-  | { kind: 'project'; path: string }
-  | { kind: 'folder'; id: string }
-
-/** Any drop target the sidebar resolves while a drag is live. */
-type ActiveDropTarget = ProjectDropTarget | FolderDropTarget
-
-/** The pointer must travel this far (px, manhattan) before a card press
- * becomes a drag — below it the gesture stays a click. */
-const DRAG_ACTIVATION_SLACK = 4
-
-/**
- * Static slot layout of a uniform card column: the first card's rect plus
- * the pitch measured to the second. Null when the column has no cards.
- */
-function hitSpaceOf(
-  cards: NodeListOf<Element> | undefined
-): DragHitSpace | null {
-  const first = cards?.[0]
-  if (!(first instanceof HTMLElement)) return null
-  const firstRect = first.getBoundingClientRect()
-  const second = cards?.[1]
-  const stride =
-    second instanceof HTMLElement
-      ? second.getBoundingClientRect().top - firstRect.top
-      : firstRect.height + 4
-  return {
-    top: firstRect.top,
-    left: firstRect.left,
-    right: firstRect.right,
-    cardHeight: firstRect.height,
-    stride,
-    count: cards?.length ?? 0,
-  }
-}
-
-/**
- * v1.2.1 (folder switch): the same slot layout for a uniform horizontal
- * row — the folder segments — carried axis-swapped so the row hit-test
- * (hoveredCardInRow) reuses the column math: top = the first segment's
- * left, cardHeight = segment width, left/right = the row's vertical
- * extent, stride = the horizontal pitch.
- */
-function rowHitSpaceOf(
-  segments: NodeListOf<Element> | undefined
-): DragHitSpace | null {
-  const first = segments?.[0]
-  if (!(first instanceof HTMLElement)) return null
-  const firstRect = first.getBoundingClientRect()
-  const second = segments?.[1]
-  // The switch row packs its segments flush (no gap), so a sole segment
-  // pitches by its own width.
-  const stride =
-    second instanceof HTMLElement
-      ? second.getBoundingClientRect().left - firstRect.left
-      : firstRect.width
-  return {
-    top: firstRect.left,
-    left: firstRect.top,
-    right: firstRect.bottom,
-    cardHeight: firstRect.width,
-    stride,
-    count: segments?.length ?? 0,
-  }
-}
-
-/** Rect snapshot for point hit-testing (the unfiled segment). */
-function rectOf(element: HTMLElement | null): Rect | null {
-  if (!element) return null
-  const rect = element.getBoundingClientRect()
-  return {
-    top: rect.top,
-    left: rect.left,
-    right: rect.right,
-    bottom: rect.bottom,
-  }
 }
 
 /**
@@ -305,11 +191,6 @@ function applyCardSelectionPill(
       })
     })
   }
-}
-
-/** The list's scrollable range below its viewport (0 when it fits). */
-function maxScrollOf(container: HTMLElement): number {
-  return Math.max(0, container.scrollHeight - container.clientHeight)
 }
 
 interface InlineNameInputProps {
@@ -482,21 +363,6 @@ export function Sidebar({
   // v1.1.2 T3: the folder card shows its "in use" dot from the moment the
   // session starts, not only once ready (spec issue #4: 使用中指示点).
   const sessionLive = sessionStatus === 'starting' || sessionStatus === 'ready'
-  const [drag, setDrag] = useState<DragSource | null>(null)
-  const [dropTarget, setDropTarget] = useState<ActiveDropTarget | null>(null)
-  /** Clone origin/stride snapshot; mirrors dragGhostRef for render. */
-  const [dragGhost, setDragGhost] = useState<DragGhost | null>(null)
-  /** Card press armed by pointerdown, not yet a drag (slack not passed). */
-  const [press, setPress] = useState<DragSource | null>(null)
-  /**
-   * True for one frame after a committed drop. The DOM reorder and the
-   * clearing of the yield transforms land in the same commit, so without
-   * this the yielding cards — already visually at their final spots —
-   * would animate from their stale offsets back to zero and slide the
-   * wrong way for a card-stride. Suppressing transitions for that single
-   * frame makes them snap invisibly into place.
-   */
-  const [suppressTransition, setSuppressTransition] = useState(false)
   /** Folder being inline-named (creation gesture: Enter commits, Esc cancels). */
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null)
   const [pendingDeleteFolderId, setPendingDeleteFolderId] = useState<
@@ -505,26 +371,6 @@ export function Sidebar({
   /** v1.2.2 (issue #28): the folder segment the context menu was opened on
    * (null = the track or the unfiled segment — no folder-specific items). */
   const [menuFolderId, setMenuFolderId] = useState<string | null>(null)
-  const dragRef = useRef<DragSource | null>(null)
-  const dropTargetRef = useRef<ActiveDropTarget | null>(null)
-  const dragGhostRef = useRef<DragGhost | null>(null)
-  /** Armed press source, geometry anchor and origin point. */
-  const pressRef = useRef<{
-    source: DragSource
-    cardSelector: string
-    card: HTMLElement | null
-    nav: HTMLElement | null
-    x: number
-    y: number
-  } | null>(null)
-  /** True for the one click right after a real drag — the drop's pointerup
-   * must not turn into a selection. Reset on every fresh press. */
-  const suppressClickRef = useRef(false)
-  const dragSpacesRef = useRef<DragSpaces>({
-    list: null,
-    folders: null,
-    breadcrumb: null,
-  })
   const unfiledSegmentRef = useRef<HTMLDivElement | null>(null)
   /** v1.2.2 (issue #28): the sliding pill — geometry applied imperatively
    * (like the drag clone), never through React state. */
@@ -533,23 +379,106 @@ export function Sidebar({
    * arrow-key focus hand-off address them directly. */
   const segmentRefs = useRef(new Map<string, HTMLDivElement>())
   /** v1.2.2 (user request after #32): the card-selection pill — geometry
-   * imperative like the folder pill. */
+   imperative like the folder pill. */
   const cardPillRef = useRef<HTMLDivElement | null>(null)
   /** The positioned list content the card pill measures against. */
   const projectContentRef = useRef<HTMLDivElement | null>(null)
-  const cloneRef = useRef<HTMLDivElement | null>(null)
   /** v1.2.1 (issue #25): the independently scrolling project column. */
   const projectScrollRef = useRef<HTMLDivElement | null>(null)
-  /** scrollTop and viewport rect captured when a drag snapshotted its hit
-   * spaces — scrolling re-anchors the static list geometry against them. */
-  const scrollBaselineRef = useRef(0)
-  const scrollViewportRef = useRef<Rect | null>(null)
-  /** Edge auto-scroll state while a project drag hovers a list edge. */
-  const autoScrollDirectionRef = useRef<-1 | 0 | 1>(0)
-  const autoScrollRafRef = useRef(0)
-  /** Last pointer position — re-resolving the drop target after a scroll
-   * tick needs it, because the pointer itself did not move. */
-  const lastPointerRef = useRef({ x: 0, y: 0 })
+
+  /**
+   * The drag controller's commit policy (v1.3.2, issue #75): what a
+   * finished drop means in store terms — the same four structural actions
+   * the inline machine called (spec issues #7/#9). Returns true only for
+   * the reorder commits, so the controller suppresses exactly those snap
+   * frames (a folder join or an unfile return lands without one).
+   */
+  const commitDragDrop = (
+    source: DragSource,
+    target: ActiveDropTarget
+  ): boolean => {
+    const store = useProjectStore.getState()
+    if (source.kind === 'project') {
+      if (target.kind === 'folder') {
+        // Dropping on a folder card files the project at that folder's
+        // end (spec issue #9: 释放后工程入夹末尾). v1.2.1 (issue #26):
+        // a full folder refuses the join — say why instead of silently
+        // bouncing the card (i18n.t: kept out of React contexts).
+        const folder = store.projectFolders[target.index]
+        if (folder) {
+          const joined = store.moveProjectToFolder(folder.id, source.path)
+          if (!joined) {
+            notifications.warning(
+              i18n.t('sidebar.projectLimitReached', {
+                limit: PROJECT_LIMIT_PER_DIRECTORY,
+              })
+            )
+          }
+        }
+        return false
+      }
+      if (target.kind === 'breadcrumb') {
+        // Dropping on the unfiled segment returns the project to
+        // ungrouped (the old breadcrumb bar).
+        if (store.activeFolderId) {
+          store.removeProjectFromFolder(store.activeFolderId, source.path)
+        }
+        return false
+      }
+      // Reordering follows the active view: inside a folder it is the
+      // set order, at the top level the master list (spec issue #7).
+      const visible = visibleProjectPaths(
+        store.recentProjectPaths,
+        store.projectFolders,
+        store.activeFolderId
+      )
+      const fromIndex = visible.indexOf(source.path)
+      if (fromIndex < 0) return false
+      const next = reorderedList(
+        visible,
+        fromIndex,
+        insertionIndexFor(target.index, target.half)
+      )
+      // reorderedList keeps its input reference for no-move drops.
+      if (next === visible) return false
+      store.applyVisibleReorder(next)
+      return true
+    }
+    // Folder drags only ever reorder within the switch row.
+    if (target.kind !== 'list') return false
+    const folderIds = store.projectFolders.map(folder => folder.id)
+    const fromIndex = folderIds.indexOf(source.id)
+    if (fromIndex < 0) return false
+    const next = reorderedList(
+      folderIds,
+      fromIndex,
+      insertionIndexFor(target.index, target.half)
+    )
+    if (next === folderIds) return false
+    store.applyFolderReorder(next)
+    return true
+  }
+
+  /**
+   * v1.3.2 (issue #75): the whole pointer drag machine — press slack
+   * activation, the floating clone transform, static hit-space snapshots,
+   * drop resolution, edge auto-scroll, scroll re-anchoring and the
+   * post-commit transition suppression — lives in useCardDrag; the
+   * sidebar only measures (sidebar-drag-adapter) and commits (above).
+   */
+  const {
+    drag,
+    dropTarget,
+    ghost: dragGhost,
+    suppressTransition,
+    cloneRef,
+    press: beginCardDrag,
+    consumeClick,
+    clearClickSuppression,
+  } = useCardDrag<DragSource>({
+    adapter: sidebarDragAdapter,
+    onCommit: commitDragDrop,
+  })
 
   // v1.1.2 T3: one folder-aware derivation drives the list, the number
   // badges and the drag indices (spec issue #7: 可见列表与序号派生).
@@ -763,329 +692,6 @@ export function Sidebar({
     event.preventDefault()
     pendingAction()
   }
-
-  /**
-   * v1.1.2 T4/T5 drag initiation (spec issues #8, #9): a pointer press
-   * anywhere on a card (project or folder) arms the drag; it activates —
-   * snapshotting the clone anchor and the static drop zones (the visible
-   * project column, the folder cards, the breadcrumb bar) — only once the
-   * pointer travels past the click slack, so a plain click still selects.
-   */
-  const beginCardDrag = (
-    source: DragSource,
-    event: React.PointerEvent<HTMLElement>,
-    cardSelector: string
-  ) => {
-    // v1.2.2 (issue #28): only the primary button drags — the secondary
-    // button's press now opens the folder context menu instead.
-    if (event.button !== 0) return
-    suppressClickRef.current = false
-    const card = event.currentTarget.closest(cardSelector)
-    pressRef.current = {
-      source,
-      cardSelector,
-      card: card instanceof HTMLElement ? card : null,
-      nav: card?.closest('nav') ?? null,
-      x: event.clientX,
-      y: event.clientY,
-    }
-    setPress(source)
-  }
-
-  // The armed press: past the slack it becomes a real drag (the [drag]
-  // effect's listeners take over); released before that, it was a click
-  // and the card's own onClick runs unsuppressed.
-  useEffect(() => {
-    if (!press) return
-
-    const activate = (event: PointerEvent) => {
-      const p = pressRef.current
-      if (!p?.card) return
-      if (
-        Math.abs(event.clientX - p.x) + Math.abs(event.clientY - p.y) <=
-        DRAG_ACTIVATION_SLACK
-      )
-        return
-      const rect = p.card.getBoundingClientRect()
-      // Pitch between cards measured from the next sibling in the same
-      // run drives the yield transforms — vertical for project cards
-      // (height + list gap), horizontal for the flush-packed segments.
-      const next = p.card.nextElementSibling
-      const inRun = next instanceof HTMLElement && next.matches(p.cardSelector)
-      const stride =
-        p.source.kind === 'folder'
-          ? inRun
-            ? next.getBoundingClientRect().left - rect.left
-            : rect.width
-          : inRun
-            ? next.getBoundingClientRect().top - rect.top
-            : rect.height + 4
-      const ghost: DragGhost = {
-        x: rect.left,
-        y: rect.top,
-        width: rect.width,
-        height: rect.height,
-        offsetX: event.clientX - rect.left,
-        offsetY: event.clientY - rect.top,
-        stride,
-      }
-      dragGhostRef.current = ghost
-      setDragGhost(ghost)
-      dragSpacesRef.current = {
-        list: hitSpaceOf(p.nav?.querySelectorAll('[data-project-path]')),
-        folders: rowHitSpaceOf(
-          p.nav?.querySelectorAll('[data-folder-segment]')
-        ),
-        breadcrumb: rectOf(unfiledSegmentRef.current),
-      }
-      // The list snapshot is taken at the current scroll; every later
-      // scroll tick re-anchors it (issue #25).
-      scrollBaselineRef.current = projectScrollRef.current?.scrollTop ?? 0
-      scrollViewportRef.current = rectOf(projectScrollRef.current)
-      lastPointerRef.current = { x: event.clientX, y: event.clientY }
-      dragRef.current = p.source
-      dropTargetRef.current = null
-      setDrag(p.source)
-      setDropTarget(null)
-      setPress(null)
-    }
-
-    const release = () => {
-      pressRef.current = null
-      setPress(null)
-    }
-
-    window.addEventListener('pointermove', activate)
-    window.addEventListener('pointerup', release)
-    window.addEventListener('pointercancel', release)
-    return () => {
-      window.removeEventListener('pointermove', activate)
-      window.removeEventListener('pointerup', release)
-      window.removeEventListener('pointercancel', release)
-    }
-  }, [press])
-
-  useEffect(() => {
-    if (!drag) return
-
-    /** Where a pointer position resolves against the drag's static zone
-     * snapshots — the single resolution path for pointer moves and for
-     * scroll ticks that move cards under a stationary pointer. */
-    const resolveDropTarget = (x: number, y: number) => {
-      // Folder cards only ever reorder among themselves; a project drag
-      // resolves against breadcrumb → folder cards → the list slots. All
-      // zones are the static snapshots taken at drag start: the yielding
-      // cards slide under the pointer, so live rects would make the
-      // target flicker as the gap opens and closes.
-      const source = dragRef.current
-      const spaces = dragSpacesRef.current
-      const next =
-        source?.kind === 'folder'
-          ? folderDropAt(x, y, spaces.folders)
-          : projectDropAt(x, y, spaces)
-      if (sameDropTarget(dropTargetRef.current, next)) return
-      dropTargetRef.current = next
-      setDropTarget(next)
-    }
-
-    /** Re-anchors the list snapshot to the container's current scroll and
-     * re-resolves the drop target under the stationary pointer — the
-     * cards physically move while the list scrolls (issue #25). Idempotent
-     * through the baseline: a repeat call with no further scroll is a
-     * no-op, so the browser's scroll event and the auto-scroll tick can
-     * both land here. */
-    const syncListScroll = () => {
-      const container = projectScrollRef.current
-      const spaces = dragSpacesRef.current
-      if (!container || !spaces.list) return
-      const delta = container.scrollTop - scrollBaselineRef.current
-      if (delta === 0) return
-      scrollBaselineRef.current = container.scrollTop
-      spaces.list = scrollShiftedHitSpace(spaces.list, delta)
-      resolveDropTarget(lastPointerRef.current.x, lastPointerRef.current.y)
-    }
-
-    const stopAutoScroll = () => {
-      autoScrollDirectionRef.current = 0
-      if (autoScrollRafRef.current) {
-        cancelAnimationFrame(autoScrollRafRef.current)
-        autoScrollRafRef.current = 0
-      }
-    }
-
-    const stepAutoScroll = () => {
-      autoScrollRafRef.current = 0
-      const container = projectScrollRef.current
-      const direction = autoScrollDirectionRef.current
-      if (!container || direction === 0) return
-      const maxScroll = maxScrollOf(container)
-      const target = Math.max(
-        0,
-        Math.min(container.scrollTop + direction * AUTO_SCROLL_STEP, maxScroll)
-      )
-      if (target !== container.scrollTop) {
-        container.scrollTop = target
-        // jsdom dispatches no scroll event for a programmatic scrollTop;
-        // sync directly so the snapshot follows every frame (in browsers
-        // the listener coalesces to a no-op — the delta is applied).
-        syncListScroll()
-      }
-      // At a scroll bound the loop rests; the next pointer move re-arms it
-      // if the pointer still sits in the edge band.
-      if (container.scrollTop > 0 && container.scrollTop < maxScroll) {
-        autoScrollRafRef.current = requestAnimationFrame(stepAutoScroll)
-      } else {
-        autoScrollDirectionRef.current = 0
-      }
-    }
-
-    const updateAutoScroll = (x: number, y: number) => {
-      // Only the project list scrolls (issue #25): folder drags reorder a
-      // static section, so they never arm the loop.
-      const container = projectScrollRef.current
-      const viewport = scrollViewportRef.current
-      if (!container || !viewport || dragRef.current?.kind !== 'project') {
-        stopAutoScroll()
-        return
-      }
-      autoScrollDirectionRef.current = autoScrollDirection(
-        x,
-        y,
-        viewport,
-        container.scrollTop,
-        maxScrollOf(container)
-      )
-      if (autoScrollDirectionRef.current === 0) stopAutoScroll()
-      else if (!autoScrollRafRef.current) {
-        autoScrollRafRef.current = requestAnimationFrame(stepAutoScroll)
-      }
-    }
-
-    const clearDrag = () => {
-      stopAutoScroll()
-      dragRef.current = null
-      dropTargetRef.current = null
-      dragGhostRef.current = null
-      dragSpacesRef.current = { list: null, folders: null, breadcrumb: null }
-      setDrag(null)
-      setDropTarget(null)
-      setDragGhost(null)
-    }
-
-    const handlePointerMove = (event: PointerEvent) => {
-      // The clone tracks the pointer imperatively — a state update per
-      // move would re-render the whole list (performance pattern).
-      const ghost = dragGhostRef.current
-      if (cloneRef.current && ghost) {
-        cloneRef.current.style.transform = `translate(${event.clientX - ghost.offsetX}px, ${event.clientY - ghost.offsetY}px)`
-      }
-      lastPointerRef.current = { x: event.clientX, y: event.clientY }
-      resolveDropTarget(event.clientX, event.clientY)
-      updateAutoScroll(event.clientX, event.clientY)
-    }
-
-    const finishDrag = () => {
-      stopAutoScroll()
-      // The ensuing click on the card is the drop's own pointerup — the
-      // card's onClick must not treat it as a selection.
-      suppressClickRef.current = true
-      const source = dragRef.current
-      const target = dropTargetRef.current
-      const store = useProjectStore.getState()
-      if (source?.kind === 'project' && target) {
-        if (target.kind === 'folder') {
-          // Dropping on a folder card files the project at that folder's
-          // end (spec issue #9: 释放后工程入夹末尾). v1.2.1 (issue #26):
-          // a full folder refuses the join — say why instead of silently
-          // bouncing the card (i18n.t: a window listener is a non-React
-          // context, kept out of the effect's deps).
-          const folder = store.projectFolders[target.index]
-          if (folder) {
-            const joined = store.moveProjectToFolder(folder.id, source.path)
-            if (!joined) {
-              notifications.warning(
-                i18n.t('sidebar.projectLimitReached', {
-                  limit: PROJECT_LIMIT_PER_DIRECTORY,
-                })
-              )
-            }
-          }
-        } else if (target.kind === 'breadcrumb') {
-          // Dropping on the unfiled segment returns the project to
-          // ungrouped (the old breadcrumb bar).
-          if (store.activeFolderId) {
-            store.removeProjectFromFolder(store.activeFolderId, source.path)
-          }
-        } else {
-          // Reordering follows the active view: inside a folder it is the
-          // set order, at the top level the master list (spec issue #7).
-          const visible = visibleProjectPaths(
-            store.recentProjectPaths,
-            store.projectFolders,
-            store.activeFolderId
-          )
-          const fromIndex = visible.indexOf(source.path)
-          if (fromIndex >= 0) {
-            const next = reorderedList(
-              visible,
-              fromIndex,
-              insertionIndexFor(target.index, target.half)
-            )
-            // reorderedList keeps its input reference for no-move drops.
-            if (next !== visible) {
-              store.applyVisibleReorder(next)
-              setSuppressTransition(true)
-            }
-          }
-        }
-      } else if (source?.kind === 'folder' && target?.kind === 'list') {
-        const folderIds = store.projectFolders.map(folder => folder.id)
-        const fromIndex = folderIds.indexOf(source.id)
-        if (fromIndex >= 0) {
-          const next = reorderedList(
-            folderIds,
-            fromIndex,
-            insertionIndexFor(target.index, target.half)
-          )
-          if (next !== folderIds) {
-            store.applyFolderReorder(next)
-            setSuppressTransition(true)
-          }
-        }
-      }
-      clearDrag()
-    }
-
-    window.addEventListener('pointermove', handlePointerMove)
-    window.addEventListener('pointerup', finishDrag)
-    window.addEventListener('pointercancel', clearDrag)
-    // Manual scrolls (wheel/trackpad) during a drag move the cards under
-    // the pointer too — keep the snapshot anchored (issue #25).
-    const scrollContainer = projectScrollRef.current
-    scrollContainer?.addEventListener('scroll', syncListScroll)
-    return () => {
-      window.removeEventListener('pointermove', handlePointerMove)
-      window.removeEventListener('pointerup', finishDrag)
-      window.removeEventListener('pointercancel', clearDrag)
-      scrollContainer?.removeEventListener('scroll', syncListScroll)
-      stopAutoScroll()
-    }
-  }, [drag])
-
-  // Re-enable card transitions only once the snap frame has painted;
-  // cancelled drags (pointercancel, no-commit drops) never pass through
-  // here and keep their smooth return animation.
-  useEffect(() => {
-    if (!suppressTransition) return
-    let second = 0
-    const first = requestAnimationFrame(() => {
-      second = requestAnimationFrame(() => setSuppressTransition(false))
-    })
-    return () => {
-      cancelAnimationFrame(first)
-      cancelAnimationFrame(second)
-    }
-  }, [suppressTransition])
 
   // v1.2.2 (issue #28): the pill tracks the active segment. Like the drag
   // clone, its geometry is applied imperatively — a state update per
@@ -1349,6 +955,7 @@ export function Sidebar({
                 <div
                   ref={unfiledSegmentRef}
                   data-testid="unfiled-segment"
+                  data-unfiled-segment=""
                   data-drop-active={unfiledDropping ? 'true' : undefined}
                   role="tab"
                   aria-selected={!activeFolder}
@@ -1358,14 +965,10 @@ export function Sidebar({
                     // Every fresh press re-arms the click suppression a
                     // finished drag left behind — the unfiled segment is not
                     // a drag source, so its press has no other handler.
-                    // (The primary-button drag guard lives in beginCardDrag.)
-                    suppressClickRef.current = false
+                    clearClickSuppression()
                   }}
                   onClick={() => {
-                    if (suppressClickRef.current) {
-                      suppressClickRef.current = false
-                      return
-                    }
+                    if (consumeClick()) return
                     setActiveFolderView(null)
                   }}
                   className={cn(
@@ -1437,7 +1040,7 @@ export function Sidebar({
                         // finished drag left behind — also when the segment
                         // cannot become a drag source (editing, protected,
                         // secondary button).
-                        suppressClickRef.current = false
+                        clearClickSuppression()
                         // Inline naming owns the segment; no drag while
                         // editing. The pinned Utilities segment is not
                         // draggable.
@@ -1450,10 +1053,7 @@ export function Sidebar({
                       }}
                       onClick={() => {
                         if (isEditing) return
-                        if (suppressClickRef.current) {
-                          suppressClickRef.current = false
-                          return
-                        }
+                        if (consumeClick()) return
                         setActiveFolderView(folder.id)
                       }}
                       style={
@@ -1619,6 +1219,7 @@ export function Sidebar({
         <div
           ref={projectScrollRef}
           data-testid="project-list-scroll"
+          data-project-scroll=""
           style={brutal ? { marginBottom: OCTO_COLUMN_RESERVE_PX } : undefined}
           className="z-10 min-h-0 flex-1 overflow-y-auto overscroll-contain [mask-composite:add] [-webkit-mask-composite:source-over] [mask-image:linear-gradient(to_bottom,transparent_0px,#000_20px,#000_calc(100%_-_20px),transparent_100%),linear-gradient(to_right,transparent_calc(100%_-_15px),#000_calc(100%_-_15px))]"
         >
@@ -1688,10 +1289,7 @@ export function Sidebar({
                     )
                   }}
                   onClick={() => {
-                    if (suppressClickRef.current) {
-                      suppressClickRef.current = false
-                      return
-                    }
+                    if (consumeClick()) return
                     selectProject(path)
                   }}
                   style={

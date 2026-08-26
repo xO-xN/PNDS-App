@@ -141,10 +141,11 @@ test('openSettings records the section to reveal', () => {
 
 ### Testing Pointer-Drag Geometry (e.g. Sidebar Reorder)
 
-jsdom has no layout and no hit-testing, so pointer dragging cannot be simulated end-to-end. Split the work at that seam (see the sidebar's `src/lib/drag-reorder.ts`):
+jsdom has no layout and no hit-testing, so pointer dragging cannot be simulated end-to-end. Since v1.3.2 (issue #75) the work splits across three modules — test each at its own seam:
 
-- All drop/yield decisions — midpoint halves, insertion index, per-card yield offsets, static hit-testing — are pure functions, unit-tested with plain numbers.
-- The component only measures rects and mutates the floating clone imperatively on `pointermove`; its tests pin the rects it derives geometry from via `mockBoundingClientRect` (`src/test/test-utils.tsx`) and fire pointer events with explicit coordinates. The drag "feel" remains a manual acceptance step.
+- All drop/yield decisions — midpoint halves, insertion index, per-card yield offsets, static hit-testing — are pure functions in `src/lib/drag-reorder.ts`, unit-tested with plain numbers.
+- The gesture machine (press slack activation, clone transform, edge auto-scroll, scroll re-anchoring, post-commit transition suppression) is `src/hooks/use-card-drag.ts`. It consumes only injected geometry: its tests (`src/hooks/use-card-drag.test.tsx`) pass a numeric `CardDragAdapter` and a scroll container whose `scrollTop`/`scrollHeight` are pinned via `Object.defineProperty` — no `getBoundingClientRect` pinning, no rect math in the machine.
+- The host (Sidebar) measures the DOM through `src/components/shell/sidebar-drag-adapter.ts` and commits through store actions. Its end-to-end drag tests still pin the rects the adapter derives geometry from via `mockBoundingClientRect` (`src/test/test-utils.tsx`) and fire pointer events with explicit coordinates. The drag "feel" remains a manual acceptance step.
 
 ## Rust Testing
 
