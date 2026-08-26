@@ -2,18 +2,31 @@ import { splitSections, type HelpSection } from './help-markdown'
 
 /**
  * v1.3.0 (#53): the help corpus loader. The Rust `help_corpus` command
- * reads the three Chinese docs (使用教程 / 创作指南 / 参考手册) raw from
- * the app resources — `docs/zh-CN/*.md` in the repository is the ONLY
- * source, shipped verbatim with no build-time conversion — and hands
- * over { id, markdown } pairs. This module is the single place that
- * knows the corpus's shape: which documents exist, which book each
- * belongs to, the display order (the reference manual follows its own
- * README index), and each document's title (its own `#` heading).
+ * reads the three books (tutorial / creator's guide / reference
+ * manual) raw from the app resources — `docs/<tree>/*.md` in the
+ * repository are the ONLY sources, shipped verbatim with no build-time
+ * conversion — and hands over { id, markdown } pairs. This module is
+ * the single place that knows the corpus's shape: which documents
+ * exist, which book each belongs to, the display order (the reference
+ * manual follows its own README index), and each document's title (its
+ * own `#` heading).
  *
  * A mismatch between the shipped set and HELP_BOOKS fails loudly — the
  * help center must never silently hide a document it cannot place, nor
  * show one nobody assigned a home.
  */
+
+/** The language trees the corpus ships in (ADR-0001), as directory
+ * names under docs/ — and, in a release bundle, under help/. The trees
+ * are mirror trees: one id/path list serves every tree, and the drift
+ * tests (Rust: help.rs, frontend: help-trees.test.ts) fail the build
+ * when either side drifts. #67 ships the en/ tree; #68 makes the
+ * served tree a UI-language parameter — until then the App UI is
+ * Chinese and zh-CN is the only tree served. */
+export const HELP_TREES = ['zh-CN', 'en'] as const
+
+/** A language tree the help corpus ships in. */
+export type HelpTree = (typeof HELP_TREES)[number]
 
 /** The three entry points the Help menu opens; also the sidebar's books. */
 export type HelpBookId = 'tutorial' | 'creator-guide' | 'reference'
@@ -44,9 +57,9 @@ export interface HelpDocument {
  * the stable contract with the Rust-side document list
  * (src-tauri/src/commands/help.rs) and the bundle resources
  * (tauri.conf.json → help/…). Paths live on the Rust side, relative to
- * the zh-CN language tree (docs/zh-CN/, ADR-0001) — the tree moves as
- * one unit, so tree-relative paths keep the corpus's internal links
- * resolving without a frontend change (#66).
+ * every language tree (docs/zh-CN/, docs/en/ — ADR-0001; the trees are
+ * isomorphic) — tree-relative paths keep the corpus's internal links
+ * resolving in either language without a frontend change (#66, #67).
  */
 export const HELP_BOOKS: readonly {
   id: HelpBookId
