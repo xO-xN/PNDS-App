@@ -6,6 +6,7 @@ import {
   within,
   createFolderOrFail,
   openFolderContextMenu,
+  mockBoundingClientRect,
 } from '@/test/test-utils'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -248,6 +249,7 @@ describe('Utilities folder protection (v1.1.2 T7, spec issue #11)', () => {
       pendingPreflightPath: null,
       activeFolderId: null,
       renameTarget: null,
+      utilityPaths: [],
       preflightStatus: 'idle',
       preflightError: null,
     })
@@ -294,5 +296,90 @@ describe('Utilities folder protection (v1.1.2 T7, spec issue #11)', () => {
 
     expect(useProjectStore.getState().activeFolderId).toBe(UTILITIES_FOLDER_ID)
     expect(screen.getAllByTestId('project-entry')).toHaveLength(2)
+  })
+
+  // v1.3.2 (user report after #75): the bundled tools are app content —
+  // their cards carry no removal affordance and never arm a drag.
+  it('a bundled tool card offers no ✕ and never becomes a drag', () => {
+    useProjectStore.setState({ utilityPaths: [PROJECT_PATH] })
+    render(<Sidebar variant="static" />)
+
+    const utilitiesSegment = screen
+      .getAllByTestId('folder-segment')
+      .find(segment => segment.textContent?.includes('Utilities'))
+    if (!utilitiesSegment) throw new Error('Expected the Utilities segment')
+    fireEvent.click(utilitiesSegment)
+
+    const toolCard = screen
+      .getAllByTestId(/project-entry|current-project-card/)
+      .find(card => card.getAttribute('data-project-path') === PROJECT_PATH)
+    if (!toolCard) throw new Error('Expected the tool card')
+
+    expect(
+      within(toolCard).queryByRole('button', { name: /remove from history/i })
+    ).not.toBeInTheDocument()
+
+    // Press and move past the click slack — a user card would activate;
+    // a tool card stays a plain (selectable) card.
+    fireEvent.pointerDown(toolCard, { pointerId: 1, clientX: 40, clientY: 80 })
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 80, clientY: 120 })
+    expect(screen.queryByTestId('drag-clone')).not.toBeInTheDocument()
+    fireEvent.pointerUp(window, { pointerId: 1 })
+    expect(useProjectStore.getState().projectFolders[0]?.projectPaths).toEqual([
+      PROJECT_PATH,
+      OTHER_PATH,
+    ])
+  })
+
+  it('dragging a user project onto the Utilities segment neither highlights nor joins it', async () => {
+    useProjectStore.setState({
+      recentProjectPaths: [PROJECT_PATH, OTHER_PATH],
+      projectFolders: [
+        {
+          id: UTILITIES_FOLDER_ID,
+          name: 'Utilities',
+          projectPaths: [],
+        },
+      ],
+      utilityPaths: [],
+    })
+    render(<Sidebar variant="static" />)
+
+    const [first, second] = screen.getAllByTestId('project-entry')
+    const utilitiesSegment = screen
+      .getAllByTestId('folder-segment')
+      .find(segment => segment.textContent?.includes('Utilities'))
+    if (!first || !second) throw new Error('Expected two ungrouped cards')
+    if (!utilitiesSegment) throw new Error('Expected the Utilities segment')
+    mockBoundingClientRect(first, { top: 0 })
+    mockBoundingClientRect(second, { top: 61 })
+    mockBoundingClientRect(utilitiesSegment, {
+      top: 200,
+      left: 100,
+      width: 70,
+      height: 32,
+    })
+
+    // Drag the second card over the Utilities segment.
+    fireEvent.pointerDown(second, { pointerId: 1, clientX: 40, clientY: 80 })
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 60, clientY: 90 })
+    await waitFor(() =>
+      expect(screen.getByTestId('drag-clone')).toBeInTheDocument()
+    )
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 135, clientY: 216 })
+
+    // The protected segment never lights up as a drop zone...
+    expect(utilitiesSegment).not.toHaveAttribute('data-drop-active', 'true')
+    fireEvent.pointerUp(window, { pointerId: 1 })
+
+    // ...and the drop commits nothing — no join, no misleading cap toast.
+    expect(useProjectStore.getState().projectFolders[0]?.projectPaths).toEqual(
+      []
+    )
+    expect(useProjectStore.getState().recentProjectPaths).toEqual([
+      PROJECT_PATH,
+      OTHER_PATH,
+    ])
+    expect(notifications.warning).not.toHaveBeenCalled()
   })
 })

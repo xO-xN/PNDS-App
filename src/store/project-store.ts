@@ -105,6 +105,18 @@ interface ProjectState {
   manifestProjectNames: Record<string, string>
   /** Card currently in inline rename; drives the sidebar's edit state. */
   renameTarget: RenameTarget | null
+  /**
+   * v1.3.2 (user report after #75): the app-bundled utility tools this
+   * launch resolved (paths from the backend registry — see
+   * utilities-folder.ts). They are app content, not user data: position,
+   * Utilities membership and history presence are immutable from the UI,
+   * enforced by the structural actions below. Not persisted — the roots
+   * move between builds, so every launch re-resolves the set before any
+   * user gesture can realistically reach the guards.
+   */
+  utilityPaths: string[]
+  /** Records this launch's utility tool paths (see `utilityPaths`). */
+  setUtilityPaths: (paths: string[]) => void
   preflightStatus: PreflightStatus
   preflightError: string | null
   /**
@@ -328,6 +340,8 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
   projectDisplayNames: {},
   manifestProjectNames: {},
   renameTarget: null,
+  utilityPaths: [],
+  setUtilityPaths: paths => set({ utilityPaths: paths }),
   preflightStatus: 'idle',
   preflightError: null,
 
@@ -363,6 +377,10 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
 
   removeRecentProject: path => {
     const before = get()
+    // v1.3.2 (user report after #75): the bundled utility tools are app
+    // content — their history entries never leave through the ✕ (stale
+    // root copies are exempt: they are not this launch's tool paths).
+    if (before.utilityPaths.includes(path)) return
     set(state => ({
       recentProjectPaths: state.recentProjectPaths.filter(p => p !== path),
       // Removing the app-side index also drops folder membership — the
@@ -380,16 +398,24 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
   clearRecentProjects: () => {
     const before = get()
     set(state => ({
-      recentProjectPaths: [],
-      // Members are gone with the list; the folders themselves (and the
-      // protected Utilities folder) stay as empty shells.
+      // User data clears; the bundled utility tools are app content and
+      // stay listed (and members of Utilities) through a clear-all.
+      recentProjectPaths: state.recentProjectPaths.filter(path =>
+        state.utilityPaths.includes(path)
+      ),
       projectFolders: state.projectFolders.map(folder => ({
         ...folder,
-        projectPaths: [],
+        projectPaths: folder.projectPaths.filter(path =>
+          state.utilityPaths.includes(path)
+        ),
       })),
       currentProject:
-        state.currentProject !== null ? null : state.currentProject,
-      ...(state.currentProject !== null
+        state.currentProject !== null &&
+        !state.utilityPaths.includes(state.currentProject.path)
+          ? null
+          : state.currentProject,
+      ...(state.currentProject !== null &&
+      !state.utilityPaths.includes(state.currentProject.path)
         ? { preflightStatus: 'idle' as const, preflightError: null }
         : {}),
     }))
@@ -427,6 +453,9 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
 
   setProjectDisplayName: (path, name) => {
     const before = get()
+    // v1.3.2 (user report after #75): bundled tools keep the names the app
+    // ships (learned from their manifests) — no user override.
+    if (before.utilityPaths.includes(path)) return
     set(state => ({
       projectDisplayNames: upsertDisplayName(
         state.projectDisplayNames,
@@ -516,6 +545,13 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
   moveProjectToFolder: (folderId, path) => {
     const before = get()
     const target = before.projectFolders.find(folder => folder.id === folderId)
+    // v1.3.2 (user report after #75): the bundled utility tools live in
+    // Utilities and nowhere else, and nothing else files into Utilities —
+    // both directions of the membership border are refused. (The launch
+    // seeding itself moves tool paths INTO Utilities and stays allowed.)
+    const isUtility = before.utilityPaths.includes(path)
+    if (isUtility && !isProtectedFolder(folderId)) return false
+    if (!isUtility && isProtectedFolder(folderId)) return false
     // v1.2.1 (issue #26): a join that would push the target past the
     // per-directory cap is refused before any state change. A path already
     // inside the target is a no-op re-file, never a refusal.
@@ -541,6 +577,9 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
 
   removeProjectFromFolder: (folderId, path) => {
     const before = get()
+    // v1.3.2 (user report after #75): a bundled tool never leaves its
+    // folder through the unfiled drop (or any other removal).
+    if (before.utilityPaths.includes(path)) return
     set(state => ({
       projectFolders: withoutFolderMember(state.projectFolders, path).map(
         folder =>
@@ -557,6 +596,14 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
 
   applyVisibleReorder: newVisiblePaths => {
     const before = get()
+    // v1.3.2 (user report after #75): the Utilities view lists app content
+    // in registry order — its members never reorder.
+    if (
+      before.activeFolderId !== null &&
+      isProtectedFolder(before.activeFolderId)
+    ) {
+      return
+    }
     set(state => {
       if (state.activeFolderId !== null) {
         return {

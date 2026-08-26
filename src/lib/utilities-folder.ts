@@ -91,10 +91,11 @@ function refreshToolRoots(tools: BuiltinUtility[]): void {
  * spelling counts — `refersToTool`). A cap-refused history add leaves
  * the id unrecorded and retried on a later launch.
  *
- * Known edge: an install that deliberately purged a built-in tool from
- * history AND every folder before this record existed sees that tool
- * return once on upgrade — the record cannot distinguish "purged" from
- * "never shipped here". After the one-time offer, removals stick.
+ * Known edge: an install from before the v1.3.2 immutability guards that
+ * deliberately purged a built-in tool AND every record of the offer sees
+ * that tool return once on upgrade — the record cannot distinguish
+ * "purged" from "never shipped here". Since the guards, tools cannot be
+ * purged anymore, so the offer is genuinely one-time for new installs.
  */
 async function offerNewUtilities(tools: BuiltinUtility[]): Promise<void> {
   const prefs = await loadPreferences()
@@ -126,6 +127,24 @@ async function offerNewUtilities(tools: BuiltinUtility[]): Promise<void> {
 }
 
 /**
+ * Best-effort guard registration when the registry lookup fails (or ships
+ * nothing): Utilities members staged under a `<root>/utilities/<id>` path
+ * are tools — only the seeding ever files into the folder, and every tool
+ * root ends in `/utilities/<id>` (v1.3.1). Keeps the immutability guards
+ * alive for that degraded launch; the next successful lookup re-resolves
+ * the exact set.
+ */
+function registerFallbackUtilityPaths(): void {
+  const utilities = useProjectStore
+    .getState()
+    .projectFolders.find(folder => folder.id === UTILITIES_FOLDER_ID)
+  const paths = (utilities?.projectPaths ?? []).filter(path =>
+    path.includes('/utilities/')
+  )
+  useProjectStore.getState().setUtilityPaths(paths)
+}
+
+/**
  * v1.2.0 (issue #18): the built-in utility tools behind the default
  * Utilities folder. They ship UNPACKED with the app resources at stable
  * paths (`utilities/<id>/`, no version in the path) and run in place — the
@@ -135,12 +154,13 @@ async function offerNewUtilities(tools: BuiltinUtility[]): Promise<void> {
  * Runs after the preference restore on every launch. The folder is
  * created when missing with every tool the cap admits; when it already
  * exists, stale-root copies are refreshed away (see `refreshToolRoots`,
- * v1.3.1), newly shipped tools are offered once (see
- * `offerNewUtilities`), and other membership edits are never undone, so
- * removing a tool from it (or from history) sticks across relaunches.
- * The folder is pinned to the BOTTOM of the folder area: seeded last,
- * and a launch also migrates installs where it still sits elsewhere.
- * Every mutation persists through the store's structural actions.
+ * v1.3.1) and newly shipped tools are offered once (see
+ * `offerNewUtilities`). v1.3.2 (user report after #75): the tools are app
+ * content — once seeded, the store guards keep their position, Utilities
+ * membership and history entry immutable from the UI. The folder is
+ * pinned to the BOTTOM of the folder area: seeded last, and a launch also
+ * migrates installs where it still sits elsewhere. Every mutation
+ * persists through the store's structural actions.
  */
 export async function ensureUtilitiesFolder(): Promise<void> {
   const result = await commands.builtinUtilities()
@@ -148,11 +168,22 @@ export async function ensureUtilitiesFolder(): Promise<void> {
     logger.warn('Failed to resolve the built-in utility tools', {
       error: result.error,
     })
+    registerFallbackUtilityPaths()
     return
   }
   const tools = result.data
-  if (tools.length === 0) return
+  if (tools.length === 0) {
+    registerFallbackUtilityPaths()
+    return
+  }
   learnToolNames(tools)
+  // v1.3.2 (user report after #75): register this launch's tool paths with
+  // the store — every structural guard below (move / remove / reorder /
+  // rename refusals) keys off the set. Recorded before the seeding flows
+  // so their own commits (filing a tool into Utilities) pass the border
+  // guard, while stale-root copies — not this launch's paths — stay
+  // removable for the refresh below.
+  useProjectStore.getState().setUtilityPaths(tools.map(tool => tool.path))
 
   const store = useProjectStore.getState()
   const existing = store.projectFolders.find(

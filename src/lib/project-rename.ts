@@ -7,7 +7,9 @@ import { useSessionStore } from '@/store/session-store'
  *
  * Resolves what "rename the selected thing" means:
  * - session running (or stopping) → forbidden, silent no-op
- * - a selected project → that project, even inside a folder view
+ * - a selected project → that project, even inside a folder view — unless
+ *   it is a bundled utility tool (v1.3.2: app content keeps its manifest
+ *   name)
  * - no selection but drilled into a folder → the folder's name, unless it
  *   is protected (the Utilities folder keeps its name — v1.1.2 T7)
  * - nothing selected → silent no-op (no prompt, no action)
@@ -18,6 +20,7 @@ export function startRename(): void {
 
   const project = useProjectStore.getState()
   if (project.currentProject) {
+    if (project.utilityPaths.includes(project.currentProject.path)) return
     project.setRenameTarget({
       kind: 'project',
       path: project.currentProject.path,

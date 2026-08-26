@@ -122,6 +122,7 @@ describe('⌘R project rename (v1.1.2 T6)', () => {
       preflightError: null,
       projectDisplayNames: {},
       renameTarget: null,
+      utilityPaths: [],
     })
     useSessionStore.getState().resetSession()
   })
@@ -253,6 +254,22 @@ describe('⌘R project rename (v1.1.2 T6)', () => {
 
   it('is a silent no-op with no selected project at the top level', () => {
     useProjectStore.setState({ recentProjectPaths: [FIRST_PATH] })
+    render(<AppShell />)
+
+    pressCmdR()
+
+    expect(screen.queryByTestId('project-name-input')).not.toBeInTheDocument()
+    expect(commands.savePreferences).not.toHaveBeenCalled()
+    expect(useProjectStore.getState().renameTarget).toBeNull()
+  })
+
+  it('never renames a bundled utility tool — app content keeps its name (v1.3.2)', () => {
+    useProjectStore.setState({
+      recentProjectPaths: [FIRST_PATH],
+      currentProject: { path: FIRST_PATH, manifest },
+      preflightStatus: 'ready',
+      utilityPaths: [FIRST_PATH],
+    })
     render(<AppShell />)
 
     pressCmdR()

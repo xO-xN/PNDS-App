@@ -61,6 +61,7 @@ describe('ensureUtilitiesFolder', () => {
       projectFolders: [],
       activeFolderId: null,
       manifestProjectNames: {},
+      utilityPaths: [],
     })
   })
 
@@ -145,7 +146,7 @@ describe('ensureUtilitiesFolder', () => {
     })
   })
 
-  it('is a no-op once the folder exists — later edits stick across launches', async () => {
+  it('locks the tools once seeded — removals refuse and relaunches keep them (v1.3.2 user report)', async () => {
     await ensureUtilitiesFolder()
     // Let every queued seeding save land (the history adds, the folder
     // commit and the offer record each persist) before clearing, so only
@@ -153,29 +154,25 @@ describe('ensureUtilitiesFolder', () => {
     await new Promise(resolve => setTimeout(resolve, 0))
     expect(commands.savePreferences).toHaveBeenCalled()
 
-    // The user moved a tool out and removed it from history.
+    // The removals a user might attempt are refused outright — the tools
+    // are app content, not history entries to curate.
     const second = TOOL_PATHS[1]
     if (!second) throw new Error('Expected a second tool path')
     const store = useProjectStore.getState()
     store.removeProjectFromFolder(UTILITIES_FOLDER_ID, second)
     store.removeRecentProject(second)
-    // Those removals persist through the store — let the queue settle
-    // before clearing, so only a hypothetical reseeding save could be
-    // observed below.
-    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(useProjectStore.getState().recentProjectPaths).toEqual(TOOL_PATHS)
+    expect(useProjectStore.getState().projectFolders[0]?.projectPaths).toEqual(
+      TOOL_PATHS
+    )
     vi.mocked(commands.savePreferences).mockClear()
-    // Disk state for the next launch: the offer record the seed wrote
-    // survives the removals (that is exactly what keeps them sticking).
-    mockPrefs({ offeredUtilities: TOOL_PATHS })
+    mockPrefs({ offeredUtilities: TOOL_IDS })
 
     await ensureUtilitiesFolder()
 
     const state = useProjectStore.getState()
-    expect(state.recentProjectPaths).toEqual([TOOL_PATHS[0], TOOL_PATHS[2]])
-    expect(state.projectFolders[0]?.projectPaths).toEqual([
-      TOOL_PATHS[0],
-      TOOL_PATHS[2],
-    ])
+    expect(state.recentProjectPaths).toEqual(TOOL_PATHS)
+    expect(state.projectFolders[0]?.projectPaths).toEqual(TOOL_PATHS)
     expect(commands.savePreferences).not.toHaveBeenCalled()
   })
 
@@ -314,6 +311,35 @@ describe('ensureUtilitiesFolder', () => {
 
     expect(useProjectStore.getState().projectFolders).toEqual([])
     expect(commands.savePreferences).not.toHaveBeenCalled()
+  })
+
+  it('still locks the persisted tools when the registry lookup fails (v1.3.2)', async () => {
+    // An earlier launch seeded the folder; this launch's backend lookup
+    // fails — the members must still count as app content (no ✕, no
+    // drag) for the whole degraded session.
+    useProjectStore.setState({
+      recentProjectPaths: TOOL_PATHS,
+      projectFolders: [
+        {
+          id: UTILITIES_FOLDER_ID,
+          name: 'Utilities',
+          projectPaths: TOOL_PATHS,
+        },
+      ],
+    })
+    vi.mocked(commands.builtinUtilities).mockResolvedValue({
+      status: 'error',
+      error: 'app resources unavailable',
+    })
+
+    await ensureUtilitiesFolder()
+
+    expect(useProjectStore.getState().utilityPaths).toEqual(TOOL_PATHS)
+    // And the guard bites: a removal attempt refuses.
+    const first = TOOL_PATHS[0]
+    if (!first) throw new Error('Expected a tool path')
+    useProjectStore.getState().removeRecentProject(first)
+    expect(useProjectStore.getState().recentProjectPaths).toEqual(TOOL_PATHS)
   })
 
   it('refreshes stale-root copies away — one entry per tool, and back again (v1.3.1 report)', async () => {

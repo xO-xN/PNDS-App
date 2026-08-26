@@ -40,6 +40,7 @@ describe('project-store', () => {
       pendingPreflightPath: null,
       activeFolderId: null,
       manifestProjectNames: {},
+      utilityPaths: [],
       preflightStatus: 'idle',
       preflightError: null,
     })
@@ -557,6 +558,7 @@ describe('protected folders (v1.1.2 T7, spec issue #11)', () => {
       ],
       pendingPreflightPath: null,
       activeFolderId: null,
+      utilityPaths: [],
       preflightStatus: 'idle',
       preflightError: null,
     })
@@ -572,25 +574,68 @@ describe('protected folders (v1.1.2 T7, spec issue #11)', () => {
     expect(useProjectStore.getState().projectFolders).toHaveLength(1)
   })
 
-  it('still allows editing the Utilities membership (files like any folder)', () => {
+  it('takes no outside members and never releases its tools (v1.3.2 user report)', () => {
+    const utilities = () =>
+      useProjectStore
+        .getState()
+        .projectFolders.find(folder => folder.id === UTILITIES_FOLDER_ID)
+
+    // A user project cannot file into Utilities...
+    expect(
+      useProjectStore.getState().moveProjectToFolder(UTILITIES_FOLDER_ID, '/c')
+    ).toBe(false)
+    expect(utilities()?.projectPaths).toEqual(['/a', '/b'])
+
+    // ...and a registered tool never leaves: not to another folder...
+    useProjectStore.getState().createFolder('Set list')
+    const setListId = useProjectStore
+      .getState()
+      .projectFolders.find(folder => folder.id !== UTILITIES_FOLDER_ID)?.id
+    useProjectStore.setState({ utilityPaths: ['/a'] })
+    if (!setListId) throw new Error('Expected a non-protected folder')
+    expect(
+      useProjectStore.getState().moveProjectToFolder(setListId, '/a')
+    ).toBe(false)
+    // ...not back to ungrouped...
     useProjectStore
       .getState()
-      .removeProjectFromFolder(UTILITIES_FOLDER_ID, '/b')
-    expect(useProjectStore.getState().projectFolders[0]?.projectPaths).toEqual([
-      '/a',
-    ])
-
-    useProjectStore.getState().moveProjectToFolder(UTILITIES_FOLDER_ID, '/b')
-    expect(useProjectStore.getState().projectFolders[0]?.projectPaths).toEqual([
-      '/a',
-      '/b',
-    ])
+      .removeProjectFromFolder(UTILITIES_FOLDER_ID, '/a')
+    // ...and not out of the history either.
+    useProjectStore.getState().removeRecentProject('/a')
+    expect(utilities()?.projectPaths).toEqual(['/a', '/b'])
+    expect(useProjectStore.getState().recentProjectPaths).toEqual(['/a', '/b'])
   })
 
   it('flags only the reserved id as protected', () => {
     expect(isProtectedFolder(UTILITIES_FOLDER_ID)).toBe(true)
     expect(isProtectedFolder('utilities-2')).toBe(false)
     expect(isProtectedFolder(crypto.randomUUID())).toBe(false)
+  })
+
+  it('never reorders inside the Utilities view (v1.3.2 user report)', () => {
+    useProjectStore.setState({ activeFolderId: UTILITIES_FOLDER_ID })
+    useProjectStore.getState().applyVisibleReorder(['/b', '/a'])
+    expect(useProjectStore.getState().projectFolders[0]?.projectPaths).toEqual([
+      '/a',
+      '/b',
+    ])
+  })
+
+  it('keeps the tools through a clear-all (v1.3.2 user report)', () => {
+    useProjectStore.setState({
+      utilityPaths: ['/a'],
+      recentProjectPaths: ['/a', '/user'],
+    })
+    useProjectStore.getState().clearRecentProjects()
+    const state = useProjectStore.getState()
+    expect(state.recentProjectPaths).toEqual(['/a'])
+    expect(state.projectFolders[0]?.projectPaths).toEqual(['/a'])
+  })
+
+  it('refuses a display-name override for a tool (v1.3.2 user report)', () => {
+    useProjectStore.setState({ utilityPaths: ['/a'] })
+    useProjectStore.getState().setProjectDisplayName('/a', 'Nickname')
+    expect(useProjectStore.getState().projectDisplayNames['/a']).toBeUndefined()
   })
 })
 
@@ -616,6 +661,7 @@ describe('project-store persistence (structural actions commit + save)', () => {
       activeFolderId: null,
       projectDisplayNames: {},
       manifestProjectNames: {},
+      utilityPaths: [],
       preflightStatus: 'idle',
       preflightError: null,
     })

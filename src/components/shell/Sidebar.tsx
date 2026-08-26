@@ -329,6 +329,9 @@ export function Sidebar({
   // #71: the shelf octopus is Brutal-only decoration riding the footer.
   const brutal = useSettingsStore(state => state.colorThemeSetting) === 'brutal'
   const recentProjectPaths = useProjectStore(state => state.recentProjectPaths)
+  // v1.3.2 (user report after #75): this launch's bundled utility tools —
+  // their cards never drag, never rename, never leave the list.
+  const utilityPaths = useProjectStore(state => state.utilityPaths)
   const projectFolders = useProjectStore(state => state.projectFolders)
   const currentProject = useProjectStore(state => state.currentProject)
   const pendingPreflightPath = useProjectStore(
@@ -399,12 +402,19 @@ export function Sidebar({
   ): boolean => {
     const store = useProjectStore.getState()
     if (source.kind === 'project') {
+      // v1.3.2 (user report after #75): a bundled utility tool is app
+      // content — its press never arms a drag, and the commit refuses it
+      // too (defense in depth; the segment highlight already hid it).
+      if (store.utilityPaths.includes(source.path)) return false
       if (target.kind === 'folder') {
         // Dropping on a folder card files the project at that folder's
         // end (spec issue #9: 释放后工程入夹末尾). v1.2.1 (issue #26):
         // a full folder refuses the join — say why instead of silently
         // bouncing the card (i18n.t: kept out of React contexts).
+        // v1.3.2: Utilities takes no outside projects — refuse before the
+        // store call so the cap toast never fires for it.
         const folder = store.projectFolders[target.index]
+        if (folder && isProtectedFolder(folder.id)) return false
         if (folder) {
           const joined = store.moveProjectToFolder(folder.id, source.path)
           if (!joined) {
@@ -1010,7 +1020,11 @@ export function Sidebar({
                   // 可拖拽排序).
                   const isDraggedSegment =
                     drag?.kind === 'folder' && drag.id === folder.id
-                  const isDropHover = folderDropIndex === folderIndex
+                  // A project drag highlights the hovered segment as its
+                  // drop zone — never the protected Utilities segment
+                  // (v1.3.2: it takes no outside projects).
+                  const isDropHover =
+                    folderDropIndex === folderIndex && !isProtected
                   const cardOffset =
                     folderInsertionIndex === null || dragFolderIndex < 0
                       ? 0
@@ -1250,6 +1264,9 @@ export function Sidebar({
               const isDragged = drag?.kind === 'project' && drag.path === path
               const renamingProject =
                 renameTarget?.kind === 'project' && renameTarget.path === path
+              // v1.3.2 (user report after #75): a bundled utility tool is
+              // app content — position, membership and presence are fixed.
+              const isUtility = utilityPaths.includes(path)
               // v1.2.3 (#39): the running bar follows the SESSION's project
               // (from the moment the session starts, not only once ready) —
               // an idle selection stays white-card-only, and selecting
@@ -1280,8 +1297,13 @@ export function Sidebar({
                   data-project-path={path}
                   data-selected-card={path === selectedPath ? '' : undefined}
                   onPointerDown={e => {
-                    // Renaming owns the card; the drag must not steal focus.
-                    if (renamingProject) return
+                    // Every fresh press re-arms the click suppression a
+                    // finished drag left behind — also when the card cannot
+                    // become a drag source (renaming, bundled tool).
+                    clearClickSuppression()
+                    // Renaming owns the card; the drag must not steal
+                    // focus. Bundled utility tools never drag (v1.3.2).
+                    if (renamingProject || isUtility) return
                     beginCardDrag(
                       { kind: 'project', path },
                       e,
@@ -1393,7 +1415,9 @@ export function Sidebar({
                         className="text-(--pnds-danger)"
                       />
                     </span>
-                  ) : isCurrent || isSessionCard ? (
+                  ) : isCurrent || isSessionCard || isUtility ? (
+                    /* Bundled tools are permanent (v1.3.2) — the spacer
+                       keeps the title's optical axis, no ✕. */
                     <span className="w-5 shrink-0" />
                   ) : (
                     <button
