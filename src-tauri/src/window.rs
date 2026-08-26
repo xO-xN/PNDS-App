@@ -21,6 +21,10 @@
 //!     lib.rs force-shows it if the reveal never arrives. New windows
 //!     that must not flash on their first frame (the Help center, T8)
 //!     reuse this same pattern.
+//!   - v1.3.1 (#70) the Brutal square-corner flag is APP-WIDE: theme
+//!     switches re-sync every live window, and a window created after
+//!     the last switch (the help center) syncs at its own reveal —
+//!     square corners never apply to just half the app's windows.
 
 use serde::Serialize;
 use specta::Type;
@@ -266,6 +270,22 @@ pub async fn fade_in_window(app: AppHandle, label: Option<String>) -> Result<(),
     let gen = reveal_generation(&state, &label);
     let generation = gen.next();
     set_opacity(&window, 0.0);
+    // v1.3.1 (#70): the reveal is where a frontend-created window (the
+    // help center) syncs its native corners with the theme flag — it was
+    // created after the last flag change, so it is born with the
+    // platform's default corners even while Brutal is active. Landing
+    // the radius while the window is still invisible means its first
+    // visible frame is already correct; for main this is an idempotent
+    // no-op (setup and every theme sync already applied the radius).
+    let square = state.square_corners.load(Ordering::SeqCst);
+    {
+        let corner_window = window.clone();
+        if let Err(e) = app.run_on_main_thread(move || {
+            sync_corner_radius(&corner_window, square);
+        }) {
+            log::warn!("Failed to schedule the reveal corner sync: {e}");
+        }
+    }
     window
         .show()
         .map_err(|e| format!("Failed to show the hidden window: {e}"))?;
@@ -434,19 +454,25 @@ fn set_alpha<R: Runtime>(_window: &WebviewWindow<R>, _value: f64) -> Result<(), 
 /// mask (16px in every other theme) drops to 0 while that theme is
 /// active. The frontend calls this whenever the effective theme changes
 /// (startup + every Appearance switch); fullscreen is square regardless.
-/// The AppKit work hops to the main thread — driving the view hierarchy
-/// from a tokio worker aborts (the glass.rs lesson).
+/// v1.3.1 (#70): the flag governs EVERY window — an open help center
+/// squares and un-squares with the main window, so a theme switch is
+/// never half-applied across the app's windows. The AppKit work hops to
+/// the main thread — driving the view hierarchy from a tokio worker
+/// aborts (the glass.rs lesson).
 #[tauri::command]
 #[specta::specta]
 pub async fn set_window_corners_square(app: AppHandle, square: bool) -> Result<(), String> {
     app.state::<WindowManager>()
         .square_corners
         .store(square, Ordering::SeqCst);
-    let window = app
-        .get_webview_window("main")
-        .ok_or("main window not found")?;
+    // #70: windows created AFTER the last flag change (the help center
+    // opens on demand) missed it here — their reveal re-syncs instead
+    // (fade_in_window), so both paths together cover every window.
+    let windows: Vec<_> = app.webview_windows().into_values().collect();
     app.run_on_main_thread(move || {
-        sync_corner_radius(&window, square);
+        for window in &windows {
+            sync_corner_radius(window, square);
+        }
     })
     .map_err(|e| format!("Failed to schedule the corner task: {e}"))
 }
@@ -455,14 +481,69 @@ pub async fn set_window_corners_square(app: AppHandle, square: bool) -> Result<(
 /// state : 16px in windowed mode, 0 in fullscreen — and 0 in any
 /// state while the square-corners theme flag is set (#41). Call on
 /// startup, on every fullscreen transition (native green button or
-/// ⌃⌘F), and on every theme change so the radius survives them all.
+/// ⌃⌘F), on every theme change, and on every window reveal (#70: a
+/// frontend-created help window missed the flag changes that predate
+/// it) so the radius survives them all.
 pub fn sync_corner_radius<R: Runtime>(window: &WebviewWindow<R>, square_corners: bool) {
     let is_fullscreen = window.is_fullscreen().unwrap_or(false);
     let radius = window_corner_radius(is_fullscreen, square_corners);
+    sync_window_chrome(window, square_corners);
     if let Err(e) = set_corner_radius(window, radius) {
         log::warn!("setCornerRadius({radius}) failed: {e}");
     }
 }
+
+/// The chrome decision as a pure function: a square-corners window
+/// must also carry the see-through chrome that lets the content mask
+/// define its shape (#70). Main is exempt — see `sync_window_chrome`.
+fn chrome_transparent_for(square_corners: bool) -> bool {
+    square_corners
+}
+
+/// #70: squares a SECONDARY window (the help center) for real. A
+/// standard titled window is opaque and its rounded shape is drawn by
+/// the window server (NSThemeFrame) — `set_corner_radius`'s content
+/// mask cannot square it, which is exactly why Brutal left the help
+/// window rounded while main squared: main is CREATED with the
+/// see-through structure (tao), help is not. While the square-corners
+/// flag is set, this flips the window to that same structure —
+/// non-opaque, clear background, transparent titlebar — so the mask
+/// becomes the visible shape; when the flag clears it restores the
+/// standard frosted titlebar, leaving the other three themes
+/// pixel-identical to before the flag ever fired. Main skips this
+/// entirely: its structure is fixed at creation and flipping it back
+/// to opaque would break its normal-theme look. Runs on the main
+/// thread (every caller hops there); idempotent in both directions.
+#[cfg(target_os = "macos")]
+fn sync_window_chrome<R: Runtime>(window: &WebviewWindow<R>, square_corners: bool) {
+    use objc2_app_kit::NSColor;
+    use objc2_app_kit::NSWindow;
+
+    if window.label() == "main" {
+        return;
+    }
+    let transparent = chrome_transparent_for(square_corners);
+    let Ok(ns_window) = window.ns_window() else {
+        return;
+    };
+    // SAFETY: borrowed NSWindow pointer owned by Tauri (the same
+    // contract as set_corner_radius); typed AppKit calls only.
+    unsafe {
+        let win: *mut NSWindow = ns_window.cast();
+        let clear = NSColor::clearColor();
+        let standard = NSColor::windowBackgroundColor();
+        (*win).setTitlebarAppearsTransparent(transparent);
+        (*win).setOpaque(!transparent);
+        (*win).setBackgroundColor(if transparent {
+            Some(&clear)
+        } else {
+            Some(&standard)
+        });
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn sync_window_chrome<R: Runtime>(_window: &WebviewWindow<R>, _square_corners: bool) {}
 
 /// The context-menu suppression script (see `suppress_default_context_menu`
 /// — the string is shared with the frontend fallback registration).
@@ -598,6 +679,8 @@ fn window_corner_radius(is_fullscreen: bool, square_corners: bool) -> f64 {
 /// subview (including the WKWebView) to the rounded shape, so the monitor
 /// background reaches the window's real edge instead of leaking the white
 /// webview background at the corners. Fullscreen passes radius 0 (square).
+/// On a titled window this only shapes the content: the window's own
+/// rounded frame is the window server's (see `sync_window_chrome`, #70).
 #[cfg(target_os = "macos")]
 fn set_corner_radius<R: Runtime>(window: &WebviewWindow<R>, radius: f64) -> Result<(), String> {
     use objc2::msg_send;
@@ -716,5 +799,40 @@ mod tests {
         assert_eq!(window_corner_radius(true, false), 0.0);
         assert_eq!(window_corner_radius(false, true), 0.0);
         assert_eq!(window_corner_radius(true, true), 0.0);
+    }
+
+    /// v1.3.1 (#70): the theme→corner mapping covers the help window.
+    /// The flag squares EVERY window — a theme switch walks all live
+    /// windows (`set_window_corners_square`), and a help window created
+    /// after the last switch lands on the flag's radius at its reveal
+    /// (`fade_in_window` reads the flag exactly like this) — so under
+    /// Brutal both windows are square, and every other theme keeps the
+    /// shared 16px token on both.
+    #[test]
+    fn corner_flag_maps_the_help_window_like_main() {
+        // Brutal activated before the help window exists: its reveal
+        // reads the stored flag and must land square like main.
+        let manager = WindowManager::default();
+        manager.square_corners.store(true, Ordering::SeqCst);
+        assert_eq!(
+            window_corner_radius(false, manager.square_corners.load(Ordering::SeqCst)),
+            0.0
+        );
+        // The radius alone cannot square a standard titled window — the
+        // see-through chrome must ride with the flag (#70's user report).
+        assert!(chrome_transparent_for(
+            manager.square_corners.load(Ordering::SeqCst)
+        ));
+
+        // Switching back while it is open restores the shared token for
+        // every window alike — and the standard frosted titlebar.
+        manager.square_corners.store(false, Ordering::SeqCst);
+        assert_eq!(
+            window_corner_radius(false, manager.square_corners.load(Ordering::SeqCst)),
+            CORNER_RADIUS
+        );
+        assert!(!chrome_transparent_for(
+            manager.square_corners.load(Ordering::SeqCst)
+        ));
     }
 }
