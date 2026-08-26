@@ -195,6 +195,11 @@ async cleanupOrphanedProcesses() : Promise<Result<number, string>> {
  * Starts the score server of a validated project (§8). Progress and
  * health updates are delivered via `pnds:session` events. `osc_target` is
  * required (and validated) only for external mode (§9).
+ * 
+ * v1.3.2 (issue #77): the command boundary constructs the `StartRequest`
+ * record once — everything below this layer reads from the record, and
+ * future start inputs (v1.4.0's hub variables) widen fields, not the
+ * four-layer positional chain.
  */
 async startProject(path: string, mode: string, lanIp: string, oscTarget: string | null) : Promise<Result<null, string>> {
     try {
