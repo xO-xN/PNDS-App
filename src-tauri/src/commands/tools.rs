@@ -40,11 +40,15 @@ pub struct ToolEntry {
     pub sha256: String,
 }
 
-/// One tool as the frontend sees it: the stable project path inside the app
-/// resources and its manifest-declared display name.
+/// One tool as the frontend sees it: its registry id, the stable project
+/// path inside the app resources, and its manifest-declared display name.
 #[derive(Debug, Clone, serde::Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct BuiltinUtility {
+    /// Registry identity of the tool — stable across every staging root
+    /// (release resources, a dev checkout, a debug target dir), so the
+    /// frontend can tell "same tool at a new root" from "new tool".
+    pub id: String,
     /// Absolute path of the unpacked tool project, run in place.
     pub path: String,
     /// The manifest-declared display name, so a clean install lists the
@@ -112,6 +116,7 @@ pub fn resolve_staged_utilities(registry: &[ToolEntry], staged_dir: &Path) -> Ve
             let dir = staged_dir.join(&entry.id);
             match crate::project::manifest::load_manifest(&dir) {
                 Ok(manifest) => Some(BuiltinUtility {
+                    id: entry.id.clone(),
                     path: dir.to_string_lossy().into_owned(),
                     name: manifest.name,
                 }),
@@ -237,6 +242,7 @@ mod tests {
             ],
             "registry order rules, not the directory listing"
         );
+        assert_eq!(utilities[0].id, "second-tool");
         assert_eq!(utilities[0].name, "Second Tool");
         assert_eq!(utilities[1].name, "First Tool");
     }

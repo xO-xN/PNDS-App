@@ -20,7 +20,7 @@ Keyboard input reaches the app through two layers: native menu accelerators
 | Cmd (hold)    | Number badges + sidebar peek while running                                                                   | Web (`use-command-keyboard.ts`)   |
 | Cmd+1..9      | Select the Nth visible project (v1.1.2)                                                                      | Web (`use-command-keyboard.ts`)   |
 | Cmd+↓ / Cmd+↑ | Next/previous project in the visible order (v1.1.2 T7)                                                       | Web (`use-command-keyboard.ts`)   |
-| Cmd+← / Cmd+→ | Previous/next folder view, clamped at the ends (v1.2.2)                                                      | Web (`use-command-keyboard.ts`)   |
+| Cmd+← / Cmd+→ | Previous/next folder view, wrapping at the ends (v1.2.2; wrap since v1.3.1)                                  | Web (`use-command-keyboard.ts`)   |
 | ← / →         | Switch folder views on the focused switch segment (v1.2.2 #28)                                               | Web (`Sidebar.tsx` tabs)          |
 | Enter         | Load (idle) / Change-restart (pending)                                                                       | Web (`SessionActionButton.tsx`)   |
 | Esc           | Close-project confirmation (v1.1.2 T7)                                                                       | Web (`SessionActionButton.tsx`)   |
@@ -48,10 +48,11 @@ Its behaviors (spec issue #4, later additions noted):
 - **Cmd+←/Cmd+→** → moves one folder view along the row through
   `moveFolderSelection` (`src/lib/project-select.ts`) — the same entry a
   segment click uses, so the selection reset and the live-session keep
-  behave alike. The ends clamp, never wrap (the Cmd+↓/Cmd+↑ rule), and a
-  clamped press is a full no-op — see
+  behave alike. The ends wrap like the segment arrows (v1.3.1 user
+  report: with three views the old clamp read as stuck, not as an edge;
+  a same-view press stays a full no-op) — see
   [Folder Switch Tabs](#folder-switch-tabs-v122-issue-28). Together the
-  four Cmd arrows navigate the folder/project grid. (They briefly nudged
+  Cmd arrows navigate the folder/project grid. (They briefly nudged
   the master volume before v1.2.2 shipped; that role is gone, Cmd+M keeps
   mute.)
 - **Cmd+R** → starts the inline rename through `startRename`
@@ -96,10 +97,11 @@ while typing.
 
 **Cmd+←/Cmd+→** are the global variant, registered in the web Cmd layer
 and working from anywhere: `moveFolderSelection` walks the same stops
-through `setActiveFolderView` (the segment-click entry) but **clamps at
-the ends instead of wrapping** — Cmd+← at the Home view and Cmd+→ at
-the last folder are full no-ops, matching the Cmd+↓/Cmd+↑ rule that the
-arrows navigate a grid, never a ring. Text inputs keep the keys as
+through `setActiveFolderView` (the segment-click entry) and **wraps at
+the ends just like the segment arrows** — Cmd+← at the Home view lands
+on the last folder, Cmd+→ at the last folder lands on Home (v1.3.1 user
+report; until v1.3.0 these clamped, which read as stuck with three
+views). Text inputs keep the keys as
 line-start/end and overlays block the move, the standard web-layer
 guards.
 

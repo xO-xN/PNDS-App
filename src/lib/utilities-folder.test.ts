@@ -10,6 +10,9 @@ const TOOL_PATHS = [
   `${RESOURCES}/telematic-network-diagnostics`,
 ]
 
+/** Registry ids — the basenames of the staged `<root>/utilities/<id>` paths. */
+const TOOL_IDS = TOOL_PATHS.map(path => path.split('/').pop() ?? path)
+
 const TOOL_NAMES = [
   'Local Network Diagnostics',
   'Multichannel Signal Generator',
@@ -20,6 +23,7 @@ function mockTools(tools: { path: string; name?: string }[]) {
   vi.mocked(commands.builtinUtilities).mockResolvedValue({
     status: 'ok',
     data: tools.map((tool, index) => ({
+      id: tool.path.split('/').pop() ?? tool.path,
       path: tool.path,
       name: tool.name ?? TOOL_NAMES[index] ?? tool.path,
     })),
@@ -38,6 +42,10 @@ function mockPrefs(preferences: Partial<AppPreferences> = {}) {
  * v1.2.0 (issue #18): the Utilities folder — seeded once from the built-in
  * tools (unpacked into the app resources at stable paths and run in place),
  * protected from reseeding ever after.
+ * v1.3.1 (user report): tool identity is the registry id, not the path —
+ * dev and release builds stage the same tool at different roots while
+ * sharing the preference domain, and the path-keyed index double-listed
+ * every tool once both builds had run.
  */
 describe('ensureUtilitiesFolder', () => {
   beforeEach(() => {
@@ -91,11 +99,12 @@ describe('ensureUtilitiesFolder', () => {
         })
       )
     })
-    // The seed also records every admitted tool as offered — the one-time
-    // offer record later removals rely on.
+    // The seed also records every admitted tool id as offered — the
+    // one-time offer record later removals rely on (ids since v1.3.1;
+    // legacy path records still read as their tool).
     await vi.waitFor(() => {
       expect(commands.savePreferences).toHaveBeenCalledWith(
-        expect.objectContaining({ offeredUtilities: TOOL_PATHS })
+        expect.objectContaining({ offeredUtilities: TOOL_IDS })
       )
     })
   })
@@ -197,7 +206,7 @@ describe('ensureUtilitiesFolder', () => {
     // next launch treats all three tools as already offered.
     await vi.waitFor(() => {
       expect(commands.savePreferences).toHaveBeenCalledWith(
-        expect.objectContaining({ offeredUtilities: [lnd, msg, tnd] })
+        expect.objectContaining({ offeredUtilities: TOOL_IDS })
       )
     })
   })
@@ -231,7 +240,9 @@ describe('ensureUtilitiesFolder', () => {
     expect(state.projectFolders[0]?.projectPaths).toEqual([lnd, msg])
     await vi.waitFor(() => {
       expect(commands.savePreferences).toHaveBeenCalledWith(
-        expect.objectContaining({ offeredUtilities: [lnd, msg] })
+        expect.objectContaining({
+          offeredUtilities: [TOOL_IDS[0], TOOL_IDS[1]],
+        })
       )
     })
   })
@@ -303,5 +314,90 @@ describe('ensureUtilitiesFolder', () => {
 
     expect(useProjectStore.getState().projectFolders).toEqual([])
     expect(commands.savePreferences).not.toHaveBeenCalled()
+  })
+
+  it('refreshes stale-root copies away — one entry per tool, and back again (v1.3.1 report)', async () => {
+    // The installed app seeded its three paths; the dev build then
+    // offered its own — six members for three tools. Records written by
+    // both launches hold their path spellings.
+    const DEV = '/Users/dev/PNDS-App/src-tauri/target/debug/utilities'
+    const DEV_PATHS = TOOL_IDS.map(id => `${DEV}/${id}`)
+    const MY_SCORE = '/Users/x/My Score'
+    useProjectStore.setState({
+      recentProjectPaths: [...TOOL_PATHS, MY_SCORE, ...DEV_PATHS],
+      projectFolders: [
+        { id: 'perform', name: 'Perform', projectPaths: [MY_SCORE] },
+        {
+          id: UTILITIES_FOLDER_ID,
+          name: 'Utilities',
+          projectPaths: [...TOOL_PATHS, ...DEV_PATHS],
+        },
+      ],
+    })
+    mockTools(DEV_PATHS.map(path => ({ path })))
+    mockPrefs({ offeredUtilities: [...TOOL_PATHS, ...DEV_PATHS] })
+
+    await ensureUtilitiesFolder()
+
+    // The dev launch settles on the dev root: the installed copies leave
+    // the index (history and every folder), the kept tools re-materialize
+    // at the current root, and unrelated projects are untouched.
+    let state = useProjectStore.getState()
+    expect(
+      state.projectFolders.find(folder => folder.id === UTILITIES_FOLDER_ID)
+        ?.projectPaths
+    ).toEqual(DEV_PATHS)
+    expect(state.recentProjectPaths).toEqual([MY_SCORE, ...DEV_PATHS])
+    expect(
+      state.projectFolders.find(folder => folder.id === 'perform')?.projectPaths
+    ).toEqual([MY_SCORE])
+
+    // Ping-pong: the installed app's next launch settles on ITS root —
+    // no third copy, no re-offer (the ids are recorded by then).
+    mockTools(TOOL_PATHS.map(path => ({ path })))
+    mockPrefs({ offeredUtilities: TOOL_IDS })
+
+    await ensureUtilitiesFolder()
+
+    state = useProjectStore.getState()
+    expect(
+      state.projectFolders.find(folder => folder.id === UTILITIES_FOLDER_ID)
+        ?.projectPaths
+    ).toEqual(TOOL_PATHS)
+    expect(state.recentProjectPaths).toEqual([MY_SCORE, ...TOOL_PATHS])
+  })
+
+  it('a legacy path record counts as its tool — only genuinely new ids are offered', async () => {
+    const [lnd, tnd] = [TOOL_PATHS[0], TOOL_PATHS[2]]
+    if (!lnd || !tnd) throw new Error('Expected two tool paths')
+    useProjectStore.setState({
+      recentProjectPaths: [lnd],
+      projectFolders: [
+        {
+          id: UTILITIES_FOLDER_ID,
+          name: 'Utilities',
+          projectPaths: [lnd],
+        },
+      ],
+    })
+    // The record predates id-keying and holds a path of LND from another
+    // staging root — it must still cover LND's one-time offer, while TND
+    // is genuinely new.
+    mockTools([lnd, tnd].map(path => ({ path })))
+    mockPrefs({ offeredUtilities: [lnd] })
+
+    await ensureUtilitiesFolder()
+
+    const state = useProjectStore.getState()
+    expect(state.recentProjectPaths).toEqual([lnd, tnd])
+    expect(
+      state.projectFolders.find(folder => folder.id === UTILITIES_FOLDER_ID)
+        ?.projectPaths
+    ).toEqual([lnd, tnd])
+    await vi.waitFor(() => {
+      expect(commands.savePreferences).toHaveBeenCalledWith(
+        expect.objectContaining({ offeredUtilities: [lnd, TOOL_IDS[2]] })
+      )
+    })
   })
 })

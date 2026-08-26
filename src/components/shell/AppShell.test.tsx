@@ -413,7 +413,11 @@ describe('AppShell', () => {
     ]
     vi.mocked(commands.builtinUtilities).mockResolvedValue({
       status: 'ok',
-      data: TOOLS.map(path => ({ path, name: path })),
+      data: TOOLS.map(path => ({
+        id: path.split('/').pop() ?? path,
+        path,
+        name: path,
+      })),
     })
 
     render(<AppShell />)

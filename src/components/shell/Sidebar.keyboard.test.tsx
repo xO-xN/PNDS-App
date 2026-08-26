@@ -421,16 +421,16 @@ describe('Cmd keyboard layer (v1.1.2)', () => {
       expect(useProjectStore.getState().activeFolderId).toBeNull()
     })
 
-    it('clamps at both ends — Home is not left, the last folder is not right', () => {
+    it('wraps at both ends — Home is left of the first folder, the last folder is right of Home (v1.3.1)', () => {
       const [, archives] = seedFolderRow()
       render(<AppShell />)
 
       pressCmdArrow('ArrowLeft')
-      expect(useProjectStore.getState().activeFolderId).toBeNull()
+      expect(useProjectStore.getState().activeFolderId).toBe(archives)
 
       useProjectStore.setState({ activeFolderId: archives })
       pressCmdArrow('ArrowRight')
-      expect(useProjectStore.getState().activeFolderId).toBe(archives)
+      expect(useProjectStore.getState().activeFolderId).toBeNull()
     })
 
     it('keeps the keys while a text input holds focus (line navigation)', () => {

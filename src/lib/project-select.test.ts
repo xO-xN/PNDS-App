@@ -290,8 +290,8 @@ describe('nextFolderView (v1.2.2, issue #28)', () => {
 
 /**
  * ⌘←/⌘→ — one folder view along the row, through the same entry as a
- * segment click. The ends clamp (the ⌘↓/⌘↑ rule — the Cmd arrows navigate
- * a grid, never a ring), and a clamped press must be a full no-op.
+ * segment click. Wraps at the ends like the segment arrows (v1.3.1 user
+ * report: with three views the old clamp read as stuck, not as an edge).
  */
 describe('moveFolderSelection', () => {
   const folders = [
@@ -325,19 +325,21 @@ describe('moveFolderSelection', () => {
     expect(useProjectStore.getState().activeFolderId).toBeNull()
   })
 
-  it('clamps at both ends — never wraps', () => {
+  it('wraps at both ends — the row is a ring (v1.3.1)', () => {
     moveFolderSelection(-1)
-    expect(useProjectStore.getState().activeFolderId).toBeNull()
+    expect(useProjectStore.getState().activeFolderId).toBe('utilities')
 
     useProjectStore.setState({ activeFolderId: 'utilities' })
     moveFolderSelection(1)
-    expect(useProjectStore.getState().activeFolderId).toBe('utilities')
+    expect(useProjectStore.getState().activeFolderId).toBeNull()
   })
 
-  it('a clamped press is a full no-op — an idle selection survives', () => {
+  it('a same-view press is a full no-op — an idle selection survives', () => {
     // The view must not re-run the click entry when it does not move:
-    // that would reset an idle selection for nothing.
+    // that would reset an idle selection for nothing. Wrapping leaves
+    // exactly one no-op case — a row whose only stop is Home.
     useProjectStore.setState({
+      projectFolders: [],
       currentProject: { path: '/a', manifest },
       preflightStatus: 'ready',
     })
@@ -375,7 +377,7 @@ describe('moveFolderSelection', () => {
 
     useProjectStore.setState({ activeFolderId: 'gone' })
     moveFolderSelection(-1)
-    expect(useProjectStore.getState().activeFolderId).toBeNull()
+    expect(useProjectStore.getState().activeFolderId).toBe('utilities')
   })
 
   it('an empty folder area is a no-op in both directions', () => {

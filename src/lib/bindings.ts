@@ -555,10 +555,16 @@ export type AudioDeviceCapabilities = { devices: AudioOutputDevice[]; sampleRate
  */
 export type AudioOutputDevice = { name: string; isDefault: boolean; maxOutputChannels: number }
 /**
- * One tool as the frontend sees it: the stable project path inside the app
- * resources and its manifest-declared display name.
+ * One tool as the frontend sees it: its registry id, the stable project
+ * path inside the app resources, and its manifest-declared display name.
  */
 export type BuiltinUtility = { 
+/**
+ * Registry identity of the tool — stable across every staging root
+ * (release resources, a dev checkout, a debug target dir), so the
+ * frontend can tell "same tool at a new root" from "new tool".
+ */
+id: string; 
 /**
  * Absolute path of the unpacked tool project, run in place.
  */
@@ -606,10 +612,10 @@ status: string; projectId?: string | null; audioMode?: string | null; audio?: He
 export type HealthScoreServer = { performerPort?: number | null; monitorPort?: number | null; error?: string | null }
 /**
  * One help document exactly as the frontend receives it: its stable id,
- * its docs/-relative path (the base the help window resolves the
- * corpus's cross-document markdown links against — #56 user report),
- * and the raw markdown. Titles and sections are the frontend's to
- * derive (it owns the markdown structure pass).
+ * its language-tree-relative path (the base the help window resolves
+ * the corpus's cross-document markdown links against — #56 user
+ * report), and the raw markdown. Titles and sections are the
+ * frontend's to derive (it owns the markdown structure pass).
  */
 export type HelpCorpusDocument = { id: string; path: string; markdown: string }
 export type Manifest = { schemaVersion: number; id: string; name: string; version: string; description: string | null; scoreServer: ScoreServer; audio: AudioConfig }

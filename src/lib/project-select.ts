@@ -86,20 +86,15 @@ export function nextFolderView(
 
 /**
  * ⌘←/⌘→ — one folder view along the row, through the same entry as a
- * segment click. The ends clamp instead of wrapping (the ⌘↑/⌘↓ rule: the
- * arrows navigate a grid, never a ring), and a clamped press is a full
+ * segment click. Wraps at the ends like the segment arrows (v1.3.1 user
+ * report: with three views the old clamp read as stuck at an edge, not
+ * as an edge), and a press that resolves to the current view is a full
  * no-op — re-running the click entry would reset an idle selection even
  * though the view never moved.
  */
 export function moveFolderSelection(direction: 1 | -1): void {
   const { projectFolders, activeFolderId } = useProjectStore.getState()
-  const viewIds = folderViewStops(projectFolders)
-  const currentIndex = Math.max(0, viewIds.indexOf(activeFolderId))
-  const nextIndex = Math.min(
-    Math.max(currentIndex + direction, 0),
-    viewIds.length - 1
-  )
-  const next = viewIds[nextIndex] ?? null
+  const next = nextFolderView(projectFolders, activeFolderId, direction)
   if (next !== activeFolderId) setActiveFolderView(next)
 }
 
