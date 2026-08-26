@@ -46,6 +46,7 @@ interface ActiveDoc {
 const BOOK_LABEL_KEYS: Record<HelpBookId, string> = {
   tutorial: 'help.book.tutorial',
   'creator-guide': 'help.book.creatorGuide',
+  modules: 'help.book.modules',
   reference: 'help.book.reference',
 }
 

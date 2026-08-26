@@ -42,6 +42,7 @@
   "help.noResults": "No results for “{{query}}”",
   "help.book.tutorial": "User Tutorial",
   "help.book.creatorGuide": "Creator Guide",
+  "help.book.modules": "Module Manual",
   "help.book.reference": "Reference Manual",
   "help.loading": "Loading…",
   "help.loadError": "The help content could not be loaded.",

@@ -2,8 +2,8 @@ import { splitSections, type HelpSection } from './help-markdown'
 
 /**
  * v1.3.0 (#53): the help corpus loader. The Rust `help_corpus` command
- * reads the three books (tutorial / creator's guide / reference
- * manual) raw from the app resources — `docs/<tree>/*.md` in the
+ * reads the four books (tutorial / creator's guide / module manual /
+ * reference manual) raw from the app resources — `docs/<tree>/*.md` in the
  * repository are the ONLY sources, shipped verbatim with no build-time
  * conversion — and hands over { id, markdown } pairs. This module is
  * the single place that knows the corpus's shape: which documents
@@ -28,8 +28,8 @@ export const HELP_TREES = ['zh-CN', 'en'] as const
 /** A language tree the help corpus ships in. */
 export type HelpTree = (typeof HELP_TREES)[number]
 
-/** The three entry points the Help menu opens; also the sidebar's books. */
-export type HelpBookId = 'tutorial' | 'creator-guide' | 'reference'
+/** The sidebar's books; three of them are also Help-menu entry points. */
+export type HelpBookId = 'tutorial' | 'creator-guide' | 'modules' | 'reference'
 
 /** One help document exactly as the `help_corpus` command ships it. */
 export interface RawHelpDocument {
@@ -67,6 +67,19 @@ export const HELP_BOOKS: readonly {
 }[] = [
   { id: 'tutorial', documentIds: ['app-tutorial'] },
   { id: 'creator-guide', documentIds: ['template-guide'] },
+  {
+    // The module manual (#72): per-module usage for the PNDS Template's
+    // built-in modules, front-paged by its own README index.
+    id: 'modules',
+    documentIds: [
+      'modules-readme',
+      'modules-qr',
+      'modules-players',
+      'modules-theme-follow',
+      'modules-locale-follow',
+      'modules-audio',
+    ],
+  },
   {
     id: 'reference',
     documentIds: [

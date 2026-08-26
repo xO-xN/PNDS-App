@@ -1,6 +1,6 @@
 # 帮助中心语料与搜索（T7 基建）
 
-v1.3.0（#53）为 Help 帮助中心（T8 窗口，#56）打的底座：三本书（教程 / 创作指南 / 参考手册）**以 markdown 原文**进应用资源包，窗口打开时运行时渲染、内存建索引、纯函数搜索。全程离线。#67 起语料以 **zh-CN / en 两棵镜像树**维护（布局见 ADR-0001）；#68 起 `help_corpus(locale)` 按 resolved locale（`en` / `zh-CN`，system 走既有解析）选树，帮助窗口开着切换语言即**热更新**语料与索引。
+v1.3.0（#53）为 Help 帮助中心（T8 窗口，#56）打的底座：几本书（v1.3.0 三本：教程 / 创作指南 / 参考手册；#72 起四本，新增模块手册）**以 markdown 原文**进应用资源包，窗口打开时运行时渲染、内存建索引、纯函数搜索。全程离线。#67 起语料以 **zh-CN / en 两棵镜像树**维护（布局见 ADR-0001）；#68 起 `help_corpus(locale)` 按 resolved locale（`en` / `zh-CN`，system 走既有解析）选树，帮助窗口开着切换语言即**热更新**语料与索引。
 
 **关键决策**（修订自 #48 spec）：不做构建期 HTML 转换、无任何生成产物——`docs/<tree>/*.md` 两棵树是唯一事实源，打包器原样复制；渲染与索引全部在运行时完成。代价是首次打开窗口时建一次索引（全语料毫秒级，`help-scale.test.ts` 钉住），换来语料更新零流程、dev 直读仓库文件。
 
@@ -9,7 +9,7 @@ v1.3.0（#53）为 Help 帮助中心（T8 窗口，#56）打的底座：三本�
 | 部件                | 位置                                                                                                                                                    |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 语料清单 + 读取命令 | `src-tauri/src/commands/help.rs`（`HELP_TREES` 两树 + `HELP_DOCUMENTS` 清单 + `help_corpus(locale)`，`corpus_tree` 校验非法 locale）                    |
-| 资源映射            | `src-tauri/tauri.conf.json` → `bundle.resources`（两树共 26 个文件**逐条**映射进 `help/<tree>/`，显式 allowlist——developer/、agents/ 向文档因此进不来） |
+| 资源映射            | `src-tauri/tauri.conf.json` → `bundle.resources`（两树共 38 个文件**逐条**映射进 `help/<tree>/`，显式 allowlist——developer/、agents/ 向文档因此进不来） |
 | 语料装载纯模块      | `src/lib/help-corpus.ts`（`HELP_TREES` + `HELP_BOOKS` 清单 + `buildHelpCorpus`）                                                                        |
 | markdown 结构模块   | `src/lib/help-markdown.ts`（`splitSections`）                                                                                                           |
 | 搜索纯模块          | `src/lib/help-search.ts`（`buildHelpIndex` + `searchHelp`）                                                                                             |

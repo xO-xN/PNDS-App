@@ -36,8 +36,24 @@ const FIXTURES: RawHelpDocument[] = [
     path: 'reference/README.md',
     markdown: '# PNDS 参考手册\n\n按问题检索。',
   },
+  {
+    id: 'modules-readme',
+    path: 'modules/README.md',
+    markdown: '# 模块手册\n\n逐个讲解模块用法。',
+  },
   // The rest of the manifest as minimal stubs — the tests only exercise
   // ordering, placement and failure paths, not the stubs' content.
+  ...[
+    'modules-qr',
+    'modules-players',
+    'modules-theme-follow',
+    'modules-locale-follow',
+    'modules-audio',
+  ].map(id => ({
+    id,
+    path: `modules/${id.replace('modules-', '')}.md`,
+    markdown: `# ${id}\n\n正文。`,
+  })),
   ...[
     'reference-digital-score',
     'reference-network',
@@ -59,15 +75,15 @@ describe('help-corpus (#53)', () => {
   it('builds the corpus in manifest order with books, titles and sections', () => {
     const corpus = buildHelpCorpus(FIXTURES)
 
-    expect(corpus).toHaveLength(13)
+    expect(corpus).toHaveLength(19)
     expect(
       corpus.slice(0, 3).map(doc => [doc.id, doc.book, doc.title])
     ).toEqual([
       ['app-tutorial', 'tutorial', 'PNDS App 使用教程'],
       ['template-guide', 'creator-guide', 'PNDS Template 创作指南'],
-      ['reference-readme', 'reference', 'PNDS 参考手册'],
+      ['modules-readme', 'modules', '模块手册'],
     ])
-    expect(corpus.slice(10).map(doc => [doc.id, doc.book, doc.title])).toEqual([
+    expect(corpus.slice(16).map(doc => [doc.id, doc.book, doc.title])).toEqual([
       ['reference-supercollider', 'reference', 'reference-supercollider'],
       ['reference-osc', 'reference', 'OSC 协议'],
       ['reference-p5js', 'reference', 'reference-p5js'],
@@ -111,6 +127,15 @@ describe('help-corpus (#53)', () => {
     expect(HELP_BOOKS.map(book => [book.id, ...book.documentIds])).toEqual([
       ['tutorial', 'app-tutorial'],
       ['creator-guide', 'template-guide'],
+      [
+        'modules',
+        'modules-readme',
+        'modules-qr',
+        'modules-players',
+        'modules-theme-follow',
+        'modules-locale-follow',
+        'modules-audio',
+      ],
       [
         'reference',
         'reference-readme',
