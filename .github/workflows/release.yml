@@ -66,6 +66,21 @@ jobs:
           releaseBody: |
             ## PNDS ${{ github.ref_name || inputs.version }}
 
+            ### What's New in V1.3.1 — the Help center in English, a performer-first Welcome & the Brutal octopus
+
+            **The documentation speaks your language**
+            - The entire Help corpus — the User Tutorial, the Creator Guide and the Reference Manual, all 13 documents — now exists in English as well as Chinese. Terminology follows a locked glossary (Digital Score, .pnds bundle, performance, performer, monitor), and cross-document links stay inside your language's tree — one click never drops you into the other language.
+            - The Help center follows the App's resolved language: English UI, English documentation. Switch the app language while the Help window is open and it hot-swaps in place — the documents and the standing search rebuild on the new language without reopening the window; a failed switch shows the error and Retry asks again.
+            - Search results are never a language mix — the index is built only from the tree you are reading. Translation trouble is loud, not silent: a missing document is an explicit error, never a quiet fallback to the other language, and the build itself fails if the two language trees drift apart.
+
+            **A Welcome that starts where the show starts**
+            - The welcome page now carries three tips: open a project from the left sidebar (the performer's main path), hold ⌘ to drive the App with the keyboard, and see Help for the full documentation. The "add a new project" suggestion is gone — importing lives in the sidebar where it always worked.
+            - Product naming is consistent now: English copy calls the product only "PNDS"; Chinese keeps the full product name.
+
+            **Brutal gains an octopus**
+            - The Brutal sidebar has its mascot: an octopus holding a synth keyboard, seated exactly on the audio settings card — its shelf line lands on the card's top edge, with the hands and part of the face dipping inside. It rides along when the card's height changes (audio mode, device rows, volume), stays fixed while the project list scrolls under it, and never intercepts a click.
+            - Known note: squaring the Help window's corners to match the main window under Brutal was explored this cycle and rejected — a standard titled window cannot safely take the main window's see-through structure at runtime. The decision is recorded in the developer docs; Brutal keeps its squared main window as before.
+
             ### What's New in V1.3.0 — addresses on the menu, language-following tools & the offline Help center
 
             **Performer & Conductor addresses, always on the menu**
