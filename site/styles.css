@@ -363,6 +363,7 @@ html:not(.at-welcome) .page-welcome {
 /* The logo rides above the welcome title on a soft halo — the one
    quiet flourish on the page's calmest screen. */
 .welcome-logo {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -378,7 +379,40 @@ html:not(.at-welcome) .page-welcome {
   animation: welcome-float 5.5s ease-in-out infinite alternate;
 }
 
+/* Water rings behind the logo: three perfect circles, phased a third
+   of a cycle apart, each swelling past the halo and dissolving —
+   negative delays so a wave is already travelling at first paint. */
+.logo-ripple {
+  position: absolute;
+  inset: 0;
+  border: 1.5px solid rgba(43, 125, 233, 0.4);
+  border-radius: 50%;
+  animation: logo-ripple 4.2s cubic-bezier(0.2, 0.55, 0.35, 1) infinite;
+  will-change: transform, opacity;
+}
+
+.logo-ripple:nth-child(2) {
+  animation-delay: -1.4s;
+}
+
+.logo-ripple:nth-child(3) {
+  animation-delay: -2.8s;
+}
+
+@keyframes logo-ripple {
+  from {
+    transform: scale(0.6);
+    opacity: 0.5;
+  }
+  to {
+    transform: scale(1.8);
+    opacity: 0;
+  }
+}
+
 .welcome-logo img {
+  position: relative;
+  z-index: 1;
   width: 84px;
   height: 84px;
   border-radius: 18px;
@@ -412,56 +446,56 @@ html:not(.at-welcome) .page-welcome {
   color: var(--color-muted);
 }
 
-/* Wordless scroll cue: a mouse outline whose dot travels down and
-   dissolves — the invitation to scroll, without a single word. */
+/* Wordless scroll cue: two chevron heads (no shafts) pulsing
+   downward in sequence — the invitation to scroll, without a word. */
 .welcome-cue {
   margin-top: 8vh;
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
 }
 
-.cue-track {
-  position: relative;
-  width: 24px;
-  height: 38px;
-  border: 1.5px solid var(--color-soft);
-  border-radius: 13px;
-  opacity: 0.85;
+.cue-chevron + .cue-chevron {
+  /* gap can't be negative: pull the trailing head into a tight stack */
+  margin-top: -5px;
 }
 
-.cue-dot {
-  position: absolute;
-  left: 50%;
-  top: 7px;
-  width: 4px;
-  height: 4px;
-  margin-left: -2px;
-  border-radius: 50%;
-  background: var(--color-accent);
-  animation: cue-scroll 1.8s ease-in-out infinite;
+/* Square by construction: the two arms are the box's right and
+   bottom borders, so equal sides keep the chevron symmetric. */
+.cue-chevron {
+  width: 17px;
+  height: 17px;
+  border-right: 2px solid var(--color-accent);
+  border-bottom: 2px solid var(--color-accent);
+  transform: translateY(0) rotate(45deg);
+  opacity: 0.35;
+  animation: cue-nudge 1.8s ease-in-out infinite;
 }
 
-@keyframes cue-scroll {
-  0% {
-    transform: translateY(0);
-    opacity: 0;
-  }
-  25% {
-    opacity: 1;
-  }
-  70% {
-    opacity: 1;
-  }
+.cue-chevron:nth-child(2) {
+  animation-delay: 0.22s;
+}
+
+@keyframes cue-nudge {
+  0%,
   100% {
-    transform: translateY(15px);
-    opacity: 0;
+    transform: translateY(0) rotate(45deg);
+    opacity: 0.35;
+  }
+  30% {
+    transform: translateY(3px) rotate(45deg);
+    opacity: 1;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .cue-dot {
+  .cue-chevron {
     animation: none;
-    opacity: 1;
+    opacity: 0.8;
+  }
+
+  .cue-chevron:nth-child(2) {
+    opacity: 0.45;
   }
 }
 
@@ -609,6 +643,10 @@ html:not(.at-welcome) .page-welcome {
 .app-content {
   flex: 1;
   min-width: 0;
+  /* Column layouts (mobile) must be allowed to shrink inside the
+     window — without this the window grows to the content's full
+     height and the page scrolls instead of the content pane. */
+  min-height: 0;
   position: relative;
   overflow-y: auto;
   scroll-snap-type: y proximity;
@@ -802,6 +840,27 @@ h1 {
   .stage {
     padding: 0 10px 10px;
     align-items: stretch;
+    /* Body is a column here: without min-height the stage grows to
+       the content's height instead of filling what the viewport has. */
+    min-height: 0;
+  }
+
+  /* The welcome choreography is a desktop statement — on a phone the
+     rail is a top bar (its collapse animates width, which no longer
+     collapses it) and it carries the only language/download controls,
+     so it stays put. */
+  html.at-welcome .outer-rail {
+    width: auto;
+    opacity: 1;
+    visibility: visible;
+  }
+
+  /* Same reasoning inside the window: the hidden card row would hold
+     its height as a blank strip on the welcome screen. The App's own
+   welcome shows the sidebar, so on mobile the row simply stays. */
+  html.at-welcome .app-sidebar {
+    opacity: 1;
+    pointer-events: auto;
   }
 
   .app-window {
@@ -832,6 +891,10 @@ h1 {
     height: 124px;
   }
 
+  .logo-ripple {
+    border-width: 1px;
+  }
+
   .welcome-logo img {
     width: 60px;
     height: 60px;
@@ -846,10 +909,10 @@ h1 {
     margin-top: 5vh;
   }
 
-  .cue-track {
-    width: 20px;
-    height: 32px;
-    border-radius: 11px;
+  .cue-chevron {
+    width: 13px;
+    height: 13px;
+    border-width: 1.5px;
   }
 
   .app-body {
