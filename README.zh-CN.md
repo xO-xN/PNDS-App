@@ -2,6 +2,8 @@
 
 **中文** | [English](README.md)
 
+🌐 项目主页：https://xo-xn.github.io/PNDS-App/
+
 AI-Coding 时代的电子音乐创作与演奏平台。
 
 PNDS 池谱（Platform for Networked Digital Score）是创作与演奏网络数字乐谱电子音乐的平台，包含 **PNDS App** 与 **PNDS Template** 两部分。

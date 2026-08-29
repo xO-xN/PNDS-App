@@ -2,6 +2,8 @@
 
 [中文](README.zh-CN.md) | **English**
 
+🌐 Website: https://xo-xn.github.io/PNDS-App/
+
 An electronic-music creation and performance platform for the AI-coding era.
 
 PNDS (Platform for Networked Digital Score) is a platform for creating and performing networked digital-score electronic music, with two parts: **PNDS App** and **PNDS Template**.
