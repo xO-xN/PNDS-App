@@ -1,0 +1,914 @@
+/* ────────────────────────────────────────────────────────────────
+   PNDS 池谱 · GitHub Pages site
+   The page is staged as the product itself: a quiet outer rail
+   (brand top-left, links bottom-left — the studio-site layout) and
+   a floating mock App window carrying the content. Inside the
+   window, a small floating sidebar (the App's own sidebar
+   language) tracks the scroll position of the three stacked
+   sections. Tokens follow the platform-intro diagrams
+   ("pnds-blue" profile).
+   ──────────────────────────────────────────────────────────────── */
+
+@font-face {
+  font-family: 'Comfortaa';
+  src: url('assets/fonts/comfortaa-latin-ext.woff2') format('woff2');
+  font-weight: 300 700;
+  font-display: swap;
+  unicode-range:
+    U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113,
+    U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Comfortaa';
+  src: url('assets/fonts/comfortaa-latin.woff2') format('woff2');
+  font-weight: 300 700;
+  font-display: swap;
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF,
+    U+FFFD;
+}
+@font-face {
+  font-family: 'Manrope';
+  src: url('assets/fonts/manrope-latin-ext.woff2') format('woff2');
+  font-weight: 200 800;
+  font-display: swap;
+  unicode-range:
+    U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113,
+    U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Manrope';
+  src: url('assets/fonts/manrope-latin.woff2') format('woff2');
+  font-weight: 200 800;
+  font-display: swap;
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+:root {
+  --color-paper: #f4f8fc;
+  --color-panel: #e6eef8;
+  --color-desk: #e6eff9;
+  --color-ink: #101828;
+  --color-muted: #3e5a80;
+  --color-soft: #7a93b4;
+  --color-rule: rgba(16, 24, 40, 0.12);
+  --color-rule-solid: #b9cce0;
+  --color-accent: #2b7de9;
+  --color-accent-tint: rgba(43, 125, 233, 0.08);
+  --color-link: #1d5fbf;
+
+  --font-sans: 'Manrope', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
+  --font-display: 'Comfortaa', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
+  --font-mono: 'Geist Mono', 'PingFang SC', 'SF Mono', 'Menlo', monospace;
+
+  --ease-card: cubic-bezier(0.4, 0.1, 0.2, 1);
+  --sidebar-w: 206px;
+}
+
+/* ── Language: one mechanism for chrome and diagram text ─────── */
+.l-en {
+  display: none;
+}
+html[lang='en'] .l-en {
+  display: inline;
+}
+html[lang='en'] .l-zh {
+  display: none;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+::selection {
+  background: rgba(43, 125, 233, 0.2);
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--color-desk);
+  color: var(--color-ink);
+  height: 100vh;
+  display: flex;
+  overflow: hidden;
+}
+
+@supports (height: 100dvh) {
+  body {
+    height: 100dvh;
+  }
+}
+
+/* ── Outer rail — the quiet studio-site column ────────────────── */
+.outer-rail {
+  flex-shrink: 0;
+  width: 228px;
+  padding: 28px 18px 24px 26px;
+}
+
+/* Fixed-width inner: the rail's collapse animates only its width —
+   the text never reflows mid-flight, it is simply revealed/clipped. */
+.rail-inner {
+  width: 184px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  text-decoration: none;
+  color: var(--color-ink);
+}
+
+.brand-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+}
+
+.brand-name {
+  display: block;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.05rem;
+  line-height: 1.2;
+}
+
+.brand-sub {
+  display: block;
+  margin-top: 2px;
+  font-family: var(--font-mono);
+  font-size: 0.56rem;
+  letter-spacing: 0.08em;
+  color: var(--color-muted);
+}
+
+.rail-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.download-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 14px;
+  background: #ffffff;
+  border: 1.5px solid var(--color-ink);
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 0.8rem;
+  color: var(--color-ink);
+  text-decoration: none;
+  box-shadow: 2.5px 2.5px 0 rgba(16, 24, 40, 0.16);
+  transition:
+    background-color 150ms ease,
+    color 150ms ease,
+    box-shadow 80ms ease;
+}
+
+.download-btn:hover {
+  background: var(--color-accent);
+  color: #ffffff;
+  box-shadow: 2.5px 2.5px 0 rgba(43, 125, 233, 0.35);
+}
+
+.download-btn:active {
+  transform: translate(1px, 1px);
+  box-shadow: 1.5px 1.5px 0 rgba(16, 24, 40, 0.16);
+}
+
+.lang-seg {
+  position: relative;
+  display: flex;
+  padding: 3px;
+  background: rgba(16, 24, 40, 0.06);
+  border-radius: 10px;
+}
+
+.lang-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: calc(50% - 3px);
+  height: calc(100% - 6px);
+  background: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.12);
+  transition: transform 200ms var(--ease-card);
+}
+
+.lang-btn {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  padding: 5px 0;
+  background: none;
+  border: none;
+  border-radius: 8px;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  color: var(--color-muted);
+  cursor: pointer;
+  transition: color 200ms ease;
+}
+
+.lang-btn.is-active {
+  color: var(--color-ink);
+}
+
+.contact {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+}
+
+.contact a {
+  width: fit-content;
+  color: var(--color-muted);
+  text-decoration: none;
+  transition: color 150ms ease;
+}
+
+.contact a:hover {
+  color: var(--color-link);
+}
+
+.copyright {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  color: var(--color-soft);
+}
+
+/* ── The mock App window — the product as its own hero ────────── */
+.stage {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px 34px 28px 10px;
+}
+
+.app-window {
+  position: relative;
+  width: 100%;
+  max-width: 1200px;
+  height: 100%;
+  max-height: 800px;
+  transition:
+    max-width 480ms var(--ease-card),
+    max-height 480ms var(--ease-card);
+  display: flex;
+  flex-direction: column;
+  background: var(--color-paper);
+  border: 1px solid rgba(16, 24, 40, 0.1);
+  border-radius: 18px;
+  box-shadow:
+    0 24px 60px rgba(16, 24, 40, 0.13),
+    0 2px 8px rgba(16, 24, 40, 0.06);
+  overflow: hidden;
+  animation: window-in 420ms ease;
+}
+
+@keyframes window-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+/* Opening state: the App's welcome page is the FIRST page of the
+   content scroll. While it owns the viewport (html.at-welcome, hung
+   by the head script when no chapter hash is present) the outer
+   rail collapses, the window grows and centers in the browser, and
+   the inner sidebar sleeps — scrolling into the chapters glides
+   everything back to its working place. */
+.outer-rail {
+  overflow: hidden;
+  transition:
+    width 480ms var(--ease-card),
+    opacity 200ms ease;
+}
+
+html.at-welcome .outer-rail {
+  width: 0;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    width 480ms var(--ease-card),
+    opacity 160ms ease,
+    visibility 0s 480ms;
+}
+
+.stage {
+  transition: padding 480ms var(--ease-card);
+}
+
+html.at-welcome .stage {
+  padding-left: 34px;
+}
+
+html.at-welcome .app-window {
+  max-width: 1268px;
+  max-height: 868px;
+}
+
+.app-sidebar {
+  transition: opacity 280ms ease;
+}
+
+html.at-welcome .app-sidebar {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.page-welcome {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  scroll-snap-align: start;
+  text-align: center;
+  /* The sleeping sidebar still holds its column; shift the page's
+     center onto the whole window while it is the only thing shown. */
+  transform: translateX(calc((var(--sidebar-w) + 12px) / -2));
+  transition: transform 480ms var(--ease-card);
+}
+
+html:not(.at-welcome) .page-welcome {
+  transform: translateX(0);
+}
+
+/* The logo rides above the welcome title on a soft halo — the one
+   quiet flourish on the page's calmest screen. */
+.welcome-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 172px;
+  height: 172px;
+  margin-bottom: 0.5rem;
+  border-radius: 50%;
+  background: radial-gradient(
+    closest-side,
+    rgba(43, 125, 233, 0.13),
+    rgba(43, 125, 233, 0) 72%
+  );
+  animation: welcome-float 5.5s ease-in-out infinite alternate;
+}
+
+.welcome-logo img {
+  width: 84px;
+  height: 84px;
+  border-radius: 18px;
+  box-shadow:
+    0 10px 30px rgba(16, 24, 40, 0.16),
+    0 2px 6px rgba(16, 24, 40, 0.08);
+}
+
+@keyframes welcome-float {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-7px);
+  }
+}
+
+.welcome-title {
+  font-family: var(--font-display);
+  font-size: clamp(1.9rem, 3.4vw + 0.5rem, 2.75rem);
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+  color: var(--color-ink);
+}
+
+.welcome-sub {
+  margin-top: 0.8rem;
+  font-size: 1.18rem;
+  letter-spacing: 0.05em;
+  color: var(--color-muted);
+}
+
+/* Wordless scroll cue: a mouse outline whose dot travels down and
+   dissolves — the invitation to scroll, without a single word. */
+.welcome-cue {
+  margin-top: 8vh;
+  display: flex;
+  justify-content: center;
+}
+
+.cue-track {
+  position: relative;
+  width: 24px;
+  height: 38px;
+  border: 1.5px solid var(--color-soft);
+  border-radius: 13px;
+  opacity: 0.85;
+}
+
+.cue-dot {
+  position: absolute;
+  left: 50%;
+  top: 7px;
+  width: 4px;
+  height: 4px;
+  margin-left: -2px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  animation: cue-scroll 1.8s ease-in-out infinite;
+}
+
+@keyframes cue-scroll {
+  0% {
+    transform: translateY(0);
+    opacity: 0;
+  }
+  25% {
+    opacity: 1;
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(15px);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cue-dot {
+    animation: none;
+    opacity: 1;
+  }
+}
+
+/* ── Inside the window: floating sidebar + scrolling content ──── */
+.app-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+}
+
+.app-sidebar {
+  position: relative;
+  flex-shrink: 0;
+  width: var(--sidebar-w);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 10px 10px;
+  background: var(--color-panel);
+  border: 1px solid rgba(16, 24, 40, 0.05);
+  border-radius: 14px;
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.06);
+}
+
+/* The App sidebar's top strip: custom traffic lights at the left
+   (share/refresh clusters have no meaning on a website and are
+   deliberately absent). */
+.sidebar-top {
+  height: 42px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: flex-start;
+  padding: 13px 4px 0;
+}
+
+.window-dots {
+  display: flex;
+  gap: 8px;
+}
+
+.window-dots i {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+}
+
+.window-dots i:nth-child(1) {
+  background: #ff6159;
+}
+
+.window-dots i:nth-child(2) {
+  background: #ffbd2e;
+}
+
+.window-dots i:nth-child(3) {
+  background: #28ca42;
+}
+
+/* Nav cards — the App project-card language: transparent rows, the
+   selection is a white pill sliding behind them, the current
+   section carries a 3px accent bar on its left edge. */
+.nav-pill {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  top: 0;
+  height: 54px;
+  z-index: 0;
+  background: #ffffff;
+  border-radius: 10px;
+  box-shadow:
+    0 1px 3px rgba(16, 24, 40, 0.1),
+    0 2px 8px rgba(16, 24, 40, 0.06);
+  transition:
+    transform 280ms var(--ease-card),
+    height 280ms var(--ease-card);
+  will-change: transform;
+}
+
+.nav-card {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  min-height: 54px;
+  padding: 8px 8px 8px 16px;
+  border-radius: 10px;
+  text-decoration: none;
+  color: var(--color-ink);
+  transition: background-color 200ms ease;
+}
+
+.nav-card:not(.is-active):hover {
+  background: rgba(16, 24, 40, 0.05);
+}
+
+.nav-card:not(.is-active):active {
+  background: rgba(16, 24, 40, 0.1);
+}
+
+.nav-bar {
+  position: absolute;
+  left: 5px;
+  top: 16px;
+  bottom: 16px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--color-accent);
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+
+.nav-card.is-active .nav-bar {
+  opacity: 1;
+}
+
+.nav-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.nav-title {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: rgba(16, 24, 40, 0.85);
+}
+
+.nav-desc {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.03em;
+  color: var(--color-muted);
+}
+
+:is(.nav-card, .brand, .download-btn, .contact a):focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: 10px;
+}
+
+.app-content {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  overflow-y: auto;
+  scroll-snap-type: y proximity;
+  scroll-behavior: smooth;
+  border-radius: 10px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-rule-solid) transparent;
+}
+
+.app-content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.app-content::-webkit-scrollbar-thumb {
+  background: var(--color-rule-solid);
+  border-radius: 4px;
+}
+
+.app-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ── Sections — the three pages, stacked in narrative order ───── */
+.view {
+  padding: 3.25rem 2.25rem 3.5rem;
+  scroll-snap-align: start;
+}
+
+.view + .view {
+  margin-top: 2.5rem;
+  padding-top: 3.5rem;
+  border-top: 1px solid var(--color-rule);
+}
+
+.view-header {
+  max-width: 40rem;
+  margin-bottom: 2.5rem;
+}
+
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+  margin-bottom: 0.75rem;
+}
+
+h1 {
+  font-family: var(--font-display);
+  font-size: clamp(1.75rem, 3vw + 1rem, 2.5rem);
+  font-weight: 700;
+  line-height: 1.15;
+  margin-bottom: 0.5rem;
+}
+
+.subtitle {
+  font-size: 1rem;
+  line-height: 1.55;
+  color: var(--color-muted);
+  max-width: 68ch;
+}
+
+/* ── Diagrams (extracted from the platform-intro pages) ───────── */
+.diagram-wrap {
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-rule-solid) transparent;
+}
+
+.diagram-wrap::-webkit-scrollbar {
+  height: 8px;
+}
+
+.diagram-wrap::-webkit-scrollbar-thumb {
+  background: var(--color-rule-solid);
+  border-radius: 4px;
+}
+
+.diagram-wrap::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Scaled to the window: no horizontal shelf on desktop (narrow
+   screens keep a readable minimum and scroll instead). */
+.diagram {
+  width: 100%;
+  min-width: 0;
+  display: block;
+}
+
+/* Hover layer: text, paper backings, label masks and chips never
+   catch the pointer. Hovering a node card or a legend swatch (JS in
+   app.js, grouped by fill) lights its whole category and dims the
+   other cards. */
+.diagram text,
+.diagram rect[fill='#f4f8fc'],
+.diagram rect[fill='transparent'],
+.diagram rect[fill='none'] {
+  pointer-events: none;
+}
+
+.diagram .node-hit {
+  transition:
+    stroke 160ms ease,
+    stroke-width 160ms ease,
+    opacity 200ms ease;
+}
+
+.diagram .node-hit.dg-match {
+  stroke: var(--color-accent);
+  stroke-width: 1.6;
+}
+
+.diagram.dg-filtering .node-hit:not(.dg-match) {
+  opacity: 0.35;
+}
+
+/* ── Reduced motion: everything snaps ─────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+
+  .app-content {
+    scroll-behavior: auto;
+  }
+}
+
+/* ── Narrow screens: rail collapses to a top bar ──────────────── */
+@media (max-width: 880px) {
+  body {
+    flex-direction: column;
+  }
+
+  .outer-rail {
+    width: auto;
+    padding: 10px 14px;
+  }
+
+  .rail-inner {
+    width: auto;
+    height: auto;
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .brand {
+    gap: 9px;
+  }
+
+  .brand-icon {
+    width: 30px;
+    height: 30px;
+  }
+
+  .brand-name {
+    font-size: 0.95rem;
+  }
+
+  .brand-sub {
+    display: none;
+  }
+
+  .rail-foot {
+    margin-left: auto;
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .download-btn {
+    padding: 6px 11px;
+    font-size: 0.74rem;
+  }
+
+  .lang-seg {
+    width: 96px;
+  }
+
+  .contact,
+  .copyright {
+    display: none;
+  }
+
+  .stage {
+    padding: 0 10px 10px;
+    align-items: stretch;
+  }
+
+  .app-window {
+    max-width: none;
+    max-height: none;
+    border-radius: 14px;
+  }
+
+  html.at-welcome .stage {
+    padding-left: 10px;
+  }
+
+  html.at-welcome .app-window {
+    max-width: none;
+    max-height: none;
+  }
+
+  .page-welcome {
+    transform: none;
+  }
+
+  html:not(.at-welcome) .page-welcome {
+    transform: none;
+  }
+
+  .welcome-logo {
+    width: 124px;
+    height: 124px;
+  }
+
+  .welcome-logo img {
+    width: 60px;
+    height: 60px;
+    border-radius: 13px;
+  }
+
+  .welcome-title {
+    font-size: clamp(1.4rem, 6vw, 1.9rem);
+  }
+
+  .welcome-cue {
+    margin-top: 5vh;
+  }
+
+  .cue-track {
+    width: 20px;
+    height: 32px;
+    border-radius: 11px;
+  }
+
+  .app-body {
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px;
+  }
+
+  .app-sidebar {
+    width: auto;
+    flex-direction: row;
+    gap: 6px;
+    padding: 5px;
+    overflow-x: auto;
+  }
+
+  .sidebar-top {
+    display: none;
+  }
+
+  .nav-pill,
+  .nav-bar {
+    display: none;
+  }
+
+  .nav-card {
+    flex-shrink: 0;
+    min-width: 148px;
+    min-height: 42px;
+    padding: 7px 12px;
+  }
+
+  .nav-card.is-active {
+    background: #ffffff;
+    box-shadow: 0 1px 3px rgba(16, 24, 40, 0.1);
+  }
+
+  .nav-desc {
+    display: none;
+  }
+
+  .app-content {
+    border-radius: 8px;
+  }
+
+  .diagram {
+    min-width: 640px;
+  }
+
+  .view {
+    padding: 1.75rem 1.25rem 2.5rem;
+  }
+
+  .view + .view {
+    margin-top: 1.5rem;
+    padding-top: 2.25rem;
+  }
+
+  .view-header {
+    margin-bottom: 1.75rem;
+  }
+}

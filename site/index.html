@@ -1,0 +1,5444 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PNDS 池谱 · Platform for Networked Digital Score</title>
+    <meta
+      name="description"
+      content="PNDS（Platform for Networked Digital Score）——创作与演奏网络数字乐谱电子音乐的平台。"
+    />
+    <link rel="icon" type="image/png" href="assets/icon.png" />
+    <link rel="stylesheet" href="styles.css" />
+    <script>
+      // Set the language before first paint (kept in sync with app.js setLang).
+      var saved = null
+      try {
+        saved = localStorage.getItem('pnds-site-lang')
+      } catch (e) {}
+      var lang =
+        saved ||
+        (navigator.language && navigator.language.indexOf('zh') === 0
+          ? 'zh'
+          : 'en')
+      document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en'
+      // Refresh must land on the welcome page: stop the browser from
+      // restoring the inner scroller's old position (which would fire
+      // the scroll-spy and leave the opening state at once).
+      try {
+        history.scrollRestoration = 'manual'
+      } catch (e) {}
+      // Landing: a chapter hash opens its chapter — EXCEPT on reload,
+      // where the hash was only the scroll-spy's silent bookkeeping;
+      // refreshing always reopens the welcome page.
+      var isReload =
+        performance.getEntriesByType &&
+        performance.getEntriesByType('navigation')[0] &&
+        performance.getEntriesByType('navigation')[0].type === 'reload'
+      if (isReload || !/^#\/(structure|anatomy|network)/.test(location.hash))
+        document.documentElement.classList.add('at-welcome')
+    </script>
+  </head>
+  <body>
+    <aside class="outer-rail">
+      <div class="rail-inner">
+        <a class="brand" href="#/structure">
+          <img
+            class="brand-icon"
+            src="assets/icon.png"
+            alt="PNDS"
+            width="38"
+            height="38"
+          />
+          <span class="brand-text">
+            <span class="brand-name">PNDS 池谱</span>
+            <span class="brand-sub">
+              <span class="l-zh">网络数字乐谱演奏平台</span>
+              <span class="l-en">Platform for Networked Digital Score</span>
+            </span>
+          </span>
+        </a>
+
+        <div class="rail-foot">
+          <a
+            class="download-btn"
+            href="https://github.com/xO-xN/PNDS-App/releases/latest"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <span class="l-zh">下载 PNDS App</span>
+            <span class="l-en">Download PNDS App</span>
+          </a>
+
+          <div class="lang-seg" role="group" aria-label="中文 / English">
+            <span class="lang-thumb" aria-hidden="true"></span>
+            <button class="lang-btn" type="button" data-lang="zh">中</button>
+            <button class="lang-btn" type="button" data-lang="en">EN</button>
+          </div>
+
+          <div class="contact">
+            <a
+              href="https://github.com/xO-xN/PNDS-App"
+              target="_blank"
+              rel="noopener noreferrer"
+              >GitHub ↗</a
+            >
+            <a
+              href="https://github.com/xO-xN/PNDS-App/releases"
+              target="_blank"
+              rel="noopener noreferrer"
+              >Releases ↗</a
+            >
+            <a
+              href="https://github.com/xO-xN/PNDS-App/issues"
+              target="_blank"
+              rel="noopener noreferrer"
+              >Issues ↗</a
+            >
+          </div>
+
+          <p class="copyright">© 2026 xO-xN</p>
+        </div>
+      </div>
+    </aside>
+
+    <div class="stage">
+      <main class="app-window">
+        <div class="app-body">
+          <nav class="app-sidebar" id="site-nav" aria-label="Site navigation">
+            <div class="sidebar-top" aria-hidden="true">
+              <span class="window-dots"><i></i><i></i><i></i></span>
+            </div>
+            <span class="nav-pill" aria-hidden="true"></span>
+            <a class="nav-card" href="#/structure" data-route="structure">
+              <span class="nav-bar" aria-hidden="true"></span>
+              <span class="nav-body">
+                <span class="nav-title">
+                  <span class="l-zh">什么是 PNDS</span>
+                  <span class="l-en">What is PNDS</span>
+                </span>
+                <span class="nav-desc">
+                  <span class="l-zh">演奏系统总览</span>
+                  <span class="l-en">The performance system at a glance</span>
+                </span>
+              </span>
+            </a>
+            <a class="nav-card" href="#/anatomy" data-route="anatomy">
+              <span class="nav-bar" aria-hidden="true"></span>
+              <span class="nav-body">
+                <span class="nav-title">
+                  <span class="l-zh">开始创作工程</span>
+                  <span class="l-en">Start Creating PNDS Project</span>
+                </span>
+                <span class="nav-desc">
+                  <span class="l-zh">创作起点的解剖</span>
+                  <span class="l-en">Anatomy of the starting point</span>
+                </span>
+              </span>
+            </a>
+            <a class="nav-card" href="#/network" data-route="network">
+              <span class="nav-bar" aria-hidden="true"></span>
+              <span class="nav-body">
+                <span class="nav-title">
+                  <span class="l-zh">联网演奏</span>
+                  <span class="l-en">Perform with Network</span>
+                </span>
+                <span class="nav-desc">
+                  <span class="l-zh">本地与跨互联网演奏</span>
+                  <span class="l-en">Local &amp; across the internet</span>
+                </span>
+              </span>
+            </a>
+          </nav>
+          <div class="app-content" id="content">
+            <section class="page-welcome" id="page-welcome">
+              <div class="welcome-logo" aria-hidden="true">
+                <img src="assets/icon.png" alt="" width="84" height="84" />
+              </div>
+              <header class="welcome-head">
+                <h1 class="welcome-title">
+                  <span class="l-zh">你好！欢迎来到 PNDS 池谱</span>
+                  <span class="l-en">Hi! Welcome to PNDS</span>
+                </h1>
+                <p class="welcome-sub">
+                  <span class="l-zh">网络数字乐谱演奏平台</span>
+                  <span class="l-en"
+                    >The Platform for Networked Digital Score</span
+                  >
+                </p>
+              </header>
+              <div class="welcome-cue" aria-hidden="true">
+                <span class="cue-track"><span class="cue-dot"></span></span>
+              </div>
+            </section>
+            <section class="view" id="view-structure" data-route="structure">
+              <header class="view-header">
+                <p class="eyebrow">
+                  <span class="l-zh">PNDS · 网络数字乐谱演奏平台</span>
+                  <span class="l-en"
+                    >PNDS · THE PLATFORM FOR NETWORK DIGITAL SCORE</span
+                  >
+                </p>
+                <h1>
+                  <span class="l-zh">什么是 PNDS 演奏系统</span>
+                  <span class="l-en">What is the PNDS Performance System</span>
+                </h1>
+                <p class="subtitle">
+                  <span class="l-zh"
+                    >PNDS 池谱（Platform for Networked Digital
+                    Score）是创作与演奏网络数字乐谱电子音乐的平台：<strong
+                      >PNDS App</strong
+                    >
+                    是演出现场运行工程的 macOS Host，把 Node.js
+                    服务器与声音引擎架设在本地网络，就地构成演出环境；<strong
+                      >PNDS Template</strong
+                    >
+                    是为 AI Coding
+                    预备的工程起点——框架已备好实用工具，你的作品只写在少数几个特定文件里。</span
+                  >
+                  <span class="l-en"
+                    >PNDS (Platform for Networked Digital Score) is a platform
+                    for creating and performing networked digital-score
+                    electronic music: the <strong>PNDS App</strong> is the macOS
+                    host that runs projects on stage, hosting the Node.js server
+                    and sound engine on the local network for a performance
+                    environment on the spot; the
+                    <strong>PNDS Template</strong> is a starting point prepared
+                    for AI coding — the framework ships the practical tools, and
+                    your work lives in just a few specific files.</span
+                  >
+                </p>
+              </header>
+              <div class="diagram-wrap">
+                <svg
+                  class="diagram"
+                  viewBox="0 0 1120 776"
+                  role="img"
+                  aria-labelledby="pnds-platform-structure-desc"
+                >
+                  <desc id="pnds-platform-structure-desc">
+                    PNDS 演奏系统结构图：左侧为 PNDS App
+                    的四个功能模块（演出窗口、工程库、会话监督、内置声音引擎），上方为乐手演奏界面与指挥
+                    /
+                    监视界面，两界面与工程服务器之间的连线均为双向，演出窗口内嵌指挥
+                    / 监视界面；右侧为 PNDS 工程：左上是列出必填契约条目的
+                    manifest.json 卡片，工程服务器受 App
+                    托管并驱动声音合成与外部目标；PNDS Template
+                    作为创作起点示例打包为 .pnds 安装进工程。
+                  </desc>
+                  <defs>
+                    <marker
+                      id="arrow"
+                      markerWidth="8"
+                      markerHeight="6"
+                      refX="7"
+                      refY="3"
+                      orient="auto"
+                    >
+                      <polygon points="0 0, 8 3, 0 6" fill="#3e5a80" />
+                    </marker>
+                    <marker
+                      id="arrow-rev"
+                      markerWidth="8"
+                      markerHeight="6"
+                      refX="1"
+                      refY="3"
+                      orient="auto"
+                    >
+                      <polygon points="8 0, 0 3, 8 6" fill="#3e5a80" />
+                    </marker>
+                    <marker
+                      id="arrow-accent"
+                      markerWidth="8"
+                      markerHeight="6"
+                      refX="7"
+                      refY="3"
+                      orient="auto"
+                    >
+                      <polygon points="0 0, 8 3, 0 6" fill="#2b7de9" />
+                    </marker>
+                    <marker
+                      id="arrow-link"
+                      markerWidth="8"
+                      markerHeight="6"
+                      refX="7"
+                      refY="3"
+                      orient="auto"
+                    >
+                      <polygon points="0 0, 8 3, 0 6" fill="#1d5fbf" />
+                    </marker>
+                  </defs>
+
+                  <!-- Paper -->
+                  <rect width="100%" height="100%" fill="#f4f8fc" />
+
+                  <!-- ── Zones (painted first) ─────────────────────────────── -->
+                  <!-- Boundary: PNDS App (dashed) -->
+                  <rect
+                    x="40"
+                    y="40"
+                    width="384"
+                    height="568"
+                    rx="8"
+                    fill="rgba(16,24,40,0.02)"
+                    stroke="rgba(16,24,40,0.25)"
+                    stroke-width="1"
+                    stroke-dasharray="4,4"
+                  />
+                  <rect
+                    x="48"
+                    y="44"
+                    width="176"
+                    height="12"
+                    rx="2"
+                    fill="#f4f8fc"
+                  />
+                  <text
+                    x="136"
+                    y="53"
+                    fill="rgba(16,24,40,0.40)"
+                    font-size="7"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.14em"
+                    class="l-zh"
+                  >
+                    PNDS APP · 演出宿主
+                  </text>
+                  <text
+                    x="136"
+                    y="53"
+                    fill="rgba(16,24,40,0.40)"
+                    font-size="7"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.14em"
+                    class="l-en"
+                  >
+                    PNDS APP · PERFORMANCE HOST
+                  </text>
+
+                  <!-- Zone: browsers -->
+                  <rect
+                    x="480"
+                    y="40"
+                    width="600"
+                    height="128"
+                    rx="8"
+                    fill="rgba(16,24,40,0.02)"
+                    stroke="rgba(16,24,40,0.10)"
+                    stroke-width="0.8"
+                  />
+                  <rect
+                    x="488"
+                    y="44"
+                    width="200"
+                    height="12"
+                    rx="2"
+                    fill="#f4f8fc"
+                  />
+                  <text
+                    x="588"
+                    y="53"
+                    fill="rgba(16,24,40,0.40)"
+                    font-size="7"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.14em"
+                    class="l-zh"
+                  >
+                    浏览器 · 乐手与指挥
+                  </text>
+                  <text
+                    x="588"
+                    y="53"
+                    fill="rgba(16,24,40,0.40)"
+                    font-size="7"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.14em"
+                    class="l-en"
+                  >
+                    BROWSERS · PERFORMERS &amp; CONDUCTOR
+                  </text>
+
+                  <!-- Zone: PNDS project -->
+                  <rect
+                    x="480"
+                    y="208"
+                    width="600"
+                    height="384"
+                    rx="8"
+                    fill="rgba(16,24,40,0.02)"
+                    stroke="rgba(16,24,40,0.10)"
+                    stroke-width="0.8"
+                  />
+                  <rect
+                    x="488"
+                    y="212"
+                    width="200"
+                    height="12"
+                    rx="2"
+                    fill="#f4f8fc"
+                  />
+                  <text
+                    x="588"
+                    y="221"
+                    fill="rgba(16,24,40,0.40)"
+                    font-size="7"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.14em"
+                    class="l-zh"
+                  >
+                    PNDS 工程 · 乐谱真身
+                  </text>
+                  <text
+                    x="588"
+                    y="221"
+                    fill="rgba(16,24,40,0.40)"
+                    font-size="7"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.14em"
+                    class="l-en"
+                  >
+                    PNDS PROJECT · THE SCORE ITSELF
+                  </text>
+
+                  <!-- ── Connectors (before nodes) ─────────────────────────── -->
+                  <!-- performer page ↔ server (bidirectional) -->
+                  <path
+                    d="M 632,136 V 180 Q 632,188 640,188 H 824 Q 832,188 832,196 V 344"
+                    fill="none"
+                    stroke="#3e5a80"
+                    stroke-width="1.2"
+                    marker-start="url(#arrow-rev)"
+                    marker-end="url(#arrow)"
+                  />
+
+                  <!-- monitor page ↔ server (bidirectional) -->
+                  <path
+                    d="M 920,136 V 344"
+                    fill="none"
+                    stroke="#3e5a80"
+                    stroke-width="1.2"
+                    marker-start="url(#arrow-rev)"
+                    marker-end="url(#arrow)"
+                  />
+
+                  <!-- library → manifest (load · preflight) -->
+                  <path
+                    d="M 392,268 H 508"
+                    fill="none"
+                    stroke="#3e5a80"
+                    stroke-width="1.2"
+                    marker-end="url(#arrow)"
+                  />
+
+                  <!-- session → server (hosts) -->
+                  <line
+                    x1="392"
+                    y1="396"
+                    x2="776"
+                    y2="396"
+                    stroke="#3e5a80"
+                    stroke-width="1.2"
+                    marker-end="url(#arrow)"
+                  />
+
+                  <!-- server → session (health, return) -->
+                  <line
+                    x1="776"
+                    y1="424"
+                    x2="392"
+                    y2="424"
+                    stroke="#3e5a80"
+                    stroke-width="1.2"
+                    marker-end="url(#arrow)"
+                  />
+
+                  <!-- server → scsynth (OSC) -->
+                  <path
+                    d="M 792,440 V 452 Q 792,460 784,460 H 752 Q 744,460 744,468 V 488"
+                    fill="none"
+                    stroke="#3e5a80"
+                    stroke-width="1.2"
+                    marker-end="url(#arrow)"
+                  />
+
+                  <!-- server → external target (dashed) -->
+                  <line
+                    x1="896"
+                    y1="440"
+                    x2="896"
+                    y2="488"
+                    stroke="#3e5a80"
+                    stroke-width="1"
+                    stroke-dasharray="4,3"
+                    marker-end="url(#arrow)"
+                  />
+
+                  <!-- audio out: scsynth → App audio output -->
+                  <line
+                    x1="512"
+                    y1="524"
+                    x2="392"
+                    y2="524"
+                    stroke="#3e5a80"
+                    stroke-width="1.2"
+                    marker-end="url(#arrow)"
+                  />
+
+                  <!-- template → project zone (install, dashed) -->
+                  <path
+                    d="M 780,624 V 596"
+                    fill="none"
+                    stroke="#3e5a80"
+                    stroke-width="1"
+                    stroke-dasharray="4,3"
+                    marker-end="url(#arrow)"
+                  />
+
+                  <!-- shell window → monitor page (embeds the conductor view) -->
+                  <path
+                    d="M 392,120 H 440 Q 448,120 448,112 V 72 Q 448,64 456,64 H 888 Q 896,64 896,72"
+                    fill="none"
+                    stroke="#3e5a80"
+                    stroke-width="1.2"
+                    marker-end="url(#arrow)"
+                  />
+
+                  <!-- ── Arrow labels (masked, 6-8px gap above stroke) ──────── -->
+                  <text
+                    x="648"
+                    y="182"
+                    fill="#7a93b4"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    letter-spacing="0.06em"
+                    class="l-zh"
+                  >
+                    手势
+                  </text>
+                  <text
+                    x="648"
+                    y="182"
+                    fill="#7a93b4"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    letter-spacing="0.06em"
+                    class="l-en"
+                  >
+                    GESTURES
+                  </text>
+
+                  <text
+                    x="928"
+                    y="252"
+                    fill="#7a93b4"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    letter-spacing="0.06em"
+                    class="l-zh"
+                  >
+                    状态
+                  </text>
+                  <text
+                    x="928"
+                    y="252"
+                    fill="#7a93b4"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    letter-spacing="0.06em"
+                    class="l-en"
+                  >
+                    STATE
+                  </text>
+
+                  <rect
+                    x="420"
+                    y="262"
+                    width="80"
+                    height="12"
+                    rx="2"
+                    fill="#f4f8fc"
+                  />
+                  <text
+                    x="460"
+                    y="271"
+                    fill="#7a93b4"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.06em"
+                    class="l-zh"
+                  >
+                    加载 · 预检
+                  </text>
+                  <text
+                    x="460"
+                    y="271"
+                    fill="#7a93b4"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.06em"
+                    class="l-en"
+                  >
+                    LOAD · PREFLIGHT
+                  </text>
+
+                  <rect
+                    x="416"
+                    y="390"
+                    width="72"
+                    height="12"
+                    rx="2"
+                    fill="#f4f8fc"
+                  />
+                  <text
+                    x="452"
+                    y="399"
+                    fill="#7a93b4"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.06em"
+                    class="l-zh"
+                  >
+                    托管
+                  </text>
+                  <text
+                    x="452"
+                    y="399"
+                    fill="#7a93b4"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.06em"
+                    class="l-en"
+                  >
+                    HOSTS
+                  </text>
+
+                  <rect
+                    x="404"
+                    y="418"
+                    width="96"
+                    height="12"
+                    rx="2"
+                    fill="#f4f8fc"
+                  />
+                  <text
+                    x="452"
+                    y="427"
+                    fill="#7a93b4"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.06em"
+                    class="l-zh"
+                  >
+                    健康检查 · ready
+                  </text>
+                  <text
+                    x="452"
+                    y="427"
+                    fill="#7a93b4"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.06em"
+                    class="l-en"
+                  >
+                    HEALTH · READY
+                  </text>
+
+                  <text
+                    x="752"
+                    y="480"
+                    fill="#7a93b4"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    letter-spacing="0.06em"
+                  >
+                    OSC
+                  </text>
+
+                  <text
+                    x="904"
+                    y="468"
+                    fill="#7a93b4"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    letter-spacing="0.06em"
+                    class="l-zh"
+                  >
+                    外接 · 可选
+                  </text>
+                  <text
+                    x="904"
+                    y="468"
+                    fill="#7a93b4"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    letter-spacing="0.06em"
+                    class="l-en"
+                  >
+                    EXTERNAL
+                  </text>
+
+                  <rect
+                    x="416"
+                    y="506"
+                    width="72"
+                    height="12"
+                    rx="2"
+                    fill="#f4f8fc"
+                  />
+                  <text
+                    x="452"
+                    y="515"
+                    fill="#7a93b4"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.06em"
+                    class="l-zh"
+                  >
+                    音频
+                  </text>
+                  <text
+                    x="452"
+                    y="515"
+                    fill="#7a93b4"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.06em"
+                    class="l-en"
+                  >
+                    AUDIO
+                  </text>
+
+                  <text
+                    x="720"
+                    y="58"
+                    fill="#7a93b4"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    letter-spacing="0.06em"
+                    class="l-zh"
+                  >
+                    内嵌
+                  </text>
+                  <text
+                    x="720"
+                    y="58"
+                    fill="#7a93b4"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    letter-spacing="0.06em"
+                    class="l-en"
+                  >
+                    EMBEDS
+                  </text>
+
+                  <text
+                    x="772"
+                    y="616"
+                    fill="#7a93b4"
+                    font-size="8"
+                    text-anchor="end"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    letter-spacing="0.06em"
+                    class="l-zh"
+                  >
+                    打包 .pnds · 安装
+                  </text>
+                  <text
+                    x="772"
+                    y="616"
+                    fill="#7a93b4"
+                    font-size="8"
+                    text-anchor="end"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    letter-spacing="0.06em"
+                    class="l-en"
+                  >
+                    PACK .PNDS · INSTALL
+                  </text>
+
+                  <!-- ── Nodes ──────────────────────────────────────────────── -->
+                  <!-- App 1 · shell -->
+                  <rect
+                    x="72"
+                    y="88"
+                    width="320"
+                    height="104"
+                    rx="6"
+                    fill="#f4f8fc"
+                  />
+                  <rect
+                    x="72"
+                    y="88"
+                    width="320"
+                    height="104"
+                    rx="6"
+                    fill="#ffffff"
+                    stroke="#101828"
+                    stroke-width="1"
+                    class="node-hit"
+                  />
+                  <rect
+                    x="80"
+                    y="94"
+                    width="52"
+                    height="12"
+                    rx="2"
+                    fill="transparent"
+                    stroke="rgba(16,24,40,0.40)"
+                    stroke-width="0.8"
+                  />
+                  <text
+                    x="106"
+                    y="103"
+                    fill="rgba(16,24,40,0.80)"
+                    font-size="7"
+                    font-family="'Geist Mono',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.08em"
+                  >
+                    WINDOW
+                  </text>
+                  <text
+                    x="232"
+                    y="140"
+                    fill="#101828"
+                    font-size="16"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    演出窗口
+                  </text>
+                  <text
+                    x="232"
+                    y="140"
+                    fill="#101828"
+                    font-size="16"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    Performance Window
+                  </text>
+                  <text
+                    x="232"
+                    y="162"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    全屏 · 一键静音 · 内嵌指挥 / 监视界面
+                  </text>
+                  <text
+                    x="232"
+                    y="162"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    fullscreen · mute · embeds the conductor view
+                  </text>
+
+                  <!-- App 2 · library -->
+                  <rect
+                    x="72"
+                    y="216"
+                    width="320"
+                    height="104"
+                    rx="6"
+                    fill="#f4f8fc"
+                  />
+                  <rect
+                    x="72"
+                    y="216"
+                    width="320"
+                    height="104"
+                    rx="6"
+                    fill="#ffffff"
+                    stroke="#101828"
+                    stroke-width="1"
+                    class="node-hit"
+                  />
+                  <rect
+                    x="80"
+                    y="222"
+                    width="60"
+                    height="12"
+                    rx="2"
+                    fill="transparent"
+                    stroke="rgba(16,24,40,0.40)"
+                    stroke-width="0.8"
+                  />
+                  <text
+                    x="110"
+                    y="231"
+                    fill="rgba(16,24,40,0.80)"
+                    font-size="7"
+                    font-family="'Geist Mono',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.08em"
+                  >
+                    LIBRARY
+                  </text>
+                  <text
+                    x="232"
+                    y="268"
+                    fill="#101828"
+                    font-size="16"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    工程库
+                  </text>
+                  <text
+                    x="232"
+                    y="268"
+                    fill="#101828"
+                    font-size="16"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    Project Library
+                  </text>
+                  <text
+                    x="232"
+                    y="290"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    最近工程 · 加载 / 切换 · 分享
+                  </text>
+                  <text
+                    x="232"
+                    y="290"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    recents · load / switch · share
+                  </text>
+
+                  <!-- App 3 · session supervisor (focal) -->
+                  <rect
+                    x="72"
+                    y="344"
+                    width="320"
+                    height="104"
+                    rx="6"
+                    fill="#f4f8fc"
+                  />
+                  <rect
+                    x="72"
+                    y="344"
+                    width="320"
+                    height="104"
+                    rx="6"
+                    fill="rgba(43,125,233,0.08)"
+                    stroke="#2b7de9"
+                    stroke-width="1.2"
+                    class="node-hit"
+                  />
+                  <rect
+                    x="80"
+                    y="350"
+                    width="60"
+                    height="12"
+                    rx="2"
+                    fill="transparent"
+                    stroke="rgba(43,125,233,0.45)"
+                    stroke-width="0.8"
+                  />
+                  <text
+                    x="110"
+                    y="359"
+                    fill="rgba(43,125,233,0.90)"
+                    font-size="7"
+                    font-family="'Geist Mono',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.08em"
+                  >
+                    SESSION
+                  </text>
+                  <text
+                    x="232"
+                    y="396"
+                    fill="#101828"
+                    font-size="16"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    会话监督
+                  </text>
+                  <text
+                    x="232"
+                    y="396"
+                    fill="#101828"
+                    font-size="16"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    Session Supervisor
+                  </text>
+                  <text
+                    x="232"
+                    y="418"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    预检 → 启动 → 健康监控 → 关停
+                  </text>
+                  <text
+                    x="232"
+                    y="418"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    preflight → start → health → graceful stop
+                  </text>
+
+                  <!-- App 4 · audio output -->
+                  <rect
+                    x="72"
+                    y="472"
+                    width="320"
+                    height="104"
+                    rx="6"
+                    fill="#f4f8fc"
+                  />
+                  <rect
+                    x="72"
+                    y="472"
+                    width="320"
+                    height="104"
+                    rx="6"
+                    fill="#ffffff"
+                    stroke="#101828"
+                    stroke-width="1"
+                    class="node-hit"
+                  />
+                  <rect
+                    x="80"
+                    y="478"
+                    width="52"
+                    height="12"
+                    rx="2"
+                    fill="transparent"
+                    stroke="rgba(16,24,40,0.40)"
+                    stroke-width="0.8"
+                  />
+                  <text
+                    x="106"
+                    y="487"
+                    fill="rgba(16,24,40,0.80)"
+                    font-size="7"
+                    font-family="'Geist Mono',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.08em"
+                  >
+                    ENGINE
+                  </text>
+                  <text
+                    x="232"
+                    y="524"
+                    fill="#101828"
+                    font-size="16"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    内置声音引擎
+                  </text>
+                  <text
+                    x="232"
+                    y="524"
+                    fill="#101828"
+                    font-size="16"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    Built-in Sound Engine
+                  </text>
+                  <text
+                    x="232"
+                    y="546"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    设备选择 · 总输出音量
+                  </text>
+                  <text
+                    x="232"
+                    y="546"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    device selection · master gain
+                  </text>
+
+                  <!-- Browser · performer page -->
+                  <rect
+                    x="512"
+                    y="72"
+                    width="240"
+                    height="64"
+                    rx="6"
+                    fill="#f4f8fc"
+                  />
+                  <rect
+                    x="512"
+                    y="72"
+                    width="240"
+                    height="64"
+                    rx="6"
+                    fill="rgba(62,90,128,0.10)"
+                    stroke="#7a93b4"
+                    stroke-width="1"
+                    class="node-hit"
+                  />
+                  <rect
+                    x="520"
+                    y="78"
+                    width="72"
+                    height="12"
+                    rx="2"
+                    fill="transparent"
+                    stroke="rgba(122,147,180,0.40)"
+                    stroke-width="0.8"
+                  />
+                  <text
+                    x="556"
+                    y="87"
+                    fill="rgba(122,147,180,0.80)"
+                    font-size="7"
+                    font-family="'Geist Mono',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.08em"
+                  >
+                    PERFORMER
+                  </text>
+                  <text
+                    x="632"
+                    y="106"
+                    fill="#101828"
+                    font-size="16"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    乐手演奏界面
+                  </text>
+                  <text
+                    x="632"
+                    y="106"
+                    fill="#101828"
+                    font-size="16"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    Performer view
+                  </text>
+                  <text
+                    x="632"
+                    y="126"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    手机扫码 · 手势演奏
+                  </text>
+                  <text
+                    x="632"
+                    y="126"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    scan to join · play by gestures
+                  </text>
+
+                  <!-- Browser · monitor page -->
+                  <rect
+                    x="800"
+                    y="72"
+                    width="240"
+                    height="64"
+                    rx="6"
+                    fill="#f4f8fc"
+                  />
+                  <rect
+                    x="800"
+                    y="72"
+                    width="240"
+                    height="64"
+                    rx="6"
+                    fill="rgba(62,90,128,0.10)"
+                    stroke="#7a93b4"
+                    stroke-width="1"
+                    class="node-hit"
+                  />
+                  <rect
+                    x="808"
+                    y="78"
+                    width="60"
+                    height="12"
+                    rx="2"
+                    fill="transparent"
+                    stroke="rgba(122,147,180,0.40)"
+                    stroke-width="0.8"
+                  />
+                  <text
+                    x="838"
+                    y="87"
+                    fill="rgba(122,147,180,0.80)"
+                    font-size="7"
+                    font-family="'Geist Mono',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.08em"
+                  >
+                    MONITOR
+                  </text>
+                  <text
+                    x="920"
+                    y="106"
+                    fill="#101828"
+                    font-size="16"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    指挥 / 监视界面
+                  </text>
+                  <text
+                    x="920"
+                    y="106"
+                    fill="#101828"
+                    font-size="16"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    Conductor view
+                  </text>
+                  <text
+                    x="920"
+                    y="126"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    App 内嵌窗口 · 可投大屏
+                  </text>
+                  <text
+                    x="920"
+                    y="126"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    embedded in the App · projector-ready
+                  </text>
+
+                  <!-- Project · manifest (contract list) -->
+                  <rect
+                    x="508"
+                    y="232"
+                    width="208"
+                    height="148"
+                    rx="6"
+                    fill="#f4f8fc"
+                  />
+                  <rect
+                    x="508"
+                    y="232"
+                    width="208"
+                    height="148"
+                    rx="6"
+                    fill="#ffffff"
+                    stroke="#101828"
+                    stroke-width="1"
+                    class="node-hit"
+                  />
+                  <rect
+                    x="516"
+                    y="238"
+                    width="68"
+                    height="12"
+                    rx="2"
+                    fill="transparent"
+                    stroke="rgba(16,24,40,0.40)"
+                    stroke-width="0.8"
+                  />
+                  <text
+                    x="550"
+                    y="247"
+                    fill="rgba(16,24,40,0.80)"
+                    font-size="7"
+                    font-family="'Geist Mono',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.08em"
+                  >
+                    CONTRACT
+                  </text>
+                  <text
+                    x="612"
+                    y="272"
+                    fill="#101828"
+                    font-size="16"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                  >
+                    manifest.json
+                  </text>
+                  <text
+                    x="612"
+                    y="288"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    工程契约 · 按作品填写
+                  </text>
+                  <text
+                    x="612"
+                    y="288"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    the contract · set per work
+                  </text>
+                  <rect x="519" y="300" width="3" height="3" fill="#b9cce0" />
+                  <text
+                    x="528"
+                    y="306"
+                    fill="#3e5a80"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    letter-spacing="0.02em"
+                  >
+                    schemaVersion · id
+                  </text>
+                  <rect x="519" y="313" width="3" height="3" fill="#b9cce0" />
+                  <text
+                    x="528"
+                    y="319"
+                    fill="#3e5a80"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    letter-spacing="0.02em"
+                  >
+                    name · version
+                  </text>
+                  <rect x="519" y="326" width="3" height="3" fill="#b9cce0" />
+                  <text
+                    x="528"
+                    y="332"
+                    fill="#3e5a80"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    letter-spacing="0.02em"
+                  >
+                    scoreServer.entry / workingDirectory
+                  </text>
+                  <rect x="519" y="339" width="3" height="3" fill="#b9cce0" />
+                  <text
+                    x="528"
+                    y="345"
+                    fill="#3e5a80"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    letter-spacing="0.02em"
+                  >
+                    performerPort / monitorPort
+                  </text>
+                  <rect x="519" y="352" width="3" height="3" fill="#b9cce0" />
+                  <text
+                    x="528"
+                    y="358"
+                    fill="#3e5a80"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    letter-spacing="0.02em"
+                  >
+                    audio.defaultMode / supportedModes
+                  </text>
+                  <rect x="519" y="365" width="3" height="3" fill="#b9cce0" />
+                  <text
+                    x="528"
+                    y="371"
+                    fill="#3e5a80"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    letter-spacing="0.02em"
+                    class="l-zh"
+                  >
+                    audio.synthdefs (internal 必填)
+                  </text>
+                  <text
+                    x="528"
+                    y="371"
+                    fill="#3e5a80"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    letter-spacing="0.02em"
+                    class="l-en"
+                  >
+                    audio.synthdefs (if internal)
+                  </text>
+
+                  <!-- Project · score server (focal) -->
+                  <rect
+                    x="776"
+                    y="344"
+                    width="240"
+                    height="96"
+                    rx="6"
+                    fill="#f4f8fc"
+                  />
+                  <rect
+                    x="776"
+                    y="344"
+                    width="240"
+                    height="96"
+                    rx="6"
+                    fill="rgba(43,125,233,0.08)"
+                    stroke="#2b7de9"
+                    stroke-width="1.2"
+                    class="node-hit"
+                  />
+                  <rect
+                    x="784"
+                    y="350"
+                    width="52"
+                    height="12"
+                    rx="2"
+                    fill="transparent"
+                    stroke="rgba(43,125,233,0.45)"
+                    stroke-width="0.8"
+                  />
+                  <text
+                    x="810"
+                    y="359"
+                    fill="rgba(43,125,233,0.90)"
+                    font-size="7"
+                    font-family="'Geist Mono',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.08em"
+                  >
+                    SERVER
+                  </text>
+                  <text
+                    x="896"
+                    y="388"
+                    fill="#101828"
+                    font-size="16"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    工程服务器
+                  </text>
+                  <text
+                    x="896"
+                    y="388"
+                    fill="#101828"
+                    font-size="16"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    Score Server
+                  </text>
+                  <text
+                    x="896"
+                    y="408"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    Node · 演奏协议 · Socket.IO
+                  </text>
+                  <text
+                    x="896"
+                    y="408"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    Node · performance protocol
+                  </text>
+                  <text
+                    x="896"
+                    y="424"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    乐谱逻辑所在
+                  </text>
+                  <text
+                    x="896"
+                    y="424"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    where the score logic lives
+                  </text>
+
+                  <!-- Project · synthesis -->
+                  <rect
+                    x="512"
+                    y="488"
+                    width="240"
+                    height="72"
+                    rx="6"
+                    fill="#f4f8fc"
+                  />
+                  <rect
+                    x="512"
+                    y="488"
+                    width="240"
+                    height="72"
+                    rx="6"
+                    fill="#ffffff"
+                    stroke="#101828"
+                    stroke-width="1"
+                    class="node-hit"
+                  />
+                  <rect
+                    x="520"
+                    y="494"
+                    width="44"
+                    height="12"
+                    rx="2"
+                    fill="transparent"
+                    stroke="rgba(16,24,40,0.40)"
+                    stroke-width="0.8"
+                  />
+                  <text
+                    x="542"
+                    y="503"
+                    fill="rgba(16,24,40,0.80)"
+                    font-size="7"
+                    font-family="'Geist Mono',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.08em"
+                  >
+                    SYNTH
+                  </text>
+                  <text
+                    x="632"
+                    y="524"
+                    fill="#101828"
+                    font-size="16"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    声音合成（scsynth）
+                  </text>
+                  <text
+                    x="632"
+                    y="524"
+                    fill="#101828"
+                    font-size="16"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    Synthesis (scsynth)
+                  </text>
+                  <text
+                    x="632"
+                    y="544"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    App 内置 SuperCollider 声音合成引擎
+                  </text>
+                  <text
+                    x="632"
+                    y="544"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    App-bundled SuperCollider engine
+                  </text>
+
+                  <!-- Project · external target -->
+                  <rect
+                    x="800"
+                    y="488"
+                    width="240"
+                    height="72"
+                    rx="6"
+                    fill="#f4f8fc"
+                  />
+                  <rect
+                    x="800"
+                    y="488"
+                    width="240"
+                    height="72"
+                    rx="6"
+                    fill="rgba(16,24,40,0.03)"
+                    stroke="rgba(16,24,40,0.30)"
+                    stroke-width="1"
+                    class="node-hit"
+                  />
+                  <rect
+                    x="808"
+                    y="494"
+                    width="28"
+                    height="12"
+                    rx="2"
+                    fill="transparent"
+                    stroke="rgba(16,24,40,0.30)"
+                    stroke-width="0.8"
+                  />
+                  <text
+                    x="822"
+                    y="503"
+                    fill="rgba(16,24,40,0.70)"
+                    font-size="7"
+                    font-family="'Geist Mono',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.08em"
+                  >
+                    OSC
+                  </text>
+                  <text
+                    x="920"
+                    y="524"
+                    fill="#101828"
+                    font-size="16"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    外部目标
+                  </text>
+                  <text
+                    x="920"
+                    y="524"
+                    fill="#101828"
+                    font-size="16"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    External Target
+                  </text>
+                  <text
+                    x="920"
+                    y="544"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    Max · Ableton · 灯光控制台
+                  </text>
+                  <text
+                    x="920"
+                    y="544"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    Max · Ableton · lighting console
+                  </text>
+
+                  <!-- Template example (dashed) -->
+                  <rect
+                    x="480"
+                    y="624"
+                    width="600"
+                    height="64"
+                    rx="6"
+                    fill="#f4f8fc"
+                  />
+                  <rect
+                    x="480"
+                    y="624"
+                    width="600"
+                    height="64"
+                    rx="6"
+                    fill="rgba(16,24,40,0.02)"
+                    stroke="rgba(16,24,40,0.20)"
+                    stroke-width="1"
+                    stroke-dasharray="4,3"
+                  />
+                  <rect
+                    x="488"
+                    y="630"
+                    width="68"
+                    height="12"
+                    rx="2"
+                    fill="transparent"
+                    stroke="rgba(16,24,40,0.30)"
+                    stroke-width="0.8"
+                  />
+                  <text
+                    x="522"
+                    y="639"
+                    fill="rgba(16,24,40,0.70)"
+                    font-size="7"
+                    font-family="'Geist Mono',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.08em"
+                  >
+                    TEMPLATE
+                  </text>
+                  <text
+                    x="780"
+                    y="654"
+                    fill="#101828"
+                    font-size="16"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    创作起点：PNDS Template
+                  </text>
+                  <text
+                    x="780"
+                    y="654"
+                    fill="#101828"
+                    font-size="16"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    The starting point: PNDS Template
+                  </text>
+                  <text
+                    x="780"
+                    y="674"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    AI-Coding 预备的模版工程
+                  </text>
+                  <text
+                    x="780"
+                    y="674"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    A template project primed for AI-coding
+                  </text>
+
+                  <!-- ── Editorial aside ────────────────────────────────────── -->
+                  <text
+                    x="72"
+                    y="640"
+                    fill="#3e5a80"
+                    font-size="14"
+                    font-style="italic"
+                    font-family="'Comfortaa','PingFang SC',sans-serif"
+                    class="l-zh"
+                  >
+                    高频演奏数据在工程内部直达声音，
+                  </text>
+                  <text
+                    x="72"
+                    y="640"
+                    fill="#3e5a80"
+                    font-size="14"
+                    font-style="italic"
+                    font-family="'Comfortaa','PingFang SC',sans-serif"
+                    class="l-en"
+                  >
+                    High-frequency performance data reaches
+                  </text>
+                  <text
+                    x="72"
+                    y="662"
+                    fill="#3e5a80"
+                    font-size="14"
+                    font-style="italic"
+                    font-family="'Comfortaa','PingFang SC',sans-serif"
+                    class="l-zh"
+                  >
+                    不经过 App——App 只负责把工程可靠地跑起来。
+                  </text>
+                  <text
+                    x="72"
+                    y="662"
+                    fill="#3e5a80"
+                    font-size="14"
+                    font-style="italic"
+                    font-family="'Comfortaa','PingFang SC',sans-serif"
+                    class="l-en"
+                  >
+                    sound inside the project, never through the App.
+                  </text>
+
+                  <!-- ── Legend (horizontal bottom strip) ───────────────────── -->
+                  <line
+                    x1="40"
+                    y1="712"
+                    x2="1080"
+                    y2="712"
+                    stroke="rgba(16,24,40,0.10)"
+                    stroke-width="0.8"
+                  />
+                  <text
+                    x="48"
+                    y="740"
+                    fill="#3e5a80"
+                    font-size="8"
+                    font-family="'Geist Mono',monospace"
+                    letter-spacing="0.14em"
+                  >
+                    LEGEND
+                  </text>
+
+                  <rect
+                    x="120"
+                    y="728"
+                    width="16"
+                    height="12"
+                    rx="2"
+                    fill="rgba(62,90,128,0.10)"
+                    stroke="#7a93b4"
+                    stroke-width="0.8"
+                    class="node-hit"
+                  />
+                  <text
+                    x="142"
+                    y="738"
+                    fill="#3e5a80"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    class="l-zh"
+                  >
+                    演奏 / 监视界面
+                  </text>
+                  <text
+                    x="142"
+                    y="738"
+                    fill="#3e5a80"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    class="l-en"
+                  >
+                    Performer / monitor
+                  </text>
+
+                  <rect
+                    x="248"
+                    y="728"
+                    width="16"
+                    height="12"
+                    rx="2"
+                    fill="#ffffff"
+                    stroke="#101828"
+                    stroke-width="0.8"
+                    class="node-hit"
+                  />
+                  <text
+                    x="270"
+                    y="738"
+                    fill="#3e5a80"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    class="l-zh"
+                  >
+                    进程 · 组件
+                  </text>
+                  <text
+                    x="270"
+                    y="738"
+                    fill="#3e5a80"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    class="l-en"
+                  >
+                    Process / component
+                  </text>
+
+                  <rect
+                    x="392"
+                    y="728"
+                    width="16"
+                    height="12"
+                    rx="2"
+                    fill="rgba(43,125,233,0.08)"
+                    stroke="#2b7de9"
+                    stroke-width="0.8"
+                    class="node-hit"
+                  />
+                  <text
+                    x="414"
+                    y="738"
+                    fill="#3e5a80"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    class="l-zh"
+                  >
+                    焦点
+                  </text>
+                  <text
+                    x="414"
+                    y="738"
+                    fill="#3e5a80"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    class="l-en"
+                  >
+                    Focal
+                  </text>
+
+                  <rect
+                    x="488"
+                    y="728"
+                    width="16"
+                    height="12"
+                    rx="2"
+                    fill="rgba(16,24,40,0.03)"
+                    stroke="rgba(16,24,40,0.30)"
+                    stroke-width="0.8"
+                    class="node-hit"
+                  />
+                  <text
+                    x="510"
+                    y="738"
+                    fill="#3e5a80"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    class="l-zh"
+                  >
+                    外部目标
+                  </text>
+                  <text
+                    x="510"
+                    y="738"
+                    fill="#3e5a80"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    class="l-en"
+                  >
+                    External target
+                  </text>
+
+                  <rect
+                    x="608"
+                    y="728"
+                    width="16"
+                    height="12"
+                    rx="2"
+                    fill="rgba(16,24,40,0.02)"
+                    stroke="rgba(16,24,40,0.20)"
+                    stroke-width="0.8"
+                    stroke-dasharray="4,3"
+                  />
+                  <text
+                    x="630"
+                    y="738"
+                    fill="#3e5a80"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    class="l-zh"
+                  >
+                    模板示例
+                  </text>
+                  <text
+                    x="630"
+                    y="738"
+                    fill="#3e5a80"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    class="l-en"
+                  >
+                    Template example
+                  </text>
+
+                  <line
+                    x1="736"
+                    y1="734"
+                    x2="760"
+                    y2="734"
+                    stroke="#3e5a80"
+                    stroke-width="1.2"
+                    marker-end="url(#arrow)"
+                  />
+                  <text
+                    x="768"
+                    y="738"
+                    fill="#3e5a80"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    class="l-zh"
+                  >
+                    运行数据流
+                  </text>
+                  <text
+                    x="768"
+                    y="738"
+                    fill="#3e5a80"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    class="l-en"
+                  >
+                    Runtime data flow
+                  </text>
+
+                  <rect
+                    x="888"
+                    y="728"
+                    width="16"
+                    height="12"
+                    rx="2"
+                    fill="none"
+                    stroke="rgba(16,24,40,0.25)"
+                    stroke-width="0.8"
+                    stroke-dasharray="4,4"
+                  />
+                  <text
+                    x="910"
+                    y="738"
+                    fill="#3e5a80"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    class="l-zh"
+                  >
+                    App 边界
+                  </text>
+                  <text
+                    x="910"
+                    y="738"
+                    fill="#3e5a80"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    class="l-en"
+                  >
+                    App boundary
+                  </text>
+                </svg>
+              </div>
+            </section>
+
+            <section class="view" id="view-anatomy" data-route="anatomy">
+              <header class="view-header">
+                <p class="eyebrow">
+                  <span class="l-zh">PNDS TEMPLATE · 创作起点</span>
+                  <span class="l-en">PNDS TEMPLATE · THE STARTING POINT</span>
+                </p>
+                <h1>
+                  <span class="l-zh">从 Template 开始</span>
+                  <span class="l-en">Start from the Template</span>
+                </h1>
+                <p class="subtitle">
+                  <span class="l-zh"
+                    >Template 是一个为 AI Coding 预备的 PNDS
+                    工程起点：框架内已备好实现作品的实用工具，你的作品只写在少数几个特定文件里——边界清晰，简单明了。</span
+                  >
+                  <span class="l-en"
+                    >The Template is a PNDS starting point prepared for AI
+                    coding: the framework ships the practical tools for
+                    realizing a work, and your creation lives in just a few
+                    specific files — simple and clear.</span
+                  >
+                </p>
+              </header>
+              <div class="diagram-wrap">
+                <svg
+                  class="diagram"
+                  viewBox="0 0 1120 856"
+                  role="img"
+                  aria-labelledby="pnds-template-anatomy-desc"
+                >
+                  <desc id="pnds-template-anatomy-desc">
+                    PNDS Template 结构图：顶部的乐手演奏界面（performer
+                    页）与指挥 / 监视界面（monitor 页）是可整体替换的示例；中部
+                    Node 工程里，server.js 入口与 lib/
+                    核心框架（加入、座位、健康、OSC、关停）是已就绪的共享骨架，audio/controller.js
+                    是创作者的工作层——交互到声音的映射与 OSC
+                    地址语义都由创作者定义，manifest.json
+                    是按作品填写的契约；右侧为声音目标：App
+                    内合成或外部引擎。底部发行管线：push v*
+                    标签后，package.yml（GitHub Action，也是告诉 AI agent
+                    如何正确发行的文件）自动打出依赖预装的 .pnds 包，装入 PNDS
+                    App 即可演出。
+                  </desc>
+                  <defs>
+                    <marker
+                      id="arrow"
+                      markerWidth="8"
+                      markerHeight="6"
+                      refX="7"
+                      refY="3"
+                      orient="auto"
+                    >
+                      <polygon points="0 0, 8 3, 0 6" fill="#3e5a80" />
+                    </marker>
+                    <marker
+                      id="arrow-accent"
+                      markerWidth="8"
+                      markerHeight="6"
+                      refX="7"
+                      refY="3"
+                      orient="auto"
+                    >
+                      <polygon points="0 0, 8 3, 0 6" fill="#2b7de9" />
+                    </marker>
+                    <marker
+                      id="arrow-link"
+                      markerWidth="8"
+                      markerHeight="6"
+                      refX="7"
+                      refY="3"
+                      orient="auto"
+                    >
+                      <polygon points="0 0, 8 3, 0 6" fill="#1d5fbf" />
+                    </marker>
+                  </defs>
+
+                  <!-- Paper -->
+                  <rect width="100%" height="100%" fill="#f4f8fc" />
+
+                  <!-- ── Zones (painted first) ─────────────────────────────── -->
+                  <!-- Zone: example pages -->
+                  <rect
+                    x="40"
+                    y="40"
+                    width="1040"
+                    height="108"
+                    rx="8"
+                    fill="rgba(16,24,40,0.02)"
+                    stroke="rgba(16,24,40,0.10)"
+                    stroke-width="0.8"
+                  />
+                  <rect
+                    x="48"
+                    y="44"
+                    width="180"
+                    height="12"
+                    rx="2"
+                    fill="#f4f8fc"
+                  />
+                  <text
+                    x="138"
+                    y="53"
+                    fill="rgba(16,24,40,0.40)"
+                    font-size="7"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.14em"
+                    class="l-zh"
+                  >
+                    浏览器 · 示例界面
+                  </text>
+                  <text
+                    x="138"
+                    y="53"
+                    fill="rgba(16,24,40,0.40)"
+                    font-size="7"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.14em"
+                    class="l-en"
+                  >
+                    BROWSERS · EXAMPLE VIEWS
+                  </text>
+
+                  <!-- Zone: Node project -->
+                  <rect
+                    x="40"
+                    y="212"
+                    width="700"
+                    height="304"
+                    rx="8"
+                    fill="rgba(16,24,40,0.02)"
+                    stroke="rgba(16,24,40,0.10)"
+                    stroke-width="0.8"
+                  />
+                  <rect
+                    x="48"
+                    y="216"
+                    width="136"
+                    height="12"
+                    rx="2"
+                    fill="#f4f8fc"
+                  />
+                  <text
+                    x="116"
+                    y="225"
+                    fill="rgba(16,24,40,0.40)"
+                    font-size="7"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.14em"
+                    class="l-zh"
+                  >
+                    PNDS 工程 · NODE.JS
+                  </text>
+                  <text
+                    x="116"
+                    y="225"
+                    fill="rgba(16,24,40,0.40)"
+                    font-size="7"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.14em"
+                    class="l-en"
+                  >
+                    PNDS PROJECT · NODE.JS
+                  </text>
+
+                  <!-- Zone: sound targets -->
+                  <rect
+                    x="772"
+                    y="212"
+                    width="308"
+                    height="304"
+                    rx="8"
+                    fill="rgba(16,24,40,0.02)"
+                    stroke="rgba(16,24,40,0.10)"
+                    stroke-width="0.8"
+                  />
+                  <rect
+                    x="780"
+                    y="216"
+                    width="150"
+                    height="12"
+                    rx="2"
+                    fill="#f4f8fc"
+                  />
+                  <text
+                    x="855"
+                    y="225"
+                    fill="rgba(16,24,40,0.40)"
+                    font-size="7"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.14em"
+                    class="l-zh"
+                  >
+                    声音目标 · TARGETS
+                  </text>
+                  <text
+                    x="855"
+                    y="225"
+                    fill="rgba(16,24,40,0.40)"
+                    font-size="7"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.14em"
+                    class="l-en"
+                  >
+                    SOUND TARGETS
+                  </text>
+
+                  <!-- Zone: release pipeline -->
+                  <rect
+                    x="40"
+                    y="648"
+                    width="1040"
+                    height="120"
+                    rx="8"
+                    fill="rgba(16,24,40,0.02)"
+                    stroke="rgba(16,24,40,0.10)"
+                    stroke-width="0.8"
+                  />
+                  <rect
+                    x="48"
+                    y="652"
+                    width="220"
+                    height="12"
+                    rx="2"
+                    fill="#f4f8fc"
+                  />
+                  <text
+                    x="158"
+                    y="661"
+                    fill="rgba(16,24,40,0.40)"
+                    font-size="7"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.14em"
+                    class="l-zh"
+                  >
+                    发行管线 · RELEASE
+                  </text>
+                  <text
+                    x="158"
+                    y="661"
+                    fill="rgba(16,24,40,0.40)"
+                    font-size="7"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.14em"
+                    class="l-en"
+                  >
+                    RELEASE PIPELINE
+                  </text>
+
+                  <!-- ── Connectors (before nodes) ─────────────────────────── -->
+                  <!-- performer page → server (gestures, input corridor) -->
+                  <path
+                    d="M 420,136 V 160 Q 420,168 412,168 H 200 Q 192,168 192,176 V 248"
+                    fill="none"
+                    stroke="#3e5a80"
+                    stroke-width="1.2"
+                    marker-end="url(#arrow)"
+                  />
+
+                  <!-- server → monitor page (state lane) -->
+                  <path
+                    d="M 264,248 V 200 Q 264,192 272,192 H 692 Q 700,192 700,184 V 136"
+                    fill="none"
+                    stroke="#3e5a80"
+                    stroke-width="1.2"
+                    marker-end="url(#arrow)"
+                  />
+
+                  <!-- server → controller -->
+                  <line
+                    x1="312"
+                    y1="300"
+                    x2="412"
+                    y2="300"
+                    stroke="#3e5a80"
+                    stroke-width="1.2"
+                    marker-end="url(#arrow)"
+                  />
+
+                  <!-- server → lib/ -->
+                  <line
+                    x1="192"
+                    y1="340"
+                    x2="192"
+                    y2="396"
+                    stroke="#3e5a80"
+                    stroke-width="1.2"
+                    marker-end="url(#arrow)"
+                  />
+
+                  <!-- controller → scsynth (OSC) -->
+                  <line
+                    x1="708"
+                    y1="300"
+                    x2="806"
+                    y2="300"
+                    stroke="#3e5a80"
+                    stroke-width="1.2"
+                    marker-end="url(#arrow)"
+                  />
+
+                  <!-- controller → external engine (dashed, optional) -->
+                  <path
+                    d="M 708,320 H 752 Q 760,320 760,328 V 428 Q 760,436 768,436 H 806"
+                    fill="none"
+                    stroke="#3e5a80"
+                    stroke-width="1"
+                    stroke-dasharray="4,3"
+                    marker-end="url(#arrow)"
+                  />
+
+                  <!-- pipeline arrows -->
+                  <line
+                    x1="244"
+                    y1="708"
+                    x2="276"
+                    y2="708"
+                    stroke="#3e5a80"
+                    stroke-width="1.2"
+                    marker-end="url(#arrow)"
+                  />
+                  <line
+                    x1="444"
+                    y1="708"
+                    x2="476"
+                    y2="708"
+                    stroke="#3e5a80"
+                    stroke-width="1.2"
+                    marker-end="url(#arrow)"
+                  />
+                  <line
+                    x1="644"
+                    y1="708"
+                    x2="676"
+                    y2="708"
+                    stroke="#3e5a80"
+                    stroke-width="1.2"
+                    marker-end="url(#arrow)"
+                  />
+                  <line
+                    x1="844"
+                    y1="708"
+                    x2="876"
+                    y2="708"
+                    stroke="#3e5a80"
+                    stroke-width="1.2"
+                    marker-end="url(#arrow)"
+                  />
+
+                  <!-- ── Arrow labels (floating 6-8px above horizontal strokes) -->
+                  <rect
+                    x="282"
+                    y="152"
+                    width="56"
+                    height="12"
+                    rx="2"
+                    fill="#f4f8fc"
+                  />
+                  <text
+                    x="310"
+                    y="161"
+                    fill="#7a93b4"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.06em"
+                    class="l-zh"
+                  >
+                    手势
+                  </text>
+                  <text
+                    x="310"
+                    y="161"
+                    fill="#7a93b4"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.06em"
+                    class="l-en"
+                  >
+                    GESTURES
+                  </text>
+
+                  <rect
+                    x="460"
+                    y="172"
+                    width="48"
+                    height="12"
+                    rx="2"
+                    fill="#f4f8fc"
+                  />
+                  <text
+                    x="484"
+                    y="181"
+                    fill="#7a93b4"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.06em"
+                    class="l-zh"
+                  >
+                    状态
+                  </text>
+                  <text
+                    x="484"
+                    y="181"
+                    fill="#7a93b4"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.06em"
+                    class="l-en"
+                  >
+                    STATE
+                  </text>
+
+                  <rect
+                    x="712"
+                    y="282"
+                    width="88"
+                    height="12"
+                    rx="2"
+                    fill="#f4f8fc"
+                  />
+                  <text
+                    x="756"
+                    y="291"
+                    fill="#7a93b4"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.06em"
+                    class="l-zh"
+                  >
+                    OSC · 你来定义
+                  </text>
+                  <text
+                    x="756"
+                    y="291"
+                    fill="#7a93b4"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.06em"
+                    class="l-en"
+                  >
+                    OSC · YOU DEFINE
+                  </text>
+
+                  <text
+                    transform="rotate(90,748,374)"
+                    x="748"
+                    y="374"
+                    fill="#7a93b4"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.06em"
+                    class="l-zh"
+                  >
+                    外接 · 可选
+                  </text>
+                  <text
+                    transform="rotate(90,748,374)"
+                    x="748"
+                    y="374"
+                    fill="#7a93b4"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.06em"
+                    class="l-en"
+                  >
+                    EXTERNAL
+                  </text>
+
+                  <!-- ── Nodes ──────────────────────────────────────────────── -->
+                  <!-- Example page · performer -->
+                  <rect
+                    x="300"
+                    y="72"
+                    width="240"
+                    height="64"
+                    rx="6"
+                    fill="#f4f8fc"
+                  />
+                  <rect
+                    x="300"
+                    y="72"
+                    width="240"
+                    height="64"
+                    rx="6"
+                    fill="rgba(62,90,128,0.10)"
+                    stroke="#7a93b4"
+                    stroke-width="1"
+                    class="node-hit"
+                  />
+                  <rect
+                    x="308"
+                    y="78"
+                    width="56"
+                    height="12"
+                    rx="2"
+                    fill="transparent"
+                    stroke="rgba(122,147,180,0.40)"
+                    stroke-width="0.8"
+                  />
+                  <text
+                    x="336"
+                    y="87"
+                    fill="rgba(122,147,180,0.80)"
+                    font-size="7"
+                    font-family="'Geist Mono',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.08em"
+                  >
+                    STARTER
+                  </text>
+                  <text
+                    x="420"
+                    y="106"
+                    fill="#101828"
+                    font-size="16"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    乐手演奏界面
+                  </text>
+                  <text
+                    x="420"
+                    y="106"
+                    fill="#101828"
+                    font-size="16"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    Performer view
+                  </text>
+                  <text
+                    x="420"
+                    y="126"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    示例 · 可用可换
+                  </text>
+                  <text
+                    x="420"
+                    y="126"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    example · use, adapt, or replace
+                  </text>
+
+                  <!-- Example page · monitor -->
+                  <rect
+                    x="580"
+                    y="72"
+                    width="240"
+                    height="64"
+                    rx="6"
+                    fill="#f4f8fc"
+                  />
+                  <rect
+                    x="580"
+                    y="72"
+                    width="240"
+                    height="64"
+                    rx="6"
+                    fill="rgba(62,90,128,0.10)"
+                    stroke="#7a93b4"
+                    stroke-width="1"
+                    class="node-hit"
+                  />
+                  <rect
+                    x="588"
+                    y="78"
+                    width="56"
+                    height="12"
+                    rx="2"
+                    fill="transparent"
+                    stroke="rgba(122,147,180,0.40)"
+                    stroke-width="0.8"
+                  />
+                  <text
+                    x="616"
+                    y="87"
+                    fill="rgba(122,147,180,0.80)"
+                    font-size="7"
+                    font-family="'Geist Mono',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.08em"
+                  >
+                    STARTER
+                  </text>
+                  <text
+                    x="700"
+                    y="106"
+                    fill="#101828"
+                    font-size="16"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    指挥 / 监视界面
+                  </text>
+                  <text
+                    x="700"
+                    y="106"
+                    fill="#101828"
+                    font-size="16"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    Conductor view
+                  </text>
+                  <text
+                    x="700"
+                    y="126"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    状态 · 乐谱展示 · QR
+                  </text>
+                  <text
+                    x="700"
+                    y="126"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    state · score display · QR
+                  </text>
+
+                  <!-- Core · server.js -->
+                  <rect
+                    x="72"
+                    y="260"
+                    width="240"
+                    height="80"
+                    rx="6"
+                    fill="#f4f8fc"
+                  />
+                  <rect
+                    x="72"
+                    y="260"
+                    width="240"
+                    height="80"
+                    rx="6"
+                    fill="#ffffff"
+                    stroke="#101828"
+                    stroke-width="1"
+                    class="node-hit"
+                  />
+                  <rect
+                    x="80"
+                    y="266"
+                    width="48"
+                    height="12"
+                    rx="2"
+                    fill="transparent"
+                    stroke="rgba(16,24,40,0.40)"
+                    stroke-width="0.8"
+                  />
+                  <text
+                    x="104"
+                    y="275"
+                    fill="rgba(16,24,40,0.80)"
+                    font-size="7"
+                    font-family="'Geist Mono',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.08em"
+                  >
+                    CORE
+                  </text>
+                  <text
+                    x="192"
+                    y="302"
+                    fill="#101828"
+                    font-size="16"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                  >
+                    server.js
+                  </text>
+                  <text
+                    x="192"
+                    y="324"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    入口 · 生命周期编排
+                  </text>
+                  <text
+                    x="192"
+                    y="324"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    entry · lifecycle orchestration
+                  </text>
+
+                  <!-- Core · lib/ -->
+                  <rect
+                    x="72"
+                    y="396"
+                    width="240"
+                    height="80"
+                    rx="6"
+                    fill="#f4f8fc"
+                  />
+                  <rect
+                    x="72"
+                    y="396"
+                    width="240"
+                    height="80"
+                    rx="6"
+                    fill="#ffffff"
+                    stroke="#101828"
+                    stroke-width="1"
+                    class="node-hit"
+                  />
+                  <rect
+                    x="80"
+                    y="402"
+                    width="80"
+                    height="12"
+                    rx="2"
+                    fill="transparent"
+                    stroke="rgba(16,24,40,0.40)"
+                    stroke-width="0.8"
+                  />
+                  <text
+                    x="120"
+                    y="411"
+                    fill="rgba(16,24,40,0.80)"
+                    font-size="7"
+                    font-family="'Geist Mono',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.08em"
+                  >
+                    FRAMEWORK
+                  </text>
+                  <text
+                    x="192"
+                    y="438"
+                    fill="#101828"
+                    font-size="16"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    lib/ · 核心框架
+                  </text>
+                  <text
+                    x="192"
+                    y="438"
+                    fill="#101828"
+                    font-size="16"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    lib/ · the core
+                  </text>
+                  <text
+                    x="192"
+                    y="460"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    加入重连 · 座位 · 健康 · OSC · 关停
+                  </text>
+                  <text
+                    x="192"
+                    y="460"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    join · seats · health · OSC · stop
+                  </text>
+
+                  <!-- Work · controller (focal) -->
+                  <rect
+                    x="412"
+                    y="260"
+                    width="296"
+                    height="80"
+                    rx="6"
+                    fill="#f4f8fc"
+                  />
+                  <rect
+                    x="412"
+                    y="260"
+                    width="296"
+                    height="80"
+                    rx="6"
+                    fill="rgba(43,125,233,0.08)"
+                    stroke="#2b7de9"
+                    stroke-width="1.2"
+                    class="node-hit"
+                  />
+                  <rect
+                    x="420"
+                    y="266"
+                    width="48"
+                    height="12"
+                    rx="2"
+                    fill="transparent"
+                    stroke="rgba(43,125,233,0.45)"
+                    stroke-width="0.8"
+                  />
+                  <text
+                    x="444"
+                    y="275"
+                    fill="rgba(43,125,233,0.90)"
+                    font-size="7"
+                    font-family="'Geist Mono',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.08em"
+                  >
+                    WORK
+                  </text>
+                  <text
+                    x="560"
+                    y="302"
+                    fill="#101828"
+                    font-size="16"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                  >
+                    audio/controller.js
+                  </text>
+                  <text
+                    x="560"
+                    y="324"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    你的作品语义：交互 → 声音
+                  </text>
+                  <text
+                    x="560"
+                    y="324"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    your work's semantics: gesture → sound
+                  </text>
+
+                  <!-- Contract · manifest -->
+                  <rect
+                    x="412"
+                    y="396"
+                    width="296"
+                    height="80"
+                    rx="6"
+                    fill="#f4f8fc"
+                  />
+                  <rect
+                    x="412"
+                    y="396"
+                    width="296"
+                    height="80"
+                    rx="6"
+                    fill="#ffffff"
+                    stroke="#101828"
+                    stroke-width="1"
+                    class="node-hit"
+                  />
+                  <rect
+                    x="420"
+                    y="402"
+                    width="68"
+                    height="12"
+                    rx="2"
+                    fill="transparent"
+                    stroke="rgba(16,24,40,0.40)"
+                    stroke-width="0.8"
+                  />
+                  <text
+                    x="454"
+                    y="411"
+                    fill="rgba(16,24,40,0.80)"
+                    font-size="7"
+                    font-family="'Geist Mono',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.08em"
+                  >
+                    CONTRACT
+                  </text>
+                  <text
+                    x="560"
+                    y="438"
+                    fill="#101828"
+                    font-size="16"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                  >
+                    manifest.json
+                  </text>
+                  <text
+                    x="560"
+                    y="460"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    工程契约 · 按作品填写：名字 · 端口 · 通道
+                  </text>
+                  <text
+                    x="560"
+                    y="460"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    the contract, set per work: name · ports · channels
+                  </text>
+
+                  <!-- Sound target · synthesis -->
+                  <rect
+                    x="806"
+                    y="260"
+                    width="240"
+                    height="80"
+                    rx="6"
+                    fill="#f4f8fc"
+                  />
+                  <rect
+                    x="806"
+                    y="260"
+                    width="240"
+                    height="80"
+                    rx="6"
+                    fill="#ffffff"
+                    stroke="#101828"
+                    stroke-width="1"
+                    class="node-hit"
+                  />
+                  <rect
+                    x="814"
+                    y="266"
+                    width="44"
+                    height="12"
+                    rx="2"
+                    fill="transparent"
+                    stroke="rgba(16,24,40,0.40)"
+                    stroke-width="0.8"
+                  />
+                  <text
+                    x="836"
+                    y="275"
+                    fill="rgba(16,24,40,0.80)"
+                    font-size="7"
+                    font-family="'Geist Mono',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.08em"
+                  >
+                    SYNTH
+                  </text>
+                  <text
+                    x="926"
+                    y="302"
+                    fill="#101828"
+                    font-size="16"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    声音合成 · scsynth
+                  </text>
+                  <text
+                    x="926"
+                    y="302"
+                    fill="#101828"
+                    font-size="16"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    Synthesis · scsynth
+                  </text>
+                  <text
+                    x="926"
+                    y="324"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    App 内合成 · internal
+                  </text>
+                  <text
+                    x="926"
+                    y="324"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    in-App synthesis · internal
+                  </text>
+
+                  <!-- Sound target · external -->
+                  <rect
+                    x="806"
+                    y="396"
+                    width="240"
+                    height="80"
+                    rx="6"
+                    fill="#f4f8fc"
+                  />
+                  <rect
+                    x="806"
+                    y="396"
+                    width="240"
+                    height="80"
+                    rx="6"
+                    fill="rgba(16,24,40,0.03)"
+                    stroke="rgba(16,24,40,0.30)"
+                    stroke-width="1"
+                    class="node-hit"
+                  />
+                  <rect
+                    x="814"
+                    y="402"
+                    width="28"
+                    height="12"
+                    rx="2"
+                    fill="transparent"
+                    stroke="rgba(16,24,40,0.30)"
+                    stroke-width="0.8"
+                  />
+                  <text
+                    x="828"
+                    y="411"
+                    fill="rgba(16,24,40,0.70)"
+                    font-size="7"
+                    font-family="'Geist Mono',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.08em"
+                  >
+                    OSC
+                  </text>
+                  <text
+                    x="926"
+                    y="438"
+                    fill="#101828"
+                    font-size="16"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    外部引擎
+                  </text>
+                  <text
+                    x="926"
+                    y="438"
+                    fill="#101828"
+                    font-size="16"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    External engine
+                  </text>
+                  <text
+                    x="926"
+                    y="460"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    Max · Ableton · 灯光控制台
+                  </text>
+                  <text
+                    x="926"
+                    y="460"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    Max · Ableton · lighting console
+                  </text>
+
+                  <!-- Sound targets · either / or -->
+                  <circle
+                    cx="926"
+                    cy="368"
+                    r="15"
+                    fill="#f4f8fc"
+                    stroke="#b9cce0"
+                    stroke-width="1"
+                  />
+                  <text
+                    x="926"
+                    y="372"
+                    fill="#3e5a80"
+                    font-size="12"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    或
+                  </text>
+                  <text
+                    x="926"
+                    y="371"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-weight="600"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.08em"
+                    class="l-en"
+                  >
+                    OR
+                  </text>
+
+                  <!-- ── Editorial aside ────────────────────────────────────── -->
+                  <text
+                    x="72"
+                    y="560"
+                    fill="#3e5a80"
+                    font-size="14"
+                    font-style="italic"
+                    font-family="'Comfortaa','PingFang SC',sans-serif"
+                    class="l-zh"
+                  >
+                    lib/ 属于每一个衍生工程——请勿修改；
+                  </text>
+                  <text
+                    x="72"
+                    y="560"
+                    fill="#3e5a80"
+                    font-size="14"
+                    font-style="italic"
+                    font-family="'Comfortaa','PingFang SC',sans-serif"
+                    class="l-en"
+                  >
+                    lib/ belongs to every derived project —
+                  </text>
+                  <text
+                    x="72"
+                    y="582"
+                    fill="#3e5a80"
+                    font-size="14"
+                    font-style="italic"
+                    font-family="'Comfortaa','PingFang SC',sans-serif"
+                    class="l-zh"
+                  >
+                    你的作品住在 controller.js、两个界面和音色里。
+                  </text>
+                  <text
+                    x="72"
+                    y="582"
+                    fill="#3e5a80"
+                    font-size="14"
+                    font-style="italic"
+                    font-family="'Comfortaa','PingFang SC',sans-serif"
+                    class="l-en"
+                  >
+                    don't modify it; your work lives in controller.js,
+                  </text>
+                  <text
+                    x="72"
+                    y="604"
+                    fill="#3e5a80"
+                    font-size="14"
+                    font-style="italic"
+                    font-family="'Comfortaa','PingFang SC',sans-serif"
+                    class="l-zh"
+                  ></text>
+                  <text
+                    x="72"
+                    y="604"
+                    fill="#3e5a80"
+                    font-size="14"
+                    font-style="italic"
+                    font-family="'Comfortaa','PingFang SC',sans-serif"
+                    class="l-en"
+                  >
+                    the two views, and the sound.
+                  </text>
+
+                  <!-- ── Pipeline chips ─────────────────────────────────────── -->
+                  <rect
+                    x="80"
+                    y="668"
+                    width="160"
+                    height="80"
+                    rx="6"
+                    fill="#f4f8fc"
+                  />
+                  <rect
+                    x="80"
+                    y="668"
+                    width="160"
+                    height="80"
+                    rx="6"
+                    fill="rgba(16,24,40,0.05)"
+                    stroke="#3e5a80"
+                    stroke-width="1"
+                    class="node-hit"
+                  />
+                  <text
+                    x="160"
+                    y="700"
+                    fill="#101828"
+                    font-size="12"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    你的工程
+                  </text>
+                  <text
+                    x="160"
+                    y="700"
+                    fill="#101828"
+                    font-size="12"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    Your project
+                  </text>
+                  <text
+                    x="160"
+                    y="720"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    改动 + commit
+                  </text>
+                  <text
+                    x="160"
+                    y="720"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    edits + commit
+                  </text>
+
+                  <rect
+                    x="280"
+                    y="668"
+                    width="160"
+                    height="80"
+                    rx="6"
+                    fill="#f4f8fc"
+                  />
+                  <rect
+                    x="280"
+                    y="668"
+                    width="160"
+                    height="80"
+                    rx="6"
+                    fill="rgba(16,24,40,0.05)"
+                    stroke="#3e5a80"
+                    stroke-width="1"
+                    class="node-hit"
+                  />
+                  <text
+                    x="360"
+                    y="700"
+                    fill="#101828"
+                    font-size="12"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    v* 标签
+                  </text>
+                  <text
+                    x="360"
+                    y="700"
+                    fill="#101828"
+                    font-size="12"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    v* tag
+                  </text>
+                  <text
+                    x="360"
+                    y="720"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    推送标签
+                  </text>
+                  <text
+                    x="360"
+                    y="720"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    push the tag
+                  </text>
+
+                  <rect
+                    x="480"
+                    y="668"
+                    width="160"
+                    height="80"
+                    rx="6"
+                    fill="#f4f8fc"
+                  />
+                  <rect
+                    x="480"
+                    y="668"
+                    width="160"
+                    height="80"
+                    rx="6"
+                    fill="rgba(16,24,40,0.05)"
+                    stroke="#3e5a80"
+                    stroke-width="1"
+                    class="node-hit"
+                  />
+                  <text
+                    x="560"
+                    y="696"
+                    fill="#101828"
+                    font-size="12"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                  >
+                    package.yml
+                  </text>
+                  <text
+                    x="560"
+                    y="714"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    GitHub Action · 打包
+                  </text>
+                  <text
+                    x="560"
+                    y="714"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    GitHub Action · packs
+                  </text>
+                  <text
+                    x="560"
+                    y="730"
+                    fill="#7a93b4"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    AI agent 发行指南
+                  </text>
+                  <text
+                    x="560"
+                    y="730"
+                    fill="#7a93b4"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    AI agent release guide
+                  </text>
+
+                  <rect
+                    x="680"
+                    y="668"
+                    width="160"
+                    height="80"
+                    rx="6"
+                    fill="#f4f8fc"
+                  />
+                  <rect
+                    x="680"
+                    y="668"
+                    width="160"
+                    height="80"
+                    rx="6"
+                    fill="rgba(16,24,40,0.05)"
+                    stroke="#3e5a80"
+                    stroke-width="1"
+                    class="node-hit"
+                  />
+                  <text
+                    x="760"
+                    y="700"
+                    fill="#101828"
+                    font-size="12"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    .pnds 包
+                  </text>
+                  <text
+                    x="760"
+                    y="700"
+                    fill="#101828"
+                    font-size="12"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    .pnds bundle
+                  </text>
+                  <text
+                    x="760"
+                    y="720"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    依赖已预装
+                  </text>
+                  <text
+                    x="760"
+                    y="720"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    deps pre-installed
+                  </text>
+
+                  <rect
+                    x="880"
+                    y="668"
+                    width="160"
+                    height="80"
+                    rx="6"
+                    fill="#f4f8fc"
+                  />
+                  <rect
+                    x="880"
+                    y="668"
+                    width="160"
+                    height="80"
+                    rx="6"
+                    fill="rgba(16,24,40,0.05)"
+                    stroke="#3e5a80"
+                    stroke-width="1"
+                    class="node-hit"
+                  />
+                  <text
+                    x="960"
+                    y="700"
+                    fill="#101828"
+                    font-size="12"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    装入 PNDS App
+                  </text>
+                  <text
+                    x="960"
+                    y="700"
+                    fill="#101828"
+                    font-size="12"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    Install in App
+                  </text>
+                  <text
+                    x="960"
+                    y="720"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    双击安装 · 演出
+                  </text>
+                  <text
+                    x="960"
+                    y="720"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    double-click · perform
+                  </text>
+
+                  <!-- ── Legend (horizontal bottom strip) ───────────────────── -->
+                  <line
+                    x1="40"
+                    y1="800"
+                    x2="1080"
+                    y2="800"
+                    stroke="rgba(16,24,40,0.10)"
+                    stroke-width="0.8"
+                  />
+                  <text
+                    x="48"
+                    y="828"
+                    fill="#3e5a80"
+                    font-size="8"
+                    font-family="'Geist Mono',monospace"
+                    letter-spacing="0.14em"
+                  >
+                    LEGEND
+                  </text>
+
+                  <rect
+                    x="120"
+                    y="816"
+                    width="16"
+                    height="12"
+                    rx="2"
+                    fill="#ffffff"
+                    stroke="#101828"
+                    stroke-width="0.8"
+                    class="node-hit"
+                  />
+                  <text
+                    x="142"
+                    y="826"
+                    fill="#3e5a80"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    class="l-zh"
+                  >
+                    核心 · 已就绪
+                  </text>
+                  <text
+                    x="142"
+                    y="826"
+                    fill="#3e5a80"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    class="l-en"
+                  >
+                    Core · ready-made
+                  </text>
+
+                  <rect
+                    x="256"
+                    y="816"
+                    width="16"
+                    height="12"
+                    rx="2"
+                    fill="rgba(62,90,128,0.10)"
+                    stroke="#7a93b4"
+                    stroke-width="0.8"
+                    class="node-hit"
+                  />
+                  <text
+                    x="278"
+                    y="826"
+                    fill="#3e5a80"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    class="l-zh"
+                  >
+                    示例界面 · 可换
+                  </text>
+                  <text
+                    x="278"
+                    y="826"
+                    fill="#3e5a80"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    class="l-en"
+                  >
+                    Example views · replaceable
+                  </text>
+
+                  <rect
+                    x="416"
+                    y="816"
+                    width="16"
+                    height="12"
+                    rx="2"
+                    fill="rgba(43,125,233,0.08)"
+                    stroke="#2b7de9"
+                    stroke-width="0.8"
+                    class="node-hit"
+                  />
+                  <text
+                    x="438"
+                    y="826"
+                    fill="#3e5a80"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    class="l-zh"
+                  >
+                    焦点 · 你的工作
+                  </text>
+                  <text
+                    x="438"
+                    y="826"
+                    fill="#3e5a80"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    class="l-en"
+                  >
+                    Focal · your work
+                  </text>
+
+                  <rect
+                    x="568"
+                    y="816"
+                    width="16"
+                    height="12"
+                    rx="2"
+                    fill="rgba(16,24,40,0.03)"
+                    stroke="rgba(16,24,40,0.30)"
+                    stroke-width="0.8"
+                    class="node-hit"
+                  />
+                  <text
+                    x="590"
+                    y="826"
+                    fill="#3e5a80"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    class="l-zh"
+                  >
+                    外部目标
+                  </text>
+                  <text
+                    x="590"
+                    y="826"
+                    fill="#3e5a80"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    class="l-en"
+                  >
+                    External target
+                  </text>
+
+                  <rect
+                    x="696"
+                    y="816"
+                    width="16"
+                    height="12"
+                    rx="2"
+                    fill="rgba(16,24,40,0.05)"
+                    stroke="#3e5a80"
+                    stroke-width="0.8"
+                    class="node-hit"
+                  />
+                  <text
+                    x="718"
+                    y="826"
+                    fill="#3e5a80"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    class="l-zh"
+                  >
+                    发行步骤
+                  </text>
+                  <text
+                    x="718"
+                    y="826"
+                    fill="#3e5a80"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    class="l-en"
+                  >
+                    Release step
+                  </text>
+
+                  <line
+                    x1="816"
+                    y1="822"
+                    x2="840"
+                    y2="822"
+                    stroke="#3e5a80"
+                    stroke-width="1.2"
+                    marker-end="url(#arrow)"
+                  />
+                  <text
+                    x="848"
+                    y="826"
+                    fill="#3e5a80"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    class="l-zh"
+                  >
+                    流向
+                  </text>
+                  <text
+                    x="848"
+                    y="826"
+                    fill="#3e5a80"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    class="l-en"
+                  >
+                    Flow
+                  </text>
+                </svg>
+              </div>
+            </section>
+
+            <section class="view" id="view-network" data-route="network">
+              <header class="view-header">
+                <p class="eyebrow">
+                  <span class="l-zh">PNDS · 技术框架</span>
+                  <span class="l-en">PNDS · TECHNICAL FRAMEWORK</span>
+                </p>
+                <h1>
+                  <span class="l-zh">一场 PNDS 演出的技术框架</span>
+                  <span class="l-en"
+                    >The Technology Behind a PNDS Performance</span
+                  >
+                </h1>
+                <p class="subtitle">
+                  <span class="l-zh"
+                    >PNDS App 将 PNDS 工程定义的 Node.js
+                    服务器架设在本地网络，就地构成数字乐谱演出环境；在此基础上，PNDS
+                    还支持跨互联网的多地实时共奏。</span
+                  >
+                  <span class="l-en"
+                    >The PNDS App hosts the Node.js server defined by a PNDS
+                    project on the local network, forming a digital-score
+                    performance environment on the spot; on this foundation,
+                    PNDS also supports real-time multi-site performance across
+                    the internet.</span
+                  >
+                </p>
+              </header>
+              <div class="diagram-wrap">
+                <svg
+                  class="diagram"
+                  viewBox="0 0 1120 800"
+                  role="img"
+                  aria-labelledby="pnds-network-performance-desc"
+                >
+                  <desc id="pnds-network-performance-desc">
+                    PNDS App 将 PNDS 工程定义的 Node.js
+                    服务器架设在本地网络，就地构成数字乐谱演出环境；在此基础上，PNDS
+                    还支持跨互联网的多地实时共奏。
+                  </desc>
+                  <defs>
+                    <marker
+                      id="arrow"
+                      markerWidth="8"
+                      markerHeight="6"
+                      refX="7"
+                      refY="3"
+                      orient="auto"
+                    >
+                      <polygon points="0 0, 8 3, 0 6" fill="#3e5a80" />
+                    </marker>
+                    <marker
+                      id="arrow-start"
+                      markerWidth="8"
+                      markerHeight="6"
+                      refX="1"
+                      refY="3"
+                      orient="auto"
+                    >
+                      <polygon points="8 0, 0 3, 8 6" fill="#3e5a80" />
+                    </marker>
+                    <marker
+                      id="arrow-mini"
+                      markerWidth="4"
+                      markerHeight="3"
+                      refX="3"
+                      refY="1.5"
+                      orient="auto"
+                    >
+                      <polygon points="0 0, 4 1.5, 0 3" fill="#3e5a80" />
+                    </marker>
+                  </defs>
+
+                  <!-- Paper -->
+                  <rect width="100%" height="100%" fill="#f4f8fc" />
+
+                  <!-- ── Zones (painted first) ─────────────────────────────── -->
+                  <!-- Zone: Site B (same stack as A, simplified) -->
+                  <rect
+                    x="40"
+                    y="352"
+                    width="312"
+                    height="336"
+                    rx="8"
+                    fill="rgba(16,24,40,0.02)"
+                    stroke="rgba(16,24,40,0.25)"
+                    stroke-width="1"
+                    stroke-dasharray="4,4"
+                  />
+                  <rect
+                    x="48"
+                    y="356"
+                    width="150"
+                    height="12"
+                    rx="2"
+                    fill="#f4f8fc"
+                  />
+                  <text
+                    x="123"
+                    y="365"
+                    fill="rgba(16,24,40,0.40)"
+                    font-size="7"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.14em"
+                    class="l-zh"
+                  >
+                    站点 B · 本地端点
+                  </text>
+                  <text
+                    x="123"
+                    y="365"
+                    fill="rgba(16,24,40,0.40)"
+                    font-size="7"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.14em"
+                    class="l-en"
+                  >
+                    SITE B · LOCAL ENDPOINT
+                  </text>
+                  <text
+                    x="196"
+                    y="660"
+                    fill="#7a93b4"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.06em"
+                    class="l-zh"
+                  >
+                    与站点 A 同构 · 已简化
+                  </text>
+                  <text
+                    x="196"
+                    y="660"
+                    fill="#7a93b4"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.06em"
+                    class="l-en"
+                  >
+                    same stack as site A · simplified
+                  </text>
+
+                  <!-- Zone: Site A (detailed) -->
+                  <rect
+                    x="384"
+                    y="352"
+                    width="352"
+                    height="336"
+                    rx="8"
+                    fill="rgba(16,24,40,0.02)"
+                    stroke="rgba(16,24,40,0.25)"
+                    stroke-width="1"
+                    stroke-dasharray="4,4"
+                  />
+                  <rect
+                    x="392"
+                    y="356"
+                    width="150"
+                    height="12"
+                    rx="2"
+                    fill="#f4f8fc"
+                  />
+                  <text
+                    x="467"
+                    y="365"
+                    fill="rgba(16,24,40,0.40)"
+                    font-size="7"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.14em"
+                    class="l-zh"
+                  >
+                    站点 A · 本地端点
+                  </text>
+                  <text
+                    x="467"
+                    y="365"
+                    fill="rgba(16,24,40,0.40)"
+                    font-size="7"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.14em"
+                    class="l-en"
+                  >
+                    SITE A · LOCAL ENDPOINT
+                  </text>
+
+                  <!-- Zone: Site C (same stack as A, simplified) -->
+                  <rect
+                    x="768"
+                    y="352"
+                    width="312"
+                    height="336"
+                    rx="8"
+                    fill="rgba(16,24,40,0.02)"
+                    stroke="rgba(16,24,40,0.25)"
+                    stroke-width="1"
+                    stroke-dasharray="4,4"
+                  />
+                  <rect
+                    x="776"
+                    y="356"
+                    width="150"
+                    height="12"
+                    rx="2"
+                    fill="#f4f8fc"
+                  />
+                  <text
+                    x="851"
+                    y="365"
+                    fill="rgba(16,24,40,0.40)"
+                    font-size="7"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.14em"
+                    class="l-zh"
+                  >
+                    站点 C · 本地端点
+                  </text>
+                  <text
+                    x="851"
+                    y="365"
+                    fill="rgba(16,24,40,0.40)"
+                    font-size="7"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.14em"
+                    class="l-en"
+                  >
+                    SITE C · LOCAL ENDPOINT
+                  </text>
+                  <text
+                    x="924"
+                    y="660"
+                    fill="#7a93b4"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.06em"
+                    class="l-zh"
+                  >
+                    与站点 A 同构 · 已简化
+                  </text>
+                  <text
+                    x="924"
+                    y="660"
+                    fill="#7a93b4"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.06em"
+                    class="l-en"
+                  >
+                    same stack as site A · simplified
+                  </text>
+
+                  <!-- ── Connectors (before nodes) ─────────────────────────── -->
+                  <!-- Site spokes: double-headed — each site and the relay exchange information -->
+                  <path
+                    d="M 196,440 V 248 Q 196,240 204,240 H 432 Q 440,240 440,232 V 172"
+                    fill="none"
+                    stroke="#3e5a80"
+                    stroke-width="1.2"
+                    marker-start="url(#arrow-start)"
+                    marker-end="url(#arrow)"
+                  />
+                  <line
+                    x1="560"
+                    y1="396"
+                    x2="560"
+                    y2="172"
+                    stroke="#3e5a80"
+                    stroke-width="1.2"
+                    marker-start="url(#arrow-start)"
+                    marker-end="url(#arrow)"
+                  />
+                  <path
+                    d="M 924,440 V 248 Q 924,240 916,240 H 688 Q 680,240 680,232 V 172"
+                    fill="none"
+                    stroke="#3e5a80"
+                    stroke-width="1.2"
+                    marker-start="url(#arrow-start)"
+                    marker-end="url(#arrow)"
+                  />
+
+                  <!-- Site A internals: App ↔ the two views (two-way) -->
+                  <line
+                    x1="474"
+                    y1="504"
+                    x2="474"
+                    y2="556"
+                    stroke="#3e5a80"
+                    stroke-width="1.2"
+                    marker-start="url(#arrow-start)"
+                    marker-end="url(#arrow)"
+                  />
+                  <line
+                    x1="646"
+                    y1="504"
+                    x2="646"
+                    y2="556"
+                    stroke="#3e5a80"
+                    stroke-width="1.2"
+                    marker-start="url(#arrow-start)"
+                    marker-end="url(#arrow)"
+                  />
+
+                  <!-- Sites B/C internals: App ↔ the two views (two-way, unlabeled) -->
+                  <line
+                    x1="130"
+                    y1="496"
+                    x2="130"
+                    y2="568"
+                    stroke="#3e5a80"
+                    stroke-width="1.2"
+                    marker-start="url(#arrow-start)"
+                    marker-end="url(#arrow)"
+                  />
+                  <line
+                    x1="262"
+                    y1="496"
+                    x2="262"
+                    y2="568"
+                    stroke="#3e5a80"
+                    stroke-width="1.2"
+                    marker-start="url(#arrow-start)"
+                    marker-end="url(#arrow)"
+                  />
+                  <line
+                    x1="858"
+                    y1="496"
+                    x2="858"
+                    y2="568"
+                    stroke="#3e5a80"
+                    stroke-width="1.2"
+                    marker-start="url(#arrow-start)"
+                    marker-end="url(#arrow)"
+                  />
+                  <line
+                    x1="990"
+                    y1="496"
+                    x2="990"
+                    y2="568"
+                    stroke="#3e5a80"
+                    stroke-width="1.2"
+                    marker-start="url(#arrow-start)"
+                    marker-end="url(#arrow)"
+                  />
+
+                  <!-- ── Arrow labels (masked, 6-8px gap above stroke) ──────── -->
+                  <rect
+                    x="490"
+                    y="236"
+                    width="140"
+                    height="14"
+                    rx="2"
+                    fill="#f4f8fc"
+                  />
+                  <text
+                    x="560"
+                    y="247"
+                    fill="#7a93b4"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.06em"
+                    class="l-zh"
+                  >
+                    演奏数据 · 实时音频
+                  </text>
+                  <text
+                    x="560"
+                    y="247"
+                    fill="#7a93b4"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.06em"
+                    class="l-en"
+                  >
+                    SCORE DATA · LIVE AUDIO
+                  </text>
+
+                  <rect
+                    x="248"
+                    y="224"
+                    width="140"
+                    height="12"
+                    rx="2"
+                    fill="#f4f8fc"
+                  />
+                  <text
+                    x="318"
+                    y="233"
+                    fill="#7a93b4"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.06em"
+                    class="l-zh"
+                  >
+                    演奏数据 · 实时音频
+                  </text>
+                  <text
+                    x="318"
+                    y="233"
+                    fill="#7a93b4"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.06em"
+                    class="l-en"
+                  >
+                    SCORE DATA · LIVE AUDIO
+                  </text>
+
+                  <rect
+                    x="732"
+                    y="224"
+                    width="140"
+                    height="12"
+                    rx="2"
+                    fill="#f4f8fc"
+                  />
+                  <text
+                    x="802"
+                    y="233"
+                    fill="#7a93b4"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.06em"
+                    class="l-zh"
+                  >
+                    演奏数据 · 实时音频
+                  </text>
+                  <text
+                    x="802"
+                    y="233"
+                    fill="#7a93b4"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.06em"
+                    class="l-en"
+                  >
+                    SCORE DATA · LIVE AUDIO
+                  </text>
+
+                  <rect
+                    x="482"
+                    y="524"
+                    width="72"
+                    height="12"
+                    rx="2"
+                    fill="#f4f8fc"
+                  />
+                  <text
+                    x="486"
+                    y="533"
+                    fill="#7a93b4"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    letter-spacing="0.06em"
+                    class="l-zh"
+                  >
+                    本地网络
+                  </text>
+                  <text
+                    x="486"
+                    y="533"
+                    fill="#7a93b4"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    letter-spacing="0.06em"
+                    class="l-en"
+                  >
+                    LOCAL NETWORK
+                  </text>
+
+                  <rect
+                    x="654"
+                    y="524"
+                    width="36"
+                    height="12"
+                    rx="2"
+                    fill="#f4f8fc"
+                  />
+                  <text
+                    x="658"
+                    y="533"
+                    fill="#7a93b4"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    letter-spacing="0.06em"
+                    class="l-zh"
+                  >
+                    状态
+                  </text>
+                  <text
+                    x="658"
+                    y="533"
+                    fill="#7a93b4"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    letter-spacing="0.06em"
+                    class="l-en"
+                  >
+                    STATE
+                  </text>
+
+                  <!-- ── Nodes ──────────────────────────────────────────────── -->
+                  <!-- Icon: abstract world map — three sites' signals converge on the relay -->
+                  <clipPath id="pnds-globe-clip">
+                    <circle cx="560" cy="32" r="27" />
+                  </clipPath>
+                  <circle
+                    cx="560"
+                    cy="32"
+                    r="28"
+                    fill="rgba(43,125,233,0.15)"
+                    stroke="#3e5a80"
+                    stroke-width="1"
+                  />
+                  <g clip-path="url(#pnds-globe-clip)">
+                    <path
+                      d="M 537,8 C 545,4 552,10 550,18 C 549,24 544,26 545,32 C 546,38 552,42 550,50 C 548,57 542,61 538,56 C 535,51 538,45 537,39 C 536,32 531,25 533,17 C 534,12 535,9 537,8 Z"
+                      fill="#ffffff"
+                      stroke="#3e5a80"
+                      stroke-width="0.8"
+                    />
+                    <path
+                      d="M 556,10 C 566,2 582,4 592,12 C 598,17 596,24 588,26 C 581,28 574,25 569,27 C 564,29 560,26 560,21 C 560,15 554,13 556,10 Z"
+                      fill="#ffffff"
+                      stroke="#3e5a80"
+                      stroke-width="0.8"
+                    />
+                    <path
+                      d="M 560,38 C 566,34 574,36 576,42 C 578,48 574,56 568,59 C 562,62 558,58 558,52 C 558,46 557,41 560,38 Z"
+                      fill="#ffffff"
+                      stroke="#3e5a80"
+                      stroke-width="0.8"
+                    />
+                    <path
+                      d="M 580,46 C 584,44 589,47 588,51 C 587,55 581,56 579,52 C 578,50 578,47 580,46 Z"
+                      fill="#ffffff"
+                      stroke="#3e5a80"
+                      stroke-width="0.8"
+                    />
+                  </g>
+                  <circle
+                    cx="540"
+                    cy="22"
+                    r="3"
+                    fill="#101828"
+                    stroke="#ffffff"
+                    stroke-width="1.2"
+                  />
+                  <circle
+                    cx="576"
+                    cy="16"
+                    r="3"
+                    fill="#101828"
+                    stroke="#ffffff"
+                    stroke-width="1.2"
+                  />
+                  <circle
+                    cx="568"
+                    cy="50"
+                    r="3"
+                    fill="#101828"
+                    stroke="#ffffff"
+                    stroke-width="1.2"
+                  />
+                  <line
+                    x1="543"
+                    y1="23"
+                    x2="552"
+                    y2="28"
+                    stroke="#3e5a80"
+                    stroke-width="1"
+                    stroke-dasharray="3,2"
+                    marker-end="url(#arrow-mini)"
+                  />
+                  <line
+                    x1="574"
+                    y1="18"
+                    x2="566"
+                    y2="26"
+                    stroke="#3e5a80"
+                    stroke-width="1"
+                    stroke-dasharray="3,2"
+                    marker-end="url(#arrow-mini)"
+                  />
+                  <line
+                    x1="567"
+                    y1="47"
+                    x2="564"
+                    y2="40"
+                    stroke="#3e5a80"
+                    stroke-width="1"
+                    stroke-dasharray="3,2"
+                    marker-end="url(#arrow-mini)"
+                  />
+                  <circle
+                    cx="560"
+                    cy="32"
+                    r="5"
+                    fill="#2b7de9"
+                    stroke="#ffffff"
+                    stroke-width="1.5"
+                  />
+                  <line
+                    x1="560"
+                    y1="62"
+                    x2="560"
+                    y2="69"
+                    stroke="#7a93b4"
+                    stroke-width="0.8"
+                    stroke-dasharray="1,3"
+                  />
+                  <!-- Hub (focal, top center, nothing beside it) -->
+                  <rect
+                    x="400"
+                    y="72"
+                    width="320"
+                    height="92"
+                    rx="6"
+                    fill="#f4f8fc"
+                  />
+                  <rect
+                    x="400"
+                    y="72"
+                    width="320"
+                    height="92"
+                    rx="6"
+                    fill="rgba(43,125,233,0.08)"
+                    stroke="#2b7de9"
+                    stroke-width="1.2"
+                    class="node-hit"
+                  />
+                  <rect
+                    x="408"
+                    y="78"
+                    width="36"
+                    height="12"
+                    rx="2"
+                    fill="transparent"
+                    stroke="rgba(43,125,233,0.45)"
+                    stroke-width="0.8"
+                  />
+                  <text
+                    x="426"
+                    y="87"
+                    fill="rgba(43,125,233,0.90)"
+                    font-size="7"
+                    font-family="'Geist Mono',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.08em"
+                  >
+                    HUB
+                  </text>
+                  <text
+                    x="560"
+                    y="118"
+                    fill="#101828"
+                    font-size="16"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    中继服务器
+                  </text>
+                  <text
+                    x="560"
+                    y="118"
+                    fill="#101828"
+                    font-size="16"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    Relay Server
+                  </text>
+                  <text
+                    x="560"
+                    y="140"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    转发演奏数据与实时音频
+                  </text>
+                  <text
+                    x="560"
+                    y="140"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    forwards score data + live audio
+                  </text>
+
+                  <!-- Site A · performer view (bottom left) -->
+                  <rect
+                    x="400"
+                    y="556"
+                    width="148"
+                    height="104"
+                    rx="6"
+                    fill="#f4f8fc"
+                  />
+                  <rect
+                    x="400"
+                    y="556"
+                    width="148"
+                    height="104"
+                    rx="6"
+                    fill="rgba(62,90,128,0.10)"
+                    stroke="#7a93b4"
+                    stroke-width="1"
+                    class="node-hit"
+                  />
+                  <rect
+                    x="408"
+                    y="562"
+                    width="72"
+                    height="12"
+                    rx="2"
+                    fill="transparent"
+                    stroke="rgba(122,147,180,0.40)"
+                    stroke-width="0.8"
+                  />
+                  <text
+                    x="444"
+                    y="571"
+                    fill="rgba(122,147,180,0.80)"
+                    font-size="7"
+                    font-family="'Geist Mono',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.08em"
+                  >
+                    PERFORMER
+                  </text>
+                  <text
+                    x="474"
+                    y="604"
+                    fill="#101828"
+                    font-size="13"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    乐手演奏界面
+                  </text>
+                  <text
+                    x="474"
+                    y="604"
+                    fill="#101828"
+                    font-size="13"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    Performer view
+                  </text>
+                  <text
+                    x="474"
+                    y="626"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    演奏者设备连接
+                  </text>
+                  <text
+                    x="474"
+                    y="626"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    performer devices
+                  </text>
+                  <text
+                    x="474"
+                    y="644"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    乐谱 / 交互界面
+                  </text>
+                  <text
+                    x="474"
+                    y="644"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    score / interaction view
+                  </text>
+
+                  <!-- Site A · monitor view (bottom right) -->
+                  <rect
+                    x="572"
+                    y="556"
+                    width="148"
+                    height="104"
+                    rx="6"
+                    fill="#f4f8fc"
+                  />
+                  <rect
+                    x="572"
+                    y="556"
+                    width="148"
+                    height="104"
+                    rx="6"
+                    fill="rgba(62,90,128,0.10)"
+                    stroke="#7a93b4"
+                    stroke-width="1"
+                    class="node-hit"
+                  />
+                  <rect
+                    x="580"
+                    y="562"
+                    width="64"
+                    height="12"
+                    rx="2"
+                    fill="transparent"
+                    stroke="rgba(122,147,180,0.40)"
+                    stroke-width="0.8"
+                  />
+                  <text
+                    x="612"
+                    y="571"
+                    fill="rgba(122,147,180,0.80)"
+                    font-size="7"
+                    font-family="'Geist Mono',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.08em"
+                  >
+                    MONITOR
+                  </text>
+                  <text
+                    x="646"
+                    y="604"
+                    fill="#101828"
+                    font-size="13"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    指挥 / 监视界面
+                  </text>
+                  <text
+                    x="646"
+                    y="604"
+                    fill="#101828"
+                    font-size="13"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    Conductor view
+                  </text>
+                  <text
+                    x="646"
+                    y="626"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    为指挥或场地内演奏者 /
+                  </text>
+                  <text
+                    x="646"
+                    y="626"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    score display for
+                  </text>
+                  <text
+                    x="646"
+                    y="644"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    观众的乐谱展示
+                  </text>
+                  <text
+                    x="646"
+                    y="644"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    conductor or in-venue
+                  </text>
+                  <text
+                    x="646"
+                    y="654"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    performers / audience
+                  </text>
+
+                  <!-- Site A · Mac host (top, facing the relay) -->
+                  <rect
+                    x="456"
+                    y="396"
+                    width="208"
+                    height="108"
+                    rx="6"
+                    fill="#f4f8fc"
+                  />
+                  <rect
+                    x="456"
+                    y="396"
+                    width="208"
+                    height="108"
+                    rx="6"
+                    fill="#ffffff"
+                    stroke="#101828"
+                    stroke-width="1"
+                    class="node-hit"
+                  />
+                  <rect
+                    x="464"
+                    y="402"
+                    width="64"
+                    height="12"
+                    rx="2"
+                    fill="transparent"
+                    stroke="rgba(16,24,40,0.40)"
+                    stroke-width="0.8"
+                  />
+                  <text
+                    x="496"
+                    y="411"
+                    fill="rgba(16,24,40,0.80)"
+                    font-size="7"
+                    font-family="'Geist Mono',monospace"
+                    text-anchor="middle"
+                    letter-spacing="0.08em"
+                  >
+                    MAC · APP
+                  </text>
+                  <text
+                    x="560"
+                    y="448"
+                    fill="#101828"
+                    font-size="16"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                  >
+                    PNDS App
+                  </text>
+                  <text
+                    x="560"
+                    y="476"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    同一工程
+                  </text>
+                  <text
+                    x="560"
+                    y="476"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    same project
+                  </text>
+                  <text
+                    x="560"
+                    y="494"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    本地合成出声
+                  </text>
+                  <text
+                    x="560"
+                    y="494"
+                    fill="#3e5a80"
+                    font-size="9"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    local synthesis
+                  </text>
+
+                  <!-- Site B (simplified): App top, views below -->
+                  <rect
+                    x="72"
+                    y="568"
+                    width="116"
+                    height="56"
+                    rx="6"
+                    fill="#f4f8fc"
+                  />
+                  <rect
+                    x="72"
+                    y="568"
+                    width="116"
+                    height="56"
+                    rx="6"
+                    fill="rgba(62,90,128,0.10)"
+                    stroke="#7a93b4"
+                    stroke-width="1"
+                    class="node-hit"
+                  />
+                  <text
+                    x="130"
+                    y="600"
+                    fill="#101828"
+                    font-size="12"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    乐手演奏界面
+                  </text>
+                  <text
+                    x="130"
+                    y="600"
+                    fill="#101828"
+                    font-size="12"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    Performer view
+                  </text>
+
+                  <rect
+                    x="204"
+                    y="568"
+                    width="116"
+                    height="56"
+                    rx="6"
+                    fill="#f4f8fc"
+                  />
+                  <rect
+                    x="204"
+                    y="568"
+                    width="116"
+                    height="56"
+                    rx="6"
+                    fill="rgba(62,90,128,0.10)"
+                    stroke="#7a93b4"
+                    stroke-width="1"
+                    class="node-hit"
+                  />
+                  <text
+                    x="262"
+                    y="600"
+                    fill="#101828"
+                    font-size="12"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    指挥 / 监视界面
+                  </text>
+                  <text
+                    x="262"
+                    y="600"
+                    fill="#101828"
+                    font-size="12"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    Conductor view
+                  </text>
+
+                  <rect
+                    x="108"
+                    y="440"
+                    width="176"
+                    height="56"
+                    rx="6"
+                    fill="#f4f8fc"
+                  />
+                  <rect
+                    x="108"
+                    y="440"
+                    width="176"
+                    height="56"
+                    rx="6"
+                    fill="#ffffff"
+                    stroke="#101828"
+                    stroke-width="1"
+                    class="node-hit"
+                  />
+                  <text
+                    x="196"
+                    y="472"
+                    fill="#101828"
+                    font-size="14"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                  >
+                    PNDS App
+                  </text>
+
+                  <!-- Site C (simplified): App top, views below -->
+                  <rect
+                    x="800"
+                    y="568"
+                    width="116"
+                    height="56"
+                    rx="6"
+                    fill="#f4f8fc"
+                  />
+                  <rect
+                    x="800"
+                    y="568"
+                    width="116"
+                    height="56"
+                    rx="6"
+                    fill="rgba(62,90,128,0.10)"
+                    stroke="#7a93b4"
+                    stroke-width="1"
+                    class="node-hit"
+                  />
+                  <text
+                    x="858"
+                    y="600"
+                    fill="#101828"
+                    font-size="12"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    乐手演奏界面
+                  </text>
+                  <text
+                    x="858"
+                    y="600"
+                    fill="#101828"
+                    font-size="12"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    Performer view
+                  </text>
+
+                  <rect
+                    x="932"
+                    y="568"
+                    width="116"
+                    height="56"
+                    rx="6"
+                    fill="#f4f8fc"
+                  />
+                  <rect
+                    x="932"
+                    y="568"
+                    width="116"
+                    height="56"
+                    rx="6"
+                    fill="rgba(62,90,128,0.10)"
+                    stroke="#7a93b4"
+                    stroke-width="1"
+                    class="node-hit"
+                  />
+                  <text
+                    x="990"
+                    y="600"
+                    fill="#101828"
+                    font-size="12"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    指挥 / 监视界面
+                  </text>
+                  <text
+                    x="990"
+                    y="600"
+                    fill="#101828"
+                    font-size="12"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    Conductor view
+                  </text>
+
+                  <rect
+                    x="836"
+                    y="440"
+                    width="176"
+                    height="56"
+                    rx="6"
+                    fill="#f4f8fc"
+                  />
+                  <rect
+                    x="836"
+                    y="440"
+                    width="176"
+                    height="56"
+                    rx="6"
+                    fill="#ffffff"
+                    stroke="#101828"
+                    stroke-width="1"
+                    class="node-hit"
+                  />
+                  <text
+                    x="924"
+                    y="472"
+                    fill="#101828"
+                    font-size="14"
+                    font-weight="600"
+                    font-family="'Manrope','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                  >
+                    PNDS App
+                  </text>
+
+                  <!-- ── Editorial aside (below the star) ───────────────────── -->
+                  <text
+                    x="560"
+                    y="720"
+                    fill="#3e5a80"
+                    font-size="14"
+                    font-style="italic"
+                    font-family="'Comfortaa','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    站点之间从不直接连线：所有信息都经中继服务器转发。
+                  </text>
+                  <text
+                    x="560"
+                    y="720"
+                    fill="#3e5a80"
+                    font-size="14"
+                    font-style="italic"
+                    font-family="'Comfortaa','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    Sites never connect to each other: everything passes through
+                    the relay hub.
+                  </text>
+                  <text
+                    x="560"
+                    y="740"
+                    fill="#3e5a80"
+                    font-size="14"
+                    font-style="italic"
+                    font-family="'Comfortaa','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-zh"
+                  >
+                    即使互联网中断，各站点仍继续演奏；重连后凭 claim token
+                    归回原座位。
+                  </text>
+                  <text
+                    x="560"
+                    y="740"
+                    fill="#3e5a80"
+                    font-size="14"
+                    font-style="italic"
+                    font-family="'Comfortaa','PingFang SC',sans-serif"
+                    text-anchor="middle"
+                    class="l-en"
+                  >
+                    If the internet drops, every site keeps playing; a claim
+                    token restores each seat on reconnect.
+                  </text>
+
+                  <!-- ── Legend (horizontal bottom strip) ───────────────────── -->
+                  <line
+                    x1="40"
+                    y1="760"
+                    x2="1080"
+                    y2="760"
+                    stroke="rgba(16,24,40,0.10)"
+                    stroke-width="0.8"
+                  />
+                  <text
+                    x="48"
+                    y="788"
+                    fill="#3e5a80"
+                    font-size="8"
+                    font-family="'Geist Mono',monospace"
+                    letter-spacing="0.14em"
+                  >
+                    LEGEND
+                  </text>
+
+                  <rect
+                    x="120"
+                    y="776"
+                    width="16"
+                    height="12"
+                    rx="2"
+                    fill="rgba(62,90,128,0.10)"
+                    stroke="#7a93b4"
+                    stroke-width="0.8"
+                    class="node-hit"
+                  />
+                  <text
+                    x="142"
+                    y="786"
+                    fill="#3e5a80"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    class="l-zh"
+                  >
+                    演奏 / 监视界面
+                  </text>
+                  <text
+                    x="142"
+                    y="786"
+                    fill="#3e5a80"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    class="l-en"
+                  >
+                    Performer / monitor views
+                  </text>
+
+                  <rect
+                    x="320"
+                    y="776"
+                    width="16"
+                    height="12"
+                    rx="2"
+                    fill="#ffffff"
+                    stroke="#101828"
+                    stroke-width="0.8"
+                    class="node-hit"
+                  />
+                  <text
+                    x="342"
+                    y="786"
+                    fill="#3e5a80"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    class="l-zh"
+                  >
+                    进程 · 组件
+                  </text>
+                  <text
+                    x="342"
+                    y="786"
+                    fill="#3e5a80"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    class="l-en"
+                  >
+                    Process / component
+                  </text>
+
+                  <rect
+                    x="464"
+                    y="776"
+                    width="16"
+                    height="12"
+                    rx="2"
+                    fill="rgba(43,125,233,0.08)"
+                    stroke="#2b7de9"
+                    stroke-width="0.8"
+                    class="node-hit"
+                  />
+                  <text
+                    x="486"
+                    y="786"
+                    fill="#3e5a80"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    class="l-zh"
+                  >
+                    焦点 · 中继
+                  </text>
+                  <text
+                    x="486"
+                    y="786"
+                    fill="#3e5a80"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    class="l-en"
+                  >
+                    Focal · relay
+                  </text>
+
+                  <line
+                    x1="592"
+                    y1="782"
+                    x2="616"
+                    y2="782"
+                    stroke="#3e5a80"
+                    stroke-width="1.2"
+                    marker-start="url(#arrow-start)"
+                    marker-end="url(#arrow)"
+                  />
+                  <text
+                    x="624"
+                    y="786"
+                    fill="#3e5a80"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    class="l-zh"
+                  >
+                    信息交流
+                  </text>
+                  <text
+                    x="624"
+                    y="786"
+                    fill="#3e5a80"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    class="l-en"
+                  >
+                    information exchange
+                  </text>
+
+                  <rect
+                    x="816"
+                    y="776"
+                    width="16"
+                    height="12"
+                    rx="2"
+                    fill="none"
+                    stroke="rgba(16,24,40,0.25)"
+                    stroke-width="0.8"
+                    stroke-dasharray="4,4"
+                  />
+                  <text
+                    x="838"
+                    y="786"
+                    fill="#3e5a80"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    class="l-zh"
+                  >
+                    站点边界
+                  </text>
+                  <text
+                    x="838"
+                    y="786"
+                    fill="#3e5a80"
+                    font-size="8"
+                    font-family="'Geist Mono','PingFang SC',monospace"
+                    class="l-en"
+                  >
+                    Site boundary
+                  </text>
+                </svg>
+              </div>
+            </section>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <script src="app.js" defer></script>
+  </body>
+</html>

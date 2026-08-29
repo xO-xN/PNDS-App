@@ -98,6 +98,26 @@ export default tseslint.config(
     },
   },
   {
+    // GitHub Pages site (site/) — static, framework-free browser JS.
+    files: ['site/**/*.js'],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: 'script',
+      globals: {
+        document: 'readonly',
+        window: 'readonly',
+        location: 'readonly',
+        history: 'readonly',
+        localStorage: 'readonly',
+        navigator: 'readonly',
+        performance: 'readonly',
+        requestAnimationFrame: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+      },
+    },
+  },
+  {
     ignores: [
       'dist/**',
       'node_modules/**',
