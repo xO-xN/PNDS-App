@@ -653,13 +653,17 @@ impl SessionManager {
                     .as_ref()
                     .map(|plan| plan.bridged_channels)
                     .ok_or("internal mode requires a resolved channel plan")?;
-                // Issue #92: the bundled scsynth 3.14.1 dies probabilistically
-                // right after spawn on macOS 26 (an ObjC runtime race in the
-                // audio-session init — signal death before a single line of
-                // output). That exact shape gets ONE transparent retry on a
-                // fresh port while the session stays in `starting`; timeouts
-                // and failures that printed diagnostics are real errors and
-                // fail straight through to the error page, unmasked.
+                // Issue #92 (2026-08-30 field revision): the bundled scsynth
+                // 3.14.1 dies probabilistically on macOS 26 — an ObjC runtime
+                // corruption race killing the process by signal. ANY signal
+                // death is that dice roll (the first implementation also
+                // required zero output, which field measurement falsified:
+                // real crashes carry the CoreAudio device list on stdout and
+                // the ObjC runtime's own diagnostics on stderr, so the retry
+                // never fired). Signal deaths retry transparently on a fresh
+                // port while the session stays in `starting`; timeouts and
+                // clean-exit failures (configuration errors) are real errors
+                // and fail straight through to the error page, unmasked.
                 //
                 // The first attempt still waits out the cold-coreaudiod
                 // grace period (§ FIRST_BOOT_DELAY); each failed attempt's
@@ -678,7 +682,15 @@ impl SessionManager {
                     || Self::boot_scsynth(app_data_dir, sc_cfg, k, device.as_deref()),
                     |failure| Self::log_transient_retry(&logger_inner, failure),
                 )
-                .map_err(|failure| failure.message)?;
+                .map_err(|failure| {
+                    // The final failure's shape and the dead child's last
+                    // words land in the session log before the teardown
+                    // closes it — the first field diagnosis had no such
+                    // record, which is how the zero-output premise went
+                    // unchallenged.
+                    Self::log_boot_failure(&logger_inner, &failure);
+                    failure.message
+                })?;
                 // §12: hand the handle to the session immediately. Every
                 // failure below this point is now covered by the teardown
                 // in `fail_start` instead of leaking a live scsynth.
@@ -1098,7 +1110,7 @@ impl SessionManager {
         failure: &crate::project::audio::BootFailure,
     ) {
         log::warn!(
-            "scsynth transient startup crash ({}); auto-retrying once",
+            "scsynth transient startup crash ({}); auto-retrying",
             failure.describe()
         );
         let mut guard = inner.lock().unwrap_or_else(|e| e.into_inner());
@@ -1107,6 +1119,26 @@ impl SessionManager {
                 "scsynth transient startup crash ({}); auto-retrying",
                 failure.describe()
             ));
+        }
+    }
+
+    /// Issue #92 (2026-08-30 revision): the FINAL boot failure — after the
+    /// retries are spent or on a non-transient shape — leaves its shape and
+    /// the dead child's last output lines in the session log. A failed
+    /// boot's output never reaches the error page (the output readers attach
+    /// only after a successful boot), so without this line the only
+    /// machine-readable trace of what a crashed scsynth said was nothing.
+    fn log_boot_failure(
+        inner: &Arc<Mutex<SessionInner>>,
+        failure: &crate::project::audio::BootFailure,
+    ) {
+        log::warn!("scsynth boot failed ({})", failure.describe());
+        let mut guard = inner.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(log) = guard.logger.as_mut() {
+            log.write_line(&format!("scsynth boot failed ({})", failure.describe()));
+            for line in &failure.output_tail {
+                log.write_line(&format!("  | {line}"));
+            }
         }
     }
 
@@ -1969,6 +2001,7 @@ mod tests {
                 .to_string(),
             exit: Some(ExitStatus::from_raw(5)),
             output_lines: 0,
+            output_tail: Vec::new(),
         };
 
         let inner = std::sync::Arc::clone(&manager.inner);
@@ -1981,6 +2014,48 @@ mod tests {
                 "scsynth transient startup crash (signal 5, 0 output lines); auto-retrying"
             ),
             "session log must record the retry: {content}"
+        );
+    }
+
+    /// Issue #92 (2026-08-30 revision): the FINAL boot failure leaves its
+    /// shape and the dead child's last words in the session log — the
+    /// record whose absence let the zero-output premise go unchallenged
+    /// through the first field diagnosis.
+    #[test]
+    fn final_boot_failure_is_logged_with_the_dead_childs_last_words() {
+        use std::os::unix::process::ExitStatusExt;
+        use std::process::ExitStatus;
+
+        let manager = SessionManager::default();
+        let dir = tempfile::tempdir().unwrap();
+        let (logger, log_path) = open_session_log(dir.path());
+        {
+            let mut inner = manager.lock();
+            inner.logger = Some(logger);
+        }
+        let failure = crate::project::audio::BootFailure {
+            message: "Audio engine exited during startup (signal: 6 (SIGABRT)). See output below."
+                .to_string(),
+            exit: Some(ExitStatus::from_raw(6)),
+            output_lines: 24,
+            output_tail: vec![
+                "Number of Devices: 12".to_string(),
+                "objc[94757]: bad weak table".to_string(),
+            ],
+        };
+
+        let inner = std::sync::Arc::clone(&manager.inner);
+        SessionManager::log_boot_failure(&inner, &failure);
+
+        manager.lock().logger.as_mut().unwrap().close();
+        let content = std::fs::read_to_string(&log_path).unwrap();
+        assert!(
+            content.contains("scsynth boot failed (signal 6, 24 output lines)"),
+            "log: {content}"
+        );
+        assert!(
+            content.contains("  | objc[94757]: bad weak table"),
+            "the dead child's last words must land: {content}"
         );
     }
 

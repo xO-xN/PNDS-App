@@ -139,10 +139,10 @@ Rust session manager 是运行状态真源。React 不得用本地 reset 伪造�
 - 设备选择是本机偏好，变更通过 Change/restart 生效（运行契约 §6）；
 - master gain 的默认值（80%）、百分比到 dB 曲线与 `N > 2` 固定 100% → 运行契约 §7.5。
 
-scsynth 瞬态启动崩溃的自动重试（issue #92）：捆绑 scsynth 3.14.1 在 macOS 26 上按 spawn 概率崩溃（AVAudioSession ObjC 运行时竞态——信号死亡且零输出，SIGTRAP/SIGABRT/EXC_BAD_ACCESS 三种死法同根因）。判定是纯函数（退出状态 + 输出行数 → 是否可重试，`audio.rs` 表驱动测试），两条路径共用：
+scsynth 瞬态启动崩溃的自动重试（issue #92；2026-08-30 实测修订）：捆绑 scsynth 3.14.1 在 macOS 26 上按 spawn 概率崩溃——ObjC 运行时损坏竞态（实测帧：AVAudioSession/objc_initWeak、`_objc_fatalv`、method-cache insert、SCSession 符号intern，同族多死法，SIGTRAP/SIGABRT/SIGSEGV）。判定是纯函数（退出状态 → 是否可重试，`audio.rs` 表驱动测试）：**信号死亡即可重试**。初版的「且零输出」前提已被实测证伪——真实崩溃带着 CoreAudio 设备清单（stdout）与 ObjC 运行时自身诊断（stderr 无缓冲），零输出永不成立，重试从未触发；配置错误（如 `-H` 设备被拒）是打印错误后干净退出（exit code 非信号），不受放宽影响。两条路径共用同一判定：
 
-- 会话启动：仅对「信号死亡且零输出」透明重试一次（fresh 端口，界面保持 starting 不闪错误页）；重试记入 App 日志与 session 日志（为将来升级 scsynth 二进制留存崩溃率证据）。重试失败或首遇其他形态（超时、带输出的配置错误如 `-H` 设备被拒）直接进入错误页——错误页出现即需人工介入，手动 Retry 行为不变；
-- App 启动预热：同一判定下静默重试至多两次，成功才置预热标志；真失败静默放弃（session 启动路径自会向用户呈现真失败）。
+- 会话启动：信号死亡透明重试至多 3 次（fresh 端口，界面保持 starting 不闪错误页；实测 53% 单次崩溃率下，3 次重试把连续失败率压到约 8%）；每次重试记入 App 日志与 session 日志。重试耗尽或首遇其他形态（超时、干净退出）直接进入错误页——错误页出现即需人工介入，手动 Retry 行为不变；最终失败的形态与死亡子进程的末 8 行输出也落 session 日志（启动失败的输出不会出现在错误页 tail——读取器仅在成功后挂载）；
+- App 启动预热：同一判定下静默重试至多 3 次，成功才置预热标志；真失败静默放弃（session 启动路径自会向用户呈现真失败）。
 
 上游 SC 3.15 发布后应评估升级捆绑二进制；重试去留按升级后实测决定。
 
