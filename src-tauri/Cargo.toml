@@ -1,6 +1,6 @@
 [package]
 name = "pnds-app"
-version = "1.3.2"
+version = "1.3.3"
 description = "在演出现场运行 PNDS 数字乐谱工程的 macOS 桌面 Host 应用"
 authors = ["xO-xN"]
 edition = "2021"

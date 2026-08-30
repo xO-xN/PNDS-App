@@ -66,6 +66,30 @@ jobs:
           releaseBody: |
             ## PNDS ${{ github.ref_name || inputs.version }}
 
+            ### What's New in V1.3.3 — the native belt, a dressed Utilities shelf & the Pond
+
+            **The right-click bug, finished — and the right click handed to authors**
+            - The stubborn WKWebView right-click menu ("Open Frame in New Window") is now stopped at the native NSMenu level, with the JS layers kept as the first belt. Menus carrying a text affordance — copy/cut/paste on editable fields and selections — pass through untouched.
+            - Right-click inside a project's monitor page belongs to the page's author now: a project can design its own context menu and the App stays out of the way (runtime contract §10).
+
+            **Window edges behave**
+            - The bottom-right rounded corner no longer clicks through to apps underneath: an invisible grip drives the native resize session.
+            - ⌘← / ⌘→ folder switching is back. WKWebView had been claiming exactly Command+horizontal arrows as its own back/forward keys before the page could see them; a native guard reroutes that pair onto the normal key path. Every other shortcut keeps its original routing (⌘↓/⌘↑ untouched).
+
+            **The Utilities shelf, dressed as app content**
+            - The built-in tools sit in a fixed registry order — Multichannel → Local → Telematic — and every launch re-settles installs seeded before the reorder.
+            - Concise card names that fit the 320px sidebar — Multichannel Gen, Local Diagnostics, Telematic Diagnostics — resolved above every learned manifest name, in the sidebar, the settings list and the running title alike; selection can no longer flip them back to the long names.
+            - Each tool's card carries an illustrative icon: a waveform, a node pair, a globe — a wrench for whatever ships next.
+
+            **A Welcome with an identity, themes with dressing**
+            - The Welcome page carries the app icon on a rippling halo stage, ported from the project homepage and recolored by each theme's accent; Brutal keeps its hard plane and sits it out.
+            - The Stage theme's selection pills — the folder segment and the project card — render as frosted liquid glass (a strict port of the pure-CSS recipe, then tuned frosty; the folder pill's whites sit one step softer).
+            - The default theme is now 池塘 / Pond — display name and internal id alike. Stored preferences migrate silently, and following project pages are none the wiser: a page that does not recognize an id keeps its own default palette, which is exactly the Pond look.
+
+            **Documentation**
+            - network.md is the performance networking guide it always should have been: playing over the LAN (start the show, scan or type the address) and over the internet (VPN, port forwarding, JackTrip for inter-site audio), with an honest best-effort disclaimer. The port tables moved to the manifest reference, appearance syncing to the runtime contract.
+            - The Module Manual sits below the Reference Manual in the Help center, and the English README matches the Chinese one again.
+
             ### What's New in V1.3.2 — the Module Manual, tools that stay put & an architecture hardening pass
 
             **A fourth book in the Help center: the Module Manual**
