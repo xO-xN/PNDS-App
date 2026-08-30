@@ -12,8 +12,17 @@ use std::path::PathBuf;
 use std::process::{Child, Command};
 use std::time::{Duration, Instant};
 
-/// Default escalation window (§12). Overridable per call.
-pub const SHUTDOWN_GRACE_WINDOW: Duration = Duration::from_secs(5);
+/// Issue #93: the score server's shutdown grace window. Healthy projects
+/// exit in 0.01–0.2s; the 2s bound keeps a SIGTERM-ignoring pathological
+/// server from stretching the StopCover past "two or three seconds". The
+/// score server has no persistent state and phone clients sit in a
+/// reconnect loop, so escalating to SIGKILL early is side-effect free.
+pub const SCORE_SERVER_SHUTDOWN_GRACE_WINDOW: Duration = Duration::from_secs(2);
+/// Issue #93: scsynth keeps the full 5s window — CoreAudio teardown can
+/// legitimately take longer than a Node exit, and rushing it risks device
+/// state for a mere restart. Two named constants so the windows can be
+/// tuned independently (user story #8).
+pub const SCSYNTH_SHUTDOWN_GRACE_WINDOW: Duration = Duration::from_secs(5);
 /// Orphan cleanup and port release use a shorter window.
 pub(crate) const ORPHAN_GRACE_WINDOW: Duration = Duration::from_secs(2);
 const PROCESS_POLL_INTERVAL: Duration = Duration::from_millis(100);
@@ -276,6 +285,24 @@ mod tests {
         let pid = child.id();
         assert!(kill_escalate(&mut child, pid, Duration::from_secs(2)));
         assert!(child.try_wait().unwrap().is_some());
+    }
+
+    /// Issue #93: the shutdown windows are a product decision, not a
+    /// mechanical default — the score server's teardown is bounded at 2s
+    /// (healthy projects exit in 0.01–0.2s) while scsynth keeps 5s for
+    /// CoreAudio teardown. Pin both so a casual edit surfaces in review.
+    #[test]
+    fn shutdown_grace_windows_match_the_spec() {
+        assert_eq!(
+            SCORE_SERVER_SHUTDOWN_GRACE_WINDOW,
+            Duration::from_secs(2),
+            "the score-server window is the StopCover bound (issue #93)"
+        );
+        assert_eq!(
+            SCSYNTH_SHUTDOWN_GRACE_WINDOW,
+            Duration::from_secs(5),
+            "scsynth keeps the full window for CoreAudio teardown (issue #93)"
+        );
     }
 
     /// §12: an unmatched marker never gets killed, and the record is

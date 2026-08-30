@@ -38,6 +38,11 @@ const OUTPUT_TAIL_LINES: usize = 50;
 /// succeeded, this shrinks to PREWARMED_FIRST_BOOT_DELAY.
 const FIRST_BOOT_DELAY: Duration = Duration::from_millis(1500);
 const PREWARMED_FIRST_BOOT_DELAY: Duration = Duration::from_millis(300);
+/// Issue #93: settle time between the children being reaped and the session
+/// log closing, so the output readers can drain the pipes' last buffered
+/// lines — losing those final lines is exactly what made past teardown
+/// stalls undiagnosable.
+const OUTPUT_DRAIN_SETTLE: Duration = Duration::from_millis(100);
 
 // ============================================================================
 // Types shared with the frontend
@@ -307,6 +312,11 @@ struct SessionInner {
     generation: u64,
     /// §12: per-session log file.
     logger: Option<crate::project::logs::SessionLogger>,
+    /// Issue #93: the generation whose children the open logger belongs to.
+    /// Output readers persist only while this matches their generation —
+    /// through their own session's teardown (the shutdown diagnostics this
+    /// log exists for) but never into a newer session's log.
+    logger_generation: Option<u64>,
     /// App-Nap prevention held while the session is live (see
     /// process_activity.rs); refreshed on every state publication.
     process_activity: Option<crate::process_activity::ProcessActivity>,
@@ -334,6 +344,7 @@ impl Default for SessionInner {
             output_device: None,
             generation: 0,
             logger: None,
+            logger_generation: None,
             process_activity: None,
         }
     }
@@ -621,6 +632,9 @@ impl SessionManager {
         {
             let mut inner = self.lock();
             inner.logger = session_log;
+            // Issue #93: the log belongs to this generation's children —
+            // their output readers key off this to persist.
+            inner.logger_generation = Some(generation);
         }
 
         // §8: internal mode boots scsynth first (and waits for /status)
@@ -798,12 +812,23 @@ impl SessionManager {
         Self::emit_static(app, inner);
     }
 
+    /// Pipes one child's stdout/stderr into the in-memory output tail and,
+    /// issue #93, line by line into the session log with a `[node]` /
+    /// `[scsynth]` source prefix. The two sinks carry different generation
+    /// guards: the log accepts a line only while it is the log of the
+    /// reader's OWN generation — which stays true through that session's
+    /// teardown, so the children's final shutdown lines land (the whole
+    /// reason this persistence exists) — while a newer session's log can
+    /// never receive an older generation's stragglers. The in-memory tail
+    /// keeps the strict current-generation guard (§12): a superseded
+    /// generation's late lines must not pollute the retry's error page.
+    /// The handle lets tests join the reader deterministically.
     fn spawn_output_reader<R: std::io::Read + Send + 'static>(
         &self,
         reader: R,
         tag: &'static str,
         generation: u64,
-    ) {
+    ) -> std::thread::JoinHandle<()> {
         let inner = Arc::clone(&self.inner);
         std::thread::spawn(move || {
             for line in BufReader::new(reader).lines() {
@@ -811,10 +836,13 @@ impl SessionManager {
                     Ok(line) => {
                         log::debug!("[{tag}] {line}");
                         let mut guard = inner.lock().unwrap_or_else(|e| e.into_inner());
-                        // §12: a reader still draining a dead generation's
-                        // pipe must not pollute the retry's output tail.
+                        if guard.logger_generation == Some(generation) {
+                            if let Some(log) = guard.logger.as_mut() {
+                                log.write_line(&format!("[{tag}] {line}"));
+                            }
+                        }
                         if guard.generation != generation {
-                            return;
+                            continue;
                         }
                         guard.output_tail.push_back(line);
                         while guard.output_tail.len() > OUTPUT_TAIL_LINES {
@@ -824,7 +852,7 @@ impl SessionManager {
                     Err(_) => break,
                 }
             }
-        });
+        })
     }
 
     fn spawn_supervisor<R: tauri::Runtime>(
@@ -1110,7 +1138,7 @@ impl SessionManager {
         };
         if let Err(wait_failure) = wait {
             let failure = crate::project::audio::classify_boot_failure(&wait_failure, &mut child);
-            if !children::kill_escalate(&mut child, pid, children::SHUTDOWN_GRACE_WINDOW) {
+            if !children::kill_escalate(&mut child, pid, children::SCSYNTH_SHUTDOWN_GRACE_WINDOW) {
                 // §12: record the unconfirmed kill so the next start's
                 // targeted orphan cleanup frees the audio device.
                 ChildRegistry::new(app_data_dir.to_path_buf())
@@ -1139,12 +1167,23 @@ impl SessionManager {
     /// grace window, master synth release, scsynth quit. Handles are always
     /// cleared, so the session is provably child-free afterwards (§12).
     ///
+    /// Issue #93: the two children have separate grace windows — the score
+    /// server is bounded at 2s (healthy projects exit in 0.01–0.2s; a
+    /// SIGTERM-ignoring server must not stretch the StopCover), scsynth
+    /// keeps 5s for CoreAudio teardown. Order stays node-then-scsynth: the
+    /// project's graceful shutdown needs scsynth alive to release its
+    /// synths (parallelizing was evaluated and rejected).
+    ///
+    /// The session log stays open THROUGH the teardown (closed at the very
+    /// end): the children's final output lines — the shutdown diagnostics
+    /// this log exists for (issue #93) — land between the two markers below.
+    ///
     /// The session-children record is only cleared for a **confirmed** kill;
     /// an unconfirmed one keeps its ownership record so the next start
     /// re-runs the targeted orphan cleanup before its port preflight.
     fn teardown_children(inner: &Arc<Mutex<SessionInner>>, app_data_dir: &Path) {
         let registry = ChildRegistry::new(app_data_dir.to_path_buf());
-        let (node_child, node_pid, sc_child, sc_pid, sc_port, master_ready, mut logger_opt) = {
+        let (node_child, node_pid, sc_child, sc_pid, sc_port, master_ready, log_generation) = {
             let mut guard = inner.lock().unwrap_or_else(|e| e.into_inner());
             let node_pid = guard.child.as_ref().map(|c| c.id());
             let sc_pid = guard.scsynth.as_ref().map(|c| c.id());
@@ -1155,23 +1194,29 @@ impl SessionManager {
                 sc_pid,
                 guard.scsynth_port.take(),
                 std::mem::take(&mut guard.master_synth_ready),
-                guard.logger.take(),
+                // Issue #93: teardown may only touch the log of the session
+                // it is tearing down. A start() that interleaves during the
+                // kill windows installs the NEXT session's log — every write
+                // and the close below are gated on this captured generation
+                // so a dying generation's teardown can never close a newer
+                // session's log.
+                guard.logger_generation,
             )
         };
-        if let Some(ref mut log) = logger_opt {
-            log.write_line("Session ending — stopping processes");
-        }
+        let had_children = node_child.is_some() || sc_child.is_some();
+        Self::write_session_log_line(inner, log_generation, "Session ending — stopping processes");
 
         if let Some(mut c) = node_child {
             let pid = node_pid.unwrap_or(0);
-            if children::kill_escalate(&mut c, pid, children::SHUTDOWN_GRACE_WINDOW) {
-                registry.clear(pid);
-                log::info!("Score server stopped (pid {pid})");
-            } else {
-                log::warn!(
-                    "Score server (pid {pid}) could not be confirmed dead; keeping its ownership record for the next start"
-                );
-            }
+            Self::stop_child_and_log(
+                inner,
+                &registry,
+                &mut c,
+                pid,
+                children::SCORE_SERVER_SHUTDOWN_GRACE_WINDOW,
+                "Score server",
+                log_generation,
+            );
         }
 
         if let Some(mut sc) = sc_child {
@@ -1183,19 +1228,84 @@ impl SessionManager {
                     crate::project::audio::quit_scsynth(&client, master_ready);
                 }
             }
-            if children::kill_escalate(&mut sc, pid, children::SHUTDOWN_GRACE_WINDOW) {
-                registry.clear(pid);
-                log::info!("scsynth stopped (pid {pid})");
-            } else {
-                log::warn!(
-                    "scsynth (pid {pid}) could not be confirmed dead; keeping its ownership record for the next start"
-                );
-            }
+            Self::stop_child_and_log(
+                inner,
+                &registry,
+                &mut sc,
+                pid,
+                children::SCSYNTH_SHUTDOWN_GRACE_WINDOW,
+                "scsynth",
+                log_generation,
+            );
         }
 
-        if let Some(ref mut log) = logger_opt {
-            log.write_line("All processes stopped");
-            log.close();
+        // Issue #93: the children are reaped by now; give their output
+        // readers a short settle so the pipes' last buffered lines land
+        // before the log closes, then write the end marker and close. The
+        // close stays generation-gated: if a newer session's log replaced
+        // this one mid-teardown, leave that log strictly alone (the
+        // superseded log then simply ends without its footer).
+        if had_children {
+            std::thread::sleep(OUTPUT_DRAIN_SETTLE);
+        }
+        {
+            let mut guard = inner.lock().unwrap_or_else(|e| e.into_inner());
+            if guard.logger_generation == log_generation {
+                if let Some(ref mut log) = guard.logger {
+                    log.write_line("All processes stopped");
+                    log.close();
+                }
+                guard.logger = None;
+                guard.logger_generation = None;
+            }
+        }
+    }
+
+    /// Issue #93: kills one child through the §12 escalation and mirrors
+    /// the outcome into both the App log and the session log (gated on
+    /// `log_generation` so a concurrent newer session's log is never
+    /// touched). The session-children record is only cleared for a
+    /// **confirmed** kill; an unconfirmed one keeps its ownership record so
+    /// the next start re-runs the targeted orphan cleanup.
+    #[allow(clippy::too_many_arguments)]
+    fn stop_child_and_log(
+        inner: &Arc<Mutex<SessionInner>>,
+        registry: &ChildRegistry,
+        child: &mut Child,
+        pid: u32,
+        window: std::time::Duration,
+        label: &str,
+        log_generation: Option<u64>,
+    ) {
+        let line = if children::kill_escalate(child, pid, window) {
+            registry.clear(pid);
+            log::info!("{label} stopped (pid {pid})");
+            format!("{label} stopped (pid {pid})")
+        } else {
+            log::warn!(
+                "{label} (pid {pid}) could not be confirmed dead; keeping its ownership record for the next start"
+            );
+            format!(
+                "{label} (pid {pid}) could not be confirmed dead; keeping its ownership record for the next start"
+            )
+        };
+        Self::write_session_log_line(inner, log_generation, &line);
+    }
+
+    /// Issue #93: appends one line to the session log, but only while that
+    /// log still belongs to `log_generation` — teardown's own markers and
+    /// stop outcomes go through here while the log is still open, and a
+    /// newer session's log is never written to.
+    fn write_session_log_line(
+        inner: &Arc<Mutex<SessionInner>>,
+        log_generation: Option<u64>,
+        line: &str,
+    ) {
+        let mut guard = inner.lock().unwrap_or_else(|e| e.into_inner());
+        if guard.logger_generation == log_generation {
+            if let Some(log) = guard.logger.as_mut() {
+                log.write_line(line);
+            }
         }
     }
 
@@ -1814,6 +1924,31 @@ mod tests {
         assert!(!manager.has_active_session());
     }
 
+    /// Opens a fixture session log in `dir` and returns it with its file
+    /// path (the fresh tempdir holds exactly one log file).
+    fn open_session_log(dir: &Path) -> (crate::project::logs::SessionLogger, PathBuf) {
+        let logger = crate::project::logs::SessionLogger::open(
+            dir,
+            crate::project::logs::SessionLogParams {
+                project_id: "fixture",
+                project_name: "fixture",
+                project_path: "/p",
+                audio_mode: "internal",
+                lan_ip: "192.168.1.10",
+                osc_target: "none",
+                output_device: "fixture",
+            },
+        )
+        .unwrap();
+        let log_path = std::fs::read_dir(dir.join("session-logs"))
+            .unwrap()
+            .next()
+            .unwrap()
+            .unwrap()
+            .path();
+        (logger, log_path)
+    }
+
     /// Issue #92: the transparent scsynth auto-retry leaves its audit trail
     /// in the per-session log — the crash-rate record the future scsynth
     /// binary upgrade decision will be judged from.
@@ -1824,20 +1959,8 @@ mod tests {
 
         let manager = SessionManager::default();
         let dir = tempfile::tempdir().unwrap();
+        let (logger, log_path) = open_session_log(dir.path());
         {
-            let logger = crate::project::logs::SessionLogger::open(
-                dir.path(),
-                crate::project::logs::SessionLogParams {
-                    project_id: "fixture",
-                    project_name: "fixture",
-                    project_path: "/p",
-                    audio_mode: "internal",
-                    lan_ip: "192.168.1.10",
-                    osc_target: "none",
-                    output_device: "fixture",
-                },
-            )
-            .unwrap();
             let mut inner = manager.lock();
             inner.logger = Some(logger);
         }
@@ -1851,21 +1974,185 @@ mod tests {
         let inner = std::sync::Arc::clone(&manager.inner);
         SessionManager::log_transient_retry(&inner, &failure);
 
-        // Flush the BufWriter, then read the session log back.
         manager.lock().logger.as_mut().unwrap().close();
-        let logs_dir = dir.path().join("session-logs");
-        let log_path = std::fs::read_dir(&logs_dir)
-            .unwrap()
-            .next()
-            .unwrap()
-            .unwrap()
-            .path();
-        let content = std::fs::read_to_string(log_path).unwrap();
+        let content = std::fs::read_to_string(&log_path).unwrap();
         assert!(
             content.contains(
                 "scsynth transient startup crash (signal 5, 0 output lines); auto-retrying"
             ),
             "session log must record the retry: {content}"
+        );
+    }
+
+    /// Issue #93: node/scsynth stdout/stderr lands line by line in the
+    /// session log with a source prefix — and a superseded generation's
+    /// lines land in neither the log nor the in-memory tail.
+    #[test]
+    fn child_output_lands_in_the_session_log_with_source_prefix() {
+        let manager = SessionManager::default();
+        let dir = tempfile::tempdir().unwrap();
+        let (logger, log_path) = open_session_log(dir.path());
+        {
+            let mut inner = manager.lock();
+            inner.generation = 7;
+            inner.logger = Some(logger);
+            inner.logger_generation = Some(7);
+        }
+
+        let mut child = Command::new("/bin/sh")
+            .arg("-c")
+            .arg("echo one; echo two")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let reader = manager.spawn_output_reader(child.stdout.take().unwrap(), "node", 7);
+        let mut stale = Command::new("/bin/sh")
+            .arg("-c")
+            .arg("echo stale-line")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let stale_reader = manager.spawn_output_reader(stale.stdout.take().unwrap(), "scsynth", 6);
+        reader.join().unwrap();
+        stale_reader.join().unwrap();
+        let _ = child.wait();
+        let _ = stale.wait();
+
+        // write_line flushes per line (issue #93), so the log is readable
+        // live — no close needed for the assertions.
+        let content = std::fs::read_to_string(&log_path).unwrap();
+        assert!(content.contains("[node] one"), "log: {content}");
+        assert!(content.contains("[node] two"), "log: {content}");
+        assert!(!content.contains("stale-line"), "log: {content}");
+        let tail = manager.snapshot().output_tail;
+        assert!(tail.iter().any(|l| l == "one"));
+        assert!(
+            !tail.iter().any(|l| l == "stale-line"),
+            "a stale generation must not pollute the tail: {tail:?}"
+        );
+    }
+
+    /// Issue #93: teardown keeps the session log open until both children
+    /// are stopped — the dying session's final output lines (the shutdown
+    /// diagnostics this persistence exists for) land BETWEEN the teardown
+    /// markers even though the generation was already bumped, the tail
+    /// never sees them, and teardown closes and clears the log at the end.
+    #[test]
+    fn teardown_closes_the_session_log_after_the_childrens_final_output() {
+        let manager = SessionManager::default();
+        let dir = tempfile::tempdir().unwrap();
+        let (logger, log_path) = open_session_log(dir.path());
+        {
+            // Production order: the log exists before the children spawn.
+            // stop() has already bumped the generation (3 → 4) at this point.
+            let mut inner = manager.lock();
+            inner.generation = 4;
+            inner.logger = Some(logger);
+            inner.logger_generation = Some(3);
+        }
+        // Graceful-shutdown fixture: registers its TERM trap, reports
+        // ready, and only then keeps running — so the teardown SIGTERM
+        // always arrives at an armed, listening process (exactly like the
+        // real score server; a bare `echo` would race the signal and lose).
+        let mut child = Command::new("/bin/sh")
+            .arg("-c")
+            .arg(
+                "trap 'echo shutting-down; exit 0' TERM; echo ready; \
+                 while :; do sleep 0.1; done",
+            )
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let reader = manager.spawn_output_reader(child.stdout.take().unwrap(), "node", 3);
+        {
+            let mut inner = manager.lock();
+            inner.status = "stopping".to_string();
+            inner.child = Some(child);
+        }
+        // The fixture's ready line is already persisted output (write_line
+        // flushes per line) — seeing it proves the trap is armed before the
+        // teardown starts signaling.
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            let content = std::fs::read_to_string(&log_path).unwrap_or_default();
+            if content.contains("[node] ready") {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "graceful-shutdown fixture never became ready: {content}"
+            );
+            std::thread::sleep(Duration::from_millis(20));
+        }
+
+        let inner = std::sync::Arc::clone(&manager.inner);
+        SessionManager::teardown_children(&inner, dir.path());
+        reader.join().unwrap();
+
+        {
+            let guard = manager.lock();
+            assert!(
+                guard.logger.is_none(),
+                "teardown must close and clear the log"
+            );
+            assert_eq!(guard.logger_generation, None);
+        }
+        assert!(
+            manager.snapshot().output_tail.is_empty(),
+            "teardown-window lines must not enter the tail"
+        );
+        let content = std::fs::read_to_string(&log_path).unwrap();
+        let position = |needle: &str| {
+            content
+                .find(needle)
+                .unwrap_or_else(|| panic!("session log must contain {needle:?}: {content}"))
+        };
+        let ending = position("Session ending — stopping processes");
+        let output = position("[node] shutting-down");
+        let stopped = position("Score server stopped");
+        let all = position("All processes stopped");
+        let end = position("[session end]");
+        assert!(ending < output, "log: {content}");
+        assert!(output < stopped, "log: {content}");
+        assert!(all < end, "log: {content}");
+        assert!(stopped < all, "log: {content}");
+    }
+
+    /// Issue #93: teardown's session-log writes are gated on the log's own
+    /// generation — a start() interleaving during the kill windows installs
+    /// the next session's log, and the dying generation's teardown must
+    /// never write into (or later close) that newer log.
+    #[test]
+    fn session_log_writes_are_gated_on_the_log_generation() {
+        let manager = SessionManager::default();
+        let dir = tempfile::tempdir().unwrap();
+        let (logger, log_path) = open_session_log(dir.path());
+        {
+            let mut inner = manager.lock();
+            inner.logger = Some(logger);
+            inner.logger_generation = Some(9); // a newer session's log
+        }
+
+        let inner = std::sync::Arc::clone(&manager.inner);
+        SessionManager::write_session_log_line(&inner, Some(3), "stale teardown line");
+        assert!(
+            manager.lock().logger.is_some(),
+            "the newer session's log must stay untouched and open"
+        );
+        let content = std::fs::read_to_string(&log_path).unwrap();
+        assert!(
+            !content.contains("stale teardown line"),
+            "a stale generation must not write into a newer log: {content}"
+        );
+
+        SessionManager::write_session_log_line(&inner, Some(9), "current line");
+        let content = std::fs::read_to_string(&log_path).unwrap();
+        assert!(
+            content.contains("current line"),
+            "the owning generation still writes: {content}"
         );
     }
 

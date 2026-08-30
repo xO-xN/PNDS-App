@@ -1,5 +1,5 @@
 //! Session log files (app-behavior「日志与清理」): one file per project session, kept in
-//! `app_data_dir/logs/`. Metadata header, per-line timestamps, stdout/stderr
+//! `app_data_dir/session-logs/`. Metadata header, per-line timestamps, stdout/stderr
 //! interleaved from both children, and a stop footer. Files are rotated —
 //! the last 20 are kept; older files are removed on session start.
 
@@ -61,6 +61,11 @@ impl SessionLogger {
         Ok(Self { file: Some(writer) })
     }
 
+    /// Appends one timestamped line, flushing immediately: the log's whole
+    /// purpose (issue #93) is post-hoc diagnosis of slow shutdowns and
+    /// crashes, so lines must survive a hard App exit and be observable
+    /// while the session is live. Volume is line-rate child output — the
+    /// per-line flush cost is negligible.
     pub fn write_line(&mut self, line: &str) {
         if let Some(ref mut f) = self.file {
             let ts = SystemTime::now()
@@ -68,7 +73,12 @@ impl SessionLogger {
                 .unwrap_or_default();
             let secs = ts.as_secs();
             let ms = ts.subsec_millis();
-            let _ = writeln!(f, "[{secs}.{ms:03}] {line}");
+            if writeln!(f, "[{secs}.{ms:03}] {line}")
+                .and_then(|()| f.flush())
+                .is_err()
+            {
+                log::warn!("Failed to append to the session log");
+            }
         }
     }
 

@@ -223,7 +223,9 @@ Back/Close 返回 Welcome，不自动重启。
 
 ## 日志与清理
 
-每个 session 写独立日志，保存在 App data 的 `session-logs/`，记录：manifest/preflight；session 元数据；Node/scsynth stdout/stderr；health；master stage；scsynth 瞬态重试（issue #92）；stop 与错误。保留最近 20 份，删除最旧文件。日志不写入工程目录，也不上传。
+每个 session 写独立日志，保存在 App data 的 `session-logs/`，记录：manifest/preflight；session 元数据；Node/scsynth stdout/stderr——issue #93 起逐行落盘、带 `[node]`/`[scsynth]` 来源前缀、随写随 flush，且**包含关停窗口内该 generation 的最终输出**（落盘以日志所属 generation 为守卫：旧 generation 的迟到行不进新会话日志，也不进错误页 tail）；health；master stage；scsynth 瞬态重试（issue #92）；关停标记与结果（`Session ending` → 各子进程 stopped/未确认 → `All processes stopped`）；错误。保留最近 20 份，删除最旧文件。日志不写入工程目录，也不上传。
+
+关停有界化（issue #93）：score server 与 scsynth 的 SIGTERM 宽限窗是两个独立具名常量——score server 2 秒（健康工程实测 0.01–0.2 秒退出；无持久状态、手机端自带重连等待，提前强杀无副作用），scsynth 保持 5 秒（CoreAudio 释放可能更慢）。关停顺序保持先 node 优雅释放、后 scsynth：工程侧优雅关停需要 scsynth 存活以释放合成器（并行方案已评估并否决）。
 
 关闭工程、红灯隐藏、restart 与 `⌘Q` 的语义必须区分：只有 session stop/实际 App exit 才停止工程；普通窗口 hide 不终止正在运行的 session。实际退出必须清理 Node/scsynth；下次启动执行 orphan cleanup（运行契约 §12）。
 
