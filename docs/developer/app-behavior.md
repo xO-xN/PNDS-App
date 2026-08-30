@@ -139,6 +139,13 @@ Rust session manager 是运行状态真源。React 不得用本地 reset 伪造�
 - 设备选择是本机偏好，变更通过 Change/restart 生效（运行契约 §6）；
 - master gain 的默认值（80%）、百分比到 dB 曲线与 `N > 2` 固定 100% → 运行契约 §7.5。
 
+scsynth 瞬态启动崩溃的自动重试（issue #92）：捆绑 scsynth 3.14.1 在 macOS 26 上按 spawn 概率崩溃（AVAudioSession ObjC 运行时竞态——信号死亡且零输出，SIGTRAP/SIGABRT/EXC_BAD_ACCESS 三种死法同根因）。判定是纯函数（退出状态 + 输出行数 → 是否可重试，`audio.rs` 表驱动测试），两条路径共用：
+
+- 会话启动：仅对「信号死亡且零输出」透明重试一次（fresh 端口，界面保持 starting 不闪错误页）；重试记入 App 日志与 session 日志（为将来升级 scsynth 二进制留存崩溃率证据）。重试失败或首遇其他形态（超时、带输出的配置错误如 `-H` 设备被拒）直接进入错误页——错误页出现即需人工介入，手动 Retry 行为不变；
+- App 启动预热：同一判定下静默重试至多两次，成功才置预热标志；真失败静默放弃（session 启动路径自会向用户呈现真失败）。
+
+上游 SC 3.15 发布后应评估升级捆绑二进制；重试去留按升级后实测决定。
+
 静音（UI 语义）：
 
 - 设置卡的喇叭是静音按钮：点击静音（记住当前值为恢复值），再点恢复；拖动滑杆到 >0 解除静音、落 0 视为静音态（图标同步）；
@@ -216,7 +223,7 @@ Back/Close 返回 Welcome，不自动重启。
 
 ## 日志与清理
 
-每个 session 写独立日志，保存在 App data 的 `session-logs/`，记录：manifest/preflight；session 元数据；Node/scsynth stdout/stderr；health；master stage；stop 与错误。保留最近 20 份，删除最旧文件。日志不写入工程目录，也不上传。
+每个 session 写独立日志，保存在 App data 的 `session-logs/`，记录：manifest/preflight；session 元数据；Node/scsynth stdout/stderr；health；master stage；scsynth 瞬态重试（issue #92）；stop 与错误。保留最近 20 份，删除最旧文件。日志不写入工程目录，也不上传。
 
 关闭工程、红灯隐藏、restart 与 `⌘Q` 的语义必须区分：只有 session stop/实际 App exit 才停止工程；普通窗口 hide 不终止正在运行的 session。实际退出必须清理 Node/scsynth；下次启动执行 orphan cleanup（运行契约 §12）。
 

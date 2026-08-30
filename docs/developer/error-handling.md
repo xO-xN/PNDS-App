@@ -131,7 +131,8 @@ Retries live where the operation lives — no frontend query layer retries
 for you:
 
 - **Rust**: retry transient failures inside the command (e.g. the
-  scsynth boot attempts in `src-tauri/src/project/session.rs`), so the
+  transient-crash scsynth boot retries via `boot_with_transient_retries`
+  in `src-tauri/src/project/audio.rs`, issue #92), so the
   policy is testable next to the operation.
 - **Frontend**: a plain loop for the rare case (keep it in the flow
   module, not the component); log and surface a user message when the

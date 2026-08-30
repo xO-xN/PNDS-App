@@ -9,9 +9,11 @@
 use rosc::{OscMessage, OscPacket, OscType};
 use serde::Serialize;
 use specta::Type;
+use std::io::{BufRead, BufReader};
 use std::net::UdpSocket;
+use std::os::unix::process::ExitStatusExt;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
@@ -272,6 +274,16 @@ pub const DEFAULT_VOLUME_PERCENT: f32 = 80.0;
 
 const SCSYNTH_BOOT_TIMEOUT: Duration = Duration::from_secs(10);
 const OSC_REPLY_TIMEOUT: Duration = Duration::from_millis(1500);
+/// Issue #92: session-start retries for a transient scsynth boot crash —
+/// exactly one transparent retry; a second failure reaches the error page
+/// and manual Retry.
+pub const SESSION_BOOT_TRANSIENT_RETRIES: u32 = 1;
+/// Issue #92: launch-prewarm retries (silent, same transient gate only).
+const PREWARM_BOOT_TRANSIENT_RETRIES: u32 = 2;
+/// Issue #92: settle delay before each transient retry — the crash itself
+/// is instant, the delay just lets the dead process's resources settle so
+/// the fresh spawn starts clean.
+pub const TRANSIENT_RETRY_DELAY: Duration = Duration::from_millis(750);
 
 /// Locates the bundled scsynth binary. V1 is Apple Silicon only.
 pub fn scsynth_binary_path() -> Result<PathBuf, String> {
@@ -411,6 +423,164 @@ pub fn spawn_scsynth(
         .map_err(|e| format!("Failed to start scsynth: {e}"))
 }
 
+/// Issue #92: the transient-crash gate. The bundled scsynth 3.14.1 rolls
+/// the dice on every spawn on macOS 26: an ObjC runtime race in the
+/// AVAudioSession init kills the process (~0.13ms in, SIGTRAP / SIGABRT /
+/// EXC_BAD_ACCESS) before it prints a single line. Retry ONLY that exact
+/// shape — signal death AND zero output. A boot timeout, a clean exit, or
+/// a death that printed diagnostics (e.g. an output device rejected by
+/// `-H`) is a real failure that must reach the error page unmasked; manual
+/// Retry stays the recovery path for those. Pure so every shape (signals ×
+/// output × timeout) is table-testable.
+fn is_transient_boot_crash(exit: Option<&ExitStatus>, output_lines: usize) -> bool {
+    matches!(exit, Some(status) if status.signal().is_some()) && output_lines == 0
+}
+
+/// Issue #92: how a failed /status boot wait ended. The retry gate needs
+/// the failure's shape, not just a display message.
+#[derive(Debug)]
+pub enum BootWaitFailure {
+    /// The child exited during the wait — by exit code or by signal. Only
+    /// the signal form can pass the transient-crash gate.
+    Exited(ExitStatus),
+    /// The child stayed alive but never answered /status in time.
+    TimedOut,
+    /// The OSC probe itself failed (send/connect error); not retryable.
+    Osc(String),
+}
+
+impl BootWaitFailure {
+    /// The error-page wording — unchanged from the pre-retry behavior.
+    pub fn message(&self) -> String {
+        match self {
+            Self::Exited(status) => {
+                format!("Audio engine exited during startup ({status}). See output below.")
+            }
+            Self::TimedOut => {
+                "Audio engine failed to start (scsynth did not answer /status in time).".to_string()
+            }
+            Self::Osc(e) => e.clone(),
+        }
+    }
+}
+
+/// Issue #92: one failed scsynth boot attempt, reduced to the unchanged
+/// error-page message plus the two inputs of the transient-crash gate.
+#[derive(Debug)]
+pub struct BootFailure {
+    /// Exact error-page wording (the retry policy must not mask or reword
+    /// real failures).
+    pub message: String,
+    /// The child's exit status when it died during the boot wait; `None`
+    /// for a timeout or a failure before/without a child exit.
+    pub exit: Option<ExitStatus>,
+    /// stdout + stderr lines the dead child left in its pipes. The known
+    /// transient crash dies before printing anything; real failures print
+    /// their diagnostics first.
+    pub output_lines: usize,
+}
+
+impl BootFailure {
+    /// A failure with no child exit to inspect (port/spawn/OSC) — never
+    /// transient-retryable.
+    pub fn other(message: String) -> Self {
+        Self {
+            message,
+            exit: None,
+            output_lines: 0,
+        }
+    }
+
+    /// Issue #92 gate: signal death with zero output.
+    pub fn is_transient_crash(&self) -> bool {
+        is_transient_boot_crash(self.exit.as_ref(), self.output_lines)
+    }
+
+    /// One-line description for the retry log lines — the crash rate these
+    /// capture is the evidence base for the future scsynth binary upgrade
+    /// decision (issue #92).
+    pub fn describe(&self) -> String {
+        let death = match self.exit.as_ref().and_then(|s| s.signal()) {
+            Some(signal) => format!("signal {signal}"),
+            None if self.exit.is_some() => "exited without a signal".to_string(),
+            None => "no exit (timeout)".to_string(),
+        };
+        format!("{death}, {} output lines", self.output_lines)
+    }
+}
+
+/// Issue #92: reduces a failed /status wait to the gate's inputs, draining
+/// the dead child's pipes to EOF to count what it printed. Only an exited
+/// (already reaped) child is drained — reading a live child's pipe would
+/// block until its next output.
+pub fn classify_boot_failure(wait: &BootWaitFailure, child: &mut Child) -> BootFailure {
+    let exit = match wait {
+        BootWaitFailure::Exited(status) => Some(*status),
+        _ => None,
+    };
+    let output_lines = if exit.is_some() {
+        drain_output_lines(child)
+    } else {
+        0
+    };
+    BootFailure {
+        message: wait.message(),
+        exit,
+        output_lines,
+    }
+}
+
+/// Counts the lines a dead child left in its pipes: both write ends close
+/// with the reaped process, so reading runs to EOF after the buffered
+/// output (a trailing unterminated chunk still counts as one line).
+fn drain_output_lines(child: &mut Child) -> usize {
+    fn drain_pipe(pipe: impl std::io::Read) -> usize {
+        let mut lines = 0;
+        for line in BufReader::new(pipe).lines() {
+            match line {
+                Ok(_) => lines += 1,
+                Err(_) => break,
+            }
+        }
+        lines
+    }
+    child.stdout.take().map(drain_pipe).unwrap_or(0)
+        + child.stderr.take().map(drain_pipe).unwrap_or(0)
+}
+
+/// Issue #92: the shared transient-crash retry policy. Runs boot attempts,
+/// retrying ONLY the transient signature (signal death, zero output — a
+/// per-spawn dice roll, so an immediate fresh spawn is the correct
+/// recovery) at most `retries` times. Any other failure — and any failure
+/// once the retries are spent — surfaces immediately: real errors must
+/// reach the error page unmasked. `on_retry` fires on every accepted retry
+/// (the logging seam). Session start passes `SESSION_BOOT_TRANSIENT_RETRIES`
+/// (1), the launch prewarm `PREWARM_BOOT_TRANSIENT_RETRIES` (2).
+pub fn boot_with_transient_retries<T>(
+    retries: u32,
+    retry_delay: Duration,
+    mut boot: impl FnMut() -> Result<T, BootFailure>,
+    mut on_retry: impl FnMut(&BootFailure),
+) -> Result<T, BootFailure> {
+    let mut attempt = 0;
+    loop {
+        if attempt > 0 {
+            std::thread::sleep(retry_delay);
+        }
+        attempt += 1;
+        match boot() {
+            Ok(booted) => return Ok(booted),
+            Err(failure) => {
+                if failure.is_transient_crash() && attempt <= retries {
+                    on_retry(&failure);
+                    continue;
+                }
+                return Err(failure);
+            }
+        }
+    }
+}
+
 /// Whether the audio subsystem has been prewarmed this run (process-global,
 /// set by the background prewarm thread, read by session start to shorten
 /// the first-boot delay when the warm-up already succeeded).
@@ -426,6 +596,13 @@ pub fn is_audio_prewarmed() -> bool {
 /// the first request after launch) happens while the user is still on the
 /// welcome screen — the first real session load then boots scsynth on a
 /// warm audio subsystem instead of paying the cold-start cost.
+///
+/// Issue #92: the boot itself rolls the same transient-crash dice as any
+/// other spawn, so the prewarm retries through the shared gate — up to
+/// `PREWARM_BOOT_TRANSIENT_RETRIES` (2) retries, transient signature only,
+/// fully silent, and the prewarm flag is set only after a boot actually
+/// succeeded. Real failures give up silently; the session-start path
+/// surfaces any real failure to the error page.
 pub fn prewarm_scsynth() {
     std::thread::spawn(|| {
         let Ok(binary) = scsynth_binary_path() else {
@@ -439,36 +616,32 @@ pub fn prewarm_scsynth() {
             block_size: 64,
             audio_bus_channels: 128,
         };
-        let Ok(port) = crate::project::session::allocate_udp_port() else {
-            return;
-        };
-        let Ok(mut child) = spawn_scsynth(&binary, &cfg, 2, port, &plugins, None) else {
-            return;
-        };
-        // Drain output so the pipe cannot block the child.
-        let stdout = child.stdout.take();
-        let stderr = child.stderr.take();
-        if let Some(mut stdout) = stdout {
-            std::thread::spawn(move || {
-                use std::io::Read;
-                let mut buf = [0u8; 1024];
-                while stdout.read(&mut buf).is_ok_and(|n| n > 0) {}
-            });
-        }
-        if let Some(mut stderr) = stderr {
-            std::thread::spawn(move || {
-                use std::io::Read;
-                let mut buf = [0u8; 1024];
-                while stderr.read(&mut buf).is_ok_and(|n| n > 0) {}
-            });
-        }
-        let ready = OscClient::connect(&format!("127.0.0.1:{port}"))
-            .ok()
-            .map(|client| wait_for_scsynth(&client, &mut child).is_ok())
-            .unwrap_or(false);
-        let _ = child.kill();
-        let _ = child.wait();
-        if ready {
+        let prewarmed = boot_with_transient_retries(
+            PREWARM_BOOT_TRANSIENT_RETRIES,
+            TRANSIENT_RETRY_DELAY,
+            || {
+                let port =
+                    crate::project::session::allocate_udp_port().map_err(BootFailure::other)?;
+                let mut child = spawn_scsynth(&binary, &cfg, 2, port, &plugins, None)
+                    .map_err(BootFailure::other)?;
+                let wait = match OscClient::connect(&format!("127.0.0.1:{port}")) {
+                    Ok(client) => wait_for_scsynth(&client, &mut child),
+                    Err(e) => Err(BootWaitFailure::Osc(e)),
+                };
+                let result =
+                    wait.map_err(|wait_failure| classify_boot_failure(&wait_failure, &mut child));
+                let _ = child.kill();
+                let _ = child.wait();
+                result
+            },
+            |failure| {
+                log::info!(
+                    "Prewarm: scsynth transient startup crash ({}); retrying",
+                    failure.describe()
+                );
+            },
+        );
+        if prewarmed.is_ok() {
             PREWARMED.store(true, Ordering::SeqCst);
             log::info!("Audio subsystem prewarmed (scsynth booted and quit)");
         }
@@ -541,14 +714,18 @@ impl OscClient {
 
 /// §8 step 4: wait until scsynth answers /status (it is fully booted).
 /// Fails fast when the process exits during boot (e.g. an output-only
-/// device rejected by -H) instead of waiting out the full timeout.
-pub fn wait_for_scsynth(client: &OscClient, child: &mut Child) -> Result<(), String> {
+/// device rejected by -H) instead of waiting out the full timeout. The
+/// failure carries its shape (issue #92) — exit status vs timeout — so the
+/// caller can classify it for the transient-crash gate.
+pub fn wait_for_scsynth(client: &OscClient, child: &mut Child) -> Result<(), BootWaitFailure> {
     let deadline = Instant::now() + SCSYNTH_BOOT_TIMEOUT;
     loop {
-        client.send(OscMessage {
-            addr: "/status".to_string(),
-            args: vec![],
-        })?;
+        client
+            .send(OscMessage {
+                addr: "/status".to_string(),
+                args: vec![],
+            })
+            .map_err(BootWaitFailure::Osc)?;
         if client
             .wait_for("/status.reply", Duration::from_millis(500))
             .is_ok()
@@ -556,15 +733,10 @@ pub fn wait_for_scsynth(client: &OscClient, child: &mut Child) -> Result<(), Str
             return Ok(());
         }
         if let Ok(Some(status)) = child.try_wait() {
-            return Err(format!(
-                "Audio engine exited during startup ({status}). See output below."
-            ));
+            return Err(BootWaitFailure::Exited(status));
         }
         if Instant::now() >= deadline {
-            return Err(
-                "Audio engine failed to start (scsynth did not answer /status in time)."
-                    .to_string(),
-            );
+            return Err(BootWaitFailure::TimedOut);
         }
     }
 }
@@ -1009,6 +1181,210 @@ mod tests {
         assert_eq!(s, "48000");
     }
 
+    /// Issue #92: exit statuses synthesized like waitpid's raw values.
+    fn signaled(signal: i32) -> ExitStatus {
+        use std::os::unix::process::ExitStatusExt;
+        ExitStatus::from_raw(signal)
+    }
+
+    fn exited_with(code: i32) -> ExitStatus {
+        use std::os::unix::process::ExitStatusExt;
+        ExitStatus::from_raw(code << 8)
+    }
+
+    fn transient_failure(signal: i32) -> BootFailure {
+        BootFailure {
+            message: format!("Audio engine exited during startup (signal: {signal})."),
+            exit: Some(signaled(signal)),
+            output_lines: 0,
+        }
+    }
+
+    /// Issue #92: the transient-crash gate accepts ONLY a signal death with
+    /// zero output — table-driven across the observed crash flavors
+    /// (SIGTRAP/SIGABRT/EXC_BAD_ACCESS-shaped signals), other signals,
+    /// clean exits, output-producing deaths, and boot timeouts.
+    #[test]
+    fn transient_crash_gate_accepts_only_signal_death_without_output() {
+        // Signal deaths with zero output → retryable (the known scsynth
+        // 3.14.1 ObjC crash shapes on macOS 26).
+        for signal in [5, 6, 10, 11, 9] {
+            assert!(
+                is_transient_boot_crash(Some(&signaled(signal)), 0),
+                "signal {signal} with no output must be retryable"
+            );
+        }
+        // Any output disqualifies the retry — a failure that printed
+        // diagnostics (e.g. a device rejected by -H) is a real error.
+        for signal in [5, 6, 11] {
+            assert!(!is_transient_boot_crash(Some(&signaled(signal)), 1));
+            assert!(!is_transient_boot_crash(Some(&signaled(signal)), 42));
+        }
+        // Clean exits are not signal deaths, with or without output.
+        assert!(!is_transient_boot_crash(Some(&exited_with(1)), 0));
+        assert!(!is_transient_boot_crash(Some(&exited_with(0)), 0));
+        // A boot timeout (the child never exited during the wait) is a real
+        // failure.
+        assert!(!is_transient_boot_crash(None, 0));
+    }
+
+    /// Issue #92: classify_boot_failure must see what the dead child
+    /// actually printed — a signal death that stayed silent is transient,
+    /// the same death after printing is not.
+    #[test]
+    fn classify_boot_failure_reads_the_dead_child_output() {
+        use std::process::Command;
+
+        // Killed by a signal before printing anything → transient.
+        let mut silent = Command::new("/bin/sh")
+            .arg("-c")
+            .arg("kill -9 $$")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let status = silent.wait().unwrap();
+        let failure = classify_boot_failure(&BootWaitFailure::Exited(status), &mut silent);
+        assert_eq!(failure.exit, Some(status));
+        assert_eq!(failure.output_lines, 0);
+        assert!(failure.is_transient_crash());
+        assert_eq!(
+            failure.message,
+            format!("Audio engine exited during startup ({status}). See output below.")
+        );
+
+        // Printed, then killed by the same signal → real failure.
+        let mut chatty = Command::new("/bin/sh")
+            .arg("-c")
+            .arg("echo boom; kill -9 $$")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let status = chatty.wait().unwrap();
+        let failure = classify_boot_failure(&BootWaitFailure::Exited(status), &mut chatty);
+        assert_eq!(failure.output_lines, 1);
+        assert!(!failure.is_transient_crash());
+
+        // A timeout is classified without touching the (live) child's pipes.
+        let mut live = Command::new("sleep").arg("30").spawn().unwrap();
+        let failure = classify_boot_failure(&BootWaitFailure::TimedOut, &mut live);
+        assert_eq!(failure.exit, None);
+        assert_eq!(failure.output_lines, 0);
+        assert!(!failure.is_transient_crash());
+        let _ = live.kill();
+        let _ = live.wait();
+    }
+
+    /// Issue #92: the retry runner retries ONLY the transient signature,
+    /// at most `retries` times, and otherwise surfaces the failure
+    /// unchanged. Injection-based — no real scsynth involved.
+    #[test]
+    fn retry_runner_retries_a_transient_crash_once_then_succeeds() {
+        let calls = std::cell::Cell::new(0u32);
+        let retries = std::cell::Cell::new(0u32);
+        let result = boot_with_transient_retries(
+            SESSION_BOOT_TRANSIENT_RETRIES,
+            Duration::ZERO,
+            || {
+                calls.set(calls.get() + 1);
+                if calls.get() == 1 {
+                    Err(transient_failure(5))
+                } else {
+                    Ok("booted")
+                }
+            },
+            |_| retries.set(retries.get() + 1),
+        );
+        assert_eq!(result.unwrap(), "booted");
+        assert_eq!(calls.get(), 2, "exactly one retry");
+        assert_eq!(retries.get(), 1);
+    }
+
+    #[test]
+    fn retry_runner_does_not_retry_a_timeout() {
+        let calls = std::cell::Cell::new(0u32);
+        let result: Result<(), BootFailure> = boot_with_transient_retries(
+            SESSION_BOOT_TRANSIENT_RETRIES,
+            Duration::ZERO,
+            || {
+                calls.set(calls.get() + 1);
+                Err(BootFailure::other(
+                    "Audio engine failed to start (scsynth did not answer /status in time)."
+                        .to_string(),
+                ))
+            },
+            |_| panic!("a timeout must not be retried"),
+        );
+        assert_eq!(calls.get(), 1);
+        assert_eq!(
+            result.unwrap_err().message,
+            "Audio engine failed to start (scsynth did not answer /status in time)."
+        );
+    }
+
+    #[test]
+    fn retry_runner_does_not_retry_a_death_that_printed() {
+        let calls = std::cell::Cell::new(0u32);
+        let result: Result<(), BootFailure> = boot_with_transient_retries(
+            SESSION_BOOT_TRANSIENT_RETRIES,
+            Duration::ZERO,
+            || {
+                calls.set(calls.get() + 1);
+                Err(BootFailure {
+                    message: "Audio engine exited during startup (signal: 5).".to_string(),
+                    exit: Some(signaled(5)),
+                    output_lines: 3,
+                })
+            },
+            |_| panic!("a death with output must not be retried"),
+        );
+        assert_eq!(calls.get(), 1);
+        assert!(!result.unwrap_err().is_transient_crash());
+    }
+
+    #[test]
+    fn retry_runner_surfaces_the_error_when_the_retry_also_crashes() {
+        let calls = std::cell::Cell::new(0u32);
+        let result: Result<(), BootFailure> = boot_with_transient_retries(
+            SESSION_BOOT_TRANSIENT_RETRIES,
+            Duration::ZERO,
+            || {
+                calls.set(calls.get() + 1);
+                Err(transient_failure(6))
+            },
+            |_| {},
+        );
+        assert_eq!(calls.get(), 2, "one attempt plus exactly one retry");
+        let failure = result.unwrap_err();
+        assert!(failure.is_transient_crash());
+        assert_eq!(
+            failure.message,
+            "Audio engine exited during startup (signal: 6)."
+        );
+    }
+
+    /// Issue #92: the prewarm policy is the same runner with two retries.
+    #[test]
+    fn retry_runner_allows_the_prewarms_two_retries() {
+        let calls = std::cell::Cell::new(0u32);
+        let result = boot_with_transient_retries(
+            PREWARM_BOOT_TRANSIENT_RETRIES,
+            Duration::ZERO,
+            || {
+                calls.set(calls.get() + 1);
+                if calls.get() <= 2 {
+                    Err(transient_failure(5))
+                } else {
+                    Ok(())
+                }
+            },
+            |_| {},
+        );
+        assert!(result.is_ok());
+        assert_eq!(calls.get(), 3);
+    }
+
     #[test]
     fn master_instances_map_private_bus_to_hardware_bus() {
         // K = B = 2 (stereo device): instance 0 reads bus 2 -> hw 0, etc.
@@ -1113,7 +1489,7 @@ mod tests {
                             break 'outer;
                         }
                         Err(e) => {
-                            last_err = Some(e);
+                            last_err = Some(e.message());
                             let pid = c.id();
                             let _ = Command::new("/bin/kill").arg(pid.to_string()).status();
                             let _ = c.wait();

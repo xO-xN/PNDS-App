@@ -30,10 +30,6 @@ const HEALTH_REQUEST_TIMEOUT: Duration = Duration::from_millis(800);
 /// Number of node stdout/stderr lines kept for error reports (the
 /// error-page technical tail, app-behavior「Error Page」).
 const OUTPUT_TAIL_LINES: usize = 50;
-/// scsynth/CoreAudio initialization can fail transiently during startup,
-/// especially immediately after another project session has been stopped.
-const SCSYNTH_BOOT_ATTEMPTS: u32 = 5;
-const SCSYNTH_RETRY_DELAY: Duration = Duration::from_millis(750);
 /// Delay before the FIRST scsynth boot attempt when the audio subsystem
 /// was NOT prewarmed at launch (cold coreaudiod). The one-time
 /// AVAudioSession init can crash (objc cache corruption in the HAL XPC
@@ -643,38 +639,32 @@ impl SessionManager {
                     .as_ref()
                     .map(|plan| plan.bridged_channels)
                     .ok_or("internal mode requires a resolved channel plan")?;
-                // scsynth's CoreAudio/Objective-C initialization can fail
-                // transiently; give the failed process and audio device a
-                // short moment to settle before retrying. The very first
-                // attempt also waits for coreaudiod's one-time audio
-                // session init to settle (§ FIRST_BOOT_DELAY).
-                let mut last_err = String::new();
-                let mut booted = None;
+                // Issue #92: the bundled scsynth 3.14.1 dies probabilistically
+                // right after spawn on macOS 26 (an ObjC runtime race in the
+                // audio-session init — signal death before a single line of
+                // output). That exact shape gets ONE transparent retry on a
+                // fresh port while the session stays in `starting`; timeouts
+                // and failures that printed diagnostics are real errors and
+                // fail straight through to the error page, unmasked.
+                //
+                // The first attempt still waits out the cold-coreaudiod
+                // grace period (§ FIRST_BOOT_DELAY); each failed attempt's
+                // scsynth was already reclaimed by `boot_scsynth`'s failure
+                // path before the retry spawns.
                 let prewarmed = crate::project::audio::is_audio_prewarmed();
-                for attempt in 1..=SCSYNTH_BOOT_ATTEMPTS {
-                    if attempt == 1 {
-                        std::thread::sleep(if prewarmed {
-                            PREWARMED_FIRST_BOOT_DELAY
-                        } else {
-                            FIRST_BOOT_DELAY
-                        });
-                    } else {
-                        std::thread::sleep(SCSYNTH_RETRY_DELAY);
-                    }
-                    match Self::boot_scsynth(app_data_dir, sc_cfg, k, device.as_deref()) {
-                        Ok(ok) => {
-                            booted = Some(ok);
-                            break;
-                        }
-                        Err(e) => {
-                            last_err = e;
-                            log::warn!("scsynth boot attempt {attempt} failed: {last_err}");
-                        }
-                    }
-                }
-                let Some((mut sc_child, port)) = booted else {
-                    return Err(last_err);
-                };
+                std::thread::sleep(if prewarmed {
+                    PREWARMED_FIRST_BOOT_DELAY
+                } else {
+                    FIRST_BOOT_DELAY
+                });
+                let logger_inner = Arc::clone(&self.inner);
+                let (mut sc_child, port) = crate::project::audio::boot_with_transient_retries(
+                    crate::project::audio::SESSION_BOOT_TRANSIENT_RETRIES,
+                    crate::project::audio::TRANSIENT_RETRY_DELAY,
+                    || Self::boot_scsynth(app_data_dir, sc_cfg, k, device.as_deref()),
+                    |failure| Self::log_transient_retry(&logger_inner, failure),
+                )
+                .map_err(|failure| failure.message)?;
                 // §12: hand the handle to the session immediately. Every
                 // failure below this point is now covered by the teardown
                 // in `fail_start` instead of leaking a live scsynth.
@@ -1071,31 +1061,62 @@ impl SessionManager {
         }
     }
 
+    /// Issue #92: the transparent auto-retry's audit trail — the App log
+    /// and the per-session log both record every transient crash. The crash
+    /// rate these lines capture is the evidence base for the future
+    /// scsynth binary upgrade decision.
+    fn log_transient_retry(
+        inner: &Arc<Mutex<SessionInner>>,
+        failure: &crate::project::audio::BootFailure,
+    ) {
+        log::warn!(
+            "scsynth transient startup crash ({}); auto-retrying once",
+            failure.describe()
+        );
+        let mut guard = inner.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(log) = guard.logger.as_mut() {
+            log.write_line(&format!(
+                "scsynth transient startup crash ({}); auto-retrying",
+                failure.describe()
+            ));
+        }
+    }
+
     /// Boots scsynth on a fresh dynamic UDP port with K hardware output
     /// channels (§7.2) and waits for /status (§8 step 4). On failure the
-    /// child is killed before returning.
+    /// attempt is classified for the transient-crash gate (issue #92) and
+    /// the child is killed before returning; an unconfirmed kill keeps its
+    /// registry record so the next start's targeted cleanup can free the
+    /// audio device.
     fn boot_scsynth(
         app_data_dir: &Path,
         sc_cfg: &crate::project::manifest::ScsynthConfig,
         k: u32,
         device: Option<&str>,
-    ) -> Result<(Child, u16), String> {
-        let port = allocate_udp_port()?;
-        let binary = crate::project::audio::scsynth_binary_path()?;
-        let plugins = crate::project::audio::plugins_dir()?;
+    ) -> Result<(Child, u16), crate::project::audio::BootFailure> {
+        let port = allocate_udp_port().map_err(crate::project::audio::BootFailure::other)?;
+        let binary = crate::project::audio::scsynth_binary_path()
+            .map_err(crate::project::audio::BootFailure::other)?;
+        let plugins = crate::project::audio::plugins_dir()
+            .map_err(crate::project::audio::BootFailure::other)?;
         let mut child =
-            crate::project::audio::spawn_scsynth(&binary, sc_cfg, k, port, &plugins, device)?;
+            crate::project::audio::spawn_scsynth(&binary, sc_cfg, k, port, &plugins, device)
+                .map_err(crate::project::audio::BootFailure::other)?;
         let pid = child.id();
 
-        let client = crate::project::audio::OscClient::connect(&format!("127.0.0.1:{port}"))?;
-        if let Err(e) = crate::project::audio::wait_for_scsynth(&client, &mut child) {
+        let wait = match crate::project::audio::OscClient::connect(&format!("127.0.0.1:{port}")) {
+            Ok(client) => crate::project::audio::wait_for_scsynth(&client, &mut child),
+            Err(e) => Err(crate::project::audio::BootWaitFailure::Osc(e)),
+        };
+        if let Err(wait_failure) = wait {
+            let failure = crate::project::audio::classify_boot_failure(&wait_failure, &mut child);
             if !children::kill_escalate(&mut child, pid, children::SHUTDOWN_GRACE_WINDOW) {
                 // §12: record the unconfirmed kill so the next start's
                 // targeted orphan cleanup frees the audio device.
                 ChildRegistry::new(app_data_dir.to_path_buf())
                     .record(pid, "scsynth-aarch64-apple-darwin".to_string());
             }
-            return Err(e);
+            return Err(failure);
         }
         ChildRegistry::new(app_data_dir.to_path_buf())
             .record(pid, "scsynth-aarch64-apple-darwin".to_string());
@@ -1791,6 +1812,61 @@ mod tests {
             "stale output must be cleared"
         );
         assert!(!manager.has_active_session());
+    }
+
+    /// Issue #92: the transparent scsynth auto-retry leaves its audit trail
+    /// in the per-session log — the crash-rate record the future scsynth
+    /// binary upgrade decision will be judged from.
+    #[test]
+    fn transient_retry_is_written_to_the_session_log() {
+        use std::os::unix::process::ExitStatusExt;
+        use std::process::ExitStatus;
+
+        let manager = SessionManager::default();
+        let dir = tempfile::tempdir().unwrap();
+        {
+            let logger = crate::project::logs::SessionLogger::open(
+                dir.path(),
+                crate::project::logs::SessionLogParams {
+                    project_id: "fixture",
+                    project_name: "fixture",
+                    project_path: "/p",
+                    audio_mode: "internal",
+                    lan_ip: "192.168.1.10",
+                    osc_target: "none",
+                    output_device: "fixture",
+                },
+            )
+            .unwrap();
+            let mut inner = manager.lock();
+            inner.logger = Some(logger);
+        }
+        let failure = crate::project::audio::BootFailure {
+            message: "Audio engine exited during startup (signal: 5 (SIGTRAP)). See output below."
+                .to_string(),
+            exit: Some(ExitStatus::from_raw(5)),
+            output_lines: 0,
+        };
+
+        let inner = std::sync::Arc::clone(&manager.inner);
+        SessionManager::log_transient_retry(&inner, &failure);
+
+        // Flush the BufWriter, then read the session log back.
+        manager.lock().logger.as_mut().unwrap().close();
+        let logs_dir = dir.path().join("session-logs");
+        let log_path = std::fs::read_dir(&logs_dir)
+            .unwrap()
+            .next()
+            .unwrap()
+            .unwrap()
+            .path();
+        let content = std::fs::read_to_string(log_path).unwrap();
+        assert!(
+            content.contains(
+                "scsynth transient startup crash (signal 5, 0 output lines); auto-retrying"
+            ),
+            "session log must record the retry: {content}"
+        );
     }
 
     /// Integration: the REAL supervisor thread polling a live (stdlib) HTTP
