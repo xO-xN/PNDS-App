@@ -80,6 +80,7 @@ jobs:
             - The built-in tools sit in a fixed registry order — Multichannel → Local → Telematic — and every launch re-settles installs seeded before the reorder.
             - Concise card names that fit the 320px sidebar — Multichannel Gen, Local Diagnostics, Telematic Diagnostics — resolved above every learned manifest name, in the sidebar, the settings list and the running title alike; selection can no longer flip them back to the long names.
             - Each tool's card carries an illustrative icon: a waveform, a node pair, a globe — a wrench for whatever ships next.
+            - The two diagnostics tools ship refreshed. Their stability reading no longer mistook the test cycle's own idle phase for network trouble (Wi-Fi power-save wake-up used to paint a ~4 s wave on "stability" and pin healthy performers yellow): quality now judges the load condition, and only real degradation under load raises a flag. Each performer's phone mirrors its own measured verdict live — green/yellow/red on the dot. The telematic monitor is rebuilt as a one-screen compact console (three-column top row, scan-sized join QR beside the performer cards, capped event log).
 
             **A Welcome with an identity, themes with dressing**
             - The Welcome page carries the app icon on a rippling halo stage, ported from the project homepage and recolored by each theme's accent; Brutal keeps its hard plane and sits it out.

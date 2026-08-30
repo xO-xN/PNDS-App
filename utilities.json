@@ -10,16 +10,16 @@
     {
       "id": "local-network-diagnostics",
       "repo": "xO-xN/Local-Network-Diagnostics",
-      "tag": "v0.3.0",
-      "artifact": "local-network-diagnostics-v0.3.0.pnds",
-      "sha256": "dde90b9fc40067cad9397862b31159f7539c960516e9477de13091ca0d8724d2"
+      "tag": "v0.4.0",
+      "artifact": "local-network-diagnostics-v0.4.0.pnds",
+      "sha256": "06d3cac4a85a28bc4a9b026f37a69a6ae329a61840ca37f6d780483d2ccebf43"
     },
     {
       "id": "telematic-network-diagnostics",
       "repo": "xO-xN/Telematic-Network-Diagnostics",
-      "tag": "v0.2.0",
-      "artifact": "telematic-network-diagnostics-v0.2.0.pnds",
-      "sha256": "69d06cf276f533593926d00734c018af4efd8625a4c4a056744f94deac7f33ad"
+      "tag": "v0.3.0",
+      "artifact": "telematic-network-diagnostics-v0.3.0.pnds",
+      "sha256": "55fa0d0d5e87e7de5bf556abefba10935e8ddd5f182222c8b324b9dc3bd7debf"
     }
   ]
 }
