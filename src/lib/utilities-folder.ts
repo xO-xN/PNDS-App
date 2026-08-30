@@ -14,18 +14,13 @@ function refersToTool(entry: string, id: string): boolean {
 }
 
 /**
- * Learns every tool's manifest-declared name up front, so the Utilities
- * entries read as "Local Network Diagnostics" & co. on a clean install —
- * before any of them has been opened and preflighted. The store merges
- * and persists when the names actually changed.
+ * v1.3.3 (#84, user report): the built-in tools' concise display names
+ * live in the RESOLUTION layer (builtin-utilities.ts →
+ * projectDisplayName), never here — learning them into
+ * manifestProjectNames at launch was undone the moment a tool's
+ * preflight learned the formal manifest name back over it (the selected
+ * card flipped to the truncating long name).
  */
-function learnToolNames(tools: { path: string; name: string }[]): void {
-  const names: Record<string, string> = {}
-  for (const tool of tools) {
-    if (tool.name) names[tool.path] = tool.name
-  }
-  useProjectStore.getState().upsertManifestProjectNames(names)
-}
 
 /**
  * Records tool ids this install has now offered, merging into the
@@ -145,6 +140,37 @@ function registerFallbackUtilityPaths(): void {
 }
 
 /**
+ * v1.3.3 (user request, #81): the Utilities folder's display order is the
+ * registry order, FIXED — the tools are app content, not a curated list.
+ * Installs seeded before a registry reorder keep their seeded order
+ * forever (the seeding runs only when the folder is missing), so every
+ * launch re-settles the folder's members into the registry order. Paths
+ * outside the registry (none expected — only the seeding files into the
+ * folder) keep their relative order at the end. A no-op settles nothing.
+ */
+function normalizeUtilityOrder(tools: BuiltinUtility[]): void {
+  const folders = useProjectStore.getState().projectFolders
+  const index = folders.findIndex(folder => folder.id === UTILITIES_FOLDER_ID)
+  if (index === -1) return
+  const folder = folders[index]
+  if (!folder) return
+  const rank = new Map(tools.map((tool, order) => [tool.path, order]))
+  const ordered = [
+    ...folder.projectPaths
+      .filter(path => rank.has(path))
+      .sort((a, b) => (rank.get(a) ?? 0) - (rank.get(b) ?? 0)),
+    ...folder.projectPaths.filter(path => !rank.has(path)),
+  ]
+  const settled =
+    ordered.length === folder.projectPaths.length &&
+    ordered.every((path, order) => path === folder.projectPaths[order])
+  if (settled) return
+  const next = [...folders]
+  next[index] = { ...folder, projectPaths: ordered }
+  useProjectStore.getState().setProjectFolders(next)
+}
+
+/**
  * v1.2.0 (issue #18): the built-in utility tools behind the default
  * Utilities folder. They ship UNPACKED with the app resources at stable
  * paths (`utilities/<id>/`, no version in the path) and run in place — the
@@ -157,7 +183,9 @@ function registerFallbackUtilityPaths(): void {
  * v1.3.1) and newly shipped tools are offered once (see
  * `offerNewUtilities`). v1.3.2 (user report after #75): the tools are app
  * content — once seeded, the store guards keep their position, Utilities
- * membership and history entry immutable from the UI. The folder is
+ * membership and history entry immutable from the UI. v1.3.3 (#81): the
+ * member order is the registry order, fixed — each launch re-settles it
+ * (see `normalizeUtilityOrder`). The folder is
  * pinned to the BOTTOM of the folder area: seeded last, and a launch also
  * migrates installs where it still sits elsewhere. Every mutation
  * persists through the store's structural actions.
@@ -176,7 +204,6 @@ export async function ensureUtilitiesFolder(): Promise<void> {
     registerFallbackUtilityPaths()
     return
   }
-  learnToolNames(tools)
   // v1.3.2 (user report after #75): register this launch's tool paths with
   // the store — every structural guard below (move / remove / reorder /
   // rename refusals) keys off the set. Recorded before the seeding flows
@@ -218,6 +245,7 @@ export async function ensureUtilitiesFolder(): Promise<void> {
 
   refreshToolRoots(tools)
   await offerNewUtilities(tools)
+  normalizeUtilityOrder(tools)
 
   // Already present: pin it to the bottom when an older install still has
   // it elsewhere (it used to be seeded first). Last position is the steady

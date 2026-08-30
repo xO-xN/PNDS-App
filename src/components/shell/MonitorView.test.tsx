@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, act } from '@/test/test-utils'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { useSessionStore } from '@/store/session-store'
+import { useProjectStore } from '@/store/project-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { MONITOR_REVEAL_TIMEOUT_MS } from '@/lib/monitor-reveal'
 import { logger } from '@/lib/logger'
@@ -119,7 +120,7 @@ describe('MonitorView theme bridge (#44)', () => {
       lanIp: '192.168.1.10',
       health: readyHealth,
     })
-    useSettingsStore.setState({ colorThemeSetting: 'lavender' })
+    useSettingsStore.setState({ colorThemeSetting: 'pond' })
   })
   afterEach(() => {
     vi.restoreAllMocks()
@@ -138,7 +139,7 @@ describe('MonitorView theme bridge (#44)', () => {
     const origin = firstCall?.[1]
     expect(origin).toBe('http://192.168.1.10:6869') // never '*'
     expect(message.type).toBe('pnds:theme')
-    expect(message.theme).toBe('lavender')
+    expect(message.theme).toBe('pond')
     expect(message.palette.accent).toBe('#5a4ff3')
   })
 
@@ -185,7 +186,7 @@ describe('MonitorView theme bridge (#44)', () => {
 
     const themeCalls = bridgeCalls(second, 'pnds:theme')
     expect(themeCalls).toHaveLength(1)
-    expect(themeCalls[0]?.[0].theme).toBe('lavender')
+    expect(themeCalls[0]?.[0].theme).toBe('pond')
   })
 })
 
@@ -203,7 +204,7 @@ describe('MonitorView locale bridge (#54)', () => {
       lanIp: '192.168.1.10',
       health: readyHealth,
     })
-    useSettingsStore.setState({ colorThemeSetting: 'lavender' })
+    useSettingsStore.setState({ colorThemeSetting: 'pond' })
     // The i18n singleton is shared across the whole file — pin the
     // language each time so a previous test's switch cannot leak in.
     await i18n.changeLanguage('en')
@@ -423,5 +424,69 @@ describe('MonitorView reveal gate (#50)', () => {
     expect(useSessionStore.getState().monitorLoadTimedOut).toBe(true)
     expect(warn).toHaveBeenCalledTimes(1)
     coverReleased()
+  })
+})
+
+/**
+ * v1.3.3 (#84): the title strip's name resolution — a user display-name
+ * override still wins, the built-in tool's concise alias (resolved from
+ * its registry id, ABOVE the learned names) is the second stop, and the
+ * session's manifest name is the fallback. A running tool must read the
+ * same name as its sidebar card.
+ */
+describe('MonitorView title strip (#84)', () => {
+  const TOOL_PATH =
+    '/Applications/PNDS.app/Contents/Resources/utilities/multichannel-signal-generator'
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useSessionStore.setState({
+      sessionStatus: 'ready',
+      projectName: 'Multichannel Signal Generator',
+      sessionProjectPath: TOOL_PATH,
+      lanIp: '192.168.1.10',
+      health: readyHealth,
+    })
+    useProjectStore.setState({
+      projectDisplayNames: {},
+      manifestProjectNames: {},
+    })
+  })
+
+  it('keeps the alias over the manifest name preflight learned (user report on #84)', () => {
+    // Selecting the tool runs its preflight, which learns the FORMAL
+    // manifest name into the map — the title must not flip back to the
+    // truncating long name.
+    useProjectStore.setState({
+      manifestProjectNames: { [TOOL_PATH]: 'Multichannel Signal Generator' },
+    })
+
+    render(<MonitorView />)
+
+    expect(screen.getByText('PNDS - Multichannel Gen')).toBeTruthy()
+  })
+
+  it('keeps a user display-name override above the alias', () => {
+    useProjectStore.setState({
+      projectDisplayNames: { [TOOL_PATH]: 'My MSG' },
+      manifestProjectNames: { [TOOL_PATH]: 'Multichannel Signal Generator' },
+    })
+
+    render(<MonitorView />)
+
+    expect(screen.getByText('PNDS - My MSG')).toBeTruthy()
+  })
+
+  it('falls back to the session-reported manifest name', () => {
+    // A regular project carries no alias, so an empty name map falls
+    // through to the name the session itself reports.
+    useSessionStore.setState({
+      sessionProjectPath: '/Users/test/inarticulate-iii',
+      projectName: 'Inarticulate III',
+    })
+
+    render(<MonitorView />)
+
+    expect(screen.getByText('PNDS - Inarticulate III')).toBeTruthy()
   })
 })

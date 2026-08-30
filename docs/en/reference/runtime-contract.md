@@ -340,11 +340,88 @@ http://<PNDS_HOST_IP>:<monitorPort>/
 
 The monitor iframe keeps one document instance for the session's lifetime. Window resizes and entering/leaving full screen must not restart Node, and should not reload the iframe.
 
-The Project's monitor must update its layout and drawing surfaces from standard viewport resizes. The App never reads, injects or calls into cross-origin iframe DOM.
+The Project's monitor page must:
+
+- load at the address above and allow iframe embedding — no `X-Frame-Options` or CSP `frame-ancestors` that blocks it;
+- not depend on Tauri APIs or the App's DOM;
+- update layout and drawing surfaces from standard viewport resizes (without asking the App to rebuild the iframe) — canvas/WebGL/p5 pages keep their internal drawing buffers and coordinate mappings in sync as their size changes;
+- store persistent interaction state in relative or normalised coordinates, so it does not fossilise old pixel coordinates after a window resize;
+- keep the area at the top centre of the window free of critical interactions — the App's window title / drag overlay lives there.
+
+Entering or leaving macOS full screen only changes the window's size and decoration state: the App does not restart Node and does not reload the monitor iframe; the Project must adapt using standard resize events.
+
+**Right-click belongs to the page author**: the App suppresses WKWebView's native web menu (Reload, Open Frame in New Window, Back, …; editable fields keep the system copy/paste menu). The suppression only calls `preventDefault()` and never stops propagation — a Project's own context menu, built by listening for `contextmenu` in its monitor page, coexists with it naturally, and the App needs (and offers) no wiring for it. Right-click in the App's own UI (the sidebar, …) belongs to the App's designed menus; the performer page is never opened inside the App, so its right-click is entirely the Project's own business.
+
+The App never reads, injects or calls into cross-origin iframe DOM.
 
 A manual Refresh may rebuild the iframe on the user's explicit action; it is a recovery tool, not part of the normal resize flow.
 
-## 11. Shutdown contract
+## 11. Theme and locale push (the theme/locale bridge)
+
+The App pushes the current theme and language to the monitor page one-way over the same mechanism. Supporting either is **optional**: Projects that don't listen behave exactly as before. For the zero-config paths and advanced options, see the Module Manual's [theme following](../modules/theme-follow.md) and [locale following](../modules/locale-follow.md) — this section is the protocol's source of truth.
+
+### Theme push
+
+From v1.2.3, when the monitor iframe finishes loading, on theme switches, and when the window regains focus, the App pushes the current theme to the monitor page via cross-origin `postMessage`. From v1.3.0, whenever the App loads or reloads the monitor it also **always** carries a `?theme=<name>` first-frame parameter on the iframe URL (semantics below), so theme-following pages paint correctly on the first frame.
+
+Message (App → monitor page, one-way):
+
+```json
+{
+  "type": "pnds:theme",
+  "version": 1,
+  "theme": "pond",
+  "palette": {
+    "bg": "#eef0f8",
+    "sidebar-bg": "#e2e5f3",
+    "card": "#ffffff",
+    "pill": "#e8ebf7",
+    "accent": "#5a4ff3",
+    "accent-hover": "#4a3fe0",
+    "accent-foreground": "#ffffff",
+    "text": "#171a2b",
+    "text-secondary": "#5d6484",
+    "danger": "#e11d48",
+    "danger-hover": "#c2143c",
+    "danger-foreground": "#ffffff",
+    "warning": "#ffb020",
+    "warning-hover": "#f0a20c",
+    "warning-foreground": "#171a2b"
+  }
+}
+```
+
+Conventions:
+
+- `palette` carries the final colour values (its keys share names with the App's semantic tokens) — most Projects consume only the palette and never need the theme concept; when the App adds a theme, Projects follow with zero changes. The `theme` name is for Projects that fork a whole design language (e.g. switching corner radii or font weights per theme).
+- Delivery is best-effort, last-value-wins: the App does not guarantee exactly-once (a suspended WebView may drop messages; the App re-pushes on focus regain). The page must apply messages idempotently (writing the values into its own CSS variables is enough).
+- To avoid a first-frame colour flash, a page may read the URL query parameter `?theme=<name>` as its initial value. From v1.3.0 the App **always** carries the parameter when loading or reloading the monitor (the value is snapshotted at iframe navigation — switching theme mid-session does not reload the page; updates still arrive via postMessage); the Project must still tolerate its absence (opening directly in a browser, older App versions, …).
+- The performer page takes no part (it is not opened inside the App and always uses the Project's own colours).
+- The App never injects or rewrites anything in the monitor page — whether and how to use the push is entirely the Project's call.
+
+### Locale push
+
+From v1.3.0, with the same mechanism as the theme bridge, the App pushes the current **resolved** language code to the monitor page; the push triggers are fully shared (monitor iframe load, language switch, window focus regain, heartbeat). From the same version, the App **always** carries a `?lang=<code>` first-frame parameter on the iframe URL when loading or reloading the monitor (same semantics as `?theme=`).
+
+Message (App → monitor page, one-way):
+
+```json
+{
+  "type": "pnds:locale",
+  "version": 1,
+  "locale": "zh-CN"
+}
+```
+
+Conventions:
+
+- `locale` is the **resolved** language code (current vocabulary: `en` / `zh-CN`), not the General settings item — a session set to "follow system" is pushed with the code the system resolved to. When the App adds languages, only the vocabulary grows; the message shape does not change.
+- Delivery semantics match the theme bridge: best-effort, last-value-wins; the page must apply messages idempotently; the App does not guarantee exactly-once.
+- To avoid a first-frame language flash, a page may read the URL query parameter `?lang=<code>` as its initial value. The value is snapshotted at iframe navigation — switching language mid-session does not reload the page; updates arrive via postMessage; the Project must still tolerate its absence (opening directly in a browser, older App versions, …).
+- Pages that don't implement locale following are entirely unaffected: the App never injects or rewrites anything in the monitor page, and `?lang=` is a harmless query parameter to a page that ignores it.
+- The performer page takes no part (it is not opened inside the App and always uses the Project's own language).
+
+## 12. Shutdown contract
 
 The Project must respond to `SIGINT` and `SIGTERM`:
 
@@ -370,7 +447,7 @@ Orphan cleanup always skips children of the currently active session (decided by
 
 Any startup or runtime failure must first run the current generation's failure cleanup before surfacing `error`: stop Node, release the master group, stop scsynth, clear the process handles. When a force-kill cannot be confirmed, the child registry must keep the ownership record; on a direct Retry from `error`, the start flow runs a targeted orphan cleanup for that generation before the port preflight. Retry never calls the public stop flow used by normal sessions.
 
-## 12. Runtime compliance verification
+## 13. Runtime compliance verification
 
 Verify at minimum:
 

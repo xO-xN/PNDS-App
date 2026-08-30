@@ -9,14 +9,15 @@ import { useSettingsStore } from '@/store/settings-store'
  * node's `data-color-theme` attribute — this module owns that attribute.
  *
  * The four solid themes ship in T2/T4/T5; the persisted enum also carries
- * legacy values (`midnight` — renamed to `brutal`; `glass` from the
+ * legacy values (`midnight` — renamed to `brutal`; `lavender` — renamed
+ * to `pond` in #91, its display name a release earlier; `glass` from the
  * abandoned liquid-glass ticket), and `colorThemeFromPrefs` maps anything
- * this build cannot render back to Lavender, so a preference from a
- * newer or older App never renders wrong.
+ * this build cannot render back to Pond, so a preference from a newer or
+ * older App never renders wrong.
  */
 
 /** The themes this build implements (the settings panel's offer). */
-export type ColorTheme = 'lavender' | 'sand' | 'stage' | 'brutal'
+export type ColorTheme = 'pond' | 'sand' | 'stage' | 'brutal'
 
 export interface ColorThemeOption {
   value: ColorTheme
@@ -29,27 +30,30 @@ export interface ColorThemeOption {
  *  swatch cannot read the token (it must render before/independent of the
  *  root attribute), so keep the two in sync when adding a theme. */
 export const COLOR_THEME_OPTIONS: readonly ColorThemeOption[] = [
-  { value: 'lavender', accent: '#5a4ff3' },
+  { value: 'pond', accent: '#5a4ff3' },
   { value: 'sand', accent: '#d97706' },
   { value: 'stage', accent: '#34d399' },
   { value: 'brutal', accent: '#ff5722' },
 ]
 
-export const DEFAULT_COLOR_THEME: ColorTheme = 'lavender'
+export const DEFAULT_COLOR_THEME: ColorTheme = 'pond'
 
 /**
  * Persisted values this build renders under a new name — `midnight` was
- * renamed to `brutal` (issue #41's second redirect); the stored
- * preference migrates silently instead of snapping to Lavender.
+ * renamed to `brutal` (issue #41's second redirect) and `lavender` to
+ * `pond` (#91, the vocabulary-sync follow-up to its display rename); the
+ * stored preference migrates silently instead of snapping to the
+ * default.
  */
 const LEGACY_THEME_NAMES: Record<string, ColorTheme> = {
   midnight: 'brutal',
+  lavender: 'pond',
 }
 
 /**
  * Map the persisted `colorTheme` preference to a theme this build can
  * render: renamed values map to their successor, unknown/absent/not-yet
- * -shipped values (glass until its ticket lands) fall back to Lavender —
+ * -shipped values (glass until its ticket lands) fall back to Pond —
  * spec #36 story 10.
  */
 export function colorThemeFromPrefs(

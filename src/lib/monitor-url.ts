@@ -9,8 +9,8 @@
  * - `?lang=<code>` — same first-frame semantics, from the locale
  *   bridge (#54).
  *
- * Contract: docs/zh-CN/reference/network.md "Theme Following" and
- * "Locale Following". Pages must still tolerate both parameters being
+ * Contract: docs/zh-CN/reference/runtime-contract.md §11 (theme and
+ * locale push). Pages must still tolerate both parameters being
  * absent.
  */
 

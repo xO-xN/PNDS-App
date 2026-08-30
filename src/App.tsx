@@ -67,7 +67,7 @@ function App() {
           .setLanguageSetting(languageSettingFromPrefs(savedLanguage))
         // v1.2.3 (issue #38): apply the saved color theme to the root node
         // and seed the Appearance-section selection from the same read.
-        // Unknown or not-yet-shipped values fall back to Lavender, so an
+        // Unknown or not-yet-shipped values fall back to Pond, so an
         // error read also lands on the default rather than no attribute.
         const colorTheme = colorThemeFromPrefs(
           result.status === 'ok' ? result.data.colorTheme : null
@@ -99,10 +99,10 @@ function App() {
       } finally {
         // v1.3.0 (#51): cold-start reveal. The window is created hidden
         // (tauri.conf.json visible:false) so its first visible frame is
-        // already themed — dark users never see the Lavender default
+        // already themed — dark users never see the Pond default
         // first. The reveal is gated on the theme having landed above;
         // it runs even when initialization failed (the DOM then keeps
-        // its Lavender default, still a themed paint, and the Rust-side
+        // its Pond default, still a themed paint, and the Rust-side
         // backstop would force-show anyway — just far later).
         await fadeInWindow()
       }

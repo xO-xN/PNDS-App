@@ -13,6 +13,7 @@ import { WelcomeScreen } from '@/components/welcome'
 import { Sidebar } from './Sidebar'
 import { MonitorView } from './MonitorView'
 import { HoverSidebar } from './HoverSidebar'
+import { ResizeGrip } from './ResizeGrip'
 import { LoadingScreen } from './LoadingScreen'
 import { ErrorScreen } from './ErrorScreen'
 import { StopCover } from './StopCover'
@@ -237,6 +238,9 @@ export function AppShell() {
               loading, including fullscreen. Ready frames drop it here —
               MonitorView brings its own; stopping keeps MonitorView's. */}
           {sessionStatus === 'starting' && <HoverSidebar />}
+          {/* #80: the rounded-corner resize grip — windowed frames only
+              (fullscreen has square corners and no resize affordance). */}
+          {!fullscreen && <ResizeGrip />}
         </div>
         <Toaster position="bottom-right" />
       </>
@@ -260,6 +264,7 @@ export function AppShell() {
           <main className="flex-1 overflow-auto">
             <ErrorScreen />
           </main>
+          {!fullscreen && <ResizeGrip />}
         </div>
         <Toaster position="bottom-right" />
       </>
@@ -291,6 +296,7 @@ export function AppShell() {
             onFadedOut={() => useSessionStore.getState().clearStopUncover()}
           />
         )}
+        {!fullscreen && <ResizeGrip />}
       </div>
       <Toaster position="bottom-right" />
     </>

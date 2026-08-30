@@ -5,8 +5,8 @@
  * The monitor page is an out-of-process, cross-origin iframe; the App can
  * neither inject nor rewrite its DOM. The message protocol below is the
  * one supported channel, and it is OPTIONAL for projects: a page that
- * never listens behaves exactly as before. See the score project
- * specification's "Theme Following" section for the contract.
+ * never listens behaves exactly as before. See the runtime
+ * contract §11 (theme push) for the contract.
  */
 
 /** The semantic token subset offered to projects (kebab-case names). */

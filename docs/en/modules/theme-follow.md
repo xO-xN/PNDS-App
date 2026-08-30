@@ -1,6 +1,6 @@
 # Theme Following
 
-The App ships four themes (lavender / sand / stage / brutal). Theme following recolours the monitor page to match the App's current theme, while performer pages keep the Project's own colours.
+The App ships four themes (pond / sand / stage / brutal; pond's id was `lavender` before v1.3.3 (#91) — a page that does not recognize an id keeps its own default palette, which is exactly the pond look, so the rename is visually a no-op). Theme following recolours the monitor page to match the App's current theme, while performer pages keep the Project's own colours.
 
 ## Load it on the monitor page only
 
@@ -16,7 +16,7 @@ The mechanism: the App (≥ v1.2.3) pushes its current theme to the monitor ifra
 { type: "pnds:theme", version: 1, theme: "<name>", palette: { … } }
 ```
 
-The App re-pushes on iframe load, theme switches and window focus regain — **latest value wins, and applying must be idempotent** (applying the same palette any number of times lands on the same state). Unknown or malformed messages are ignored silently; the page never errors on them.
+The App re-pushes on iframe load, theme switches and window focus regain — **latest value wins, and applying must be idempotent** (applying the same palette any number of times lands on the same state). Unknown or malformed messages are ignored silently; the page never errors on them. The protocol's source of truth (message shape, delivery semantics, the `?theme=` first-frame parameter) is the [runtime contract §11](../reference/runtime-contract.md).
 
 ## The zero-config path: CSS variables
 
@@ -35,7 +35,7 @@ Configure nothing and the script writes the palette into the page root's CSS var
 
 Write the page's styles against these variables and the whole page follows a theme switch. The page should carry its own default variable values — before any message arrives (and when opened standalone, without the App) it still has to look right.
 
-First frame: with `?theme=<name>` in the URL, the script paints the first frame from its built-in four palettes (the App does not send the parameter today; it is the hook for standalone previews). When the App's message arrives it overwrites the values verbatim.
+First frame: with `?theme=<name>` in the URL, the script paints the first frame from its built-in four palettes — the App (≥ v1.3.0) always carries the parameter when loading or reloading the monitor, and the page must still tolerate its absence (standalone previews, older App versions). When the App's message arrives it overwrites the values verbatim.
 
 ## The advanced path: PNDS_THEME_OPTIONS
 

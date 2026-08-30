@@ -1,6 +1,7 @@
 import { render, screen } from '@/test/test-utils'
 import { describe, it, expect, beforeEach } from 'vitest'
 import { useProjectStore } from '@/store/project-store'
+import pndsIcon from '@/assets/pnds-icon.png'
 import { WelcomeScreen } from './WelcomeScreen'
 
 /**
@@ -36,6 +37,22 @@ describe('WelcomeScreen', () => {
     ).toBeInTheDocument()
     expect(screen.queryByText(/adding a new project/i)).not.toBeInTheDocument()
     expect(screen.queryByRole('button')).not.toBeInTheDocument()
+  })
+
+  it('renders the rippling logo stage above the hero (#86)', () => {
+    render(<WelcomeScreen />)
+
+    // Decorative, so hidden from the a11y tree — but present: the
+    // ported site art and its three phased ripple rings. The
+    // data-welcome-logo hook is what Brutal's hide rule keys on
+    // (theme-variables.css), so it must survive refactors.
+    const stage = screen.getByTestId('welcome-logo-stage')
+    expect(stage).toHaveAttribute('aria-hidden', 'true')
+    expect(stage).toHaveAttribute('data-welcome-logo', '')
+    expect(stage.querySelectorAll('span')).toHaveLength(3)
+    const icon = stage.querySelector('img')
+    expect(icon).toHaveAttribute('src', pndsIcon)
+    expect(icon).toHaveAttribute('alt', '')
   })
 
   it('shows the checking feedback while preflight runs', () => {

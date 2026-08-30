@@ -139,12 +139,6 @@ interface ProjectState {
   /** Restores the learned manifest names from persisted preferences (launch). */
   setManifestProjectNames: (names: Record<string, string>) => void
   /**
-   * Merges learned manifest names (truthy entries only) and persists when
-   * the map changed — the Utilities seeding learns every tool's name up
-   * front (issue #18).
-   */
-  upsertManifestProjectNames: (names: Record<string, string>) => void
-  /**
    * Sets one override and persists it. An empty name removes the entry —
    * the card falls back to the path-basename name (spec issue #10: 空串回退).
    */
@@ -505,18 +499,6 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
   setProjectDisplayNames: names => set({ projectDisplayNames: names }),
 
   setManifestProjectNames: names => set({ manifestProjectNames: names }),
-
-  upsertManifestProjectNames: names => {
-    const before = get()
-    set(state => {
-      const merged = { ...state.manifestProjectNames }
-      for (const [path, name] of Object.entries(names)) {
-        if (name) merged[path] = name
-      }
-      return { manifestProjectNames: merged }
-    })
-    persistNameMapIfChanged(before, get(), 'manifestProjectNames')
-  },
 
   setProjectDisplayName: (path, name) => {
     const before = get()

@@ -276,11 +276,11 @@ mod tests {
         assert_eq!(
             registry.iter().map(|t| t.id.as_str()).collect::<Vec<_>>(),
             [
-                "local-network-diagnostics",
                 "multichannel-signal-generator",
+                "local-network-diagnostics",
                 "telematic-network-diagnostics"
             ],
-            "registry order is the Utilities order"
+            "registry order is the Utilities order (v1.3.3 user request, #81)"
         );
         for tool in registry {
             assert_eq!(tool.sha256.len(), 64);

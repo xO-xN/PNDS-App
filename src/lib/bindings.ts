@@ -210,7 +210,7 @@ async startProject(path: string, mode: string, lanIp: string, oscTarget: string 
 }
 },
 /**
- * Stops the running score server (§11). Idempotent.
+ * Stops the running score server (§12). Idempotent.
  */
 async stopProject() : Promise<Result<null, string>> {
     try {
@@ -294,7 +294,7 @@ async checkPortStatus(port: number) : Promise<Result<PortStatus, string>> {
 },
 /**
  * v1.2.0 (issue #14): release an occupied port — SIGTERM → grace → SIGKILL
- * on the freshly-resolved occupant (same escalation as §11 child cleanup).
+ * on the freshly-resolved occupant (same escalation as §12 child cleanup).
  * Returns the port's post-release status; the caller refreshes from it.
  */
 async releasePort(port: number) : Promise<Result<PortStatus, string>> {
@@ -478,9 +478,9 @@ theme: string;
  * `data-color-theme` attribute. Enum-validated at the save boundary;
  * the legacy `midnight` (renamed to `brutal` in #41's second
  * redirect) and `glass` (abandoned ticket) values stay accepted so
- * stored preferences keep validating — the frontend maps the former
- * to `brutal` and falls back to `lavender` for anything its build
- * cannot render. App-local, never touches project manifests.
+ * stored preferences keep validating — the frontend maps renamed
+ * values to their successors and falls back to `pond` for anything
+ * its build cannot render. App-local, never touches project manifests.
  */
 colorTheme?: string; 
 /**

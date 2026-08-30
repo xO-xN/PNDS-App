@@ -1,10 +1,10 @@
 //! Project session: score-server (Node.js) process lifecycle and health
-//! polling. See `docs/zh-CN/reference/runtime-contract.md` §3–§11; App-side
+//! polling. See `docs/zh-CN/reference/runtime-contract.md` §3–§12; App-side
 //! session behavior in `docs/developer/app-behavior.md` (状态与 Session).
 //!
 //! Startup order (runtime-contract §8): preflight → (internal: resolve
 //! channel plan and boot scsynth) → spawn node → poll health → ready
-//! (internal: master stage). Shutdown (§11): SIGTERM → graceful wait →
+//! (internal: master stage). Shutdown (§12): SIGTERM → graceful wait →
 //! SIGKILL on timeout.
 
 use serde::{Deserialize, Serialize};
@@ -309,7 +309,7 @@ struct SessionInner {
     output_device: Option<String>,
     /// Incremented on every start/stop so stale supervisor threads exit.
     generation: u64,
-    /// §11: per-session log file.
+    /// §12: per-session log file.
     logger: Option<crate::project::logs::SessionLogger>,
     /// App-Nap prevention held while the session is live (see
     /// process_activity.rs); refreshed on every state publication.
@@ -440,7 +440,7 @@ impl SessionManager {
     /// Starts a score-server session (§8). Validation (manifest, ports)
     /// is re-run here so a stale preflight result cannot start a process.
     ///
-    /// §11: this is also the **Retry** entry point — no stop is required
+    /// §12: this is also the **Retry** entry point — no stop is required
     /// first. The generation is bumped and the previous run's
     /// error/health/output is cleared before anything else, so a retry
     /// always begins from a clean `starting` snapshot. Every failure below
@@ -505,7 +505,7 @@ impl SessionManager {
         }
 
         let registry = ChildRegistry::new(app_data_dir.to_path_buf());
-        // §11: a previous generation whose SIGKILL was never confirmed
+        // §12: a previous generation whose SIGKILL was never confirmed
         // still owns its ports. Re-run the targeted (pid + marker) cleanup
         // BEFORE the port preflight, so a Retry after a hard failure is
         // not blocked by the corpse of its own last attempt.
@@ -586,7 +586,7 @@ impl SessionManager {
             }
         }
 
-        // §11: open the per-session log file. The session owns it from
+        // §12: open the per-session log file. The session owns it from
         // here on, so `teardown_children` closes it on a failed start too.
         let mut session_log = crate::project::logs::SessionLogger::open(
             app_data_dir,
@@ -675,7 +675,7 @@ impl SessionManager {
                 let Some((mut sc_child, port)) = booted else {
                     return Err(last_err);
                 };
-                // §11: hand the handle to the session immediately. Every
+                // §12: hand the handle to the session immediately. Every
                 // failure below this point is now covered by the teardown
                 // in `fail_start` instead of leaking a live scsynth.
                 if let Some(stdout) = sc_child.stdout.take() {
@@ -762,7 +762,7 @@ impl SessionManager {
         Ok(())
     }
 
-    /// §11: a synchronously failing start must leave nothing behind.
+    /// §12: a synchronously failing start must leave nothing behind.
     /// Tears down whatever this generation already spawned, clears the
     /// handles, and only then publishes the `error` snapshot — so the
     /// state the user retries from is provably clean.
@@ -777,7 +777,7 @@ impl SessionManager {
         Self::fail_generation(app, &inner, app_data_dir, generation, message.to_string());
     }
 
-    /// §11: the **single** failure exit for a generation, shared by the
+    /// §12: the **single** failure exit for a generation, shared by the
     /// synchronous start path, the startup supervisor and the running
     /// watchdog. Order is the contract: cleanup first, `error` snapshot
     /// second. A superseded generation is a no-op — a dying old session
@@ -821,7 +821,7 @@ impl SessionManager {
                     Ok(line) => {
                         log::debug!("[{tag}] {line}");
                         let mut guard = inner.lock().unwrap_or_else(|e| e.into_inner());
-                        // §11: a reader still draining a dead generation's
+                        // §12: a reader still draining a dead generation's
                         // pipe must not pollute the retry's output tail.
                         if guard.generation != generation {
                             return;
@@ -974,7 +974,7 @@ impl SessionManager {
                 guard.generation,
             )
         };
-        // §11: a stop/retry that landed while health was being polled must
+        // §12: a stop/retry that landed while health was being polled must
         // not run the OSC handshake on a torn-down engine.
         if current_generation != generation {
             return false;
@@ -1036,7 +1036,7 @@ impl SessionManager {
             if let Some(status) = exited {
                 drop(guard);
                 log::warn!("Score server (pid {pid}) exited unexpectedly: {status}");
-                // §11: the failed generation must not leave the audio
+                // §12: the failed generation must not leave the audio
                 // engine behind — node/scsynth stop before the error
                 // snapshot is emitted, so Retry starts clean.
                 Self::fail_generation(
@@ -1090,7 +1090,7 @@ impl SessionManager {
         let client = crate::project::audio::OscClient::connect(&format!("127.0.0.1:{port}"))?;
         if let Err(e) = crate::project::audio::wait_for_scsynth(&client, &mut child) {
             if !children::kill_escalate(&mut child, pid, children::SHUTDOWN_GRACE_WINDOW) {
-                // §11: record the unconfirmed kill so the next start's
+                // §12: record the unconfirmed kill so the next start's
                 // targeted orphan cleanup frees the audio device.
                 ChildRegistry::new(app_data_dir.to_path_buf())
                     .record(pid, "scsynth-aarch64-apple-darwin".to_string());
@@ -1114,9 +1114,9 @@ impl SessionManager {
         crate::project::audio::create_master_stage(&client, &synthdef, k, b, gain)
     }
 
-    /// Stops the node score server and scsynth (§11): node SIGTERM with a
+    /// Stops the node score server and scsynth (§12): node SIGTERM with a
     /// grace window, master synth release, scsynth quit. Handles are always
-    /// cleared, so the session is provably child-free afterwards (§11).
+    /// cleared, so the session is provably child-free afterwards (§12).
     ///
     /// The session-children record is only cleared for a **confirmed** kill;
     /// an unconfirmed one keeps its ownership record so the next start
@@ -1178,7 +1178,7 @@ impl SessionManager {
         }
     }
 
-    /// §11 stop sequence. Idempotent.
+    /// §12 stop sequence. Idempotent.
     ///
     /// NOTE: never call `emit` while holding the inner lock — `emit` takes a
     /// snapshot, which locks again (std Mutex is not reentrant → deadlock).
@@ -1495,7 +1495,7 @@ mod tests {
         assert!(manager.active_child_pids().is_empty());
     }
 
-    /// §11: an error-state session has NO lingering children — the failed
+    /// §12: an error-state session has NO lingering children — the failed
     /// generation was torn down before the error snapshot. Retry starts
     /// from a clean slate.
     #[test]
@@ -1527,7 +1527,7 @@ mod tests {
         assert!(!alive, "teardown must kill the lingering node");
     }
 
-    /// §11: every asynchronous failure (health timeout, health `error`,
+    /// §12: every asynchronous failure (health timeout, health `error`,
     /// master-stage failure, early Node/scsynth exit) funnels through
     /// `fail_generation`. Its contract: children are gone and the handles
     /// are cleared BEFORE the `error` snapshot becomes observable.
@@ -1696,7 +1696,7 @@ mod tests {
         assert!(!manager.lock().master_synth_ready);
     }
 
-    /// §11: a dying old generation must never overwrite the retry that
+    /// §12: a dying old generation must never overwrite the retry that
     /// replaced it — the late failure is dropped, not published.
     #[test]
     fn stale_generation_failure_does_not_touch_the_new_session() {
@@ -1732,7 +1732,7 @@ mod tests {
         assert_eq!(snapshot.startup_stage, 2);
     }
 
-    /// §11: `start` opens a new generation before it does any work — the
+    /// §12: `start` opens a new generation before it does any work — the
     /// previous run's error/health/output tail never bleeds into the retry,
     /// and the very first snapshot the UI sees is `starting` at stage 1.
     #[test]

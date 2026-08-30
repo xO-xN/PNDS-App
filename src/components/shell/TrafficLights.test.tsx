@@ -12,7 +12,7 @@ import { useSettingsStore } from '@/store/settings-store'
 describe('TrafficLights (#41: Brutal reduces the chrome to one ✕)', () => {
   beforeEach(() => {
     useWindowStore.setState({ showCustomTrafficLights: true })
-    useSettingsStore.setState({ colorThemeSetting: 'lavender' })
+    useSettingsStore.setState({ colorThemeSetting: 'pond' })
   })
 
   it('offers all three lights outside Brutal', () => {

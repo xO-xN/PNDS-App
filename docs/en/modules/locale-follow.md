@@ -16,7 +16,7 @@ The mechanism: the App (≥ v1.3.0) pushes its resolved interface language to th
 { type: "pnds:locale", version: 1, locale: "<code>" }
 ```
 
-The code is the **resolved** language tag (today `en` and `zh-CN`). Delivery is best-effort, latest-value-wins, and applying must be idempotent; unknown or malformed messages are ignored silently; a page that never listens behaves exactly as before.
+The code is the **resolved** language tag (today `en` and `zh-CN`). Delivery is best-effort, latest-value-wins, and applying must be idempotent; unknown or malformed messages are ignored silently; a page that never listens behaves exactly as before. The protocol's source of truth is the [runtime contract §11](../reference/runtime-contract.md).
 
 ## The zero-config path: <html lang>
 
@@ -50,4 +50,4 @@ window.PNDS_LOCALE_OPTIONS = {
 }
 ```
 
-`onLocale(resolved, raw)`'s second argument is the raw delivered value (handy in debug logs to tell `zh` from `zh-CN`-style inputs). The first frame can come from the `?lang=<code>` URL parameter (the App does not send it today; standalone previews use it).
+`onLocale(resolved, raw)`'s second argument is the raw delivered value (handy in debug logs to tell `zh` from `zh-CN`-style inputs). The first frame can come from the `?lang=<code>` URL parameter — the App (≥ v1.3.0) always carries it when loading or reloading the monitor, and the page must still tolerate its absence (standalone previews, older App versions).

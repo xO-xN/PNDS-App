@@ -20,23 +20,26 @@ afterEach(() => {
 
 describe('colorThemeFromPrefs (issue #38: persisted value → renderable theme)', () => {
   it('passes the four shipped themes through', () => {
-    expect(colorThemeFromPrefs('lavender')).toBe('lavender')
+    expect(colorThemeFromPrefs('pond')).toBe('pond')
     expect(colorThemeFromPrefs('sand')).toBe('sand')
     expect(colorThemeFromPrefs('stage')).toBe('stage')
     expect(colorThemeFromPrefs('brutal')).toBe('brutal')
   })
 
-  it('maps renamed themes to their successor (#41: midnight → brutal)', () => {
+  it('maps renamed themes to their successor (#41: midnight → brutal; #91: lavender → pond)', () => {
     expect(colorThemeFromPrefs('midnight')).toBe('brutal')
+    // #91: the default theme's id joined its display name — installs
+    // persisted before the rename migrate silently to pond.
+    expect(colorThemeFromPrefs('lavender')).toBe('pond')
   })
 
-  it('falls back to Lavender for absent, unknown, or not-yet-shipped values', () => {
+  it('falls back to Pond for absent, unknown, or not-yet-shipped values', () => {
     // glass is valid in the persisted enum (the abandoned liquid-glass
     // ticket) but this build cannot render it — spec #36 story 10.
-    expect(colorThemeFromPrefs(null)).toBe('lavender')
-    expect(colorThemeFromPrefs(undefined)).toBe('lavender')
-    expect(colorThemeFromPrefs('banana')).toBe('lavender')
-    expect(colorThemeFromPrefs('glass')).toBe('lavender')
+    expect(colorThemeFromPrefs(null)).toBe('pond')
+    expect(colorThemeFromPrefs(undefined)).toBe('pond')
+    expect(colorThemeFromPrefs('banana')).toBe('pond')
+    expect(colorThemeFromPrefs('glass')).toBe('pond')
   })
 })
 
@@ -45,8 +48,8 @@ describe('setColorThemeAttribute (issue #38: the switching mechanism)', () => {
     setColorThemeAttribute('sand')
     expect(document.documentElement.dataset.colorTheme).toBe('sand')
 
-    setColorThemeAttribute('lavender')
-    expect(document.documentElement.dataset.colorTheme).toBe('lavender')
+    setColorThemeAttribute('pond')
+    expect(document.documentElement.dataset.colorTheme).toBe('pond')
   })
 })
 
@@ -79,8 +82,8 @@ describe('applyColorThemeSetting (issue #38: apply + persist)', () => {
     expect(commands.setWindowCornersSquare).toHaveBeenCalledWith(true)
     expect(document.documentElement.dataset.colorTheme).toBe('brutal')
 
-    await applyColorThemeSetting('lavender')
+    await applyColorThemeSetting('pond')
     expect(commands.setWindowCornersSquare).toHaveBeenCalledWith(false)
-    expect(document.documentElement.dataset.colorTheme).toBe('lavender')
+    expect(document.documentElement.dataset.colorTheme).toBe('pond')
   })
 })

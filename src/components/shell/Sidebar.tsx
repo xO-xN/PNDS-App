@@ -40,6 +40,8 @@ import { startFolderRename } from '@/lib/project-rename'
 import { reclaimIfManagedBundle } from '@/lib/bundle-project'
 import { revealScrollTarget } from '@/lib/list-reveal'
 import { projectDisplayName } from '@/lib/display-names'
+import { builtinUtilityId } from '@/lib/builtin-utilities'
+import { utilityCardIcon } from './utility-icons'
 import { cardShift, insertionIndexFor, reorderedList } from '@/lib/drag-reorder'
 import { useCardDrag, type ActiveDropTarget } from '@/hooks/use-card-drag'
 import {
@@ -945,6 +947,12 @@ export function Sidebar({
                 <div
                   ref={pillRef}
                   data-testid="folder-pill"
+                  /* data-folder-pill: the theme layer's hook (Stage's
+                     liquid-glass selection, theme-variables.css) — same
+                     role as data-selection-pill on the card pill below.
+                     The span is that treatment's inner ring (the yzrt
+                     reference's .circle-overlay) — inert outside Stage. */
+                  data-folder-pill=""
                   aria-hidden="true"
                   className={cn(
                     'pointer-events-none absolute inset-y-0.5 left-0 z-0 rounded-md bg-(--pnds-card) shadow-sm',
@@ -953,7 +961,9 @@ export function Sidebar({
                       : 'transition-[transform,width,opacity] duration-[280ms] ease-[cubic-bezier(0.4,0.1,0.2,1)]',
                     pillHidden ? 'opacity-0' : 'opacity-100'
                   )}
-                />
+                >
+                  <span />
+                </div>
                 <div
                   ref={unfiledSegmentRef}
                   data-testid="unfiled-segment"
@@ -1221,7 +1231,11 @@ export function Sidebar({
             column above the footer's Brutal octopus layer. The Brutal
             reserve below keeps the cards out of the art entirely (they
             page above the tentacles, never over them); the z-10 stays
-            as the guard. */}
+            as the guard. The mask is also why the card-selection pill
+            must stay backdrop-filter-free (Stage's liquid glass,
+            theme-variables.css #88): a masked ancestor is its
+            descendants' backdrop root, so a blur on the pill would
+            sample only the empty scroller content below it. */}
         <div
           ref={projectScrollRef}
           data-testid="project-list-scroll"
@@ -1250,7 +1264,11 @@ export function Sidebar({
                   ? 'transition-none'
                   : 'transition-[transform,opacity] duration-[280ms] ease-[cubic-bezier(0.4,0.1,0.2,1)]'
               )}
-            />
+            >
+              {/* Stage's liquid-glass inner ring (the yzrt reference's
+                  .circle-overlay) — inert outside Stage. */}
+              <span />
+            </div>
             {visiblePaths.map((path, index) => {
               const isCurrent = path === currentProject?.path
               const isDragged = drag?.kind === 'project' && drag.path === path
@@ -1265,6 +1283,10 @@ export function Sidebar({
               // another card while one runs never moves the bar.
               const isSessionCard = sessionLive && path === sessionProjectPath
               const showRunningBar = isSessionCard
+              // v1.3.3 (#85): the bundled tool's illustrative icon takes
+              // the left slot — same 20px, so the centered title's optical
+              // axis is unchanged.
+              const UtilityIcon = isUtility ? utilityCardIcon(path) : null
               // v1.2.3 (#39): the selected project's preflight verdict shows
               // on its card — a small spinner while checking, a danger icon
               // (tooltip = the raw error) when it failed.
@@ -1347,8 +1369,28 @@ export function Sidebar({
                     />
                   )}
                   {/* Left slot keeps the centered title's optical axis; the
-                  whole card is the drag trigger (v1.1.2 T5). */}
-                  <span className="w-5 shrink-0" aria-hidden="true" />
+                    whole card is the drag trigger (v1.1.2 T5). v1.3.3
+                    (#85): a bundled tool's slot carries its icon — the
+                    badge's subdued tone, never a focus target. The glyph
+                    rides 1px above the row's geometric center: the 15px
+                    title's optical axis (its lowercase mass) sits that
+                    far up, a dead-center icon reads low against it. */}
+                  {UtilityIcon ? (
+                    <span
+                      data-testid="utility-card-icon"
+                      data-utility-icon={builtinUtilityId(path)}
+                      aria-hidden="true"
+                      className="flex w-5 shrink-0 items-center justify-center text-(--pnds-text)/45"
+                    >
+                      <UtilityIcon
+                        size={14}
+                        strokeWidth={2}
+                        className="-translate-y-px"
+                      />
+                    </span>
+                  ) : (
+                    <span className="w-5 shrink-0" aria-hidden="true" />
+                  )}
 
                   {renamingProject ? (
                     /* v1.1.2 T6: ⌘R inline rename — autofocus, select-all,

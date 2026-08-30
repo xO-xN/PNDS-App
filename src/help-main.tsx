@@ -39,7 +39,7 @@ async function boot(): Promise<void> {
     language = result.data.language ?? null
     colorTheme = result.data.colorTheme ?? null
   }
-  // An error read falls back to Lavender (colorThemeFromPrefs' default)
+  // An error read falls back to Pond (colorThemeFromPrefs' default)
   // — still a themed paint, never a white flash.
   setColorThemeAttribute(colorThemeFromPrefs(colorTheme))
   await initializeLanguage(language)

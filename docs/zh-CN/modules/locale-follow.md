@@ -16,7 +16,7 @@ App 界面语言切换时，monitor 页跟着换成对应语言；performer 页�
 { type: "pnds:locale", version: 1, locale: "<code>" }
 ```
 
-code 是**解析后**的语言标签（今天是 `en` 与 `zh-CN`）。投递尽力而为、最新值胜出、应用必须幂等；未知或畸形消息静默忽略；不监听的页面行为完全不变。
+code 是**解析后**的语言标签（今天是 `en` 与 `zh-CN`）。投递尽力而为、最新值胜出、应用必须幂等；未知或畸形消息静默忽略；不监听的页面行为完全不变。协议规范见[运行契约 §11](../reference/runtime-contract.md)。
 
 ## 零配置路径：<html lang>
 
@@ -50,4 +50,4 @@ window.PNDS_LOCALE_OPTIONS = {
 }
 ```
 
-`onLocale(resolved, raw)` 的第二参是原始投递值（调试日志里区分 `zh` 与 `zh-CN` 这类输入时有用）。首帧可用 URL 参数 `?lang=<code>`（App 目前不发，独立预览用）。
+`onLocale(resolved, raw)` 的第二参是原始投递值（调试日志里区分 `zh` 与 `zh-CN` 这类输入时有用）。首帧可用 URL 参数 `?lang=<code>`——App（≥ v1.3.0）加载与重载 monitor 时总是携带该参数，页面仍须容忍其缺席（独立预览、旧版 App）。

@@ -3,9 +3,9 @@
 按问题检索：查什么 → 读哪个文件。
 
 - **数字乐谱是什么？** → [digital-score.md](./digital-score.md)
-- **端口如何分配？performer / monitor 页面要满足什么？** → [network.md](./network.md)
+- **如何在本地网络 / 互联网上组网演奏？** → [network.md](./network.md)
 - **三种音频模式（internal / external / none）有什么区别？** → [audio-modes.md](./audio-modes.md)
-- **App 如何启动工程：环境变量、health、音频 bus、关停行为** → [runtime-contract.md](./runtime-contract.md)
+- **App 如何启动工程：环境变量、health、音频 bus、monitor 页面要求、主题/语言推送、关停行为** → [runtime-contract.md](./runtime-contract.md)
 - **PNDS 工程的目录结构与合规要求** → [structure.md](./structure.md)
 - **manifest.json：字段规则、端口选择、路径安全** → [manifest.md](./manifest.md)
 - **.pnds 工程包：格式、打包、安装、版本号、分发** → [pnds-bundle.md](./pnds-bundle.md)

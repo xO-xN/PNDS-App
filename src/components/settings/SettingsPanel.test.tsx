@@ -39,7 +39,7 @@ beforeEach(() => {
     settingsOpen: false,
     focusSection: null,
     languageSetting: 'system',
-    colorThemeSetting: 'lavender',
+    colorThemeSetting: 'pond',
   })
   vi.mocked(commands.loadPreferences).mockResolvedValue({
     status: 'ok',
@@ -196,7 +196,7 @@ describe('SettingsPanel Appearance section (issues #38/#40)', () => {
       settingsOpen: false,
       focusSection: null,
       languageSetting: 'system',
-      colorThemeSetting: 'lavender',
+      colorThemeSetting: 'pond',
       sampleRateSetting: 48000,
     })
     vi.mocked(commands.loadPreferences).mockResolvedValue({
@@ -218,8 +218,11 @@ describe('SettingsPanel Appearance section (issues #38/#40)', () => {
     const labels = within(select)
       .getAllByRole('option')
       .map(option => option.textContent)
-    expect(labels).toEqual(['Lavender', 'Sand', 'Stage', 'Brutal'])
-    expect(select).toHaveValue('lavender')
+    // v1.3.3 (#90/#91): the default theme's display name is Pond, and
+    // since #91 its id is 'pond' as well ('lavender' lives on only as a
+    // legacy preference value mapped back to it).
+    expect(labels).toEqual(['Pond', 'Sand', 'Stage', 'Brutal'])
+    expect(select).toHaveValue('pond')
   })
 
   it('shows the accent swatch of the selected theme', () => {
@@ -255,21 +258,21 @@ describe('SettingsPanel Appearance section (issues #38/#40)', () => {
     })
   })
 
-  it('switching back to Lavender restores the root attribute', async () => {
+  it('switching back to Pond restores the root attribute', async () => {
     useSettingsStore.setState({ colorThemeSetting: 'sand' })
     useSettingsStore.getState().openSettings()
     render(<SettingsPanel />)
 
     fireEvent.change(screen.getByLabelText('Theme'), {
-      target: { value: 'lavender' },
+      target: { value: 'pond' },
     })
 
     await waitFor(() => {
-      expect(document.documentElement.dataset.colorTheme).toBe('lavender')
+      expect(document.documentElement.dataset.colorTheme).toBe('pond')
     })
     await waitFor(() => {
       expect(commands.savePreferences).toHaveBeenCalledWith(
-        expect.objectContaining({ colorTheme: 'lavender' })
+        expect.objectContaining({ colorTheme: 'pond' })
       )
     })
   })

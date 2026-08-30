@@ -68,19 +68,6 @@ export const HELP_BOOKS: readonly {
   { id: 'tutorial', documentIds: ['app-tutorial'] },
   { id: 'creator-guide', documentIds: ['template-guide'] },
   {
-    // The module manual (#72): per-module usage for the PNDS Template's
-    // built-in modules, front-paged by its own README index.
-    id: 'modules',
-    documentIds: [
-      'modules-readme',
-      'modules-qr',
-      'modules-players',
-      'modules-theme-follow',
-      'modules-locale-follow',
-      'modules-audio',
-    ],
-  },
-  {
     id: 'reference',
     documentIds: [
       'reference-readme',
@@ -94,6 +81,22 @@ export const HELP_BOOKS: readonly {
       'reference-supercollider',
       'reference-osc',
       'reference-p5js',
+    ],
+  },
+  {
+    // The module manual (#72): per-module usage for the PNDS Template's
+    // built-in modules, front-paged by its own README index. Books last
+    // (v1.3.3 user request, #81): the reference manual answers contract
+    // lookups, the module manual reads after the contracts — so it sits
+    // below the reference book in the sidebar.
+    id: 'modules',
+    documentIds: [
+      'modules-readme',
+      'modules-qr',
+      'modules-players',
+      'modules-theme-follow',
+      'modules-locale-follow',
+      'modules-audio',
     ],
   },
 ]

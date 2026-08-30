@@ -101,8 +101,8 @@ describe('help corpus at real scale (#53)', () => {
     expect(corpus).toHaveLength(19)
     expect(corpus[0]?.title).toBe('PNDS App 使用教程')
     expect(corpus[1]?.title).toBe('PNDS Template 创作指南')
-    expect(corpus[2]?.title).toBe('模块手册')
-    expect(corpus[8]?.title).toBe('PNDS 参考手册')
+    expect(corpus[2]?.title).toBe('PNDS 参考手册')
+    expect(corpus[13]?.title).toBe('模块手册')
     for (const document of corpus) {
       expect(document.title).not.toBe(document.id)
       expect(document.sections.length).toBeGreaterThan(0)

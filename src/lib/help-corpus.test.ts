@@ -81,12 +81,12 @@ describe('help-corpus (#53)', () => {
     ).toEqual([
       ['app-tutorial', 'tutorial', 'PNDS App 使用教程'],
       ['template-guide', 'creator-guide', 'PNDS Template 创作指南'],
-      ['modules-readme', 'modules', '模块手册'],
+      ['reference-readme', 'reference', 'PNDS 参考手册'],
     ])
     expect(corpus.slice(16).map(doc => [doc.id, doc.book, doc.title])).toEqual([
-      ['reference-supercollider', 'reference', 'reference-supercollider'],
-      ['reference-osc', 'reference', 'OSC 协议'],
-      ['reference-p5js', 'reference', 'reference-p5js'],
+      ['modules-theme-follow', 'modules', 'modules-theme-follow'],
+      ['modules-locale-follow', 'modules', 'modules-locale-follow'],
+      ['modules-audio', 'modules', 'modules-audio'],
     ])
     expect(corpus[0]?.sections.map(s => s.id)).toEqual([
       'pnds-app-使用教程',
@@ -128,15 +128,6 @@ describe('help-corpus (#53)', () => {
       ['tutorial', 'app-tutorial'],
       ['creator-guide', 'template-guide'],
       [
-        'modules',
-        'modules-readme',
-        'modules-qr',
-        'modules-players',
-        'modules-theme-follow',
-        'modules-locale-follow',
-        'modules-audio',
-      ],
-      [
         'reference',
         'reference-readme',
         'reference-digital-score',
@@ -149,6 +140,15 @@ describe('help-corpus (#53)', () => {
         'reference-supercollider',
         'reference-osc',
         'reference-p5js',
+      ],
+      [
+        'modules',
+        'modules-readme',
+        'modules-qr',
+        'modules-players',
+        'modules-theme-follow',
+        'modules-locale-follow',
+        'modules-audio',
       ],
     ])
   })

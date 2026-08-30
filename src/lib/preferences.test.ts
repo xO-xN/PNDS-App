@@ -64,7 +64,7 @@ describe('updatePreferences — serialized save queue', () => {
   /// v1.2.3 (issue #38): colorTheme is patchable (the legacy `theme` field
   /// is not — a patch carrying it would be a compile error).
   it('patches colorTheme while the legacy theme field stays load-only', async () => {
-    const disk = mockDisk({ theme: 'system', colorTheme: 'lavender' })
+    const disk = mockDisk({ theme: 'system', colorTheme: 'pond' })
 
     await updatePreferences({ colorTheme: 'sand' })
 

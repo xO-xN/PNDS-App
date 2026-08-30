@@ -180,7 +180,7 @@ describe('help-window (#56)', () => {
     } finally {
       unsubscribe()
       useSettingsStore.setState({
-        colorThemeSetting: 'lavender',
+        colorThemeSetting: 'pond',
         settingsOpen: false,
       })
     }

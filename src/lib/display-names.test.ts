@@ -90,4 +90,42 @@ describe('projectDisplayName', () => {
       'Inarticulate Iii 0.1.0'
     )
   })
+
+  // v1.3.3 (#84): a built-in tool's concise alias outranks BOTH manifest
+  // layers — preflight learns the formal manifest name on every
+  // selection (issue #16's generic learning), and that write used to
+  // flip the card back to the truncating long name.
+  const toolPath =
+    '/Applications/PNDS.app/Contents/Resources/utilities/multichannel-signal-generator'
+
+  it('shows the concise alias above the learned manifest name (#84)', () => {
+    expect(
+      projectDisplayName(
+        toolPath,
+        {},
+        { [toolPath]: 'Multichannel Signal Generator' },
+        null
+      )
+    ).toBe('Multichannel Gen')
+  })
+
+  it('keeps the alias while the tool is the selected project', () => {
+    const currentTool: CurrentProject = {
+      path: toolPath,
+      manifest: {
+        ...manifest,
+        id: 'multichannel-signal-generator',
+        name: 'Multichannel Signal Generator',
+      },
+    }
+    expect(projectDisplayName(toolPath, {}, {}, currentTool)).toBe(
+      'Multichannel Gen'
+    )
+  })
+
+  it('still lets a display-name override win on a tool path', () => {
+    expect(
+      projectDisplayName(toolPath, { [toolPath]: 'My MSG' }, {}, null)
+    ).toBe('My MSG')
+  })
 })

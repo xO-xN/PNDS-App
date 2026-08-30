@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { useProjectStore } from '@/store/project-store'
+import pndsIcon from '@/assets/pnds-icon.png'
 
 /**
  * Welcome main area (§10.4; Figma "Starting Page"): hero text plus the
@@ -20,6 +21,36 @@ export function WelcomeScreen() {
 
   return (
     <div className="relative flex min-h-full flex-col items-center justify-center bg-(--pnds-bg) p-8 animate-[fade-in_0.8s_ease-in]">
+      {/* v1.3.3 (#86, ported from the site's welcome page): the app icon
+          on a rippling halo stage — three rings phased a third of a cycle
+          apart (negative delays, so a wave is already travelling at first
+          paint) while the whole stage floats. The rings and halo take
+          --pnds-accent so every theme owns its ripple; the icon keeps its
+          own art, like a macOS icon in dark mode. Purely decorative. */}
+      <div
+        data-testid="welcome-logo-stage"
+        /* data-welcome-logo: Brutal's hook — that theme hides the stage
+           entirely (theme-variables.css; soft glow has no place on its
+           hard plane). */
+        data-welcome-logo=""
+        aria-hidden="true"
+        className="relative mb-3 flex size-[172px] animate-[welcome-float_5.5s_ease-in-out_infinite_alternate] items-center justify-center rounded-full"
+        style={{
+          background:
+            'radial-gradient(closest-side, color-mix(in oklab, var(--pnds-accent) 13%, transparent), transparent 72%)',
+        }}
+      >
+        <span className="absolute inset-0 rounded-full border-[1.5px] border-(--pnds-accent)/40 animate-[welcome-logo-ripple_4.2s_cubic-bezier(0.2,0.55,0.35,1)_infinite]" />
+        <span className="absolute inset-0 rounded-full border-[1.5px] border-(--pnds-accent)/40 animate-[welcome-logo-ripple_4.2s_cubic-bezier(0.2,0.55,0.35,1)_infinite] [animation-delay:-1.4s]" />
+        <span className="absolute inset-0 rounded-full border-[1.5px] border-(--pnds-accent)/40 animate-[welcome-logo-ripple_4.2s_cubic-bezier(0.2,0.55,0.35,1)_infinite] [animation-delay:-2.8s]" />
+        <img
+          src={pndsIcon}
+          alt=""
+          width={84}
+          height={84}
+          className="relative z-[1] size-[84px] rounded-[18px] shadow-[0_10px_30px_rgba(16,24,40,0.16),0_2px_6px_rgba(16,24,40,0.08)]"
+        />
+      </div>
       <header className="text-center">
         <h1 className="text-[44px] font-light leading-tight tracking-wide text-(--pnds-text)">
           {t('welcome.title')}

@@ -24,7 +24,7 @@ vi.mock('sonner', () => ({
 describe('Sidebar octopus (issue #71: Brutal-only shelf illustration)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    useSettingsStore.setState({ colorThemeSetting: 'lavender' })
+    useSettingsStore.setState({ colorThemeSetting: 'pond' })
     useProjectStore.setState({
       currentProject: null,
       recentProjectPaths: [],
@@ -49,7 +49,7 @@ describe('Sidebar octopus (issue #71: Brutal-only shelf illustration)', () => {
   })
 
   it('is absent from every other theme', () => {
-    for (const colorTheme of ['lavender', 'sand', 'stage'] as const) {
+    for (const colorTheme of ['pond', 'sand', 'stage'] as const) {
       useSettingsStore.setState({ colorThemeSetting: colorTheme })
       const view = render(<Sidebar variant="static" />)
       expect(
@@ -99,7 +99,7 @@ describe('Sidebar octopus (issue #71: Brutal-only shelf illustration)', () => {
     ).toBe(false)
     brutalView.unmount()
 
-    useSettingsStore.setState({ colorThemeSetting: 'lavender' })
+    useSettingsStore.setState({ colorThemeSetting: 'pond' })
     render(<Sidebar variant="static" />)
     expect(screen.getByTestId('project-list-scroll').style.marginBottom).toBe(
       ''
@@ -118,7 +118,7 @@ describe('Sidebar octopus (issue #71: Brutal-only shelf illustration)', () => {
 
     // Outside Brutal the button stays the translucent chip it always
     // was, in the same seat.
-    useSettingsStore.setState({ colorThemeSetting: 'lavender' })
+    useSettingsStore.setState({ colorThemeSetting: 'pond' })
     render(<Sidebar variant="static" />)
     const chip = screen.getByTestId('add-project-button')
     expect(screen.getByTestId('project-list-scroll')).toContainElement(chip)

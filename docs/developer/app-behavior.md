@@ -58,19 +58,25 @@ App 不是：
 - 点击历史条目重新 preflight；
 - 支持拖拽排序和移除历史记录；
 - 失效路径显示可读错误；
-- App 启动进入 Welcome，不自动运行历史工程。
+- App 启动进入 Welcome，不自动运行历史工程。Welcome 标题上方是涟漪 logo 舞台（v1.3.3 #86，用户要求自 site welcome 页移植）：App icon（`src/assets/pnds-icon.png`，与 site 同图）浮在 172px 圆形舞台上，三道错相水纹环扩散消散、整台缓浮——涟漪与光环取 `--pnds-accent`（各主题自有色），icon 保持自身配色（如 macOS 图标之于暗色模式）；`prefers-reduced-motion` 下动画按全局规则静止；纯装饰（`aria-hidden`）。Brutal 下整个舞台不渲染（#87 用户要求：柔光语言不属于硬线条平面，`[data-color-theme='brutal'] [data-welcome-logo]` 隐藏，hero 文案独立承载页面）。
 
 打开路径不弹信任确认：PNDS App 是「操作者即机主」的演出工具，打开的工程由操作者本人放入本机，运行前再弹一次本地代码确认是纯摩擦。工程历史的增删与数据格式（`recentProjects`）保持不变。
 
 工程文件夹（侧栏顶部的分段控件 switch）：
 
 - track 撑满行宽，段宽随名字分配，白色 pill 滑动切换；段为 `role="tab"` + roving tabindex；
-- ←/→ 在聚焦段上循环切换视图；⌘←/→ 在任意位置切换当前文件夹视图，两端循环回绕（v1.3.1 用户反馈：三视图下旧的端点钳制读起来像卡住；与段箭头同规，经段点击同一入口）；
+- ←/→ 在聚焦段上循环切换视图；⌘←/→ 在任意位置切换当前文件夹视图，两端循环回绕（v1.3.1 用户反馈：三视图下旧的端点钳制读起来像卡住；与段箭头同规，经段点击同一入口）。v1.3.3（#89 用户反馈：⌘←/⌘→ 无声失效）：WKWebView 把「仅 Command + 左/右方向键」当作自身后退/前进等价键在原生层吃掉，keydown 到不了页面（实测 ⌘↓ 与裸方向键可达 DOM、⌘横箭头不可；jsdom 全绿故仅真实环境可见）——window.rs 的 `install_cmd_arrow_webview_passthrough` 沿 #79 守卫的 shadow/exchange 双路模式挂 `performKeyEquivalent:`，把精确匹配的该组合改道普通 `keyDown` 路径（页面 ⌘ 层照常接管，文本框/浮层守卫语义与 v1.3.1 一致），其余组合（含 ⌘↓/⌘↑）原样转发 WKWebView；改道守卫为类级、随启动安装一次；
 - 文件夹管理走段的右键菜单：新建 / 重命名（与 ⌘R 同动作）/ 删除；Utilities 文件夹受保护（重命名与删除禁用并说明原因），文件夹上限 3 个时「新建」禁用并说明原因；
 - Utilities 文件夹的成员随 App 更新单向补齐（v1.3.0，issue #55）：每个内置工具在本机只「offer」一次，凭 `offeredUtilities` 记录判断——新发售的工具（如 v1.3.0 的 TND）在升级安装的下次启动补入历史与文件夹；记录缺失的老安装以「路径已出现在索引里」视为已 offer 静默回填，容量拒收的工具不记录、留待下次启动重试；工具身份是 registry id 而非绝对路径（v1.3.1 用户反馈）：正式版与 dev 构建把同一工具暂存在不同根下却共享偏好域，按路径认曾把每个工具双列（6 条目/3 工具）——现在启动时旧根副本从索引清除、保留的工具改挂当前根（历史与 Utilities 成员），`offeredUtilities` 改以 id 记录，旧路径记录按 `/utilities/<id>` 后缀视同其工具；
 - 内置工具是 App 内容，一经种入即不可变（v1.3.2 用户反馈）：卡片不拖拽（无位置重排、不可移出或移入其它文件夹）、无 ✕（不可从历史移除）、⌘R 不改名；Utilities 段不接受外部工程拖入（不高亮、落点拒绝且不弹上限提示）；`clearRecentProjects` 清空用户历史时保留工具。守卫在 project-store 的结构性动作上（`utilityPaths` 集合由每次启动的 `builtinUtilities` 注册表解析注入，不持久化；注册表解析失败时退回按 Utilities 成员的 `/utilities/` 路径形状识别，降级会话内守卫仍在），UI 的禁用只是第一道（utilities-folder.ts 负责注册）；
+- 内置工具的显示顺序固定为 App 注册表顺序（v1.3.3 #81，用户要求）：multichannel → local → telematic。每次启动把 Utilities 夹内顺序归一化到注册表顺序——种子只在首次建夹时跑，v1.3.3 之前种入的老安装靠这条迁移跟上重排；顺序无变化时不动持久化；
+- 内置工具在侧栏 / 设置列表 / 运行标题显示 App 提供的简洁别名（v1.3.3 #84 用户报告：320px 侧栏下长名截断）：Multichannel Gen / Local Diagnostics / Telematic Diagnostics。别名是解析层事实（builtin-utilities.ts → `projectDisplayName`，MonitorView 运行标题同序），排在「preflight 学到的 manifest 名」之上——选中卡片触发的 preflight 会照常把正式 manifest 名学进 `manifestProjectNames`（#16 的通用机制），但显示不再被它顶回长名（#84 首版把别名启动时学习进 store，恰被这条学习覆盖，用户报告后改为解析层）；manifest 与工具仓库的正式名不变，用户改名层对工具仍然禁用；
+- 内置工具卡左侧定轴槽显示示意 icon（v1.3.3 #85 用户要求）：multichannel → 波形（AudioWaveform）、local → 网络节点（Network）、telematic → 地球（Globe），未映射的未来工具回退扳手；按路径形状 `…/utilities/<id>` 解析 id（与别名同键），槽宽与居中标题光轴不变，普通工程卡保持裸 spacer；glyph 相对行几何中心上移 1px——15px 标题的光轴（小写字面质量）在中心线上方，正中放置的 icon 读起来偏低（#85 用户反馈）；
 - 工程拖到文件夹段上入夹、拖到未分组段返回；拖动排序期间 pill 淡出，落定后在新位置淡入；
 - 正在运行的工程卡片左缘有 accent 竖条；空闲选中仅白底。Brutal 下工程列为章鱼插画预留底部整段净空（#71 v2 用户反馈：卡片翻页止于插画上方、永不压图，卡片在所有主题保持透明静止底）；「+ 导入工程」留在列表尾部（随列表滚动，不压插画），Brutal 下为实体按钮（卡色底、黑框、硬投影，按下压入投影），其余主题维持半透明 chip。
+- 暗场（stage）主题的两个选择 pill——文件夹段滑 pill（`data-folder-pill`）与工程卡选择 pill（`data-selection-pill`，几何引擎按选中卡全盒定尺寸，玻璃即选中卡的表面；其上的卡片行是透明的）——渲染为**磨砂**液态玻璃（v1.3.3 #88：先严格移植 yzrt 纯 CSS 液态玻璃配方，再按用户方向加磨砂——虚化所有效果；随后多轮仅调透明度，填充 10%→6%→4%→3%）：填充 3% 白；文件夹 pill 的白色高光比工程卡 pill 弱一级（角部高光对 40/25 vs 55/35、角部高光面 45 vs 60——段 pill 更小、等值白读起来更烫，用户要求单独调弱）；六层 inset 阴影栈虚化（角对 0.9/0.55 → 0.55/0.35、blur 半径翻倍、暗内缘 2px→4px blur）；投影放宽抬高（0 6px 16px@35%）；::before 折射暗环 blur 8px→14px；::after 静态 45° 角部高光 blur 3px→8px、白 0.8→0.6；子 span 内白环（参考的 .circle-overlay）blur 1px→4px。**静态、无动态背景**（漂移高光为中间版本，用户要求移除）。与参考的两处差异均因 App DOM：`contrast(3)`/`brightness(0.9)` 外壳不移植（需包住整个侧栏、会毁文字；参考自身的 fx-layer filter 同样使其 backdrop blur 失效）；卡 pill 不带 backdrop blur（其 backdrop root 是带渐隐 mask 的滚动容器，v1.2.2 #29），文件夹 pill 的 backdrop blur 随磨砂 2px→6px。pill 的命令式几何（transform/width）不受影响。浅色主题保持实心卡色 pill，Brutal 保持硬平面。
+
+默认主题的 id 为 `pond`（v1.3.3 #91，语汇与显示名 池塘/Pond 对齐；#90 先改的显示名）：`ColorTheme` 联合、`DEFAULT_COLOR_THEME`、主题表、设置面板选项、`data-color-theme` 属性与主题桥（§11 的 `theme` 值 / `?theme=`）全部用 `pond`。`lavender` 与 `midnight` 同入 `LEGACY_THEME_NAMES` 静默迁移（存量偏好 `lavender` → `pond`）；Rust `validate_color_theme` 白名单同时容纳新旧值。改名对页面跟随是视觉无操作：页面（Template `theme-follow`）不认识的 id 会被忽略并保持自身默认配色——恰与 pond 同款；Template 仓的 `THEME_PALETTES` 以 `pond` 为主键、`lavender` 为同调色板别名（双向版本偏斜保险，老 App 推 `lavender` 新页面仍跟随）。唯一实质影响：显式分支 `onTheme('lavender')` 的自定义页面在 pond 主题下不再触发回调。
 
 列表与导入：
 
@@ -99,7 +105,7 @@ Preflight 必须包含：
 idle | starting | ready | stopping | error
 ```
 
-启动与停止遵循运行契约 §8 与 §11。以下操作执行完整 restart：
+启动与停止遵循运行契约 §8 与 §12。以下操作执行完整 restart：
 
 ```text
 切换工程
@@ -147,7 +153,8 @@ Rust session manager 是运行状态真源。React 不得用本地 reset 伪造�
 - 自绘 traffic lights；
 - Welcome/Error 使用常开侧栏；ready monitor 使用左边缘 hover 浮出侧栏；
 - 顶部中央显示 `PNDS - <project>` 并作为 drag region；
-- 侧栏覆盖 monitor，不改变 monitor 布局。
+- 侧栏覆盖 monitor，不改变 monitor 布局；
+- 右下角隐形 resize grip（v1.3.3 #80，用户报告）：无边框透明圆角窗口的角外像素全透明，macOS 把点击穿给下层 app，而系统的斜向 resize 光标恰好显示在角上——用户被引导去点一个点不到的角。grip 是弧内侧约 20px 的隐形命中区（`cursor: nwse-resize`），主键按下走 `startResizeDragging('SouthEast')`；全屏隐藏，其余三角不处理（上两角属标题栏拖拽区）。
 
 全屏入口共三处——macOS Window 菜单项、`⌃⌘F`、侧栏按钮——所有入口必须调用同一 action。全屏切换不 reload monitor。
 
@@ -166,7 +173,7 @@ v1.3.0（#56）帮助中心窗口——第二个 webview 窗口（label `help`�
 
 - 打开自 Help 菜单（⌘? 搜索 + 使用教程 / 创作指南 / 参考手册三入口；⌘? 注册为 `Cmd+Shift+Slash`，同一物理键序两种拼写）；已开则聚焦并窗口内导航。
 - 防闪复用 #51 模式：隐藏创建 → 主题先于首帧落地 → 语料就绪（或加载失败出错误态）后 `fadeInWindow('help')` 揭示；非 main 窗口揭示走独立渐变计数，不干扰主窗口进行中的动画。卡在隐藏态的复用窗口由打开方重跑揭示兜底。
-- 搜索为实时纯函数（每键击重跑），命中含文档/小节/片段；点击命中在同一窗口打开文档页、滚动到小节锚点并高亮关键词；侧栏按三册浏览全部语料。本版语料仅中文，界面文案随 App 语言（运行中语言切换实时推送）。
+- 搜索为实时纯函数（每键击重跑），命中含文档/小节/片段；点击命中在同一窗口打开文档页、滚动到小节锚点并高亮关键词；侧栏按四册浏览全部语料（教程、创作者指南、参考手册、模块手册——书序 v1.3.3 #81 用户要求，模块手册排在参考手册之后）。本版语料仅中文，界面文案随 App 语言（运行中语言切换实时推送）。
 - 可缩放、标准标题栏；⌘W / 红灯关闭即销毁。**⌘W 按聚焦窗口分发**：帮助中心在前台时关闭它，绝不触发主窗口的关闭流或会话确认。
 - 语料内链接永不导航 webview（用户报告教训）：文档间 `.md` 链接解析为窗口内跳转（`#fragment` 为小节锚点），外部 URL 走系统浏览器，解析不到则无操作。文档正文用平台标准字体，不用品牌字体。
 - 语料加载失败：显示错误态 + 重试；窗口仍被揭示（不得留用户对着不可见窗口）。
@@ -201,7 +208,7 @@ Retry 必须真正重新启动：
 
 - `canStart()` 允许 `idle` 和 `error`；error 状态下侧栏主按钮文字保持 `Load`；
 - 调用现有 start flow，由 Rust 增加 generation、重置 run state 并启动；
-- error generation 的失败清理与定向 orphan cleanup 语义 → 运行契约 §11；不先执行多余的公开 stop flow；
+- error generation 的失败清理与定向 orphan cleanup 语义 → 运行契约 §12；不先执行多余的公开 stop flow；
 - 防止同一次 retry 的重复提交；
 - 新 loading session 从第一阶段开始。
 
@@ -211,7 +218,7 @@ Back/Close 返回 Welcome，不自动重启。
 
 每个 session 写独立日志，保存在 App data 的 `session-logs/`，记录：manifest/preflight；session 元数据；Node/scsynth stdout/stderr；health；master stage；stop 与错误。保留最近 20 份，删除最旧文件。日志不写入工程目录，也不上传。
 
-关闭工程、红灯隐藏、restart 与 `⌘Q` 的语义必须区分：只有 session stop/实际 App exit 才停止工程；普通窗口 hide 不终止正在运行的 session。实际退出必须清理 Node/scsynth；下次启动执行 orphan cleanup（运行契约 §11）。
+关闭工程、红灯隐藏、restart 与 `⌘Q` 的语义必须区分：只有 session stop/实际 App exit 才停止工程；普通窗口 hide 不终止正在运行的 session。实际退出必须清理 Node/scsynth；下次启动执行 orphan cleanup（运行契约 §12）。
 
 ## 内置验证工具
 

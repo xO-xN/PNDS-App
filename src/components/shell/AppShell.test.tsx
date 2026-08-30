@@ -170,7 +170,7 @@ describe('AppShell', () => {
     // first-frame parameters.
     expect(monitor).toHaveAttribute(
       'src',
-      'http://192.168.1.10:6869/?theme=lavender&lang=en'
+      'http://192.168.1.10:6869/?theme=pond&lang=en'
     )
     expect(screen.getByText('PNDS - Inarticulate III')).toBeInTheDocument()
     expect(screen.getByTestId('sidebar-hover-zone')).toBeInTheDocument()
@@ -225,7 +225,7 @@ describe('AppShell', () => {
     const monitor = screen.getByTitle('Project monitor')
     expect(monitor).toHaveAttribute(
       'src',
-      'http://192.168.1.10:6869/?theme=lavender&lang=en'
+      'http://192.168.1.10:6869/?theme=pond&lang=en'
     )
     expect(useSessionStore.getState().sessionStatus).toBe('ready')
   })

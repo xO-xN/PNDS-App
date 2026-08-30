@@ -80,7 +80,7 @@
   }
 
   /* The PNDS color tokens and the per-theme token sets live in
-     theme-variables.css (v1.2.3, issue #38): :root doubles as the Lavender
+     theme-variables.css (v1.2.3, issue #38): :root doubles as the Pond
      theme and [data-color-theme='…'] blocks override it. */
 
   @keyframes spin-shrink {
@@ -103,6 +103,32 @@
     }
     to {
       opacity: 1;
+    }
+  }
+
+  /* Welcome logo stage (v1.3.3 #86, ported from the site's welcome
+     page): the app icon floats gently while three phased rings swell
+     past the halo and dissolve — the negative delays live in the
+     WelcomeScreen markup so a wave is already travelling at first
+     paint. The rings are colored by --pnds-accent in the markup, so
+     every theme (Brutal included) owns its ripple. */
+  @keyframes welcome-float {
+    from {
+      transform: translateY(0);
+    }
+    to {
+      transform: translateY(-7px);
+    }
+  }
+
+  @keyframes welcome-logo-ripple {
+    from {
+      transform: scale(0.6);
+      opacity: 0.5;
+    }
+    to {
+      transform: scale(1.8);
+      opacity: 0;
     }
   }
 

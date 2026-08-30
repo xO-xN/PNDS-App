@@ -201,6 +201,19 @@ describe('Sidebar folder switch (v1.2.2, issue #28)', () => {
   })
 
   describe('sliding pill', () => {
+    it('carries the theme-layer hook for Stage liquid glass (#88)', () => {
+      seedFolders()
+      render(<Sidebar variant="static" />)
+
+      // data-folder-pill is what theme-variables.css keys the Stage
+      // glass on (same role as data-selection-pill on the card pill) —
+      // the pure-CSS theming means this attribute is its only anchor.
+      expect(screen.getByTestId('folder-pill')).toHaveAttribute(
+        'data-folder-pill',
+        ''
+      )
+    })
+
     it('positions itself from the active segment offsets and follows switches', async () => {
       seedFolders()
       render(<Sidebar variant="static" />)

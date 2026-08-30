@@ -52,7 +52,7 @@ export const useSettingsStore = create<SettingsState>()(set => ({
   focusSection: null,
   languageSetting: 'system',
   // Mirrors DEFAULT_COLOR_THEME in lib/color-theme (see the import note).
-  colorThemeSetting: 'lavender',
+  colorThemeSetting: 'pond',
   sampleRateSetting: DEFAULT_SAMPLE_RATE,
 
   openSettings: section =>

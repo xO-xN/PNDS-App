@@ -59,8 +59,10 @@ tauri-plugin-window-state = "2"
 # set_opacity; we drive AppKit directly through the NSWindow pointer).
 # v1.2.0 (issue #16): NSOpenPanel powers the ⌘O picker that accepts both
 # project directories and .pnds bundle files.
+# v1.3.3 (#79): NSMenu/NSMenuItem power the native context-menu guard
+# (the willOpenMenu hook empties non-text web menus at the NSMenu level).
 objc2 = "0.6"
-objc2-app-kit = { version = "0.3", features = ["std", "NSWindow", "NSOpenPanel"] }
+objc2-app-kit = { version = "0.3", features = ["std", "NSWindow", "NSOpenPanel", "NSMenu", "NSMenuItem"] }
 objc2-foundation = { version = "0.3", features = ["std", "NSString", "NSProcessInfo"] }
 
 [dev-dependencies]

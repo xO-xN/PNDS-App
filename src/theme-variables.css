@@ -126,7 +126,10 @@
  * `:root` blocks above double as the Lavender theme: Lavender is defined as
  * "the current look", and :root is also the pre-JavaScript fallback — until
  * startup applies the saved theme, the app renders Lavender, which is the
- * default. Every further theme is a single `[data-color-theme='…']` block
+ * default. (v1.3.3 #90: this theme's DISPLAY name is 池塘 / Pond; #91
+ * renamed the id to match — 'pond' — while 'lavender' lives on as a
+ * legacy preference value mapped back to it in color-theme.ts.) Every
+ * further theme is a single `[data-color-theme='…']` block
  * overriding both the PNDS tokens and the shadcn semantic mapping; the
  * blocks below :root win the cascade at equal specificity by order, and
  * each block is self-contained so themes cannot leak values from each
@@ -515,4 +518,122 @@
 [data-color-theme='brutal'] [data-sidebar-surface] {
   border-color: #000000;
   box-shadow: none;
+}
+
+/* ────────────────────────────────────────────────────────────────────
+   v1.3.3 (#88, user request — yzrt's pure-CSS liquid glass 纯CSS液态玻璃,
+   ported STRICTLY first, then FROSTED on the user's direction: the pane
+   is more opaque and every effect is defocused — blur radii up, specular
+   alphas down — so the pill reads as frosted glass, not crisp glints.
+   Layer by layer: the fill rises 4% → 10% (then walks back down to 4%
+   on the user's opacity-only follow-ups); the six-layer inset stack
+   softens (0.9/0.55 corner pairs → 0.55/0.35 with doubled blur radii,
+   the dark inner rim 2px → 4px of blur); the drop shadow widens and
+   lifts (0 4px 8px → 0 6px 16px); ::before's refracted dark ring
+   blooms wider (blur 8px → 14px, top 35% as before); ::after's corner
+   sheen melts (blur 3px → 8px, whites 0.8 → 0.6); the child-span ring
+   (the reference's .circle-overlay) dissolves (blur 1px → 4px). Two
+   deviations forced by the app's DOM, not taste, survive from the
+   strict port: (1) the reference's contrast(3)/brightness(0.9) demo
+   shell is not carried — it would have to wrap the whole sidebar and
+   wreck its text, and the reference's own fx-layer filter equally
+   voids its backdrop blur (the look never depended on it); (2) the
+   card pill carries no backdrop-filter: its backdrop root is the
+   masked project scroller (Sidebar, v1.2.2 #29), so a blur samples
+   only empty scroller content — the folder pill keeps a backdrop blur
+   (2px → 6px with the frosting), which does sample its unmasked
+   track. Scoped to Stage only: light themes keep their solid card
+   pill, Brutal keeps its hard plane. Frosting follow-up (user): the
+   pane's opacity walks down as directed — 10% → 6% → 4% → 3% — and the
+   FOLDER pill's white highlights sit one step weaker than the card
+   pill's (the segment pill is smaller, so equal whites read hotter
+   there). Every blur radius stays as frosted. */
+[data-color-theme='stage'] [data-folder-pill],
+[data-color-theme='stage'] [data-selection-pill] {
+  background: rgb(255 255 255 / 3%);
+  border: 1px double rgb(51 51 51 / 8%);
+  box-shadow:
+    inset 2px -2px 2px -1px rgb(255 255 255 / 55%),
+    inset -2px 2px 2px -1px rgb(255 255 255 / 55%),
+    inset 6px -6px 2px -6px rgb(255 255 255 / 35%),
+    inset -6px 6px 2px -6px rgb(255 255 255 / 35%),
+    inset 0 0 4px rgb(0 0 0 / 80%),
+    0 6px 16px rgb(0 0 0 / 35%);
+}
+
+[data-color-theme='stage'] [data-folder-pill] {
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  /* One step weaker whites than the card pill (user): corner pairs
+     55/35 → 40/25 — box-shadow re-declared whole, it does not merge. */
+  box-shadow:
+    inset 2px -2px 2px -1px rgb(255 255 255 / 40%),
+    inset -2px 2px 2px -1px rgb(255 255 255 / 40%),
+    inset 6px -6px 2px -6px rgb(255 255 255 / 25%),
+    inset -6px 6px 2px -6px rgb(255 255 255 / 25%),
+    inset 0 0 4px rgb(0 0 0 / 80%),
+    0 6px 16px rgb(0 0 0 / 35%);
+}
+
+[data-color-theme='stage'] [data-folder-pill]::before,
+[data-color-theme='stage'] [data-selection-pill]::before {
+  content: '';
+  position: absolute;
+  z-index: 1;
+  top: 35%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% - 16px);
+  height: calc(100% - 16px);
+  border-radius: inherit;
+  border: 1px solid rgb(0 0 0 / 80%);
+  filter: blur(14px);
+}
+
+[data-color-theme='stage'] [data-folder-pill]::after,
+[data-color-theme='stage'] [data-selection-pill]::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  filter: blur(8px);
+  background: linear-gradient(
+    45deg,
+    rgb(255 255 255 / 60%) 0%,
+    transparent 25%,
+    transparent 75%,
+    rgb(255 255 255 / 60%) 100%
+  );
+}
+
+/* The folder pill's sheen joins its weaker-whites step: 60 → 45 (the
+   full declaration again — gradients do not merge either). */
+[data-color-theme='stage'] [data-folder-pill]::after {
+  background: linear-gradient(
+    45deg,
+    rgb(255 255 255 / 45%) 0%,
+    transparent 25%,
+    transparent 75%,
+    rgb(255 255 255 / 45%) 100%
+  );
+}
+
+/* The reference's .circle-overlay — a real DOM child in the demo, so a
+   real span child here (the pills carry no other children). Inert and
+   unstyled in every other theme. */
+[data-color-theme='stage'] [data-folder-pill] > span,
+[data-color-theme='stage'] [data-selection-pill] > span {
+  position: absolute;
+  inset: 4.5px;
+  border-radius: inherit;
+  border: 1px solid rgb(255 255 255 / 20%);
+  filter: blur(4px);
+}
+
+/* v1.3.3 (#87, user call): Brutal does not show the welcome logo stage
+   at all — the ripples, halo and float are soft-glow language and this
+   theme's plane is hard lines and no halos. The hero copy carries the
+   page. */
+[data-color-theme='brutal'] [data-welcome-logo] {
+  display: none;
 }

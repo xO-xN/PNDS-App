@@ -31,7 +31,7 @@ describe('App', () => {
   })
 
   // v1.2.3 (issue #38): the startup preferences read applies the saved
-  // color theme to the root node; an absent value is Lavender (the
+  // color theme to the root node; an absent value is Pond (the
   // pre-attribute fallback look, now made explicit).
   it('applies the saved color theme to the root node at startup', async () => {
     vi.mocked(commands.loadPreferences).mockResolvedValue({
@@ -45,7 +45,7 @@ describe('App', () => {
     })
   })
 
-  it('falls back to Lavender when no color theme is saved', async () => {
+  it('falls back to Pond when no color theme is saved', async () => {
     vi.mocked(commands.loadPreferences).mockResolvedValue({
       status: 'ok',
       data: { theme: 'system', language: null },
@@ -53,7 +53,7 @@ describe('App', () => {
     render(<App />)
 
     await waitFor(() => {
-      expect(document.documentElement.dataset.colorTheme).toBe('lavender')
+      expect(document.documentElement.dataset.colorTheme).toBe('pond')
     })
   })
 

@@ -750,7 +750,7 @@ pub fn set_master_gain(client: &OscClient, gain: f32) -> Result<(), String> {
     })
 }
 
-/// §11: free the entire master group (instances go with it), then quit.
+/// §12: free the entire master group (instances go with it), then quit.
 pub fn release_master_and_quit(client: &OscClient) {
     let _ = client.send(OscMessage {
         addr: "/n_free".to_string(),
@@ -762,7 +762,7 @@ pub fn release_master_and_quit(client: &OscClient) {
     });
 }
 
-/// §11: ask scsynth to quit (releasing the master stage first when up).
+/// §12: ask scsynth to quit (releasing the master stage first when up).
 pub fn quit_scsynth(client: &OscClient, release_master: bool) {
     if release_master {
         release_master_and_quit(client);
@@ -1210,7 +1210,7 @@ mod tests {
             });
             assert!((gain.unwrap() - 0.25).abs() < 1e-6, "gain reply: {gain:?}");
 
-            // §11: freeing the master group removes it and all instances.
+            // §12: freeing the master group removes it and all instances.
             client
                 .send(OscMessage {
                     addr: "/n_free".to_string(),
@@ -1230,7 +1230,7 @@ mod tests {
             std::panic::resume_unwind(outcome.unwrap_err());
         }
 
-        // §11: quit politely, then verify the process is actually gone.
+        // §12: quit politely, then verify the process is actually gone.
         // A CoreAudio stall can hang /quit; force-kill after the grace
         // window so a hung engine can never leak out of this test.
         release_master_and_quit(&client);

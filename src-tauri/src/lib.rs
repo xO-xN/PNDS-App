@@ -150,6 +150,22 @@ pub fn run() {
                 crate::window::suppress_default_context_menu(&window);
             }
 
+            // v1.3.3 (#79): the native belt of that suppression —
+            // `preventDefault()` is not honored consistently inside
+            // WKWebView (WebKit bug 244149), so the menu is stopped at
+            // the NSMenu level as well. Class-level: every window, every
+            // frame; no window handle needed.
+            #[cfg(target_os = "macos")]
+            crate::window::install_native_context_menu_guard();
+
+            // v1.3.3 (#89): WKWebView claims exactly-⌘ horizontal arrows
+            // as its back/forward equivalents before the page can see
+            // them — reroute that pair into the normal keyDown path so
+            // the app's ⌘←/⌘→ folder navigation works again. Class-level,
+            // every window; call once at startup.
+            #[cfg(target_os = "macos")]
+            crate::window::install_cmd_arrow_webview_passthrough();
+
             // v1.3.0 (#51): cold-start reveal backstop. The main window is
             // created hidden and the frontend reveals it (fade_in_window)
             // once the saved theme has landed; if that signal never

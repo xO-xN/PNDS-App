@@ -767,35 +767,6 @@ describe('project-store persistence (structural actions commit + save)', () => {
     await settle()
     expect(commands.savePreferences).not.toHaveBeenCalled()
   })
-
-  it('upsertManifestProjectNames merges and persists only real changes', async () => {
-    useProjectStore.getState().upsertManifestProjectNames({ '/a': 'Tool A' })
-    await vi.waitFor(() => {
-      expect(commands.savePreferences).toHaveBeenCalledWith(
-        expect.objectContaining({
-          projectManifestNames: { '/a': 'Tool A' },
-        })
-      )
-    })
-
-    useProjectStore
-      .getState()
-      .upsertManifestProjectNames({ '/a': 'Tool A', '/b': 'Tool B' })
-    await vi.waitFor(() => {
-      expect(commands.savePreferences).toHaveBeenCalledWith(
-        expect.objectContaining({
-          projectManifestNames: { '/a': 'Tool A', '/b': 'Tool B' },
-        })
-      )
-    })
-
-    vi.mocked(commands.savePreferences).mockClear()
-    useProjectStore
-      .getState()
-      .upsertManifestProjectNames({ '/a': 'Tool A', '/b': 'Tool B' })
-    await settle()
-    expect(commands.savePreferences).not.toHaveBeenCalled()
-  })
 })
 
 /**

@@ -22,9 +22,9 @@ pub struct AppPreferences {
     /// `data-color-theme` attribute. Enum-validated at the save boundary;
     /// the legacy `midnight` (renamed to `brutal` in #41's second
     /// redirect) and `glass` (abandoned ticket) values stay accepted so
-    /// stored preferences keep validating — the frontend maps the former
-    /// to `brutal` and falls back to `lavender` for anything its build
-    /// cannot render. App-local, never touches project manifests.
+    /// stored preferences keep validating — the frontend maps renamed
+    /// values to their successors and falls back to `pond` for anything
+    /// its build cannot render. App-local, never touches project manifests.
     #[serde(default = "default_color_theme")]
     pub color_theme: String,
     /// User's preferred language (V1 ships English-only)
@@ -116,10 +116,10 @@ impl AppPreferences {
 pub const DEFAULT_SAMPLE_RATE: u32 = 48_000;
 
 /// v1.2.3 (issue #38): the value an absent `colorTheme` resolves to — the
-/// Lavender theme, which is the pre-v1.2.3 look, so existing installs see
-/// no change.
+/// Pond theme (id renamed from `lavender` in #91; the look is unchanged),
+/// which is the pre-v1.2.3 look, so existing installs see no change.
 pub fn default_color_theme() -> String {
-    "lavender".to_string()
+    "pond".to_string()
 }
 
 // ============================================================================
@@ -136,15 +136,16 @@ pub fn validate_theme(theme: &str) -> Result<(), String> {
 
 /// v1.2.3 (issue #38): validates the color-theme preference against the
 /// v1.2.3 theme enum. `midnight` (renamed to `brutal` in #41's second
-/// redirect) and `glass` (the abandoned liquid-glass ticket) stay valid
-/// persisted values; the frontend maps the former to `brutal` and the
-/// latter to Lavender at render, so no stored preference ever renders
-/// wrong. Unsupported values are rejected at the save boundary.
+/// redirect), `lavender` (renamed to `pond` in #91) and `glass` (the
+/// abandoned liquid-glass ticket) stay valid persisted values; the
+/// frontend maps the first two to their successors and the rest to Pond
+/// at render, so no stored preference ever renders wrong. Unsupported
+/// values are rejected at the save boundary.
 pub fn validate_color_theme(theme: &str) -> Result<(), String> {
     match theme {
-        "lavender" | "sand" | "stage" | "brutal" | "midnight" | "glass" => Ok(()),
+        "pond" | "lavender" | "sand" | "stage" | "brutal" | "midnight" | "glass" => Ok(()),
         _ => Err(
-            "Invalid colorTheme: must be 'lavender', 'sand', 'stage', 'brutal', 'midnight', or 'glass'"
+            "Invalid colorTheme: must be 'pond', 'lavender', 'sand', 'stage', 'brutal', 'midnight', or 'glass'"
                 .to_string(),
         ),
     }
@@ -347,7 +348,7 @@ mod tests {
             "recentProjects": ["/a"]
         }"#;
         let prefs: AppPreferences = serde_json::from_str(legacy).expect("legacy prefs parse");
-        assert_eq!(prefs.color_theme, "lavender");
+        assert_eq!(prefs.color_theme, "pond");
         assert_eq!(prefs.theme, "dark");
     }
 
@@ -369,14 +370,17 @@ mod tests {
 
     /// v1.2.3 (issue #38): the whole v1.2.3 theme enum validates — the
     /// shipped names plus the legacy persisted values (`midnight` renamed
-    /// to `brutal`, `glass` abandoned); anything else is rejected with a
-    /// readable error at the save boundary.
+    /// to `brutal`, `lavender` renamed to `pond` in #91, `glass`
+    /// abandoned); anything else is rejected with a readable error at
+    /// the save boundary.
     #[test]
     fn validates_color_theme() {
-        for theme in ["lavender", "sand", "stage", "brutal", "midnight", "glass"] {
+        for theme in [
+            "pond", "lavender", "sand", "stage", "brutal", "midnight", "glass",
+        ] {
             assert!(validate_color_theme(theme).is_ok(), "{theme} must be valid");
         }
-        assert_eq!(default_color_theme(), "lavender");
+        assert_eq!(default_color_theme(), "pond");
         let err = validate_color_theme("banana").expect_err("must be rejected");
         assert!(
             err.contains("Invalid colorTheme"),

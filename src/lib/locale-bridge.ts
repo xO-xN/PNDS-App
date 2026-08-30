@@ -5,14 +5,14 @@
  * pushes ride the same triggers (iframe load, language switch, window
  * focus, heartbeat), delivery is one-way and best-effort with
  * latest-value-wins, and the whole channel is OPTIONAL for projects — a
- * page that never listens behaves exactly as before. See the network
- * reference doc's "Locale Following" section for the contract.
+ * page that never listens behaves exactly as before. See the runtime
+ * contract §11 (locale push) for the contract.
  */
 
 export const LOCALE_MESSAGE_TYPE = 'pnds:locale'
 export const LOCALE_MESSAGE_VERSION = 1
 
-/** The message shape App → monitor iframe (contract: network.md). */
+/** The message shape App → monitor iframe (contract: runtime-contract.md §11). */
 export interface LocaleMessage {
   type: typeof LOCALE_MESSAGE_TYPE
   version: number

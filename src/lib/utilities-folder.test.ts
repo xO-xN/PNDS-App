@@ -4,9 +4,11 @@ import { useProjectStore, UTILITIES_FOLDER_ID } from '@/store/project-store'
 import { ensureUtilitiesFolder } from './utilities-folder'
 
 const RESOURCES = '/Applications/PNDS.app/Contents/Resources/utilities'
+// The v1.3.3 registry order (#81): multichannel first, then local, then
+// telematic — the fixture mirrors the committed utilities.json.
 const TOOL_PATHS = [
-  `${RESOURCES}/local-network-diagnostics`,
   `${RESOURCES}/multichannel-signal-generator`,
+  `${RESOURCES}/local-network-diagnostics`,
   `${RESOURCES}/telematic-network-diagnostics`,
 ]
 
@@ -14,8 +16,8 @@ const TOOL_PATHS = [
 const TOOL_IDS = TOOL_PATHS.map(path => path.split('/').pop() ?? path)
 
 const TOOL_NAMES = [
-  'Local Network Diagnostics',
   'Multichannel Signal Generator',
+  'Local Network Diagnostics',
   'Telematic Network Diagnostics',
 ]
 
@@ -77,13 +79,10 @@ describe('ensureUtilitiesFolder', () => {
       },
     ])
     expect(state.recentProjectPaths).toEqual(TOOL_PATHS)
-    // The manifest names are learned up front, so the entries read by
-    // name on a clean install before their first preflight.
-    const [lnd, msg, tnd] = TOOL_PATHS
-    if (!lnd || !msg || !tnd) throw new Error('Expected three tool paths')
-    expect(state.manifestProjectNames[lnd]).toBe(TOOL_NAMES[0])
-    expect(state.manifestProjectNames[msg]).toBe(TOOL_NAMES[1])
-    expect(state.manifestProjectNames[tnd]).toBe(TOOL_NAMES[2])
+    // v1.3.3 (#84): the concise display names are NOT learned here — the
+    // resolution layer (builtin-utilities.ts → projectDisplayName) owns
+    // them, above whatever manifest name a later preflight learns.
+    expect(state.manifestProjectNames).toEqual({})
     // saveProjectIndex runs through the serialized save queue — the store's
     // structural commits (history adds + the folder seed) each persist.
     await vi.waitFor(() => {
@@ -174,6 +173,45 @@ describe('ensureUtilitiesFolder', () => {
     expect(state.recentProjectPaths).toEqual(TOOL_PATHS)
     expect(state.projectFolders[0]?.projectPaths).toEqual(TOOL_PATHS)
     expect(commands.savePreferences).not.toHaveBeenCalled()
+  })
+
+  it('re-settles an install seeded before the registry reorder (#81)', async () => {
+    // The pre-v1.3.3 registry seeded local first. The seeding only runs
+    // when the folder is missing, so the install keeps its seeded order
+    // forever — the launch itself must re-settle the members into the
+    // (new) registry order and persist it.
+    const [msg, lnd, tnd] = TOOL_PATHS
+    if (!msg || !lnd || !tnd) throw new Error('Expected three tool paths')
+    useProjectStore.setState({
+      recentProjectPaths: [lnd, msg, tnd],
+      projectFolders: [
+        {
+          id: UTILITIES_FOLDER_ID,
+          name: 'Utilities',
+          projectPaths: [lnd, msg, tnd],
+        },
+      ],
+    })
+    mockPrefs({ offeredUtilities: TOOL_IDS })
+
+    await ensureUtilitiesFolder()
+
+    expect(useProjectStore.getState().projectFolders[0]?.projectPaths).toEqual(
+      TOOL_PATHS
+    )
+    await vi.waitFor(() => {
+      expect(commands.savePreferences).toHaveBeenCalledWith(
+        expect.objectContaining({
+          projectFolders: [
+            {
+              id: UTILITIES_FOLDER_ID,
+              name: 'Utilities',
+              projectPaths: TOOL_PATHS,
+            },
+          ],
+        })
+      )
+    })
   })
 
   it('offers a newly shipped tool to an upgrade install (issue #55)', async () => {

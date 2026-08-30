@@ -550,6 +550,355 @@ pub fn suppress_default_context_menu<R: Runtime>(window: &WebviewWindow<R>) {
     log::info!("Default webview context menu suppressed (all frames)");
 }
 
+/// Guard installed once per process — a second exchange would swap the
+/// implementations back.
+#[cfg(target_os = "macos")]
+static NATIVE_MENU_GUARD_INSTALLED: AtomicBool = AtomicBool::new(false);
+/// Shadow mode: the guard was ADDED under `willOpenMenu:withEvent:`
+/// because WKWebView did not implement the hook itself — there is no
+/// original to forward to at the end of the guard.
+#[cfg(target_os = "macos")]
+static NATIVE_MENU_GUARD_SHADOWS: AtomicBool = AtomicBool::new(false);
+
+/// The ⌘←/⌘→ reroute guard (#89) — same once-per-process rule.
+#[cfg(target_os = "macos")]
+static CMD_ARROW_GUARD_INSTALLED: AtomicBool = AtomicBool::new(false);
+/// Shadow mode for the ⌘-arrow guard (see NATIVE_MENU_GUARD_SHADOWS).
+#[cfg(target_os = "macos")]
+static CMD_ARROW_GUARD_SHADOWS: AtomicBool = AtomicBool::new(false);
+
+/// v1.3.3 (#79): the NATIVE belt of the context-menu suppression. The
+/// three JS layers (main.tsx, help-main.tsx, and the all-frames
+/// WKUserScript above) all hinge on `preventDefault()`, which WebKit
+/// only honors inconsistently inside WKWebView (WebKit bug 244149) —
+/// users still saw the native menu on macOS 26. This guard hooks the
+/// last native choke point instead: WKWebView hands the NSMenu it is
+/// about to open to `willOpenMenu:withEvent:`, where a menu carrying a
+/// text-affordance selector passes through untouched (the contract
+/// keeps the native copy/paste menu on editable fields) and every other
+/// web menu — Reload, Open Frame in New Window, Back — is emptied
+/// before AppKit can present it. Class-level, so it covers every
+/// window (main + help) and every frame, cross-origin iframes included.
+/// Main thread only, like the rest of this block; call once at startup.
+#[cfg(target_os = "macos")]
+pub fn install_native_context_menu_guard() {
+    use objc2::ffi::{
+        class_addMethod, class_getInstanceMethod, method_exchangeImplementations,
+        method_getTypeEncoding,
+    };
+    use objc2::runtime::{AnyClass, Imp};
+
+    if NATIVE_MENU_GUARD_INSTALLED.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    // SAFETY: the class-structure mutation runs once per process, at
+    // startup before any WKWebView exists — no code can hold a stale
+    // method cache across the change.
+    unsafe {
+        let Some(wk) = AnyClass::get(c"WKWebView") else {
+            log::warn!("WKWebView class not found — native menu guard not installed");
+            return;
+        };
+        // The hook's type encoding, taken from NSView (which declares
+        // it); WKWebView shares the signature.
+        let Some(view) = AnyClass::get(c"NSView") else {
+            log::warn!("NSView class not found — native menu guard not installed");
+            return;
+        };
+        let template = class_getInstanceMethod(
+            view as *const AnyClass,
+            objc2::sel!(willOpenMenu:withEvent:),
+        );
+        if template.is_null() {
+            log::warn!("willOpenMenu:withEvent: not found — native menu guard not installed");
+            return;
+        }
+        let types = method_getTypeEncoding(template);
+        if types.is_null() {
+            log::warn!(
+                "willOpenMenu:withEvent: has no type encoding — native menu guard not installed"
+            );
+            return;
+        }
+        let typed: unsafe extern "C-unwind" fn(
+            &objc2::runtime::AnyObject,
+            objc2::runtime::Sel,
+            *mut objc2::runtime::AnyObject,
+            *mut objc2::runtime::AnyObject,
+        ) = pnds_will_open_menu;
+        let imp: Imp = std::mem::transmute::<_, Imp>(typed);
+        // Shadow path: WKWebView does not implement the hook itself —
+        // adding it shadows NSView's no-op for WKWebView instances ONLY.
+        // (Exchanging here instead would have rewritten NSView's method
+        // for every view in the process.)
+        if class_addMethod(
+            wk as *const AnyClass as *mut AnyClass,
+            objc2::sel!(willOpenMenu:withEvent:),
+            imp,
+            types,
+        )
+        .as_bool()
+        {
+            NATIVE_MENU_GUARD_SHADOWS.store(true, Ordering::Relaxed);
+            log::info!("Native context menu guard installed (shadows NSView's hook)");
+            return;
+        }
+        // Exchange path: WKWebView implements the hook — file the guard
+        // under a private selector and swap the two, so the guard runs on
+        // the real selector and forwards to the original.
+        if !class_addMethod(
+            wk as *const AnyClass as *mut AnyClass,
+            objc2::sel!(pndsWillOpenMenu:withEvent:),
+            imp,
+            types,
+        )
+        .as_bool()
+        {
+            log::warn!("guard method could not be added — native menu guard not installed");
+            return;
+        }
+        let original =
+            class_getInstanceMethod(wk as *const AnyClass, objc2::sel!(willOpenMenu:withEvent:));
+        if original.is_null() {
+            log::warn!("willOpenMenu:withEvent: vanished — native menu guard not installed");
+            return;
+        }
+        let guard = class_getInstanceMethod(
+            wk as *const AnyClass,
+            objc2::sel!(pndsWillOpenMenu:withEvent:),
+        );
+        if guard.is_null() {
+            log::warn!("guard method vanished — native menu guard not installed");
+            return;
+        }
+        method_exchangeImplementations(original as *mut _, guard as *mut _);
+        log::info!("Native context menu guard installed (exchanged with WKWebView's hook)");
+    }
+}
+
+/// A native menu counts as a text affordance — and passes the guard —
+/// when any item carries the Cut/Copy/Paste selectors: the
+/// editable-field and selection menus do, the web-navigation menus
+/// (Reload, Open Frame in New Window, Back) do not.
+fn actions_include_text_affordance(
+    actions: impl IntoIterator<Item = Option<objc2::runtime::Sel>>,
+) -> bool {
+    actions.into_iter().any(|action| {
+        matches!(action, Some(action) if action == objc2::sel!(copy:)
+            || action == objc2::sel!(cut:)
+            || action == objc2::sel!(paste:))
+    })
+}
+
+/// The guard's `willOpenMenu:withEvent:` implementation: text-affordance
+/// menus pass through untouched, every other web menu is emptied before
+/// AppKit can present it. In exchange mode the call forwards to
+/// WKWebView's original implementation (which lives under the private
+/// selector after the swap); in shadow mode there is nothing beneath us
+/// but NSView's no-op, so forwarding would recurse.
+#[cfg(target_os = "macos")]
+unsafe extern "C-unwind" fn pnds_will_open_menu(
+    this: &objc2::runtime::AnyObject,
+    _cmd: objc2::runtime::Sel,
+    menu: *mut objc2::runtime::AnyObject,
+    event: *mut objc2::runtime::AnyObject,
+) {
+    use objc2::msg_send;
+    use objc2_app_kit::NSMenu;
+
+    if !menu.is_null() {
+        // SAFETY: the runtime hands this hook a live NSMenu pointer.
+        let menu: &NSMenu = unsafe { &*menu.cast() };
+        let items = menu.itemArray();
+        let text_affordance = (0..items.count()).any(|index| {
+            let item = items.objectAtIndex(index);
+            actions_include_text_affordance([item.action()])
+        });
+        if !text_affordance {
+            menu.removeAllItems();
+        }
+    }
+    if !NATIVE_MENU_GUARD_SHADOWS.load(Ordering::Relaxed) {
+        // SAFETY: same receiver, same menu/event pointers, same signature —
+        // the selector resolves to the original implementation post-swap.
+        unsafe {
+            let _: () = msg_send![this, willOpenMenu: menu, withEvent: event];
+        }
+    }
+}
+
+// NSEvent modifier constants (device-independent bits) and the arrow
+// keyCodes the reroute matches. Command = 0x100000; Shift/Option/Control
+// = 0x020000/0x080000/0x040000. The numeric-pad bit (0x200000, set for
+// arrow keys) and the other noise bits (caps lock, function, help, the
+// device-dependent low word) are deliberately ignored — they ride along
+// with plain arrow presses and carry no intent of their own.
+#[cfg(target_os = "macos")]
+const NSEVENT_MODIFIER_COMMAND: usize = 0x0010_0000;
+#[cfg(target_os = "macos")]
+const NSEVENT_MODIFIERS_SHIFT_OPTION_CONTROL: usize = 0x000E_0000;
+#[cfg(target_os = "macos")]
+const KVK_LEFT_ARROW: u16 = 0x7B;
+#[cfg(target_os = "macos")]
+const KVK_RIGHT_ARROW: u16 = 0x7C;
+
+/// True for exactly-Command horizontal arrows: command held, none of
+/// shift/option/control, keyCode left/right. That is the pair WKWebView
+/// claims as its back/forward equivalents — and the pair the app's ⌘
+/// layer owns (folder views, v1.3.1). Everything else (⌘↓/⌘↑ project
+/// navigation included) must keep WKWebView's original routing.
+#[cfg(target_os = "macos")]
+fn is_exactly_command_horizontal_arrow(modifier_flags: usize, key_code: u16) -> bool {
+    modifier_flags & NSEVENT_MODIFIER_COMMAND != 0
+        && modifier_flags & NSEVENT_MODIFIERS_SHIFT_OPTION_CONTROL == 0
+        && (key_code == KVK_LEFT_ARROW || key_code == KVK_RIGHT_ARROW)
+}
+
+/// v1.3.3 (#89, user report — ⌘←/⌘→ stopped switching folder views):
+/// WKWebView claims exactly-Command horizontal arrows as its own
+/// back/forward equivalents and consumes them before the page can see
+/// them (reproduced on the dev build: ⌘↓ and plain arrows reach the
+/// DOM, ⌘←/⌘→ never do — silent, because the app has no in-webview
+/// history to navigate). This guard reroutes that pair into the NORMAL
+/// keyDown path, where the page's web-layer ⌘ handling — the same one
+/// since v1.3.1, guards for text fields and overlays included — owns
+/// them again. Every other key equivalent keeps WKWebView's original
+/// implementation untouched. Class-level like the menu guard; main
+/// thread only; call once at startup.
+#[cfg(target_os = "macos")]
+pub fn install_cmd_arrow_webview_passthrough() {
+    use objc2::ffi::{
+        class_addMethod, class_getInstanceMethod, method_exchangeImplementations,
+        method_getTypeEncoding,
+    };
+    use objc2::runtime::{AnyClass, Imp};
+
+    if CMD_ARROW_GUARD_INSTALLED.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    // SAFETY: mirrors the context-menu guard's class-structure mutation —
+    // once per process, at startup, before any WKWebView exists.
+    unsafe {
+        let Some(wk) = AnyClass::get(c"WKWebView") else {
+            log::warn!("WKWebView class not found — ⌘-arrow reroute not installed");
+            return;
+        };
+        let Some(view) = AnyClass::get(c"NSView") else {
+            log::warn!("NSView class not found — ⌘-arrow reroute not installed");
+            return;
+        };
+        let template =
+            class_getInstanceMethod(view as *const AnyClass, objc2::sel!(performKeyEquivalent:));
+        if template.is_null() {
+            log::warn!("performKeyEquivalent: not found — ⌘-arrow reroute not installed");
+            return;
+        }
+        let types = method_getTypeEncoding(template);
+        if types.is_null() {
+            log::warn!(
+                "performKeyEquivalent: has no type encoding — ⌘-arrow reroute not installed"
+            );
+            return;
+        }
+        let typed: unsafe extern "C-unwind" fn(
+            &objc2::runtime::AnyObject,
+            objc2::runtime::Sel,
+            *mut objc2::runtime::AnyObject,
+        ) -> objc2::runtime::Bool = pnds_perform_key_equivalent;
+        let imp: Imp = std::mem::transmute::<_, Imp>(typed);
+        // Shadow path: WKWebView inherits NSView's hook without
+        // implementing it itself — adding ours shadows it for WKWebView
+        // instances only (exchanging would rewrite NSView process-wide).
+        if class_addMethod(
+            wk as *const AnyClass as *mut AnyClass,
+            objc2::sel!(performKeyEquivalent:),
+            imp,
+            types,
+        )
+        .as_bool()
+        {
+            CMD_ARROW_GUARD_SHADOWS.store(true, Ordering::Relaxed);
+            log::info!("⌘-arrow reroute installed (shadows NSView's hook)");
+            return;
+        }
+        // Exchange path: WKWebView implements the hook — stash the
+        // original under a private selector and swap the two.
+        if !class_addMethod(
+            wk as *const AnyClass as *mut AnyClass,
+            objc2::sel!(pndsPerformKeyEquivalent:),
+            imp,
+            types,
+        )
+        .as_bool()
+        {
+            log::warn!("reroute method could not be added — ⌘-arrow reroute not installed");
+            return;
+        }
+        let original =
+            class_getInstanceMethod(wk as *const AnyClass, objc2::sel!(performKeyEquivalent:));
+        if original.is_null() {
+            log::warn!("performKeyEquivalent: vanished — ⌘-arrow reroute not installed");
+            return;
+        }
+        let guard = class_getInstanceMethod(
+            wk as *const AnyClass,
+            objc2::sel!(pndsPerformKeyEquivalent:),
+        );
+        if guard.is_null() {
+            log::warn!("reroute method vanished — ⌘-arrow reroute not installed");
+            return;
+        }
+        method_exchangeImplementations(original as *mut _, guard as *mut _);
+        log::info!("⌘-arrow reroute installed (exchanged with WKWebView's hook)");
+    }
+}
+
+/// The reroute's `performKeyEquivalent:` implementation: exactly-Command
+/// horizontal arrows are delivered through the NORMAL keyDown path (the
+/// page's web layer then owns them, exactly as before WKWebView started
+/// claiming the pair) and reported handled; every other equivalent
+/// keeps its original routing — forwarded to WKWebView's implementation
+/// in exchange mode, and in shadow mode answered "not handled" like the
+/// NSView no-op we shadow (WKWebView has no AppKit subviews that need
+/// key equivalents — its content is remote).
+#[cfg(target_os = "macos")]
+unsafe extern "C-unwind" fn pnds_perform_key_equivalent(
+    this: &objc2::runtime::AnyObject,
+    _cmd: objc2::runtime::Sel,
+    event: *mut objc2::runtime::AnyObject,
+) -> objc2::runtime::Bool {
+    use objc2::msg_send;
+
+    let handled: bool = if event.is_null() {
+        false
+    } else {
+        // SAFETY: the runtime hands this hook a live NSEvent pointer.
+        let flags: usize = unsafe { msg_send![event, modifierFlags] };
+        let key_code: u16 = unsafe { msg_send![event, keyCode] };
+        if is_exactly_command_horizontal_arrow(flags, key_code) {
+            // SAFETY: same receiver, same event pointer — delivered as a
+            // plain keyDown, the ordinary (non-equivalent) event path.
+            unsafe {
+                let _: () = msg_send![this, keyDown: event];
+            }
+            true
+        } else {
+            false
+        }
+    };
+    if handled {
+        return objc2::runtime::Bool::YES;
+    }
+    if !CMD_ARROW_GUARD_SHADOWS.load(Ordering::Relaxed) {
+        // SAFETY: same receiver, same event pointer, same signature — the
+        // selector resolves to the original implementation post-swap.
+        let result: objc2::runtime::Bool =
+            unsafe { msg_send![this, pndsPerformKeyEquivalent: event] };
+        return result;
+    }
+    objc2::runtime::Bool::NO
+}
+
 /// Depth-bounded walk for the first view of an exact class — AppKit
 /// hierarchies are shallow; the bound turns any pathological cycle into a
 /// false negative instead of a hang (the WKWebView sits two levels under
@@ -684,6 +1033,61 @@ mod tests {
         assert!(s1.fullscreen);
         assert!(!s1.show_custom_traffic_lights);
         assert!(s1.generation > s0.generation);
+    }
+
+    /// v1.3.3 (#79): the native menu guard's pass-through policy — menus
+    /// carrying a text-affordance selector (editable fields and text
+    /// selections) keep their native menu, web-navigation menus do not.
+    #[test]
+    fn text_affordance_menus_pass_the_native_guard() {
+        use objc2::sel;
+
+        assert!(actions_include_text_affordance([Some(sel!(copy:))]));
+        assert!(actions_include_text_affordance([None, Some(sel!(paste:))]));
+        // Selection menus mix copy with non-edit actions — still text.
+        assert!(actions_include_text_affordance([
+            Some(sel!(lookUp:)),
+            Some(sel!(copy:)),
+        ]));
+        // Empty menus and pure navigation menus are emptied.
+        assert!(!actions_include_text_affordance([]));
+        assert!(!actions_include_text_affordance([None]));
+        assert!(!actions_include_text_affordance([Some(sel!(reload:))]));
+    }
+
+    /// v1.3.3 (#89): the ⌘-arrow reroute matches EXACTLY Command +
+    /// horizontal arrows — the pair WKWebView claims as back/forward and
+    /// the pair the app's ⌘ layer owns. Modifiers, vertical arrows and
+    /// arrow-noise bits must all stay on WKWebView's original routing.
+    #[test]
+    fn command_horizontal_arrows_match_the_reroute() {
+        const COMMAND: usize = 0x0010_0000;
+        const SHIFT: usize = 0x0002_0000;
+        const OPTION: usize = 0x0008_0000;
+        const CONTROL: usize = 0x0004_0000;
+        // The numeric-pad bit rides along with arrow presses.
+        const NUMERIC_PAD: usize = 0x0020_0000;
+
+        assert!(is_exactly_command_horizontal_arrow(COMMAND, 0x7B));
+        assert!(is_exactly_command_horizontal_arrow(COMMAND, 0x7C));
+        // Arrow presses carry the numeric-pad bit — still a match.
+        assert!(is_exactly_command_horizontal_arrow(
+            COMMAND | NUMERIC_PAD,
+            0x7B
+        ));
+        // Any other intent disqualifies the pair.
+        assert!(!is_exactly_command_horizontal_arrow(COMMAND | SHIFT, 0x7B));
+        assert!(!is_exactly_command_horizontal_arrow(COMMAND | OPTION, 0x7C));
+        assert!(!is_exactly_command_horizontal_arrow(
+            COMMAND | CONTROL,
+            0x7B
+        ));
+        // ⌘↓/⌘↑ must keep their original routing.
+        assert!(!is_exactly_command_horizontal_arrow(COMMAND, 0x7D));
+        assert!(!is_exactly_command_horizontal_arrow(COMMAND, 0x7E));
+        // Plain arrows and no-Command arrows are not equivalents anyway.
+        assert!(!is_exactly_command_horizontal_arrow(0, 0x7B));
+        assert!(!is_exactly_command_horizontal_arrow(SHIFT, 0x7B));
     }
 
     /// The ramp steps through intermediate opacities and lands exactly on

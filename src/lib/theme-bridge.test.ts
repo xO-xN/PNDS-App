@@ -92,6 +92,6 @@ describe('theme-bridge (#44)', () => {
   })
 
   it('fails soft without a frame — the show is never affected', () => {
-    expect(pushThemeToFrame(null, 'http://x:1', 'lavender')).toBe(false)
+    expect(pushThemeToFrame(null, 'http://x:1', 'pond')).toBe(false)
   })
 })

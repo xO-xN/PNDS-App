@@ -10,6 +10,10 @@ import {
 import { pushThemeToFrame } from '@/lib/theme-bridge'
 import { pushLocaleToFrame } from '@/lib/locale-bridge'
 import { buildMonitorUrl } from '@/lib/monitor-url'
+import {
+  BUILTIN_UTILITY_DISPLAY_NAMES,
+  builtinUtilityId,
+} from '@/lib/builtin-utilities'
 import { currentResolvedLanguage } from '@/i18n/config'
 import {
   monitorNavigationRevealed,
@@ -35,10 +39,16 @@ export function MonitorView() {
   // rename map entry differs) never retitles the live show.
   const sessionProjectPath = useSessionStore(state => state.sessionProjectPath)
   // v1.1.2 T6: a custom display name (spec issue #10) wins over the
-  // manifest name the session reports.
+  // manifest name the session reports. v1.3.3 (#84): a built-in tool's
+  // concise alias is the next stop — resolved above the learned names,
+  // so the manifest name preflight learns on selection can't flip a
+  // running tool's title back to the long name (same precedence order
+  // as projectDisplayName).
   const displayOverride = useProjectStore(state =>
     sessionProjectPath
-      ? state.projectDisplayNames[sessionProjectPath]
+      ? (state.projectDisplayNames[sessionProjectPath] ??
+        BUILTIN_UTILITY_DISPLAY_NAMES[builtinUtilityId(sessionProjectPath)] ??
+        state.manifestProjectNames[sessionProjectPath])
       : undefined
   )
   // v1.2.3 (#39/T4): the iframe targets the SESSION's LAN IP (snapshot

@@ -1,7 +1,7 @@
 //! Project-related commands: preflight validation and orphan cleanup.
 //!
 //! Implements the startup sequence stage that runs before any process is
-//! spawned (docs/zh-CN/reference/runtime-contract.md §8 steps 1–2 and §11
+//! spawned (docs/zh-CN/reference/runtime-contract.md §8 steps 1–2 and §12
 //! orphan cleanup; preflight checklist in docs/developer/app-behavior.md).
 
 use std::path::PathBuf;
@@ -58,7 +58,7 @@ pub async fn preflight_project(
 
     let live_pids = state.active_child_pids();
 
-    // §11: stale children must be gone before port checks are meaningful.
+    // §12: stale children must be gone before port checks are meaningful.
     let dir = app_data_dir(&app)?;
     let terminated =
         crate::project::children::ChildRegistry::new(dir.clone()).cleanup_orphans(&live_pids)?;
@@ -103,7 +103,7 @@ pub async fn start_project(
     state.start(app, dir, StartRequest::new(path, mode, lan_ip, osc_target))
 }
 
-/// Stops the running score server (§11). Idempotent.
+/// Stops the running score server (§12). Idempotent.
 #[tauri::command]
 #[specta::specta]
 pub async fn stop_project(app: AppHandle, state: State<'_, SessionManager>) -> Result<(), String> {
@@ -173,7 +173,7 @@ pub async fn check_port_status(port: u16) -> Result<PortStatus, String> {
 }
 
 /// v1.2.0 (issue #14): release an occupied port — SIGTERM → grace → SIGKILL
-/// on the freshly-resolved occupant (same escalation as §11 child cleanup).
+/// on the freshly-resolved occupant (same escalation as §12 child cleanup).
 /// Returns the port's post-release status; the caller refreshes from it.
 #[tauri::command]
 #[specta::specta]
