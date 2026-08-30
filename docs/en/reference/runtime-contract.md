@@ -191,8 +191,10 @@ When the App cannot reliably read the device's capabilities, or the device has n
 -u <dynamic UDP port>
 -B 127.0.0.1
 -U <App bundled UGen plugins>
--H <selected device name>         when not the system default
+-H <resolved device name>         always; the session-resolved device name
 ```
+
+`-H` is always passed (issue #100): every spawn — session start and the launch prewarm — carries the output device name resolved for that run (session: the saved preference or the system default it fell back to; prewarm: the launch-resolved system default — on resolution failure no `-H` is passed and the prewarm gives up silently). scsynth's own default-device resolution path hits an ObjC runtime race on macOS 26 (#99 field data: 47% per-spawn crash without `-H`, 0% with an explicit name), so that path is never taken. A device vanishing between resolution and spawn makes scsynth print its error and exit cleanly (exit code, no signal) — no retry, straight to the error page with the output in the session log, no silent fallback.
 
 `-S` takes the App's **effective sample rate**: the App's global sample-rate preference, `48000` when unset. The manifest no longer declares sampleRate (removed from the schema's active surface); a leftover `audio.scsynth.sampleRate` in an old manifest is read and ignored — it takes no part in startup, is never rewritten, and never fails validation. H in §7.1 and the device-capability check in §7.6 likewise use the effective sample rate.
 

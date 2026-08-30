@@ -409,7 +409,12 @@ pub fn scsynth_args(
 
 /// Spawns scsynth with the §7.2 flags and returns the child (stdout/stderr
 /// are wired into the session output tail by the caller). `device` selects
-/// the output via -H (app-behavior「音频 Host 行为」); None uses the system default.
+/// the output via -H (app-behavior「音频 Host 行为」). Issue #100: callers pass
+/// the RESOLVED device name — session start the saved preference or its
+/// resolved system-default fallback, the launch prewarm the launch-resolved
+/// system default — so scsynth never takes its default-device resolution
+/// path (the #99 ObjC race). `None` (no -H) survives only as the prewarm's
+/// resolution-failure shape.
 ///
 /// We bundle SC 3.14.x because 3.13's -H opened devices for input even with
 /// `-i 0`, which broke output-only devices (built-in speakers, TVs). The
@@ -643,6 +648,12 @@ pub fn is_audio_prewarmed() -> bool {
 /// fully silent, and the prewarm flag is set only after a boot actually
 /// succeeded. Real failures give up silently; the session-start path
 /// surfaces any real failure to the error page.
+///
+/// Issue #100: the prewarm spawn also carries `-H` — scsynth's
+/// default-device resolution path is the #99 ObjC race, and the prewarm
+/// must not roll those dice either. The system default's name is resolved
+/// once at launch; a resolution failure keeps the pre-#100 shape (spawn
+/// without -H), silently.
 pub fn prewarm_scsynth() {
     std::thread::spawn(|| {
         let Ok(binary) = scsynth_binary_path() else {
@@ -656,13 +667,16 @@ pub fn prewarm_scsynth() {
             block_size: 64,
             audio_bus_channels: 128,
         };
+        let device = list_output_devices(cfg.sample_rate)
+            .and_then(|caps| resolve_in_list(&caps, None).map(|cap| cap.name))
+            .ok();
         let prewarmed = boot_with_transient_retries(
             PREWARM_BOOT_TRANSIENT_RETRIES,
             TRANSIENT_RETRY_DELAY,
             || {
                 let port =
                     crate::project::session::allocate_udp_port().map_err(BootFailure::other)?;
-                let mut child = spawn_scsynth(&binary, &cfg, 2, port, &plugins, None)
+                let mut child = spawn_scsynth(&binary, &cfg, 2, port, &plugins, device.as_deref())
                     .map_err(BootFailure::other)?;
                 let wait = match OscClient::connect(&format!("127.0.0.1:{port}")) {
                     Ok(client) => wait_for_scsynth(&client, &mut child),
@@ -1177,6 +1191,29 @@ mod tests {
         // No device → no -H flag at all.
         let args = scsynth_args(&cfg, 2, 57110, Path::new("/plugins"), None);
         assert!(!args.iter().any(|a| a == "-H"));
+    }
+
+    /// Issue #100: every real spawn carries `-H` with the session's
+    /// resolved device name — the saved preference or the resolved system
+    /// default — so scsynth never takes its own default-device resolution
+    /// path (the #99 ObjC race: default path 47% crash, explicit name 0%).
+    /// Table-driven over both provenances: whichever way the name was
+    /// obtained, it must ride -H.
+    #[test]
+    fn scsynth_args_pass_resolved_device_name_via_h() {
+        let cfg = ScsynthConfig {
+            sample_rate: 48000,
+            block_size: 64,
+            audio_bus_channels: 128,
+        };
+        for name in ["Saved Preference", "Resolved System Default"] {
+            let args = scsynth_args(&cfg, 2, 57110, Path::new("/plugins"), Some(name));
+            let pos = args
+                .iter()
+                .position(|a| a == "-H")
+                .unwrap_or_else(|| panic!("device \"{name}\" produced no -H"));
+            assert_eq!(args[pos + 1], name);
+        }
     }
 
     /// Issue #20: `-S` carries the App's effective sample rate — the global

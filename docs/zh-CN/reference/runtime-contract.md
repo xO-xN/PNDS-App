@@ -191,8 +191,10 @@ App 无法可靠取得设备能力或设备没有可用输出时，Internal 启�
 -u <dynamic UDP port>
 -B 127.0.0.1
 -U <App bundled UGen plugins>
--H <selected device name>         非系统默认时
+-H <resolved device name>         恒携带：会话解析的设备名
 ```
+
+`-H` 恒携带（issue #100）：每次 spawn——会话启动与 App 启动预热——都传入本次已解析的输出设备名：会话用保存的设备偏好或其回退解析出的系统默认名，预热用启动时解析的系统默认名（解析失败时不传 `-H`、静默放弃）。原因是 scsynth 自身的默认设备解析路径在 macOS 26 上撞 ObjC 运行时竞态（#99 实测：无 `-H` 单次崩溃 47%，显式名 0%），恒携带即永不走该路径。设备在解析与 spawn 之间消失时，scsynth 打印错误后干净退出（exit code，非信号）——不重试、直接进错误页、输出落 session 日志，不做静默回退。
 
 `-S` 使用 App 的**有效采样率**：App 全局采样率偏好，未设置时为 `48000`。manifest 不再声明 sampleRate（已从 schema 的活跃表面移除）；旧 manifest 中残留的 `audio.scsynth.sampleRate` 被读取后忽略——不参与启动、不被改写、不导致校验失败。§7.1 的 H 与 §7.6 的设备能力判定同样以有效采样率为准。
 

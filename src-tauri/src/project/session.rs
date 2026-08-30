@@ -577,8 +577,14 @@ impl SessionManager {
                 cap.name
             );
             request.channel_plan = Some(plan);
-            request.output_device = Some(cap.name);
-            (device, Some(sc_cfg))
+            request.output_device = Some(cap.name.clone());
+            // Issue #100: every spawn carries -H with the RESOLVED name —
+            // the saved preference or the system default it fell back to —
+            // because scsynth's own default-device resolution path is the
+            // #99 ObjC race. A device vanishing between this resolution and
+            // the spawn surfaces as scsynth's clean-exit error (error page,
+            // output in the session log), never a silent fallback.
+            (Some(cap.name), Some(sc_cfg))
         } else {
             (None, None)
         };
