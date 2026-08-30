@@ -66,6 +66,19 @@ jobs:
           releaseBody: |
             ## PNDS ${{ github.ref_name || inputs.version }}
 
+            ### What's New in V1.3.4 — a self-healing startup, a bounded shutdown & a session log that tells the story
+
+            **The scsynth startup crash now heals itself**
+            - The bundled audio engine can die right after launch on macOS 26 — a SuperCollider 3.14.1 ObjC runtime race that strikes probabilistically (the SIGTRAP / "Audio engine exited during startup" error that a manual Retry used to clear). The App now recognizes exactly that signature — killed by a signal before printing a single line — and retries it transparently while the loading screen stays put, on a fresh port, within about a second. Real failures (timeouts, configuration errors such as a rejected output device) still stop at the error page unmasked: if the error page appears, it still means a human should look. The launch-time audio warmup retries through the same gate, silently, so the first project load boots on a warm subsystem.
+            - Every auto-retry is recorded in the App log and the session log — the crash-rate record that will decide the eventual SuperCollider upgrade.
+
+            **Shutdown is bounded — closing a project can't blank the screen for five seconds**
+            - A pathological score server that ignored SIGTERM used to stretch the stop cover into a 5–10 second white screen. The score server's grace window now tightens to 2 seconds — healthy projects exit in a twentieth of that, and phones sit in their reconnect loop either way — while the audio engine keeps its full window for CoreAudio teardown. Stop order is unchanged: the project releases its synths first, the engine follows.
+            - The project server's and the audio engine's raw output now lands, line by line, in the per-session log with `[node]` / `[scsynth]` prefixes — including their final words during shutdown, flushed as written so the log survives even a hard crash. Slow shutdowns and startup failures can finally be read straight from `session-logs/`, bracketed by the App's own teardown markers.
+
+            **The bundled diagnostics tools ride along**
+            - Local Network Diagnostics v0.5.0 and Telematic Network Diagnostics v0.4.0 now force-close their live connections on stop, so they exit comfortably inside the new window — and their step-by-step shutdown timings land in the session log.
+
             ### What's New in V1.3.3 — the native belt, a dressed Utilities shelf & the Pond
 
             **The right-click bug, finished — and the right click handed to authors**
@@ -106,7 +119,7 @@ jobs:
             - Four pure refactors landed alongside: the sidebar drag engine extracted into a useCardDrag controller with a geometry adapter; the folder and card pill indicators unified into one useIndicatorPill engine, so scheduling and geometry writes exist exactly once; the project store gained replaceProjectIndex — a single-call wholesale rebuild that persists in one snapshot, the seam the upcoming setlist import will call, with the set.json keying decision (manifest id + version, never absolute paths) recorded ahead of the format freeze; and the Rust start pipeline now threads one StartRequest record through all four layers, so v1.4.0's networked-hub variables will land as record fields instead of widening four signatures.
 
             ### Earlier releases
-            The V1.3.1–V1.1 notes live on the [releases page](https://github.com/xO-xN/PNDS-App/releases).
+            The V1.3.2–V1.1 notes live on the [releases page](https://github.com/xO-xN/PNDS-App/releases).
 
             ### Auto-Updates
             Existing users will receive automatic update notifications.
