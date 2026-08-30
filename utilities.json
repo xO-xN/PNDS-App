@@ -17,9 +17,9 @@
     {
       "id": "telematic-network-diagnostics",
       "repo": "xO-xN/Telematic-Network-Diagnostics",
-      "tag": "v0.3.0",
-      "artifact": "telematic-network-diagnostics-v0.3.0.pnds",
-      "sha256": "55fa0d0d5e87e7de5bf556abefba10935e8ddd5f182222c8b324b9dc3bd7debf"
+      "tag": "v0.4.0",
+      "artifact": "telematic-network-diagnostics-v0.4.0.pnds",
+      "sha256": "3d0b93efccc6133be7693ebb91dd2111398da5cc5a529f87adbd7b25d8a75451"
     }
   ]
 }
