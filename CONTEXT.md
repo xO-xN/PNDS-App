@@ -58,4 +58,8 @@ _Avoid_: 插件、addon、实用工具（作统称）
 App 内的帮助窗口，浏览帮助语料四本书：教程、创作者指南、参考手册、模块手册。
 
 **帮助语料 / Help corpus**:
-帮助中心内可浏览的全部文档，中英双语成对维护，读者按界面语言取用对应语言版本。
+帮助中心内可浏览的全部文档，中英双语成对维护，读者按界面语言取用对应语言版本。装机语料路径（`help/<tree>/…`）同时是创作者 AI agent 的本地契约文档来源（见 ADR-0003），是对外接口。
+
+**实现手册 / Implementation Manual**:
+PNDS Template 仓库中描述模板示例工程的文档（`docs/implementation.md`）：示例行为规格、目录职责、「创作时改哪里」。与帮助语料的「创作指南」（工作流）互指分工。
+_Avoid_: creator-guide（旧名）、handoff（已并入 Template 的 AGENTS.md）

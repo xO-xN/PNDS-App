@@ -20,6 +20,7 @@ PNDS App：演出现场运行 PNDS 数字乐谱工程的 macOS（Apple Silicon�
 - 改 manifest / preflight / 工程结构 → `docs/zh-CN/reference/manifest.md`、`docs/zh-CN/reference/structure.md`
 - 改进程 / health / 音频 bus / 关停 → `docs/zh-CN/reference/runtime-contract.md`
 - 改 `.pnds` 打包 / 安装 → `docs/zh-CN/reference/pnds-bundle.md`
+- 动帮助语料清单 / 资源路径 → `docs/developer/help-center.md` + ADR-0003（装机语料路径是对外接口，重排即断链）
 - App 产品行为与验收存疑（session / 窗口 / 侧栏 / 静音 / 全屏 / 错误重试 / 测试覆盖 / DoD）→ `docs/developer/app-behavior.md`
 - 写 UI / 状态 / 命令桥 / 快捷键 / i18n → `docs/developer/README.md`（问题式索引）
 - 领取与汇报任务 → GitHub issues（`docs/agents/issue-tracker.md`）；领域术语与 ADR 布局 → `docs/agents/domain.md`

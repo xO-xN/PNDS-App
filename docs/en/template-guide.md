@@ -28,8 +28,8 @@ Before you start, make sure your machine has:
    git clone <your-repo-url>
    ```
 
-3. **Read the Project conventions**
-   Open the Project in your editor and read the `README.md` at its root for a quick view of the directory layout, configuration options and basic conventions.
+3. **Read the Project documentation**  
+   Open the Project in your editor: the root `README.md` is the overview; `docs/implementation.md` (the implementation manual) covers what the template's example work does and where to change things; `AGENTS.md` is the entry point for AI coding agents — agents read it automatically and use it to look up the platform contract docs (reading the local help corpus shipped with the installed App first). Ports are declared in `manifest.json`; see the port section of [the Reference Manual · manifest](../reference/manifest.md) for conventions and advice.
 
 ---
 
@@ -38,7 +38,7 @@ Before you start, make sure your machine has:
 PNDS recommends a twin-track iteration loop: **AI-assisted generation and editing, plus live hot-reload preview in PNDS App**:
 
 - **AI-driven development**
-  Import the Project directory into your AI coding agent. Guide the AI through conversation to understand the score's interaction logic, audio and visual rendering rules, and communication protocols, and let it write or refactor code quickly.
+  Import the Project directory into your AI coding agent. Guide the AI through conversation to understand the score's interaction logic, audio and visual rendering rules, and communication protocols, and let it write or refactor code quickly. The Project's built-in `AGENTS.md` routes the agent to the platform contracts and module manuals — no manual doc feeding needed. For a freshly created Project, just tell the agent **"start"** — it follows the Project's built-in `docs/start.md` to initialise (work name / author / description in place, version reset, install and tests green).
 - **Live loading and preview**
   While authoring, load the local Project directory in PNDS App at any time to test interaction response, audio-visual behaviour and multi-device sync on the spot; the **Open in default browser** and **Refresh the monitor view** buttons at the top right of the sidebar help during development.
 - **Continuous verification and fine-tuning**

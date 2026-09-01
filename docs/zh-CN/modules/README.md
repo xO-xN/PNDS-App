@@ -16,7 +16,7 @@
 
 ## 与其他文档的分工
 
-- **[Template 仓库的 creator-guide](https://github.com/xO-xN/PNDS-Template/blob/main/docs/creator-guide.md)**（体裁分工）：那边是开发机上「从零到发布」跟着走的工作流指南，边写边读；本册是按模块查用法的参考手册，排练与演出时回答「座位怎么持久化」「主题变量有哪些」这类问题。帮助中心的[创作指南](../template-guide.md)同样是工作流体裁，与本册的分工同此。
+- **[Template 仓库的实现手册](https://github.com/xO-xN/PNDS-Template/blob/main/docs/implementation.md)**（体裁分工）：那边讲模板示例工程本身——示例行为规格、目录职责、「创作时改哪里」；本册是按模块查用法的参考手册，排练与演出时回答「座位怎么持久化」「主题变量有哪些」这类问题。开发机上「从零到发布」的工作流指南是帮助中心的[创作指南](../template-guide.md)，与本册的分工同此。
 - **[参考手册](../reference/README.md)**（契约分工）：参考手册面向「工程」这一契约层——manifest、运行时行为、`.pnds` 打包、OSC 等 App 与工程之间的接口；本册面向 Template 自带的模块实现——工程内部这些文件怎么用。契约细节一律以参考手册为准，本册只链接、不重述。
 
 ## 刻意不收的模块
