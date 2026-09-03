@@ -6,7 +6,7 @@
 
 AI-Coding 时代的电子音乐创作与演奏平台。
 
-PNDS 池谱（Platform for Networked Digital Score）是创作与演奏网络数字乐谱电子音乐的平台，包含 **PNDS App** 与 **PNDS Template** 两部分。
+PNDS 池谱（Platform for Networked Digital Score），寓意「多池相连」：每个池塘（本地演奏系统）聚集一群人的表达，PNDS 将这些池塘相连，构成一个独特的表达场域（跨互联网演奏系统）。它是演奏与创作网络数字乐谱电子音乐的平台，包含 **PNDS App** 与 **PNDS Template** 两部分。
 
 - **PNDS App**——演出现场运行工程的 Host，负责给 node.js 与 声音引擎架设在本地网络下，就地构成数字乐谱演出环境。
 - **PNDS Template** 是一个为 AI Coding 预备的 PNDS 工程起点：框架内已备好实现作品的实用工具，你的作品只写在少数几个特定文件里——边界清晰，简单明了。

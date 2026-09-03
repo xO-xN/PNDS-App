@@ -6,7 +6,7 @@
 
 An electronic-music creation and performance platform for the AI-coding era.
 
-PNDS (Platform for Networked Digital Score) is a platform for creating and performing networked digital-score electronic music, with two parts: **PNDS App** and **PNDS Template**.
+The name PNDS (Platform for Networked Digital Score) evokes "many ponds, connected": each pond (a local performance system) gathers the voices of a group of people, and PNDS connects these ponds into a unique field of expression (a cross-internet performance system). It is a platform for performing and creating networked digital-score electronic music, with two parts: **PNDS App** and **PNDS Template**.
 
 - **PNDS App** — the Host that runs projects at the performance site: it stands Node.js and the sound engines up on a local network, forming a digital-score performance environment on the spot.
 - **PNDS Template** — a PNDS project starting point prepared for AI coding: the framework ships ready-made utilities for realizing works, and your own work lives in just a few specific files — a clear, simple boundary.
