@@ -140,7 +140,11 @@ all-frames reporter script (`window.rs` `GUEST_FOCUS_SCRIPT`) publishes
 the page's focus state, and while a page element other than body/html
 holds focus, every reclaim path stands down and the web ⌘ layer lets
 the page keep the keyboard (page-focus priority — app-behavior
-「网络与 Monitor」; native menu accelerators are unaffected).
+「网络与 Monitor」; native menu accelerators are unaffected). #107 adds
+the second gate: the pointer sitting inside the monitor frame area
+holds the same stand-down (homemade no-focusin controls included),
+until it leaves — with a ≤500ms debounce and an elementFromPoint
+re-check so a missed leave can't strand the gate.
 
 ## Mute Shortcut (v1.2.2, issue #30 feedback)
 

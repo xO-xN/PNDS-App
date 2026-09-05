@@ -195,6 +195,131 @@ describe('MonitorView guest focus gate (#105)', () => {
 })
 
 /**
+ * v1.3.5 (#107): the pointer-area gate. Homemade page controls (div
+ * menus with no tabindex) never fire focusin — the guest gate alone
+ * can miss them — but the pointer sitting inside the monitor frame
+ * means the user is working in the page: the reclaim machinery stands
+ * down until the pointer leaves (after a ≤500ms debounce), and every
+ * reclaim re-verifies via elementFromPoint at the last known pointer
+ * coordinates so a missed leave cannot strand the gate.
+ */
+describe('MonitorView pointer-area gate (#107)', () => {
+  /** jsdom implements neither elementFromPoint nor layout: a stub hit
+   * test, defaulting to "the pointer is over app chrome". */
+  let hitTest: ReturnType<
+    typeof vi.fn<(x: number, y: number) => Element | null>
+  >
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useSessionStore.setState({
+      sessionStatus: 'ready',
+      projectName: 'Inarticulate III',
+      lanIp: '192.168.1.10',
+      health: readyHealth,
+    })
+    hitTest = vi.fn(() => document.body)
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      writable: true,
+      value: hitTest,
+    })
+  })
+
+  afterEach(() => {
+    delete (
+      document as {
+        elementFromPoint?: (x: number, y: number) => Element | null
+      }
+    ).elementFromPoint
+  })
+
+  it('the pointer inside the frame suppresses the reclaim without any guest signal', () => {
+    render(<MonitorView />)
+    const iframe = screen.getByTitle('Project monitor') as HTMLIFrameElement
+    iframe.focus()
+
+    hitTest.mockReturnValue(iframe)
+    fireEvent.mouseEnter(iframe, { clientX: 120, clientY: 200 })
+    window.dispatchEvent(new Event('focus'))
+
+    expect(document.activeElement).toBe(iframe)
+  })
+
+  it('leaving the frame re-arms the reclaim once the debounce window passes', () => {
+    vi.useFakeTimers()
+    try {
+      render(<MonitorView />)
+      const iframe = screen.getByTitle('Project monitor') as HTMLIFrameElement
+      iframe.focus()
+
+      hitTest.mockReturnValue(iframe)
+      fireEvent.mouseEnter(iframe, { clientX: 120, clientY: 200 })
+      hitTest.mockReturnValue(document.body)
+      fireEvent.mouseLeave(iframe)
+
+      // Inside the debounce window the gate still holds.
+      act(() => {
+        window.dispatchEvent(new Event('focus'))
+      })
+      expect(document.activeElement).toBe(iframe)
+
+      // Past the window the pending leave lifts the gate and reclaims
+      // at once — no waiting for the next heartbeat.
+      act(() => {
+        vi.advanceTimersByTime(500)
+      })
+      expect(document.activeElement).toBe(screen.getByTestId('monitor-host'))
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('re-entering during the debounce window cancels the pending leave', () => {
+    vi.useFakeTimers()
+    try {
+      render(<MonitorView />)
+      const iframe = screen.getByTitle('Project monitor') as HTMLIFrameElement
+      iframe.focus()
+
+      hitTest.mockReturnValue(iframe)
+      fireEvent.mouseEnter(iframe, { clientX: 120, clientY: 200 })
+      hitTest.mockReturnValue(document.body)
+      fireEvent.mouseLeave(iframe)
+      hitTest.mockReturnValue(iframe)
+      fireEvent.mouseEnter(iframe, { clientX: 130, clientY: 210 })
+
+      act(() => {
+        vi.advanceTimersByTime(1000)
+        window.dispatchEvent(new Event('focus'))
+      })
+      expect(document.activeElement).toBe(iframe)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('a missed leave self-corrects from the last known pointer coordinates', () => {
+    render(<MonitorView />)
+    const iframe = screen.getByTitle('Project monitor') as HTMLIFrameElement
+    iframe.focus()
+
+    // The enter landed inside the frame…
+    hitTest.mockImplementation((x: number) =>
+      x < 100 ? document.body : iframe
+    )
+    fireEvent.mouseEnter(iframe, { clientX: 120, clientY: 200 })
+    // …the leave never fires (a suspended webview drops it), but the
+    // pointer moved onto app chrome — the hit test at the fresh
+    // coordinates says so, and the reclaim re-runs the gate.
+    fireEvent.mouseMove(window, { clientX: 40, clientY: 40 })
+    window.dispatchEvent(new Event('focus'))
+
+    expect(document.activeElement).toBe(screen.getByTestId('monitor-host'))
+  })
+})
+
+/**
  * v1.2.3 (#44) / v1.3.0 (#54): the bridges' delivery timing — the
  * monitor iframe receives the current theme and resolved language on
  * load, on every theme/language switch and on every window regain (a

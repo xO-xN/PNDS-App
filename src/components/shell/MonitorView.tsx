@@ -37,6 +37,11 @@ function isGuestFocusPayload(
   )
 }
 
+/** v1.3.5 (#107): how long a frame-area leave holds before the reclaim
+ * machinery re-arms — boundary jitter (the title strip overlays the
+ * frame's top edge) must not flicker the gate. */
+const FRAME_POINTER_LEAVE_DEBOUNCE_MS = 500
+
 /**
  * Performance view (§10.1): the project's monitor page fills the whole
  * window; the top-center title strip shows "PNDS - <project>" and is the
@@ -158,22 +163,77 @@ export function MonitorView() {
   // mid-interaction (tnd/template inputs and dropdowns); when the page
   // is done with it, the keyboard comes back at once.
   const guestInteractingRef = useRef(false)
+  // v1.3.5 (#107): the pointer-area gate. Homemade page controls (div
+  // menus with no tabindex) never fire focusin, so the guest-focus gate
+  // alone can miss them — but the pointer sitting inside the monitor
+  // frame means the user is working in the page. mouseenter/mouseleave
+  // on the iframe element are main-frame events (the pointer's moves
+  // INSIDE the frame never cross the origin boundary); a ≤500ms debounce
+  // absorbs boundary jitter, and every reclaim re-verifies with
+  // elementFromPoint at the last known coordinates so a missed leave
+  // cannot strand the gate.
+  const pointerInsideFrameRef = useRef(false)
+  const pointerPositionRef = useRef({ x: 0, y: 0 })
+  const frameLeaveTimerRef = useRef<number | null>(null)
+  // The leave debounce needs to run a reclaim check the moment it lifts
+  // the gate; the effect below keeps the current closure here.
+  const reclaimNowRef = useRef<() => void>(() => undefined)
+  const rememberPointer = (x: number, y: number) => {
+    pointerPositionRef.current = { x, y }
+  }
+  const cancelFrameLeave = () => {
+    if (frameLeaveTimerRef.current !== null) {
+      clearTimeout(frameLeaveTimerRef.current)
+      frameLeaveTimerRef.current = null
+    }
+  }
+  const handleFramePointerEnter = (
+    event: React.MouseEvent<HTMLIFrameElement>
+  ) => {
+    cancelFrameLeave()
+    pointerInsideFrameRef.current = true
+    rememberPointer(event.clientX, event.clientY)
+  }
+  const handleFramePointerLeave = () => {
+    cancelFrameLeave()
+    frameLeaveTimerRef.current = window.setTimeout(() => {
+      frameLeaveTimerRef.current = null
+      pointerInsideFrameRef.current = false
+      // The gate lifted: if focus sits stranded in the frame, take it
+      // back now instead of waiting for the next heartbeat.
+      reclaimNowRef.current()
+    }, FRAME_POINTER_LEAVE_DEBOUNCE_MS)
+  }
   // v1.2.2 (user report on #29): switching to another desktop and back can
   // hand the first responder to the monitor iframe again — every
-  // window-level key (the ⌘ layer above all) then goes dead until the
-  // next click. Reclaim on focus/visibility regain, but only when
+  // window-level key (the ⌘ layer above all) then goes dead until the next
+  // click. Reclaim on focus/visibility regain, but only when
   // nothing meaningful holds focus: never steal from a sidebar input or
   // an open dialog — and since v1.3.5 (#105) never from the guest page
   // the user is working in.
   useEffect(() => {
+    // #107: the pointer gate's vote — true while the enter flag holds.
+    // With a leave settling, the debounce window owns the verdict (the
+    // re-check below would cut it short over boundary jitter: the
+    // pointer grazing chrome already refreshed the coordinates). With no
+    // leave pending, the hit test at the last known coordinates guards
+    // against a MISSED leave stranding the gate — chrome overlays above
+    // the frame (the title strip, the hover sidebar) answer with
+    // themselves, correctly un-gating.
+    const pointerInFrameArea = () => {
+      if (!pointerInsideFrameRef.current) return false
+      if (frameLeaveTimerRef.current !== null) return true
+      const { x, y } = pointerPositionRef.current
+      return document.elementFromPoint(x, y) === iframeRef.current
+    }
     // #44/#54: both bridges ride along on every keyboard-reclaim path —
     // a suspended OOPIF drops messages, so each regain re-pushes the
     // theme and the language (latest value wins, the page applies them
     // idempotently). Keyed on the values so the closure never goes
     // stale. The pushes are focus-neutral, so they run even while the
-    // guest gate holds.
+    // gates hold.
     const reclaimIfLost = () => {
-      if (!guestInteractingRef.current) {
+      if (!guestInteractingRef.current && !pointerInFrameArea()) {
         const active = document.activeElement
         if (
           active === null ||
@@ -185,6 +245,13 @@ export function MonitorView() {
       }
       pushThemeToFrame(iframeRef.current, monitorOrigin, colorTheme)
       pushLocaleToFrame(iframeRef.current, monitorOrigin, locale)
+    }
+    reclaimNowRef.current = reclaimIfLost
+    // The pointer's coordinates only ever arrive from main-frame surfaces
+    // (chrome moves, the frame's enter event) — the freshest possible
+    // position for the hit test above.
+    const handlePointerMove = (event: MouseEvent) => {
+      rememberPointer(event.clientX, event.clientY)
     }
     const handleGuestFocusMessage = (event: MessageEvent) => {
       // Only THIS iframe's reporter is trusted — anything else flying by
@@ -204,6 +271,7 @@ export function MonitorView() {
       if (!document.hidden) reclaimIfLost()
     }
     window.addEventListener('focus', reclaimIfLost)
+    window.addEventListener('mousemove', handlePointerMove)
     window.addEventListener('message', handleGuestFocusMessage)
     document.addEventListener('visibilitychange', handleVisibility)
     // The Rust-side regain signal (NSWindowDidBecomeKey via lib.rs) —
@@ -217,9 +285,11 @@ export function MonitorView() {
     const heartbeat = setInterval(reclaimIfLost, 2000)
     return () => {
       window.removeEventListener('focus', reclaimIfLost)
+      window.removeEventListener('mousemove', handlePointerMove)
       window.removeEventListener('message', handleGuestFocusMessage)
       document.removeEventListener('visibilitychange', handleVisibility)
       clearInterval(heartbeat)
+      cancelFrameLeave()
       void unlisten.then(off => off())
     }
   }, [monitorOrigin, colorTheme, locale])
@@ -264,6 +334,8 @@ export function MonitorView() {
           src={iframeSrc}
           title="Project monitor"
           className="block h-full w-full border-0"
+          onMouseEnter={handleFramePointerEnter}
+          onMouseLeave={handleFramePointerLeave}
           onLoad={() => {
             // A fresh document has not been interacted with — the guest
             // gate re-arms for the page that just loaded (its reporter
