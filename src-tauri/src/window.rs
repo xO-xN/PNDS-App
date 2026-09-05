@@ -472,6 +472,115 @@ const CONTEXT_MENU_SCRIPT: &str = "document.addEventListener('contextmenu', func
     if (!editable) e.preventDefault();\
 }, false);";
 
+/// v1.3.5 (#105): the guest focus reporter script (see
+/// `inject_guest_focus_reporter`). Runs in EVERY frame and reports the
+/// page's focus state to the host: `focusin` on anything but body/html
+/// posts `interacting: true` (the user is working in the page); focus
+/// falling back to the page body, leaving the page, or the page losing
+/// the native focus posts `false`. The `false` is settled one macrotask
+/// after the `focusout`: engines report `relatedTarget: null` even for
+/// same-document element moves (and shadow DOM caps it), so the script
+/// re-checks `document.activeElement` / `document.hasFocus()` and lets a
+/// following `focusin` win — the gate must never drop mid-interaction.
+/// MonitorView gates its keyboard-reclaim machinery on the signal, so
+/// page interaction (tnd/template inputs, dropdowns) is never
+/// interrupted. Frames only (the main frame's parent is itself, so the
+/// app UI stays silent); the payload carries nothing sensitive and the
+/// host validates the message source before trusting it.
+const GUEST_FOCUS_SCRIPT: &str = "(function () {\
+    if (window.parent === window) return;\
+    var last = null;\
+    function post(interacting) {\
+        if (interacting === last) return;\
+        last = interacting;\
+        window.parent.postMessage({ type: 'pnds:guest-focus', interacting: interacting }, '*');\
+    }\
+    function container(el) {\
+        return !el || el === document.body || el === document.documentElement || el === document;\
+    }\
+    document.addEventListener('focusin', function (e) { post(!container(e.target)); }, true);\
+    document.addEventListener('focusout', function (e) {\
+        var next = e.relatedTarget;\
+        if (next && !container(next)) return;\
+        setTimeout(function () {\
+            if (!document.hasFocus() || container(document.activeElement)) post(false);\
+        }, 0);\
+    }, true);\
+})();";
+
+/// The injection contract for [GUEST_FOCUS_SCRIPT] — document start,
+/// every frame — kept as data so the unit test can pin what the objc
+/// registration passes.
+fn guest_focus_injection() -> (&'static str, isize, bool) {
+    (GUEST_FOCUS_SCRIPT, 0, false)
+}
+
+/// Adds `source` as a `WKUserScript` on the window's WKWebView (the
+/// objc dance shared by the context-menu suppressor and the guest focus
+/// reporter). Main thread only; call once per script at startup — the
+/// user content controller retains every added script for all later
+/// loads.
+#[cfg(target_os = "macos")]
+fn add_webview_user_script<R: Runtime>(
+    window: &WebviewWindow<R>,
+    source: &str,
+    injection_time: isize,
+    main_frame_only: bool,
+    what: &str,
+) {
+    use objc2::msg_send;
+    use objc2::runtime::{AnyClass, AnyObject};
+    use objc2_app_kit::{NSView, NSWindow};
+    use objc2_foundation::NSString;
+
+    let ns_window = match window.ns_window() {
+        Ok(w) => w,
+        Err(e) => {
+            log::warn!("ns_window failed: {e} — {what} not injected");
+            return;
+        }
+    };
+    // SAFETY: borrowed NSWindow/NSView pointers owned by Tauri (the same
+    // contract as set_corner_radius); the WKUserScript we create is handed
+    // to the user content controller (retained there) and never referenced
+    // again on our side.
+    unsafe {
+        let win: *mut NSWindow = ns_window.cast();
+        let content: *mut NSView = msg_send![win, contentView];
+        let Some(wk_class) = AnyClass::get(c"WKWebView") else {
+            log::warn!("WKWebView class not found — {what} not injected");
+            return;
+        };
+        let Some(wk) = find_first_of_class(content.cast(), wk_class, 0) else {
+            log::warn!("No WKWebView in the window — {what} not injected");
+            return;
+        };
+        let ucc: *mut AnyObject = msg_send![wk, userContentController];
+        let script_class = match AnyClass::get(c"WKUserScript") {
+            Some(cls) => cls,
+            None => {
+                log::warn!("WKUserScript class not found — {what} not injected");
+                return;
+            }
+        };
+        let source = NSString::from_str(source);
+        let alloc: *mut AnyObject = msg_send![script_class, alloc];
+        // WKUserScriptInjectionTimeAtDocumentStart = 0, typed isize: the
+        // enum is NSInteger-backed (the ABI rule that bit glass.rs before).
+        let script: *mut AnyObject = msg_send![
+            alloc,
+            initWithSource: &*source,
+            injectionTime: injection_time,
+            forMainFrameOnly: main_frame_only
+        ];
+        if script.is_null() {
+            log::warn!("WKUserScript init failed — {what} not injected");
+            return;
+        }
+        let _: () = msg_send![ucc, addUserScript: script];
+    }
+}
+
 /// v1.2.3 (user request): right-click belongs exclusively to the app's
 /// designed context menus (the sidebar's folder/project Radix menus) —
 /// WKWebView's default web menu (Reload, Open Frame in New Window, Back,
@@ -490,57 +599,13 @@ const CONTEXT_MENU_SCRIPT: &str = "document.addEventListener('contextmenu', func
 /// corner-radius sync above; call once at startup.
 #[cfg(target_os = "macos")]
 pub fn suppress_default_context_menu<R: Runtime>(window: &WebviewWindow<R>) {
-    use objc2::msg_send;
-    use objc2::runtime::{AnyClass, AnyObject};
-    use objc2_app_kit::{NSView, NSWindow};
-    use objc2_foundation::NSString;
-
-    let ns_window = match window.ns_window() {
-        Ok(w) => w,
-        Err(e) => {
-            log::warn!("ns_window failed: {e} — context menu not suppressed");
-            return;
-        }
-    };
-    // SAFETY: borrowed NSWindow/NSView pointers owned by Tauri (the same
-    // contract as set_corner_radius); the WKUserScript we create is handed
-    // to the user content controller (retained there) and never referenced
-    // again on our side.
-    unsafe {
-        let win: *mut NSWindow = ns_window.cast();
-        let content: *mut NSView = msg_send![win, contentView];
-        let Some(wk_class) = AnyClass::get(c"WKWebView") else {
-            log::warn!("WKWebView class not found — context menu not suppressed");
-            return;
-        };
-        let Some(wk) = find_first_of_class(content.cast(), wk_class, 0) else {
-            log::warn!("No WKWebView in the window — context menu not suppressed");
-            return;
-        };
-        let ucc: *mut AnyObject = msg_send![wk, userContentController];
-        let script_class = match AnyClass::get(c"WKUserScript") {
-            Some(cls) => cls,
-            None => {
-                log::warn!("WKUserScript class not found — context menu not suppressed");
-                return;
-            }
-        };
-        let source = NSString::from_str(CONTEXT_MENU_SCRIPT);
-        let alloc: *mut AnyObject = msg_send![script_class, alloc];
-        // WKUserScriptInjectionTimeAtDocumentStart = 0, typed isize: the
-        // enum is NSInteger-backed (the ABI rule that bit glass.rs before).
-        let script: *mut AnyObject = msg_send![
-            alloc,
-            initWithSource: &*source,
-            injectionTime: 0isize,
-            forMainFrameOnly: false
-        ];
-        if script.is_null() {
-            log::warn!("WKUserScript init failed — context menu not suppressed");
-            return;
-        }
-        let _: () = msg_send![ucc, addUserScript: script];
-    }
+    add_webview_user_script(
+        window,
+        CONTEXT_MENU_SCRIPT,
+        0,
+        false,
+        "context menu suppression",
+    );
     // The user script starts at the NEXT document creation; the app page
     // is already loading when setup() runs, so evaluate once for it. The
     // monitor iframes navigate later and get the user script.
@@ -548,6 +613,27 @@ pub fn suppress_default_context_menu<R: Runtime>(window: &WebviewWindow<R>) {
         log::warn!("context-menu eval failed: {e}");
     }
     log::info!("Default webview context menu suppressed (all frames)");
+}
+
+/// v1.3.5 (#105): inject the guest focus reporter ([GUEST_FOCUS_SCRIPT])
+/// into every frame. The monitor pages — cross-origin iframes the app
+/// cannot script — report their focus state over postMessage, and
+/// MonitorView gates its keyboard-reclaim machinery on the signal so
+/// page interaction is never interrupted. No eval for the already-loading
+/// main document: the script's first line keeps the app frame silent,
+/// and the monitor iframes navigate later and get the user script.
+/// Main thread only; call once at startup.
+#[cfg(target_os = "macos")]
+pub fn inject_guest_focus_reporter<R: Runtime>(window: &WebviewWindow<R>) {
+    let (source, injection_time, main_frame_only) = guest_focus_injection();
+    add_webview_user_script(
+        window,
+        source,
+        injection_time,
+        main_frame_only,
+        "guest focus reporter",
+    );
+    log::info!("Guest focus reporter injected (all frames)");
 }
 
 /// Guard installed once per process — a second exchange would swap the
@@ -1088,6 +1174,34 @@ mod tests {
         // Plain arrows and no-Command arrows are not equivalents anyway.
         assert!(!is_exactly_command_horizontal_arrow(0, 0x7B));
         assert!(!is_exactly_command_horizontal_arrow(SHIFT, 0x7B));
+    }
+
+    /// v1.3.5 (#105): the guest focus reporter's injection contract —
+    /// document start, every frame (the monitor iframes navigate after
+    /// setup, and the script must be live in each new document before
+    /// the page can focus anything). The script itself carries the
+    /// contract markers: the pnds:guest-focus message, focusin/focusout
+    /// reporting, and the guard that keeps the app's main frame silent.
+    #[test]
+    fn guest_focus_reporter_registers_for_all_frames_at_document_start() {
+        let (source, injection_time, main_frame_only) = guest_focus_injection();
+        assert_eq!(
+            injection_time, 0,
+            "WKUserScriptInjectionTimeAtDocumentStart"
+        );
+        assert!(!main_frame_only, "must reach the monitor iframes");
+        assert!(source.contains("'pnds:guest-focus'"));
+        assert!(source.contains("focusin"));
+        assert!(source.contains("focusout"));
+        assert!(
+            source.contains("window.parent === window"),
+            "the app's main frame must stay silent"
+        );
+        assert!(
+            source.contains("document.hasFocus()"),
+            "the deferred false must settle via hasFocus/activeElement — \
+             relatedTarget alone misreports same-document moves"
+        );
     }
 
     /// The ramp steps through intermediate opacities and lands exactly on

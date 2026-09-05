@@ -76,6 +76,125 @@ describe('MonitorView keyboard focus', () => {
 })
 
 /**
+ * v1.3.5 (#105): the guest focus gate. The all-frames user script
+ * (window.rs GUEST_FOCUS_SCRIPT) makes the monitor page report its
+ * focus state — `interacting: true` while a page element other than
+ * body/html holds focus. The reclaim machinery stands down while it is
+ * true (the page's inputs and dropdowns keep the keyboard) and takes
+ * the keyboard back the moment focus returns to the page body. The
+ * signal is trusted only from THIS iframe's content window.
+ */
+describe('MonitorView guest focus gate (#105)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useSessionStore.setState({
+      sessionStatus: 'ready',
+      projectName: 'Inarticulate III',
+      lanIp: '192.168.1.10',
+      health: readyHealth,
+    })
+  })
+
+  /** Posts a pnds:guest-focus signal as if sent by the monitor iframe. */
+  function postGuestFocus(interacting: boolean, source?: MessageEventSource) {
+    const frame = screen.getByTitle('Project monitor') as HTMLIFrameElement
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: { type: 'pnds:guest-focus', interacting },
+        source: source ?? frame.contentWindow,
+      })
+    )
+  }
+
+  it('every reclaim path stands down while the guest page interacts', () => {
+    vi.useFakeTimers()
+    try {
+      render(<MonitorView />)
+      const iframe = screen.getByTitle('Project monitor') as HTMLIFrameElement
+      postGuestFocus(true)
+      iframe.focus()
+      expect(document.activeElement).toBe(iframe)
+
+      // Window regain, visibility regain and the 2s heartbeat all pass
+      // through the one gated choke point — none may steal.
+      act(() => {
+        window.dispatchEvent(new Event('focus'))
+        document.dispatchEvent(new Event('visibilitychange'))
+        vi.advanceTimersByTime(2000)
+      })
+      expect(document.activeElement).toBe(iframe)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('focus falling back to the page body hands the keyboard over at once', () => {
+    render(<MonitorView />)
+    const iframe = screen.getByTitle('Project monitor') as HTMLIFrameElement
+    postGuestFocus(true)
+    iframe.focus()
+
+    postGuestFocus(false)
+
+    expect(document.activeElement).toBe(screen.getByTestId('monitor-host'))
+  })
+
+  it('a spontaneous steal with no guest signal is still reclaimed (#29)', () => {
+    render(<MonitorView />)
+    const iframe = screen.getByTitle('Project monitor') as HTMLIFrameElement
+
+    // Desktop switch back: WKWebView hands the responder to the iframe,
+    // and the page is NOT interacting (no signal) — the reclaim fires
+    // exactly as before the gate existed.
+    iframe.focus()
+    window.dispatchEvent(new Event('focus'))
+
+    expect(document.activeElement).toBe(screen.getByTestId('monitor-host'))
+  })
+
+  it('messages from anywhere but this iframe leave the gate untouched', () => {
+    render(<MonitorView />)
+    const frame = screen.getByTitle('Project monitor') as HTMLIFrameElement
+    postGuestFocus(true)
+    frame.focus()
+
+    // A foreign source claiming the interaction ended — ignored.
+    postGuestFocus(false, {} as MessageEventSource)
+    // A malformed payload from the right source — ignored too.
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: { type: 'pnds:guest-focus', interacting: 'yes' },
+        source: frame.contentWindow,
+      })
+    )
+    window.dispatchEvent(new Event('focus'))
+    expect(document.activeElement).toBe(frame)
+
+    // The real end-of-interaction signal still lands afterwards.
+    postGuestFocus(false)
+    expect(document.activeElement).toBe(screen.getByTestId('monitor-host'))
+  })
+
+  it('a monitor reload reclaims unconditionally and re-arms the gate', () => {
+    render(<MonitorView />)
+    const iframe = screen.getByTitle('Project monitor') as HTMLIFrameElement
+    postGuestFocus(true)
+    iframe.focus()
+
+    // v1.3.4 behavior retained: the load reclaim is not gated, and the
+    // fresh document starts with the gate down (no interaction yet).
+    fireEvent.load(iframe)
+    expect(document.activeElement).toBe(screen.getByTestId('monitor-host'))
+
+    // No guest signal + focus parked in the iframe: the #29 reclaim
+    // fires for the reloaded page as well.
+    iframe.focus()
+    window.dispatchEvent(new Event('focus'))
+    expect(document.activeElement).toBe(screen.getByTestId('monitor-host'))
+  })
+})
+
+/**
  * v1.2.3 (#44) / v1.3.0 (#54): the bridges' delivery timing — the
  * monitor iframe receives the current theme and resolved language on
  * load, on every theme/language switch and on every window regain (a

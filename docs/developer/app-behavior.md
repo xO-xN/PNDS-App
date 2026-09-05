@@ -130,6 +130,14 @@ Rust session manager 是运行状态真源。React 不得用本地 reset 伪造�
 - 以 performer health `status === "ready"` 判定就绪；Internal session 的 ready 门槛（health ready + monitor 可显示 + master stage 完整创建）→ 运行契约 §5、§8；
 - monitor iframe 完整占据主区域；resize / 全屏切换不重载 iframe、不重启 Node；手动 Refresh 重建 iframe；App 不读取跨 origin monitor DOM → 运行契约 §10。
 
+页面焦点优先（v1.3.5 #105）：monitor 页面的键盘交互（tnd/template 的输入框、下拉菜单）永远不被 App 的焦点夺回机制打断——
+
+- 全帧注入的 reporter 脚本（`window.rs` `GUEST_FOCUS_SCRIPT`，all-frames WKUserScript，页面无需配合）报告页面焦点状态：页面内 body/html 之外的元素持焦点即「用户在交互」（`pnds:guest-focus` postMessage，宿主校验消息来源为该 iframe 才采信）；
+- 交互期间所有夺回路径（2s 心跳、window focus、visibilitychange、`pnds:window-focus`）在唯一收口处一律暂停；web 层 ⌘ 快捷键（⌘1..9、⌘←→↓↑、⌘R、⌘,）同期对页面让位——键盘属于页面聚焦的元素；
+- 页面焦点落回 body（或离开页面）时键盘立即归还，⌘ 层随之恢复；点 App chrome（标题条、hover 侧栏）任何时候可手动拿回；
+- 原生菜单加速器（⌘M 静音、缩放、⌘⇧R、⌘W 等）不走 web 层，交互期间照常工作；
+- 无 guest 信号的自发丢焦点（#29 桌面切换回来 activeElement 落 iframe）照常被夺回；mount/onLoad/reload 时点的夺回保留（v1.3.4 行为）。
+
 ## 音频 Host 行为
 
 - UI 只能显示 manifest 声明的模式；三模式的 Host 行为表 → 运行契约 §6（模式说明见 [`audio-modes.md`](../zh-CN/reference/audio-modes.md)）；

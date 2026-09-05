@@ -23,6 +23,20 @@ import {
 import { cn } from '@/lib/utils'
 import { HoverSidebar } from './HoverSidebar'
 
+/** The payload shape of the injected reporter's pnds:guest-focus
+ * messages (window.rs GUEST_FOCUS_SCRIPT) — anything else arriving on
+ * `message` is not the reporter and must not move the gate. */
+function isGuestFocusPayload(
+  data: unknown
+): data is { type: 'pnds:guest-focus'; interacting: boolean } {
+  if (typeof data !== 'object' || data === null) return false
+  const candidate = data as { type?: unknown; interacting?: unknown }
+  return (
+    candidate.type === 'pnds:guest-focus' &&
+    typeof candidate.interacting === 'boolean'
+  )
+}
+
 /**
  * Performance view (§10.1): the project's monitor page fills the whole
  * window; the top-center title strip shows "PNDS - <project>" and is the
@@ -126,8 +140,9 @@ export function MonitorView() {
   // click — most visibly on the first project opened after launch, the
   // only session entered without a host element ever being focused.
   // Focusing the host root on mount and after every monitor load/reload
-  // keeps the shell's keyboard layer alive; the monitor page is
-  // display-only here, so nothing usable loses focus.
+  // keeps the shell's keyboard layer alive. This never fights the page:
+  // while the guest page holds focus on an interactive element, every
+  // reclaim below stands down (the guest-focus gate).
   const reclaimKeyboardFocus = () => {
     window.focus()
     hostRef.current?.focus()
@@ -135,34 +150,61 @@ export function MonitorView() {
   useEffect(() => {
     reclaimKeyboardFocus()
   }, [])
+  // v1.3.5 (#105): the guest focus signal. The all-frames user script
+  // (window.rs GUEST_FOCUS_SCRIPT) makes the monitor page report its
+  // focus state: `interacting: true` while a page element (anything but
+  // body/html) holds focus, `false` the moment focus falls back to the
+  // page body or leaves the page. The page's keyboard is never stolen
+  // mid-interaction (tnd/template inputs and dropdowns); when the page
+  // is done with it, the keyboard comes back at once.
+  const guestInteractingRef = useRef(false)
   // v1.2.2 (user report on #29): switching to another desktop and back can
   // hand the first responder to the monitor iframe again — every
   // window-level key (the ⌘ layer above all) then goes dead until the
   // next click. Reclaim on focus/visibility regain, but only when
   // nothing meaningful holds focus: never steal from a sidebar input or
-  // an open dialog.
+  // an open dialog — and since v1.3.5 (#105) never from the guest page
+  // the user is working in.
   useEffect(() => {
     // #44/#54: both bridges ride along on every keyboard-reclaim path —
     // a suspended OOPIF drops messages, so each regain re-pushes the
     // theme and the language (latest value wins, the page applies them
     // idempotently). Keyed on the values so the closure never goes
-    // stale.
+    // stale. The pushes are focus-neutral, so they run even while the
+    // guest gate holds.
     const reclaimIfLost = () => {
-      const active = document.activeElement
-      if (
-        active === null ||
-        active === document.body ||
-        active instanceof HTMLIFrameElement
-      ) {
-        reclaimKeyboardFocus()
+      if (!guestInteractingRef.current) {
+        const active = document.activeElement
+        if (
+          active === null ||
+          active === document.body ||
+          active instanceof HTMLIFrameElement
+        ) {
+          reclaimKeyboardFocus()
+        }
       }
       pushThemeToFrame(iframeRef.current, monitorOrigin, colorTheme)
       pushLocaleToFrame(iframeRef.current, monitorOrigin, locale)
+    }
+    const handleGuestFocusMessage = (event: MessageEvent) => {
+      // Only THIS iframe's reporter is trusted — anything else flying by
+      // (another window, the page's own postMessage traffic) must not
+      // move the gate.
+      if (event.source !== iframeRef.current?.contentWindow) return
+      if (!isGuestFocusPayload(event.data)) return
+      guestInteractingRef.current = event.data.interacting
+      // Focus back on the page body (or gone from the page): hand the
+      // keyboard over immediately — activeElement is typically still the
+      // iframe (the body inside it), the exact state reclaimIfLost
+      // targets, and a meaningful main-frame holder is never stolen
+      // from.
+      if (!guestInteractingRef.current) reclaimIfLost()
     }
     const handleVisibility = () => {
       if (!document.hidden) reclaimIfLost()
     }
     window.addEventListener('focus', reclaimIfLost)
+    window.addEventListener('message', handleGuestFocusMessage)
     document.addEventListener('visibilitychange', handleVisibility)
     // The Rust-side regain signal (NSWindowDidBecomeKey via lib.rs) —
     // WKWebView does not reliably surface DOM focus events for desktop
@@ -175,6 +217,7 @@ export function MonitorView() {
     const heartbeat = setInterval(reclaimIfLost, 2000)
     return () => {
       window.removeEventListener('focus', reclaimIfLost)
+      window.removeEventListener('message', handleGuestFocusMessage)
       document.removeEventListener('visibilitychange', handleVisibility)
       clearInterval(heartbeat)
       void unlisten.then(off => off())
@@ -222,6 +265,10 @@ export function MonitorView() {
           title="Project monitor"
           className="block h-full w-full border-0"
           onLoad={() => {
+            // A fresh document has not been interacted with — the guest
+            // gate re-arms for the page that just loaded (its reporter
+            // re-registers with it).
+            guestInteractingRef.current = false
             reclaimKeyboardFocus()
             pushThemeToFrame(iframeRef.current, monitorOrigin, colorTheme)
             pushLocaleToFrame(iframeRef.current, monitorOrigin, locale)

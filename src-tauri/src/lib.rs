@@ -148,6 +148,12 @@ pub fn run() {
                 // menus only (all frames, incl. the monitor iframes).
                 #[cfg(target_os = "macos")]
                 crate::window::suppress_default_context_menu(&window);
+                // v1.3.5 (#105): the monitor pages report their focus
+                // state so the app's keyboard-reclaim machinery never
+                // interrupts page interaction (typing, dropdowns) — the
+                // gate itself lives in MonitorView.
+                #[cfg(target_os = "macos")]
+                crate::window::inject_guest_focus_reporter(&window);
             }
 
             // v1.3.3 (#79): the native belt of that suppression —

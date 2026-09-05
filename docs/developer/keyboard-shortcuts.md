@@ -128,8 +128,12 @@ entered without any host element ever being focused. The shell's
 window-level shortcuts (⌘ layer, Esc) then go dead until the next click.
 `MonitorView` prevents this by focusing its host root (`tabIndex={-1}`)
 on mount and on every iframe `onLoad` (project switches and monitor
-reloads included); the monitor page is display-only, so nothing usable
-loses focus.
+reloads included). v1.3.5 (#105): the reclaim yields to the page — an
+all-frames reporter script (`window.rs` `GUEST_FOCUS_SCRIPT`) publishes
+the page's focus state, and while a page element other than body/html
+holds focus, every reclaim path stands down and the web ⌘ layer lets
+the page keep the keyboard (page-focus priority — app-behavior
+「网络与 Monitor」; native menu accelerators are unaffected).
 
 ## Mute Shortcut (v1.2.2, issue #30 feedback)
 
