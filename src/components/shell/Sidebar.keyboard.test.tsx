@@ -269,6 +269,66 @@ describe('Cmd keyboard layer (v1.1.2)', () => {
     })
   })
 
+  describe('Cmd stuck-state self-heal (v1.3.5 #106)', () => {
+    it('a pointer move reporting Meta up heals the stuck hold — badges clear', () => {
+      useProjectStore.setState({ recentProjectPaths: TEN_PATHS })
+      render(<AppShell />)
+
+      // The leak: the Meta keyup is swallowed while focus sits inside
+      // the out-of-process monitor iframe — no keyUp ever reaches the
+      // window, and no blur fires either.
+      pressCmd()
+      expect(useKeyboardStore.getState().commandKeyPressed).toBe(true)
+
+      fireEvent.mouseMove(window, { metaKey: false })
+
+      expect(useKeyboardStore.getState().commandKeyPressed).toBe(false)
+      expect(
+        screen.queryByTestId('project-number-badge')
+      ).not.toBeInTheDocument()
+    })
+
+    it('a pointer press reporting Meta up heals the stuck hold', () => {
+      render(<AppShell />)
+      pressCmd()
+
+      fireEvent.pointerDown(window, { metaKey: false })
+
+      expect(useKeyboardStore.getState().commandKeyPressed).toBe(false)
+    })
+
+    it('a real hold — pointer events reporting Meta down — is never healed away', () => {
+      render(<AppShell />)
+      pressCmd()
+
+      fireEvent.mouseMove(window, { metaKey: true })
+      fireEvent.pointerDown(window, { metaKey: true })
+
+      expect(useKeyboardStore.getState().commandKeyPressed).toBe(true)
+    })
+
+    it('a non-Meta keydown without the modifier heals the stuck hold (fallback)', () => {
+      render(<AppShell />)
+      pressCmd()
+
+      fireEvent.keyDown(window, { key: 'x', metaKey: false })
+
+      expect(useKeyboardStore.getState().commandKeyPressed).toBe(false)
+    })
+
+    it('a chord keydown (metaKey held) keeps the hold intact', () => {
+      render(<AppShell />)
+      pressCmd()
+
+      // ⌘x — not a handled shortcut, but the modifier IS down.
+      fireEvent.keyDown(window, { key: 'x', metaKey: true })
+
+      expect(useKeyboardStore.getState().commandKeyPressed).toBe(true)
+      releaseCmd()
+      expect(useKeyboardStore.getState().commandKeyPressed).toBe(false)
+    })
+  })
+
   describe('Enter as the session-action shortcut', () => {
     /** Idle + selected + preflighted + LAN picked → the Load button is live. */
     function seedLoadableIdle() {

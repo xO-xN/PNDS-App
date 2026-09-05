@@ -33,6 +33,11 @@ Its behaviors (spec issue #4, later additions noted):
 - **Cmd held** → `commandKeyPressed` in `useKeyboardStore` drives the number
   badges on project cards and the running-state hover-sidebar peek. Window
   blur resets it so a Cmd+Tab away can't leave the app stuck in peek mode.
+  v1.3.5 (#106) adds self-heal: when the Meta keyup is swallowed by the
+  out-of-process monitor iframe (focus inside it at release), the first
+  main-frame mousemove/pointerdown reporting Meta up — or any non-Meta
+  keydown without the modifier — resets the stuck state; a real hold's
+  pointer events report Meta down and are never touched.
 - **Cmd+1..9** → selects the Nth visible project through `selectProject`
   (`src/lib/project-select.ts`) — the same unified entry the card click
   uses, so semantics can never drift between mouse and keyboard.

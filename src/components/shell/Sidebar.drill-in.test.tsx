@@ -264,8 +264,11 @@ describe('Sidebar folder drill-in (v1.1.2 T3)', () => {
       // The ungrouped project is not part of the folder view.
       expect(entryOrder()).toEqual([SECOND_PATH, THIRD_PATH])
 
-      // Returning to Home restores the ungrouped numbering.
-      await user.click(screen.getByTestId('unfiled-segment'))
+      // Returning to Home restores the ungrouped numbering. fireEvent
+      // on purpose: userEvent's synthetic pointer sequence carries no
+      // modifier state, which would trip the #106 self-heal and drop
+      // the hold — a real click under a held ⌘ reports Meta down.
+      fireEvent.click(screen.getByTestId('unfiled-segment'))
       expect(
         screen
           .getAllByTestId('project-number-badge')

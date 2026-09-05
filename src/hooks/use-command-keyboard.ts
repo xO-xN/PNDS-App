@@ -48,6 +48,27 @@ export function hasOpenOverlayBesidesSettings(): boolean {
 }
 
 /**
+ * v1.3.5 (#106): self-heal for a stuck ⌘-held state. The Meta keyup can
+ * be swallowed when focus sits inside the out-of-process monitor iframe
+ * at release — no main-frame keyup arrives, and the iframe's blur never
+ * fires either — leaving `commandKeyPressed` stuck at true: badges that
+ * won't clear and a sidebar peek that won't quit. Every heal below acts
+ * only on that stuck-true state; a real hold never trips it.
+ */
+function healStuckCommandKey(): void {
+  const { commandKeyPressed, setCommandKeyPressed } =
+    useKeyboardStore.getState()
+  if (commandKeyPressed) setCommandKeyPressed(false)
+}
+
+/** The pointer half of the self-heal: a mousemove/pointerdown whose
+ * modifier report says Meta is UP is authoritative proof the key was
+ * released — a real hold reports Meta down and changes nothing. */
+function healIfPointerReportsMetaUp(event: MouseEvent): void {
+  if (!event.getModifierState('Meta')) healStuckCommandKey()
+}
+
+/**
  * v1.1.2 Cmd keyboard layer (spec issue #4): one registration at the shell
  * level, active in every window state — the shortcuts must not depend on
  * sidebar visibility.
@@ -68,6 +89,9 @@ export function hasOpenOverlayBesidesSettings(): boolean {
  *   pressing the selected project's number deselects it (v1.2.0, same
  *   as clicking the card). Cmd+0 stays the native "Actual Size" menu
  *   accelerator and is never consumed here
+ * - stuck ⌘-held state self-heals (#106): the pointer's modifier report
+ *   on mousemove/pointerdown, and any non-Meta keydown without the
+ *   modifier, reset a store left claiming ⌘ is held
  */
 export function useCommandKeyboard(): void {
   useEffect(() => {
@@ -76,7 +100,13 @@ export function useCommandKeyboard(): void {
         useKeyboardStore.getState().setCommandKeyPressed(true)
         return
       }
-      if (!event.metaKey || event.repeat) return
+      // #106: a non-Meta keydown carrying no modifier while the store
+      // says ⌘ is held is proof the Meta keyup was swallowed — heal.
+      if (!event.metaKey) {
+        healStuckCommandKey()
+        return
+      }
+      if (event.repeat) return
       // v1.2.0 (issue #13): ⌘, toggles the settings panel — closable with
       // ⌘, again, never stacked on another modal. Once the app menu is
       // built its accelerator consumes the key first; this handler covers
@@ -141,10 +171,16 @@ export function useCommandKeyboard(): void {
     window.addEventListener('keydown', handleKeyDown)
     window.addEventListener('keyup', handleKeyUp)
     window.addEventListener('blur', handleBlur)
+    // #106: pointer self-heal — the first main-frame mousemove/pointerdown
+    // after a swallowed Meta keyup carries the true modifier state.
+    window.addEventListener('mousemove', healIfPointerReportsMetaUp)
+    window.addEventListener('pointerdown', healIfPointerReportsMetaUp)
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
       window.removeEventListener('keyup', handleKeyUp)
       window.removeEventListener('blur', handleBlur)
+      window.removeEventListener('mousemove', healIfPointerReportsMetaUp)
+      window.removeEventListener('pointerdown', healIfPointerReportsMetaUp)
     }
   }, [])
 }
