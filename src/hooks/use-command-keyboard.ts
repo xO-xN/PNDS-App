@@ -103,11 +103,12 @@ export function useCommandKeyboard(): void {
         return
       }
       // ⌘←/⌘→ move one folder view along the row, wrapping at the ends
-      // like the focused-segment arrows (v1.3.1 user report — the old
-      // clamp read as stuck, not as an edge). Guarded like those arrows:
-      // text fields keep ⌘←/⌘→ as line-start/end, and the row is not
-      // navigated under an overlay. Web-layer on purpose — a menu
-      // accelerator would consume the key even inside an input.
+      // (v1.3.1 user report — the old clamp read as stuck, not as an
+      // edge). Since v1.3.5 (#104) the ONLY keyboard folder switch: the
+      // segments' bare ←/→ handler is gone. Text fields keep ⌘←/⌘→ as
+      // line-start/end, and the row is not navigated under an overlay.
+      // Web-layer on purpose — a menu accelerator would consume the key
+      // even inside an input.
       if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
         if (isEditableTarget(event.target) || hasOpenOverlay()) return
         event.preventDefault()

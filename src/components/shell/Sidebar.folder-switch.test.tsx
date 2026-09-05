@@ -47,7 +47,8 @@ function seedFolders() {
  * v1.2.2 (issue #28): the folder switch grows up — a sliding pill under
  * the active segment, a right-click menu owning folder management (the
  * inline "+" and the hover ✕ are gone), and real tab semantics (role,
- * aria-selected, roving tabindex, ←/→ view switching).
+ * aria-selected, roving tabindex). v1.3.5 (#104): the bare ←/→ view
+ * switching is gone with it — the keyboard path is ⌘←/⌘→ only.
  */
 describe('Sidebar folder switch (v1.2.2, issue #28)', () => {
   beforeEach(() => {
@@ -88,7 +89,7 @@ describe('Sidebar folder switch (v1.2.2, issue #28)', () => {
     })
   })
 
-  describe('tab semantics and ←/→ switching', () => {
+  describe('tab semantics', () => {
     it('segments are tabs with a roving tabindex on the active view', () => {
       const gigId = seedFolders()
       render(<Sidebar variant="static" />)
@@ -113,35 +114,32 @@ describe('Sidebar folder switch (v1.2.2, issue #28)', () => {
       expect(gig).toHaveAttribute('tabIndex', '0')
     })
 
-    it('→ walks unfiled → folders → Utilities → wraps to unfiled, focus follows', () => {
+    it('bare ←/→ on the segments are inert — switching is ⌘-only (v1.3.5 #104)', () => {
       const gigId = seedFolders()
       render(<Sidebar variant="static" />)
 
+      // The click path still switches — mouse and ⌘←/⌘→ (the global web
+      // layer, covered in Sidebar.keyboard.test.tsx) are the two ways in.
       const unfiled = screen.getByTestId('unfiled-segment')
-      const [gig, utilities] = screen.getAllByTestId('folder-segment')
-      if (!gig || !utilities) throw new Error('Expected both segments')
-      unfiled.focus()
+      const [gig] = screen.getAllByTestId('folder-segment')
+      if (!gig) throw new Error('Expected the Gig segment')
+      fireEvent.click(gig)
+      expect(useProjectStore.getState().activeFolderId).toBe(gigId)
 
-      fireEvent.keyDown(unfiled, { key: 'ArrowRight' })
+      // Bare arrows dispatched at the focused segment never move the
+      // view or the focus — the v1.2.2 #28 handler is gone.
+      gig.focus()
+      fireEvent.keyDown(gig, { key: 'ArrowRight' })
+      fireEvent.keyDown(gig, { key: 'ArrowLeft' })
       expect(useProjectStore.getState().activeFolderId).toBe(gigId)
       expect(document.activeElement).toBe(gig)
 
-      fireEvent.keyDown(gig, { key: 'ArrowRight' })
-      expect(useProjectStore.getState().activeFolderId).toBe(
-        UTILITIES_FOLDER_ID
-      )
-      expect(document.activeElement).toBe(utilities)
-
-      // The row wraps: past Utilities lands back on the unfiled view.
-      fireEvent.keyDown(utilities, { key: 'ArrowRight' })
-      expect(useProjectStore.getState().activeFolderId).toBeNull()
-      expect(document.activeElement).toBe(unfiled)
-
-      // And ← from unfiled wraps around to Utilities.
+      // Nor from the unfiled segment after focus lands on it.
+      unfiled.focus()
       fireEvent.keyDown(unfiled, { key: 'ArrowLeft' })
-      expect(useProjectStore.getState().activeFolderId).toBe(
-        UTILITIES_FOLDER_ID
-      )
+      fireEvent.keyDown(unfiled, { key: 'ArrowRight' })
+      expect(useProjectStore.getState().activeFolderId).toBe(gigId)
+      expect(document.activeElement).toBe(unfiled)
     })
 
     it('arrow keys inside the inline rename do not switch views', async () => {

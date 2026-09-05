@@ -20,8 +20,7 @@ Keyboard input reaches the app through two layers: native menu accelerators
 | Cmd (hold)    | Number badges + sidebar peek while running                                                                   | Web (`use-command-keyboard.ts`)   |
 | Cmd+1..9      | Select the Nth visible project (v1.1.2)                                                                      | Web (`use-command-keyboard.ts`)   |
 | Cmd+↓ / Cmd+↑ | Next/previous project in the visible order (v1.1.2 T7)                                                       | Web (`use-command-keyboard.ts`)   |
-| Cmd+← / Cmd+→ | Previous/next folder view, wrapping at the ends (v1.2.2; wrap since v1.3.1)                                  | Web (`use-command-keyboard.ts`)   |
-| ← / →         | Switch folder views on the focused switch segment (v1.2.2 #28)                                               | Web (`Sidebar.tsx` tabs)          |
+| Cmd+← / Cmd+→ | Previous/next folder view, wrapping at the ends — the only keyboard path (bare ←/→ removed v1.3.5 #104)      | Web (`use-command-keyboard.ts`)   |
 | Enter         | Load (idle) / Change-restart (pending)                                                                       | Web (`SessionActionButton.tsx`)   |
 | Esc           | Close-project confirmation (v1.1.2 T7)                                                                       | Web (`SessionActionButton.tsx`)   |
 
@@ -48,13 +47,14 @@ Its behaviors (spec issue #4, later additions noted):
 - **Cmd+←/Cmd+→** → moves one folder view along the row through
   `moveFolderSelection` (`src/lib/project-select.ts`) — the same entry a
   segment click uses, so the selection reset and the live-session keep
-  behave alike. The ends wrap like the segment arrows (v1.3.1 user
-  report: with three views the old clamp read as stuck, not as an edge;
-  a same-view press stays a full no-op) — see
+  behave alike. The ends wrap (v1.3.1 user report: with three views the
+  old clamp read as stuck, not as an edge; a same-view press stays a
+  full no-op) — see
   [Folder Switch Tabs](#folder-switch-tabs-v122-issue-28). Together the
-  Cmd arrows navigate the folder/project grid. (They briefly nudged
-  the master volume before v1.2.2 shipped; that role is gone, Cmd+M keeps
-  mute.)
+  Cmd arrows navigate the folder/project grid. v1.3.5 (#104): these
+  chords are the only keyboard folder switch — the segments' bare
+  ←/→ handler is gone. (They briefly nudged the master volume before
+  v1.2.2 shipped; that role is gone, Cmd+M keeps mute.)
 - **Cmd+R** → starts the inline rename through `startRename`
   (`src/lib/project-rename.ts`): the selected project's card (or the
   selected folder segment's name when nothing is selected). The Edit
@@ -86,19 +86,19 @@ one set of conditions:
 
 The sidebar's folder switch is a real `tablist`: the segments carry
 `role="tab"` + `aria-selected` with a roving tabindex (only the active
-view is tab-stoppable, so one Tab reaches the switch). While a segment
-holds focus, **←/→** moves to the neighboring folder view through
-`nextFolderView` (`src/lib/project-select.ts`) — unfiled first, the
-folders in display order, Utilities pinned last, both ends wrapping —
-and focus follows onto the newly active tab. The keys live on the
-segments themselves (not the global layer): an inline name edit inside
-a segment stops propagation, so the arrows keep working as caret keys
-while typing.
+view is tab-stoppable, so one Tab reaches the switch). v1.2.2 (#28)
+gave the focused segment bare **←/→** switching through `nextFolderView`;
+v1.3.5 (#104) removed that handler — after a click parked focus on a
+segment, plain arrows kept switching views and read as the Cmd
+shortcuts firing without Cmd held. Bare arrows on a segment are now
+fully inert; the roving tabindex and Tab order are untouched.
 
-**Cmd+←/Cmd+→** are the global variant, registered in the web Cmd layer
-and working from anywhere: `moveFolderSelection` walks the same stops
-through `setActiveFolderView` (the segment-click entry) and **wraps at
-the ends just like the segment arrows** — Cmd+← at the Home view lands
+**Cmd+←/Cmd+→** are the keyboard folder switch, registered in the web
+Cmd layer and working from anywhere: `moveFolderSelection` walks the
+stops through `setActiveFolderView` (the segment-click entry; internally
+`nextFolderView`, `src/lib/project-select.ts` — unfiled first, the
+folders in display order, Utilities pinned last) and **wraps at the
+ends** — Cmd+← at the Home view lands
 on the last folder, Cmd+→ at the last folder lands on Home (v1.3.1 user
 report; until v1.3.0 these clamped, which read as stuck with three
 views). Text inputs keep the keys as

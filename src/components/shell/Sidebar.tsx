@@ -31,11 +31,7 @@ import { useKeyboardStore } from '@/store/keyboard-store'
 import { notifications } from '@/lib/notifications'
 import { promptOpenProject, stopAndReset } from '@/lib/open-project'
 import { Spinner } from '@/components/ui/spinner'
-import {
-  selectProject,
-  setActiveFolderView,
-  nextFolderView,
-} from '@/lib/project-select'
+import { selectProject, setActiveFolderView } from '@/lib/project-select'
 import { startFolderRename } from '@/lib/project-rename'
 import { reclaimIfManagedBundle } from '@/lib/bundle-project'
 import { revealScrollTarget } from '@/lib/list-reveal'
@@ -294,7 +290,8 @@ function ListEmptyState({
  * right-click context menu — the inline "+" and the hover ✕ are gone; the
  * menu disables at the folder cap (#26) and for the protected Utilities
  * folder, with the reasons spelled out. Segments are tabs: roving
- * tabindex, ←/→ view switching, accent focus ring. The project cards
+ * tabindex, accent focus ring (bare ←/→ switching removed in v1.3.5
+ * #104 — ⌘←/⌘→ is the keyboard path). The project cards
  * hold no tab stops of their own (the title and ✕ buttons are
  * pointer-only; ⌘1..9 and ⌘↑/↓ are their keyboard path), so Tab walks
  * the top controls → the switch → the settings footer only.
@@ -642,28 +639,6 @@ export function Sidebar({
     useProjectStore.getState().deleteFolder(id)
   }
 
-  /**
-   * v1.2.2 (issue #28): ←/→ on a focused segment — the roving-tabindex tab
-   * pattern. The view moves to the neighboring folder view (wrapping at
-   * the ends) and focus follows onto the newly active tab.
-   */
-  const handleSegmentKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
-    event.preventDefault()
-    const store = useProjectStore.getState()
-    const next = nextFolderView(
-      store.projectFolders,
-      store.activeFolderId,
-      event.key === 'ArrowLeft' ? -1 : 1
-    )
-    setActiveFolderView(next)
-    const element =
-      next === null
-        ? unfiledSegmentRef.current
-        : (segmentRefs.current.get(next) ?? null)
-    element?.focus()
-  }
-
   /** Resolves which folder segment a right-click landed on (null = track
    * or the unfiled segment) — runs before Radix opens the menu, so the
    * content renders for the right target. */
@@ -928,7 +903,8 @@ export function Sidebar({
             a right-click context menu (new / rename / delete); the import
             "+" lands in the selected segment's view (spec issue #7
             新导入落点). Segments are real tabs: role/aria-selected, a
-            roving tabindex, ←/→ view switching and an accent focus ring. */}
+            roving tabindex and an accent focus ring (bare ←/→ switching
+            removed in v1.3.5 #104). */}
         <div className="mx-5 mb-2 flex items-center gap-1">
           <ContextMenu onOpenChange={handleMenuOpenChange}>
             <ContextMenuTrigger asChild>
@@ -972,7 +948,6 @@ export function Sidebar({
                   role="tab"
                   aria-selected={!activeFolder}
                   tabIndex={!activeFolder ? 0 : -1}
-                  onKeyDown={handleSegmentKeyDown}
                   onPointerDown={() => {
                     // Every fresh press re-arms the click suppression a
                     // finished drag left behind — the unfiled segment is not
@@ -1050,7 +1025,6 @@ export function Sidebar({
                       aria-selected={isActive}
                       tabIndex={isActive ? 0 : -1}
                       title={folderDisplayName(folder)}
-                      onKeyDown={handleSegmentKeyDown}
                       onPointerDown={e => {
                         // Every fresh press re-arms the click suppression a
                         // finished drag left behind — also when the segment

@@ -69,9 +69,10 @@ function folderViewStops(folders: ProjectFolder[]): (string | null)[] {
 }
 
 /**
- * v1.2.2 (issue #28): ←/→ on the focused switch segment — the next folder
- * view along the row, wrapping at the ends (the row is short, so wrapping
- * beats clamping).
+ * The next folder view along the row, wrapping at the ends (the row is
+ * short, so wrapping beats clamping). Born as the focused segment's
+ * bare ←/→ walker (v1.2.2 #28); since v1.3.5 (#104) ⌘←/⌘→ — through
+ * moveFolderSelection below — is the only caller.
  */
 export function nextFolderView(
   folders: ProjectFolder[],
@@ -86,11 +87,11 @@ export function nextFolderView(
 
 /**
  * ⌘←/⌘→ — one folder view along the row, through the same entry as a
- * segment click. Wraps at the ends like the segment arrows (v1.3.1 user
- * report: with three views the old clamp read as stuck at an edge, not
- * as an edge), and a press that resolves to the current view is a full
- * no-op — re-running the click entry would reset an idle selection even
- * though the view never moved.
+ * segment click. Wraps at the ends (v1.3.1 user report: with three
+ * views the old clamp read as stuck at an edge, not as an edge), and a
+ * press that resolves to the current view is a full no-op — re-running
+ * the click entry would reset an idle selection even though the view
+ * never moved. Since v1.3.5 (#104) the only keyboard folder switch.
  */
 export function moveFolderSelection(direction: 1 | -1): void {
   const { projectFolders, activeFolderId } = useProjectStore.getState()

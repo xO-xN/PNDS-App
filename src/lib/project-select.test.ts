@@ -290,8 +290,9 @@ describe('nextFolderView (v1.2.2, issue #28)', () => {
 
 /**
  * ⌘←/⌘→ — one folder view along the row, through the same entry as a
- * segment click. Wraps at the ends like the segment arrows (v1.3.1 user
- * report: with three views the old clamp read as stuck, not as an edge).
+ * segment click, wrapping at the ends (v1.3.1 user report: with three
+ * views the old clamp read as stuck, not as an edge). Since v1.3.5
+ * (#104) the only keyboard folder switch.
  */
 describe('moveFolderSelection', () => {
   const folders = [
