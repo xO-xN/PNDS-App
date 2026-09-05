@@ -96,7 +96,9 @@ gave the focused segment bare **←/→** switching through `nextFolderView`;
 v1.3.5 (#104) removed that handler — after a click parked focus on a
 segment, plain arrows kept switching views and read as the Cmd
 shortcuts firing without Cmd held. Bare arrows on a segment are now
-fully inert; the roving tabindex and Tab order are untouched.
+fully inert; the roving tabindex and Tab order are untouched. A segment
+click also drops the focus the browser parks on it — the ring only ever
+appears for Tab, never frozen after a click.
 
 **Cmd+←/Cmd+→** are the keyboard folder switch, registered in the web
 Cmd layer and working from anywhere: `moveFolderSelection` walks the

@@ -142,6 +142,21 @@ describe('Sidebar folder switch (v1.2.2, issue #28)', () => {
       expect(document.activeElement).toBe(unfiled)
     })
 
+    it('a segment click does not park focus — no frozen ring residue (#104)', () => {
+      const gigId = seedFolders()
+      render(<Sidebar variant="static" />)
+
+      // The browser parks focus on the clicked segment (jsdom does not,
+      // so the test focuses it first to mirror reality).
+      const [gig] = screen.getAllByTestId('folder-segment')
+      if (!gig) throw new Error('Expected the Gig segment')
+      gig.focus()
+      fireEvent.click(gig)
+
+      expect(useProjectStore.getState().activeFolderId).toBe(gigId)
+      expect(document.activeElement).toBe(document.body)
+    })
+
     it('arrow keys inside the inline rename do not switch views', async () => {
       seedFolders()
       render(<Sidebar variant="static" />)

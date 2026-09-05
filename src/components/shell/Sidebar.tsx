@@ -639,6 +639,19 @@ export function Sidebar({
     useProjectStore.getState().deleteFolder(id)
   }
 
+  /**
+   * v1.3.5 (#104 follow-up): a segment click must not park DOM focus on
+   * the segment. The browser focuses it on mousedown, and while
+   * `:focus-visible` hides the ring for the click itself, the first later
+   * keypress reveals it — a frozen ring on a control whose arrow keys are
+   * gone reads as a dead selection. Segments are divs, so a click always
+   * comes from the pointer; dropping focus never touches a keyboard path
+   * (Tab still stops on the active view, ⌘←/⌘→ live on the window layer).
+   */
+  const blurAfterSegmentClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    event.currentTarget.blur()
+  }
+
   /** Resolves which folder segment a right-click landed on (null = track
    * or the unfiled segment) — runs before Radix opens the menu, so the
    * content renders for the right target. */
@@ -954,9 +967,10 @@ export function Sidebar({
                     // a drag source, so its press has no other handler.
                     clearClickSuppression()
                   }}
-                  onClick={() => {
+                  onClick={event => {
                     if (consumeClick()) return
                     setActiveFolderView(null)
+                    blurAfterSegmentClick(event)
                   }}
                   className={cn(
                     // #32: shared focus ring + press-darkening (the segment
@@ -1041,10 +1055,11 @@ export function Sidebar({
                           '[data-folder-segment]'
                         )
                       }}
-                      onClick={() => {
+                      onClick={event => {
                         if (isEditing) return
                         if (consumeClick()) return
                         setActiveFolderView(folder.id)
+                        blurAfterSegmentClick(event)
                       }}
                       style={
                         cardOffset !== 0
