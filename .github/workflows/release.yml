@@ -66,6 +66,22 @@ jobs:
           releaseBody: |
             ## PNDS ${{ github.ref_name || inputs.version }}
 
+            ### What's New in V1.3.5 — the monitor page keeps its keyboard, folder switching is ⌘-only & the stuck-Cmd ghost is gone
+
+            **Typing in a monitor page is never interrupted again**
+            - The App used to take the keyboard back from the monitor page on a timer — typing into a project's input field or picking from a dropdown (tnd, the Template) could get cut off mid-gesture. The page now reports its own focus state to the App (a reporter script injected into every frame — projects need to do nothing), and while you are working in the page every reclaim path stands down. The keyboard returns the instant the page is done with it.
+            - The pointer sitting inside the monitor area holds the same protection, so homemade controls that never take focus (div-based menus) are covered too. Moving the mouse to the title strip or the sidebar hands the keyboard back at once.
+            - While the page holds focus, the web ⌘ layer (⌘1..9, ⌘ arrows, ⌘R, ⌘,) lets the page keep the keys; native menu shortcuts (⌘M mute, zoom, ⌘⇧R, ⌘W) are never affected. The desktop-switch reclaim from earlier releases still fires when nothing holds the keyboard.
+
+            **Folder switching is ⌘-only — and no frozen focus ring**
+            - Plain ←/→ no longer switch folder views. Focus used to park on a segment after a click, and the bare arrows then moved the view — reading exactly like the ⌘ shortcuts firing without ⌘ held. ⌘←/⌘→ (wrapping at the ends) and clicking are the two ways to switch; Tab order is unchanged. The focus ring a click used to leave behind — a blue box that appeared on the next keypress and wouldn't move — is gone as well: it only ever appears for Tab now.
+
+            **The stuck ⌘ state heals itself**
+            - If the key-up was swallowed while focus sat inside the monitor page, the App could keep believing ⌘ was held: number badges that wouldn't clear, a peek sidebar that wouldn't retract. The next pointer move or plain keypress reports the truth and resets it — a real hold is never touched.
+
+            **Telematic Network Diagnostics v0.5.0 rides along**
+            - Performers can leave on their own — the leave is measured, the card disappears server-side, and coming back gets a full-page rejoin. The hub can remove a performer from the card's ✕ (the phone shows a removed notice and a fresh rejoin). The monitor's connect button gained a four-state machine that dirty-checks the live config, and the burst marker is off the display.
+
             ### What's New in V1.3.4 — the startup crash fixed at the root, a bounded shutdown & a session log that tells the story
 
             **The scsynth startup crash — fixed at the root, with the self-heal kept as the fuse**
