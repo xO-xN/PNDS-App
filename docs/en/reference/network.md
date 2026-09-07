@@ -22,7 +22,7 @@ Operating discipline for custom `.local` addresses:
 
 - `.local` is an mDNS local host name: who it resolves to depends on each machine's own host name. For a work declaring `mywork.local`, the Mac running it must have the local host name (System Settings → General → Sharing → Local hostname) `mywork` — and when the same work runs on several Macs / sites, **every node carries the same matching host name**, so `mywork.local` resolves to the machine running it on each network;
 - a mismatching host name means the address fails to resolve (or resolves to the wrong machine) — a monitor that will not load, phones that cannot connect, is usually this discipline being broken. The default fallback always works: do not declare `performerAddress` and the App injects the selected LAN IPv4;
-- Android's mDNS resolution for `.local` inside browsers varies by implementation and is pending real-device verification — when targeting Android performers with a custom address, verify by scanning the QR on the actual performance devices beforehand, and fall back to IP injection if it does not resolve.
+- Android's mDNS resolution for `.local` inside browsers varies by implementation and is pending real-device verification — when targeting Android performers with a custom address, verify by scanning the QR on the actual performance devices beforehand, and fall back to IP injection if it does not resolve. This is a gate on the v1.4.0 pre-publish matrix (`docs/developer/releases.md`, "Manual verification before publishing", item 4); the real-device conclusion is written back to this note.
 
 Seats, reconnection and the work's data protocol are the Project's own implementation — PNDS prescribes no Socket.IO event names, client IDs, role counts or UI framework.
 
