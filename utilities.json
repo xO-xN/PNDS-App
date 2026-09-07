@@ -10,9 +10,9 @@
     {
       "id": "local-network-diagnostics",
       "repo": "xO-xN/Local-Network-Diagnostics",
-      "tag": "v0.5.0",
-      "artifact": "local-network-diagnostics-v0.5.0.pnds",
-      "sha256": "4a6a54b46f7a052b4ba5a9698a7a81ef3ac197ef4b097033b95b725543cd05fd"
+      "tag": "v0.6.0",
+      "artifact": "local-network-diagnostics-v0.6.0.pnds",
+      "sha256": "5c73abea500b526b6916fd68def8ec2f9e9fc4297dee782a65f6dcea6e9292fc"
     },
     {
       "id": "telematic-network-diagnostics",

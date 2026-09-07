@@ -375,7 +375,9 @@ async getSetlistExportInfo(paths: string[]) : Promise<Result<SetlistProjectInfo[
  * v1.4.0 (#59): packs every project (in list order) into `destDir`, then
  * writes the frontend-serialized set.json and the import instructions
  * beside them. A failure removes everything this run wrote — a partial
- * export never reads as complete.
+ * export never reads as complete. Each pack is announced on
+ * `pnds:setlist-export-progress` (`{ done, total, fileName }`, done
+ * 0-based) so the UI can show per-project progress.
  */
 async exportSetlist(destDir: string, setlistJson: string, instructions: string, projectPaths: string[]) : Promise<Result<SetlistExportResult, string>> {
     try {

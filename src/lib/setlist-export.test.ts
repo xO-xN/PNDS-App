@@ -263,7 +263,7 @@ describe('setlist export progress toast', () => {
   })
 
   it('starts the loading toast, follows the Rust events, resolves in place', async () => {
-    type ProgressEvent = {
+    interface ProgressEvent {
       payload: { done: number; total: number; fileName: string }
     }
     // An object container — TS does not narrow object properties across
