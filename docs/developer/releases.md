@@ -97,10 +97,30 @@ draft release on GitHub.
 
 ### Manual verification before publishing
 
-- **Updater proxies (v1.4.0, #60)** — on a real machine:
-  1. System Settings → Network → Proxies pointing at a local proxy (e.g. Charles/mitmproxy): launch the App, run Check for Updates, confirm the request appears in the proxy's log.
-  2. `launchctl setenv https_proxy http://127.0.0.1:7890` (see [Proxies](#proxies-v140-issue-60)), relaunch the App, repeat the check.
-  3. Point the proxy at a dead address: the boot auto-check and the manual check must both open the failure dialog — copy the error, open the Releases page.
+The v1.4.0 pre-publish matrix (issue #64) — every gate below passes on
+real machines before the draft release is published:
+
+1. **Local Network Diagnostics v0.6.0 is published** (no longer a draft)
+   in `xO-xN/Local-Network-Diagnostics`. `utilities:fetch` runs inside
+   `beforeBuildCommand` and draft-release assets are not publicly
+   downloadable — while that release sits in draft, every `tauri build`
+   (local and CI alike) fails with a 404 on the pinned artifact.
+2. **Two sites + a VPS hub run TND end to end** — the telematic path the
+   v1.4.0 Node section feeds: one machine at each of the two performance
+   sites (different networks) against the hub on the VPS, node names
+   visible on the hub, measurements flowing both ways. This also
+   completes TND's deferred「双节点实测校准质量阈值」step.
+3. **Auto-update downloads and installs behind a system proxy** — the
+   updater-proxy checklist (v1.4.0, #60), on a real machine:
+   1. System Settings → Network → Proxies pointing at a local proxy (e.g. Charles/mitmproxy): launch the App, run Check for Updates, confirm the request appears in the proxy's log.
+   2. `launchctl setenv https_proxy http://127.0.0.1:7890` (see [Proxies](#proxies-v140-issue-60)), relaunch the App, repeat the check.
+   3. Point the proxy at a dead address: the boot auto-check and the manual check must both open the failure dialog — copy the error, open the Releases page.
+4. **`.local` custom address on an Android phone** — a work declaring a
+   `*.local` performer address: scan its QR code with the Android device
+   that will actually perform, confirm the page loads. Write the
+   conclusion back into the「Android mDNS 兼容性待真机验证」note in
+   `network.md` (both language trees) — pass, or document the fall-back
+   to IP injection.
 
 ### Manual Method
 

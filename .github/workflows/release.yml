@@ -66,6 +66,32 @@ jobs:
           releaseBody: |
             ## PNDS ${{ github.ref_name || inputs.version }}
 
+            ### What's New in V1.4.0 — telematic config lives in the App, setlists travel between machines & updates work behind proxies
+
+            **Your hub config, set once in the App**
+            - Works that perform across the internet (like the built-in Telematic Network Diagnostics) used to make you retype the hub address, token and node name into the monitor's connect form every single time you opened them. Settings now has a Node section: a node name for this Mac (defaults to the machine's hostname, editable) plus the hub address and token, remembered per work like an External OSC target. On every start the App injects them as the environment the work reads — the connect form comes up prefilled and stays overridable for probing. The room still derives itself from the work and its group number; you never type it.
+            - The token is masked in the UI and never rides a URL. Works that don't declare telematic capability never see the section. Changes apply at the next work start — a running session is never disturbed.
+
+            **Performers connect by name, not by digits**
+            - A work's manifest can now declare a performer address string — say `mywork.local` — and the QR code, the monitor URL and the address injected into the work all carry it instead of a numeric LAN IP. Works that don't declare one behave exactly as before, and projects need zero changes to adopt it.
+            - The discipline for `.local`: every Mac running the work must carry the matching local hostname (System Settings → General → Sharing), and Android's in-browser mDNS support varies from device to device — scan the QR on the actual phone before the show; if it won't resolve, fall back to the IP injection.
+
+            **Setlists travel between machines**
+            - A performance folder — a multi-work setlist — exports as one directory: every work as its `.pnds` bundle, a human-readable `set.json` (order, display names, default audio modes, External targets) and an import instructions file. The export shows per-work progress as it packs.
+            - Importing that directory on another Mac installs every work (same overwrite semantics as a plain `.pnds` install) and rebuilds the folder, its order and its display names. Machine-local preferences — output device, sample rate — deliberately don't travel.
+
+            **Updates work behind proxies — and a failure has a way out**
+            - The updater's HTTP client now honors the proxy configured in macOS System Settings (and `launchctl setenv` environment variables): on networks where GitHub is reachable only through the proxy, Check for Updates no longer dies with a 403.
+            - When a check or install does fail, the App opens its own failure dialog: the full error text, copyable, plus an Open Releases Page action for a manual download — on the boot auto-check and the manual check alike. The old one-line browser alert is retired.
+
+            **Settings, polished after stage rehearsals**
+            - The Appearance section is gone — the theme row lives in General now, one identity row beside the language.
+            - The audio rows (output device, sample rate) are editable while a session runs: the change persists immediately, the running session keeps the audio configuration it was spawned with, and the hint says exactly that. The output device sits above the sample rate — the physical output comes first.
+            - The Node section's LAN address list refreshes whenever the panel opens or its dropdown gains focus, so a first launch with no work opened no longer stares at a "Select…" placeholder.
+
+            **Diagnostics ride along**
+            - Telematic Network Diagnostics v0.6.0 declares its telematic capability to the App and prefills its connect form from the injected environment. Local Network Diagnostics v0.6.0 ships alongside. The Help Center gained a chapter on performing across the internet, the page-interaction contract and the built-in tools.
+
             ### What's New in V1.3.5 — the monitor page keeps its keyboard, folder switching is ⌘-only & the stuck-Cmd ghost is gone
 
             **Typing in a monitor page is never interrupted again**
