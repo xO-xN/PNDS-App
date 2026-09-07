@@ -10,6 +10,7 @@
 
 import { open } from '@tauri-apps/plugin-dialog'
 import { revealItemInDir } from '@tauri-apps/plugin-opener'
+import { listen } from '@tauri-apps/api/event'
 import i18n from '@/i18n/config'
 import { commands } from '@/lib/tauri-bindings'
 import { logger } from '@/lib/logger'
@@ -122,28 +123,61 @@ export async function exportSetlistFolder(folderId: string): Promise<void> {
     projects,
   })
 
-  const result = await commands.exportSetlist(
-    destDir,
-    setlistJson,
-    readmeText(folder.name, projects.length),
-    paths
+  // User report after #59: a full setlist packs for a while — ONE toast
+  // walks the operator through it: per-project progress from the Rust
+  // events, then the outcome morphs the same toast in place.
+  const toastId = `setlist-export:${folderId}`
+  notifications.flow.step(
+    toastId,
+    i18n.t('setlist.exportProgressTitle'),
+    i18n.t('setlist.exportProgressPreparing')
   )
-  if (result.status === 'error') {
-    logger.error('Setlist export failed', {
-      folder: folder.name,
-      dir: destDir,
-      error: result.error,
-    })
-    notifications.error(i18n.t('setlist.exportFailed'), result.error)
-    return
-  }
-  logger.info('Setlist exported', { folder: folder.name, dir: destDir })
-  notifications.success(
-    i18n.t('setlist.exportSuccessTitle'),
-    result.data.outputDir
-  )
-  // Best effort — the export succeeded; a reveal hiccup is not an error.
-  await revealItemInDir(result.data.outputDir).catch(error => {
-    logger.warn('Failed to reveal the export directory', { error })
+  const unlisten = await listen<{
+    done: number
+    total: number
+    fileName: string
+  }>('pnds:setlist-export-progress', event => {
+    notifications.flow.step(
+      toastId,
+      i18n.t('setlist.exportProgressTitle'),
+      i18n.t('setlist.exportProgressItem', {
+        done: event.payload.done + 1,
+        total: event.payload.total,
+        name: event.payload.fileName,
+      })
+    )
   })
+  try {
+    const result = await commands.exportSetlist(
+      destDir,
+      setlistJson,
+      readmeText(folder.name, projects.length),
+      paths
+    )
+    if (result.status === 'error') {
+      logger.error('Setlist export failed', {
+        folder: folder.name,
+        dir: destDir,
+        error: result.error,
+      })
+      notifications.flow.fail(
+        toastId,
+        i18n.t('setlist.exportFailed'),
+        result.error
+      )
+      return
+    }
+    logger.info('Setlist exported', { folder: folder.name, dir: destDir })
+    notifications.flow.succeed(
+      toastId,
+      i18n.t('setlist.exportSuccessTitle'),
+      result.data.outputDir
+    )
+    // Best effort — the export succeeded; a reveal hiccup is not an error.
+    await revealItemInDir(result.data.outputDir).catch(error => {
+      logger.warn('Failed to reveal the export directory', { error })
+    })
+  } finally {
+    unlisten()
+  }
 }

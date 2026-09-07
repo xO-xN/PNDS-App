@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { open } from '@tauri-apps/plugin-dialog'
 import { revealItemInDir } from '@tauri-apps/plugin-opener'
+import { listen } from '@tauri-apps/api/event'
 import { commands } from '@/lib/tauri-bindings'
 import { notifications } from '@/lib/notifications'
 import { useProjectStore } from '@/store/project-store'
@@ -16,6 +17,11 @@ vi.mock('@/lib/notifications', () => ({
     success: vi.fn(),
     info: vi.fn(),
     warning: vi.fn(),
+    flow: {
+      step: vi.fn(),
+      succeed: vi.fn(),
+      fail: vi.fn(),
+    },
   },
 }))
 
@@ -123,7 +129,8 @@ describe('exportSetlistFolder (issue #59)', () => {
     expect(instructions).toContain('Gig Friday')
     expect(instructions).toContain('2')
 
-    expect(notifications.success).toHaveBeenCalledWith(
+    expect(notifications.flow.succeed).toHaveBeenCalledWith(
+      'setlist-export:folder-1',
       'Setlist exported',
       '/tmp/setlist-export'
     )
@@ -137,7 +144,7 @@ describe('exportSetlistFolder (issue #59)', () => {
 
     expect(commands.getSetlistExportInfo).not.toHaveBeenCalled()
     expect(commands.exportSetlist).not.toHaveBeenCalled()
-    expect(notifications.success).not.toHaveBeenCalled()
+    expect(notifications.flow.step).not.toHaveBeenCalled()
   })
 
   it('a failing pre-flight names the error and writes nothing', async () => {
@@ -200,10 +207,12 @@ describe('exportSetlistFolder (issue #59)', () => {
 
     await exportSetlistFolder('folder-1')
 
-    expect(notifications.error).toHaveBeenCalledWith(
+    expect(notifications.flow.fail).toHaveBeenCalledWith(
+      'setlist-export:folder-1',
       'Setlist export failed',
       'disk full'
     )
+    expect(notifications.flow.succeed).not.toHaveBeenCalled()
     expect(revealItemInDir).not.toHaveBeenCalled()
   })
 
@@ -213,5 +222,99 @@ describe('exportSetlistFolder (issue #59)', () => {
 
     expect(open).not.toHaveBeenCalled()
     expect(commands.exportSetlist).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * User report after #59: a full setlist packs for a while — ONE toast
+ * walks the operator through it (per-project progress from the Rust
+ * events, then the outcome morphs the same toast in place).
+ */
+describe('setlist export progress toast', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(open).mockResolvedValue('/Users/test/Desktop/Gig Export')
+    useProjectStore.setState({
+      currentProject: null,
+      projectFolders: [
+        { id: 'folder-1', name: 'Gig Friday', projectPaths: [PATH_B, PATH_A] },
+      ],
+      projectDisplayNames: {},
+      manifestProjectNames: {},
+      pendingPreflightPath: null,
+      preflightStatus: 'idle',
+      preflightError: null,
+    })
+    vi.mocked(commands.getSetlistExportInfo).mockResolvedValue({
+      status: 'ok',
+      data: [INFO_B, INFO_A],
+    })
+    vi.mocked(commands.loadPreferences).mockResolvedValue({
+      status: 'ok',
+      data: { theme: 'system' } as never,
+    })
+    // clearAllMocks clears calls, not per-test mockResolvedValue
+    // implementations — the disk-full test above would otherwise leak
+    // its error into this describe.
+    vi.mocked(commands.exportSetlist).mockResolvedValue({
+      status: 'ok',
+      data: { outputDir: '/tmp/setlist-export' },
+    })
+  })
+
+  it('starts the loading toast, follows the Rust events, resolves in place', async () => {
+    type ProgressEvent = {
+      payload: { done: number; total: number; fileName: string }
+    }
+    // An object container — TS does not narrow object properties across
+    // the callback assignment the way it does a bare `let`.
+    const captured: { handler?: (event: ProgressEvent) => void } = {}
+    const unlisten = vi.fn()
+    vi.mocked(listen).mockImplementation(async (_event, registered) => {
+      captured.handler = registered as (event: ProgressEvent) => void
+      return unlisten
+    })
+
+    await exportSetlistFolder('folder-1')
+
+    // The loading toast is up before the pack, listening for the Rust
+    // per-project events.
+    expect(listen).toHaveBeenCalledWith(
+      'pnds:setlist-export-progress',
+      expect.any(Function)
+    )
+    expect(notifications.flow.step).toHaveBeenCalledWith(
+      'setlist-export:folder-1',
+      'Exporting setlist folder…',
+      'Preparing…'
+    )
+
+    // Simulate the backend announcing each pack…
+    const emit = captured.handler
+    if (!emit) throw new Error('Expected the progress listener registered')
+    emit({
+      payload: { done: 0, total: 2, fileName: 'Project B-2.0.0.pnds' },
+    })
+    emit({
+      payload: { done: 1, total: 2, fileName: 'Project A-1.0.0.pnds' },
+    })
+    expect(notifications.flow.step).toHaveBeenCalledWith(
+      'setlist-export:folder-1',
+      'Exporting setlist folder…',
+      '1/2 — Project B-2.0.0.pnds'
+    )
+    expect(notifications.flow.step).toHaveBeenCalledWith(
+      'setlist-export:folder-1',
+      'Exporting setlist folder…',
+      '2/2 — Project A-1.0.0.pnds'
+    )
+
+    // The outcome morphed the SAME toast id, and the listener is gone.
+    expect(notifications.flow.succeed).toHaveBeenCalledWith(
+      'setlist-export:folder-1',
+      'Setlist exported',
+      '/tmp/setlist-export'
+    )
+    expect(unlisten).toHaveBeenCalled()
   })
 })

@@ -35,7 +35,10 @@ v1.4.0（#59 导出、#63 导入，spec #57）。演出文件夹的移交机制�
        ├─ 组装 + serializeSetlist（显示名走 display-names 的唯一命名规则；
        │   oscTarget 来自 preferences.oscTargets[manifest id]）
        ├─ commands.exportSetlist(destDir, setlistJson, readme, paths)（Rust）
-       └─ 成功 toast + plugin-opener revealItemInDir
+       │    ← 每个工程打包前发 pnds:setlist-export-progress 事件
+       │      （{ done, total, fileName }，done 0 基）
+       └─ flow toast：loading 逐工程走查 → 成功/失败就地翻转（见
+          notifications.md 的 Flow toasts）+ plugin-opener revealItemInDir
 ```
 
 - UI 门控：空文件夹与「工具」文件夹的菜单项禁用并显示原因（沿用禁用项必给原因的既有模式）；

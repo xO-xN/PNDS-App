@@ -86,7 +86,9 @@ pub async fn get_setlist_export_info(
 /// v1.4.0 (#59): packs every project (in list order) into `destDir`, then
 /// writes the frontend-serialized set.json and the import instructions
 /// beside them. A failure removes everything this run wrote — a partial
-/// export never reads as complete.
+/// export never reads as complete. Each pack is announced on
+/// `pnds:setlist-export-progress` (`{ done, total, fileName }`, done
+/// 0-based) so the UI can show per-project progress.
 #[tauri::command]
 #[specta::specta]
 pub async fn export_setlist(
@@ -96,13 +98,33 @@ pub async fn export_setlist(
     instructions: String,
     project_paths: Vec<String>,
 ) -> Result<SetlistExportResult, String> {
+    use tauri::Emitter;
+
     let packed_with = app.package_info().version.to_string();
+    let emit_app = app.clone();
     setlist::export_setlist(
         &PathBuf::from(dest_dir),
         &project_paths,
         &setlist_json,
         &instructions,
         &packed_with,
+        &|done, total, file_name| {
+            #[derive(Clone, serde::Serialize)]
+            #[serde(rename_all = "camelCase")]
+            struct Progress<'a> {
+                done: usize,
+                total: usize,
+                file_name: &'a str,
+            }
+            let _ = emit_app.emit(
+                "pnds:setlist-export-progress",
+                Progress {
+                    done,
+                    total,
+                    file_name,
+                },
+            );
+        },
     )
 }
 

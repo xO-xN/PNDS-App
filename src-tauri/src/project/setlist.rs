@@ -106,12 +106,17 @@ pub fn describe_projects(project_paths: &[String]) -> Result<Vec<SetlistProjectI
 /// same-named artifact is replaced — a re-export owns its directory's
 /// artifacts. On any failure every file this run wrote is removed again,
 /// so a failed export never leaves a directory that reads as complete.
+///
+/// `progress` runs before each pack with the project's 0-based index, the
+/// total and the artifact file name (v1.4.0, user report after #59: the
+/// UI shows per-project progress — packing a full setlist takes a while).
 pub fn export_setlist(
     dest_dir: &Path,
     project_paths: &[String],
     setlist_json: &str,
     instructions: &str,
     packed_with: &str,
+    progress: &dyn Fn(usize, usize, &str),
 ) -> Result<SetlistExportResult, String> {
     if project_paths.is_empty() {
         return Err("The export holds no projects".to_string());
@@ -121,10 +126,12 @@ pub fn export_setlist(
 
     let mut written: Vec<PathBuf> = Vec::new();
     let outcome = (|| -> Result<(), String> {
-        for path in project_paths {
+        for (index, path) in project_paths.iter().enumerate() {
             let (_, output) = bundle::validate_packable(&PathBuf::from(path))
                 .map_err(|e| format!("{path}: {e}"))?;
-            let target = dest_dir.join(output_file_name(&output)?);
+            let file_name = output_file_name(&output)?;
+            progress(index, project_paths.len(), &file_name);
+            let target = dest_dir.join(&file_name);
             bundle::pack_project_to(&PathBuf::from(path), &target, packed_with)?;
             written.push(target);
         }
@@ -366,6 +373,74 @@ mod tests {
         );
     }
 
+    /// v1.4.0 (user report after #59): one progress step per project, in
+    /// list order, naming the artifact about to be packed — and a failed
+    /// export stops announcing at the failure.
+    #[test]
+    fn export_reports_progress_per_project_and_stops_on_failure() {
+        let parent = tempfile::tempdir().unwrap();
+        let good = parent.path().join("Good");
+        let other = parent.path().join("Other");
+        let broken = parent.path().join("Broken");
+        for dir in [&good, &other, &broken] {
+            fs::create_dir_all(dir).unwrap();
+        }
+        fixture_project(&good, "good", "Good", "1.0.0", "external");
+        fixture_project(&other, "other", "Other", "2.0.0", "external");
+        fixture_project(&broken, "broken", "Broken", "3.0.0", "external");
+        fs::remove_dir_all(broken.join("node_modules")).unwrap();
+
+        let dest = parent.path().join("Export");
+        type Steps = std::sync::Arc<std::sync::Mutex<Vec<(usize, usize, String)>>>;
+        let recorder = |steps: Steps| {
+            move |done: usize, total: usize, name: &str| {
+                steps.lock().unwrap().push((done, total, name.to_string()));
+            }
+        };
+
+        let ok_steps: Steps = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        export_setlist(
+            &dest,
+            &[
+                good.to_string_lossy().into_owned(),
+                other.to_string_lossy().into_owned(),
+            ],
+            "{\"formatVersion\":1}\n",
+            "readme\n",
+            APP_VERSION,
+            &recorder(ok_steps.clone()),
+        )
+        .unwrap();
+        assert_eq!(
+            ok_steps.lock().unwrap().as_slice(),
+            &[
+                (0, 2, "Good-1.0.0.pnds".to_string()),
+                (1, 2, "Other-2.0.0.pnds".to_string()),
+            ]
+        );
+
+        // The broken third project fails its packability gate — the
+        // announcement list ends before it.
+        let fail_steps: Steps = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let err = export_setlist(
+            &dest,
+            &[
+                good.to_string_lossy().into_owned(),
+                broken.to_string_lossy().into_owned(),
+            ],
+            "{\"formatVersion\":1}\n",
+            "readme\n",
+            APP_VERSION,
+            &recorder(fail_steps.clone()),
+        )
+        .unwrap_err();
+        assert!(err.contains("Broken"), "unexpected: {err}");
+        assert_eq!(
+            fail_steps.lock().unwrap().as_slice(),
+            &[(0, 2, "Good-1.0.0.pnds".to_string())]
+        );
+    }
+
     #[test]
     fn export_writes_pnds_setlist_and_readme_in_the_directory() {
         let parent = tempfile::tempdir().unwrap();
@@ -388,6 +463,7 @@ mod tests {
             setlist_json,
             instructions,
             APP_VERSION,
+            &|_, _, _| {},
         )
         .unwrap();
 
@@ -426,6 +502,7 @@ mod tests {
                 setlist_json,
                 "readme\n",
                 APP_VERSION,
+                &|_, _, _| {},
             )
             .unwrap()
         };
@@ -463,6 +540,7 @@ mod tests {
             "{\"formatVersion\":1}\n",
             "readme\n",
             APP_VERSION,
+            &|_, _, _| {},
         )
         .unwrap_err();
         assert!(err.contains("Broken"), "unexpected: {err}");
@@ -495,6 +573,7 @@ mod tests {
             setlist_json,
             "readme\n",
             APP_VERSION,
+            &|_, _, _| {},
         )
         .unwrap();
 
@@ -542,6 +621,7 @@ mod tests {
             "{\"formatVersion\":1}\n",
             "readme\n",
             APP_VERSION,
+            &|_, _, _| {},
         )
         .unwrap();
 

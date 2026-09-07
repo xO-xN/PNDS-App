@@ -96,6 +96,10 @@ If the native call fails, the toast fallback fires — a native notification tha
 
 `@/lib/notifications` flattens to `title: message` and cannot carry action buttons. Flows that need a toast with an action (e.g. the updater's Install / Restart buttons, v1.3.2 issue #74) call sonner's `toast` directly inside their own module — see `src/lib/updater.ts` for the pattern (locale copy via `i18n.t`, longer `duration` so the buttons stay reachable).
 
+## Flow toasts (progress → outcome in one place)
+
+Long-running flows (the setlist export, v1.4.0 after #59) use `notifications.flow` instead of firing a stack of toasts: `step(id, title, description?)` puts up a loading toast; later `step` calls with the SAME `id` refresh its description (per-project progress), and `succeed(id, …)` / `fail(id, …)` morph that same toast into the outcome — progress and completion read as one indicator, never two. The id is flow-scoped (e.g. `setlist-export:<folderId>`); there is no native variant and no extra logging (the owning flow logs its own milestones).
+
 ### Advanced Usage
 
 ```typescript

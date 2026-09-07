@@ -105,6 +105,37 @@ export const notifications = {
   /** Show warning notification */
   warning: (title: string, message?: string, native?: boolean) =>
     notify(title, message, { type: 'warning', native }),
+
+  /**
+   * v1.4.0 (user report after #59): a long-running flow's progress toast.
+   * The same `id` passed to a later `succeed`/`fail` morphs the loading
+   * toast in place instead of stacking another — progress and outcome read
+   * as ONE indicator. Pure UI: no native variant (the owning flow logs
+   * its own milestones).
+   */
+  flow: {
+    /** Starts the loading toast, or refreshes its description. */
+    step: (id: string, title: string, description?: string): void => {
+      toast.loading(
+        title,
+        description !== undefined ? { id, description } : { id }
+      )
+    },
+    /** Resolves the loading toast as success (same toast, same place). */
+    succeed: (id: string, title: string, description?: string): void => {
+      toast.success(
+        title,
+        description !== undefined ? { id, description } : { id }
+      )
+    },
+    /** Resolves the loading toast as failure (same toast, same place). */
+    fail: (id: string, title: string, description?: string): void => {
+      toast.error(
+        title,
+        description !== undefined ? { id, description } : { id }
+      )
+    },
+  },
 }
 
 // Export individual convenience functions
