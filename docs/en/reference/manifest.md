@@ -48,9 +48,25 @@ audio.supportedModes
 
 ```text
 description
+telematic
+performerAddress
 audio.outputChannels
 audio.standaloneTarget
 ```
+
+`telematic`:
+
+- a boolean declaring that the work carries cross-internet (telematic) performance capability;
+- absent, `null`, `false` and non-boolean values all read as **undeclared**, without error (preflight tolerance) — only an explicit `"telematic": true` declares;
+- it decides exactly two things: whether the App injects the node environment variables at startup (see [runtime-contract.md](./runtime-contract.md) §3), and whether the "Set Node" mandatory start gate applies to this work;
+- **carries no hub configuration**: node name, hub URL, token and room all live on the App side (ADR-0004) — the manifest never sees them.
+
+`performerAddress`:
+
+- a string, the performer connection address (e.g. `mywork.local`); when present and not blank, it replaces the connection address the App injects (`PNDS_HOST_IP`) — the QR code and the monitor then show it instead of the numeric IP (see [network.md](./network.md), "Custom connection address");
+- the value is a bare host name: dot-separated labels of letters, digits and hyphens only (an IPv4 literal is also legal), carrying **no** scheme, port or path — `http://mywork.local` or `mywork.local:6868` fail preflight with a readable error;
+- absent, `null` and blank strings read as undeclared — the App injects the selected LAN IPv4 (today's behavior), never an error;
+- a declaration only, carrying no configuration: the Project needs zero changes (it keeps reading the same variable), and the address the App uses for the monitor stays identical to the injected value (see [runtime-contract.md](./runtime-contract.md) §3/§10).
 
 `audio.outputChannels`:
 

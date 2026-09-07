@@ -49,6 +49,7 @@ audio.supportedModes
 ```text
 description
 telematic
+performerAddress
 audio.outputChannels
 audio.standaloneTarget
 ```
@@ -59,6 +60,13 @@ audio.standaloneTarget
 - 缺省、`null`、`false` 与非布尔值一律视为**未声明**，不报错（preflight 容错）——只有显式 `"telematic": true` 才算声明；
 - 只决定两件事：App 是否在启动时注入节点环境变量（见 [runtime-contract.md](./runtime-contract.md) §3），以及「设置节点」强制门是否适用于本工程；
 - **不承载任何 hub 配置**：节点名、hub 地址、token 与房间全部由 App 一侧决定（ADR-0004），manifest 永远拿不到它们。
+
+`performerAddress`：
+
+- 字符串，演奏者连接地址（如 `mywork.local`）；存在且非空白时，App 注入给工程的连接地址（`PNDS_HOST_IP`）被替换为该字符串——二维码与 monitor 显示它而不是数字 IP（[network.md](./network.md)「自定义连接地址」）；
+- 值是裸主机名：点分标签只允许字母、数字与连字符（IPv4 字面量同样合法），**不带**协议、端口或路径——`http://mywork.local`、`mywork.local:6868` 会被 preflight 以可读错误拒绝；
+- 缺省、`null` 与空白字符串视为未声明，回落数字 IP 注入（现行为），不报错；
+- 只是声明，不携带任何配置：工程零改动（仍读它今天读的那个变量），App 用于 monitor 的地址与注入值保持一致（[runtime-contract.md](./runtime-contract.md) §3/§10）。
 
 `audio.outputChannels`：
 

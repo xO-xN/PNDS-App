@@ -1218,6 +1218,7 @@ mod tests {
             version: "1.0.0".into(),
             description: None,
             telematic: None,
+            performer_address: None,
             score_server: crate::project::manifest::ScoreServer {
                 entry: "s.js".into(),
                 working_directory: ".".into(),

@@ -54,6 +54,16 @@ export function selectionIsRunningCard(
   )
 }
 
+/**
+ * v1.4.0 (#62): the address the running session's pages live at — the
+ * snapshot's injected `hostAddress` (a manifest-declared performer
+ * address replaces the IP), falling back through the pre-#62 mirror to
+ * the start-config selection before any snapshot arrives. The monitor
+ * iframe and the Share action both read this, so they can never drift.
+ */
+export const sessionConnectionAddress = (state: SessionState): string | null =>
+  state.sessionHostAddress ?? state.sessionLanIp ?? state.lanIp
+
 /** §6.4: every new session's master starts at 80%. */
 export const DEFAULT_SESSION_VOLUME = 80
 
@@ -79,11 +89,23 @@ interface SessionState {
   /**
    * v1.2.3 (#39/T4): the running session's LAN IP, mirrored from the
    * backend snapshot — unlike `lanIp`, it is never touched by another
-   * card's preflight seeding. The monitor iframe and the Share action read
-   * it, so selecting a project over a running session can never retarget
-   * (or reload) the live monitor page.
+   * card's preflight seeding. The monitor iframe and the Share action
+   * read it, so selecting a project over a running session can never
+   * retarget (or reload) the live monitor page. v1.4.0 (#62): the
+   * address consumers actually navigate to is `sessionHostAddress` (the
+   * manifest-declared performer address replaces the IP) — this stays
+   * the fallback for fixtures and snapshots that predate the field.
    */
   sessionLanIp: string | null
+  /**
+   * v1.4.0 (#62): the connection address actually injected as
+   * `PNDS_HOST_IP`, mirrored from the backend snapshot — the
+   * manifest-declared performer address when the work declares one,
+   * else the selected LAN IP. The monitor iframe origin, the Share
+   * action and the menu address items read it, so they can never drift
+   * from what the score server actually received.
+   */
+  sessionHostAddress: string | null
   /** OSC target reported by the backend (internal: dynamic; external: §6.6). */
   oscTarget: string | null
   /** Master volume percent (§6.4; every new session starts at 80). */
@@ -177,6 +199,7 @@ export const useSessionStore = create<SessionState>()(set => ({
   projectName: null,
   sessionProjectPath: null,
   sessionLanIp: null,
+  sessionHostAddress: null,
   oscTarget: null,
   volume: DEFAULT_SESSION_VOLUME,
   muted: false,
@@ -252,6 +275,7 @@ export const useSessionStore = create<SessionState>()(set => ({
         projectName: snapshot.projectName,
         sessionProjectPath: snapshot.projectPath,
         sessionLanIp: snapshot.lanIp,
+        sessionHostAddress: snapshot.hostAddress,
         oscTarget: snapshot.oscTarget,
         volume: snapshot.volume,
         // v1.2.2 (#30): mute is session-only — every new run returns to
@@ -343,6 +367,7 @@ export const useSessionStore = create<SessionState>()(set => ({
       projectName: null,
       sessionProjectPath: null,
       sessionLanIp: null,
+      sessionHostAddress: null,
       volume: DEFAULT_SESSION_VOLUME,
       muted: false,
       prevVolume: 0,

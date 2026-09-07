@@ -15,6 +15,7 @@ const snapshot = (overrides: Partial<SessionSnapshot>): SessionSnapshot => ({
   projectPath: null,
   audioMode: null,
   lanIp: null,
+  hostAddress: null,
   oscTarget: null,
   health: null,
   error: null,
@@ -39,6 +40,29 @@ describe('session-store', () => {
   it('starts idle', () => {
     expect(useSessionStore.getState().sessionStatus).toBe('idle')
     expect(useSessionStore.getState().health).toBeNull()
+  })
+
+  it('mirrors the injected host address alongside the LAN selection (#62)', () => {
+    useSessionStore.getState().applySnapshot(
+      snapshot({
+        status: 'starting',
+        lanIp: '192.168.1.10',
+        hostAddress: 'mywork.local',
+      })
+    )
+    // The selection stays a plain IP (a restart reuses it); the injected
+    // address carries the manifest's declaration.
+    expect(useSessionStore.getState().lanIp).toBe('192.168.1.10')
+    expect(useSessionStore.getState().sessionLanIp).toBe('192.168.1.10')
+    expect(useSessionStore.getState().sessionHostAddress).toBe('mywork.local')
+
+    // Idle snapshots clear it, like every other session fact.
+    useSessionStore
+      .getState()
+      .applySnapshot(
+        snapshot({ status: 'idle', lanIp: null, hostAddress: null })
+      )
+    expect(useSessionStore.getState().sessionHostAddress).toBeNull()
   })
 
   it('mirrors snapshots from the backend (§9 state machine)', () => {

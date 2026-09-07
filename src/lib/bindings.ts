@@ -688,7 +688,16 @@ export type Manifest = { schemaVersion: number; id: string; name: string; versio
  * absent, `null`, `false` and non-boolean values all read as
  * undeclared and never fail validation.
  */
-telematic?: boolean | null }
+telematic?: boolean | null; 
+/**
+ * v1.4.0 (issue #62): the performer connection address (a host string
+ * like `mywork.local`) that replaces the LAN IPv4 injected as
+ * `PNDS_HOST_IP`. The QR code and the monitor then show this address
+ * instead of the numeric IP; absent falls back to the LAN selection
+ * (today's behavior). Declaration-only — the Project keeps reading
+ * the same variable, zero project changes.
+ */
+performerAddress?: string | null }
 export type PackResult = { outputPath: string; sha256: string }
 /**
  * Who is listening on a project port.
@@ -727,7 +736,14 @@ export type SessionSnapshot = {
 /**
  * `idle | starting | ready | error | stopping`
  */
-status: string; projectName: string | null; projectPath: string | null; audioMode: string | null; lanIp: string | null; oscTarget: string | null; health: HealthPayload | null; error: string | null; outputTail: string[]; 
+status: string; projectName: string | null; projectPath: string | null; audioMode: string | null; lanIp: string | null; 
+/**
+ * #62: the connection address actually injected as `PNDS_HOST_IP` —
+ * the manifest-declared performer address when present, else the
+ * selected LAN IP. The monitor origin and every shareable address
+ * derive from it; `lan_ip` stays the operator's selection fact.
+ */
+hostAddress: string | null; oscTarget: string | null; health: HealthPayload | null; error: string | null; outputTail: string[]; 
 /**
  * Master volume percent (§7.5; new N<=2 sessions always start at 80,
  * N>2 sessions are fixed at 100).

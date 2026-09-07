@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { listen } from '@tauri-apps/api/event'
 import { useTranslation } from 'react-i18next'
-import { useSessionStore } from '@/store/session-store'
+import {
+  sessionConnectionAddress,
+  useSessionStore,
+} from '@/store/session-store'
 import { useProjectStore } from '@/store/project-store'
 import {
   useSettingsStore,
@@ -70,11 +73,14 @@ export function MonitorView() {
         state.manifestProjectNames[sessionProjectPath])
       : undefined
   )
-  // v1.2.3 (#39/T4): the iframe targets the SESSION's LAN IP (snapshot
+  // v1.2.3 (#39/T4): the iframe targets the SESSION's address (snapshot
   // mirror) — another card's preflight seeding must never retarget or
   // reload the live monitor page. Falls back to the start-config IP only
-  // when no snapshot has arrived yet.
-  const lanIp = useSessionStore(state => state.sessionLanIp ?? state.lanIp)
+  // when no snapshot has arrived yet. v1.4.0 (#62): the session's
+  // `hostAddress` comes first — a manifest-declared performer address
+  // replaces the IP, so the iframe origin stays identical to the value
+  // injected as `PNDS_HOST_IP` (runtime contract §3/§10).
+  const hostAddress = useSessionStore(sessionConnectionAddress)
   const reloadNonce = useSessionStore(state => state.monitorReloadNonce)
   // §v1.1.1: browser-style zoom (50–200%), session-only.
   const monitorZoom = useSessionStore(state => state.monitorZoom)
@@ -94,7 +100,7 @@ export function MonitorView() {
   const locale = i18n.resolvedLanguage ?? i18n.language ?? 'en'
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
   const monitorPort = health?.scoreServer?.monitorPort
-  const monitorOrigin = `http://${lanIp}:${monitorPort}`
+  const monitorOrigin = `http://${hostAddress}:${monitorPort}`
   // v1.3.0 (#49/#54): `?theme=` and `?lang=` ride in the URL as
   // first-frame parameters, so following pages paint the right colors
   // and language before any postMessage arrives. The src is snapshotted
@@ -111,11 +117,11 @@ export function MonitorView() {
     // address fallbacks never reach the DOM — the guard below replaces
     // the whole view until a real address exists.
     void reloadNonce
-    return buildMonitorUrl(lanIp ?? '', monitorPort ?? 0, {
+    return buildMonitorUrl(hostAddress ?? '', monitorPort ?? 0, {
       theme: currentColorThemeSetting(),
       lang: currentResolvedLanguage(),
     })
-  }, [lanIp, monitorPort, reloadNonce])
+  }, [hostAddress, monitorPort, reloadNonce])
   // v1.3.0 (#50): the reveal gate. Every navigation reports readiness
   // from its own load event; the backstop below bounds the wait. The
   // cover hides the still-loading iframe (visible on reloads, when no
@@ -294,7 +300,7 @@ export function MonitorView() {
     }
   }, [monitorOrigin, colorTheme, locale])
 
-  if (!lanIp || !monitorPort) {
+  if (!hostAddress || !monitorPort) {
     // Should not happen for a ready session; fail visibly rather than blank.
     return (
       <div className="flex h-screen items-center justify-center text-sm text-muted-foreground">

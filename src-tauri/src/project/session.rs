@@ -97,6 +97,11 @@ pub struct SessionSnapshot {
     pub project_path: Option<String>,
     pub audio_mode: Option<String>,
     pub lan_ip: Option<String>,
+    /// #62: the connection address actually injected as `PNDS_HOST_IP` —
+    /// the manifest-declared performer address when present, else the
+    /// selected LAN IP. The monitor origin and every shareable address
+    /// derive from it; `lan_ip` stays the operator's selection fact.
+    pub host_address: Option<String>,
     pub osc_target: Option<String>,
     pub health: Option<HealthPayload>,
     pub error: Option<String>,
@@ -177,6 +182,13 @@ pub struct StartRequest {
     /// config is complete. Orthogonal to the audio mode — every mode
     /// carries them or none does. `None` injects nothing, silently.
     pub hub: Option<HubInjection>,
+    /// Resolved during start (#62): the manifest-declared performer
+    /// address that REPLACES the value injected as `PNDS_HOST_IP` (the
+    /// Project keeps reading the same variable — zero project changes).
+    /// `None` (undeclared) keeps the selected LAN IP, exactly today's
+    /// behavior; the snapshot's `host_address` and every URL the App
+    /// derives (monitor origin, shareable addresses) follow this value.
+    pub performer_address: Option<String>,
 }
 
 /// #58: the four telematic hub variables one start may inject (TND's
@@ -205,7 +217,15 @@ impl StartRequest {
             output_device: None,
             resolved_osc_target: None,
             hub: None,
+            performer_address: None,
         }
+    }
+
+    /// #62: the connection address actually injected as `PNDS_HOST_IP` —
+    /// the resolved performer address when declared, else the selected
+    /// LAN IP (the frontend's `effectiveHostAddress` mirrors this).
+    pub fn host_address(&self) -> &str {
+        self.performer_address.as_deref().unwrap_or(&self.lan_ip)
     }
 }
 
@@ -250,7 +270,13 @@ pub fn resolve_hub_injection(
 /// start) and `PNDS_AUDIO_OUTPUT_CHANNELS = N` (declared project
 /// outputs) — never a hardcoded stereo pair.
 pub fn build_score_server_env(request: &StartRequest) -> Vec<(String, String)> {
-    let mut env = vec![("PNDS_HOST_IP".to_string(), request.lan_ip.clone())];
+    // #62: a manifest-declared performer address replaces the injected
+    // host value (the Project keeps reading the same variable); undeclared
+    // falls back to the selected LAN IP — exactly today's behavior.
+    let mut env = vec![(
+        "PNDS_HOST_IP".to_string(),
+        request.host_address().to_string(),
+    )];
     match request.mode.as_str() {
         "internal" => {
             env.push((
@@ -358,6 +384,8 @@ struct SessionInner {
     project_path: Option<String>,
     audio_mode: Option<String>,
     lan_ip: Option<String>,
+    /// #62: the injected connection address (see `SessionSnapshot`).
+    host_address: Option<String>,
     osc_target: Option<String>,
     health: Option<HealthPayload>,
     error: Option<String>,
@@ -396,6 +424,7 @@ impl Default for SessionInner {
             project_path: None,
             audio_mode: None,
             lan_ip: None,
+            host_address: None,
             osc_target: None,
             health: None,
             error: None,
@@ -420,6 +449,7 @@ impl SessionInner {
             project_path: self.project_path.clone(),
             audio_mode: self.audio_mode.clone(),
             lan_ip: self.lan_ip.clone(),
+            host_address: self.host_address.clone(),
             osc_target: self.osc_target.clone(),
             health: self.health.clone(),
             error: self.error.clone(),
@@ -440,6 +470,7 @@ impl SessionInner {
         self.project_path = None;
         self.audio_mode = None;
         self.lan_ip = None;
+        self.host_address = None;
         self.osc_target = None;
         self.health = None;
         self.error = None;
@@ -530,6 +561,10 @@ impl SessionManager {
             inner.project_path = Some(request.path.clone());
             inner.audio_mode = Some(request.mode.clone());
             inner.lan_ip = Some(request.lan_ip.clone());
+            // #62: the pre-manifest default — the declared performer
+            // address (if any) overrides this once the manifest is loaded
+            // in `start_generation`.
+            inner.host_address = Some(request.lan_ip.clone());
             inner.startup_stage = 1;
             inner.generation
         };
@@ -568,9 +603,18 @@ impl SessionManager {
         {
             return Err(format!("Invalid LAN IPv4 address: \"{}\"", request.lan_ip));
         }
+        // #62: a declared performer address replaces the injected
+        // connection address — the score server's env, the snapshot's
+        // `host_address` and every URL the App derives (monitor origin)
+        // all follow this one value. Undeclared keeps the LAN IP. Read at
+        // spawn, so a manifest edit applies at the next start.
+        request.performer_address = manifest.performer_address().map(str::to_string);
         {
             let mut inner = self.lock();
             inner.project_name = Some(manifest.name.clone());
+            if let Some(address) = &request.performer_address {
+                inner.host_address = Some(address.clone());
+            }
         }
 
         // #58: telematic declaration + complete global node config → the
@@ -687,6 +731,14 @@ impl SessionManager {
             },
         )
         .ok();
+        // #62: both values on one line — the injected address and the LAN
+        // selection it replaced.
+        if let (Some(log), Some(address)) = (&mut session_log, &request.performer_address) {
+            let lan_ip = &request.lan_ip;
+            log.write_line(&format!(
+                "Performer address from manifest: {address} (replaces LAN IP {lan_ip})"
+            ));
+        }
         if let (Some(log), Some(plan), Some(device_name)) = (
             &mut session_log,
             &request.channel_plan,
@@ -1441,6 +1493,7 @@ impl SessionManager {
                 // user's pending selection across the stop barrier.
                 inner.audio_mode = None;
                 inner.lan_ip = None;
+                inner.host_address = None;
             }
         }
         self.emit(app);
@@ -1741,6 +1794,45 @@ mod tests {
                     .all(|(key, _)| !key.starts_with("PNDS_HUB_") && key != "PNDS_NODE_ID"),
                 "{mode}"
             );
+        }
+    }
+
+    /// #62: a manifest-declared performer address replaces the injected
+    /// `PNDS_HOST_IP` in every audio mode — the Project keeps reading the
+    /// same variable; undeclared keeps the selected LAN IP (the earlier
+    /// env tests pin that fallback with plain IPs for all three modes).
+    #[test]
+    fn declared_performer_address_replaces_host_ip_in_every_mode() {
+        for mode in ["internal", "external", "none"] {
+            let mut request = StartRequest::new(
+                "/p".to_string(),
+                mode.to_string(),
+                "192.168.1.10".to_string(),
+                None,
+            );
+            request.resolved_osc_target = Some("127.0.0.1:49328".to_string());
+            request.channel_plan = Some(crate::project::audio::channel_plan(2, 2));
+            request.performer_address = Some("mywork.local".to_string());
+            let env = build_score_server_env(&request);
+            let host = env
+                .iter()
+                .find(|(key, _)| key == "PNDS_HOST_IP")
+                .unwrap_or_else(|| panic!("{mode}: PNDS_HOST_IP missing"));
+            assert_eq!(host.1, "mywork.local", "{mode}");
+            // Declared + none mode still injects ONLY the host variable —
+            // the replacement never widens the none-mode surface.
+            if mode == "none" {
+                assert_eq!(env.len(), 1, "{mode}: {env:?}");
+            }
+
+            // Undeclared → exactly the selected LAN IP.
+            request.performer_address = None;
+            let env = build_score_server_env(&request);
+            let host = env
+                .iter()
+                .find(|(key, _)| key == "PNDS_HOST_IP")
+                .unwrap_or_else(|| panic!("{mode}: PNDS_HOST_IP missing"));
+            assert_eq!(host.1, "192.168.1.10", "{mode}");
         }
     }
 

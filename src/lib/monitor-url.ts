@@ -23,7 +23,7 @@ export interface MonitorUrlParams {
 }
 
 export function buildMonitorUrl(
-  lanIp: string,
+  host: string,
   port: number,
   params: MonitorUrlParams = {}
 ): string {
@@ -31,5 +31,22 @@ export function buildMonitorUrl(
   if (params.theme) search.set('theme', params.theme)
   if (params.lang) search.set('lang', params.lang)
   const query = search.toString()
-  return `http://${lanIp}:${port}/${query ? `?${query}` : ''}`
+  return `http://${host}:${port}/${query ? `?${query}` : ''}`
+}
+
+/**
+ * v1.4.0 (#62): the effective connection address for a project — the
+ * manifest-declared `performerAddress` replaces the selected LAN IP,
+ * mirroring what Rust injects as `PNDS_HOST_IP` (a blank declaration
+ * reads as undeclared, same preflight tolerance). Used where the
+ * address must be derived before a session snapshot exists (menu
+ * address items); a live session reads the snapshot's `hostAddress`
+ * instead — the backend is the injection authority.
+ */
+export function effectiveHostAddress(
+  performerAddress: string | null | undefined,
+  lanIp: string | null
+): string | null {
+  const declared = performerAddress?.trim()
+  return (declared ? declared : null) ?? lanIp
 }

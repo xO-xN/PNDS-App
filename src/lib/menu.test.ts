@@ -364,6 +364,62 @@ describe('buildAppMenu address segment (v1.3.0, #52)', () => {
     expect(performer.enabled).toBe(false)
   })
 
+  it('shows the manifest-declared performer address instead of the LAN IP (#62)', async () => {
+    selectProject()
+    useProjectStore.setState({
+      currentProject: {
+        path: '/tmp/demo',
+        manifest: { ...addressManifest, performerAddress: 'mywork.local' },
+      },
+    })
+    await buildAppMenu()
+
+    expect(item('performer-address').text).toBe(
+      'Performer — http://mywork.local:7000/'
+    )
+    expect(item('conductor-address').text).toBe(
+      'Conductor — http://mywork.local:7001/'
+    )
+  })
+
+  it('prefers the running session injected address over any derivation (#62)', async () => {
+    selectProject()
+    // A live session running the SELECTED project reports the address
+    // Rust actually injected — the snapshot mirror outranks both the
+    // manifest declaration and the LAN selection.
+    useSessionStore.setState({
+      sessionProjectPath: '/tmp/demo',
+      sessionHostAddress: 'stage.example.org',
+    })
+    await buildAppMenu()
+
+    expect(item('performer-address').text).toBe(
+      'Performer — http://stage.example.org:7000/'
+    )
+    expect(item('conductor-address').text).toBe(
+      'Conductor — http://stage.example.org:7001/'
+    )
+  })
+
+  it("never mixes the session address with a roaming selection's ports (#62)", async () => {
+    selectProject()
+    // The session runs ANOTHER project while /tmp/demo is selected: the
+    // session's address must not pair with the selection's ports — the
+    // items describe the selection alone.
+    useSessionStore.setState({
+      sessionProjectPath: '/tmp/other-work',
+      sessionHostAddress: 'stage.example.org',
+    })
+    await buildAppMenu()
+
+    expect(item('performer-address').text).toBe(
+      'Performer — http://192.168.1.42:7000/'
+    )
+    expect(item('conductor-address').text).toBe(
+      'Conductor — http://192.168.1.42:7001/'
+    )
+  })
+
   it('follows the LAN choice into the rebuilt addresses', async () => {
     selectProject()
     useSessionStore.getState().setLanIp('10.0.0.7')

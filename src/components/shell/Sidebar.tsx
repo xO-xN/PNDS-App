@@ -26,7 +26,11 @@ import {
   useProjectStore,
   visibleProjectPaths,
 } from '@/store/project-store'
-import { isSessionBusy, useSessionStore } from '@/store/session-store'
+import {
+  isSessionBusy,
+  sessionConnectionAddress,
+  useSessionStore,
+} from '@/store/session-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { useKeyboardStore } from '@/store/keyboard-store'
 import { notifications } from '@/lib/notifications'
@@ -361,9 +365,12 @@ export function Sidebar({
   // accent bar or the folder in-use dot.
   const sessionProjectPath = useSessionStore(state => state.sessionProjectPath)
   const commandKeyPressed = useKeyboardStore(state => state.commandKeyPressed)
-  // v1.2.3 (#39/T4): Share targets the SESSION's IP (snapshot mirror) —
-  // another card's preflight seeding must never retarget the live link.
-  const lanIp = useSessionStore(state => state.sessionLanIp ?? state.lanIp)
+  // v1.2.3 (#39/T4): Share targets the SESSION's address (snapshot
+  // mirror) — another card's preflight seeding must never retarget the
+  // live link. v1.4.0 (#62): the session's `hostAddress` comes first — a
+  // manifest-declared performer address replaces the IP, keeping the
+  // shared URL identical to the monitor's actual origin.
+  const hostAddress = useSessionStore(sessionConnectionAddress)
   const monitorPort = useSessionStore(
     state => state.health?.scoreServer?.monitorPort
   )
@@ -548,8 +555,8 @@ export function Sidebar({
 
   /** Share: open the monitor page in the default external browser. */
   const handleShare = async () => {
-    if (!running || !lanIp || !monitorPort) return
-    await openUrl(`http://${lanIp}:${monitorPort}/`)
+    if (!running || !hostAddress || !monitorPort) return
+    await openUrl(`http://${hostAddress}:${monitorPort}/`)
   }
 
   /** v1.1.2 T7: the lone-Esc close confirmation's submit — same teardown
@@ -886,7 +893,7 @@ export function Sidebar({
             type="button"
             aria-label={t('sidebar.share')}
             title={t('sidebar.shareHint')}
-            disabled={!running || !lanIp || !monitorPort}
+            disabled={!running || !hostAddress || !monitorPort}
             onClick={() => void handleShare()}
             className="pnds-focus-ring rounded-md p-1.5 text-(--pnds-text)/70 transition hover:bg-(--pnds-text)/5 hover:text-(--pnds-text) active:scale-90 disabled:opacity-40"
           >

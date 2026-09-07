@@ -13,6 +13,7 @@ const snapshot = (overrides: Partial<SessionSnapshot>): SessionSnapshot => ({
   projectPath: null,
   audioMode: null,
   lanIp: null,
+  hostAddress: null,
   oscTarget: null,
   health: null,
   error: null,

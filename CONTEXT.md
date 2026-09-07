@@ -58,6 +58,10 @@ _Avoid_: 群组、channel、房间字符串
 跨互联网演奏中继服务（hub）的完整 URL，含协议与端口；App 全局配置，token 永不拼入其中。
 _Avoid_: hub IP、服务器地址
 
+**演奏者地址 / performer address**:
+manifest 可选字段 `performerAddress` 声明的连接地址字符串（如 `mywork.local`）：存在时替换 App 注入的 `PNDS_HOST_IP` 与 monitor 地址，二维码显示它；未声明回落所选 LAN IPv4。裸主机名（不带协议/端口），工程零改动。
+_Avoid_: 自定义域名、连接 URL、host IP（作声明名）
+
 **参考手册 / Reference Manual**:
 帮助语料中的 reference 分册：面向工程的契约文档（manifest、runtime、bundle、network 等）。
 _Avoid_: specification、wiki

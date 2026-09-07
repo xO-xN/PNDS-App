@@ -534,6 +534,9 @@ describe('MonitorView iframe URL (#49)', () => {
       sessionStatus: 'ready',
       projectName: 'Inarticulate III',
       lanIp: '192.168.1.10',
+      // #62: hermetic reset — the declared-address test below sets these.
+      sessionLanIp: null,
+      sessionHostAddress: null,
       health: readyHealth,
     })
     useSettingsStore.setState({ colorThemeSetting: 'brutal' })
@@ -552,6 +555,20 @@ describe('MonitorView iframe URL (#49)', () => {
     render(<MonitorView />)
 
     expect(frameSrc()).toBe('http://192.168.1.10:6869/?theme=brutal&lang=en')
+  })
+
+  it('navigates to a manifest-declared performer address over the LAN IP (#62)', () => {
+    act(() => {
+      useSessionStore.setState({
+        sessionLanIp: '192.168.1.10',
+        sessionHostAddress: 'mywork.local',
+      })
+    })
+    render(<MonitorView />)
+
+    // The origin follows the address actually injected as PNDS_HOST_IP —
+    // never the numeric selection it replaced.
+    expect(frameSrc()).toBe('http://mywork.local:6869/?theme=brutal&lang=en')
   })
 
   it('keeps the src frozen across a live theme switch (the bridge owns updates)', () => {

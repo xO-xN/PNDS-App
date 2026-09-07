@@ -30,12 +30,31 @@ pub struct Manifest {
     /// undeclared and never fail validation.
     #[serde(default, deserialize_with = "lenient_optional_bool")]
     pub telematic: Option<bool>,
+    /// v1.4.0 (issue #62): the performer connection address (a host string
+    /// like `mywork.local`) that replaces the LAN IPv4 injected as
+    /// `PNDS_HOST_IP`. The QR code and the monitor then show this address
+    /// instead of the numeric IP; absent falls back to the LAN selection
+    /// (today's behavior). Declaration-only — the Project keeps reading
+    /// the same variable, zero project changes.
+    #[serde(default)]
+    pub performer_address: Option<String>,
 }
 
 impl Manifest {
     /// True only when the work explicitly declares telematic capability.
     pub fn telematic(&self) -> bool {
         self.telematic == Some(true)
+    }
+
+    /// #62: the declared performer connection address — the trimmed string
+    /// when a non-empty `performerAddress` is present, `None` otherwise
+    /// (absent, `null` and blank all read as undeclared — preflight
+    /// tolerance, same shape as `telematic`).
+    pub fn performer_address(&self) -> Option<&str> {
+        self.performer_address
+            .as_deref()
+            .map(str::trim)
+            .filter(|address| !address.is_empty())
     }
 }
 
@@ -130,6 +149,31 @@ fn field_present(mut cur: &Value, path: &str) -> bool {
         }
     }
     !cur.is_null()
+}
+
+/// #62: validates a manifest-declared host address (RFC 1123 shape,
+/// tolerant of an IPv4 literal): dot-separated labels of letters, digits
+/// and hyphens — no scheme, port, path or empty labels. The reason string
+/// names the exact violation for the preflight error.
+fn validate_host_address(host: &str) -> Result<(), &str> {
+    if host.len() > 253 {
+        return Err("longer than the 253-character host limit");
+    }
+    for label in host.split('.') {
+        if label.is_empty() {
+            return Err("empty label — check for a leading, trailing or doubled dot");
+        }
+        if label.len() > 63 {
+            return Err("a label longer than 63 characters");
+        }
+        if !label.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+            return Err("only letters, digits and hyphens are allowed");
+        }
+        if label.starts_with('-') || label.ends_with('-') {
+            return Err("a label must not start or end with a hyphen");
+        }
+    }
+    Ok(())
 }
 
 fn get<'a>(value: &'a Value, path: &str) -> Option<&'a Value> {
@@ -227,6 +271,30 @@ fn validate_schema(value: &Value) -> Result<(), String> {
             }
         },
     };
+
+    // #62: the optional performer connection address. Absent/null is
+    // undeclared (LAN IP fallback); a blank string is tolerated as
+    // undeclared; anything present but malformed is a readable preflight
+    // error — the value lands verbatim in URLs, so a scheme, port or path
+    // must fail here, never at show time.
+    match get(value, "performerAddress") {
+        None | Some(Value::Null) => {}
+        Some(Value::String(raw)) => {
+            let trimmed = raw.trim();
+            if !trimmed.is_empty() {
+                if let Err(reason) = validate_host_address(trimmed) {
+                    return Err(format!(
+                        "performerAddress is not a valid host address ({reason}): \"{trimmed}\" — expected a bare host name like \"mywork.local\", without scheme, port or path"
+                    ));
+                }
+            }
+        }
+        Some(other) => {
+            return Err(format!(
+                "performerAddress must be a string (a host address like \"mywork.local\"), not {other}"
+            ));
+        }
+    }
 
     // manifest.md conditional requirements for internal mode.
     if modes.contains(&"internal") {
@@ -793,5 +861,89 @@ mod tests {
         assert!(manifest.telematic());
         let reserialized = serde_json::to_string(&manifest).unwrap();
         assert!(reserialized.contains("\"telematic\":true"));
+    }
+
+    /// Writes a none-mode manifest with a chosen `performerAddress` JSON
+    /// fragment (#62) prepended to the audio section.
+    fn write_manifest_with_address(dir: &Path, address_json: &str) {
+        write_manifest(
+            dir,
+            &format!(
+                r#"{{
+                  "schemaVersion": 1, "id": "x", "name": "X", "version": "0.1.0", {address_json}
+                  "scoreServer": {{ "entry": "server.js", "workingDirectory": ".", "performerPort": 6868, "monitorPort": 6869 }},
+                  "audio": {{ "defaultMode": "none", "supportedModes": ["none"] }}
+                }}"#
+            ),
+        );
+    }
+
+    /// #62: `performerAddress` is optional and tolerant — absent, `null`
+    /// and blank all read as undeclared (LAN IP fallback); a valid host
+    /// parses trimmed, and an IPv4 literal is a legal value.
+    #[test]
+    fn performer_address_absent_null_and_blank_read_as_undeclared() {
+        for (declared, expected) in [
+            (None, None),
+            (Some("null"), None),
+            (Some("\"   \""), None),
+            (Some("\" mywork.local \""), Some("mywork.local")),
+            (Some("\"stage.example.org\""), Some("stage.example.org")),
+            (Some("\"192.168.1.50\""), Some("192.168.1.50")),
+        ] {
+            let dir = tempfile::tempdir().unwrap();
+            write_valid_project(dir.path());
+            let field = declared
+                .map(|v| format!("\"performerAddress\": {v}, "))
+                .unwrap_or_default();
+            write_manifest_with_address(dir.path(), &field);
+            let manifest = load_manifest(dir.path())
+                .unwrap_or_else(|e| panic!("declared={declared:?} must validate: {e}"));
+            assert_eq!(
+                manifest.performer_address(),
+                expected,
+                "declared={declared:?}"
+            );
+        }
+    }
+
+    /// #62: malformed values fail preflight with readable errors naming the
+    /// field and the exact violation — the string lands verbatim in URLs,
+    /// so scheme/port/path/label mistakes must surface at load time.
+    #[test]
+    fn performer_address_rejects_malformed_values_readably() {
+        for (declared, reason) in [
+            ("\"http://mywork.local\"", "letters, digits and hyphens"),
+            ("\"mywork.local:6868\"", "letters, digits and hyphens"),
+            ("\"my work.local\"", "letters, digits and hyphens"),
+            ("\".local\"", "empty label"),
+            ("\"mywork..local\"", "empty label"),
+            ("\"-mywork.local\"", "must not start or end with a hyphen"),
+            ("\"mywork-.local\"", "must not start or end with a hyphen"),
+            ("42", "must be a string"),
+            ("[\"mywork.local\"]", "must be a string"),
+        ] {
+            let dir = tempfile::tempdir().unwrap();
+            write_valid_project(dir.path());
+            write_manifest_with_address(dir.path(), &format!("\"performerAddress\": {declared}, "));
+            let err = match load_manifest(dir.path()) {
+                Err(err) => err,
+                Ok(_) => panic!("declared={declared} must fail"),
+            };
+            assert!(err.contains("performerAddress"), "{declared}: {err}");
+            assert!(err.contains(reason), "{declared}: {err}");
+        }
+    }
+
+    /// #62: the declared address survives a parse→serialize round trip.
+    #[test]
+    fn performer_address_roundtrips() {
+        let dir = tempfile::tempdir().unwrap();
+        write_valid_project(dir.path());
+        write_manifest_with_address(dir.path(), "\"performerAddress\": \"mywork.local\", ");
+        let manifest = load_manifest(dir.path()).unwrap();
+        assert_eq!(manifest.performer_address(), Some("mywork.local"));
+        let reserialized = serde_json::to_string(&manifest).unwrap();
+        assert!(reserialized.contains("\"performerAddress\":\"mywork.local\""));
     }
 }

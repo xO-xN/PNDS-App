@@ -56,8 +56,10 @@ PNDS App 使用随包 ARM64 Node.js `24.18.1` 启动 score server。App 不调�
 所有模式：
 
 ```text
-PNDS_HOST_IP=<selected LAN IPv4>
+PNDS_HOST_IP=<selected LAN IPv4 | manifest performerAddress>
 ```
+
+v1.4.0（#62）：manifest 声明 `performerAddress`（如 `mywork.local`）时，`PNDS_HOST_IP` 的值被替换为该声明——工程零改动，仍读这个变量生成二维码与连接地址；未声明时注入所选 LAN IPv4（现行为）。声明格式与容错见 [manifest.md](./manifest.md)。
 
 Internal：
 
@@ -100,7 +102,7 @@ PNDS_HUB_ROOM={manifest.id}_{分组号}
 - Internal 的 target 始终由 App 动态分配；
 - App 不得使用 `audio.standaloneTarget`；
 - External target 是 App 本机、按工程保存的偏好，不写回 manifest；
-- `PNDS_HOST_IP` 必须与 App 用于 monitor 的 LAN 地址一致；
+- `PNDS_HOST_IP` 必须与 App 用于 monitor 的地址一致（v1.4.0 起该值可能是 manifest 声明的地址字符串，而不仅是 LAN IP）；
 - 工程可使用 `PNDS_HOST_IP` 生成 performer QR URL，不得从 monitor 请求的 host 推断。
 
 ## 4. HTTP 与网络

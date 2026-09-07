@@ -67,6 +67,7 @@ const idleSnapshot: SessionSnapshot = {
   projectPath: null,
   audioMode: null,
   lanIp: null,
+  hostAddress: null,
   oscTarget: null,
   health: null,
   error: null,

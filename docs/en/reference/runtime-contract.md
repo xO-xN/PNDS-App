@@ -56,8 +56,10 @@ Projects should treat Node 24 as the current official runtime baseline. `package
 All modes:
 
 ```text
-PNDS_HOST_IP=<selected LAN IPv4>
+PNDS_HOST_IP=<selected LAN IPv4 | manifest performerAddress>
 ```
+
+v1.4.0 (#62): when the manifest declares `performerAddress` (e.g. `mywork.local`), the `PNDS_HOST_IP` value is replaced by that declaration — zero project changes; the Project keeps reading this variable to build QR and connection addresses. Undeclared works inject the selected LAN IPv4 (today's behavior). Declaration format and tolerance: [manifest.md](./manifest.md).
 
 Internal:
 
@@ -84,7 +86,7 @@ Rules:
 - Internal's target is always allocated dynamically by the App;
 - the App must never use `audio.standaloneTarget`;
 - the External target is a preference local to the App machine, saved per Project, never written back to the manifest;
-- `PNDS_HOST_IP` must match the LAN address the App uses for the monitor;
+- `PNDS_HOST_IP` must match the address the App uses for the monitor (since v1.4.0 that value may be a manifest-declared address string, not only a LAN IP);
 - the Project may use `PNDS_HOST_IP` to build performer QR URLs; it must not infer the address from the host the monitor request came from.
 
 ## 4. HTTP and networking

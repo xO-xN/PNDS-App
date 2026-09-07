@@ -30,7 +30,7 @@ import {
 import { writeText } from '@tauri-apps/plugin-clipboard-manager'
 import i18n from '@/i18n/config'
 import { logger } from '@/lib/logger'
-import { buildMonitorUrl } from '@/lib/monitor-url'
+import { buildMonitorUrl, effectiveHostAddress } from '@/lib/monitor-url'
 import { notifications } from '@/lib/notifications'
 import { promptOpenProject } from '@/lib/open-project'
 import { checkForUpdates } from '@/lib/updater'
@@ -275,19 +275,31 @@ export async function buildAppMenu(): Promise<Menu> {
     })
 
     // v1.3.0 (#52): the permanent address segment. Each URL joins the
-    // selected project's manifest port with the settings-card LAN choice
-    // (the same value a start passes to Rust) through the monitor URL
-    // constructor — the copied text is by construction the same origin
-    // the monitor iframe navigates to. No project or no LAN yet → the
-    // items fall back to bare disabled labels, never a made-up address.
-    const lanIp = useSessionStore.getState().lanIp
-    const scoreServer =
-      useProjectStore.getState().currentProject?.manifest.scoreServer
+    // selected project's manifest port with the effective connection
+    // address through the monitor URL constructor — the copied text is by
+    // construction the same origin the monitor iframe navigates to.
+    // v1.4.0 (#62): while the menu describes the RUNNING session's own
+    // project, its snapshot `hostAddress` wins (a manifest-declared
+    // performer address replaced the IP); a roaming selection keeps its
+    // own derivation — the manifest's `performerAddress` declaration over
+    // the settings-card LAN choice, mirroring what Rust injects as
+    // `PNDS_HOST_IP`. No project or no address yet → the items fall back
+    // to bare disabled labels, never a made-up address.
+    const { lanIp, sessionHostAddress, sessionProjectPath } =
+      useSessionStore.getState()
+    const currentProject = useProjectStore.getState().currentProject
+    const manifest = currentProject?.manifest
+    const scoreServer = manifest?.scoreServer
+    const sessionOwnsSelection =
+      sessionHostAddress !== null && sessionProjectPath === currentProject?.path
+    const address =
+      (sessionOwnsSelection ? sessionHostAddress : null) ??
+      effectiveHostAddress(manifest?.performerAddress, lanIp)
     const addressUrls =
-      lanIp !== null && scoreServer
+      address !== null && scoreServer
         ? {
-            performer: buildMonitorUrl(lanIp, scoreServer.performerPort),
-            conductor: buildMonitorUrl(lanIp, scoreServer.monitorPort),
+            performer: buildMonitorUrl(address, scoreServer.performerPort),
+            conductor: buildMonitorUrl(address, scoreServer.monitorPort),
           }
         : null
 
@@ -432,9 +444,17 @@ export function setupMenuStateListener(): () => void {
     state => state.lanIp,
     rebuild
   )
+  // v1.4.0 (#62): a session start can replace the address mid-menu-life
+  // (manifest-declared performer address overrides the LAN choice).
+  const unsubHostAddress = subscribeIfChanged(
+    useSessionStore,
+    state => state.sessionHostAddress,
+    rebuild
+  )
   return () => {
     unsubProject()
     unsubSession()
+    unsubHostAddress()
   }
 }
 

@@ -36,6 +36,7 @@ const readySnapshot: SessionSnapshot = {
   projectPath: '/p',
   audioMode: 'none',
   lanIp: '192.168.1.10',
+  hostAddress: null,
   oscTarget: null,
   health: {
     status: 'ready',

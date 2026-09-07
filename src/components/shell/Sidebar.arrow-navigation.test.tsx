@@ -77,6 +77,7 @@ function seedRunningSession(currentPath: string) {
       projectPath: currentPath,
       audioMode: 'internal',
       lanIp: '192.168.1.10',
+      hostAddress: '192.168.1.10',
       oscTarget: null,
       health: readyHealth,
       error: null,

@@ -49,6 +49,7 @@ function snapshot(over: Partial<SessionSnapshot> = {}): SessionSnapshot {
     projectPath: '/p',
     audioMode: 'internal',
     lanIp: '192.168.1.10',
+    hostAddress: null,
     oscTarget: null,
     health: null,
     error: null,
