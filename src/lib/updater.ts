@@ -3,10 +3,11 @@
  * flow — check → typed outcome → download/install → restart — so the manual
  * entries (app menu, Settings About) and the boot auto-check can only share
  * it, never drift. Callers hand over rendering: outcomes go to a
- * UpdaterRenderer, and the default renderer draws toasts (the "available"
+ * UpdaterRenderer, and the default renderers draw toasts (the "available"
  * toast carries the install action — the old native confirm()/alert()s are
- * retired). v1.4.0's App-styled failure dialog (spec #57 item 4) plugs in
- * as a second renderer without touching this lifecycle.
+ * retired). v1.4.0's App-styled failure dialog (#60) is the second
+ * renderer, living in src/store/updater-store.ts — this lifecycle is
+ * untouched.
  */
 import { toast } from 'sonner'
 import { check, type Update } from '@tauri-apps/plugin-updater'
@@ -35,8 +36,8 @@ export type UpdaterInstallOutcome =
  * Rendering seam for update outcomes. The lifecycle never touches UI
  * primitives; it hands each outcome (and the action that continues the
  * flow — installing, restarting) to a renderer. The toast renderers below
- * are the first implementation; v1.4.0's App-styled failure dialog
- * (spec #57 item 4) becomes a second one.
+ * are the first implementation; the failure-dialog pair (v1.4.0 #60,
+ * src/store/updater-store.ts) is the second.
  */
 export interface UpdaterRenderer {
   /** An update is available; `install` runs download + install. */

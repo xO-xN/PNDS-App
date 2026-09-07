@@ -8,6 +8,7 @@ import {
 } from './lib/menu'
 import { setupHelpWindowBridge } from './lib/help-window'
 import { startBootUpdateCheck } from './lib/updater'
+import { bootFailureDialogRenderer } from './store/updater-store'
 import {
   initializeLanguage,
   languageSettingFromPrefs,
@@ -34,6 +35,7 @@ import {
   AppShell,
   CloseConfirmDialog,
   QuitConfirmDialog,
+  UpdaterFailureDialog,
 } from './components/shell'
 import { SettingsPanel } from './components/settings'
 import { ThemeProvider } from './components/ThemeProvider'
@@ -142,10 +144,13 @@ function App() {
     })
 
     // v1.3.2 (#74): the boot auto-check lives in the updater module — App
-    // only schedules it and cancels on unmount. Outcomes render through
-    // the module's boot toast renderer (silent unless an update exists);
-    // the old inline flow with native confirm()/alert() is retired.
-    const cancelBootUpdateCheck = startBootUpdateCheck()
+    // only schedules it and cancels on unmount. v1.4.0 (#60): failures
+    // hand over to the dialog renderer — the App-styled failure dialog —
+    // while an available update still toasts; the old inline flow with
+    // native confirm()/alert() is retired.
+    const cancelBootUpdateCheck = startBootUpdateCheck(
+      bootFailureDialogRenderer
+    )
     return () => {
       cancelBootUpdateCheck()
       window.removeEventListener('beforeunload', onBeforeUnload)
@@ -192,6 +197,9 @@ function App() {
         <CloseConfirmDialog />
         {/* v1.1.2 T7: quit-confirm (⌘Q with a live session) — same rule. */}
         <QuitConfirmDialog />
+        {/* v1.4.0 (#60): update failures (boot or manual check) land on
+            the App-styled dialog — same rule. */}
+        <UpdaterFailureDialog />
         {/* v1.2.0 (issue #13): the settings panel — reachable in every
             window state, like the confirm dialogs above. */}
         <SettingsPanel />

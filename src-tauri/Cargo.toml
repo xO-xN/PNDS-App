@@ -53,6 +53,14 @@ specta-typescript = "=0.0.9"
 tauri-plugin-single-instance = "2"
 tauri-plugin-updater = "2"
 tauri-plugin-window-state = "2"
+# v1.4.0 (#60): the updater plugin builds its reqwest client with
+# `default-features = false`, so reqwest's `system-proxy` default (macOS
+# System Settings via hyper-util's client-proxy-system → system-
+# configuration) is off in its dependency edge. Cargo unifies features per
+# crate across the graph, so this zero-code direct dependency exists only
+# to switch that feature on — the updater's client then honors the proxy
+# configured in macOS System Settings (env vars were already read).
+reqwest = { version = "0.13", default-features = false, features = ["system-proxy"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # NSWindow.alphaValue for the §7.4 whole-window fade (Tauri v2 removed

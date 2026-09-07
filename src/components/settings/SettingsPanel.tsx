@@ -6,6 +6,7 @@ import { applyLanguageSetting } from '@/i18n/language-init'
 import { logger } from '@/lib/logger'
 import { notifications } from '@/lib/notifications'
 import { checkForUpdates } from '@/lib/updater'
+import { manualFailureDialogRenderer } from '@/store/updater-store'
 import { commands } from '@/lib/tauri-bindings'
 import {
   applyColorThemeSetting,
@@ -206,7 +207,9 @@ export function SettingsPanel() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => void checkForUpdates()}
+              // v1.4.0 (#60): failures open the App-styled failure
+              // dialog; toast outcomes are unchanged.
+              onClick={() => void checkForUpdates(manualFailureDialogRenderer)}
             >
               {t('menu.checkForUpdates')}
             </Button>

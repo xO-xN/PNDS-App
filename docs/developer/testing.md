@@ -122,7 +122,7 @@ test('component renders', () => {
 
 ### Testing Zustand Stores
 
-The stores in `src/store/` (project, session, settings, window, keyboard) are plain Zustand stores — tests seed state with `setState`, call actions through `getState()`, and assert on `getState()` (see `src/store/settings-store.test.ts`):
+The stores in `src/store/` (project, session, settings, window, keyboard, updater) are plain Zustand stores — tests seed state with `setState`, call actions through `getState()`, and assert on `getState()` (see `src/store/settings-store.test.ts`):
 
 ```typescript
 import { useSettingsStore } from '@/store/settings-store'

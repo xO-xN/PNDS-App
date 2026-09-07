@@ -92,7 +92,15 @@ Then GitHub Actions will:
 4. Generate `latest.json` for auto-updates
 5. Upload all installers and signatures
 
-Finally, manually publish the draft release on GitHub.
+Finally, run the manual verification checklist below, then publish the
+draft release on GitHub.
+
+### Manual verification before publishing
+
+- **Updater proxies (v1.4.0, #60)** — on a real machine:
+  1. System Settings → Network → Proxies pointing at a local proxy (e.g. Charles/mitmproxy): launch the App, run Check for Updates, confirm the request appears in the proxy's log.
+  2. `launchctl setenv https_proxy http://127.0.0.1:7890` (see [Proxies](#proxies-v140-issue-60)), relaunch the App, repeat the check.
+  3. Point the proxy at a dead address: the boot auto-check and the manual check must both open the failure dialog — copy the error, open the Releases page.
 
 ### Manual Method
 
@@ -126,7 +134,7 @@ All three files must have matching versions:
 - Checks for updates 5 seconds after app launch (boot path)
 - "Update available" toast carries an **Install** action button (no native `confirm()`/`alert()` anywhere on the update paths)
 - Downloads and installs in background, then offers a **Restart** toast action
-- Boot path stays silent on "up to date" and check failures (typically transient network issues); the manual path toasts every outcome
+- Boot path stays silent on "up to date"; v1.4.0 (#60): a check **or** install failure on either path (boot and manual) opens the App-styled failure dialog — full copyable error text plus an **Open Releases Page** action for a manual download. The manual path toasts the up-to-date outcome as before
 
 ### Update Flow
 
@@ -141,7 +149,22 @@ The whole lifecycle lives in `src/lib/updater.ts` — one module, both entries:
 - `checkForUpdates()` — the manual entry (app menu item, Settings About button)
 - `startBootUpdateCheck()` — the boot entry; `App.tsx` only schedules it and cancels on unmount
 
-The check resolves to a typed outcome (`available` / `up-to-date` / `check-failed`), and install to `installed` / `install-failed`. Outcomes are handed to a `UpdaterRenderer` — a pure rendering seam. The two renderers today are toasts (`manualToastRenderer`, `bootToastRenderer`); v1.4.0's App-styled failure dialog (spec #57 item 4) plugs in as a second renderer without touching the lifecycle. All copy lives in `/locales` under `updater.*` (en + zh-CN). Collocated tests: `src/lib/updater.test.ts`.
+The check resolves to a typed outcome (`available` / `up-to-date` / `check-failed`), and install to `installed` / `install-failed`. Outcomes are handed to a `UpdaterRenderer` — a pure rendering seam. The toast renderers (`manualToastRenderer`, `bootToastRenderer`) draw the available/installed toasts; the failure-dialog renderer pair (v1.4.0, #60 — `manualFailureDialogRenderer` / `bootFailureDialogRenderer` in `src/store/updater-store.ts`) escalates check/install failures to the App-styled dialog (`UpdaterFailureDialog`) by spreading the toast renderers and overriding only the two failure outcomes — the lifecycle itself is untouched. The three entries hand the renderers in: the app menu item and the Settings About button (manual), `App.tsx`'s boot auto-check (boot). All copy lives in `/locales` under `updater.*` (en + zh-CN). Collocated tests: `src/lib/updater.test.ts` (lifecycle + toast renderers), `src/store/updater-store.test.ts` + `src/components/shell/UpdaterFailureDialog.test.tsx` (dialog renderer + dialog).
+
+### Proxies (v1.4.0, issue #60)
+
+The updater's HTTP client honors the network the Mac actually sits on — no proxy settings in `tauri.conf.json`:
+
+- **macOS System Settings proxy**: `src-tauri` declares a zero-code direct dependency on `reqwest` (`default-features = false` + the `system-proxy` feature). The updater plugin builds its own client with `default-features = false`, so the feature is off on its edge; Cargo unifies features per crate across the graph, so our edge switches it on for the whole build (verify: `system-configuration` appears in `Cargo.lock`'s hyper-util deps). Proxies configured in System Settings → Network → Proxies are then read by the updater's client.
+- **Environment variables** (`http_proxy` / `https_proxy` / `no_proxy`) are read too, but macOS GUI apps do not inherit shell variables — set them for the GUI session with `launchctl` and restart the app:
+
+```bash
+launchctl setenv https_proxy http://127.0.0.1:7890
+launchctl setenv http_proxy http://127.0.0.1:7890
+# remove again with: launchctl unsetenv https_proxy
+```
+
+Proxy behavior is a Cargo-feature effect — there is nothing to unit-test; it is verified on a real machine as a pre-publish checklist item (see [Manual verification before publishing](#manual-verification-before-publishing)). When a check or install fails behind a broken proxy, the failure dialog is the operator's way out: copy the error, open the Releases page, download manually.
 
 ## Release Artifacts
 
@@ -160,9 +183,10 @@ All updates are cryptographically signed:
 
 ## Troubleshooting
 
-| Issue                    | Solution                                              |
-| ------------------------ | ----------------------------------------------------- |
-| Workflow doesn't trigger | Ensure tag starts with `v` and is pushed              |
-| Build fails              | Check GitHub secrets, run `npm run check:all` locally |
-| Updates not detected     | Verify endpoint URL and public key match              |
-| Download fails           | Check signatures, file permissions, disk space        |
+| Issue                    | Solution                                                                            |
+| ------------------------ | ----------------------------------------------------------------------------------- |
+| Workflow doesn't trigger | Ensure tag starts with `v` and is pushed                                            |
+| Build fails              | Check GitHub secrets, run `npm run check:all` locally                               |
+| Updates not detected     | Verify endpoint URL and public key match                                            |
+| Download fails           | Check signatures, file permissions, disk space                                      |
+| Check fails behind proxy | See [Proxies](#proxies-v140-issue-60) — System Settings proxy or `launchctl setenv` |
