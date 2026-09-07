@@ -268,9 +268,11 @@ vi.mock('@/lib/tauri-bindings', async () => {
         },
       }),
     },
-    unwrapResult: vi.fn((result: { status: string; data?: unknown }) => {
-      if (result.status === 'ok') return result.data
-      throw result
-    }),
+    expectOk: vi.fn(
+      (result: { status: string; data?: unknown; error?: unknown }) => {
+        if (result.status === 'ok') return result.data
+        throw new Error(String(result.error))
+      }
+    ),
   }
 })

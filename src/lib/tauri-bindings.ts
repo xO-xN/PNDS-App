@@ -1,17 +1,17 @@
 /**
  * Re-export generated Tauri bindings with project conventions
  *
- * This file provides type-safe access to all Tauri commands.
+ * This file provides type-safe access to all Tauri commands and events.
  * Types are auto-generated from Rust by tauri-specta.
  *
  * @example
  * ```typescript
- * import { commands, unwrapResult } from '@/lib/tauri-bindings'
+ * import { commands, expectOk } from '@/lib/tauri-bindings'
  *
- * // In a throwing boundary - let errors propagate
- * const prefs = unwrapResult(await commands.loadPreferences())
+ * // Fail-fast boundary - let errors propagate to an existing catch
+ * const prefs = expectOk(await commands.loadPreferences())
  *
- * // In event handlers - explicit error handling
+ * // Contextual handling (the common case) - explicit error branch
  * const result = await commands.savePreferences(prefs)
  * if (result.status === 'error') {
  *   toast.error(result.error)
@@ -49,13 +49,21 @@ export type {
 } from './bindings'
 
 /**
- * Helper to unwrap a Result type, throwing on error
+ * Unwrap a command Result at a fail-fast boundary: the data, or an
+ * `Error` carrying the backend's message — never a bare string (those
+ * lose the stack and defeat logger formatting).
+ *
+ * Most call sites in this codebase deliberately keep an explicit
+ * `result.status === 'error'` branch instead: each logs with its own
+ * context and applies the right UX (toast, store fail-state, silent
+ * fallback). Reach for `expectOk` only when a failure should propagate
+ * as an exception into an existing catch.
  */
-export function unwrapResult<T, E>(
+export function expectOk<T, E>(
   result: { status: 'ok'; data: T } | { status: 'error'; error: E }
 ): T {
   if (result.status === 'ok') {
     return result.data
   }
-  throw result.error
+  throw new Error(String(result.error))
 }

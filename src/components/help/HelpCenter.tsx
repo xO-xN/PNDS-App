@@ -22,7 +22,7 @@ import {
 import { HELP_WINDOW_LABEL } from '@/lib/help-window'
 import { logger } from '@/lib/logger'
 import { splitTextOnTerms } from '@/lib/help-markdown'
-import { commands } from '@/lib/tauri-bindings'
+import { commands, expectOk } from '@/lib/tauri-bindings'
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
 import { HelpMarkdown } from './HelpMarkdown'
@@ -114,10 +114,7 @@ export function HelpCenterApp({
       try {
         const result = await commands.helpCorpus(locale)
         if (stale) return
-        if (result.status === 'error') {
-          throw new Error(String(result.error))
-        }
-        const loaded = buildHelpCorpus(result.data)
+        const loaded = buildHelpCorpus(expectOk(result))
         if (stale) return
         setCorpus(loaded)
         setIndex(buildHelpIndex(loaded))

@@ -52,15 +52,15 @@ if (result.status === 'error') {
 toast.success('Saved!')
 ```
 
-### unwrapResult Helper
+### expectOk Helper
 
-For cases where you want errors to propagate (throw) rather than handle them inline, use the `unwrapResult` helper:
+For cases where you want errors to propagate (throw) rather than handle them inline, use the `expectOk` helper. It throws a real `Error` carrying the backend's message — never a bare string (those lose the stack and defeat logger formatting):
 
 ```typescript
-import { commands, unwrapResult } from '@/lib/tauri-bindings'
+import { commands, expectOk } from '@/lib/tauri-bindings'
 
 // Throws on error, returns data on success
-const preferences = unwrapResult(await commands.loadPreferences())
+const preferences = expectOk(await commands.loadPreferences())
 ```
 
 **When to use each pattern:**
@@ -68,7 +68,13 @@ const preferences = unwrapResult(await commands.loadPreferences())
 | Pattern          | Use When                                                       |
 | ---------------- | -------------------------------------------------------------- |
 | Manual `if/else` | The default — event handlers, on-mount fetches, flow modules   |
-| `unwrapResult`   | Rare throwing boundaries where a catch suits the caller better |
+| `expectOk`       | Rare throwing boundaries where a catch suits the caller better |
+
+Most call sites in this codebase deliberately keep the explicit
+`result.status === 'error'` branch: each logs with its own context and
+applies the right UX (toast, store fail-state, silent fallback). Reach
+for `expectOk` only when a failure should propagate into an existing
+catch boundary.
 
 **On-mount fetch example** (the standard data-fetching pattern):
 
@@ -103,6 +109,32 @@ const handleSave = async () => {
   toast.success('Preferences saved!')
 }
 ```
+
+## Events (Rust → React)
+
+The reverse channel is typed the same way as commands: every event is a
+payload struct in `src-tauri/src/events.rs`, registered in
+`events_builder` (`collect_events!`). tauri-specta derives the wire name
+from the struct's name and regenerates the frontend's `events` object —
+run `npm run rust:bindings` after touching the event set.
+
+**Never call `listen`/`emit` with a hand-typed string.** Subscribe
+through `src/lib/events.ts`, which adds the lifecycle convention
+(`onX(cb)` returns a synchronous unsubscribe) and unwraps the generated
+payload. The help-window protocol (`emitTo`-targeted: navigate / locale
+/ theme) has no generated form — its names are held in `events.ts` too,
+the single module that knows them.
+
+```typescript
+import { onSessionSnapshot } from '@/lib/events'
+
+useEffect(() => onSessionSnapshot(snapshot => apply(snapshot)), [])
+```
+
+To add an event: define the payload struct in `events.rs`, add it to
+`events_builder`'s `collect_events!`, emit via `Event::emit` on the Rust
+side, regenerate bindings, then add an `onX` helper in `events.ts` if a
+component needs it.
 
 ## Adding New Commands
 
