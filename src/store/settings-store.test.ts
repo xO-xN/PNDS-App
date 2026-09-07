@@ -67,4 +67,29 @@ describe('settings-store (v1.2.0 issue #13: settings panel state)', () => {
     useSettingsStore.getState().setColorThemeSetting('sand')
     expect(useSettingsStore.getState().colorThemeSetting).toBe('sand')
   })
+
+  // #58: the Node section's identity trio and the room groups — empty
+  // until App.tsx seeds the saved values at startup (the「设置节点」gate
+  // reads completeness from these, so unset must read as blank, not
+  // undefined).
+  it('defaults the node config to blank and stores changes', () => {
+    const store = useSettingsStore.getState()
+    expect(store.nodeNameSetting).toBe('')
+    expect(store.hubUrlSetting).toBe('')
+    expect(store.hubTokenSetting).toBe('')
+    expect(store.hubRooms).toEqual({})
+    expect(store.hostnameHint).toBe('')
+
+    store.setNodeNameSetting('Concert-MacBook')
+    store.setHubUrlSetting('wss://hub.example.org:3000')
+    store.setHubTokenSetting('secret-token')
+    store.setHostnameHint('Concert-MacBook.local')
+    useSettingsStore.getState().setHubRooms({ 'inarticulate-iii': 2 })
+    const next = useSettingsStore.getState()
+    expect(next.nodeNameSetting).toBe('Concert-MacBook')
+    expect(next.hubUrlSetting).toBe('wss://hub.example.org:3000')
+    expect(next.hubTokenSetting).toBe('secret-token')
+    expect(next.hostnameHint).toBe('Concert-MacBook.local')
+    expect(next.hubRooms).toEqual({ 'inarticulate-iii': 2 })
+  })
 })

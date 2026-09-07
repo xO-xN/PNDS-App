@@ -63,7 +63,6 @@ function seedRunningSession(
     muted: false,
     prevVolume: 0,
     channelPlan: null,
-    deviceError: null,
     oscTargetInput: '127.0.0.1:3333',
     lanIp: '192.168.1.10',
     lanAddresses: ['192.168.1.10'],

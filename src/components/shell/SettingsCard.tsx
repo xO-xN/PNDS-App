@@ -1,16 +1,13 @@
-import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Volume2, VolumeX } from 'lucide-react'
-import { toast } from 'sonner'
 import { useProjectStore } from '@/store/project-store'
 import { isSessionLive, useSessionStore } from '@/store/session-store'
-import { commands } from '@/lib/tauri-bindings'
-import { logger } from '@/lib/logger'
+import { useSettingsStore } from '@/store/settings-store'
 import {
   isValidOscTarget,
+  ROOM_GROUPS,
   updateOscTarget,
   updatePreferences,
-  SYSTEM_DEFAULT_DEVICE,
 } from '@/lib/preferences'
 import {
   fixedGainFrom,
@@ -34,8 +31,6 @@ const MODE_LABELS: Record<string, string> = {
   none: 'None',
 }
 
-let missingDeviceWarned = false
-
 /**
  * Sidebar settings card (§10.2), rendered as the body of the card whose
  * footer is the session action button.
@@ -47,6 +42,15 @@ let missingDeviceWarned = false
  * deferred rows therefore sit directly above the button that applies them.
  *
  * OSC target is hidden unless the selected mode is "external" (§6.6).
+ *
+ * #58: the card carries only per-performance rows now. The output device
+ * moved to the settings Audio section and the LAN address to the Node
+ * section; the Room dropdown joined for works that declare telematic
+ * capability — the App-global group number (1–3) the hub room derives
+ * from (`{manifest.id}_{group}`). The dropdown never resets (crash
+ * recovery must land back in the same group's room, ADR-0004), shows only
+ * the number, and a change applies at the next start without flagging
+ * Change: the running session's room was fixed at its spawn.
  */
 export interface SettingsCardProps {
   /** Overlay mode: report while any popup menu is open so the host can
@@ -61,19 +65,8 @@ export function SettingsCard({ onPopupOpenChange }: SettingsCardProps) {
   const sessionStatus = useSessionStore(state => state.sessionStatus)
   const sessionProjectPath = useSessionStore(state => state.sessionProjectPath)
   const audioMode = useSessionStore(state => state.audioMode)
-  const lanIp = useSessionStore(state => state.lanIp)
-  const lanAddresses = useSessionStore(state => state.lanAddresses)
-  const outputDevice = useSessionStore(state => state.outputDevice)
   const oscTargetInput = useSessionStore(state => state.oscTargetInput)
-  const [devices, setDevices] = useState<
-    {
-      name: string
-      isDefault: boolean
-      maxOutputChannels: number
-    }[]
-  >([])
-  // §6.3: capability failure lives in the store so canStart can gate Load.
-  const deviceError = useSessionStore(state => state.deviceError)
+  const hubRooms = useSettingsStore(state => state.hubRooms)
 
   // v1.2.3 (#39/T4): the settings rows follow the SELECTION. While a
   // different card is selected over a live session, the deferred rows hold
@@ -93,63 +86,14 @@ export function SettingsCard({ onPopupOpenChange }: SettingsCardProps) {
 
   // §3.3: outputChannels defaults to 2 when the manifest omits it.
   const projectChannels = currentProject?.manifest.audio.outputChannels ?? 2
-  // §7.6: device capabilities are relative to the project sample rate.
-  const sampleRate = currentProject?.manifest.audio.scsynth?.sampleRate ?? null
-  // §6.3: the device list only matters for internal mode; anything else is
-  // a safe empty state (nothing to gate, nothing to show).
-  const deviceQueryActive =
-    projectLoaded && audioMode === 'internal' && sampleRate !== null
 
-  useEffect(() => {
-    // §6.3: without an internal project the list is a safe empty state —
-    // the render guards below ignore any stale list, so no state reset here.
-    const rate = sampleRate
-    if (!deviceQueryActive || rate === null) return
-    let stale = false
-    void commands.listOutputDevices(rate).then(result => {
-      // §6.3: a fast project switch must not let the old sample rate's
-      // response overwrite the new selection.
-      if (stale) return
-      if (result.status !== 'ok') {
-        logger.warn('Failed to list output devices', { error: result.error })
-        setDevices([])
-        useSessionStore.getState().setDeviceError(result.error)
-        return
-      }
-      setDevices(result.data.devices)
-      useSessionStore.getState().setDeviceError(null)
-      const saved = useSessionStore.getState().outputDevice
-      if (
-        saved !== SYSTEM_DEFAULT_DEVICE &&
-        !result.data.devices.some(device => device.name === saved) &&
-        !missingDeviceWarned
-      ) {
-        missingDeviceWarned = true
-        useSessionStore.getState().setOutputDevice(SYSTEM_DEFAULT_DEVICE)
-        void updatePreferences({ outputDevice: null })
-        toast.info(
-          `Saved output device "${saved}" is not available; using the system default.`
-        )
-      }
-    })
-    return () => {
-      stale = true
-    }
-  }, [deviceQueryActive, sampleRate])
-
-  // §6.3: capability of the currently selected entry — the system default
-  // row reflects the real default device's channels.
-  const selectedDefaultChannels = devices.find(
-    device => device.isDefault
-  )?.maxOutputChannels
-  const selectedChannels =
-    outputDevice === SYSTEM_DEFAULT_DEVICE
-      ? selectedDefaultChannels
-      : devices.find(device => device.name === outputDevice)?.maxOutputChannels
-  const insufficient =
-    deviceQueryActive &&
-    selectedChannels !== undefined &&
-    selectedChannels < projectChannels
+  // #58: Room appears only for works that declare telematic capability.
+  // The group reads this project's persisted choice — absent = 1 — and a
+  // change writes it back per project (never reset, never reset-to-1).
+  const telematic = currentProject?.manifest.telematic === true
+  const roomGroup = telematic
+    ? (hubRooms[currentProject.manifest.id] ?? 1)
+    : null
 
   // §7.5 (#30): the fixed-gain / adjustable derivations live in
   // volume-control as pure functions; subscribing with them keeps the
@@ -193,18 +137,21 @@ export function SettingsCard({ onPopupOpenChange }: SettingsCardProps) {
     toggleMasterMute()
   }
 
-  const handleDeviceChange = (device: string) => {
-    useSessionStore.getState().setOutputDevice(device)
-    void updatePreferences({
-      outputDevice: device === SYSTEM_DEFAULT_DEVICE ? null : device,
-    })
-    flagChange()
-  }
-
   const commitOscTarget = () => {
     if (!oscTargetValid || !currentProject) return
     void updateOscTarget(currentProject.manifest.id, oscTargetInput)
     flagChange()
+  }
+
+  const handleRoomChange = (group: string) => {
+    const projectId = currentProject?.manifest.id
+    if (!telematic || !projectId) return
+    const rooms = {
+      ...useSettingsStore.getState().hubRooms,
+      [projectId]: Number(group),
+    }
+    useSettingsStore.getState().setHubRooms(rooms)
+    void updatePreferences({ hubRooms: rooms })
   }
 
   // Every row shares one label gutter, including the volume row (its icon
@@ -215,8 +162,6 @@ export function SettingsCard({ onPopupOpenChange }: SettingsCardProps) {
   const fieldClass =
     'h-7 bg-(--pnds-pill) text-[12px] text-(--pnds-text) outline-none transition-colors hover:bg-(--pnds-pill-hover) disabled:text-(--pnds-text)/30 disabled:hover:bg-(--pnds-pill)'
   const selectClass = `${fieldClass} w-full appearance-none rounded-lg pl-2.5 pr-6`
-  const hintRowClass =
-    'flex items-center gap-2 pl-14 text-[11px] leading-tight text-(--pnds-danger)'
 
   return (
     <div
@@ -345,173 +290,40 @@ export function SettingsCard({ onPopupOpenChange }: SettingsCardProps) {
         </div>
       )}
 
-      {/* Output device (§6.3): each entry shows its channel count at the
-          project sample rate; entries with fewer channels than the project
-          instead carry the red "Nch → Hch" loss text as their marker, stay
-          selectable (no real disabled state) and get an sr-only explanation.
-          The persistent loss indicator in the CLOSED trigger is just a
-          small red dot (v1.2.0: a full badge used to widen the trigger's
-          right side and crowd the device name) — the specifics live in the
-          dot's tooltip/sr-only text and in the opened list. Preference
-          only — deferred until Change. */}
-      <div className="flex items-center gap-2">
-        <span className={labelClass}>Device</span>
-        <div className="relative flex-1">
-          <Select
-            value={outputDevice}
-            onValueChange={handleDeviceChange}
-            onOpenChange={open => onPopupOpenChange?.(open)}
-            disabled={!deviceQueryActive}
-          >
-            <SelectTrigger
-              aria-label={t('sidebar.outputDevice')}
-              className={cn(
-                selectClass,
-                'border-0 shadow-none focus-visible:ring-0'
-              )}
+      {/* #58: Room — the telematic group number. The derived room name is
+          deliberately invisible here: the operator coordinates numbers,
+          the project-side monitor shows the full derived name when
+          diagnosing. Applies at the next start; never flags Change. */}
+      {telematic && roomGroup !== null && (
+        <div className="flex items-center gap-2">
+          <span className={labelClass}>{t('sidebar.room')}</span>
+          <div className="relative flex-1">
+            <Select
+              value={String(roomGroup)}
+              onValueChange={handleRoomChange}
+              onOpenChange={open => onPopupOpenChange?.(open)}
             >
-              <span className="flex min-w-0 flex-1 items-center justify-between gap-1.5 text-start">
-                <span className="truncate">
-                  {outputDevice === SYSTEM_DEFAULT_DEVICE
-                    ? t('sidebar.systemDefault')
-                    : outputDevice}
-                </span>
-                {insufficient && (
-                  <span
-                    data-testid="device-insufficient-hint"
-                    title={t('sidebar.deviceInsufficient', {
-                      projectChannels,
-                      deviceChannels: selectedChannels,
-                    })}
-                    className="flex shrink-0 items-center"
-                  >
-                    <span
-                      aria-hidden="true"
-                      className="size-1.5 rounded-full bg-(--pnds-danger)"
-                    />
-                    <span className="sr-only">
-                      {t('sidebar.deviceInsufficient', {
-                        projectChannels,
-                        deviceChannels: selectedChannels,
-                      })}
-                    </span>
-                  </span>
+              <SelectTrigger
+                aria-label={t('sidebar.room')}
+                className={cn(
+                  selectClass,
+                  'border-0 shadow-none focus-visible:ring-0',
+                  'font-manrope'
                 )}
-              </span>
-            </SelectTrigger>
-            <SelectContent side="top">
-              {deviceQueryActive && (
-                <>
-                  <SelectItem value={SYSTEM_DEFAULT_DEVICE}>
-                    <span className="flex min-w-0 flex-1 items-center gap-1.5">
-                      <span className="truncate">
-                        {t('sidebar.systemDefault')}
-                      </span>
-                      {selectedDefaultChannels !== undefined && (
-                        <span className="shrink-0 text-(--pnds-text)/45">
-                          {t('sidebar.deviceChannelCount', {
-                            channels: selectedDefaultChannels,
-                          })}
-                        </span>
-                      )}
-                    </span>
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent side="top">
+                {ROOM_GROUPS.map(group => (
+                  <SelectItem key={group} value={String(group)}>
+                    {group}
                   </SelectItem>
-                  {devices.map(device => {
-                    const insufficient =
-                      device.maxOutputChannels < projectChannels
-                    return (
-                      <SelectItem
-                        key={device.name}
-                        value={device.name}
-                        className={cn(
-                          'pr-9',
-                          insufficient && 'opacity-40 hover:opacity-60'
-                        )}
-                      >
-                        <span className="flex min-w-0 flex-1 items-center gap-1.5">
-                          <span className="truncate">{device.name}</span>
-                          <span
-                            className={cn(
-                              'shrink-0',
-                              insufficient
-                                ? 'font-manrope text-[10px] leading-none font-semibold text-(--pnds-danger)'
-                                : 'text-(--pnds-text)/45'
-                            )}
-                          >
-                            {insufficient
-                              ? t('sidebar.deviceInsufficient', {
-                                  projectChannels,
-                                  deviceChannels: device.maxOutputChannels,
-                                })
-                              : t('sidebar.deviceChannelCount', {
-                                  channels: device.maxOutputChannels,
-                                })}
-                          </span>
-                          {insufficient && (
-                            <span className="sr-only">
-                              {t('sidebar.deviceInsufficientHint', {
-                                deviceChannels: device.maxOutputChannels,
-                                projectChannels,
-                                loss:
-                                  projectChannels - device.maxOutputChannels,
-                              })}
-                            </span>
-                          )}
-                        </span>
-                      </SelectItem>
-                    )
-                  })}
-                </>
-              )}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      {/* §6.3: capability query failed — readable inline error, Load stays
-          gated (canStart) until the query succeeds. */}
-      {deviceError && audioMode === 'internal' && projectLoaded && (
-        <div data-testid="device-error" className={hintRowClass}>
-          {t('sidebar.deviceListFailed')}
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       )}
-
-      {/* LAN address (replaces Figma — §7: explicit choice required).
-          Always visible: the row is shown even with a single address so
-          it never disappears between preflight states; the select is
-          disabled only when no address is known yet. */}
-      <div className="flex items-center gap-2">
-        <span className={labelClass}>LAN</span>
-        <div className="relative flex-1">
-          <Select
-            value={lanIp ?? ''}
-            onValueChange={ip => {
-              useSessionStore.getState().setLanIp(ip)
-              flagChange()
-            }}
-            onOpenChange={open => onPopupOpenChange?.(open)}
-            disabled={lanAddresses.length === 0}
-          >
-            <SelectTrigger
-              aria-label={t('session.lanAddress')}
-              className={cn(
-                selectClass,
-                'border-0 shadow-none focus-visible:ring-0',
-                'font-manrope'
-              )}
-            >
-              {lanIp ?? t('session.lanAddressHint')}
-            </SelectTrigger>
-            <SelectContent side="top">
-              {lanAddresses.map(ip => (
-                <SelectItem key={ip} value={ip}>
-                  {ip}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
     </div>
   )
 }

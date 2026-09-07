@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { isNodeConfigComplete, ROOM_GROUPS } from './preferences'
 import { commands, type AppPreferences } from '@/lib/tauri-bindings'
 import {
   updatePreferences,
@@ -126,5 +127,21 @@ describe('isValidOscTarget (§6.6: host:port, port 1-65535)', () => {
     ['host:65536', false],
   ])('%s → %s', (target, expected) => {
     expect(isValidOscTarget(target)).toBe(expected)
+  })
+})
+
+describe('isNodeConfigComplete (#58: completeness only, never connectivity)', () => {
+  it('is set only when all three fields hold non-blank values', () => {
+    expect(isNodeConfigComplete('Node', 'wss://hub', 'token')).toBe(true)
+    expect(isNodeConfigComplete(null, 'wss://hub', 'token')).toBe(false)
+    expect(isNodeConfigComplete('Node', '', 'token')).toBe(false)
+    expect(isNodeConfigComplete('Node', 'wss://hub', undefined)).toBe(false)
+    // Whitespace-only counts as unset, mirroring the Rust resolver.
+    expect(isNodeConfigComplete('  ', 'wss://hub', 'token')).toBe(false)
+    expect(isNodeConfigComplete('Node', ' \t ', 'token')).toBe(false)
+  })
+
+  it('offers exactly the Room dropdown groups 1-3', () => {
+    expect(ROOM_GROUPS).toEqual([1, 2, 3])
   })
 })

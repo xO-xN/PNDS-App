@@ -9,19 +9,15 @@ import {
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { commands } from '@/lib/tauri-bindings'
-import { toast } from 'sonner'
 import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
+import { useSettingsStore } from '@/store/settings-store'
 import { useWindowStore } from '@/store/window-store'
 import { Sidebar } from './Sidebar'
 import type { Manifest, SessionSnapshot } from '@/lib/tauri-bindings'
 
 vi.mock('@tauri-apps/plugin-opener', () => ({
   openUrl: vi.fn().mockResolvedValue(undefined),
-}))
-
-vi.mock('sonner', () => ({
-  toast: { info: vi.fn(), error: vi.fn() },
 }))
 
 const manifest: Manifest = {
@@ -55,25 +51,10 @@ const manifest16: Manifest = {
   },
 }
 
-/** Same project at a different sample rate — for the stale-response race. */
-const manifest96: Manifest = {
+/** #58: the same work declaring cross-internet (telematic) capability. */
+const manifestTelematic: Manifest = {
   ...manifest,
-  audio: {
-    ...manifest.audio,
-    scsynth: { sampleRate: 96000, blockSize: 64, audioBusChannels: 128 },
-  },
-}
-
-/** §6.3 test fixture: a 2ch default device + a 16ch interface. */
-const deviceList = {
-  status: 'ok' as const,
-  data: {
-    devices: [
-      { name: 'Mac mini Speakers', isDefault: true, maxOutputChannels: 2 },
-      { name: 'BlackHole 16ch', isDefault: false, maxOutputChannels: 16 },
-    ],
-    sampleRate: 48000,
-  },
+  telematic: true,
 }
 
 const PROJECT_PATH = '/Users/test/Inarticulate III'
@@ -111,7 +92,6 @@ function seedLoadedProject() {
     oscTargetInput: '127.0.0.1:3333',
     outputDevice: 'System default',
     pendingChanges: false,
-    deviceError: null,
   })
 }
 
@@ -130,17 +110,7 @@ function seedLoadedProject16() {
     oscTargetInput: '127.0.0.1:3333',
     outputDevice: 'System default',
     pendingChanges: false,
-    deviceError: null,
   })
-}
-
-/** §6.3: pick an entry in the Radix device select (open trigger → option). */
-async function pickOutputDevice(
-  user: ReturnType<typeof userEvent.setup>,
-  label: string | RegExp
-) {
-  await user.click(screen.getByRole('combobox', { name: /output device/i }))
-  await user.click(await screen.findByRole('option', { name: label }))
 }
 
 describe('Sidebar', () => {
@@ -302,22 +272,7 @@ describe('Sidebar', () => {
       sessionStatus: 'ready',
       sessionProjectPath: PROJECT_PATH,
     })
-    vi.mocked(commands.listOutputDevices).mockResolvedValue(deviceList)
-
     render(<Sidebar variant="overlay" />)
-
-    // Wait for the async device list to populate, then pick a device
-    // (pickOutputDevice opens the Radix menu itself).
-    await screen.findByRole('combobox', { name: /output device/i })
-    await pickOutputDevice(user, /BlackHole 16ch/)
-    // Regression: the selected device must stay displayed (an earlier
-    // filter dropped the current option, snapping back to default)
-    expect(
-      screen.getByRole('combobox', { name: /output device/i })
-    ).toHaveTextContent('BlackHole 16ch')
-    expect(
-      screen.getByRole('button', { name: /^change$/i })
-    ).toBeInTheDocument()
 
     // Switching mode does NOT restart immediately — it shows the Change button
     await user.click(screen.getByRole('combobox', { name: /audio mode/i }))
@@ -339,154 +294,6 @@ describe('Sidebar', () => {
     )
   })
 
-  it('marks a 16ch project’s 2ch device as greyed-but-selectable with the red loss text (§6.3)', async () => {
-    const user = userEvent.setup()
-    seedLoadedProject16()
-    vi.mocked(commands.listOutputDevices).mockResolvedValue(deviceList)
-
-    render(<Sidebar variant="static" />)
-    const trigger = await screen.findByRole('combobox', {
-      name: /output device/i,
-    })
-    await user.click(trigger)
-
-    const option = await screen.findByRole('option', {
-      name: /Mac mini Speakers/,
-    })
-    // Greyed but NOT a real disabled state: the option stays focusable
-    // and clickable; the red loss text is the marker (no ✕ glyph).
-    expect(option.className).toContain('opacity-40')
-    expect(
-      within(option).queryByTestId('device-insufficient-marker')
-    ).not.toBeInTheDocument()
-    // Enough-channels device shows neither grey nor the loss text.
-    const enough = screen.getByRole('option', { name: /BlackHole 16ch/ })
-    expect(enough.className).not.toContain('opacity-40')
-    expect(within(enough).queryByText('16ch → 2ch')).not.toBeInTheDocument()
-    // Channel counts are shown per entry — sufficient entries keep the
-    // bare count, insufficient ones spell out the loss (16ch → 2ch).
-    expect(screen.getByText('16ch')).toBeInTheDocument()
-    expect(within(option).getByText('16ch → 2ch')).toBeInTheDocument()
-
-    // Keyboard: arrow keys move through the insufficient option (no
-    // HTML disabled state blocks it), Enter selects it.
-    await user.keyboard('{ArrowDown}')
-    await user.keyboard('{Enter}')
-    await waitFor(() => {
-      expect(
-        screen.getByRole('combobox', { name: /output device/i })
-      ).toHaveTextContent('Mac mini Speakers')
-    })
-  })
-
-  it('shows a persistent Nch → Hch hint for a channel-poor selection with no toast (§6.3)', async () => {
-    const user = userEvent.setup()
-    seedLoadedProject16()
-    vi.mocked(commands.listOutputDevices).mockResolvedValue(deviceList)
-
-    render(<Sidebar variant="static" />)
-    await pickOutputDevice(user, /Mac mini Speakers/)
-
-    const hint = screen.getByTestId('device-insufficient-hint')
-    // v1.2.0: the closed trigger shows only a small red dot — the full
-    // "16ch → 2ch" loss rides along as sr-only text (kept assertable and
-    // screen-reader visible) plus the dot's hover tooltip; the opened list
-    // spells out every entry's channel count.
-    expect(hint).toHaveTextContent('16ch → 2ch')
-    expect(hint.querySelector('span[aria-hidden="true"]')).toBeInTheDocument()
-    const trigger = screen.getByRole('combobox', { name: /output device/i })
-    expect(trigger).toContainElement(hint)
-    expect(toast.info).not.toHaveBeenCalled()
-  })
-
-  it('shows no loss hint when the device has enough channels', async () => {
-    const user = userEvent.setup()
-    seedLoadedProject16()
-    vi.mocked(commands.listOutputDevices).mockResolvedValue(deviceList)
-
-    render(<Sidebar variant="static" />)
-    await pickOutputDevice(user, /BlackHole 16ch/)
-
-    expect(
-      screen.queryByTestId('device-insufficient-hint')
-    ).not.toBeInTheDocument()
-  })
-
-  it('ignores a stale device-list response from a previous project (race guard)', async () => {
-    const user = userEvent.setup()
-    useProjectStore.setState({
-      currentProject: { path: PROJECT_PATH, manifest: manifest96 },
-      recentProjectPaths: [PROJECT_PATH],
-      preflightStatus: 'ready',
-      preflightError: null,
-    })
-    useSessionStore.setState({
-      audioMode: 'internal',
-      lanIp: '192.168.1.10',
-      lanAddresses: ['192.168.1.10'],
-      sessionStatus: 'idle',
-      outputDevice: 'System default',
-      pendingChanges: false,
-      deviceError: null,
-    })
-    let resolve96!: (v: { status: 'ok'; data: typeof deviceList.data }) => void
-    vi.mocked(commands.listOutputDevices).mockReturnValueOnce(
-      new Promise(resolve => {
-        resolve96 = resolve
-      })
-    )
-    vi.mocked(commands.listOutputDevices).mockResolvedValueOnce(deviceList)
-
-    const { rerender } = render(<Sidebar variant="static" />)
-
-    // Switch to the 48k project while the 96k query is still in flight.
-    useProjectStore.setState({
-      currentProject: { path: PROJECT_PATH, manifest },
-    })
-    rerender(<Sidebar variant="static" />)
-
-    resolve96({
-      status: 'ok',
-      data: {
-        devices: [
-          { name: 'Old Device', isDefault: true, maxOutputChannels: 2 },
-        ],
-        sampleRate: 96000,
-      },
-    })
-    // The stale 96k response must not overwrite the 48k list: the live
-    // menu offers the 48k entries, never the stale "Old Device".
-    const trigger = await screen.findByRole('combobox', {
-      name: /output device/i,
-    })
-    await user.click(trigger)
-    await user.click(
-      await screen.findByRole('option', { name: /BlackHole 16ch/ })
-    )
-    expect(
-      screen.queryByRole('option', { name: /Old Device/ })
-    ).not.toBeInTheDocument()
-    // No error surfaced for the stale response.
-    expect(screen.queryByTestId('device-error')).not.toBeInTheDocument()
-    expect(
-      screen.getByRole('combobox', { name: /output device/i })
-    ).toHaveTextContent('BlackHole 16ch')
-  })
-
-  it('gates Load and shows an inline error when device capability fails (§6.3)', async () => {
-    seedLoadedProject16()
-    vi.mocked(commands.listOutputDevices).mockResolvedValue({
-      status: 'error',
-      error: 'Failed to enumerate audio output devices: boom',
-    })
-
-    render(<Sidebar variant="static" />)
-    await screen.findByTestId('device-error')
-    expect(screen.getByTestId('device-error')).toBeInTheDocument()
-    const loadButton = screen.getByRole('button', { name: /^load$/i })
-    expect(loadButton).toBeDisabled()
-  })
-
   it('shows a fixed 100% and disables the slider for N>2 sessions (§7.5)', async () => {
     seedLoadedProject16()
     useSessionStore.setState({
@@ -500,8 +307,6 @@ describe('Sidebar', () => {
       },
       volume: 80,
     })
-    vi.mocked(commands.listOutputDevices).mockResolvedValue(deviceList)
-
     render(<Sidebar variant="static" />)
     const slider = screen.getByRole('slider', {
       name: /fixed at 100%/i,
@@ -527,7 +332,6 @@ describe('Sidebar', () => {
         privateBusStart: 2,
       },
     })
-    vi.mocked(commands.listOutputDevices).mockResolvedValue(deviceList)
     vi.mocked(commands.setMasterVolume).mockResolvedValue({
       status: 'ok',
       data: null,
@@ -543,23 +347,6 @@ describe('Sidebar', () => {
     await waitFor(() => {
       expect(commands.setMasterVolume).toHaveBeenCalledWith(40)
     })
-  })
-
-  it('falls back to the system default with the existing notice when a saved device vanishes (§6.3)', async () => {
-    seedLoadedProject()
-    useSessionStore.setState({ outputDevice: 'Gone Interface' })
-    vi.mocked(commands.listOutputDevices).mockResolvedValue(deviceList)
-
-    render(<Sidebar variant="static" />)
-    await waitFor(() => {
-      expect(useSessionStore.getState().outputDevice).toBe('System default')
-    })
-    expect(toast.info).toHaveBeenCalledWith(
-      expect.stringContaining('not available')
-    )
-    expect(
-      screen.getByRole('combobox', { name: /output device/i })
-    ).toHaveTextContent('System default')
   })
 
   it('closes the running project via the Close button', async () => {
@@ -578,37 +365,6 @@ describe('Sidebar', () => {
       expect(useProjectStore.getState().currentProject).toBeNull()
     })
     expect(useProjectStore.getState().recentProjectPaths).toHaveLength(1)
-  })
-
-  it('keeps the selected project when changing the output device during a restart', async () => {
-    const user = userEvent.setup()
-    seedLoadedProject()
-    useSessionStore.setState({
-      sessionStatus: 'ready',
-      sessionProjectPath: PROJECT_PATH,
-    })
-    vi.mocked(commands.listOutputDevices).mockResolvedValue(deviceList)
-    vi.mocked(commands.stopProject).mockImplementation(async () => {
-      useSessionStore.getState().applySnapshot(idleSnapshot)
-      return { status: 'ok', data: null }
-    })
-
-    render(<Sidebar variant="overlay" />)
-    await pickOutputDevice(user, /BlackHole 16ch/)
-    await user.click(screen.getByRole('button', { name: /^change$/i }))
-
-    await waitFor(() => {
-      expect(commands.startProject).toHaveBeenCalledWith(
-        PROJECT_PATH,
-        'internal',
-        '192.168.1.10',
-        null
-      )
-      expect(useProjectStore.getState().currentProject?.path).toBe(PROJECT_PATH)
-    })
-    expect(
-      screen.getByRole('combobox', { name: /audio mode/i })
-    ).toHaveTextContent('Internal Synth')
   })
 
   it('keeps the selected project when changing an external OSC target during a restart', async () => {
@@ -827,7 +583,9 @@ describe('Sidebar', () => {
     expect(useSessionStore.getState().sessionStatus).toBe('ready')
   })
 
-  it('does not start on LAN pick alone; Load becomes the trigger (§7)', async () => {
+  it('does not start without a LAN choice; Load stays the trigger (§7)', async () => {
+    // #58: the LAN row lives in the settings Node section now; the choice
+    // itself still gates Load exactly as before.
     const user = userEvent.setup()
     seedLoadedProject()
     useSessionStore.setState({
@@ -840,10 +598,11 @@ describe('Sidebar', () => {
     const loadButton = screen.getByRole('button', { name: /^load$/i })
     expect(loadButton).toBeDisabled()
 
-    await user.click(screen.getByRole('combobox', { name: /network address/i }))
-    await user.click(await screen.findByRole('option', { name: '10.0.0.5' }))
+    useSessionStore.getState().setLanIp('10.0.0.5')
     expect(commands.startProject).not.toHaveBeenCalled()
-    expect(loadButton).toBeEnabled()
+    await waitFor(() => {
+      expect(loadButton).toBeEnabled()
+    })
 
     await user.click(loadButton)
     await waitFor(() => {
@@ -892,7 +651,6 @@ describe('settings footer follows the selection (#39/T4)', () => {
       lanIp: '192.168.1.10',
       lanAddresses: ['192.168.1.10'],
       audioMode: 'internal',
-      deviceError: null,
     })
   }
 
@@ -987,6 +745,266 @@ describe('settings footer follows the selection (#39/T4)', () => {
         '192.168.1.10',
         null
       )
+    })
+  })
+})
+
+/**
+ * #58: the「设置节点」gate — the session button becomes a router to the
+ * settings Node section while the telematic-declared selection's node
+ * config is incomplete; Close survives (a running session must stay
+ * closable), undeclared projects are never gated.
+ */
+describe('「设置节点」gate (#58)', () => {
+  function seedTelematicProject() {
+    useProjectStore.setState({
+      currentProject: { path: PROJECT_PATH, manifest: manifestTelematic },
+      recentProjectPaths: [PROJECT_PATH],
+      preflightStatus: 'ready',
+      preflightError: null,
+    })
+    useSessionStore.setState({
+      audioMode: 'internal',
+      lanIp: '192.168.1.10',
+      lanAddresses: ['192.168.1.10'],
+      sessionStatus: 'idle',
+      oscTargetInput: '127.0.0.1:3333',
+      outputDevice: 'System default',
+      pendingChanges: false,
+    })
+  }
+
+  function seedNodeConfig(nodeName: string, hubUrl: string, hubToken: string) {
+    useSettingsStore.setState({
+      nodeNameSetting: nodeName,
+      hubUrlSetting: hubUrl,
+      hubTokenSetting: hubToken,
+    })
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useSettingsStore.setState({
+      nodeNameSetting: '',
+      hubUrlSetting: '',
+      hubTokenSetting: '',
+      hubRooms: {},
+      settingsOpen: false,
+      focusSection: null,
+    })
+  })
+
+  it('replaces Load while the declared selection is unconfigured; the click routes to the Node section', async () => {
+    const user = userEvent.setup()
+    seedTelematicProject()
+    seedNodeConfig('', '', '')
+
+    render(<Sidebar variant="static" />)
+    const gateButton = await screen.findByRole('button', {
+      name: /^set up node$/i,
+    })
+    expect(
+      screen.queryByRole('button', { name: /^load$/i })
+    ).not.toBeInTheDocument()
+
+    await user.click(gateButton)
+    const settings = useSettingsStore.getState()
+    expect(settings.settingsOpen).toBe(true)
+    expect(settings.focusSection).toBe('node')
+  })
+
+  it('never gates an undeclared project', () => {
+    seedTelematicProject()
+    useProjectStore.setState({
+      currentProject: { path: PROJECT_PATH, manifest },
+    })
+    render(<Sidebar variant="static" />)
+    expect(screen.getByRole('button', { name: /^load$/i })).toBeInTheDocument()
+  })
+
+  it('returns Load once all three fields are filled', () => {
+    seedTelematicProject()
+    seedNodeConfig('Concert-MacBook', 'wss://hub.example.org:3000', 'token')
+    render(<Sidebar variant="static" />)
+    expect(screen.getByRole('button', { name: /^load$/i })).toBeEnabled()
+  })
+
+  it('keeps Close on the gated running card — the gate never strands a session', () => {
+    seedTelematicProject()
+    useSessionStore.setState({
+      sessionStatus: 'ready',
+      sessionProjectPath: PROJECT_PATH,
+      pendingChanges: false,
+    })
+    render(<Sidebar variant="overlay" />)
+    expect(screen.getByRole('button', { name: /^close$/i })).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /^set up node$/i })
+    ).not.toBeInTheDocument()
+  })
+
+  it('yields to a busy transition — the starting visual survives a wiped config', () => {
+    seedTelematicProject()
+    useSessionStore.setState({
+      sessionStatus: 'starting',
+      sessionProjectPath: PROJECT_PATH,
+    })
+    render(<Sidebar variant="overlay" />)
+    expect(screen.getByRole('button', { name: /^starting/i })).toBeDisabled()
+    expect(
+      screen.queryByRole('button', { name: /^set up node$/i })
+    ).not.toBeInTheDocument()
+  })
+
+  it('replaces Change on the gated running card with pending changes', () => {
+    seedTelematicProject()
+    useSessionStore.setState({
+      sessionStatus: 'ready',
+      sessionProjectPath: PROJECT_PATH,
+      pendingChanges: true,
+    })
+    render(<Sidebar variant="overlay" />)
+    expect(
+      screen.getByRole('button', { name: /^set up node$/i })
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /^change$/i })
+    ).not.toBeInTheDocument()
+  })
+})
+
+/**
+ * #58: the Room dropdown — declared projects only, the App-global group
+ * number persisted per project (default 1, never reset), applying at the
+ * next start without flagging Change.
+ */
+describe('Room dropdown (#58)', () => {
+  const OTHER_TELEMATIC_PATH = '/Users/test/Other Telematic'
+
+  function seedTelematic(manifestOverride: Manifest, path: string) {
+    useProjectStore.setState({
+      currentProject: { path, manifest: manifestOverride },
+      recentProjectPaths: [path],
+      preflightStatus: 'ready',
+      preflightError: null,
+    })
+    useSessionStore.setState({
+      audioMode: 'internal',
+      lanIp: '192.168.1.10',
+      lanAddresses: ['192.168.1.10'],
+      sessionStatus: 'idle',
+      oscTargetInput: '127.0.0.1:3333',
+      pendingChanges: false,
+    })
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useSettingsStore.setState({
+      nodeNameSetting: 'Node',
+      hubUrlSetting: 'wss://hub.example.org:3000',
+      hubTokenSetting: 'token',
+      hubRooms: {},
+    })
+  })
+
+  it('shows only for declared projects, defaulting to group 1', async () => {
+    const user = userEvent.setup()
+    seedTelematic(manifestTelematic, PROJECT_PATH)
+    seedTelematic(manifest, PROJECT_PATH) // undeclared — no dropdown
+    const { rerender } = render(<Sidebar variant="static" />)
+    expect(
+      screen.queryByRole('combobox', { name: /^room$/i })
+    ).not.toBeInTheDocument()
+
+    useProjectStore.setState({
+      currentProject: { path: PROJECT_PATH, manifest: manifestTelematic },
+    })
+    rerender(<Sidebar variant="static" />)
+    const room = screen.getByRole('combobox', { name: /^room$/i })
+    expect(room).toHaveTextContent('1')
+
+    await user.click(room)
+    for (const group of ['1', '2', '3']) {
+      expect(
+        await screen.findByRole('option', { name: group })
+      ).toBeInTheDocument()
+    }
+  })
+
+  it('persists the choice per project and never resets it', async () => {
+    const user = userEvent.setup()
+    seedTelematic(manifestTelematic, PROJECT_PATH)
+    render(<Sidebar variant="static" />)
+
+    await user.click(screen.getByRole('combobox', { name: /^room$/i }))
+    await user.click(await screen.findByRole('option', { name: '3' }))
+
+    await waitFor(() => {
+      expect(commands.savePreferences).toHaveBeenCalledWith(
+        expect.objectContaining({
+          hubRooms: { 'inarticulate-iii': 3 },
+        })
+      )
+    })
+    expect(useSettingsStore.getState().hubRooms).toEqual({
+      'inarticulate-iii': 3,
+    })
+
+    // Another declared work defaults to its own group 1 — the first
+    // project's choice does not leak, and stays after switching back.
+    const otherManifest: Manifest = {
+      ...manifestTelematic,
+      id: 'other-telematic-work',
+    }
+    useProjectStore.setState({
+      currentProject: { path: OTHER_TELEMATIC_PATH, manifest: otherManifest },
+    })
+    await waitFor(() => {
+      expect(
+        screen.getByRole('combobox', { name: /^room$/i })
+      ).toHaveTextContent('1')
+    })
+
+    useProjectStore.setState({
+      currentProject: { path: PROJECT_PATH, manifest: manifestTelematic },
+    })
+    await waitFor(() => {
+      expect(
+        screen.getByRole('combobox', { name: /^room$/i })
+      ).toHaveTextContent('3')
+    })
+  })
+
+  it('carries no Device/LAN rows — both live in the settings panel now (#58)', () => {
+    seedTelematic(manifestTelematic, PROJECT_PATH)
+    render(<Sidebar variant="static" />)
+    expect(screen.queryByText(/^device$/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/^lan$/i)).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('combobox', { name: /output device/i })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('combobox', { name: /network address/i })
+    ).not.toBeInTheDocument()
+  })
+
+  it('applies at the next start — a change never stops the running session', async () => {
+    const user = userEvent.setup()
+    seedTelematic(manifestTelematic, PROJECT_PATH)
+    useSessionStore.setState({
+      sessionStatus: 'ready',
+      sessionProjectPath: PROJECT_PATH,
+    })
+    render(<Sidebar variant="overlay" />)
+
+    await user.click(screen.getByRole('combobox', { name: /^room$/i }))
+    await user.click(await screen.findByRole('option', { name: '2' }))
+
+    expect(commands.stopProject).not.toHaveBeenCalled()
+    expect(useSessionStore.getState().pendingChanges).toBe(false)
+    expect(useSettingsStore.getState().hubRooms).toEqual({
+      'inarticulate-iii': 2,
     })
   })
 })

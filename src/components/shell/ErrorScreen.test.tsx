@@ -46,7 +46,6 @@ function seedErrorState() {
     lanAddresses: ['192.168.1.10'],
     oscTargetInput: '127.0.0.1:3333',
     outputDevice: 'System default',
-    deviceError: null,
     pendingChanges: false,
     health: null,
     outputTail: [],

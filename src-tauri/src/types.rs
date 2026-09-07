@@ -72,6 +72,30 @@ pub struct AppPreferences {
     /// index counts as offered, so the record backfills silently.
     #[serde(default)]
     pub offered_utilities: Vec<String>,
+    /// v1.4.0 (issue #58): this machine's node identity for telematic
+    /// performance — global, set once in the Settings「节点」section, never
+    /// per-project. `None`/blank = never set (the「设置节点」gate blocks
+    /// telematic starts until all three node fields are filled).
+    /// Whitespace-only counts as unset at the injection seam.
+    #[serde(default)]
+    pub node_name: Option<String>,
+    /// v1.4.0 (issue #58): the telematic hub's full URL (`wss://host[:port]`).
+    /// The token NEVER rides this string — it has its own field below and
+    /// only ever travels in the injected `PNDS_HUB_TOKEN` variable.
+    #[serde(default)]
+    pub hub_url: Option<String>,
+    /// v1.4.0 (issue #58): the hub access token, stored as its own field,
+    /// displayed masked in the UI and never logged, never concatenated
+    /// into URLs. Injection is the only consumer.
+    #[serde(default)]
+    pub hub_token: Option<String>,
+    /// v1.4.0 (issue #58): telematic room group number (1..=3) per project
+    /// manifest id — the user-visible「Room」dropdown. The App derives the
+    /// wire room as `{manifest.id}_{group}`; absent entry = group 1.
+    /// Persisted per project and never reset: crash recovery must land a
+    /// machine back in its own group's room (ADR-0004).
+    #[serde(default)]
+    pub hub_rooms: HashMap<String, u8>,
 }
 
 /// A named one-level group of project paths (spec issue #4).
@@ -97,6 +121,10 @@ impl Default for AppPreferences {
             project_display_names: HashMap::new(),
             project_manifest_names: HashMap::new(),
             offered_utilities: Vec::new(),
+            node_name: None,
+            hub_url: None,
+            hub_token: None,
+            hub_rooms: HashMap::new(),
         }
     }
 }
@@ -159,6 +187,22 @@ pub fn validate_sample_rate(rate: Option<u32>) -> Result<(), String> {
         None | Some(1..) => Ok(()),
         Some(0) => Err("Invalid sampleRate: must be a positive integer (Hz)".to_string()),
     }
+}
+
+/// #58: validates the per-project telematic room group numbers. The wire
+/// room derives as `{manifest.id}_{group}`; groups outside 1..=3 have no
+///「Room」dropdown entry and are rejected at the save boundary with a
+/// readable error. Non-integers/negatives never get here — `u8` rejects
+/// them at the serde boundary.
+pub fn validate_hub_rooms(rooms: &HashMap<String, u8>) -> Result<(), String> {
+    for (project_id, group) in rooms {
+        if !(1..=3).contains(group) {
+            return Err(format!(
+                "Invalid hubRooms entry for \"{project_id}\": room group must be 1, 2 or 3 (got {group})"
+            ));
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -386,5 +430,75 @@ mod tests {
             err.contains("Invalid colorTheme"),
             "readable error, got: {err}"
         );
+    }
+
+    /// v1.4.0 (#58): preference files written before the telematic node
+    /// fields existed must load losslessly (serde defaults fill them in).
+    #[test]
+    fn deserializes_preferences_without_node_fields() {
+        let legacy = r#"{
+            "theme": "dark",
+            "language": null,
+            "recentProjects": ["/a"]
+        }"#;
+        let prefs: AppPreferences = serde_json::from_str(legacy).expect("legacy prefs parse");
+        assert_eq!(prefs.node_name, None);
+        assert_eq!(prefs.hub_url, None);
+        assert_eq!(prefs.hub_token, None);
+        assert!(prefs.hub_rooms.is_empty());
+    }
+
+    /// v1.4.0 (#58): the node identity trio and the per-project room groups
+    /// survive a load-save round trip, each in its own field — the token
+    /// never rides the hub URL.
+    #[test]
+    fn roundtrips_node_fields_and_hub_rooms() {
+        let modern = r#"{
+            "theme": "system",
+            "language": null,
+            "recentProjects": [],
+            "nodeName": "Concert-MacBook",
+            "hubUrl": "wss://hub.example.org:3000",
+            "hubToken": "secret-token",
+            "hubRooms": { "telematic-network-diagnostics": 2, "inarticulate-iii": 3 }
+        }"#;
+        let prefs: AppPreferences = serde_json::from_str(modern).expect("modern prefs parse");
+        assert_eq!(prefs.node_name.as_deref(), Some("Concert-MacBook"));
+        assert_eq!(prefs.hub_url.as_deref(), Some("wss://hub.example.org:3000"));
+        assert_eq!(prefs.hub_token.as_deref(), Some("secret-token"));
+        assert_eq!(
+            prefs.hub_rooms.get("telematic-network-diagnostics"),
+            Some(&2)
+        );
+        let reserialized = serde_json::to_string(&prefs).expect("prefs serialize");
+        assert!(reserialized.contains("\"nodeName\":\"Concert-MacBook\""));
+        assert!(reserialized.contains("\"hubToken\":\"secret-token\""));
+        assert!(reserialized.contains("\"hubRooms\""));
+        // The token stays its own field — it never leaks into the URL.
+        assert_eq!(prefs.hub_url.unwrap().contains("secret-token"), false);
+    }
+
+    /// v1.4.0 (#58): the save boundary rejects room groups outside the
+    ///「Room」dropdown's 1..=3 with a readable error naming the project.
+    #[test]
+    fn validates_hub_rooms() {
+        let ok = [
+            ("a".to_string(), 1u8),
+            ("b".to_string(), 2),
+            ("c".to_string(), 3),
+        ]
+        .into_iter()
+        .collect();
+        assert!(validate_hub_rooms(&ok).is_ok());
+
+        let bad = [("telematic-network-diagnostics".to_string(), 0u8)]
+            .into_iter()
+            .collect();
+        let err = validate_hub_rooms(&bad).expect_err("group 0 must be rejected");
+        assert!(err.contains("room group must be 1, 2 or 3"), "got: {err}");
+        assert!(err.contains("telematic-network-diagnostics"), "got: {err}");
+
+        let bad = [("x".to_string(), 4u8)].into_iter().collect();
+        assert!(validate_hub_rooms(&bad).is_err());
     }
 }

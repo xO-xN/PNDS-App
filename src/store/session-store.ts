@@ -122,9 +122,6 @@ interface SessionState {
   lanAddresses: string[]
   /** §6.5: chosen output device name, or "System default". */
   outputDevice: string
-  /** §6.3: device capability query failed (or no device listed); Load stays
-   * gated for internal mode with an inline, readable error. */
-  deviceError: string | null
   /** §7.1: internal channel plan (N/H/K/B) of the running session, or null. */
   channelPlan: {
     projectChannels: number
@@ -143,7 +140,6 @@ interface SessionState {
    * unmuting) — the caller forwards it to setMasterVolume. */
   toggleMute: () => number
   setOutputDevice: (device: string) => void
-  setDeviceError: (error: string | null) => void
   setChannelPlan: (plan: SessionState['channelPlan'], device: string) => void
   setOscTargetInput: (target: string) => void
   /** §10.3 five-stage loading animation dot (1–5, 0 = idle). */
@@ -193,7 +189,6 @@ export const useSessionStore = create<SessionState>()(set => ({
   lanIp: null,
   lanAddresses: [],
   outputDevice: 'System default',
-  deviceError: null,
   channelPlan: null,
   oscTargetInput: '127.0.0.1:3333',
   startupStage: 0,
@@ -231,7 +226,6 @@ export const useSessionStore = create<SessionState>()(set => ({
     return next.volume
   },
   setOutputDevice: outputDevice => set({ outputDevice }),
-  setDeviceError: deviceError => set({ deviceError }),
   setChannelPlan: (channelPlan, outputDevice) =>
     set({ channelPlan, outputDevice }),
   setOscTargetInput: oscTargetInput => set({ oscTargetInput }),
@@ -360,7 +354,6 @@ export const useSessionStore = create<SessionState>()(set => ({
       lanIp: null,
       lanAddresses: [],
       channelPlan: null,
-      deviceError: null,
       pendingChanges: false,
       // §v1.1.1: zoom is session-only — reset on any project switch.
       monitorZoom: DEFAULT_MONITOR_ZOOM,

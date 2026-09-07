@@ -10,7 +10,9 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager};
 
-use crate::types::{validate_color_theme, validate_sample_rate, validate_theme, AppPreferences};
+use crate::types::{
+    validate_color_theme, validate_hub_rooms, validate_sample_rate, validate_theme, AppPreferences,
+};
 
 /// In-memory cache of the preferences file. Managed by Tauri.
 #[derive(Default)]
@@ -93,8 +95,13 @@ pub async fn save_preferences(app: AppHandle, preferences: AppPreferences) -> Re
     validate_color_theme(&preferences.color_theme)?;
     // Issue #20: the global sample rate must be a positive integer (Hz).
     validate_sample_rate(preferences.sample_rate)?;
+    // #58: telematic room groups stay within the「Room」dropdown's 1..=3.
+    validate_hub_rooms(&preferences.hub_rooms)?;
 
-    log::debug!("Saving preferences to disk: {preferences:?}");
+    // #58: never log the struct — it carries the hub token, which must not
+    // reach logs any more than it reaches URLs. The save outcome lines
+    // below are the diagnostic surface.
+    log::debug!("Saving preferences to disk");
     let prefs_path = get_preferences_path(&app)?;
 
     let json_content = serde_json::to_string_pretty(&preferences).map_err(|e| {

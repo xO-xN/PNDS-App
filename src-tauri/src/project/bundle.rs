@@ -1192,6 +1192,7 @@ mod tests {
             name: "Weird / Name".into(),
             version: "1.0.0".into(),
             description: None,
+            telematic: None,
             score_server: crate::project::manifest::ScoreServer {
                 entry: "s.js".into(),
                 working_directory: ".".into(),

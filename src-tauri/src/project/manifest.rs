@@ -22,6 +22,31 @@ pub struct Manifest {
     pub description: Option<String>,
     pub score_server: ScoreServer,
     pub audio: AudioConfig,
+    /// v1.4.0 (issue #58): the work declares cross-internet (telematic)
+    /// performance capability. Gates the App's hub-variable injection and
+    /// the「设置节点」start gate — carries no hub configuration itself.
+    /// Lenient by contract (manifest.md): only an explicit `true` declares;
+    /// absent, `null`, `false` and non-boolean values all read as
+    /// undeclared and never fail validation.
+    #[serde(default, deserialize_with = "lenient_optional_bool")]
+    pub telematic: Option<bool>,
+}
+
+impl Manifest {
+    /// True only when the work explicitly declares telematic capability.
+    pub fn telematic(&self) -> bool {
+        self.telematic == Some(true)
+    }
+}
+
+/// `Option<bool>` that never fails: a present non-boolean value (or null)
+/// deserializes as `None` instead of erroring — preflight tolerance for a
+/// declaration field that must not break legacy manifests (manifest.md).
+fn lenient_optional_bool<'de, D>(deserializer: D) -> Result<Option<bool>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Ok(Option::<Value>::deserialize(deserializer)?.and_then(|value| value.as_bool()))
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
@@ -714,5 +739,59 @@ mod tests {
         );
         let err = load_manifest(dir.path()).unwrap_err();
         assert!(err.contains("between 1 and 65535"), "unexpected: {err}");
+    }
+
+    /// v1.4.0 (#58): `telematic` is optional, lenient and declaration-only.
+    /// Absent/null/false/non-boolean all read as undeclared without
+    /// erroring; only an explicit `true` declares.
+    #[test]
+    fn telematic_declaration_is_lenient_optional_boolean() {
+        for (declared, expected) in [
+            (None, false),
+            (Some("null"), false),
+            (Some("false"), false),
+            (Some("\"true\""), false),
+            (Some("1"), false),
+            (Some("true"), true),
+        ] {
+            let dir = tempfile::tempdir().unwrap();
+            write_valid_project(dir.path());
+            let field = declared
+                .map(|v| format!("\"telematic\": {v}, "))
+                .unwrap_or_default();
+            write_manifest(
+                dir.path(),
+                &format!(
+                    r#"{{
+                      "schemaVersion": 1, {field}"id": "x", "name": "X", "version": "0.1.0",
+                      "scoreServer": {{ "entry": "server.js", "workingDirectory": ".", "performerPort": 6868, "monitorPort": 6869 }},
+                      "audio": {{ "defaultMode": "none", "supportedModes": ["none"] }}
+                    }}"#
+                ),
+            );
+            let manifest = load_manifest(dir.path())
+                .unwrap_or_else(|e| panic!("declared={declared:?} must validate: {e}"));
+            assert_eq!(manifest.telematic(), expected, "declared={declared:?}");
+        }
+    }
+
+    /// The declaration survives a parse→serialize round trip (the App never
+    /// writes manifests, but the struct must stay lossless for tooling).
+    #[test]
+    fn telematic_roundtrips() {
+        let dir = tempfile::tempdir().unwrap();
+        write_valid_project(dir.path());
+        write_manifest(
+            dir.path(),
+            r#"{
+              "schemaVersion": 1, "id": "x", "name": "X", "version": "0.1.0", "telematic": true,
+              "scoreServer": { "entry": "server.js", "workingDirectory": ".", "performerPort": 6868, "monitorPort": 6869 },
+              "audio": { "defaultMode": "none", "supportedModes": ["none"] }
+            }"#,
+        );
+        let manifest = load_manifest(dir.path()).unwrap();
+        assert!(manifest.telematic());
+        let reserialized = serde_json::to_string(&manifest).unwrap();
+        assert!(reserialized.contains("\"telematic\":true"));
     }
 }

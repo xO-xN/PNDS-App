@@ -172,6 +172,24 @@ pub struct StartRequest {
     /// Resolved during start: the OSC target actually injected —
     /// internal's dynamic loopback, external's validated user target.
     pub resolved_osc_target: Option<String>,
+    /// Resolved during start (#58): the telematic hub variables injected
+    /// when the manifest declares `telematic` and the App-global node
+    /// config is complete. Orthogonal to the audio mode — every mode
+    /// carries them or none does. `None` injects nothing, silently.
+    pub hub: Option<HubInjection>,
+}
+
+/// #58: the four telematic hub variables one start may inject (TND's
+/// frozen contract): `PNDS_NODE_ID` / `PNDS_HUB_URL` / `PNDS_HUB_TOKEN` /
+/// `PNDS_HUB_ROOM`. All-or-nothing by construction — the resolver only
+/// produces this when the manifest declares capability and the global
+/// node config is complete.
+#[derive(Debug, Clone)]
+pub struct HubInjection {
+    pub node_id: String,
+    pub url: String,
+    pub token: String,
+    pub room: String,
 }
 
 impl StartRequest {
@@ -186,8 +204,43 @@ impl StartRequest {
             channel_plan: None,
             output_device: None,
             resolved_osc_target: None,
+            hub: None,
         }
     }
+}
+
+/// #58: resolves the hub injection for one start. Injects only when the
+/// manifest declares `telematic: true` AND all three global node fields
+/// (node name / hub URL / token) hold non-blank values — completeness
+/// only, never connectivity. The room is ALWAYS derived, never
+/// hand-written: `{manifest.id}_{group}` with the per-project group
+/// (「Room」dropdown, 1..=3, default 1) — same work + same group = same
+/// room; a different work or group is invisible to this one (ADR-0004).
+pub fn resolve_hub_injection(
+    manifest: &Manifest,
+    prefs: &crate::types::AppPreferences,
+) -> Option<HubInjection> {
+    if !manifest.telematic() {
+        return None;
+    }
+    let non_blank = |value: Option<&String>| {
+        value
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+    };
+    // All three present or nothing — partial config never injects.
+    let node_id = non_blank(prefs.node_name.as_ref())?;
+    let url = non_blank(prefs.hub_url.as_ref())?;
+    let token = non_blank(prefs.hub_token.as_ref())?;
+    let group = prefs.hub_rooms.get(&manifest.id).copied().unwrap_or(1);
+    let id = &manifest.id;
+    Some(HubInjection {
+        node_id,
+        url,
+        token,
+        room: format!("{id}_{group}"),
+    })
 }
 
 /// Environment variables injected into the score server (§3, §6, §7),
@@ -232,6 +285,15 @@ pub fn build_score_server_env(request: &StartRequest) -> Vec<(String, String)> {
             ));
         }
         _ => {}
+    }
+    // #58: the telematic hub variables ride every mode — they address the
+    // score server's outbound hub connection, not its audio graph. The
+    // token travels here as its own variable, never inside the URL.
+    if let Some(hub) = &request.hub {
+        env.push(("PNDS_NODE_ID".to_string(), hub.node_id.clone()));
+        env.push(("PNDS_HUB_URL".to_string(), hub.url.clone()));
+        env.push(("PNDS_HUB_TOKEN".to_string(), hub.token.clone()));
+        env.push(("PNDS_HUB_ROOM".to_string(), hub.room.clone()));
     }
     env
 }
@@ -509,6 +571,17 @@ impl SessionManager {
         {
             let mut inner = self.lock();
             inner.project_name = Some(manifest.name.clone());
+        }
+
+        // #58: telematic declaration + complete global node config → the
+        // four hub variables ride this start's env (every audio mode).
+        // Incomplete config silently skips injection — the frontend's
+        // 「设置节点」gate is the UX that forces completeness; this is the
+        // injection authority. Values are read at spawn, so config edits
+        // apply at the next start, never mid-session.
+        if manifest.telematic() {
+            let prefs = crate::commands::preferences::load_preferences_sync(app)?;
+            request.hub = resolve_hub_injection(&manifest, &prefs);
         }
 
         let registry = ChildRegistry::new(app_data_dir.to_path_buf());
@@ -1542,6 +1615,133 @@ mod tests {
         let env = build_score_server_env(&request);
         assert_eq!(env.len(), 1);
         assert_eq!(env[0].0, "PNDS_HOST_IP");
+    }
+
+    /// #58: a minimal manifest with a chosen `telematic` declaration.
+    fn manifest_with(id: &str, telematic_json: &str) -> Manifest {
+        serde_json::from_str(&format!(
+            r#"{{ "schemaVersion": 1, "id": "{id}", "name": "X", "version": "0.1.0", {telematic_json}
+                "scoreServer": {{ "entry": "s.js", "workingDirectory": ".", "performerPort": 1, "monitorPort": 2 }},
+                "audio": {{ "defaultMode": "none", "supportedModes": ["none"] }} }}"#
+        ))
+        .unwrap()
+    }
+
+    /// #58: global node config of the Settings「节点」section.
+    fn node_prefs(
+        name: Option<&str>,
+        url: Option<&str>,
+        token: Option<&str>,
+    ) -> crate::types::AppPreferences {
+        crate::types::AppPreferences {
+            node_name: name.map(str::to_string),
+            hub_url: url.map(str::to_string),
+            hub_token: token.map(str::to_string),
+            ..Default::default()
+        }
+    }
+
+    const NODE_NAME: Option<&str> = Some("Concert-MacBook");
+    const HUB_URL: Option<&str> = Some("wss://hub.example.org:3000");
+    const HUB_TOKEN: Option<&str> = Some("secret-token");
+
+    /// #58: the resolver injects only on declaration × completeness, and
+    /// the room is always the derivation `{manifest.id}_{group}` — default
+    /// group 1, the project's own「Room」choice when saved, never another
+    /// project's.
+    #[test]
+    fn hub_resolution_requires_declaration_and_complete_config() {
+        let declared = manifest_with("my-work", "\"telematic\": true,");
+        let undeclared = manifest_with("my-work", "");
+
+        // No declaration → never injected, whatever the config.
+        assert!(
+            resolve_hub_injection(&undeclared, &node_prefs(NODE_NAME, HUB_URL, HUB_TOKEN))
+                .is_none()
+        );
+
+        // Declared + complete → all four, derived room at the default group.
+        let injection =
+            resolve_hub_injection(&declared, &node_prefs(NODE_NAME, HUB_URL, HUB_TOKEN)).unwrap();
+        assert_eq!(injection.node_id, "Concert-MacBook");
+        assert_eq!(injection.url, "wss://hub.example.org:3000");
+        assert_eq!(injection.token, "secret-token");
+        assert_eq!(injection.room, "my-work_1");
+
+        // Declared but any field missing/blank → nothing (all-or-nothing).
+        for incomplete in [
+            node_prefs(None, HUB_URL, HUB_TOKEN),
+            node_prefs(NODE_NAME, None, HUB_TOKEN),
+            node_prefs(NODE_NAME, HUB_URL, None),
+            node_prefs(Some("   "), HUB_URL, HUB_TOKEN),
+            node_prefs(NODE_NAME, Some(""), HUB_TOKEN),
+            node_prefs(NODE_NAME, HUB_URL, Some(" \t ")),
+        ] {
+            assert!(
+                resolve_hub_injection(&declared, &incomplete).is_none(),
+                "must not inject: {incomplete:?}"
+            );
+        }
+
+        // Saved group of THIS project picks the suffix; another project's
+        // entry is irrelevant; the range's top end works.
+        let mut prefs = node_prefs(NODE_NAME, HUB_URL, HUB_TOKEN);
+        prefs.hub_rooms.insert("my-work".to_string(), 3);
+        let injection = resolve_hub_injection(&declared, &prefs).unwrap();
+        assert_eq!(injection.room, "my-work_3");
+        prefs.hub_rooms.insert("other-work".to_string(), 2);
+        let injection = resolve_hub_injection(&declared, &prefs).unwrap();
+        assert_eq!(injection.room, "my-work_3");
+        prefs.hub_rooms.insert("my-work".to_string(), 2);
+        let injection = resolve_hub_injection(&declared, &prefs).unwrap();
+        assert_eq!(injection.room, "my-work_2");
+    }
+
+    /// #58: the four hub variables are orthogonal to the audio mode —
+    /// every mode carries all four when resolved, none when not; the token
+    /// arrives as its own variable, the URL stays exactly the configured
+    /// string.
+    #[test]
+    fn hub_env_rides_every_audio_mode_or_none_at_all() {
+        let hub = resolve_hub_injection(
+            &manifest_with("my-work", "\"telematic\": true,"),
+            &node_prefs(NODE_NAME, HUB_URL, HUB_TOKEN),
+        )
+        .unwrap();
+        for mode in ["internal", "external", "none"] {
+            let mut request = StartRequest::new(
+                "/p".to_string(),
+                mode.to_string(),
+                "192.168.1.10".to_string(),
+                None,
+            );
+            request.resolved_osc_target = Some("127.0.0.1:49328".to_string());
+            request.channel_plan = Some(crate::project::audio::channel_plan(2, 2));
+            request.hub = Some(hub.clone());
+            let env = build_score_server_env(&request);
+            let get = |k: &str| {
+                env.iter()
+                    .find(|(key, _)| key == k)
+                    .map(|(_, v)| v.as_str())
+            };
+            assert_eq!(get("PNDS_NODE_ID"), Some("Concert-MacBook"), "{mode}");
+            assert_eq!(
+                get("PNDS_HUB_URL"),
+                Some("wss://hub.example.org:3000"),
+                "{mode}"
+            );
+            assert_eq!(get("PNDS_HUB_TOKEN"), Some("secret-token"), "{mode}");
+            assert_eq!(get("PNDS_HUB_ROOM"), Some("my-work_1"), "{mode}");
+
+            // Unresolved (undeclared or incomplete) → not one of them, any mode.
+            request.hub = None;
+            let env = build_score_server_env(&request);
+            assert!(
+                env.iter()
+                    .all(|(key, _)| !key.starts_with("PNDS_HUB_") && key != "PNDS_NODE_ID"),
+                "{mode}"
+            );
+        }
     }
 
     #[test]

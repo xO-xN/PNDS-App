@@ -42,6 +42,18 @@ _Avoid_: 位置、席位、slot
 乐手加入工程时持有的身份令牌（字符串），断线重连凭它取回原座位。中英文均直接用英文。
 _Avoid_: 认领令牌、identity token
 
+**节点 / node**:
+跨互联网演奏中一台演出机器在房间内的身份名：App 全局设定、演出前必须显式填好，同房间内唯一。
+_Avoid_: site、站点、设备名
+
+**房间 / room**:
+hub 上按消息隔离的分区：由正在演出的工程与其分组号共同决定（用户只选分组号，不手填房间名），同房间互相可见，跨房间互不可见。
+_Avoid_: 群组、channel、房间字符串
+
+**hub 地址**:
+跨互联网演奏中继服务（hub）的完整 URL，含协议与端口；App 全局配置，token 永不拼入其中。
+_Avoid_: hub IP、服务器地址
+
 **参考手册 / Reference Manual**:
 帮助语料中的 reference 分册：面向工程的契约文档（manifest、runtime、bundle、network 等）。
 _Avoid_: specification、wiki

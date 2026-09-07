@@ -2,7 +2,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { commands } from '@/lib/tauri-bindings'
 import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
-import { canStart, start, restart, startReplacing } from './session-flow'
+import { useSettingsStore } from '@/store/settings-store'
+import {
+  canStart,
+  nodeGateBlocksStart,
+  start,
+  restart,
+  startReplacing,
+} from './session-flow'
 import type { Manifest, SessionSnapshot } from '@/lib/tauri-bindings'
 
 const manifest: Manifest = {
@@ -32,7 +39,6 @@ const base = {
   lanIp: '192.168.1.10',
   audioMode: 'internal',
   oscTargetInput: '127.0.0.1:3333',
-  deviceError: null,
 }
 
 /** A backend snapshot for the given status; only the fields the store reads. */
@@ -279,7 +285,6 @@ describe('startReplacing (confirm-and-replace switch)', () => {
       lanAddresses: ['192.168.1.10'],
       audioMode: 'external',
       oscTargetInput: '127.0.0.1:3333',
-      deviceError: null,
     })
   })
 
@@ -339,5 +344,106 @@ describe('startReplacing (confirm-and-replace switch)', () => {
     await startReplacing()
     expect(commands.stopProject).not.toHaveBeenCalled()
     expect(commands.startProject).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * #58: the「设置节点」gate — a telematic-declared selection with an
+ * incomplete App-global node config never starts. Completeness only;
+ * undeclared projects are never gated.
+ */
+describe('「设置节点」gate (#58)', () => {
+  const telematicManifest: Manifest = { ...manifest, telematic: true }
+
+  function seedNodeConfig(nodeName: string, hubUrl: string, hubToken: string) {
+    useSettingsStore.setState({
+      nodeNameSetting: nodeName,
+      hubUrlSetting: hubUrl,
+      hubTokenSetting: hubToken,
+    })
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    seedNodeConfig('', '', '')
+    useSettingsStore.setState({ hubRooms: {} })
+    useProjectStore.setState({
+      currentProject: { path: '/p', manifest: telematicManifest },
+      recentProjectPaths: ['/p'],
+      preflightStatus: 'ready',
+      preflightError: null,
+    })
+    useSessionStore.getState().resetSession()
+    useSessionStore.setState({
+      lanIp: '192.168.1.10',
+      lanAddresses: ['192.168.1.10'],
+      audioMode: 'internal',
+    })
+  })
+
+  it('blocks a declared project while any node field is blank', () => {
+    expect(nodeGateBlocksStart()).toBe(true)
+    seedNodeConfig('Node', '', 'token')
+    expect(nodeGateBlocksStart()).toBe(true)
+    seedNodeConfig('Node', 'wss://hub', '')
+    expect(nodeGateBlocksStart()).toBe(true)
+    // Whitespace-only counts as unset, matching the Rust resolver.
+    seedNodeConfig('  ', 'wss://hub', 'token')
+    expect(nodeGateBlocksStart()).toBe(true)
+  })
+
+  it('releases once all three fields are filled; undeclared never blocks', () => {
+    seedNodeConfig('Node', 'wss://hub', 'token')
+    expect(nodeGateBlocksStart()).toBe(false)
+    useProjectStore.setState({
+      currentProject: { path: '/p', manifest },
+    })
+    expect(nodeGateBlocksStart()).toBe(false)
+  })
+
+  it('canStart refuses a gated start, whichever card is selected', () => {
+    expect(
+      canStart({ ...base, sessionStatus: 'idle', nodeGateBlocked: true })
+    ).toBe(false)
+    expect(
+      canStart({
+        ...base,
+        sessionStatus: 'ready',
+        selectionIsRunningCard: false,
+        nodeGateBlocked: true,
+      })
+    ).toBe(false)
+    expect(
+      canStart({ ...base, sessionStatus: 'idle', nodeGateBlocked: false })
+    ).toBe(true)
+  })
+
+  it('start() and startReplacing() refuse while gated', async () => {
+    await start()
+    expect(commands.startProject).not.toHaveBeenCalled()
+
+    useSessionStore.setState({
+      sessionStatus: 'ready',
+      sessionProjectPath: '/p',
+    })
+    await startReplacing()
+    expect(commands.stopProject).not.toHaveBeenCalled()
+    expect(commands.startProject).not.toHaveBeenCalled()
+  })
+
+  it('restart() refuses while gated — no restart into an unconfigured node', async () => {
+    useSessionStore.setState({
+      sessionStatus: 'ready',
+      sessionProjectPath: '/p',
+    })
+    await restart()
+    expect(commands.stopProject).not.toHaveBeenCalled()
+    expect(commands.startProject).not.toHaveBeenCalled()
+  })
+
+  it('start() proceeds once the config is complete', async () => {
+    seedNodeConfig('Node', 'wss://hub.example.org:3000', 'token')
+    await start()
+    expect(commands.startProject).toHaveBeenCalledTimes(1)
   })
 })

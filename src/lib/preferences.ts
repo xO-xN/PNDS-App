@@ -73,8 +73,28 @@ export type PreferencesPatch = Partial<
     | 'projectDisplayNames'
     | 'projectManifestNames'
     | 'offeredUtilities'
+    | 'nodeName'
+    | 'hubUrl'
+    | 'hubToken'
+    | 'hubRooms'
   >
 >
+
+/** #58: the「Room」dropdown's group numbers — mirrors `validate_hub_rooms`
+ * in Rust (the save boundary rejects anything outside this range). */
+export const ROOM_GROUPS: readonly number[] = [1, 2, 3]
+
+/** #58: the App-global node config is "set" only when all three fields
+ * hold non-blank values — the completeness the「设置节点」gate checks
+ * (connectivity is never checked, only completeness). Mirrors
+ * `resolve_hub_injection` in Rust. */
+export function isNodeConfigComplete(
+  nodeName: string | null | undefined,
+  hubUrl: string | null | undefined,
+  hubToken: string | null | undefined
+): boolean {
+  return Boolean(nodeName?.trim() && hubUrl?.trim() && hubToken?.trim())
+}
 
 /**
  * The one way preference fields are written. The map fields

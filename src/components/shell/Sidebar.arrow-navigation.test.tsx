@@ -66,7 +66,6 @@ function seedRunningSession(currentPath: string) {
     lanIp: '192.168.1.10',
     audioMode: 'internal',
     oscTargetInput: '127.0.0.1:3333',
-    deviceError: null,
     pendingChanges: false,
     health: readyHealth,
   })
@@ -181,7 +180,6 @@ describe('Cmd+↑/↓ project navigation and Esc close (v1.1.2 T7)', () => {
         audioMode: 'external',
         lanIp: '192.168.1.10',
         oscTargetInput: '127.0.0.1:3333',
-        deviceError: null,
       })
       render(<AppShell />)
 

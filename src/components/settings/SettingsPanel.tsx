@@ -32,15 +32,17 @@ import { SectionTitle } from './SectionTitle'
 import { DeveloperSection } from './DeveloperSection'
 import { PortsSection } from './PortsSection'
 import { AudioSection } from './AudioSection'
+import { NodeSection } from './NodeSection'
 
 /**
  * v1.2.0 (issue #13): the in-app settings panel — a single scrolling page
- * with six sections (spec issue #12). General (language), Appearance
- * (issue #38), Audio (issue #21), Ports (issue #14), Developer Tools
- * (issue #16) and About are live; the Projects history section (#15) was
- * removed after user review — history management lives in the sidebar
- * alone. Opened by ⌘, / the menu item, closed by Esc or ⌘, again. The
- * About menu item routes here with `focusSection`.
+ * with seven sections (spec issue #12). General (language), Appearance
+ * (issue #38), Audio (issue #21), Node (#58), Ports (issue #14),
+ * Developer Tools (issue #16) and About are live; the Projects history
+ * section (#15) was removed after user review — history management lives
+ * in the sidebar alone. Opened by ⌘, / the menu item, closed by Esc or
+ * ⌘, again. The About menu item routes here with `focusSection` — and
+ * so does the「设置节点」gate button (#58), routed to the Node section.
  */
 export function SettingsPanel() {
   const { t } = useTranslation()
@@ -175,8 +177,10 @@ export function SettingsPanel() {
 
         <Separator />
 
-        {/* ── Audio / Ports / Developer Tools ── */}
+        {/* ── Audio / Node / Ports / Developer Tools ── */}
         <AudioSection section="audio" />
+        <Separator />
+        <NodeSection section="node" />
         <Separator />
         <PortsSection section="ports" />
         <Separator />

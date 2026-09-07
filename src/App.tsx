@@ -12,6 +12,7 @@ import {
   initializeLanguage,
   languageSettingFromPrefs,
 } from './i18n/language-init'
+import { hostname } from '@tauri-apps/plugin-os'
 import { logger } from './lib/logger'
 import { commands } from './lib/tauri-bindings'
 import { DEFAULT_SAMPLE_RATE } from './lib/preferences'
@@ -83,6 +84,31 @@ function App() {
           useSettingsStore
             .getState()
             .setSampleRateSetting(result.data.sampleRate ?? DEFAULT_SAMPLE_RATE)
+          // #58: seed the Node section's config from the same read — the
+          // 「设置节点」gate reads completeness from these, so the gate is
+          // armed as soon as the app comes up. The generated binding type
+          // is Partial, so drop undefined room entries on the way in.
+          useSettingsStore
+            .getState()
+            .setNodeNameSetting(result.data.nodeName ?? '')
+          useSettingsStore.getState().setHubUrlSetting(result.data.hubUrl ?? '')
+          useSettingsStore
+            .getState()
+            .setHubTokenSetting(result.data.hubToken ?? '')
+          const hubRooms: Record<string, number> = {}
+          for (const [projectId, group] of Object.entries(
+            result.data.hubRooms ?? {}
+          )) {
+            if (group) hubRooms[projectId] = group
+          }
+          useSettingsStore.getState().setHubRooms(hubRooms)
+        }
+        // #58: the node-name input's placeholder hints this machine's
+        // hostname — operators name nodes after machines. Best-effort.
+        try {
+          useSettingsStore.getState().setHostnameHint((await hostname()) ?? '')
+        } catch (error) {
+          logger.warn('Failed to read hostname for the node hint', { error })
         }
         await buildAppMenu()
         logger.debug('Application menu built')

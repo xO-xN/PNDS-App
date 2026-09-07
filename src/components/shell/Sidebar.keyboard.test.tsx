@@ -78,7 +78,6 @@ function seedRunningSession(currentPath: string) {
     lanIp: '192.168.1.10',
     audioMode: 'internal',
     oscTargetInput: '127.0.0.1:3333',
-    deviceError: null,
     pendingChanges: false,
     health: readyHealth,
   })
@@ -342,7 +341,6 @@ describe('Cmd keyboard layer (v1.1.2)', () => {
         audioMode: 'internal',
         lanIp: '192.168.1.10',
         oscTargetInput: '127.0.0.1:3333',
-        deviceError: null,
       })
     }
 
@@ -412,16 +410,17 @@ describe('Cmd keyboard layer (v1.1.2)', () => {
       expect(useSessionStore.getState().pendingChanges).toBe(false)
     })
 
-    it('Enter fires Change even while the device select holds focus (#29 feedback)', async () => {
+    it('Enter fires Change even while a settings select holds focus (#29 feedback)', async () => {
       seedRunningSession(FIRST_PATH)
       useSessionStore.setState({ pendingChanges: true })
       render(<AppShell />)
 
-      // The settings rows render synth / device / LAN selects in order;
-      // focus sits on the device one, exactly as after a mouse change.
-      const deviceSelect = screen.getAllByRole('combobox')[1]
-      if (!deviceSelect) throw new Error('Expected the device select')
-      fireEvent.keyDown(deviceSelect, { key: 'Enter' })
+      // The settings card's synth select holds focus — the #29 lesson
+      // (device select originally): a focused control must not swallow
+      // the Enter alias.
+      const synthSelect = screen.getAllByRole('combobox')[0]
+      if (!synthSelect) throw new Error('Expected the synth select')
+      fireEvent.keyDown(synthSelect, { key: 'Enter' })
 
       // The alias runs in the capture phase: Change happens, and the
       // select's own Enter (opening its popup) never fires.

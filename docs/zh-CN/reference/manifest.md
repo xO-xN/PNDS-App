@@ -48,9 +48,17 @@ audio.supportedModes
 
 ```text
 description
+telematic
 audio.outputChannels
 audio.standaloneTarget
 ```
+
+`telematic`：
+
+- 布尔值，声明作品具有跨互联网（telematic）演奏能力；
+- 缺省、`null`、`false` 与非布尔值一律视为**未声明**，不报错（preflight 容错）——只有显式 `"telematic": true` 才算声明；
+- 只决定两件事：App 是否在启动时注入节点环境变量（见 [runtime-contract.md](./runtime-contract.md) §3），以及「设置节点」强制门是否适用于本工程；
+- **不承载任何 hub 配置**：节点名、hub 地址、token 与房间全部由 App 一侧决定（ADR-0004），manifest 永远拿不到它们。
 
 `audio.outputChannels`：
 

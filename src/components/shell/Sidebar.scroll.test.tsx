@@ -79,7 +79,6 @@ function seedRunningSession(currentPath: string) {
     lanIp: '192.168.1.10',
     audioMode: 'internal',
     oscTargetInput: '127.0.0.1:3333',
-    deviceError: null,
     pendingChanges: false,
     health: readyHealth,
   })

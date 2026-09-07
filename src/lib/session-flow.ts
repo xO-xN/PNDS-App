@@ -2,7 +2,8 @@ import { commands } from '@/lib/tauri-bindings'
 import { logger } from '@/lib/logger'
 import { useSessionStore } from '@/store/session-store'
 import { useProjectStore } from '@/store/project-store'
-import { isValidOscTarget } from '@/lib/preferences'
+import { useSettingsStore } from '@/store/settings-store'
+import { isNodeConfigComplete, isValidOscTarget } from '@/lib/preferences'
 
 /**
  * Session-flow module: the single implementation of all start-gating and
@@ -15,12 +16,31 @@ import { isValidOscTarget } from '@/lib/preferences'
  */
 
 /**
+ * #58: the「设置节点」gate's verdict — the SELECTED project declares
+ * telematic capability but the App-global node config (node name / hub
+ * address / token) is incomplete. Reads the live stores so every consumer
+ * (the session button, the Enter alias, every start path) shares one
+ * derivation; undeclared projects are never gated, and the gate checks
+ * completeness only, never connectivity.
+ */
+export function nodeGateBlocksStart(): boolean {
+  const { currentProject } = useProjectStore.getState()
+  if (currentProject?.manifest.telematic !== true) return false
+  const { nodeNameSetting, hubUrlSetting, hubTokenSetting } =
+    useSettingsStore.getState()
+  return !isNodeConfigComplete(nodeNameSetting, hubUrlSetting, hubTokenSetting)
+}
+
+/**
  * Whether a session can be started right now (§8.1 gating).
  *
  * `selectionIsRunningCard` (v1.2.3 #39/T4): false when the selected card
  * is NOT the session's own project — then Load means "start this over
  * whatever runs" and the idle/error sessionStatus gate does not apply
  * (the confirm-and-replace flow stops the old session itself).
+ *
+ * #58: `nodeGateBlocked` (from `nodeGateBlocksStart()`) refuses the start
+ * of a telematic-declared project until the node config is complete.
  */
 export function canStart(input: {
   currentProject: unknown
@@ -29,8 +49,8 @@ export function canStart(input: {
   lanIp: string | null
   audioMode: string
   oscTargetInput: string
-  deviceError: string | null
   selectionIsRunningCard?: boolean
+  nodeGateBlocked?: boolean
 }): boolean {
   const {
     currentProject,
@@ -39,8 +59,8 @@ export function canStart(input: {
     lanIp,
     audioMode,
     oscTargetInput,
-    deviceError,
     selectionIsRunningCard = true,
+    nodeGateBlocked = false,
   } = input
 
   if (
@@ -52,12 +72,9 @@ export function canStart(input: {
     (selectionIsRunningCard &&
       sessionStatus !== 'idle' &&
       sessionStatus !== 'error') ||
-    !lanIp
+    !lanIp ||
+    nodeGateBlocked
   ) {
-    return false
-  }
-  // §6.3: internal cannot start while device capability is unknown/broken.
-  if (audioMode === 'internal' && deviceError) {
     return false
   }
   // §6.6: external mode cannot start with an invalid target.
@@ -90,7 +107,7 @@ let startInFlight = false
 export async function start(): Promise<void> {
   if (startInFlight) return
   const { currentProject, preflightStatus } = useProjectStore.getState()
-  const { audioMode, lanIp, sessionStatus, oscTargetInput, deviceError } =
+  const { audioMode, lanIp, sessionStatus, oscTargetInput } =
     useSessionStore.getState()
   if (
     !canStart({
@@ -100,7 +117,7 @@ export async function start(): Promise<void> {
       lanIp,
       audioMode,
       oscTargetInput,
-      deviceError,
+      nodeGateBlocked: nodeGateBlocksStart(),
     })
   ) {
     return
@@ -166,6 +183,9 @@ export async function restart(): Promise<void> {
   const { currentProject } = useProjectStore.getState()
   const { audioMode, lanIp } = useSessionStore.getState()
   if (!currentProject || !lanIp) return
+  // #58: the「设置节点」gate applies to restarts too — a declared project
+  // never restarts into an unconfigured node (no hub variables injected).
+  if (nodeGateBlocksStart()) return
 
   logger.info('Restarting session', {
     path: currentProject.path,
@@ -187,7 +207,7 @@ export async function restart(): Promise<void> {
 export async function startReplacing(): Promise<void> {
   if (startInFlight) return
   const { currentProject, preflightStatus } = useProjectStore.getState()
-  const { audioMode, lanIp, sessionStatus, oscTargetInput, deviceError } =
+  const { audioMode, lanIp, sessionStatus, oscTargetInput } =
     useSessionStore.getState()
   if (
     !canStart({
@@ -197,8 +217,8 @@ export async function startReplacing(): Promise<void> {
       lanIp,
       audioMode,
       oscTargetInput,
-      deviceError,
       selectionIsRunningCard: false,
+      nodeGateBlocked: nodeGateBlocksStart(),
     })
   ) {
     return

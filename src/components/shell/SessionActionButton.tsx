@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { stopAndReset } from '@/lib/open-project'
 import { canStart, start, restart, startReplacing } from '@/lib/session-flow'
+import { isNodeConfigComplete } from '@/lib/preferences'
 import { useProjectStore } from '@/store/project-store'
+import { useSettingsStore } from '@/store/settings-store'
 import {
   isSessionBusy,
   isSessionLive,
@@ -39,6 +41,11 @@ import {
  * ⌘Enter is the same alias (no macOS system conflict), the plain-Esc
  * close-project alias was retired — Esc has no app function; ⌘W opens
  * the close-project confirmation while a session runs (see menu.ts).
+ *
+ * #58: a telematic-declared selection with incomplete node config turns
+ * the button into「设置节点」(routes to the settings Node section) — see
+ * the render branch below. Enter never starts through the gate: the
+ * verdict flows into `canStart`.
  */
 export function SessionActionButton() {
   const { t } = useTranslation()
@@ -55,13 +62,23 @@ export function SessionActionButton() {
   const audioMode = useSessionStore(state => state.audioMode)
   const lanIp = useSessionStore(state => state.lanIp)
   const oscTargetInput = useSessionStore(state => state.oscTargetInput)
-  const deviceError = useSessionStore(state => state.deviceError)
   const pendingChanges = useSessionStore(state => state.pendingChanges)
+  const nodeNameSetting = useSettingsStore(state => state.nodeNameSetting)
+  const hubUrlSetting = useSettingsStore(state => state.hubUrlSetting)
+  const hubTokenSetting = useSettingsStore(state => state.hubTokenSetting)
   const [confirmSwitchOpen, setConfirmSwitchOpen] = useState(false)
 
   const running = sessionStatus === 'ready'
   const busy = isSessionBusy(sessionStatus)
   const live = isSessionLive(sessionStatus)
+  // #58: the「设置节点」gate — a telematic-declared selection whose
+  // App-global node config is incomplete. Replaces the Load/Change forms
+  // (Close survives — a running session must stay closable); completing
+  // the config in the routed settings section restores them. Completeness
+  // only, never connectivity.
+  const nodeGated =
+    currentProject?.manifest.telematic === true &&
+    !isNodeConfigComplete(nodeNameSetting, hubUrlSetting, hubTokenSetting)
   // v1.2.3 (#39/T4): false while a different card is selected over a live
   // session — the footer then belongs to that card's pending start config.
   const runningCardSelected = selectionIsRunningCard(
@@ -86,8 +103,8 @@ export function SessionActionButton() {
     lanIp,
     audioMode,
     oscTargetInput,
-    deviceError,
     selectionIsRunningCard: runningCardSelected,
+    nodeGateBlocked: nodeGated,
   })
 
   /** Load/Enter submit: confirm-and-replace over a live session, plain
@@ -153,7 +170,9 @@ export function SessionActionButton() {
   // and no shadow here — the card owns both.
   const baseClass = 'h-10 w-full text-[14px] transition-colors'
 
-  // Close (the running card is selected, no pending change)
+  // Close (the running card is selected, no pending change) — #58: Close
+  // survives the「设置节点」gate; wiping the node config mid-show must not
+  // strand the running session without a stop control.
   if (running && runningCardSelected && !pendingChanges) {
     return (
       <button
@@ -165,6 +184,27 @@ export function SessionActionButton() {
         )}
       >
         {t('sidebar.closeProject')}
+      </button>
+    )
+  }
+
+  // #58:「设置节点」(declared selection, incomplete node config) — the
+  // button routes to the settings Node section instead of starting; the
+  // Load/Change forms return once the three fields are filled. It yields
+  // to a busy transition (starting/stopping): the session keeps its
+  // busy-state visual, and the gate takes the button back when it settles.
+  if (nodeGated && !busy) {
+    return (
+      <button
+        type="button"
+        data-testid="setup-node-button"
+        onClick={() => useSettingsStore.getState().openSettings('node')}
+        className={cn(
+          baseClass,
+          'bg-(--pnds-warning) text-(--pnds-warning-foreground) hover:bg-(--pnds-warning-hover)'
+        )}
+      >
+        {t('sidebar.setupNode')}
       </button>
     )
   }

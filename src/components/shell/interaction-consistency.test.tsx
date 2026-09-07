@@ -79,7 +79,6 @@ describe('interaction consistency (v1.2.2, issue #32)', () => {
       lanIp: '192.168.1.10',
       lanAddresses: ['192.168.1.10'],
       oscTargetInput: '127.0.0.1:3333',
-      deviceError: null,
       pendingChanges: false,
       volume: 80,
       muted: false,

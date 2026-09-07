@@ -537,7 +537,35 @@ projectManifestNames?: Partial<{ [key in string]: string }>;
  * Absent in pre-v1.3.0 files: a shipped path already present in the
  * index counts as offered, so the record backfills silently.
  */
-offeredUtilities?: string[] }
+offeredUtilities?: string[]; 
+/**
+ * v1.4.0 (issue #58): this machine's node identity for telematic
+ * performance — global, set once in the Settings「节点」section, never
+ * per-project. `None`/blank = never set (the「设置节点」gate blocks
+ * telematic starts until all three node fields are filled).
+ * Whitespace-only counts as unset at the injection seam.
+ */
+nodeName?: string | null; 
+/**
+ * v1.4.0 (issue #58): the telematic hub's full URL (`wss://host[:port]`).
+ * The token NEVER rides this string — it has its own field below and
+ * only ever travels in the injected `PNDS_HUB_TOKEN` variable.
+ */
+hubUrl?: string | null; 
+/**
+ * v1.4.0 (issue #58): the hub access token, stored as its own field,
+ * displayed masked in the UI and never logged, never concatenated
+ * into URLs. Injection is the only consumer.
+ */
+hubToken?: string | null; 
+/**
+ * v1.4.0 (issue #58): telematic room group number (1..=3) per project
+ * manifest id — the user-visible「Room」dropdown. The App derives the
+ * wire room as `{manifest.id}_{group}`; absent entry = group 1.
+ * Persisted per project and never reset: crash recovery must land a
+ * machine back in its own group's room (ADR-0004).
+ */
+hubRooms?: Partial<{ [key in string]: number }> }
 export type AudioConfig = { defaultMode: string; supportedModes: string[]; 
 /**
  * Discrete project output signals (manifest.md): 1..=64, default 2.
@@ -623,7 +651,16 @@ export type HealthScoreServer = { performerPort?: number | null; monitorPort?: n
  * frontend's to derive (it owns the markdown structure pass).
  */
 export type HelpCorpusDocument = { id: string; path: string; markdown: string }
-export type Manifest = { schemaVersion: number; id: string; name: string; version: string; description: string | null; scoreServer: ScoreServer; audio: AudioConfig }
+export type Manifest = { schemaVersion: number; id: string; name: string; version: string; description: string | null; scoreServer: ScoreServer; audio: AudioConfig; 
+/**
+ * v1.4.0 (issue #58): the work declares cross-internet (telematic)
+ * performance capability. Gates the App's hub-variable injection and
+ * the「设置节点」start gate — carries no hub configuration itself.
+ * Lenient by contract (manifest.md): only an explicit `true` declares;
+ * absent, `null`, `false` and non-boolean values all read as
+ * undeclared and never fail validation.
+ */
+telematic?: boolean | null }
 export type PackResult = { outputPath: string; sha256: string }
 /**
  * Who is listening on a project port.
