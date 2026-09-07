@@ -1,4 +1,4 @@
-//! PNDS setlist export service (v1.4.0, issue #59, spec #57).
+//! PNDS setlist export service (v1.4.0, issues #59 + #63, spec #57).
 //!
 //! An export directory is a wholly-copyable handover unit: each member
 //! project's `.pnds` (packer name `<sanitized name>-<version>.pnds`), a
@@ -7,16 +7,18 @@
 //! (`src/lib/setlist.ts` pins the schema — the field set is a UI concern,
 //! and hand-editability is the format's point); this module owns the
 //! on-disk work: the packability gate, the per-project describe the
-//! frontend assembles from, packing into the chosen directory, and the
-//! two text files.
+//! frontend assembles from, packing into the chosen directory, the two
+//! text files, and — for the import (#63) — reading a directory back:
+//! the raw set.json body plus the identity probe of every `.pnds` beside
+//! it.
 //!
-//! All functions here are path-based (no AppHandle) so the export flows
-//! are testable with tempdir fixtures, like `bundle.rs`.
+//! All functions here are path-based (no AppHandle) so the export and
+//! import flows are testable with tempdir fixtures, like `bundle.rs`.
 
 use serde::Serialize;
 use specta::Type;
 use std::fs::{self, File};
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 use crate::project::bundle;
@@ -49,6 +51,28 @@ pub struct SetlistProjectInfo {
 #[serde(rename_all = "camelCase")]
 pub struct SetlistExportResult {
     pub output_dir: String,
+}
+
+/// v1.4.0 (#63): one `.pnds` found in an export directory, with the
+/// identity the import matches entries on.
+#[derive(Debug, Clone, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SetlistBundleFile {
+    pub path: String,
+    pub file_name: String,
+    pub id: String,
+    pub version: String,
+}
+
+/// v1.4.0 (#63): what the import reads out of an export directory — the
+/// raw set.json body (the frontend's `parseSetlist` is the validation
+/// seam; this side only proves the file exists and reads) plus every
+/// `.pnds` beside it with its probed identity.
+#[derive(Debug, Clone, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SetlistReadout {
+    pub setlist_json: String,
+    pub bundles: Vec<SetlistBundleFile>,
 }
 
 /// The export pre-flight: every path through the same packability gate a
@@ -137,6 +161,106 @@ fn output_file_name(output: &Path) -> Result<String, String> {
         .and_then(|name| name.to_str())
         .map(str::to_string)
         .ok_or_else(|| format!("No file name in {}", output.display()))
+}
+
+// ─────────────────────────── reading (#63) ───────────────────────────
+
+/// v1.4.0 (#63): reads an export directory for the import. The raw
+/// set.json body comes back untouched (the frontend's `parseSetlist`
+/// validates); every `.pnds` beside it is probed for its manifest
+/// identity, in file-name order so duplicate identities resolve
+/// deterministically. Directories without a `set.json` are an error —
+/// the routing seam reads exactly that as "not a setlist export".
+pub fn read_setlist(dir: &Path) -> Result<SetlistReadout, String> {
+    let setlist_path = dir.join(SETLIST_FILE_NAME);
+    if !setlist_path.is_file() {
+        return Err(format!("No {SETLIST_FILE_NAME} in {}", dir.display()));
+    }
+    let setlist_json = fs::read_to_string(&setlist_path)
+        .map_err(|e| format!("Failed to read {}: {e}", setlist_path.display()))?;
+
+    let mut names: Vec<String> = Vec::new();
+    let entries =
+        fs::read_dir(dir).map_err(|e| format!("Failed to read {}: {e}", dir.display()))?;
+    for entry in entries.filter_map(|e| e.ok()) {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if entry.path().is_file() && name.to_lowercase().ends_with(".pnds") {
+            names.push(name);
+        }
+    }
+    names.sort();
+
+    let mut bundles = Vec::with_capacity(names.len());
+    for name in &names {
+        let path = dir.join(name);
+        // A lenient probe: an unreadable archive is skipped, not fatal —
+        // the install (the real gate) reports the readable error for a
+        // bundle the set actually claims.
+        if let Some((id, version)) = probe_bundle_identity(&path) {
+            bundles.push(SetlistBundleFile {
+                path: path.to_string_lossy().into_owned(),
+                file_name: name.clone(),
+                id,
+                version,
+            });
+        }
+    }
+    Ok(SetlistReadout {
+        setlist_json,
+        bundles,
+    })
+}
+
+/// The single-root-zip identity probe: a bundle whose one root directory
+/// holds a readable `manifest.json` yields its `id` + `version`. Anything
+/// else reads as `None` — this is matching data, not validation; the
+/// install step remains the gate.
+fn probe_bundle_identity(path: &Path) -> Option<(String, String)> {
+    let file = File::open(path).ok()?;
+    let mut archive = zip::ZipArchive::new(file).ok()?;
+    let root = single_root_name(&mut archive)?;
+    let mut entry = archive.by_name(&format!("{root}/manifest.json")).ok()?;
+    let mut body = String::new();
+    entry.read_to_string(&mut body).ok()?;
+    let manifest: serde_json::Value = serde_json::from_str(&body).ok()?;
+    let id = manifest.get("id")?.as_str()?.to_string();
+    let version = manifest.get("version")?.as_str()?.to_string();
+    Some((id, version))
+}
+
+/// The one top-level directory every entry lives under, or `None` for
+/// anything else (multiple roots, stray top-level files). Standard zip
+/// writers emit explicit `<root>/` directory entries; those count as the
+/// root, not as strays.
+fn single_root_name(archive: &mut zip::ZipArchive<File>) -> Option<String> {
+    let mut roots: Vec<String> = Vec::new();
+    for index in 0..archive.len() {
+        let entry = archive.by_index(index).ok()?;
+        let is_dir_entry = entry.name().ends_with('/');
+        let name = entry.name().trim_end_matches('/');
+        let mut components = Path::new(name).components();
+        let Some(top) = components.next() else {
+            continue;
+        };
+        let top = top.as_os_str().to_string_lossy().into_owned();
+        let deeper = components.next().is_some();
+        if !deeper && !is_dir_entry {
+            // Only the metadata entry may sit at the top level — and it is
+            // not a root.
+            if name == bundle::METADATA_ENTRY {
+                continue;
+            }
+            return None; // a stray top-level file — not our layout
+        }
+        if !roots.contains(&top) {
+            roots.push(top);
+        }
+    }
+    if roots.len() == 1 {
+        roots.pop()
+    } else {
+        None
+    }
 }
 
 /// Writes `contents` to `path` through a `.part` sibling + rename, the
@@ -348,5 +472,87 @@ mod tests {
         assert!(!dest.join("Good-1.0.0.pnds").exists());
         assert!(!dest.join(SETLIST_FILE_NAME).exists());
         assert!(!dest.join(SETLIST_README_FILE_NAME).exists());
+    }
+
+    #[test]
+    fn read_returns_the_setlist_body_and_bundle_identities() {
+        let parent = tempfile::tempdir().unwrap();
+        let first = parent.path().join("First");
+        let second = parent.path().join("Second");
+        fs::create_dir_all(&first).unwrap();
+        fs::create_dir_all(&second).unwrap();
+        fixture_project(&first, "first", "First", "1.0.0", "internal");
+        fixture_project(&second, "second", "Second", "2.0.0", "external");
+
+        let dest = parent.path().join("Export");
+        let setlist_json = "{\"formatVersion\":1,\"name\":\"Gig\"}\n";
+        export_setlist(
+            &dest,
+            &[
+                first.to_string_lossy().into_owned(),
+                second.to_string_lossy().into_owned(),
+            ],
+            setlist_json,
+            "readme\n",
+            APP_VERSION,
+        )
+        .unwrap();
+
+        let readout = read_setlist(&dest).unwrap();
+        // The body comes back byte-exact — validation is the frontend's
+        // parse seam, this side only proves it reads.
+        assert_eq!(readout.setlist_json, setlist_json);
+        assert_eq!(readout.bundles.len(), 2);
+        assert_eq!(readout.bundles[0].file_name, "First-1.0.0.pnds");
+        assert_eq!(readout.bundles[0].id, "first");
+        assert_eq!(readout.bundles[0].version, "1.0.0");
+        assert_eq!(
+            readout.bundles[0].path,
+            dest.join("First-1.0.0.pnds").to_string_lossy()
+        );
+        assert_eq!(readout.bundles[1].id, "second");
+        assert_eq!(readout.bundles[1].version, "2.0.0");
+    }
+
+    #[test]
+    fn read_refuses_directories_without_set_json() {
+        let parent = tempfile::tempdir().unwrap();
+        let plain = parent.path().join("Plain");
+        fs::create_dir_all(&plain).unwrap();
+        let err = read_setlist(&plain).unwrap_err();
+        assert!(err.contains("set.json"), "unexpected: {err}");
+        // A plain project directory reads the same way — the routing seam
+        // falls through to the normal open flow on this error.
+        let project = parent.path().join("Proj");
+        fs::create_dir_all(&project).unwrap();
+        fixture_project(&project, "proj", "Proj", "1.0.0", "external");
+        assert!(read_setlist(&project).is_err());
+    }
+
+    #[test]
+    fn read_skips_unreadable_archives_and_ignores_other_files() {
+        let parent = tempfile::tempdir().unwrap();
+        let project = parent.path().join("P");
+        fs::create_dir_all(&project).unwrap();
+        fixture_project(&project, "p", "P", "1.0.0", "external");
+        let dest = parent.path().join("Export");
+        export_setlist(
+            &dest,
+            &[project.to_string_lossy().into_owned()],
+            "{\"formatVersion\":1}\n",
+            "readme\n",
+            APP_VERSION,
+        )
+        .unwrap();
+
+        // A corrupt .pnds beside the real one is skipped (the install
+        // reports the readable error for a bundle the set claims); other
+        // files never enter the scan.
+        fs::write(dest.join("Broken-9.9.9.pnds"), b"not a zip").unwrap();
+        fs::write(dest.join("notes.txt"), b"operator notes").unwrap();
+
+        let readout = read_setlist(&dest).unwrap();
+        assert_eq!(readout.bundles.len(), 1);
+        assert_eq!(readout.bundles[0].id, "p");
     }
 }

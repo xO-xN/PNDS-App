@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use tauri::{AppHandle, Manager, State};
 
 use crate::project::bundle::{self, BundleOutputInfo, PackResult, BUNDLES_DIR};
-use crate::project::setlist::{self, SetlistExportResult, SetlistProjectInfo};
+use crate::project::setlist::{self, SetlistExportResult, SetlistProjectInfo, SetlistReadout};
 
 /// Paths of `.pnds` files macOS asked the App to open (file-association
 /// double-click or launch-with-document). Filled by `RunEvent::Opened`,
@@ -104,6 +104,17 @@ pub async fn export_setlist(
         &instructions,
         &packed_with,
     )
+}
+
+/// v1.4.0 (#63): reads a setlist export directory for the import — the
+/// raw set.json body (the frontend's `parseSetlist` validates it) plus
+/// every `.pnds` beside it with its probed identity. Directories without
+/// a set.json error out; the frontend routing seam reads exactly that as
+/// "not a setlist export" and falls through to the normal open flow.
+#[tauri::command]
+#[specta::specta]
+pub async fn read_setlist(dir: String) -> Result<SetlistReadout, String> {
+    setlist::read_setlist(&PathBuf::from(dir))
 }
 
 /// Atomically drains the queue of `.pnds` paths macOS asked the App to open.

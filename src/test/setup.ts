@@ -212,6 +212,12 @@ vi.mock('@/lib/tauri-bindings', () => ({
       status: 'ok',
       data: { outputDir: '/tmp/setlist-export' },
     }),
+    // v1.4.0 (#63): setlist import — default: no set.json (routing falls
+    // through to the normal open flow; import tests override).
+    readSetlist: vi.fn().mockResolvedValue({
+      status: 'error',
+      error: 'No set.json',
+    }),
     takePendingBundleOpens: vi
       .fn()
       .mockResolvedValue({ status: 'ok', data: [] }),

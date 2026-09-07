@@ -386,6 +386,21 @@ async exportSetlist(destDir: string, setlistJson: string, instructions: string, 
 }
 },
 /**
+ * v1.4.0 (#63): reads a setlist export directory for the import — the
+ * raw set.json body (the frontend's `parseSetlist` validates it) plus
+ * every `.pnds` beside it with its probed identity. Directories without
+ * a set.json error out; the frontend routing seam reads exactly that as
+ * "not a setlist export" and falls through to the normal open flow.
+ */
+async readSetlist(dir: string) : Promise<Result<SetlistReadout, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("read_setlist", { dir }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * Atomically drains the queue of `.pnds` paths macOS asked the App to open.
  */
 async takePendingBundleOpens() : Promise<Result<string[], string>> {
@@ -762,6 +777,11 @@ channelPlan: ChannelPlan | null;
  */
 outputDevice: string | null }
 /**
+ * v1.4.0 (#63): one `.pnds` found in an export directory, with the
+ * identity the import matches entries on.
+ */
+export type SetlistBundleFile = { path: string; fileName: string; id: string; version: string }
+/**
  * v1.4.0 (#59): the finished export's location (Finder reveal target).
  */
 export type SetlistExportResult = { outputDir: string }
@@ -780,6 +800,13 @@ defaultAudioMode: string;
  * The `<sanitized name>-<version>.pnds` artifact this export writes.
  */
 fileName: string }
+/**
+ * v1.4.0 (#63): what the import reads out of an export directory — the
+ * raw set.json body (the frontend's `parseSetlist` is the validation
+ * seam; this side only proves the file exists and reads) plus every
+ * `.pnds` beside it with its probed identity.
+ */
+export type SetlistReadout = { setlistJson: string; bundles: SetlistBundleFile[] }
 export type SynthdefCompileResult = { 
 /**
  * The sclang binary this run used (standard app path or PATH hit).

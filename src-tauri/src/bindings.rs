@@ -34,6 +34,7 @@ pub fn generate_bindings() -> Builder<tauri::Wry> {
         bundle::reclaim_project_bundle,
         bundle::get_setlist_export_info,
         bundle::export_setlist,
+        bundle::read_setlist,
         bundle::take_pending_bundle_opens,
         bundle::pick_project_or_bundle,
         synthdef::compile_project_synthdefs,

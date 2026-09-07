@@ -35,6 +35,17 @@ export function isProtectedFolder(id: string): boolean {
 }
 
 /**
+ * A fresh folder id — a crypto UUID with a timestamp fallback. Shared by
+ * `createFolder` and the setlist import's rebuilt folder (#63) so every
+ * folder identity comes from the same generator.
+ */
+export function newFolderId(): string {
+  return typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `folder-${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
+
+/**
  * v1.2.1 (issue #26): the folder area is at its cap (Utilities counts) —
  * the sidebar's FOLDERS "+" derives its disabled state from this, never
  * from its own count.
@@ -577,10 +588,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
     // creation outright — the sidebar's "+" is disabled at the same
     // threshold via `folderLimitReached`.
     if (folderLimitReached(before.projectFolders)) return null
-    const id =
-      typeof crypto !== 'undefined' && 'randomUUID' in crypto
-        ? crypto.randomUUID()
-        : `folder-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    const id = newFolderId()
     // v1.2.2 (user feedback): the fresh folder never shares a name —
     // repeat creations pick up " 2", " 3"… instead of colliding.
     const uniqueName = uniqueFolderName(name, before.projectFolders)

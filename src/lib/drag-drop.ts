@@ -1,5 +1,6 @@
 import { installAndOpenBundle, isBundlePath } from '@/lib/bundle-project'
 import { openProject } from '@/lib/open-project'
+import { importSetlistDirectory } from '@/lib/setlist-import'
 import { logger } from '@/lib/logger'
 
 /**
@@ -11,6 +12,9 @@ import { logger } from '@/lib/logger'
  * surface the standard preflight error; the drop never touches anything
  * outside those two paths.
  *
+ * v1.4.0 (#63): a directory holding a set.json is a setlist export —
+ * dropping it imports the whole set, exactly like picking it with ⌘O.
+ *
  * (Dropping on the Dock icon is a different gesture — macOS routes it
  * through `RunEvent::Opened`, same as a Finder double-click.)
  */
@@ -19,6 +23,8 @@ export async function handleDroppedPaths(paths: string[]): Promise<void> {
     logger.info('Importing dropped path', { path })
     if (isBundlePath(path)) {
       await installAndOpenBundle(path)
+    } else if (await importSetlistDirectory(path)) {
+      // A setlist export — handled (or its problem reported) by the import.
     } else {
       await openProject(path)
     }

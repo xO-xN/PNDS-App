@@ -5,6 +5,11 @@ import { notifications } from '@/lib/notifications'
 import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 import { openProject, promptOpenProject, stopAndReset } from './open-project'
+import { importSetlistDirectory } from '@/lib/setlist-import'
+
+vi.mock('@/lib/setlist-import', () => ({
+  importSetlistDirectory: vi.fn().mockResolvedValue(false),
+}))
 
 vi.mock('@/lib/notifications', () => ({
   notifications: {
@@ -230,6 +235,7 @@ describe('openProject vs a live session (#39)', () => {
 describe('promptOpenProject picker (v1.2.0 issue #16)', () => {
   const PICKED_DIR = '/Users/test/Score 5'
   const PICKED_BUNDLE = '/Users/test/Score 5-1.0.0.pnds'
+  const PICKED_SETLIST_DIR = '/Volumes/Handover/Gig Export'
 
   beforeEach(() => {
     vi.clearAllMocks()
@@ -296,6 +302,21 @@ describe('promptOpenProject picker (v1.2.0 issue #16)', () => {
       'Could not open the file dialog'
     )
     expect(commands.preflightProject).not.toHaveBeenCalled()
+  })
+
+  it('imports a picked setlist export directory (#63)', async () => {
+    vi.mocked(commands.pickProjectOrBundle).mockResolvedValue({
+      status: 'ok',
+      data: PICKED_SETLIST_DIR,
+    })
+    vi.mocked(importSetlistDirectory).mockResolvedValue(true)
+
+    await promptOpenProject()
+
+    expect(importSetlistDirectory).toHaveBeenCalledWith(PICKED_SETLIST_DIR)
+    // The whole set was the picked unit — no single project opens.
+    expect(commands.preflightProject).not.toHaveBeenCalled()
+    expect(commands.installBundle).not.toHaveBeenCalled()
   })
 })
 

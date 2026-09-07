@@ -1,9 +1,14 @@
+import type { ProjectFolder } from '@/lib/tauri-bindings'
+
 /**
  * v1.4.0 (issue #59): the `set.json` exchange format for setlist exports
  * (spec #57). An exported directory holds each project's `.pnds` (packer
  * name `<sanitized name>-<version>.pnds`), this `set.json`, and an import
  * instructions `README.txt` written by the Rust side.
  *
+ * v1.4.0 (#63): the import planning helpers live here too — entry→bundle
+ * matching and the index-rebuild inputs (see `matchSetlistBundles`,
+ * `setlistRebuild`).
  * **The schema is pinned here** (mirrored by the Rust writer's file layout
  * and `docs/developer/setlist.md`; do not change fields without a
  * formatVersion bump):
@@ -186,4 +191,81 @@ function optionalString(value: unknown): string | undefined {
 
 function stringifyError(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+// ─────────────────────── import planning (#63) ───────────────────────
+
+/** One `.pnds` the import found in an export directory — the Rust
+ * `read_setlist` scan's entry (the generated `SetlistBundleFile` satisfies
+ * this structurally; kept loose so the module stays dependency-light). */
+export interface SetlistBundleProbe {
+  path: string
+  fileName: string
+  id: string
+  version: string
+}
+
+export interface SetlistMatchPlan {
+  /** Per set.json entry, in set order: the `.pnds` to install. */
+  files: string[]
+  /** Entries with no matching bundle, as `id version` strings. */
+  missing: string[]
+}
+
+/**
+ * #63: resolves each set.json entry to the export directory's `.pnds`
+ * carrying the same `id` + `version` — the identity the format pins, so
+ * a hand-renamed bundle still matches while a hand-edited `file` hint
+ * can never misroute an install. Two bundles sharing an identity resolve
+ * to the first by the scan's (name-sorted) order; bundles no entry
+ * claims are simply unused.
+ */
+export function matchSetlistBundles(
+  projects: readonly Pick<SetlistProject, 'id' | 'version'>[],
+  bundles: readonly SetlistBundleProbe[]
+): SetlistMatchPlan {
+  const byIdentity = new Map<string, SetlistBundleProbe>()
+  for (const bundle of bundles) {
+    const key = JSON.stringify([bundle.id, bundle.version])
+    if (!byIdentity.has(key)) byIdentity.set(key, bundle)
+  }
+  const files: string[] = []
+  const missing: string[] = []
+  for (const project of projects) {
+    const bundle = byIdentity.get(JSON.stringify([project.id, project.version]))
+    if (bundle) files.push(bundle.path)
+    else missing.push(`${project.id} ${project.version}`)
+  }
+  return { files, missing }
+}
+
+/**
+ * #63: the index rebuild inputs for `replaceProjectIndex` — the installed
+ * local paths (parallel to `setlist.projects`; the orchestrator installs
+ * in set order), one folder holding them in that order under the set's
+ * name, and the display-name overrides keyed by the LOCAL paths (empty
+ * names are absent overrides — the card falls back to its manifest name).
+ */
+export function setlistRebuild(
+  setlist: SetlistFile,
+  installedPaths: readonly string[],
+  folderId: string
+): {
+  paths: string[]
+  folders: ProjectFolder[]
+  names: Record<string, string>
+} {
+  const paths = installedPaths.slice(0, setlist.projects.length)
+  const names: Record<string, string> = {}
+  setlist.projects.forEach((project, index) => {
+    const path = paths[index]
+    if (path && project.displayName && project.displayName.trim()) {
+      names[path] = project.displayName
+    }
+  })
+  return {
+    paths,
+    folders: [{ id: folderId, name: setlist.name, projectPaths: paths }],
+    names,
+  }
 }

@@ -3,8 +3,10 @@ import {
   SETLIST_FILE_NAME,
   SETLIST_FORMAT_VERSION,
   duplicateSetlistIdentity,
+  matchSetlistBundles,
   parseSetlist,
   serializeSetlist,
+  setlistRebuild,
   type SetlistFile,
 } from './setlist'
 
@@ -197,5 +199,99 @@ describe('duplicateSetlistIdentity', () => {
 
   it('exposes the set.json file name for the import seam', () => {
     expect(SETLIST_FILE_NAME).toBe('set.json')
+  })
+})
+
+/**
+ * v1.4.0 (#63): the import planning seam — entries resolve to bundles by
+ * identity (never by the `file` hint), and the rebuild derives the
+ * replaceProjectIndex inputs from the installed local paths.
+ */
+describe('setlist import planning (issue #63)', () => {
+  const probes = [
+    {
+      path: '/export/Inarticulate III-0.1.0.pnds',
+      fileName: 'Inarticulate III-0.1.0.pnds',
+      id: 'inarticulate-iii',
+      version: '0.1.0',
+    },
+    {
+      path: '/export/hand-renamed.pnds',
+      fileName: 'hand-renamed.pnds',
+      id: 'another-score',
+      version: '2.0.0',
+    },
+    {
+      path: '/export/Unrelated-9.9.9.pnds',
+      fileName: 'Unrelated-9.9.9.pnds',
+      id: 'unrelated',
+      version: '9.9.9',
+    },
+  ]
+
+  it('matches entries to bundles by identity, in set order', () => {
+    const plan = matchSetlistBundles(setlist.projects, probes)
+    expect(plan.missing).toEqual([])
+    // Set order drives install order — a hand-renamed bundle still
+    // matches, and an unclaimed bundle stays unused.
+    expect(plan.files).toEqual([
+      '/export/Inarticulate III-0.1.0.pnds',
+      '/export/hand-renamed.pnds',
+    ])
+  })
+
+  it('reports unmatched entries instead of guessing', () => {
+    const plan = matchSetlistBundles(
+      [
+        { id: 'inarticulate-iii', version: '0.2.0' },
+        { id: 'gone', version: '1.0.0' },
+      ],
+      probes
+    )
+    expect(plan.files).toEqual([])
+    expect(plan.missing).toEqual(['inarticulate-iii 0.2.0', 'gone 1.0.0'])
+  })
+
+  it('two bundles with one identity resolve to the first by scan order', () => {
+    const plan = matchSetlistBundles(
+      [{ id: 'a', version: '1' }],
+      [
+        { path: '/e/z.pnds', fileName: 'z.pnds', id: 'a', version: '1' },
+        { path: '/e/a.pnds', fileName: 'a.pnds', id: 'a', version: '1' },
+      ]
+    )
+    // The Rust scan sorts by file name before the TS sees it — the first
+    // in the given order wins.
+    expect(plan.files).toEqual(['/e/z.pnds'])
+  })
+
+  it('setlistRebuild derives the replaceProjectIndex inputs', () => {
+    const installed = ['/bundles/a-0.1.0', '/bundles/b-2.0.0']
+    const rebuild = setlistRebuild(setlist, installed, 'folder-x')
+    expect(rebuild.paths).toEqual(installed)
+    expect(rebuild.folders).toEqual([
+      { id: 'folder-x', name: 'Gig Berlin', projectPaths: installed },
+    ])
+    // Display-name overrides key by LOCAL path — never by the export
+    // machine's paths or identities.
+    expect(rebuild.names).toEqual({
+      '/bundles/a-0.1.0': 'Opening Set',
+      '/bundles/b-2.0.0': 'Another Score',
+    })
+  })
+
+  it('an empty displayName is an absent override, not a blank name', () => {
+    const rebuilt = setlistRebuild(
+      {
+        formatVersion: 1,
+        name: 'S',
+        exportedWith: '',
+        exportedAt: '',
+        projects: [{ id: 'a', version: '1', displayName: '  ' }],
+      },
+      ['/bundles/a-1'],
+      'f'
+    )
+    expect(rebuilt.names).toEqual({})
   })
 })

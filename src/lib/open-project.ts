@@ -8,6 +8,7 @@ import {
 } from '@/store/project-store'
 import { useSessionStore, isSessionLive } from '@/store/session-store'
 import { installAndOpenBundle, isBundlePath } from '@/lib/bundle-project'
+import { importSetlistDirectory } from '@/lib/setlist-import'
 import { DEFAULT_OSC_TARGET, loadPreferences } from '@/lib/preferences'
 
 /**
@@ -42,6 +43,10 @@ export async function promptOpenProject(): Promise<void> {
     await installAndOpenBundle(selected)
     return
   }
+  // v1.4.0 (#63): a directory holding a set.json is a setlist export —
+  // one gesture imports the whole set. `false` (no set.json) falls
+  // through to the normal open.
+  if (await importSetlistDirectory(selected)) return
   await openProject(selected)
 }
 
