@@ -75,6 +75,10 @@ describe('interaction consistency (v1.2.2, issue #32)', () => {
     useSessionStore.setState({
       sessionStatus: 'ready',
       projectName: 'Inarticulate III',
+      // The ready session runs FIRST_PATH — since the post-#63 rule its
+      // card is the one ✕-exempt card (the fixture always meant this;
+      // sessionProjectPath just was never set).
+      sessionProjectPath: FIRST_PATH,
       audioMode: 'internal',
       lanIp: '192.168.1.10',
       lanAddresses: ['192.168.1.10'],

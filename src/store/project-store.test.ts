@@ -63,6 +63,7 @@ describe('project-store', () => {
   })
 
   it('tracks the preflight lifecycle', () => {
+    useProjectStore.getState().addRecentProject('/p')
     useProjectStore.getState().startPreflight()
     expect(useProjectStore.getState().preflightStatus).toBe('checking')
 
@@ -74,6 +75,10 @@ describe('project-store', () => {
   })
 
   it('learns the manifest name on every successful preflight (issue #16)', () => {
+    useProjectStore
+      .getState()
+      .addRecentProject('/bundles/inarticulate-iii-0.1.0')
+    useProjectStore.getState().addRecentProject('/other')
     useProjectStore
       .getState()
       .preflightSucceeded('/bundles/inarticulate-iii-0.1.0', manifest)
@@ -100,6 +105,7 @@ describe('project-store', () => {
   })
 
   it('records a readable error and clears the project on failure', () => {
+    useProjectStore.getState().addRecentProject('/p')
     useProjectStore.getState().preflightSucceeded('/p', manifest)
     useProjectStore
       .getState()
@@ -113,6 +119,8 @@ describe('project-store', () => {
   /** v1.2.3 (#39): a failed selection keeps its card — the pill stays via
    * `failedPreflightPath` and the error is recorded per path for the card. */
   it('keeps the failed selection and records the per-card error (#39)', () => {
+    useProjectStore.getState().addRecentProject('/p')
+    useProjectStore.getState().addRecentProject('/q')
     useProjectStore.getState().startPreflight()
     useProjectStore.getState().preflightFailed('/p', 'Port 6868 is busy')
 
@@ -753,6 +761,7 @@ describe('project-store persistence (structural actions commit + save)', () => {
   })
 
   it('preflightSucceeded persists the manifest name only when it is new', async () => {
+    useProjectStore.getState().addRecentProject('/a')
     useProjectStore.getState().preflightSucceeded('/a', manifest)
     await vi.waitFor(() => {
       expect(commands.savePreferences).toHaveBeenCalledWith(

@@ -469,6 +469,25 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       ...(state.currentProject?.path === path
         ? { preflightStatus: 'idle' as const, preflightError: null }
         : {}),
+      // v1.4.0 (user report after #63): the ✕ now also covers failed and
+      // mid-check cards, so a removal takes the card's transient
+      // selection state with it — a stale failed-selection pill, error
+      // entry (and the Welcome error page with it) must not outlive the
+      // card they belonged to.
+      ...(state.pendingPreflightPath === path
+        ? { pendingPreflightPath: null }
+        : {}),
+      ...(state.failedPreflightPath === path
+        ? {
+            failedPreflightPath: null,
+            preflightStatus: 'idle' as const,
+            preflightError: null,
+          }
+        : {}),
+      preflightErrors: (() => {
+        const { [path]: _removed, ...remaining } = state.preflightErrors
+        return remaining
+      })(),
     }))
     persistIndexIfChanged(before, get())
   },
@@ -755,6 +774,11 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
 
   preflightSucceeded: (path, manifest) => {
     const before = get()
+    // v1.4.0 (user report after #63): a check that resolves after its
+    // card was removed mid-flight must not resurrect the project as a
+    // de-indexed "current" selection — the removal already settled the
+    // state.
+    if (!before.recentProjectPaths.includes(path)) return
     // v1.2.3 (#39): a pass clears the card's error state.
     const { [path]: _, ...clearedPreflightErrors } = before.preflightErrors
     set(state => ({
@@ -777,15 +801,20 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
   },
 
   preflightFailed: (path, message) =>
-    set(state => ({
-      preflightStatus: 'error',
-      preflightError: message,
-      currentProject: null,
-      // v1.2.3 (#39): the selection stays on the failed card and the error
-      // shows on it — selection is free even onto a bad project.
-      failedPreflightPath: path,
-      preflightErrors: { ...state.preflightErrors, [path]: message },
-    })),
+    set(state => {
+      // v1.4.0 (user report after #63): same mid-flight guard — a removed
+      // card takes no failed-selection state back.
+      if (!state.recentProjectPaths.includes(path)) return {}
+      return {
+        preflightStatus: 'error',
+        preflightError: message,
+        currentProject: null,
+        // v1.2.3 (#39): the selection stays on the failed card and the
+        // error shows on it — selection is free even onto a bad project.
+        failedPreflightPath: path,
+        preflightErrors: { ...state.preflightErrors, [path]: message },
+      }
+    }),
 
   clearProject: () =>
     set({

@@ -366,6 +366,47 @@ describe('Sidebar project list (v1.2.2, issue #29)', () => {
         within(cardB).queryByTestId('card-preflight-checking')
       ).not.toBeInTheDocument()
     })
+
+    /** User report after #63: a broken project (dependencies missing, port
+     * held, …) must stay REMOVABLE — the error icon lives in the LEFT slot
+     * so it can never crowd out the ✕. */
+    it('a failed card carries the error icon on the left and stays removable', async () => {
+      const userEvent = (await import('@testing-library/user-event')).default
+      useProjectStore.setState({
+        failedPreflightPath: SECOND_PATH,
+        preflightStatus: 'error',
+        preflightErrors: {
+          [SECOND_PATH]: 'Project dependencies are missing.',
+        },
+      })
+      render(<Sidebar variant="static" />)
+
+      const cardB = document.querySelector<HTMLElement>(
+        `[data-project-path="${CSS.escape(SECOND_PATH)}"]`
+      )
+      if (!cardB) throw new Error('Expected the second project card')
+      const titleButton = within(cardB).getByRole('button', {
+        name: /pnds score 1/i,
+      })
+      const errorBadge = within(cardB).getByTestId('card-preflight-error')
+      // The error icon precedes the title in the DOM (left slot), so it
+      // can never crowd out the ✕ on the right.
+      expect(
+        titleButton.compareDocumentPosition(errorBadge) &
+          Node.DOCUMENT_POSITION_PRECEDING
+      ).toBeTruthy()
+
+      await userEvent.click(
+        within(cardB).getByRole('button', { name: /remove from history/i })
+      )
+      const state = useProjectStore.getState()
+      expect(state.recentProjectPaths).toEqual([FIRST_PATH])
+      // The card's transient state goes with it — no stale failed
+      // selection or error entry outlives the card.
+      expect(state.failedPreflightPath).toBeNull()
+      expect(state.preflightStatus).toBe('idle')
+      expect(state.preflightErrors).toEqual({})
+    })
   })
 
   describe('empty states', () => {

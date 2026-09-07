@@ -409,20 +409,47 @@ describe('Sidebar', () => {
     })
 
     render(<Sidebar variant="static" />)
+    // User report after #63: the ✕ is offered on EVERY card except the
+    // live session's — a merely selected (loaded-but-idle) project is
+    // removable too; removing it clears the selection.
     const currentCard = screen.getByTestId('current-project-card')
+    await user.click(
+      within(currentCard).getByRole('button', {
+        name: /remove from history/i,
+      })
+    )
+    expect(useProjectStore.getState().recentProjectPaths).toEqual([OTHER_PATH])
+    expect(useProjectStore.getState().currentProject).toBeNull()
+    expect(commands.stopProject).not.toHaveBeenCalled()
+  })
+
+  it('the live session’s card keeps no ✕ — every other card does', () => {
+    seedLoadedProject()
+    useProjectStore.setState({
+      recentProjectPaths: [PROJECT_PATH, OTHER_PATH],
+    })
+    useSessionStore.setState({
+      sessionStatus: 'ready',
+      sessionProjectPath: PROJECT_PATH,
+    })
+
+    render(<Sidebar variant="static" />)
+
+    const runningCard = document.querySelector<HTMLElement>(
+      `[data-project-path="${CSS.escape(PROJECT_PATH)}"]`
+    )
+    const otherCard = document.querySelector<HTMLElement>(
+      `[data-project-path="${CSS.escape(OTHER_PATH)}"]`
+    )
+    if (!runningCard || !otherCard) throw new Error('Expected both cards')
     expect(
-      within(currentCard).queryByRole('button', {
+      within(runningCard).queryByRole('button', {
         name: /remove from history/i,
       })
     ).not.toBeInTheDocument()
-
-    await user.click(
-      screen.getByRole('button', { name: /remove from history/i })
-    )
-    expect(useProjectStore.getState().recentProjectPaths).toEqual([
-      PROJECT_PATH,
-    ])
-    expect(commands.stopProject).not.toHaveBeenCalled()
+    expect(
+      within(otherCard).getByRole('button', { name: /remove from history/i })
+    ).toBeInTheDocument()
   })
 
   it('reorders history by dragging the grip and persists the new order', async () => {

@@ -280,8 +280,10 @@ function ListEmptyState({
  * dragging anywhere on the card — the dragged card becomes a
  * semi-transparent floating clone while the remaining cards yield a
  * full-card-sized gap at the midpoint-judged drop slot (v1.1.2 T4); the ✕
- * (remove from history) only appears on projects that are not currently
- * open or running. v1.2.3 (#39): selecting while a session runs is free
+ * (remove from history) appears on every card except the live session's
+ * project and the bundled tools (user report after #63: a merely selected
+ * or broken project must always be removable). v1.2.3 (#39): selecting
+ * while a session runs is free
  * (select + preflight, never a confirmation); starting B on top of A is
  * confirmed at the Load action, not here.
  *
@@ -566,13 +568,15 @@ export function Sidebar({
     await stopAndReset()
   }
 
-  /** ✕ (remove from history) is only offered for projects that are not
-   * currently open; the Close action handles the open one. Removing the
-   * app-side index never touches the on-disk project (spec issue #4);
-   * v1.2.0 (issue #16) additionally reclaims bundle installs under the
-   * app-managed bundles/ directory. */
+  /** ✕ (remove from history) — offered on every card except the live
+   * session's project and the bundled tools (user report after #63);
+   * removing a selected-but-idle or broken card is exactly the escape
+   * hatch the ✕ is for. Removing the app-side index never touches the
+   * on-disk project (spec issue #4); v1.2.0 (issue #16) additionally
+   * reclaims bundle installs under the app-managed bundles/ directory. */
   const handleRemove = (path: string) => {
-    // The store persists the index as part of the removal commit.
+    // The store persists the index as part of the removal commit (and
+    // takes the card's transient selection/error state with it).
     useProjectStore.getState().removeRecentProject(path)
     void reclaimIfManagedBundle(path)
   }
@@ -1398,13 +1402,30 @@ export function Sidebar({
                     />
                   )}
                   {/* Left slot keeps the centered title's optical axis; the
-                    whole card is the drag trigger (v1.1.2 T5). v1.3.3
-                    (#85): a bundled tool's slot carries its icon — the
-                    badge's subdued tone, never a focus target. The glyph
-                    rides 1px above the row's geometric center: the 15px
-                    title's optical axis (its lowercase mass) sits that
-                    far up, a dead-center icon reads low against it. */}
-                  {UtilityIcon ? (
+                      whole card is the drag trigger (v1.1.2 T5). v1.2.3
+                      (#39) the failed preflight verdict lives HERE (user
+                      report after #63): the persistent error icon used to
+                      occupy the right slot and thereby hide the ✕ — a
+                      broken project (e.g. dependencies missing) could not
+                      be removed at all. v1.3.3 (#85): a bundled tool's
+                      slot carries its icon — the badge's subdued tone,
+                      never a focus target. The glyph rides 1px above the
+                      row's geometric center: the 15px title's optical
+                      axis (its lowercase mass) sits that far up, a
+                      dead-center icon reads low against it. */}
+                  {preflightError ? (
+                    <span
+                      data-testid="card-preflight-error"
+                      title={preflightError}
+                      className="flex w-5 shrink-0 items-center justify-center"
+                    >
+                      <AlertCircle
+                        size={14}
+                        aria-label={t('sidebar.preflightFailedCard')}
+                        className="text-(--pnds-danger)"
+                      />
+                    </span>
+                  ) : UtilityIcon ? (
                     <span
                       data-testid="utility-card-icon"
                       data-utility-icon={builtinUtilityId(path)}
@@ -1444,8 +1465,12 @@ export function Sidebar({
                   )}
 
                   {/* Right slot: ⌘N hint while Cmd is held (v1.1.2), the
-                  project's preflight verdict (v1.2.3 #39), else ✕ remove
-                  from history — never for the open or running project. */}
+                  in-flight preflight spinner (v1.2.3 #39), else ✕ remove
+                  from history. User report after #63: the ✕ is offered on
+                  EVERY card except the session's live one (正在演出的那张
+                  — removing the performing project is what Close is for)
+                  and the bundled tools (app content, v1.3.2) — a merely
+                  selected or broken project must always be removable. */}
                   {showBadge ? (
                     <span
                       data-testid="project-number-badge"
@@ -1466,21 +1491,10 @@ export function Sidebar({
                         aria-label={t('sidebar.checkingProject')}
                       />
                     </span>
-                  ) : preflightError ? (
-                    <span
-                      data-testid="card-preflight-error"
-                      title={preflightError}
-                      className="flex w-5 shrink-0 items-center justify-center"
-                    >
-                      <AlertCircle
-                        size={14}
-                        aria-label={t('sidebar.preflightFailedCard')}
-                        className="text-(--pnds-danger)"
-                      />
-                    </span>
-                  ) : isCurrent || isSessionCard || isUtility ? (
-                    /* Bundled tools are permanent (v1.3.2) — the spacer
-                       keeps the title's optical axis, no ✕. */
+                  ) : isSessionCard || isUtility ? (
+                    /* Bundled tools are permanent (v1.3.2); the live
+                       session's project is closed through Close — both
+                       keep the spacer, no ✕. */
                     <span className="w-5 shrink-0" />
                   ) : (
                     <button
