@@ -6,12 +6,12 @@ import { DEFAULT_SAMPLE_RATE } from '@/lib/preferences'
 import type { ColorTheme } from '@/lib/color-theme'
 
 /** The sections of the settings panel (spec issue #12, single-page scroll
- * layout; issue #21 added Audio, issue #38 added Appearance, #58 added
- * Node). The Projects history section (#15) was removed after user
- * review — history management lives in the sidebar alone. */
+ * layout; issue #21 added Audio, #58 added Node; v1.4.0 folded the #38
+ * Appearance section into General — the theme row lives there now). The
+ * Projects history section (#15) was removed after user review — history
+ * management lives in the sidebar alone. */
 export type SettingsSection =
   | 'general'
-  | 'appearance'
   | 'audio'
   | 'node'
   | 'ports'
@@ -31,9 +31,10 @@ interface SettingsState {
   /** Current General-section language selection, seeded once at app
    * startup from preferences (App.tsx) and set optimistically on change. */
   languageSetting: LanguageSetting
-  /** Issue #38 (v1.2.3): the Appearance-section color theme — seeded once
-   * at app startup from preferences (App.tsx, which also applies it to the
-   * root node) and set optimistically on change. */
+  /** Issue #38 (v1.2.3): the color theme — seeded once at app startup
+   * from preferences (App.tsx, which also applies it to the root node)
+   * and set optimistically on change. Lived in its own Appearance section
+   * until v1.4.0 folded the row into General. */
   colorThemeSetting: ColorTheme
   /** Issue #21: the effective sample rate shown in the Audio section —
    * the saved preference, or 48000 when unset. Seeded once at app startup

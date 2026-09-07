@@ -57,7 +57,8 @@ const deviceList = {
  * settings Audio section — the §6.3/§7.6 display contract travels intact
  * (channel counts, greyed-but-selectable loss entries, the closed
  * trigger's red dot), joined to the sample rate's next-start semantics
- * (locked while a session runs).
+ * (editable even while a session runs; the running session keeps its
+ * spawn-time configuration).
  */
 describe('AudioSection output device (#58)', () => {
   beforeEach(() => {
@@ -162,7 +163,7 @@ describe('AudioSection output device (#58)', () => {
     })
   })
 
-  it('keeps the row locked while a session runs (next-start semantics)', async () => {
+  it('stays editable while a session runs — next-start hint, no live lock', async () => {
     useSessionStore.setState({
       sessionStatus: 'ready',
       sessionProjectPath: '/p',
@@ -171,7 +172,11 @@ describe('AudioSection output device (#58)', () => {
     const device = await screen.findByRole('combobox', {
       name: /output device/i,
     })
-    expect(device).toBeDisabled()
+    expect(device).toBeEnabled()
+    expect(screen.getByLabelText('Sample rate')).toBeEnabled()
+    expect(screen.getByTestId('sample-rate-hint')).toHaveTextContent(
+      'A project is running'
+    )
   })
 
   it('an enumeration failure leaves a safe empty list — Load is never gated by it', async () => {
@@ -188,6 +193,15 @@ describe('AudioSection output device (#58)', () => {
     expect(
       screen.getByRole('combobox', { name: /output device/i })
     ).toBeInTheDocument()
+  })
+
+  it('lists the device above the rate — the physical output comes first', () => {
+    render(<AudioSection section="audio" />)
+    const device = screen.getByRole('combobox', { name: /output device/i })
+    const rate = screen.getByRole('combobox', { name: /sample rate/i })
+    expect(
+      rate.compareDocumentPosition(device) & Node.DOCUMENT_POSITION_PRECEDING
+    ).toBeTruthy()
   })
 })
 

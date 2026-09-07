@@ -176,9 +176,10 @@ The real stores in `src/store/` and what belongs in each:
 
 - **`project-store`** — project history, folders, selection, preflight state, rename target; structural actions persist the project index themselves
 - **`session-store`** — mirror of the Rust SessionManager (status, volume, zoom) plus derived helpers (`shouldConfirmClose`, `isSessionBusy`)
-- **`settings-store`** — in-app settings panel (open/section) and the General/Appearance/Audio selections
+- **`settings-store`** — in-app settings panel (open/section) and the General (language + theme, since the v1.4.0 Appearance fold)/Audio/Node selections
 - **`window-store`** — mirror of Rust window state (fullscreen, traffic-light visibility) and the close/quit confirm dialogs
 - **`keyboard-store`** — raw keyboard modifier state (⌘ held)
+- **`updater-store`** — the update failure dialog's open state + failure payload, plus the failure-dialog `UpdaterRenderer` pair (v1.4.0 #60; the lifecycle stays in `src/lib/updater.ts`)
 
 Shared domain state goes in the matching store; anything component-local stays in `useState`.
 

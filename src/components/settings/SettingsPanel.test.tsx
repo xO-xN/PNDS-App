@@ -65,15 +65,19 @@ describe('SettingsPanel (v1.2.0 issue #13)', () => {
 
     expect(screen.getByRole('dialog')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'General' })).toBeInTheDocument()
-    expect(
-      screen.getByRole('heading', { name: 'Appearance' })
-    ).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Audio' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Node' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Ports' })).toBeInTheDocument()
     expect(
       screen.getByRole('heading', { name: 'Developer Tools' })
     ).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'About' })).toBeInTheDocument()
+    // v1.4.0: the Appearance section is gone — its theme row lives in
+    // General now, one identity row beside the language.
+    expect(
+      screen.queryByRole('heading', { name: 'Appearance' })
+    ).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Theme')).toBeInTheDocument()
     // The Projects history section (#15) was removed after user review —
     // history management lives in the sidebar alone.
     expect(
@@ -185,11 +189,12 @@ describe('SettingsPanel (v1.2.0 issue #13)', () => {
   })
 })
 
-/** Issue #38 (v1.2.3 T2): the Appearance section — a NativeSelect offering
- * the shipped themes with the current accent swatch beside it; selecting
- * one applies the root data-color-theme attribute immediately and persists
- * the colorTheme preference. #40 added the two dark themes. */
-describe('SettingsPanel Appearance section (issues #38/#40)', () => {
+/** Issue #38 (v1.2.3 T2): the color theme — a NativeSelect offering the
+ * shipped themes with the current accent swatch beside it; selecting one
+ * applies the root data-color-theme attribute immediately and persists
+ * the colorTheme preference. #40 added the two dark themes; v1.4.0
+ * folded the row into the General section. */
+describe('SettingsPanel theme row (issues #38/#40)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     useSettingsStore.setState({
@@ -590,24 +595,28 @@ describe('SettingsPanel Audio section (issue #21)', () => {
     expect(select).toHaveValue('88200')
   })
 
-  it('locks the control with an explanatory hint while a session runs', async () => {
+  it('stays editable while a session runs, hinting the next-start semantics', async () => {
     useSessionStore.setState({ sessionStatus: 'ready' })
     const select = openPanel()
 
-    expect(select).toBeDisabled()
+    // v1.4.0: no live lock anymore — the running session simply keeps the
+    // configuration it was spawned with, and the hint says so.
+    expect(select).toBeEnabled()
     expect(
-      screen.getByText('Stop the project to change the sample rate.')
+      screen.getByText(
+        'A project is running — changes apply at its next start.'
+      )
     ).toBeInTheDocument()
     expect(
       screen.queryByText('Applies at the next project start.')
     ).not.toBeInTheDocument()
-    expect(commands.savePreferences).not.toHaveBeenCalled()
 
-    // 'error' is not a running session — a boot failure at one rate must
-    // not lock the user out of picking another.
+    // 'error' is not a running session — the hint must not claim one is.
     useSessionStore.setState({ sessionStatus: 'error' })
     await waitFor(() =>
-      expect(screen.getByLabelText('Sample rate')).toBeEnabled()
+      expect(
+        screen.getByText('Applies at the next project start.')
+      ).toBeInTheDocument()
     )
   })
 

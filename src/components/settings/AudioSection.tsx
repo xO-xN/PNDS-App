@@ -41,10 +41,12 @@ let missingDeviceWarned = false
  *
  * #58: the output device moved here from the sidebar settings card and
  * joined the rate's semantics — App-global preference, applied at the
- * NEXT project start, locked while a session is live (no mid-session
- * change path). The list enumerates at the effective sample rate; each
- * entry shows its channel count there, channel-poor entries stay
- * selectable with the red `Nch → Hch` loss marker (§7.6).
+ * NEXT project start. Both rows stay editable while a session runs: the
+ * change persists immediately, the running session keeps the audio
+ * configuration it was spawned with (the hint says so). The list
+ * enumerates at the effective sample rate; each entry shows its channel
+ * count there, channel-poor entries stay selectable with the red
+ * `Nch → Hch` loss marker (§7.6).
  *
  * The offered rates are the standard rates supported across all enumerated
  * output devices (the backend dedupes, sorts ascending, and falls back to
@@ -70,8 +72,8 @@ export function AudioSection({ section }: { section: SettingsSection }) {
   >([])
 
   // A session "runs" in the same states the Ports section treats as live;
-  // 'error' is not a running session — a boot failure at one rate must not
-  // lock the user out of picking another.
+  // 'error' is not a running session — the hint must not tell the user a
+  // session is live after a boot failure.
   const running =
     sessionStatus === 'starting' ||
     sessionStatus === 'ready' ||
@@ -95,7 +97,7 @@ export function AudioSection({ section }: { section: SettingsSection }) {
   }, [])
 
   // #58: device capabilities at the EFFECTIVE sample rate — the rate row
-  // above owns the rate, this list follows it. Re-queries when the rate
+  // below owns the rate, this list follows it. Re-queries when the rate
   // changes (the offered rates clamp it, so the query stays bounded).
   useEffect(() => {
     let stale = false
@@ -158,30 +160,13 @@ export function AudioSection({ section }: { section: SettingsSection }) {
       <SectionTitle id={`settings-${section}-title`}>
         {t('settings.audio')}
       </SectionTitle>
-      <div className="flex items-center justify-between gap-4">
-        <Label htmlFor="settings-sample-rate">{t('settings.sampleRate')}</Label>
-        <NativeSelect
-          id="settings-sample-rate"
-          value={sampleRateSetting}
-          disabled={running}
-          onChange={event => {
-            const rate = Number(event.target.value)
-            useSettingsStore.getState().setSampleRateSetting(rate)
-            void updatePreferences({ sampleRate: rate })
-          }}
-        >
-          {options.map(rate => (
-            <NativeSelectOption key={rate} value={rate}>
-              {formatSampleRate(rate)}
-            </NativeSelectOption>
-          ))}
-        </NativeSelect>
-      </div>
       {/* #58: output device (moved from the sidebar settings card) — the
           §7.6 display contract travels intact: channel counts per entry,
           channel-poor entries stay selectable with the red loss text, and
           the closed trigger carries the loss as a small red dot whose
-          specifics live in its tooltip/sr-only text. */}
+          specifics live in its tooltip/sr-only text. Sits above the rate
+          row (user-requested): the physical output comes first, the rate
+          configures it. */}
       <div className="flex items-center justify-between gap-4">
         <Label htmlFor="settings-output-device">
           {t('settings.outputDevice')}
@@ -194,7 +179,6 @@ export function AudioSection({ section }: { section: SettingsSection }) {
               outputDevice: device === SYSTEM_DEFAULT_DEVICE ? null : device,
             })
           }}
-          disabled={running}
         >
           <SelectTrigger
             id="settings-output-device"
@@ -290,12 +274,30 @@ export function AudioSection({ section }: { section: SettingsSection }) {
           </SelectContent>
         </Select>
       </div>
+      <div className="flex items-center justify-between gap-4">
+        <Label htmlFor="settings-sample-rate">{t('settings.sampleRate')}</Label>
+        <NativeSelect
+          id="settings-sample-rate"
+          value={sampleRateSetting}
+          onChange={event => {
+            const rate = Number(event.target.value)
+            useSettingsStore.getState().setSampleRateSetting(rate)
+            void updatePreferences({ sampleRate: rate })
+          }}
+        >
+          {options.map(rate => (
+            <NativeSelectOption key={rate} value={rate}>
+              {formatSampleRate(rate)}
+            </NativeSelectOption>
+          ))}
+        </NativeSelect>
+      </div>
       <p
         className="text-muted-foreground text-xs"
         data-testid="sample-rate-hint"
       >
         {running
-          ? t('settings.sampleRateLocked')
+          ? t('settings.sampleRateRunningHint')
           : t('settings.sampleRateHint')}
       </p>
     </section>

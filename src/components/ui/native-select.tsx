@@ -4,12 +4,16 @@ import { ChevronDownIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 /** Box metrics shared by the sizer span and the select overlay, so the
- *  sizer's width is exactly the select's rendered width. The sizer also
- *  carries a TRANSPARENT border and the UI font: the select is bordered
- *  (a borderless sizer left every label clipped 2px on the right), and
- *  native form controls do not inherit the app font — without pinning
- *  both to the same family the measurement and the rendering disagree
- *  per label. */
+ * sizer's width is exactly the select's rendered width. The sizer also
+ * carries a TRANSPARENT border and the UI font: the sizer is bordered
+ * (a borderless sizer left every label clipped 2px on the right), and
+ * native form controls do not inherit the app font — without pinning
+ * both to the same family the measurement and the rendering disagree
+ * per label. The transparent border is a SIZER concern only: the real
+ * select below re-declares the visible `border-input` AFTER this
+ * constant so it survives the tailwind-merge (the select must match the
+ * Radix SelectTrigger's bordered, filled look — the rows would otherwise
+ * read as bare text, user report). */
 const BOX_METRICS =
   'h-9 rounded-md border border-transparent px-3 py-2 pr-9 text-sm'
 /** The app UI font token — see BOX_METRICS. */
@@ -66,8 +70,11 @@ function NativeSelect({
       <select
         data-slot="native-select"
         className={cn(
-          'border-input placeholder:text-muted-foreground selection:bg-primary selection:text-primary-foreground dark:bg-input/30 dark:hover:bg-input/50 absolute inset-0 w-full min-w-0 appearance-none rounded-md border bg-transparent shadow-xs transition-[color,box-shadow] outline-none disabled:pointer-events-none disabled:cursor-not-allowed',
+          'placeholder:text-muted-foreground selection:bg-primary selection:text-primary-foreground dark:bg-input/30 dark:hover:bg-input/50 absolute inset-0 w-full min-w-0 appearance-none transition-[color,box-shadow] outline-none disabled:pointer-events-none disabled:cursor-not-allowed',
           BOX_METRICS,
+          // After BOX_METRICS: the visible border survives the merge over
+          // the sizer's border-transparent (see BOX_METRICS above).
+          'border-input rounded-md border bg-transparent shadow-xs',
           'focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]',
           'aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive',
           className

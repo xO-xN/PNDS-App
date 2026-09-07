@@ -103,7 +103,8 @@ node's `data-color-theme` attribute:
   (until startup applies the saved attribute, the app renders Lavender).
 - `src/lib/color-theme.ts` owns the attribute: the startup preferences read
   applies the saved theme (unknown or not-yet-shipped values fall back to
-  Lavender), and the settings panel's Appearance section applies changes
+  Lavender), and the settings panel's General-section theme row (v1.4.0
+  fold; the Appearance section is gone) applies changes
   immediately and persists `colorTheme` (enum-validated in Rust:
   lavender/sand/stage/brutal, plus the legacy `midnight`/`glass` values
   which the frontend maps at render).
@@ -179,7 +180,7 @@ node's `data-color-theme` attribute:
   its own label/surface; recheck when touching theme values.
 - Intentionally NOT themed: the traffic-light glyphs, the PndsLogo's
   brand-color dots (the halo rings behind them ARE tokens), the shadcn
-  vendored scrims (`bg-black/50`), and the Appearance section's accent
+  vendored scrims (`bg-black/50`), and the theme row's accent
   swatch — it previews each theme's accent by definition, so it cannot be
   one token.
 

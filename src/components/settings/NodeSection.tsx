@@ -1,5 +1,8 @@
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { updatePreferences } from '@/lib/preferences'
+import { logger } from '@/lib/logger'
+import { commands } from '@/lib/tauri-bindings'
 import { useProjectStore } from '@/store/project-store'
 import { selectionIsRunningCard, useSessionStore } from '@/store/session-store'
 import { useSettingsStore } from '@/store/settings-store'
@@ -9,6 +12,24 @@ import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import type { SettingsSection } from '@/store/settings-store'
 
 import { SectionTitle } from './SectionTitle'
+
+/** Refresh the machine's LAN address list in the session store, applying
+ * preflight's auto-pick policy (a yet-unpicked selection takes the first
+ * address). Failure keeps the current list — the row degrades to the
+ * "Select…" placeholder only when nothing was known before. */
+function refreshLanAddresses(): void {
+  void commands.listLanAddresses().then(result => {
+    if (result.status === 'error') {
+      logger.warn('Failed to list LAN addresses', { error: result.error })
+      return
+    }
+    const session = useSessionStore.getState()
+    session.setLanAddresses(result.data)
+    if (session.lanIp === null && result.data[0]) {
+      session.setLanIp(result.data[0])
+    }
+  })
+}
 
 /**
  * #58: the settings Node section — this machine's telematic identity, set
@@ -31,6 +52,29 @@ export function NodeSection({ section }: { section: SettingsSection }) {
   const hostnameHint = useSettingsStore(state => state.hostnameHint)
   const lanIp = useSessionStore(state => state.lanIp)
   const lanAddresses = useSessionStore(state => state.lanAddresses)
+  // The next-start note stays out of the way until it has something to
+  // say: it appears once any row here is touched and stays for the rest
+  // of the visit (closing the dialog unmounts the section, resetting it).
+  const [modified, setModified] = useState(false)
+
+  // The LAN list is seeded by preflight — a first App launch with no
+  // project opened yet has none, leaving the row stuck on the "Select…"
+  // placeholder (user report). Refresh on panel open (Radix unmounts the
+  // closed dialog, so mounting == opening) and again whenever the select
+  // gains focus — the closest hook a native select offers to "menu
+  // opening"; the response lands behind an already-open menu and shows up
+  // on its next open.
+  useEffect(() => {
+    refreshLanAddresses()
+  }, [])
+
+  // A refresh can shrink the list past the current selection (the network
+  // changed under a running session) — keep the selected address visible
+  // rather than blanking the row.
+  const lanOptions =
+    lanIp !== null && !lanAddresses.includes(lanIp)
+      ? [lanIp, ...lanAddresses]
+      : lanAddresses
 
   const commitNodeConfig = () => {
     const {
@@ -66,9 +110,10 @@ export function NodeSection({ section }: { section: SettingsSection }) {
           })}
           autoComplete="off"
           spellCheck={false}
-          onChange={event =>
+          onChange={event => {
             useSettingsStore.getState().setNodeNameSetting(event.target.value)
-          }
+            setModified(true)
+          }}
           onBlur={commitNodeConfig}
           className="w-56"
         />
@@ -84,9 +129,10 @@ export function NodeSection({ section }: { section: SettingsSection }) {
           autoComplete="off"
           spellCheck={false}
           dir="ltr"
-          onChange={event =>
+          onChange={event => {
             useSettingsStore.getState().setHubUrlSetting(event.target.value)
-          }
+            setModified(true)
+          }}
           onBlur={commitNodeConfig}
           className="w-56"
         />
@@ -106,16 +152,21 @@ export function NodeSection({ section }: { section: SettingsSection }) {
           autoComplete="off"
           spellCheck={false}
           dir="ltr"
-          onChange={event =>
+          onChange={event => {
             useSettingsStore.getState().setHubTokenSetting(event.target.value)
-          }
+            setModified(true)
+          }}
           onBlur={commitNodeConfig}
           className="w-56"
         />
       </div>
       {/* LAN address (moved from the sidebar settings card): the machine's
           network situation, not a per-performance decision. Seeded at
-          preflight; read at start (PNDS_HOST_IP). */}
+          preflight, refreshed on panel open and select focus; read at
+          start (PNDS_HOST_IP). No width class here: NativeSelect routes
+          className to the absolutely-positioned inner select while the
+          wrapper keeps the sizer's snug width — a fixed width desyncs
+          the two and the select overflows the panel. */}
       <div className="flex items-center justify-between gap-4">
         <Label htmlFor="settings-lan-address" className="shrink-0">
           {t('session.lanAddress')}
@@ -123,8 +174,10 @@ export function NodeSection({ section }: { section: SettingsSection }) {
         <NativeSelect
           id="settings-lan-address"
           value={lanIp ?? ''}
-          disabled={lanAddresses.length === 0}
+          disabled={lanOptions.length === 0}
+          onFocus={refreshLanAddresses}
           onChange={event => {
+            setModified(true)
             useSessionStore.getState().setLanIp(event.target.value)
             // Migration parity with the old sidebar row: a LAN change on
             // the running card flags Change — restart re-spawns with the
@@ -140,23 +193,24 @@ export function NodeSection({ section }: { section: SettingsSection }) {
               session.setPendingChanges(true)
             }
           }}
-          className="w-56"
         >
-          {lanAddresses.length === 0 && (
+          {lanOptions.length === 0 && (
             <NativeSelectOption value="">
               {t('session.lanAddressHint')}
             </NativeSelectOption>
           )}
-          {lanAddresses.map(ip => (
+          {lanOptions.map(ip => (
             <NativeSelectOption key={ip} value={ip}>
               {ip}
             </NativeSelectOption>
           ))}
         </NativeSelect>
       </div>
-      <p className="text-muted-foreground text-xs" data-testid="node-hint">
-        {t('settings.nodeHint')}
-      </p>
+      {modified && (
+        <p className="text-muted-foreground text-xs" data-testid="node-hint">
+          {t('settings.nodeHint')}
+        </p>
+      )}
     </section>
   )
 }

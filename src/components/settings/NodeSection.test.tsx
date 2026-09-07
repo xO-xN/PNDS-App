@@ -92,9 +92,17 @@ describe('NodeSection (#58)', () => {
 
   it('picking a LAN address updates the start config (no persistence — it is not a preference)', async () => {
     const user = userEvent.setup()
+    const addresses = ['192.168.1.10', '10.0.0.5']
+    // Every refresh (panel open AND the select's focus refresh, which
+    // userEvent fires before picking) enumerates the fixture's two
+    // addresses — a persistent override, not a one-shot.
+    vi.mocked(commands.listLanAddresses).mockResolvedValue({
+      status: 'ok',
+      data: addresses,
+    })
     useSessionStore.setState({
       lanIp: null,
-      lanAddresses: ['192.168.1.10', '10.0.0.5'],
+      lanAddresses: addresses,
     })
     render(<NodeSection section="node" />)
 
@@ -105,17 +113,105 @@ describe('NodeSection (#58)', () => {
     expect(commands.savePreferences).not.toHaveBeenCalled()
   })
 
-  it('shows the hint when no LAN address is known yet', () => {
+  it('disables the LAN row and shows the placeholder option when no address is known', () => {
+    vi.mocked(commands.listLanAddresses).mockResolvedValueOnce({
+      status: 'ok',
+      data: [],
+    })
     useSessionStore.setState({ lanAddresses: [] })
     render(<NodeSection section="node" />)
     const lan = screen.getByRole('combobox', { name: /network address/i })
     expect(lan).toBeDisabled()
+    expect(lan).toHaveDisplayValue('Select…')
+    // Nothing has been modified — the next-start note stays hidden.
+    expect(screen.queryByTestId('node-hint')).not.toBeInTheDocument()
+  })
+
+  it('reveals the next-start note only after a row is modified', async () => {
+    const user = userEvent.setup()
+    useSessionStore.setState({ lanAddresses: ['192.168.1.10'] })
+    render(<NodeSection section="node" />)
+
+    expect(screen.queryByTestId('node-hint')).not.toBeInTheDocument()
+
+    await user.type(screen.getByLabelText(/node name/i), 'Xiang')
     expect(screen.getByTestId('node-hint')).toBeInTheDocument()
+  })
+
+  it('a LAN address pick also reveals the note', async () => {
+    const user = userEvent.setup()
+    const addresses = ['192.168.1.10', '10.0.0.5']
+    vi.mocked(commands.listLanAddresses).mockResolvedValue({
+      status: 'ok',
+      data: addresses,
+    })
+    useSessionStore.setState({
+      lanIp: '192.168.1.10',
+      lanAddresses: addresses,
+    })
+    render(<NodeSection section="node" />)
+
+    expect(screen.queryByTestId('node-hint')).not.toBeInTheDocument()
+
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: /network address/i }),
+      '10.0.0.5'
+    )
+    expect(screen.getByTestId('node-hint')).toBeInTheDocument()
+  })
+
+  it('refreshes the LAN list when the panel opens — no project needed, first address auto-picked', async () => {
+    // First launch, no project opened: preflight never seeded the list,
+    // and the row must not sit on the "Select…" placeholder.
+    vi.mocked(commands.listLanAddresses).mockResolvedValue({
+      status: 'ok',
+      data: ['192.168.1.10'],
+    })
+    useSessionStore.setState({ lanIp: null, lanAddresses: [] })
+    render(<NodeSection section="node" />)
+
+    await waitFor(() => {
+      expect(useSessionStore.getState().lanAddresses).toEqual(['192.168.1.10'])
+    })
+    // Preflight's auto-pick policy: a yet-unpicked selection takes the
+    // first address.
+    expect(useSessionStore.getState().lanIp).toBe('192.168.1.10')
+    expect(
+      screen.getByRole('combobox', { name: /network address/i })
+    ).toHaveDisplayValue('192.168.1.10')
+  })
+
+  it('keeps the selected address visible when a refresh shrinks the list', async () => {
+    // The network changed under the selection: the refresh drops
+    // 10.0.0.5, but the row must still show what is selected instead of
+    // blanking.
+    vi.mocked(commands.listLanAddresses).mockResolvedValueOnce({
+      status: 'ok',
+      data: ['192.168.1.10'],
+    })
+    useSessionStore.setState({
+      lanIp: '10.0.0.5',
+      lanAddresses: ['192.168.1.10', '10.0.0.5'],
+    })
+    render(<NodeSection section="node" />)
+
+    const lan = screen.getByRole('combobox', { name: /network address/i })
+    await waitFor(() => {
+      expect(useSessionStore.getState().lanAddresses).toEqual(['192.168.1.10'])
+    })
+    expect(lan).toHaveDisplayValue('10.0.0.5')
+    expect(lan).toBeEnabled()
   })
 })
 
 describe('NodeSection LAN change — Change-button parity (#58)', () => {
   function seed(path: string, runningPath: string | null) {
+    // Persistent: the select's focus fires a second refresh during the
+    // pick — both enumerations return the fixture's two addresses.
+    vi.mocked(commands.listLanAddresses).mockResolvedValue({
+      status: 'ok',
+      data: ['192.168.1.10', '10.0.0.5'],
+    })
     useProjectStore.setState({
       currentProject: { path, manifest: null as never },
       preflightStatus: 'ready',
