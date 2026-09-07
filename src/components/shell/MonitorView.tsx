@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react'
-import { listen } from '@tauri-apps/api/event'
+import { onWindowFocus } from '@/lib/events'
 import { useTranslation } from 'react-i18next'
 import {
   sessionConnectionAddress,
@@ -283,7 +283,7 @@ export function MonitorView() {
     // The Rust-side regain signal (NSWindowDidBecomeKey via lib.rs) —
     // WKWebView does not reliably surface DOM focus events for desktop
     // switches, the exact case the steal was reported on.
-    const unlisten = listen('pnds:window-focus', reclaimIfLost)
+    const offWindowFocus = onWindowFocus(reclaimIfLost)
     // Heartbeat backstop: every event path above can be dropped by the
     // suspended webview, but the interval itself was throttled with it —
     // the first tick after the webview resumes reclaims without needing
@@ -296,7 +296,7 @@ export function MonitorView() {
       document.removeEventListener('visibilitychange', handleVisibility)
       clearInterval(heartbeat)
       cancelFrameLeave()
-      void unlisten.then(off => off())
+      offWindowFocus()
     }
   }, [monitorOrigin, colorTheme, locale])
 

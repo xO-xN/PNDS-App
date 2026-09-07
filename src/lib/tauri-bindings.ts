@@ -21,7 +21,7 @@
  * @see docs/developer/tauri-commands.md for full documentation
  */
 
-export { commands, type Result } from './bindings'
+export { commands, events, type Result } from './bindings'
 export type {
   AppPreferences,
   AudioConfig,
@@ -41,6 +41,7 @@ export type {
   ScsynthConfig,
   SessionSnapshot,
   SessionStatus,
+  SetlistExportProgressEvent,
   SetlistExportResult,
   SetlistProjectInfo,
   SynthdefCompileResult,

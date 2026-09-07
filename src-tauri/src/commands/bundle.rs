@@ -5,6 +5,7 @@
 
 use std::path::PathBuf;
 use tauri::{AppHandle, Manager, State};
+use tauri_specta::Event as _;
 
 use crate::project::bundle::{self, BundleOutputInfo, PackResult, BUNDLES_DIR};
 use crate::project::setlist::{self, SetlistExportResult, SetlistProjectInfo, SetlistReadout};
@@ -98,8 +99,6 @@ pub async fn export_setlist(
     instructions: String,
     project_paths: Vec<String>,
 ) -> Result<SetlistExportResult, String> {
-    use tauri::Emitter;
-
     let packed_with = app.package_info().version.to_string();
     let emit_app = app.clone();
     setlist::export_setlist(
@@ -109,21 +108,12 @@ pub async fn export_setlist(
         &instructions,
         &packed_with,
         &|done, total, file_name| {
-            #[derive(Clone, serde::Serialize)]
-            #[serde(rename_all = "camelCase")]
-            struct Progress<'a> {
-                done: usize,
-                total: usize,
-                file_name: &'a str,
+            let _ = crate::events::SetlistExportProgressEvent {
+                done: done as u32,
+                total: total as u32,
+                file_name: file_name.to_string(),
             }
-            let _ = emit_app.emit(
-                "pnds:setlist-export-progress",
-                Progress {
-                    done,
-                    total,
-                    file_name,
-                },
-            );
+            .emit(&emit_app);
         },
     )
 }
@@ -170,6 +160,5 @@ pub(crate) fn record_pending_bundle_open(app: &AppHandle, path: &std::path::Path
     if let Ok(mut queue) = state.0.lock() {
         queue.push(path.to_string_lossy().into_owned());
     }
-    use tauri::Emitter;
-    let _ = app.emit("pnds:open-bundle", ());
+    let _ = crate::events::OpenBundleEvent {}.emit(app);
 }

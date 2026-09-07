@@ -9,7 +9,17 @@
  * re-revealed rather than focused into invisibility.
  */
 
-import { emitTo, listen } from '@tauri-apps/api/event'
+import {
+  HELP_WINDOW_LABEL,
+  type HelpTarget,
+  emitHelpLocale,
+  emitHelpNavigate,
+  emitHelpTheme,
+  onHelpReady,
+} from '@/lib/events'
+
+export { HELP_WINDOW_LABEL } from '@/lib/events'
+export type { HelpTarget } from '@/lib/events'
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
 import i18n, { currentResolvedLanguage } from '@/i18n/config'
 import type { ColorTheme } from '@/lib/color-theme'
@@ -19,8 +29,6 @@ import { useSettingsStore } from '@/store/settings-store'
 import { commands } from '@/lib/tauri-bindings'
 
 /** The help center's stable window label (capabilities, events, ⌘W). */
-export const HELP_WINDOW_LABEL = 'help'
-
 /**
  * The last target handed to the window — replayed when the page
  * announces readiness (see setupHelpWindowBridge), so a navigate event
@@ -29,8 +37,6 @@ export const HELP_WINDOW_LABEL = 'help'
 let lastTarget: HelpTarget | null = null
 
 /** What the help center should land on when it opens or is reused. */
-export type HelpTarget = { kind: 'search' } | { kind: 'doc'; docId: string }
-
 function helpUrl(target: HelpTarget): string {
   return target.kind === 'doc'
     ? `help.html?doc=${encodeURIComponent(target.docId)}`
@@ -51,7 +57,7 @@ export async function openHelpWindow(target: HelpTarget): Promise<void> {
       } else {
         await existing.setFocus()
       }
-      await emitTo(HELP_WINDOW_LABEL, 'pnds:help-navigate', target)
+      await emitHelpNavigate(target)
     } catch (error) {
       logger.warn('Failed to navigate the open help window', { error })
     }
@@ -98,7 +104,7 @@ export async function closeHelpWindow(): Promise<void> {
  */
 export async function pushHelpLocale(locale: string): Promise<void> {
   try {
-    await emitTo(HELP_WINDOW_LABEL, 'pnds:help-locale', { locale })
+    await emitHelpLocale(locale)
   } catch {
     // No live window to receive it — nothing to do.
   }
@@ -111,7 +117,7 @@ export async function pushHelpLocale(locale: string): Promise<void> {
  */
 async function pushHelpTheme(colorTheme: ColorTheme): Promise<void> {
   try {
-    await emitTo(HELP_WINDOW_LABEL, 'pnds:help-theme', { colorTheme })
+    await emitHelpTheme(colorTheme)
   } catch {
     // No live window to receive it — nothing to do.
   }
@@ -148,18 +154,16 @@ export function setupHelpWindowBridge(): () => void {
     void pushHelpTheme(previousTheme)
   })
 
-  const offReady = listen('pnds:help-ready', () => {
+  const offReady = onHelpReady(() => {
     if (lastTarget === null) return
-    void emitTo(HELP_WINDOW_LABEL, 'pnds:help-navigate', lastTarget).catch(
-      () => {
-        // The window closed in the same breath — nothing to replay.
-      }
-    )
+    void emitHelpNavigate(lastTarget).catch(() => {
+      // The window closed in the same breath — nothing to replay.
+    })
   })
 
   return () => {
     i18n.off('languageChanged', onLanguage)
     unsubTheme()
-    void offReady.then(unlisten => unlisten())
+    offReady()
   }
 }

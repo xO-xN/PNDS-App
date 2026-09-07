@@ -7,7 +7,7 @@
 //!   in the App master group (gain) → hardware buses 0..K-1
 
 use rosc::{OscMessage, OscPacket, OscType};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use specta::Type;
 use std::io::{BufRead, BufReader};
 use std::net::UdpSocket;
@@ -48,7 +48,7 @@ pub struct DeviceCapability {
 }
 
 /// §7.1: the Internal channel plan computed at session start.
-#[derive(Debug, Clone, Serialize, Type)]
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ChannelPlan {
     /// N: discrete signals the project produces (manifest audio.outputChannels).

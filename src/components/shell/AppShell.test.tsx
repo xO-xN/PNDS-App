@@ -53,7 +53,7 @@ const readySnapshot: SessionSnapshot = {
   outputDevice: null,
 }
 
-/** Captured handler for the shell-level pnds:session subscription. */
+/** Captured handler for the shell-level session snapshot subscription. */
 let sessionHandler: ((event: { payload: SessionSnapshot }) => void) | null
 
 describe('AppShell', () => {
@@ -61,8 +61,13 @@ describe('AppShell', () => {
     vi.clearAllMocks()
     sessionHandler = null
     vi.mocked(listen).mockImplementation((event, cb) => {
-      if (event === 'pnds:session') {
-        sessionHandler = cb as (event: { payload: SessionSnapshot }) => void
+      if (event === 'session-snapshot-event') {
+        // The generated event payload wraps the snapshot ({ snapshot });
+        // this adapter lets the call sites below keep the flat shape.
+        sessionHandler = (flat: { payload: SessionSnapshot }) =>
+          (cb as (event: { payload: { snapshot: SessionSnapshot } }) => void)({
+            payload: { snapshot: flat.payload },
+          })
       }
       return Promise.resolve(() => {
         // mock unlisten
@@ -115,7 +120,7 @@ describe('AppShell', () => {
   it('subscribes to session events at shell level and survives transitions', () => {
     render(<AppShell />)
     expect(vi.mocked(listen)).toHaveBeenCalledWith(
-      'pnds:session',
+      'session-snapshot-event',
       expect.any(Function)
     )
 

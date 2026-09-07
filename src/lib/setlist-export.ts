@@ -10,8 +10,8 @@
 
 import { open } from '@tauri-apps/plugin-dialog'
 import { revealItemInDir } from '@tauri-apps/plugin-opener'
-import { listen } from '@tauri-apps/api/event'
 import i18n from '@/i18n/config'
+import { onSetlistExportProgress } from '@/lib/events'
 import { commands } from '@/lib/tauri-bindings'
 import { logger } from '@/lib/logger'
 import { notifications } from '@/lib/notifications'
@@ -132,18 +132,14 @@ export async function exportSetlistFolder(folderId: string): Promise<void> {
     i18n.t('setlist.exportProgressTitle'),
     i18n.t('setlist.exportProgressPreparing')
   )
-  const unlisten = await listen<{
-    done: number
-    total: number
-    fileName: string
-  }>('pnds:setlist-export-progress', event => {
+  const offProgress = onSetlistExportProgress(progress => {
     notifications.flow.step(
       toastId,
       i18n.t('setlist.exportProgressTitle'),
       i18n.t('setlist.exportProgressItem', {
-        done: event.payload.done + 1,
-        total: event.payload.total,
-        name: event.payload.fileName,
+        done: progress.done + 1,
+        total: progress.total,
+        name: progress.fileName,
       })
     )
   })
@@ -178,6 +174,6 @@ export async function exportSetlistFolder(folderId: string): Promise<void> {
       logger.warn('Failed to reveal the export directory', { error })
     })
   } finally {
-    unlisten()
+    offProgress()
   }
 }

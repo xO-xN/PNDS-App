@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { listen } from '@tauri-apps/api/event'
+import { onOpenBundle } from '@/lib/events'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import {
   buildAppMenu,
@@ -164,12 +164,12 @@ function App() {
   // The drain runs only after the listener is live — an event landing in
   // between would otherwise be missed entirely.
   useEffect(() => {
-    const unlisten = listen('pnds:open-bundle', () => {
+    const offOpenBundle = onOpenBundle(() => {
       void drainPendingBundleOpens()
     })
-    void unlisten.then(() => drainPendingBundleOpens())
+    void drainPendingBundleOpens()
     return () => {
-      void unlisten.then(unlistenFn => unlistenFn())
+      offOpenBundle()
     }
   }, [])
 

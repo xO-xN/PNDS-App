@@ -499,6 +499,21 @@ async openAppLogDir() : Promise<Result<null, string>> {
 /** user-defined events **/
 
 
+export const events = __makeEvents__<{
+helpReadyEvent: HelpReadyEvent,
+openBundleEvent: OpenBundleEvent,
+sessionSnapshotEvent: SessionSnapshotEvent,
+setlistExportProgressEvent: SetlistExportProgressEvent,
+windowFocusEvent: WindowFocusEvent,
+windowStateEvent: WindowStateEvent
+}>({
+helpReadyEvent: "help-ready-event",
+openBundleEvent: "open-bundle-event",
+sessionSnapshotEvent: "session-snapshot-event",
+setlistExportProgressEvent: "setlist-export-progress-event",
+windowFocusEvent: "window-focus-event",
+windowStateEvent: "window-state-event"
+})
 
 /** user-defined constants **/
 
@@ -710,6 +725,12 @@ export type HealthScoreServer = { performerPort?: number | null; monitorPort?: n
  * frontend's to derive (it owns the markdown structure pass).
  */
 export type HelpCorpusDocument = { id: string; path: string; markdown: string }
+/**
+ * The help window finished booting and is listening for navigation
+ * (formerly `pnds:help-ready`). Emitted by the help webview itself;
+ * registered here so both windows share one generated name.
+ */
+export type HelpReadyEvent = Record<string, never>
 export type Manifest = { schemaVersion: number; id: string; name: string; version: string; description: string | null; scoreServer: ScoreServer; audio: AudioConfig; 
 /**
  * v1.4.0 (issue #58): the work declares cross-internet (telematic)
@@ -729,6 +750,11 @@ telematic?: boolean | null;
  * the same variable, zero project changes.
  */
 performerAddress?: string | null }
+/**
+ * A queued `.pnds` bundle finished installing (formerly
+ * `pnds:open-bundle`) — the frontend opens the installed project.
+ */
+export type OpenBundleEvent = Record<string, never>
 export type PackResult = { outputPath: string; sha256: string }
 /**
  * Who is listening on a project port.
@@ -789,6 +815,11 @@ channelPlan: ChannelPlan | null;
  */
 outputDevice: string | null }
 /**
+ * Session state publication — every snapshot the state machine emits
+ * (formerly `pnds:session`); statuses per runtime-contract §8/§9.
+ */
+export type SessionSnapshotEvent = { snapshot: SessionSnapshot }
+/**
  * The session state machine's vocabulary (runtime-contract §8/§9).
  * Previously a bare `String` on `SessionInner`/`SessionSnapshot`, so a
  * typo compiled and only surfaced mid-performance. serde pins the wire
@@ -802,6 +833,11 @@ export type SessionStatus = "idle" | "starting" | "ready" | "error" | "stopping"
  * identity the import matches entries on.
  */
 export type SetlistBundleFile = { path: string; fileName: string; id: string; version: string }
+/**
+ * Setlist folder export progress (formerly
+ * `pnds:setlist-export-progress`), emitted once per packed project.
+ */
+export type SetlistExportProgressEvent = { done: number; total: number; fileName: string }
 /**
  * v1.4.0 (#59): the finished export's location (Finder reveal target).
  */
@@ -844,7 +880,19 @@ produced: string[];
  */
 verified: string[] }
 /**
- * Window state broadcast to the frontend (`pnds:window` event).
+ * The window regained macOS focus (formerly `pnds:window-focus`).
+ * Payload-less by design: every consumer re-derives from the stores
+ * (AppShell restores the session snapshot, MonitorView reclaims the
+ * keyboard focus). lib.rs re-fires it on a delay schedule because an
+ * emit into a still-suspended webview is dropped outright.
+ */
+export type WindowFocusEvent = Record<string, never>
+/**
+ * Window chrome state publication (formerly `pnds:window`).
+ */
+export type WindowStateEvent = { snapshot: WindowStateSnapshot }
+/**
+ * Window state broadcast to the frontend (WindowStateEvent).
  */
 export type WindowStateSnapshot = { 
 /**

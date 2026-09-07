@@ -280,7 +280,7 @@ describe('setlist export progress toast', () => {
     // The loading toast is up before the pack, listening for the Rust
     // per-project events.
     expect(listen).toHaveBeenCalledWith(
-      'pnds:setlist-export-progress',
+      'setlist-export-progress-event',
       expect.any(Function)
     )
     expect(notifications.flow.step).toHaveBeenCalledWith(

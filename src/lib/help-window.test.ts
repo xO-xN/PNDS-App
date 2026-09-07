@@ -198,7 +198,7 @@ describe('help-window (#56)', () => {
 
       // The page finished booting — the target lost while it had no
       // listener is delivered now.
-      listeners.get('pnds:help-ready')?.(undefined)
+      listeners.get('help-ready-event')?.(undefined)
       expect(emitTo).toHaveBeenCalledWith('help', 'pnds:help-navigate', {
         kind: 'doc',
         docId: 'reference-manifest',

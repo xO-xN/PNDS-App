@@ -22,12 +22,13 @@
 //!     that must not flash on their first frame (the Help center, T8)
 //!     reuse this same pattern.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use specta::Type;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-use tauri::{AppHandle, Emitter, Manager, Runtime, WebviewWindow};
+use tauri::{AppHandle, Manager, Runtime, WebviewWindow};
+use tauri_specta::Event as _;
 
 /// Fade duration per the contract: 150–180 ms.
 const FADE_DURATION: Duration = Duration::from_millis(160);
@@ -60,8 +61,8 @@ const FULLSCREEN_TRANSITION_MS: u64 = 400;
 /// corners. Fullscreen windows are square.
 const CORNER_RADIUS: f64 = 16.0;
 
-/// Window state broadcast to the frontend (`pnds:window` event).
-#[derive(Debug, Clone, Serialize, Type)]
+/// Window state broadcast to the frontend (WindowStateEvent).
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct WindowStateSnapshot {
     /// Native macOS fullscreen state.
@@ -166,7 +167,11 @@ pub async fn toggle_fullscreen(app: AppHandle) -> Result<WindowStateSnapshot, St
     // instance stays untouched (no reload nonce, no iframe key change,
     // no server restart).
     let snapshot = state.snapshot();
-    if let Err(e) = app.emit("pnds:window", snapshot.clone()) {
+    if let Err(e) = (crate::events::WindowStateEvent {
+        snapshot: snapshot.clone(),
+    })
+    .emit(&app)
+    {
         log::warn!("Failed to emit window snapshot: {e}");
     }
     log::info!("Fullscreen toggled to {next}");

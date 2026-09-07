@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { listen } from '@tauri-apps/api/event'
+import { onSessionSnapshot, onWindowFocus, onWindowState } from '@/lib/events'
 import { Toaster } from 'sonner'
-import { commands, type SessionSnapshot } from '@/lib/tauri-bindings'
+import { commands } from '@/lib/tauri-bindings'
 import { useSessionStore } from '@/store/session-store'
 import { useProjectStore } from '@/store/project-store'
 import { useWindowStore } from '@/store/window-store'
@@ -73,9 +73,9 @@ export function AppShell() {
 
   // Mirror the Rust session state: live events + initial restore on mount.
   useEffect(() => {
-    const unlisten = listen<SessionSnapshot>('pnds:session', event => {
-      useSessionStore.getState().applySnapshot(event.payload)
-    })
+    const offSession = onSessionSnapshot(snapshot =>
+      useSessionStore.getState().applySnapshot(snapshot)
+    )
     restoreSessionState()
     // v1.2.2 (user report on #29): an occluded WKWebView suspends its JS,
     // so `pnds:session` events queue behind the suspension — coming back
@@ -89,10 +89,10 @@ export function AppShell() {
     // The Rust-side regain signal (NSWindowDidBecomeKey) — WKWebView
     // does not reliably surface DOM focus/visibility events for desktop
     // switches, so lib.rs emits this on Focused(true) instead.
-    const unlistenFocus = listen('pnds:window-focus', restoreSessionState)
+    const offWindowFocus = onWindowFocus(restoreSessionState)
     return () => {
-      void unlisten.then(off => off())
-      void unlistenFocus.then(off => off())
+      offSession()
+      offWindowFocus()
       document.removeEventListener('visibilitychange', handleVisibility)
     }
   }, [])
@@ -100,11 +100,11 @@ export function AppShell() {
   // §7.4: mirror the Rust window state (fullscreen, traffic-light
   // visibility, fade generation). Single direction: Rust → React.
   useEffect(() => {
-    const unlisten = listen('pnds:window', event => {
-      useWindowStore.getState().applyWindowSnapshot(event.payload as never)
-    })
+    const offWindowState = onWindowState(snapshot =>
+      useWindowStore.getState().applyWindowSnapshot(snapshot)
+    )
     return () => {
-      void unlisten.then(off => off())
+      offWindowState()
     }
   }, [])
 

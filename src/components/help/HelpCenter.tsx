@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { emit, listen } from '@tauri-apps/api/event'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { useTranslation } from 'react-i18next'
 
@@ -10,10 +9,16 @@ import {
   type HelpBookId,
   type HelpDocument,
 } from '@/lib/help-corpus'
-import { setColorThemeAttribute, type ColorTheme } from '@/lib/color-theme'
+import { setColorThemeAttribute } from '@/lib/color-theme'
 import { resolveHelpLink } from '@/lib/help-links'
 import { buildHelpIndex, searchHelp, type HelpIndex } from '@/lib/help-search'
-import type { HelpTarget } from '@/lib/help-window'
+import {
+  emitHelpReady,
+  onHelpLocale,
+  onHelpNavigate,
+  onHelpTheme,
+  type HelpTarget,
+} from '@/lib/events'
 import { HELP_WINDOW_LABEL } from '@/lib/help-window'
 import { logger } from '@/lib/logger'
 import { splitTextOnTerms } from '@/lib/help-markdown'
@@ -158,34 +163,28 @@ export function HelpCenterApp({
   // language switches push the resolved locale — the UI copy follows,
   // and the corpus hot-swaps with it (#68).
   useEffect(() => {
-    const unlisteners: (() => void)[] = []
-    void listen<HelpTarget>('pnds:help-navigate', event => {
-      const target = event.payload
-      if (target.kind === 'doc') {
-        setActiveDoc({ docId: target.docId, anchor: null, terms: [] })
-      } else {
-        setActiveDoc(null)
-        searchInput.current?.focus()
-      }
-    }).then(unlisten => {
-      unlisteners.push(unlisten)
-    })
-    void listen<{ locale: string }>('pnds:help-locale', event => {
-      void i18n.changeLanguage(event.payload.locale)
-    }).then(unlisten => {
-      unlisteners.push(unlisten)
-    })
-    // Live theme follow: an open help window must not keep a stale theme
-    // after the user switches one in the main window's settings.
-    void listen<{ colorTheme: ColorTheme }>('pnds:help-theme', event => {
-      setColorThemeAttribute(event.payload.colorTheme)
-    }).then(unlisten => {
-      unlisteners.push(unlisten)
-    })
+    const unlisteners: (() => void)[] = [
+      onHelpNavigate(target => {
+        if (target.kind === 'doc') {
+          setActiveDoc({ docId: target.docId, anchor: null, terms: [] })
+        } else {
+          setActiveDoc(null)
+          searchInput.current?.focus()
+        }
+      }),
+      onHelpLocale(locale => {
+        void i18n.changeLanguage(locale)
+      }),
+      // Live theme follow: an open help window must not keep a stale
+      // theme after the user switches one in the main window's settings.
+      onHelpTheme(theme => {
+        setColorThemeAttribute(theme)
+      }),
+    ]
     // The boot handshake: a target sent while this page was still loading
     // was dropped (no listener yet) — announce readiness so the main
     // window replays the last target.
-    void emit('pnds:help-ready').catch(() => {
+    void emitHelpReady().catch(() => {
       // No receiver yet — nothing was dropped either.
     })
     return () => {

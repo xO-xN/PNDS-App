@@ -51,6 +51,8 @@ vi.mock('@tauri-apps/api/event', () => ({
   listen: vi.fn().mockResolvedValue(() => {
     // Mock unlisten function
   }),
+  emit: vi.fn().mockResolvedValue(undefined),
+  emitTo: vi.fn().mockResolvedValue(undefined),
 }))
 
 // v1.2.0 (issue #16): window-level drag-and-drop wiring in App.tsx — no
@@ -88,155 +90,187 @@ vi.mock('@tauri-apps/plugin-log', () => ({
 }))
 
 // Mock typed Tauri bindings (tauri-specta generated)
-vi.mock('@/lib/tauri-bindings', () => ({
-  commands: {
-    loadPreferences: vi
-      .fn()
-      .mockResolvedValue({ status: 'ok', data: { theme: 'system' } }),
-    savePreferences: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
-    sendNativeNotification: vi
-      .fn()
-      .mockResolvedValue({ status: 'ok', data: null }),
-    preflightProject: vi.fn().mockResolvedValue({
-      status: 'error',
-      error: 'preflightProject not mocked',
-    }),
-    cleanupOrphanedProcesses: vi
-      .fn()
-      .mockResolvedValue({ status: 'ok', data: 0 }),
-    startProject: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
-    stopProject: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
-    getSessionState: vi.fn().mockResolvedValue({
-      status: 'ok',
-      data: {
-        status: 'idle',
-        projectName: null,
-        projectPath: null,
-        audioMode: null,
-        lanIp: null,
-        oscTarget: null,
-        health: null,
-        error: null,
-        outputTail: [],
-        volume: 80,
-      },
-    }),
-    listLanAddresses: vi
-      .fn()
-      .mockResolvedValue({ status: 'ok', data: ['192.168.1.10'] }),
-    listOutputDevices: vi.fn().mockResolvedValue({
-      status: 'ok',
-      data: {
-        devices: [
-          { name: 'Mac mini Speakers', isDefault: true, maxOutputChannels: 2 },
-          { name: 'BlackHole 16ch', isDefault: false, maxOutputChannels: 16 },
-          { name: 'BlackHole 2ch', isDefault: false, maxOutputChannels: 2 },
-        ],
-        sampleRate: 48000,
-      },
-    }),
-    setMasterVolume: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
-    // Issue #21: Settings Audio section — default: the fixed fallback list
-    // (the backend only errors at the transport level; its own enumeration
-    // failure already degrades to this list).
-    listSupportedSampleRates: vi
-      .fn()
-      .mockResolvedValue([44100, 48000, 88200, 96000]),
-    getWindowState: vi.fn().mockResolvedValue({
-      status: 'ok',
-      data: { fullscreen: false, showCustomTrafficLights: true, generation: 0 },
-    }),
-    toggleFullscreen: vi.fn().mockResolvedValue({
-      status: 'ok',
-      data: { fullscreen: true, showCustomTrafficLights: false, generation: 1 },
-    }),
-    // #41: the default (square=false) keeps windowed corners rounded.
-    setWindowCornersSquare: vi
-      .fn()
-      .mockResolvedValue({ status: 'ok', data: null }),
-    closeWindowWithFade: vi
-      .fn()
-      .mockResolvedValue({ status: 'ok', data: null }),
-    fadeInWindow: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
-    // v1.3.0 (#56): ⌘W dispatch — default: the main window is front.
-    focusedWindowLabel: vi
-      .fn()
-      .mockResolvedValue({ status: 'ok', data: 'main' }),
-    markQuitting: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
-    quitApp: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
-    // Default: no built-in utility staged (Utilities seeding is a no-op;
-    // tests that exercise it override this mock).
-    builtinUtilities: vi.fn().mockResolvedValue({ status: 'ok', data: [] }),
-    // v1.3.0 (issue #53): help corpus — default: no documents; the help
-    // window's tests (T8) override this with fixture documents.
-    helpCorpus: vi.fn().mockResolvedValue({ status: 'ok', data: [] }),
-    // v1.2.0 (issue #13): Settings About section reveal buttons
-    openAppDataDir: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
-    openAppLogDir: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
-    // v1.2.0 (issue #14): port occupancy — default: both ports free.
-    checkPortStatus: vi.fn().mockImplementation((port: number) =>
-      Promise.resolve({
+vi.mock('@/lib/tauri-bindings', async () => {
+  // The generated `events` object routes through the (mocked) event API,
+  // so tests keep capturing handlers by event name.
+  const { listen, emit } = await import('@tauri-apps/api/event')
+  const makeEvent = (name: string) => ({
+    listen: (cb: (event: { payload: unknown }) => void) =>
+      listen(name, cb as never),
+    emit: (payload?: unknown) => emit(name, payload),
+  })
+  return {
+    events: {
+      helpReadyEvent: makeEvent('help-ready-event'),
+      openBundleEvent: makeEvent('open-bundle-event'),
+      sessionSnapshotEvent: makeEvent('session-snapshot-event'),
+      setlistExportProgressEvent: makeEvent('setlist-export-progress-event'),
+      windowFocusEvent: makeEvent('window-focus-event'),
+      windowStateEvent: makeEvent('window-state-event'),
+    },
+    commands: {
+      loadPreferences: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: { theme: 'system' } }),
+      savePreferences: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
+      sendNativeNotification: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      preflightProject: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: 'preflightProject not mocked',
+      }),
+      cleanupOrphanedProcesses: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: 0 }),
+      startProject: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
+      stopProject: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
+      getSessionState: vi.fn().mockResolvedValue({
         status: 'ok',
-        data: { port, occupant: null },
-      })
-    ),
-    releasePort: vi.fn().mockImplementation((port: number) =>
-      Promise.resolve({
+        data: {
+          status: 'idle',
+          projectName: null,
+          projectPath: null,
+          audioMode: null,
+          lanIp: null,
+          oscTarget: null,
+          health: null,
+          error: null,
+          outputTail: [],
+          volume: 80,
+        },
+      }),
+      listLanAddresses: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: ['192.168.1.10'] }),
+      listOutputDevices: vi.fn().mockResolvedValue({
         status: 'ok',
-        data: { port, occupant: null },
-      })
-    ),
-    // v1.2.0 (issue #16): .pnds bundles — default: pack probe targets a
-    // fresh output, no pending opens, picker cancelled, no managed bundle.
-    getBundleOutputInfo: vi.fn().mockResolvedValue({
-      status: 'ok',
-      data: { outputPath: '/tmp/demo-1.0.0.pnds', exists: false },
+        data: {
+          devices: [
+            {
+              name: 'Mac mini Speakers',
+              isDefault: true,
+              maxOutputChannels: 2,
+            },
+            { name: 'BlackHole 16ch', isDefault: false, maxOutputChannels: 16 },
+            { name: 'BlackHole 2ch', isDefault: false, maxOutputChannels: 2 },
+          ],
+          sampleRate: 48000,
+        },
+      }),
+      setMasterVolume: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
+      // Issue #21: Settings Audio section — default: the fixed fallback list
+      // (the backend only errors at the transport level; its own enumeration
+      // failure already degrades to this list).
+      listSupportedSampleRates: vi
+        .fn()
+        .mockResolvedValue([44100, 48000, 88200, 96000]),
+      getWindowState: vi.fn().mockResolvedValue({
+        status: 'ok',
+        data: {
+          fullscreen: false,
+          showCustomTrafficLights: true,
+          generation: 0,
+        },
+      }),
+      toggleFullscreen: vi.fn().mockResolvedValue({
+        status: 'ok',
+        data: {
+          fullscreen: true,
+          showCustomTrafficLights: false,
+          generation: 1,
+        },
+      }),
+      // #41: the default (square=false) keeps windowed corners rounded.
+      setWindowCornersSquare: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      closeWindowWithFade: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      fadeInWindow: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
+      // v1.3.0 (#56): ⌘W dispatch — default: the main window is front.
+      focusedWindowLabel: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: 'main' }),
+      markQuitting: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
+      quitApp: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
+      // Default: no built-in utility staged (Utilities seeding is a no-op;
+      // tests that exercise it override this mock).
+      builtinUtilities: vi.fn().mockResolvedValue({ status: 'ok', data: [] }),
+      // v1.3.0 (issue #53): help corpus — default: no documents; the help
+      // window's tests (T8) override this with fixture documents.
+      helpCorpus: vi.fn().mockResolvedValue({ status: 'ok', data: [] }),
+      // v1.2.0 (issue #13): Settings About section reveal buttons
+      openAppDataDir: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
+      openAppLogDir: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
+      // v1.2.0 (issue #14): port occupancy — default: both ports free.
+      checkPortStatus: vi.fn().mockImplementation((port: number) =>
+        Promise.resolve({
+          status: 'ok',
+          data: { port, occupant: null },
+        })
+      ),
+      releasePort: vi.fn().mockImplementation((port: number) =>
+        Promise.resolve({
+          status: 'ok',
+          data: { port, occupant: null },
+        })
+      ),
+      // v1.2.0 (issue #16): .pnds bundles — default: pack probe targets a
+      // fresh output, no pending opens, picker cancelled, no managed bundle.
+      getBundleOutputInfo: vi.fn().mockResolvedValue({
+        status: 'ok',
+        data: { outputPath: '/tmp/demo-1.0.0.pnds', exists: false },
+      }),
+      packProjectBundle: vi.fn().mockResolvedValue({
+        status: 'ok',
+        data: {
+          outputPath: '/tmp/demo-1.0.0.pnds',
+          sha256: 'a'.repeat(64),
+        },
+      }),
+      installBundle: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: '/bundles/demo-1.0.0' }),
+      reclaimProjectBundle: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: false }),
+      // v1.4.0 (#59): setlist export — default: nothing described (the
+      // happy path is per-test), export lands in a scratch directory.
+      getSetlistExportInfo: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: [] }),
+      exportSetlist: vi.fn().mockResolvedValue({
+        status: 'ok',
+        data: { outputDir: '/tmp/setlist-export' },
+      }),
+      // v1.4.0 (#63): setlist import — default: no set.json (routing falls
+      // through to the normal open flow; import tests override).
+      readSetlist: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: 'No set.json',
+      }),
+      takePendingBundleOpens: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: [] }),
+      pickProjectOrBundle: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      // v1.2.0 (issue #17): SynthDef compile — default: one artifact that
+      // satisfies the fixture manifests.
+      compileProjectSynthdefs: vi.fn().mockResolvedValue({
+        status: 'ok',
+        data: {
+          sclangPath: '/Applications/SuperCollider.app/Contents/MacOS/sclang',
+          produced: ['demo.scsyndef'],
+          verified: ['supercollider/synthdefs/demo.scsyndef'],
+        },
+      }),
+    },
+    unwrapResult: vi.fn((result: { status: string; data?: unknown }) => {
+      if (result.status === 'ok') return result.data
+      throw result
     }),
-    packProjectBundle: vi.fn().mockResolvedValue({
-      status: 'ok',
-      data: {
-        outputPath: '/tmp/demo-1.0.0.pnds',
-        sha256: 'a'.repeat(64),
-      },
-    }),
-    installBundle: vi
-      .fn()
-      .mockResolvedValue({ status: 'ok', data: '/bundles/demo-1.0.0' }),
-    reclaimProjectBundle: vi
-      .fn()
-      .mockResolvedValue({ status: 'ok', data: false }),
-    // v1.4.0 (#59): setlist export — default: nothing described (the
-    // happy path is per-test), export lands in a scratch directory.
-    getSetlistExportInfo: vi.fn().mockResolvedValue({ status: 'ok', data: [] }),
-    exportSetlist: vi.fn().mockResolvedValue({
-      status: 'ok',
-      data: { outputDir: '/tmp/setlist-export' },
-    }),
-    // v1.4.0 (#63): setlist import — default: no set.json (routing falls
-    // through to the normal open flow; import tests override).
-    readSetlist: vi.fn().mockResolvedValue({
-      status: 'error',
-      error: 'No set.json',
-    }),
-    takePendingBundleOpens: vi
-      .fn()
-      .mockResolvedValue({ status: 'ok', data: [] }),
-    pickProjectOrBundle: vi
-      .fn()
-      .mockResolvedValue({ status: 'ok', data: null }),
-    // v1.2.0 (issue #17): SynthDef compile — default: one artifact that
-    // satisfies the fixture manifests.
-    compileProjectSynthdefs: vi.fn().mockResolvedValue({
-      status: 'ok',
-      data: {
-        sclangPath: '/Applications/SuperCollider.app/Contents/MacOS/sclang',
-        produced: ['demo.scsyndef'],
-        verified: ['supercollider/synthdefs/demo.scsyndef'],
-      },
-    }),
-  },
-  unwrapResult: vi.fn((result: { status: string; data?: unknown }) => {
-    if (result.status === 'ok') return result.data
-    throw result
-  }),
-}))
+  }
+})

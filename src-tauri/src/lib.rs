@@ -5,6 +5,7 @@
 
 mod bindings;
 mod commands;
+mod events;
 mod open_panel;
 mod process_activity;
 mod project;
@@ -13,6 +14,7 @@ mod window;
 
 use std::collections::HashSet;
 use tauri::{Manager, RunEvent, WindowEvent};
+use tauri_specta::Event as _;
 
 /// Application entry point. Sets up all plugins and initializes the app.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -96,6 +98,11 @@ pub fn run() {
                 .build()
         });
 
+    // The setup closure below takes ownership of `builder` (it is not
+    // Clone), so hoist the invoke handler — a boxed fn with no borrow —
+    // out first.
+    let invoke_handler = builder.invoke_handler();
+
     app_builder
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_persisted_scope::init())
@@ -103,7 +110,7 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_os::init())
-        .setup(|app| {
+        .setup(move |app| {
             log::info!("Application starting up");
             log::debug!(
                 "App handle initialized for package: {}",
@@ -186,9 +193,13 @@ pub fn run() {
                 });
             }
 
+            // tauri-specta events: mount before the app can run so
+            // every Event::emit resolves its registry entry.
+            builder.mount_events(app);
+
             Ok(())
         })
-        .invoke_handler(builder.invoke_handler())
+        .invoke_handler(invoke_handler)
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app_handle, event| match &event {
@@ -211,8 +222,10 @@ pub fn run() {
                             .fullscreen
                             .store(is_fs, std::sync::atomic::Ordering::SeqCst);
                         state.fade_gen.next();
-                        use tauri::Emitter;
-                        let _ = app_handle.emit("pnds:window", state.snapshot());
+                        let _ = (crate::events::WindowStateEvent {
+                            snapshot: state.snapshot(),
+                        })
+                        .emit(app_handle);
                         log::info!("Fullscreen state synced via resize: {is_fs}");
                         // square the native corners in fullscreen and
                         // restore the 16px radius on the way back (#41:
@@ -241,10 +254,9 @@ pub fn run() {
                 event: WindowEvent::Focused(true),
                 ..
             } if label == "main" => {
-                use tauri::Emitter;
                 let session = app_handle.state::<crate::project::session::SessionManager>();
                 session.publish(app_handle);
-                let _ = app_handle.emit("pnds:window-focus", ());
+                let _ = crate::events::WindowFocusEvent {}.emit(app_handle);
                 // The first emit can land while the webview is still
                 // resuming from occlusion suspension — an emit into a
                 // suspended webview is dropped outright, taking the
@@ -255,7 +267,7 @@ pub fn run() {
                 std::thread::spawn(move || {
                     for delay_ms in [300u64, 700, 1500] {
                         std::thread::sleep(std::time::Duration::from_millis(delay_ms));
-                        let _ = handle.emit("pnds:window-focus", ());
+                        let _ = crate::events::WindowFocusEvent {}.emit(&handle);
                     }
                 });
             }

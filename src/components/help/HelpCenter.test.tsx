@@ -309,7 +309,7 @@ describe('HelpCenterApp (#56)', () => {
     render(<HelpCenterApp />)
 
     await screen.findByPlaceholderText('Search the docs…')
-    expect(emit).toHaveBeenCalledWith('pnds:help-ready')
+    expect(emit).toHaveBeenCalledWith('help-ready-event', {})
   })
 
   it('navigates between documents on corpus links; external links leave via the system browser', async () => {

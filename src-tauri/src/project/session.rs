@@ -16,7 +16,8 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
-use tauri::{AppHandle, Emitter};
+use tauri::AppHandle;
+use tauri_specta::Event as _;
 
 use crate::project::children::{self, ChildRegistry};
 use crate::project::manifest::{load_manifest, Manifest};
@@ -89,7 +90,7 @@ pub struct HealthScoreServer {
 }
 
 /// Session snapshot emitted to the frontend as the `pnds:session` event.
-#[derive(Debug, Clone, Serialize, Type)]
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionSnapshot {
     pub status: SessionStatus,
@@ -1228,7 +1229,7 @@ impl SessionManager {
             }
             guard.snapshot()
         };
-        if let Err(e) = app.emit("pnds:session", snapshot) {
+        if let Err(e) = (crate::events::SessionSnapshotEvent { snapshot }).emit(app) {
             log::warn!("Failed to emit session snapshot: {e}");
         }
     }
@@ -1832,6 +1833,9 @@ mod tests {
     #[test]
     fn multichannel_volume_is_fixed_at_unity() {
         let app = tauri::test::mock_app().handle().clone();
+        // tauri-specta emits resolve their registry entry at call time;
+        // mount the real event set on the mock app.
+        crate::events::events_builder().mount_events(&app);
         let manager = SessionManager::default();
         {
             let mut inner = manager.lock();
@@ -1850,6 +1854,9 @@ mod tests {
     #[test]
     fn stereo_volume_updates_normally() {
         let app = tauri::test::mock_app().handle().clone();
+        // tauri-specta emits resolve their registry entry at call time;
+        // mount the real event set on the mock app.
+        crate::events::events_builder().mount_events(&app);
         let manager = SessionManager::default();
         {
             let mut inner = manager.lock();
@@ -1888,6 +1895,9 @@ mod tests {
     #[test]
     fn stop_without_child_returns_ok() {
         let app = tauri::test::mock_app().handle().clone();
+        // tauri-specta emits resolve their registry entry at call time;
+        // mount the real event set on the mock app.
+        crate::events::events_builder().mount_events(&app);
         let manager = SessionManager::default();
         let dir = tempfile::tempdir().unwrap();
         manager.stop(&app, dir.path()).unwrap();
@@ -1899,6 +1909,9 @@ mod tests {
     #[test]
     fn stop_with_child_terminates_and_resets() {
         let app = tauri::test::mock_app().handle().clone();
+        // tauri-specta emits resolve their registry entry at call time;
+        // mount the real event set on the mock app.
+        crate::events::events_builder().mount_events(&app);
         let manager = SessionManager::default();
         let dir = tempfile::tempdir().unwrap();
 
@@ -1930,6 +1943,9 @@ mod tests {
     #[test]
     fn active_child_pids_track_owned_children_until_stop() {
         let app = tauri::test::mock_app().handle().clone();
+        // tauri-specta emits resolve their registry entry at call time;
+        // mount the real event set on the mock app.
+        crate::events::events_builder().mount_events(&app);
         let manager = SessionManager::default();
         let dir = tempfile::tempdir().unwrap();
         assert!(manager.active_child_pids().is_empty());
@@ -1988,6 +2004,9 @@ mod tests {
     #[test]
     fn fail_generation_cleans_up_before_publishing_error() {
         let app = tauri::test::mock_app().handle().clone();
+        // tauri-specta emits resolve their registry entry at call time;
+        // mount the real event set on the mock app.
+        crate::events::events_builder().mount_events(&app);
         let manager = SessionManager::default();
         let dir = tempfile::tempdir().unwrap();
 
@@ -2045,6 +2064,9 @@ mod tests {
     #[test]
     fn ready_is_claimed_only_after_the_master_stage_confirms() {
         let app = tauri::test::mock_app().handle().clone();
+        // tauri-specta emits resolve their registry entry at call time;
+        // mount the real event set on the mock app.
+        crate::events::events_builder().mount_events(&app);
         let manager = SessionManager::default();
         let dir = tempfile::tempdir().unwrap();
         let generation = {
@@ -2087,6 +2109,9 @@ mod tests {
     #[test]
     fn master_stage_failure_fails_the_generation_instead_of_ready() {
         let app = tauri::test::mock_app().handle().clone();
+        // tauri-specta emits resolve their registry entry at call time;
+        // mount the real event set on the mock app.
+        crate::events::events_builder().mount_events(&app);
         let manager = SessionManager::default();
         let dir = tempfile::tempdir().unwrap();
         let generation = {
@@ -2124,6 +2149,9 @@ mod tests {
     #[test]
     fn none_mode_ready_needs_no_master_stage() {
         let app = tauri::test::mock_app().handle().clone();
+        // tauri-specta emits resolve their registry entry at call time;
+        // mount the real event set on the mock app.
+        crate::events::events_builder().mount_events(&app);
         let manager = SessionManager::default();
         let dir = tempfile::tempdir().unwrap();
         let generation = {
@@ -2155,6 +2183,9 @@ mod tests {
     #[test]
     fn stale_generation_failure_does_not_touch_the_new_session() {
         let app = tauri::test::mock_app().handle().clone();
+        // tauri-specta emits resolve their registry entry at call time;
+        // mount the real event set on the mock app.
+        crate::events::events_builder().mount_events(&app);
         let manager = SessionManager::default();
         let dir = tempfile::tempdir().unwrap();
 
@@ -2192,6 +2223,9 @@ mod tests {
     #[test]
     fn start_failure_opens_a_clean_generation_then_reports_the_new_error() {
         let app = tauri::test::mock_app().handle().clone();
+        // tauri-specta emits resolve their registry entry at call time;
+        // mount the real event set on the mock app.
+        crate::events::events_builder().mount_events(&app);
         let manager = SessionManager::default();
         let dir = tempfile::tempdir().unwrap();
 
@@ -2529,6 +2563,9 @@ mod tests {
     #[test]
     fn supervisor_reports_ready_for_a_healthy_none_mode_session() {
         let app = tauri::test::mock_app().handle().clone();
+        // tauri-specta emits resolve their registry entry at call time;
+        // mount the real event set on the mock app.
+        crate::events::events_builder().mount_events(&app);
         let manager = SessionManager::default();
         let dir = tempfile::tempdir().unwrap();
 

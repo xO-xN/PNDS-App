@@ -5,7 +5,7 @@ pub fn generate_bindings() -> Builder<tauri::Wry> {
         bundle, help, notifications, preferences, project, synthdef, system, tools,
     };
 
-    Builder::<tauri::Wry>::new().commands(collect_commands![
+    crate::events::events_builder::<tauri::Wry>().commands(collect_commands![
         crate::window::toggle_fullscreen,
         crate::window::set_window_corners_square,
         crate::window::close_window_with_fade,
