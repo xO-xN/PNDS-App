@@ -358,6 +358,34 @@ async reclaimProjectBundle(path: string) : Promise<Result<boolean, string>> {
 }
 },
 /**
+ * v1.4.0 (#59): the setlist export pre-flight — per project the same
+ * packability gate a pack would run plus the manifest identity and the
+ * derived `.pnds` file name, so the frontend can assemble set.json
+ * before anything is written.
+ */
+async getSetlistExportInfo(paths: string[]) : Promise<Result<SetlistProjectInfo[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_setlist_export_info", { paths }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * v1.4.0 (#59): packs every project (in list order) into `destDir`, then
+ * writes the frontend-serialized set.json and the import instructions
+ * beside them. A failure removes everything this run wrote — a partial
+ * export never reads as complete.
+ */
+async exportSetlist(destDir: string, setlistJson: string, instructions: string, projectPaths: string[]) : Promise<Result<SetlistExportResult, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("export_setlist", { destDir, setlistJson, instructions, projectPaths }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * Atomically drains the queue of `.pnds` paths macOS asked the App to open.
  */
 async takePendingBundleOpens() : Promise<Result<string[], string>> {
@@ -717,6 +745,25 @@ channelPlan: ChannelPlan | null;
  * Final CoreAudio output device in use (internal sessions).
  */
 outputDevice: string | null }
+/**
+ * v1.4.0 (#59): the finished export's location (Finder reveal target).
+ */
+export type SetlistExportResult = { outputDir: string }
+/**
+ * v1.4.0 (#59): what the frontend needs to assemble one set.json entry —
+ * the manifest identity plus the `.pnds` file name the export will
+ * produce. `path` rides along so the caller pairs infos with its request
+ * order explicitly.
+ */
+export type SetlistProjectInfo = { path: string; id: string; version: string; 
+/**
+ * The manifest's declared default audio mode.
+ */
+defaultAudioMode: string; 
+/**
+ * The `<sanitized name>-<version>.pnds` artifact this export writes.
+ */
+fileName: string }
 export type SynthdefCompileResult = { 
 /**
  * The sclang binary this run used (standard app path or PATH hit).

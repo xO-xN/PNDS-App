@@ -89,11 +89,36 @@ pub fn pack_project(
             output.display()
         ));
     }
+    pack_staged(project_root, &manifest, &output, packed_with)
+}
 
+/// Packs `project_root` to the caller-chosen `output` path (v1.4.0, #59:
+/// the setlist export's entry into the packer — its artifacts land in the
+/// chosen export directory, not beside the project). Same validations and
+/// staging isolation as [`pack_project`]; an existing output is always
+/// replaced, because a re-export owns its directory's artifacts.
+pub fn pack_project_to(
+    project_root: &Path,
+    output: &Path,
+    packed_with: &str,
+) -> Result<PackResult, String> {
+    let (manifest, _) = validate_packable(project_root)?;
+    pack_staged(project_root, &manifest, output, packed_with)
+}
+
+/// The staging-isolated pack core shared by both pack entries: copy the
+/// runtime tree into a temp dir, zip it beside `output` as a `.part`
+/// sibling, then atomically rename into place and hash.
+fn pack_staged(
+    project_root: &Path,
+    manifest: &Manifest,
+    output: &Path,
+    packed_with: &str,
+) -> Result<PackResult, String> {
     // stage in the system temp dir so the source tree is never touched.
     let staging =
         tempfile::tempdir().map_err(|e| format!("Failed to create the staging directory: {e}"))?;
-    let root_name = zip_root_name(&manifest);
+    let root_name = zip_root_name(manifest);
     let staged_root = staging.path().join(&root_name);
     copy_runtime_tree(project_root, project_root, &staged_root)?;
 
@@ -112,7 +137,7 @@ pub fn pack_project(
     let write_result = write_bundle_zip(&staged_root, &root_name, packed_with, &tmp_output);
     match write_result {
         Ok(()) => {
-            fs::rename(&tmp_output, &output)
+            fs::rename(&tmp_output, output)
                 .map_err(|e| format!("Failed to finalize {}: {e}", output.display()))?;
         }
         Err(error) => {
@@ -121,7 +146,7 @@ pub fn pack_project(
         }
     }
 
-    let sha256 = sha256_hex(&output)?;
+    let sha256 = sha256_hex(output)?;
     Ok(PackResult {
         output_path: output.to_string_lossy().into_owned(),
         sha256,

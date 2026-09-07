@@ -27,6 +27,7 @@ App 开发的规则层：既定模式与系统做法，按问题检索——查�
 - **文件存储模式与原子写入** → [data-persistence.md](./data-persistence.md)
 - **HTTP 请求与外部 API 调用** → [external-apis.md](./external-apis.md)
 - **帮助语料装载、运行时渲染与离线搜索** → [help-center.md](./help-center.md)
+- **演出文件夹导入导出：set.json 格式与导出/导入缝** → [setlist.md](./setlist.md)
 
 ## 质量与工具
 

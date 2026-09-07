@@ -205,6 +205,13 @@ vi.mock('@/lib/tauri-bindings', () => ({
     reclaimProjectBundle: vi
       .fn()
       .mockResolvedValue({ status: 'ok', data: false }),
+    // v1.4.0 (#59): setlist export — default: nothing described (the
+    // happy path is per-test), export lands in a scratch directory.
+    getSetlistExportInfo: vi.fn().mockResolvedValue({ status: 'ok', data: [] }),
+    exportSetlist: vi.fn().mockResolvedValue({
+      status: 'ok',
+      data: { outputDir: '/tmp/setlist-export' },
+    }),
     takePendingBundleOpens: vi
       .fn()
       .mockResolvedValue({ status: 'ok', data: [] }),

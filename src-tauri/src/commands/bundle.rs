@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use tauri::{AppHandle, Manager, State};
 
 use crate::project::bundle::{self, BundleOutputInfo, PackResult, BUNDLES_DIR};
+use crate::project::setlist::{self, SetlistExportResult, SetlistProjectInfo};
 
 /// Paths of `.pnds` files macOS asked the App to open (file-association
 /// double-click or launch-with-document). Filled by `RunEvent::Opened`,
@@ -68,6 +69,41 @@ pub async fn install_bundle(app: AppHandle, path: String) -> Result<String, Stri
 pub async fn reclaim_project_bundle(app: AppHandle, path: String) -> Result<bool, String> {
     let root = bundles_root(&app)?;
     bundle::reclaim_bundle_dir(&root, &PathBuf::from(&path))
+}
+
+/// v1.4.0 (#59): the setlist export pre-flight — per project the same
+/// packability gate a pack would run plus the manifest identity and the
+/// derived `.pnds` file name, so the frontend can assemble set.json
+/// before anything is written.
+#[tauri::command]
+#[specta::specta]
+pub async fn get_setlist_export_info(
+    paths: Vec<String>,
+) -> Result<Vec<SetlistProjectInfo>, String> {
+    setlist::describe_projects(&paths)
+}
+
+/// v1.4.0 (#59): packs every project (in list order) into `destDir`, then
+/// writes the frontend-serialized set.json and the import instructions
+/// beside them. A failure removes everything this run wrote — a partial
+/// export never reads as complete.
+#[tauri::command]
+#[specta::specta]
+pub async fn export_setlist(
+    app: AppHandle,
+    dest_dir: String,
+    setlist_json: String,
+    instructions: String,
+    project_paths: Vec<String>,
+) -> Result<SetlistExportResult, String> {
+    let packed_with = app.package_info().version.to_string();
+    setlist::export_setlist(
+        &PathBuf::from(dest_dir),
+        &project_paths,
+        &setlist_json,
+        &instructions,
+        &packed_with,
+    )
 }
 
 /// Atomically drains the queue of `.pnds` paths macOS asked the App to open.

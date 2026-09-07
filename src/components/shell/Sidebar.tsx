@@ -12,6 +12,7 @@ import {
   Command,
   Music,
   FolderOpen,
+  Package,
   AlertCircle,
 } from 'lucide-react'
 import { openUrl } from '@tauri-apps/plugin-opener'
@@ -34,6 +35,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { selectProject, setActiveFolderView } from '@/lib/project-select'
 import { startFolderRename } from '@/lib/project-rename'
 import { reclaimIfManagedBundle } from '@/lib/bundle-project'
+import { exportSetlistFolder } from '@/lib/setlist-export'
 import { revealScrollTarget } from '@/lib/list-reveal'
 import { projectDisplayName } from '@/lib/display-names'
 import { builtinUtilityId } from '@/lib/builtin-utilities'
@@ -1171,6 +1173,37 @@ export function Sidebar({
                       {menuFolderProtected && (
                         <span className="pl-6 text-xs leading-snug font-normal text-(--pnds-text)/45">
                           {t('sidebar.utilitiesProtected')}
+                        </span>
+                      )}
+                    </div>
+                  </ContextMenuItem>
+                  {/* v1.4.0 (#59): setlist export — the folder becomes a
+                      copyable directory (.pnds 组 + set.json + README).
+                      Empty folders and the protected Utilities folder
+                      disable with the reason, like every gated item. */}
+                  <ContextMenuItem
+                    data-testid="menu-export-setlist"
+                    disabled={
+                      menuFolderProtected ||
+                      menuFolder.projectPaths.length === 0
+                    }
+                    onSelect={() => {
+                      pendingMenuActionRef.current = () => {
+                        void exportSetlistFolder(menuFolder.id)
+                      }
+                    }}
+                  >
+                    <div className="flex w-full flex-col gap-0.5">
+                      <span className="flex items-center gap-2">
+                        <Package />
+                        {t('sidebar.exportSetlistFolder')}
+                      </span>
+                      {(menuFolderProtected ||
+                        menuFolder.projectPaths.length === 0) && (
+                        <span className="ps-6 text-xs leading-snug font-normal text-(--pnds-text)/45">
+                          {menuFolderProtected
+                            ? t('sidebar.setlistExportProtectedReason')
+                            : t('sidebar.setlistExportEmptyReason')}
                         </span>
                       )}
                     </div>

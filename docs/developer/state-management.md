@@ -211,7 +211,10 @@ import is all-or-nothing; further additions are capped again afterwards.
 App content (this launch's utility tools, the Utilities folder) rides
 through the replace. The set.json keying decision — manifest
 `id` + `version`, never absolute paths — is recorded in the action's doc
-comment and binds the v1.4.0 exchange format.
+comment and binds the v1.4.0 exchange format, pinned in
+`src/lib/setlist.ts` (schema + serialize/parse) and
+[setlist.md](./setlist.md); the export flow itself lives
+in `src/lib/setlist-export.ts`.
 
 ## Adding a New Store
 

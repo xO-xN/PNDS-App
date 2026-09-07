@@ -8,4 +8,5 @@ pub mod manifest;
 pub mod ports;
 pub mod preflight;
 pub mod session;
+pub mod setlist;
 pub mod synthdef;
