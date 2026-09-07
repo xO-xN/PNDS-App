@@ -30,8 +30,10 @@ PNDS 池谱（Platform for Networked Digital Score），寓意「多池相连」
 
 - [PNDS Template](https://github.com/xO-xN/PNDS-Template) | PNDS 池谱创作模板
 - [Local-Network-Diagnostics](https://github.com/xO-xN/Local-Network-Diagnostics) | App 内置的本地网络诊断工具
-- [Telematic-Network-Diagnostics](https://github.com/xO-xN/Telematic-Network-Diagnostics) | 远程网络诊断工具
+- [Telematic-Network-Diagnostics](https://github.com/xO-xN/Telematic-Network-Diagnostics) | App 内置的跨互联网诊断工具
 - [Multichannel-Signal-Generator](https://github.com/xO-xN/Multichannel-Signal-Generator) | App 内置的 16 通道验证工具
+- [pnds-hub](https://github.com/xO-xN/pnds-hub) | 跨互联网演奏中继服务器
+- [pnds-agent-skills](https://github.com/xO-xN/pnds-agent-skills) | PNDS 的 AI agent 技能集（含 pnds-port 数字乐谱移植）
 - [Inarticulate III](https://github.com/xO-xN/inarticulate-iii) | 一个使用 PNDS 池谱创作的作品示例
 
 ## 许可证

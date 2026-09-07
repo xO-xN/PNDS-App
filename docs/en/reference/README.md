@@ -12,5 +12,6 @@ Look up by question: what you want to know → which file to read.
 - **The SynthDef compilation contract and SuperCollider** → [supercollider.md](./supercollider.md)
 - **The OSC protocol and target injection** → [osc.md](./osc.md)
 - **Creating digital scores with P5.js** → [p5js.md](./p5js.md)
+- **Which keyboard / pointer / touch events can my pages rely on?** → [page-interaction.md](./page-interaction.md)
 
 Using the Template's built-in modules (QR / seats / theme / language / the audio work layer) is not this manual's subject — see the [Module Manual](../modules/README.md).

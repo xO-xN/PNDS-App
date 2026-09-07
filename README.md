@@ -34,8 +34,10 @@ Looking for a score project to run? See [_Inarticulate III_](https://github.com/
 
 - [PNDS-Template](https://github.com/xO-xN/PNDS-Template) | the PNDS creation template
 - [Local-Network-Diagnostics](https://github.com/xO-xN/Local-Network-Diagnostics) | bundled local-network diagnostics tool
-- [Telematic-Network-Diagnostics](https://github.com/xO-xN/Telematic-Network-Diagnostics) | remote-network diagnostics tool
+- [Telematic-Network-Diagnostics](https://github.com/xO-xN/Telematic-Network-Diagnostics) | bundled cross-internet diagnostics tool
 - [Multichannel-Signal-Generator](https://github.com/xO-xN/Multichannel-Signal-Generator) | bundled 16-channel validation tool
+- [pnds-hub](https://github.com/xO-xN/pnds-hub) | relay server for cross-internet performance
+- [pnds-agent-skills](https://github.com/xO-xN/pnds-agent-skills) | AI-agent skill set for PNDS (includes pnds-port score porting)
 - [Inarticulate III](https://github.com/xO-xN/inarticulate-iii) | an example work created with PNDS
 
 ## License

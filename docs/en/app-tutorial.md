@@ -32,7 +32,19 @@ The App's **left sidebar** is the main working area; it manages the full lifecyc
 
 ---
 
-## 4. Loading a Project and the multi-device performance workflow
+## 4. Built-in utilities
+
+The sidebar's **Utilities** folder carries three ready-to-run validation Projects covering three layers of the performance chain (in a fixed order):
+
+- **Multichannel Gen** ([Multichannel-Signal-Generator](https://github.com/xO-xN/Multichannel-Signal-Generator)): a 16-channel signal generator. When — verifying your audio interface's channel mapping, wiring and reinforcement setup, especially before a multichannel work goes on. Once loaded, its monitor offers 16 vertical faders to confirm, channel by channel, that sound goes where it should.
+- **Local Diagnostics** ([Local-Network-Diagnostics](https://github.com/xO-xN/Local-Network-Diagnostics)): local-network diagnostics. When — checking the Wi-Fi leg from performers' devices to the Host (latency / jitter / loss) before a show; performers scan and test from their phones.
+- **Telematic Diagnostics** ([Telematic-Network-Diagnostics](https://github.com/xO-xN/Telematic-Network-Diagnostics)): cross-internet diagnostics. When — the go / no-go verdict on the hub star network before a multi-site performance (see [Cross-internet performance](#6-cross-internet-performance-multi-site) below); every site's monitor shows the same flower view — green means playable, red names the faulty site and leg.
+
+Utilities load and run from the sidebar like any Project; details and verdict thresholds live in each tool's repository.
+
+---
+
+## 5. Loading a Project and the multi-device performance workflow
 
 Before you begin, connect the Host Mac running PNDS App and every performer's device to the same local network; a wired connection is recommended for the Host, with performers' devices (phones / tablets) on the same Wi-Fi.
 
@@ -46,10 +58,46 @@ Once the settings check out, click the **Load** button to start the Project:
 
 ---
 
-## 5. Live controls and summoning the sidebar
+## 6. Cross-internet performance (multi-site)
+
+PNDS evokes "many ponds, connected": several sites, each a Mac plus its local performance system in its own city, join through a public relay (the hub) to perform one work across the internet. The standard shape is the **star hub relay**; the workflow (networking principles and the room / token semantics in [performance networking](../reference/network.md)):
+
+1. **Deploy the hub**: install [pnds-hub](https://github.com/xO-xN/pnds-hub), the cross-internet relay server, on a public VPS, following its repository's deployment guide (a systemd service behind a TLS reverse proxy; the shared token is generated at install time). The hub only relays control messages between sites — every site connects **outbound**, so no inbound port ever needs opening at a venue.
+2. **Configure the node on each site**: open the settings panel (`⌘ ,`) on each site's Mac and fill in the three **Node** rows — the **node name** (this Mac's name in the star diagram, e.g. `site-a`), the **hub address** (the full `wss://` URL) and the **token** (shown masked). The three are machine-global: enter them once and every Project shares them; changes take effect the next time a Project starts.
+3. **Verify the network (go / no-go)**: load the built-in **Telematic Diagnostics** (see [Built-in utilities](#4-built-in-utilities)) on every site — the App-injected node configuration is its connection configuration, connecting automatically with nothing to retype in the form; with any of the three rows empty the Load button becomes **Set up node**, prompting the configuration first. Every site's monitor then shows the same star-shaped **flower view**; a green / red banner gives the verdict and names the faulty site and leg.
+4. **The performance**: load the actual work (its manifest declares cross-internet capability and it implements the hub protocol — Telematic Diagnostics is the reference implementation). The App derives the room from the work automatically — sites running the same work in the same Room group (the sidebar Room dropdown, 1–3) land in one room, and a wrongly opened work cannot see in; performers join **their own site** by QR code as usual, and real-time audio between sites rides an external transport such as JackTrip.
+
+---
+
+## 7. Live controls and summoning the sidebar
 
 During a performance or rehearsal, when you need to switch the audio output device, change volume or check connections:
 
 - **Edge hover**: move the pointer to the far left edge of the window and the settings sidebar glides in.
 - **Keyboard summon**: hold `⌘` and the sidebar appears instantly; release the key or move the pointer away and it slides back out, keeping the main view free of distraction.
 - **Full-screen performance**: `⌃⌘ F`, the menu item or the sidebar button enters full screen; the monitor page adapts to the new size.
+
+---
+
+## Appendix: shortcut quick reference
+
+The shortcuts an App user reaches for (creators asking "which keys can my pages get?" — see [page interaction](../reference/page-interaction.md)):
+
+| Shortcut              | Action                                    |
+| --------------------- | ----------------------------------------- |
+| `⌘ O`                 | Import a Project                          |
+| `⌘ 1`–`⌘ 9`           | Select the Nth visible Project            |
+| `⌘ ↓` / `⌘ ↑`         | Next / previous Project                   |
+| `⌘ ←` / `⌘ →`         | Switch folder view (wrapping at the ends) |
+| `⌘ R`                 | Rename the selected Project / folder      |
+| `Enter`               | Load the Project / restart after a change |
+| `Esc`                 | Close the Project (confirm flow)          |
+| `⌘` (hold)            | Summon the sidebar + number badges        |
+| `⌃ ⌘ F`               | Enter / leave full screen                 |
+| `⌘ M`                 | Master mute / restore                     |
+| `⌘ =` / `⌘ -` / `⌘ 0` | Monitor zoom in / out / actual size       |
+| `⌘ ⇧ R`               | Reload the monitor page                   |
+| `⌘ ,`                 | Open / close the settings panel           |
+| `⌘ ?`                 | Open the help center                      |
+| `⌘ W`                 | Close window (confirm flow while running) |
+| `⌘ Q`                 | Quit the App (confirm flow while running) |

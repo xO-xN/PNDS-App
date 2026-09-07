@@ -31,6 +31,9 @@ Before you start, make sure your machine has:
 3. **Read the Project documentation**  
    Open the Project in your editor: the root `README.md` is the overview; `docs/implementation.md` (the implementation manual) covers what the template's example work does and where to change things; `AGENTS.md` is the entry point for AI coding agents — agents read it automatically and use it to look up the platform contract docs (reading the local help corpus shipped with the installed App first). Ports are declared in `manifest.json`; see the port section of [the Reference Manual · manifest](../reference/manifest.md) for conventions and advice.
 
+**A second path: porting an existing work**  
+Starting from the template is not the only way: if you already have a work in OpenProcessing (p5.js) + SuperCollider + TouchOSC form, hand it to an AI agent with the **pnds-port** skill from [pnds-agent-skills](https://github.com/xO-xN/pnds-agent-skills) — it ports the whole thing into a PNDS Project in one shot (a complete Project directory plus its `.pnds` bundle), and you continue with the workflow above.
+
 ---
 
 ## 2. The authoring and iteration workflow

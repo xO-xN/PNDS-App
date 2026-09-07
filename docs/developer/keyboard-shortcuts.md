@@ -11,6 +11,8 @@ Keyboard input reaches the app through two layers: native menu accelerators
 | Cmd+W         | Close-confirm flow (v1.1.1); #56: dispatches on the FOCUSED window (closes the help center when it is front) | Menu (`menu.ts`)                  |
 | Cmd+Shift+/   | Open the help center on search (= ⌘?, same physical chord; v1.3.0 #56)                                       | Menu (`menu.ts`)                  |
 | Cmd+Q         | Quit-confirm flow with a live session (v1.1.2 T7)                                                            | Menu (`menu.ts`)                  |
+| Cmd+O         | Import a project                                                                                             | Menu (`menu.ts`)                  |
+| Cmd+,         | Toggle the in-app settings panel (v1.2.0 #13; the web copy covers the pre-menu moment)                       | Menu (`menu.ts`) + Web            |
 | Cmd+= / Cmd+- | Monitor zoom in/out (v1.1.1)                                                                                 | Menu (`menu.ts`)                  |
 | Cmd+0         | Monitor zoom: actual size (v1.1.1)                                                                           | Menu (`menu.ts`)                  |
 | Cmd+Shift+R   | Reload monitor (v1.1.1)                                                                                      | Menu (`menu.ts`)                  |

@@ -64,6 +64,7 @@ const FIXTURES: RawHelpDocument[] = [
     'reference-pnds-bundle',
     'reference-supercollider',
     'reference-p5js',
+    'reference-page-interaction',
   ].map(id => ({
     id,
     path: `reference/${id.replace('reference-', '')}.md`,
@@ -75,7 +76,7 @@ describe('help-corpus (#53)', () => {
   it('builds the corpus in manifest order with books, titles and sections', () => {
     const corpus = buildHelpCorpus(FIXTURES)
 
-    expect(corpus).toHaveLength(19)
+    expect(corpus).toHaveLength(20)
     expect(
       corpus.slice(0, 3).map(doc => [doc.id, doc.book, doc.title])
     ).toEqual([
@@ -83,7 +84,7 @@ describe('help-corpus (#53)', () => {
       ['template-guide', 'creator-guide', 'PNDS Template 创作指南'],
       ['reference-readme', 'reference', 'PNDS 参考手册'],
     ])
-    expect(corpus.slice(16).map(doc => [doc.id, doc.book, doc.title])).toEqual([
+    expect(corpus.slice(17).map(doc => [doc.id, doc.book, doc.title])).toEqual([
       ['modules-theme-follow', 'modules', 'modules-theme-follow'],
       ['modules-locale-follow', 'modules', 'modules-locale-follow'],
       ['modules-audio', 'modules', 'modules-audio'],
@@ -140,6 +141,7 @@ describe('help-corpus (#53)', () => {
         'reference-supercollider',
         'reference-osc',
         'reference-p5js',
+        'reference-page-interaction',
       ],
       [
         'modules',

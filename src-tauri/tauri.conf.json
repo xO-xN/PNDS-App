@@ -77,6 +77,7 @@
       "../docs/zh-CN/reference/supercollider.md": "help/zh-CN/reference/supercollider.md",
       "../docs/zh-CN/reference/osc.md": "help/zh-CN/reference/osc.md",
       "../docs/zh-CN/reference/p5js.md": "help/zh-CN/reference/p5js.md",
+      "../docs/zh-CN/reference/page-interaction.md": "help/zh-CN/reference/page-interaction.md",
       "../docs/en/app-tutorial.md": "help/en/app-tutorial.md",
       "../docs/en/template-guide.md": "help/en/template-guide.md",
       "../docs/en/modules/README.md": "help/en/modules/README.md",
@@ -95,7 +96,8 @@
       "../docs/en/reference/pnds-bundle.md": "help/en/reference/pnds-bundle.md",
       "../docs/en/reference/supercollider.md": "help/en/reference/supercollider.md",
       "../docs/en/reference/osc.md": "help/en/reference/osc.md",
-      "../docs/en/reference/p5js.md": "help/en/reference/p5js.md"
+      "../docs/en/reference/p5js.md": "help/en/reference/p5js.md",
+      "../docs/en/reference/page-interaction.md": "help/en/reference/page-interaction.md"
     },
     "icon": [
       "icons/32x32.png",

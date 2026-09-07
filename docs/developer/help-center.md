@@ -9,7 +9,7 @@ v1.3.0（#53）为 Help 帮助中心（T8 窗口，#56）打的底座：几本�
 | 部件                | 位置                                                                                                                                                    |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 语料清单 + 读取命令 | `src-tauri/src/commands/help.rs`（`HELP_TREES` 两树 + `HELP_DOCUMENTS` 清单 + `help_corpus(locale)`，`corpus_tree` 校验非法 locale）                    |
-| 资源映射            | `src-tauri/tauri.conf.json` → `bundle.resources`（两树共 38 个文件**逐条**映射进 `help/<tree>/`，显式 allowlist——developer/、agents/ 向文档因此进不来） |
+| 资源映射            | `src-tauri/tauri.conf.json` → `bundle.resources`（两树共 40 个文件**逐条**映射进 `help/<tree>/`，显式 allowlist——developer/、agents/ 向文档因此进不来） |
 | 语料装载纯模块      | `src/lib/help-corpus.ts`（`HELP_TREES` + `HELP_BOOKS` 清单 + `buildHelpCorpus`）                                                                        |
 | markdown 结构模块   | `src/lib/help-markdown.ts`（`splitSections`）                                                                                                           |
 | 搜索纯模块          | `src/lib/help-search.ts`（`buildHelpIndex` + `searchHelp`）                                                                                             |

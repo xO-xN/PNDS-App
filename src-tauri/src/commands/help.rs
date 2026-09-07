@@ -77,6 +77,10 @@ const HELP_DOCUMENTS: &[(&str, &str)] = &[
     ("reference-supercollider", "reference/supercollider.md"),
     ("reference-osc", "reference/osc.md"),
     ("reference-p5js", "reference/p5js.md"),
+    (
+        "reference-page-interaction",
+        "reference/page-interaction.md",
+    ),
 ];
 
 /// Where a document may live, most specific first: the app bundle's

@@ -81,6 +81,7 @@ export const HELP_BOOKS: readonly {
       'reference-supercollider',
       'reference-osc',
       'reference-p5js',
+      'reference-page-interaction',
     ],
   },
   {

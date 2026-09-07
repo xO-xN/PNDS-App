@@ -31,6 +31,9 @@
 3. **查阅工程文档**  
    用编辑器打开项目：根目录 `README.md` 是概览；`docs/implementation.md`（实现手册）讲模板示例作品的行为规格与「创作时改哪里」；`AGENTS.md` 是 AI-Coding Agent 的入口——agent 会自动读取它，并经它按问题索引平台契约文档（优先读取装机 App 自带的本地帮助语料）。端口在 `manifest.json` 中声明，惯例与选择建议见[参考手册 · manifest](../reference/manifest.md)的「端口」一节。
 
+**第二路径：从既有作品移植**  
+不从模板起步也行：已有 OpenProcessing（p5.js）+ SuperCollider + TouchOSC 形式的作品，可以交给 AI agent 用 [pnds-agent-skills](https://github.com/xO-xN/pnds-agent-skills) 中的 **pnds-port** 技能整体移植为 PNDS 工程——一次生成完整的工程目录与 `.pnds` 包，随后回到上面的工作流迭代。
+
 ---
 
 ## 2. 创作与迭代工作流

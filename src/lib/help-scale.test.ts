@@ -25,6 +25,7 @@ import referencePndsBundle from '../../docs/zh-CN/reference/pnds-bundle.md?raw'
 import referenceSupercollider from '../../docs/zh-CN/reference/supercollider.md?raw'
 import referenceOsc from '../../docs/zh-CN/reference/osc.md?raw'
 import referenceP5js from '../../docs/zh-CN/reference/p5js.md?raw'
+import referencePageInteraction from '../../docs/zh-CN/reference/page-interaction.md?raw'
 
 /**
  * v1.3.0 (#53): the real corpus, end to end, at full scale. The unit
@@ -57,6 +58,7 @@ const RAW_CORPUS: Record<string, string> = {
   'reference-supercollider': referenceSupercollider,
   'reference-osc': referenceOsc,
   'reference-p5js': referenceP5js,
+  'reference-page-interaction': referencePageInteraction,
 }
 
 /** id → language-tree-relative path, mirroring the Rust-side document list. */
@@ -80,6 +82,7 @@ const DOC_PATHS: Record<string, string> = {
   'reference-supercollider': 'reference/supercollider.md',
   'reference-osc': 'reference/osc.md',
   'reference-p5js': 'reference/p5js.md',
+  'reference-page-interaction': 'reference/page-interaction.md',
 }
 
 function readRealCorpus(): RawHelpDocument[] {
@@ -98,11 +101,11 @@ describe('help corpus at real scale (#53)', () => {
   const index = buildHelpIndex(corpus)
 
   it('places every shipped document and derives its own title', () => {
-    expect(corpus).toHaveLength(19)
+    expect(corpus).toHaveLength(20)
     expect(corpus[0]?.title).toBe('PNDS App 使用教程')
     expect(corpus[1]?.title).toBe('PNDS Template 创作指南')
     expect(corpus[2]?.title).toBe('PNDS 参考手册')
-    expect(corpus[13]?.title).toBe('模块手册')
+    expect(corpus[14]?.title).toBe('模块手册')
     for (const document of corpus) {
       expect(document.title).not.toBe(document.id)
       expect(document.sections.length).toBeGreaterThan(0)

@@ -12,5 +12,6 @@
 - **SynthDef 编译契约与 SuperCollider** → [supercollider.md](./supercollider.md)
 - **OSC 协议与 target 注入** → [osc.md](./osc.md)
 - **使用 P5.js 创作数字乐谱** → [p5js.md](./p5js.md)
+- **工程页面能依赖哪些键盘 / 指针 / 触摸事件？** → [page-interaction.md](./page-interaction.md)
 
 Template 自带模块（QR / 座位 / 主题 / 语言 / 音频作品层）的用法不在本册——见[模块手册](../modules/README.md)。
