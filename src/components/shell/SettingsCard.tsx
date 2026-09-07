@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { Volume2, VolumeX } from 'lucide-react'
 import { useProjectStore } from '@/store/project-store'
+import type { AudioMode } from '@/lib/tauri-bindings'
 import { isSessionLive, useSessionStore } from '@/store/session-store'
 import { useSettingsStore } from '@/store/settings-store'
 import {
@@ -122,8 +123,10 @@ export function SettingsCard({ onPopupOpenChange }: SettingsCardProps) {
     }
   }
 
+  // Radix Select hands back a string; the options below are generated
+  // from the manifest's supportedModes, so the value is an AudioMode.
   const handleModeChange = (mode: string) => {
-    useSessionStore.getState().setAudioMode(mode)
+    useSessionStore.getState().setAudioMode(mode as AudioMode)
     flagChange()
   }
 

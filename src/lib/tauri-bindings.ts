@@ -25,6 +25,7 @@ export { commands, type Result } from './bindings'
 export type {
   AppPreferences,
   AudioConfig,
+  AudioMode,
   BuiltinUtility,
   BundleOutputInfo,
   HealthAudio,
@@ -39,6 +40,7 @@ export type {
   ScoreServer,
   ScsynthConfig,
   SessionSnapshot,
+  SessionStatus,
   SetlistExportResult,
   SetlistProjectInfo,
   SynthdefCompileResult,

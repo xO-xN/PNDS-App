@@ -1,4 +1,4 @@
-import { commands } from '@/lib/tauri-bindings'
+import { commands, type AudioMode } from '@/lib/tauri-bindings'
 import { logger } from '@/lib/logger'
 import { selectionIsRunningCard, useSessionStore } from '@/store/session-store'
 import { useProjectStore } from '@/store/project-store'
@@ -38,7 +38,7 @@ export function nodeGateBlocksStart(): boolean {
 /** What a start submits to the backend — §8.1's inputs, narrowed. */
 interface StartPlan {
   path: string
-  audioMode: string
+  audioMode: AudioMode
   lanIp: string
   /** §6.6: the external OSC target; null in every other mode. */
   oscTarget: string | null
@@ -157,7 +157,7 @@ export async function start(): Promise<void> {
  */
 async function stopThenStart(
   path: string,
-  audioMode: string,
+  audioMode: AudioMode,
   lanIp: string,
   oscTarget: string | null
 ): Promise<void> {

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { open } from '@tauri-apps/plugin-dialog'
 import { revealItemInDir } from '@tauri-apps/plugin-opener'
 import { listen } from '@tauri-apps/api/event'
-import { commands } from '@/lib/tauri-bindings'
+import { commands, type SetlistProjectInfo } from '@/lib/tauri-bindings'
 import { notifications } from '@/lib/notifications'
 import { useProjectStore } from '@/store/project-store'
 import { exportSetlistFolder } from './setlist-export'
@@ -28,14 +28,14 @@ vi.mock('@/lib/notifications', () => ({
 const PATH_A = '/bundles/proj-a-1.0.0'
 const PATH_B = '/Users/test/Project B'
 
-const INFO_A = {
+const INFO_A: SetlistProjectInfo = {
   path: PATH_A,
   id: 'proj-a',
   version: '1.0.0',
   defaultAudioMode: 'internal',
   fileName: 'Project A-1.0.0.pnds',
 }
-const INFO_B = {
+const INFO_B: SetlistProjectInfo = {
   path: PATH_B,
   id: 'proj-b',
   version: '2.0.0',

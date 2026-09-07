@@ -8,7 +8,7 @@ import {
   setMasterVolumeTo,
   toggleMasterMute,
 } from './volume-control'
-import type { Manifest } from '@/lib/tauri-bindings'
+import type { AudioMode, Manifest, SessionStatus } from '@/lib/tauri-bindings'
 
 const manifest = (outputChannels: number | null): Manifest =>
   ({
@@ -41,8 +41,8 @@ type ChannelPlan = NonNullable<
 /** Seeds a ready 2-channel internal session unless overridden. */
 function seedSession(
   session: Partial<{
-    sessionStatus: 'idle' | 'ready'
-    audioMode: string
+    sessionStatus: SessionStatus
+    audioMode: AudioMode
     channelPlan: ChannelPlan | null
     volume: number
     muted: boolean

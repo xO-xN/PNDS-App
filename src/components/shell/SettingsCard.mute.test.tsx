@@ -5,7 +5,7 @@ import { commands } from '@/lib/tauri-bindings'
 import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 import { SettingsCard } from './SettingsCard'
-import type { Manifest } from '@/lib/tauri-bindings'
+import type { AudioMode, Manifest, SessionStatus } from '@/lib/tauri-bindings'
 
 vi.mock('@tauri-apps/plugin-opener', () => ({
   openUrl: vi.fn().mockResolvedValue(undefined),
@@ -38,8 +38,8 @@ const manifest: Manifest = {
 
 function seedRunningSession(
   session: Partial<{
-    sessionStatus: 'idle' | 'starting' | 'ready' | 'error' | 'stopping'
-    audioMode: string
+    sessionStatus: SessionStatus
+    audioMode: AudioMode
     volume: number
     muted: boolean
     prevVolume: number

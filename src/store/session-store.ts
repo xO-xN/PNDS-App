@@ -1,9 +1,12 @@
 import { create } from 'zustand'
-import type { HealthPayload, SessionSnapshot } from '@/lib/tauri-bindings'
+import type {
+  AudioMode,
+  HealthPayload,
+  SessionSnapshot,
+  SessionStatus,
+} from '@/lib/tauri-bindings'
 import { logger } from '@/lib/logger'
 import { useProjectStore } from '@/store/project-store'
-
-export type SessionStatus = 'idle' | 'starting' | 'ready' | 'error' | 'stopping'
 
 /** Browser-style monitor zoom bounds (§v1.1.1): ±10% steps, 50–200%. */
 export const MIN_MONITOR_ZOOM = 50
@@ -137,8 +140,10 @@ interface SessionState {
    * across repeated idle snapshots so a late restore cannot cut the
    * fade short. */
   stopUncoverPending: boolean
-  /** Selected audio mode; defaults to the manifest's defaultMode (§6.1). */
-  audioMode: string
+  /** Selected audio mode; defaults to the manifest's defaultMode (§6.1).
+   * Typed as the generated AudioMode union — the Rust enum is the single
+   * vocabulary and a typo here stops compiling. */
+  audioMode: AudioMode
   /** Selected LAN IPv4 (§7); null until the user chooses when multiple exist. */
   lanIp: string | null
   lanAddresses: string[]
@@ -153,7 +158,7 @@ interface SessionState {
   } | null
   /** §6.6: external OSC target input (per-project prefilled, default 3333). */
   oscTargetInput: string
-  setAudioMode: (mode: string) => void
+  setAudioMode: (mode: AudioMode) => void
   setLanIp: (ip: string) => void
   setLanAddresses: (ips: string[]) => void
   setVolume: (percent: number) => void
@@ -268,7 +273,7 @@ export const useSessionStore = create<SessionState>()(set => ({
         snapshot.projectPath === null ||
         snapshot.projectPath === useProjectStore.getState().currentProject?.path
       return {
-        sessionStatus: snapshot.status as SessionStatus,
+        sessionStatus: snapshot.status,
         sessionError: snapshot.error,
         health: snapshot.health,
         outputTail: snapshot.outputTail,

@@ -1226,8 +1226,8 @@ mod tests {
                 monitor_port: 2,
             },
             audio: crate::project::manifest::AudioConfig {
-                default_mode: "none".into(),
-                supported_modes: vec!["none".into()],
+                default_mode: crate::types::AudioMode::None,
+                supported_modes: vec![crate::types::AudioMode::None],
                 output_channels: 2,
                 synthdefs: None,
                 scsynth: None,

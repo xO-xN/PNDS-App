@@ -21,6 +21,7 @@ use tauri::{AppHandle, Emitter};
 use crate::project::children::{self, ChildRegistry};
 use crate::project::manifest::{load_manifest, Manifest};
 use crate::project::preflight;
+use crate::types::{AudioMode, SessionStatus};
 
 /// Health polling cadence and overall startup timeout (§8).
 const HEALTH_POLL_INTERVAL: Duration = Duration::from_millis(500);
@@ -91,11 +92,10 @@ pub struct HealthScoreServer {
 #[derive(Debug, Clone, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionSnapshot {
-    /// `idle | starting | ready | error | stopping`
-    pub status: String,
+    pub status: SessionStatus,
     pub project_name: Option<String>,
     pub project_path: Option<String>,
-    pub audio_mode: Option<String>,
+    pub audio_mode: Option<AudioMode>,
     pub lan_ip: Option<String>,
     /// #62: the connection address actually injected as `PNDS_HOST_IP` —
     /// the manifest-declared performer address when present, else the
@@ -163,7 +163,7 @@ pub struct StartRequest {
     /// Score project root directory.
     pub path: String,
     /// Requested audio mode; must be manifest-supported.
-    pub mode: String,
+    pub mode: AudioMode,
     /// The user-selected LAN IPv4 (§4) — becomes `PNDS_HOST_IP`.
     pub lan_ip: String,
     /// User OSC target (§9); required for external mode. Internal mode
@@ -207,7 +207,7 @@ pub struct HubInjection {
 impl StartRequest {
     /// The command boundary's constructor: intent only, the resolved
     /// fields start empty and fill in during `start_generation`.
-    pub fn new(path: String, mode: String, lan_ip: String, osc_target: Option<String>) -> Self {
+    pub fn new(path: String, mode: AudioMode, lan_ip: String, osc_target: Option<String>) -> Self {
         Self {
             path,
             mode,
@@ -277,8 +277,8 @@ pub fn build_score_server_env(request: &StartRequest) -> Vec<(String, String)> {
         "PNDS_HOST_IP".to_string(),
         request.host_address().to_string(),
     )];
-    match request.mode.as_str() {
-        "internal" => {
+    match request.mode {
+        AudioMode::Internal => {
             env.push((
                 "PNDS_OSC_TARGET".to_string(),
                 request
@@ -300,7 +300,7 @@ pub fn build_score_server_env(request: &StartRequest) -> Vec<(String, String)> {
                 plan.project_channels.to_string(),
             ));
         }
-        "external" => {
+        AudioMode::External => {
             env.push((
                 "PNDS_OSC_TARGET".to_string(),
                 request
@@ -310,7 +310,7 @@ pub fn build_score_server_env(request: &StartRequest) -> Vec<(String, String)> {
                     .to_string(),
             ));
         }
-        _ => {}
+        AudioMode::None => {}
     }
     // #58: the telematic hub variables ride every mode — they address the
     // score server's outbound hub connection, not its audio graph. The
@@ -373,7 +373,7 @@ fn fetch_health(performer_port: u16) -> Result<HealthPayload, String> {
 // ============================================================================
 
 struct SessionInner {
-    status: String, // idle | starting | ready | error | stopping
+    status: SessionStatus,
     child: Option<Child>,
     /// scsynth process and its OSC port (internal mode only, §7).
     scsynth: Option<Child>,
@@ -382,7 +382,7 @@ struct SessionInner {
     master_synth_ready: bool,
     project_name: Option<String>,
     project_path: Option<String>,
-    audio_mode: Option<String>,
+    audio_mode: Option<AudioMode>,
     lan_ip: Option<String>,
     /// #62: the injected connection address (see `SessionSnapshot`).
     host_address: Option<String>,
@@ -415,7 +415,7 @@ struct SessionInner {
 impl Default for SessionInner {
     fn default() -> Self {
         Self {
-            status: "idle".to_string(),
+            status: SessionStatus::Idle,
             child: None,
             scsynth: None,
             scsynth_port: None,
@@ -444,10 +444,10 @@ impl Default for SessionInner {
 impl SessionInner {
     fn snapshot(&self) -> SessionSnapshot {
         SessionSnapshot {
-            status: self.status.clone(),
+            status: self.status,
             project_name: self.project_name.clone(),
             project_path: self.project_path.clone(),
-            audio_mode: self.audio_mode.clone(),
+            audio_mode: self.audio_mode,
             lan_ip: self.lan_ip.clone(),
             host_address: self.host_address.clone(),
             osc_target: self.osc_target.clone(),
@@ -491,7 +491,7 @@ impl Default for SessionManager {
     fn default() -> Self {
         Self {
             inner: Arc::new(Mutex::new(SessionInner {
-                status: "idle".to_string(),
+                status: SessionStatus::Idle,
                 volume: crate::project::audio::DEFAULT_VOLUME_PERCENT,
                 ..Default::default()
             })),
@@ -522,7 +522,10 @@ impl SessionManager {
             // App-Nap prevention rides the same funnel every state
             // publication passes through: hold an activity while the
             // session is live, release it once idle/error settles.
-            let live = matches!(inner.status.as_str(), "starting" | "ready" | "stopping");
+            let live = matches!(
+                inner.status,
+                SessionStatus::Starting | SessionStatus::Ready | SessionStatus::Stopping
+            );
             if live && inner.process_activity.is_none() {
                 inner.process_activity = Some(crate::process_activity::ProcessActivity::begin(
                     "PNDS live score session",
@@ -557,9 +560,9 @@ impl SessionManager {
             let mut inner = self.lock();
             inner.generation += 1;
             inner.reset_run_state();
-            inner.status = "starting".to_string();
+            inner.status = SessionStatus::Starting;
             inner.project_path = Some(request.path.clone());
-            inner.audio_mode = Some(request.mode.clone());
+            inner.audio_mode = Some(request.mode);
             inner.lan_ip = Some(request.lan_ip.clone());
             // #62: the pre-manifest default — the declared performer
             // address (if any) overrides this once the manifest is loaded
@@ -595,7 +598,13 @@ impl SessionManager {
             return Err(format!(
                 "Audio mode \"{}\" is not supported by this project (supported: {})",
                 request.mode,
-                manifest.audio.supported_modes.join(", ")
+                manifest
+                    .audio
+                    .supported_modes
+                    .iter()
+                    .map(AudioMode::as_str)
+                    .collect::<Vec<_>>()
+                    .join(", ")
             ));
         }
         if request.lan_ip.parse::<std::net::Ipv4Addr>().is_err()
@@ -653,7 +662,7 @@ impl SessionManager {
         // N/H/K/B. Unreadable capability or H = 0 fails before anything is
         // spawned; a channel-poor device (H < N) is bridged partially,
         // never an error.
-        let (device, effective_sc_cfg) = if request.mode == "internal" {
+        let (device, effective_sc_cfg) = if request.mode == AudioMode::Internal {
             let sc_cfg = manifest
                 .audio
                 .scsynth
@@ -724,7 +733,7 @@ impl SessionManager {
                 project_id: &manifest.id,
                 project_name: &manifest.name,
                 project_path: &request.path,
-                audio_mode: &request.mode,
+                audio_mode: request.mode.as_str(),
                 lan_ip: &request.lan_ip,
                 osc_target: request.osc_target.as_deref().unwrap_or("none"),
                 output_device: request.output_device.as_deref().unwrap_or("system default"),
@@ -770,8 +779,8 @@ impl SessionManager {
 
         // §8: internal mode boots scsynth first (and waits for /status)
         // before the score server starts. External/none skip this entirely.
-        request.resolved_osc_target = match request.mode.as_str() {
-            "internal" => {
+        request.resolved_osc_target = match request.mode {
+            AudioMode::Internal => {
                 // Issue #20: the config resolved above already carries the
                 // App's effective sample rate; the manifest rate is never
                 // re-read here.
@@ -840,7 +849,7 @@ impl SessionManager {
                 self.emit(app);
                 Some(format!("127.0.0.1:{port}"))
             }
-            "external" => {
+            AudioMode::External => {
                 // §9: external mode requires a valid user-provided target.
                 let target = request
                     .osc_target
@@ -849,7 +858,7 @@ impl SessionManager {
                 crate::project::audio::validate_osc_target(&target)?;
                 Some(target)
             }
-            _ => None,
+            AudioMode::None => None,
         };
 
         {
@@ -865,7 +874,7 @@ impl SessionManager {
         let mut cmd = Command::new(&node);
         cmd.arg(&entry)
             .arg("--audio-mode")
-            .arg(&request.mode)
+            .arg(request.mode.as_str())
             .current_dir(&working_dir)
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
@@ -948,7 +957,7 @@ impl SessionManager {
             if guard.generation != generation {
                 return;
             }
-            guard.status = "error".to_string();
+            guard.status = SessionStatus::Error;
             guard.error = Some(message);
             guard.startup_stage = 0;
         }
@@ -1017,7 +1026,7 @@ impl SessionManager {
 
                 {
                     let guard = inner.lock().unwrap_or_else(|e| e.into_inner());
-                    if guard.generation != generation || guard.status != "starting" {
+                    if guard.generation != generation || guard.status != SessionStatus::Starting {
                         return; // stopped or replaced by a newer session
                     }
                 }
@@ -1163,13 +1172,13 @@ impl SessionManager {
             }
         }
         let mut guard = inner.lock().unwrap_or_else(|e| e.into_inner());
-        if guard.generation != generation || guard.status != "starting" {
+        if guard.generation != generation || guard.status != SessionStatus::Starting {
             return false; // a retry already replaced this generation
         }
         if needs_master_stage {
             guard.master_synth_ready = true;
         }
-        guard.status = "ready".to_string();
+        guard.status = SessionStatus::Ready;
         guard.startup_stage = 4;
         drop(guard);
         Self::emit_static(app, inner);
@@ -1187,7 +1196,7 @@ impl SessionManager {
         loop {
             std::thread::sleep(HEALTH_POLL_INTERVAL);
             let mut guard = inner.lock().unwrap_or_else(|e| e.into_inner());
-            if guard.generation != generation || guard.status != "ready" {
+            if guard.generation != generation || guard.status != SessionStatus::Ready {
                 return;
             }
             let exited = guard
@@ -1217,7 +1226,10 @@ impl SessionManager {
             let mut guard = inner.lock().unwrap_or_else(|e| e.into_inner());
             // The supervisor funnel refreshes the App-Nap activity too —
             // error transitions land here without passing through emit.
-            let live = matches!(guard.status.as_str(), "starting" | "ready" | "stopping");
+            let live = matches!(
+                guard.status,
+                SessionStatus::Starting | SessionStatus::Ready | SessionStatus::Stopping
+            );
             if live && guard.process_activity.is_none() {
                 guard.process_activity = Some(crate::process_activity::ProcessActivity::begin(
                     "PNDS live score session",
@@ -1486,9 +1498,9 @@ impl SessionManager {
             inner.generation += 1;
             if inner.child.is_none() && inner.scsynth.is_none() {
                 inner.reset_run_state();
-                inner.status = "idle".to_string();
+                inner.status = SessionStatus::Idle;
             } else {
-                inner.status = "stopping".to_string();
+                inner.status = SessionStatus::Stopping;
                 // Clear mode/ip so the frontend's ??-guard preserves the
                 // user's pending selection across the stop barrier.
                 inner.audio_mode = None;
@@ -1504,7 +1516,7 @@ impl SessionManager {
         {
             let mut guard = self.lock();
             guard.reset_run_state();
-            guard.status = "idle".to_string();
+            guard.status = SessionStatus::Idle;
         }
         self.emit(app);
         Ok(())
@@ -1608,7 +1620,7 @@ mod tests {
     fn env_internal_injects_osc_bus_and_channels() {
         let mut request = StartRequest::new(
             "/p".to_string(),
-            "internal".to_string(),
+            crate::types::AudioMode::Internal,
             "192.168.1.10".to_string(),
             None,
         );
@@ -1641,7 +1653,7 @@ mod tests {
     fn env_external_injects_target_only() {
         let mut request = StartRequest::new(
             "/p".to_string(),
-            "external".to_string(),
+            crate::types::AudioMode::External,
             "192.168.1.10".to_string(),
             Some("127.0.0.1:3333".to_string()),
         );
@@ -1661,7 +1673,7 @@ mod tests {
     fn env_none_injects_host_only() {
         let request = StartRequest::new(
             "/p".to_string(),
-            "none".to_string(),
+            crate::types::AudioMode::None,
             "192.168.1.10".to_string(),
             None,
         );
@@ -1761,13 +1773,9 @@ mod tests {
             &node_prefs(NODE_NAME, HUB_URL, HUB_TOKEN),
         )
         .unwrap();
-        for mode in ["internal", "external", "none"] {
-            let mut request = StartRequest::new(
-                "/p".to_string(),
-                mode.to_string(),
-                "192.168.1.10".to_string(),
-                None,
-            );
+        for mode in [AudioMode::Internal, AudioMode::External, AudioMode::None] {
+            let mut request =
+                StartRequest::new("/p".to_string(), mode, "192.168.1.10".to_string(), None);
             request.resolved_osc_target = Some("127.0.0.1:49328".to_string());
             request.channel_plan = Some(crate::project::audio::channel_plan(2, 2));
             request.hub = Some(hub.clone());
@@ -1803,13 +1811,9 @@ mod tests {
     /// env tests pin that fallback with plain IPs for all three modes).
     #[test]
     fn declared_performer_address_replaces_host_ip_in_every_mode() {
-        for mode in ["internal", "external", "none"] {
-            let mut request = StartRequest::new(
-                "/p".to_string(),
-                mode.to_string(),
-                "192.168.1.10".to_string(),
-                None,
-            );
+        for mode in [AudioMode::Internal, AudioMode::External, AudioMode::None] {
+            let mut request =
+                StartRequest::new("/p".to_string(), mode, "192.168.1.10".to_string(), None);
             request.resolved_osc_target = Some("127.0.0.1:49328".to_string());
             request.channel_plan = Some(crate::project::audio::channel_plan(2, 2));
             request.performer_address = Some("mywork.local".to_string());
@@ -1821,7 +1825,7 @@ mod tests {
             assert_eq!(host.1, "mywork.local", "{mode}");
             // Declared + none mode still injects ONLY the host variable —
             // the replacement never widens the none-mode surface.
-            if mode == "none" {
+            if mode == AudioMode::None {
                 assert_eq!(env.len(), 1, "{mode}: {env:?}");
             }
 
@@ -1898,7 +1902,7 @@ mod tests {
         let manager = SessionManager::default();
         let dir = tempfile::tempdir().unwrap();
         manager.stop(&app, dir.path()).unwrap();
-        assert_eq!(manager.snapshot().status, "idle");
+        assert_eq!(manager.snapshot().status, SessionStatus::Idle);
         // Idempotent: a second stop is fine too.
         manager.stop(&app, dir.path()).unwrap();
     }
@@ -1914,14 +1918,14 @@ mod tests {
         {
             let mut inner = manager.lock();
             inner.child = Some(child);
-            inner.status = "ready".to_string();
+            inner.status = SessionStatus::Ready;
         }
         assert!(manager.has_active_session());
 
         manager.stop(&app, dir.path()).unwrap();
 
         assert!(!manager.has_active_session());
-        assert_eq!(manager.snapshot().status, "idle");
+        assert_eq!(manager.snapshot().status, SessionStatus::Idle);
         let alive = Command::new("/bin/kill")
             .args(["-0", &pid.to_string()])
             .status()
@@ -1948,7 +1952,7 @@ mod tests {
             let mut inner = manager.lock();
             inner.child = Some(node);
             inner.scsynth = Some(scsynth);
-            inner.status = "ready".to_string();
+            inner.status = SessionStatus::Ready;
         }
         assert_eq!(manager.active_child_pids(), expected);
 
@@ -1969,7 +1973,7 @@ mod tests {
         {
             let mut inner = manager.lock();
             inner.child = Some(child);
-            inner.status = "error".to_string();
+            inner.status = SessionStatus::Error;
         }
 
         // Simulate the supervisor's failure path: teardown, then the
@@ -1978,7 +1982,7 @@ mod tests {
         SessionManager::teardown_children(&inner, dir.path());
 
         let snapshot = manager.snapshot();
-        assert_eq!(snapshot.status, "error");
+        assert_eq!(snapshot.status, SessionStatus::Error);
         assert!(!manager.has_active_session());
         let alive = Command::new("/bin/kill")
             .args(["-0", &pid.to_string()])
@@ -2007,7 +2011,7 @@ mod tests {
             inner.child = Some(node);
             inner.scsynth = Some(scsynth);
             inner.scsynth_port = Some(57110);
-            inner.status = "starting".to_string();
+            inner.status = SessionStatus::Starting;
             inner.startup_stage = 3;
             inner.generation
         };
@@ -2022,7 +2026,7 @@ mod tests {
         );
 
         let snapshot = manager.snapshot();
-        assert_eq!(snapshot.status, "error");
+        assert_eq!(snapshot.status, SessionStatus::Error);
         assert_eq!(
             snapshot.error.as_deref(),
             Some("Timed out waiting for the project to report ready (30s).")
@@ -2057,7 +2061,7 @@ mod tests {
         let generation = {
             let mut inner = manager.lock();
             inner.generation += 1;
-            inner.status = "starting".to_string();
+            inner.status = SessionStatus::Starting;
             inner.startup_stage = 3;
             inner.scsynth_port = Some(57110);
             inner.channel_plan = Some(crate::project::audio::channel_plan(2, 2));
@@ -2065,14 +2069,14 @@ mod tests {
         };
 
         let inner = std::sync::Arc::clone(&manager.inner);
-        let observed = std::sync::Mutex::new(String::new());
+        let observed = std::sync::Mutex::new(SessionStatus::Idle);
         let reached_ready = SessionManager::complete_startup(
             &app,
             &inner,
             dir.path(),
             generation,
             |_port, _k, _b, _gain| {
-                *observed.lock().unwrap() = manager.lock().status.clone();
+                *observed.lock().unwrap() = manager.lock().status;
                 Ok(())
             },
         );
@@ -2080,11 +2084,11 @@ mod tests {
         assert!(reached_ready);
         assert_eq!(
             *observed.lock().unwrap(),
-            "starting",
+            SessionStatus::Starting,
             "the session must still be `starting` while the master stage is being confirmed"
         );
         let guard = manager.lock();
-        assert_eq!(guard.status, "ready");
+        assert_eq!(guard.status, SessionStatus::Ready);
         assert_eq!(guard.startup_stage, 4);
         assert!(guard.master_synth_ready);
     }
@@ -2099,7 +2103,7 @@ mod tests {
         let generation = {
             let mut inner = manager.lock();
             inner.generation += 1;
-            inner.status = "starting".to_string();
+            inner.status = SessionStatus::Starting;
             inner.startup_stage = 3;
             inner.scsynth_port = Some(57110);
             inner.channel_plan = Some(crate::project::audio::channel_plan(2, 2));
@@ -2117,7 +2121,7 @@ mod tests {
 
         assert!(!reached_ready);
         let snapshot = manager.snapshot();
-        assert_eq!(snapshot.status, "error");
+        assert_eq!(snapshot.status, SessionStatus::Error);
         assert_eq!(
             snapshot.error.as_deref(),
             Some("Audio master stage failed: synthdef load timed out")
@@ -2136,7 +2140,7 @@ mod tests {
         let generation = {
             let mut inner = manager.lock();
             inner.generation += 1;
-            inner.status = "starting".to_string();
+            inner.status = SessionStatus::Starting;
             inner.startup_stage = 3;
             inner.generation
         };
@@ -2152,7 +2156,7 @@ mod tests {
 
         assert!(reached_ready);
         let snapshot = manager.snapshot();
-        assert_eq!(snapshot.status, "ready");
+        assert_eq!(snapshot.status, SessionStatus::Ready);
         assert_eq!(snapshot.startup_stage, 4);
         assert!(!manager.lock().master_synth_ready);
     }
@@ -2174,7 +2178,7 @@ mod tests {
         {
             let mut inner = manager.lock();
             inner.generation = 8;
-            inner.status = "starting".to_string();
+            inner.status = SessionStatus::Starting;
             inner.startup_stage = 2;
         }
 
@@ -2188,7 +2192,7 @@ mod tests {
         );
 
         let snapshot = manager.snapshot();
-        assert_eq!(snapshot.status, "starting");
+        assert_eq!(snapshot.status, SessionStatus::Starting);
         assert_eq!(snapshot.error, None);
         assert_eq!(snapshot.startup_stage, 2);
     }
@@ -2204,7 +2208,7 @@ mod tests {
 
         {
             let mut inner = manager.lock();
-            inner.status = "error".to_string();
+            inner.status = SessionStatus::Error;
             inner.error = Some("Port 6868 is already in use".to_string());
             inner.health = Some(HealthPayload {
                 status: "error".to_string(),
@@ -2227,7 +2231,7 @@ mod tests {
                 dir.path().to_path_buf(),
                 StartRequest::new(
                     dir.path().join("missing").to_string_lossy().to_string(),
-                    "none".to_string(),
+                    crate::types::AudioMode::None,
                     "192.168.1.10".to_string(),
                     None,
                 ),
@@ -2239,7 +2243,7 @@ mod tests {
             "generation must advance"
         );
         let snapshot = manager.snapshot();
-        assert_eq!(snapshot.status, "error");
+        assert_eq!(snapshot.status, SessionStatus::Error);
         assert_eq!(snapshot.error.as_deref(), Some(err.as_str()));
         assert_ne!(
             snapshot.error.as_deref(),
@@ -2442,7 +2446,7 @@ mod tests {
         let reader = manager.spawn_output_reader(child.stdout.take().unwrap(), "node", 3);
         {
             let mut inner = manager.lock();
-            inner.status = "stopping".to_string();
+            inner.status = SessionStatus::Stopping;
             inner.child = Some(child);
         }
         // The fixture's ready line is already persisted output (write_line
@@ -2582,7 +2586,7 @@ mod tests {
             let child = Command::new("sleep").arg("30").spawn().unwrap();
             let mut inner = manager.lock();
             inner.generation += 1;
-            inner.status = "starting".to_string();
+            inner.status = SessionStatus::Starting;
             inner.startup_stage = 3;
             inner.child = Some(child);
             inner.generation
@@ -2603,7 +2607,7 @@ mod tests {
         let deadline = Instant::now() + Duration::from_secs(10);
         loop {
             let status = manager.lock().status.clone();
-            if status == "ready" {
+            if status == SessionStatus::Ready {
                 break;
             }
             assert!(
@@ -2618,7 +2622,7 @@ mod tests {
             assert!(!guard.master_synth_ready, "none mode has no master stage");
         }
         let snapshot = manager.snapshot();
-        assert_eq!(snapshot.status, "ready");
+        assert_eq!(snapshot.status, SessionStatus::Ready);
         assert_eq!(snapshot.startup_stage, 4);
         assert_eq!(
             snapshot.health.as_ref().map(|h| h.status.as_str()),
@@ -2626,7 +2630,7 @@ mod tests {
         );
 
         manager.stop(&app, dir.path()).unwrap();
-        assert_eq!(manager.snapshot().status, "idle");
+        assert_eq!(manager.snapshot().status, SessionStatus::Idle);
         assert!(!manager.has_active_session());
     }
 

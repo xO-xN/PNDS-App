@@ -41,7 +41,7 @@ pub struct SetlistProjectInfo {
     pub id: String,
     pub version: String,
     /// The manifest's declared default audio mode.
-    pub default_audio_mode: String,
+    pub default_audio_mode: crate::types::AudioMode,
     /// The `<sanitized name>-<version>.pnds` artifact this export writes.
     pub file_name: String,
 }
@@ -353,7 +353,7 @@ mod tests {
         assert_eq!(info.path, project.to_string_lossy());
         assert_eq!(info.id, "proj-a");
         assert_eq!(info.version, "1.2.0");
-        assert_eq!(info.default_audio_mode, "external");
+        assert_eq!(info.default_audio_mode, crate::types::AudioMode::External);
         assert_eq!(info.file_name, "Proj A-1.2.0.pnds");
     }
 

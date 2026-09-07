@@ -95,7 +95,7 @@ pub async fn start_project(
     app: AppHandle,
     state: State<'_, SessionManager>,
     path: String,
-    mode: String,
+    mode: crate::types::AudioMode,
     lan_ip: String,
     osc_target: Option<String>,
 ) -> Result<(), String> {

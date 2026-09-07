@@ -3,6 +3,73 @@
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use std::collections::HashMap;
+use std::fmt;
+
+// ============================================================================
+// Session vocabulary
+// ============================================================================
+
+/// The session state machine's vocabulary (runtime-contract §8/§9).
+/// Previously a bare `String` on `SessionInner`/`SessionSnapshot`, so a
+/// typo compiled and only surfaced mid-performance. serde pins the wire
+/// format (`idle | starting | ready | error | stopping`) — the frontend
+/// snapshot type and runtime-contract.md see no change, but a missed
+/// match arm stops compiling instead of shipping.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "lowercase")]
+pub enum SessionStatus {
+    Idle,
+    Starting,
+    Ready,
+    Error,
+    Stopping,
+}
+
+impl SessionStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            SessionStatus::Idle => "idle",
+            SessionStatus::Starting => "starting",
+            SessionStatus::Ready => "ready",
+            SessionStatus::Error => "error",
+            SessionStatus::Stopping => "stopping",
+        }
+    }
+}
+
+impl fmt::Display for SessionStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// The audio mode domain (§6.1) shared by the manifest fields, the start
+/// request and the session snapshot. The manifest's raw-JSON validation
+/// (manifest.rs) still owns the creator-facing error strings; serde pins
+/// the wire format (`internal | external | none`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "lowercase")]
+pub enum AudioMode {
+    Internal,
+    External,
+    None,
+}
+
+impl AudioMode {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            AudioMode::Internal => "internal",
+            AudioMode::External => "external",
+            AudioMode::None => "none",
+        }
+    }
+}
+
+impl fmt::Display for AudioMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
 
 // ============================================================================
 // Preferences

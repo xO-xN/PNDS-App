@@ -201,7 +201,7 @@ async cleanupOrphanedProcesses() : Promise<Result<number, string>> {
  * future start inputs (v1.4.0's hub variables) widen fields, not the
  * four-layer positional chain.
  */
-async startProject(path: string, mode: string, lanIp: string, oscTarget: string | null) : Promise<Result<null, string>> {
+async startProject(path: string, mode: AudioMode, lanIp: string, oscTarget: string | null) : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("start_project", { path, mode, lanIp, oscTarget }) };
 } catch (e) {
@@ -611,7 +611,14 @@ hubToken?: string | null;
  * machine back in its own group's room (ADR-0004).
  */
 hubRooms?: Partial<{ [key in string]: number }> }
-export type AudioConfig = { defaultMode: string; supportedModes: string[]; 
+export type AudioConfig = { 
+/**
+ * The raw-JSON validation below has already rejected unknown mode
+ * strings with the contract's error wording before serde ever sees
+ * the value; the typed field keeps the rest of the App from
+ * re-comparing strings (AudioMode in types.rs).
+ */
+defaultMode: AudioMode; supportedModes: AudioMode[]; 
 /**
  * Discrete project output signals (manifest.md): 1..=64, default 2.
  * Not a speaker layout — the App never downmixes.
@@ -626,6 +633,13 @@ standaloneTarget: string | null }
  * §7.6: sample-rate-aware device capabilities (name = scsynth -H value).
  */
 export type AudioDeviceCapabilities = { devices: AudioOutputDevice[]; sampleRate: number }
+/**
+ * The audio mode domain (§6.1) shared by the manifest fields, the start
+ * request and the session snapshot. The manifest's raw-JSON validation
+ * (manifest.rs) still owns the creator-facing error strings; serde pins
+ * the wire format (`internal | external | none`).
+ */
+export type AudioMode = "internal" | "external" | "none"
 /**
  * §7.6: one CoreAudio output device and what it can do at the project's
  * sample rate. `maxOutputChannels` is 0 when no configuration of the
@@ -749,11 +763,7 @@ sampleRate?: number; blockSize: number; audioBusChannels: number }
 /**
  * Session snapshot emitted to the frontend as the `pnds:session` event.
  */
-export type SessionSnapshot = { 
-/**
- * `idle | starting | ready | error | stopping`
- */
-status: string; projectName: string | null; projectPath: string | null; audioMode: string | null; lanIp: string | null; 
+export type SessionSnapshot = { status: SessionStatus; projectName: string | null; projectPath: string | null; audioMode: AudioMode | null; lanIp: string | null; 
 /**
  * #62: the connection address actually injected as `PNDS_HOST_IP` —
  * the manifest-declared performer address when present, else the
@@ -779,6 +789,15 @@ channelPlan: ChannelPlan | null;
  */
 outputDevice: string | null }
 /**
+ * The session state machine's vocabulary (runtime-contract §8/§9).
+ * Previously a bare `String` on `SessionInner`/`SessionSnapshot`, so a
+ * typo compiled and only surfaced mid-performance. serde pins the wire
+ * format (`idle | starting | ready | error | stopping`) — the frontend
+ * snapshot type and runtime-contract.md see no change, but a missed
+ * match arm stops compiling instead of shipping.
+ */
+export type SessionStatus = "idle" | "starting" | "ready" | "error" | "stopping"
+/**
  * v1.4.0 (#63): one `.pnds` found in an export directory, with the
  * identity the import matches entries on.
  */
@@ -797,7 +816,7 @@ export type SetlistProjectInfo = { path: string; id: string; version: string;
 /**
  * The manifest's declared default audio mode.
  */
-defaultAudioMode: string; 
+defaultAudioMode: AudioMode; 
 /**
  * The `<sanitized name>-<version>.pnds` artifact this export writes.
  */

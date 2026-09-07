@@ -80,8 +80,12 @@ pub struct ScoreServer {
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct AudioConfig {
-    pub default_mode: String,
-    pub supported_modes: Vec<String>,
+    /// The raw-JSON validation below has already rejected unknown mode
+    /// strings with the contract's error wording before serde ever sees
+    /// the value; the typed field keeps the rest of the App from
+    /// re-comparing strings (AudioMode in types.rs).
+    pub default_mode: crate::types::AudioMode,
+    pub supported_modes: Vec<crate::types::AudioMode>,
     /// Discrete project output signals (manifest.md): 1..=64, default 2.
     /// Not a speaker layout — the App never downmixes.
     #[serde(default = "default_output_channels")]
@@ -398,8 +402,7 @@ fn validate_paths(manifest: &Manifest, root: &Path) -> Result<(), String> {
     if manifest
         .audio
         .supported_modes
-        .iter()
-        .any(|m| m == "internal")
+        .contains(&crate::types::AudioMode::Internal)
     {
         for synthdef in manifest.audio.synthdefs.as_deref().unwrap_or(&[]) {
             let path = resolve_within(root, &canonical_root, synthdef, "audio.synthdefs[]")?;
@@ -436,7 +439,10 @@ mod tests {
         }
         let manifest = load_manifest(&root).unwrap();
         assert_eq!(manifest.audio.output_channels, 16);
-        assert_eq!(manifest.audio.supported_modes, vec!["internal"]);
+        assert_eq!(
+            manifest.audio.supported_modes,
+            vec![crate::types::AudioMode::Internal]
+        );
         assert!(manifest.audio.scsynth.as_ref().unwrap().audio_bus_channels >= 32);
         // One production dependency (qrcode, monitor QR endpoint) -> the
         // preflight requires node_modules present (structure.md).
