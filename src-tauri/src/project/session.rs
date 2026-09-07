@@ -517,27 +517,7 @@ impl SessionManager {
     }
 
     fn emit<R: tauri::Runtime>(&self, app: &AppHandle<R>) {
-        let snapshot = {
-            let mut inner = self.lock();
-            // App-Nap prevention rides the same funnel every state
-            // publication passes through: hold an activity while the
-            // session is live, release it once idle/error settles.
-            let live = matches!(
-                inner.status,
-                SessionStatus::Starting | SessionStatus::Ready | SessionStatus::Stopping
-            );
-            if live && inner.process_activity.is_none() {
-                inner.process_activity = Some(crate::process_activity::ProcessActivity::begin(
-                    "PNDS live score session",
-                ));
-            } else if !live {
-                inner.process_activity = None;
-            }
-            inner.snapshot()
-        };
-        if let Err(e) = app.emit("pnds:session", snapshot) {
-            log::warn!("Failed to emit session snapshot: {e}");
-        }
+        Self::publish_snapshot(app, &self.inner);
     }
 
     /// Starts a score-server session (§8). Validation (manifest, ports)
@@ -1222,10 +1202,19 @@ impl SessionManager {
     }
 
     fn emit_static<R: tauri::Runtime>(app: &AppHandle<R>, inner: &Arc<Mutex<SessionInner>>) {
+        Self::publish_snapshot(app, inner);
+    }
+
+    /// The single funnel every state publication passes through (both
+    /// entry points above route here): refreshes the App-Nap activity —
+    /// hold one while the session is live, release it once idle/error
+    /// settles (process_activity.rs) — snapshots under the lock, and
+    /// emits `pnds:session`. Previously the App-Nap refresh was inlined
+    /// twice (emit + emit_static); a third transition path would have
+    /// copied it again.
+    fn publish_snapshot<R: tauri::Runtime>(app: &AppHandle<R>, inner: &Mutex<SessionInner>) {
         let snapshot = {
             let mut guard = inner.lock().unwrap_or_else(|e| e.into_inner());
-            // The supervisor funnel refreshes the App-Nap activity too —
-            // error transitions land here without passing through emit.
             let live = matches!(
                 guard.status,
                 SessionStatus::Starting | SessionStatus::Ready | SessionStatus::Stopping
