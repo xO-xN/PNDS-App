@@ -34,6 +34,10 @@ _Avoid_: show、gig、session（面向用户的文案）
 **performer / monitor**:
 工程内两种页面角色（performer 页与 monitor 页）。中英文均直接用英文。
 
+**页面交互 / page interaction**:
+工程页面（monitor 与 performer）可依赖的交互事件边界：哪些键盘、指针、触摸、右键事件归页面，哪些被 App 或 macOS 永久保留。
+_Avoid_: 输入通道、input channel、快捷键表（作统称）
+
 **座位 / seat**:
 乐手的稳定演出位：claim token 对应的 id 与输出通道的组合，跨工程重启持久化；monitor 页可移座或重置。中文文档用「座位」，代码与文件名用 seat。
 _Avoid_: 位置、席位、slot
