@@ -4,7 +4,7 @@ import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 import { useSettingsStore } from '@/store/settings-store'
 import {
-  canStart,
+  canStartNow,
   nodeGateBlocksStart,
   start,
   restart,
@@ -31,14 +31,6 @@ const manifest: Manifest = {
     scsynth: { sampleRate: 48000, blockSize: 64, audioBusChannels: 128 },
     standaloneTarget: null,
   },
-}
-
-const base = {
-  currentProject: { path: '/p', manifest },
-  preflightStatus: 'ready',
-  lanIp: '192.168.1.10',
-  audioMode: 'internal',
-  oscTargetInput: '127.0.0.1:3333',
 }
 
 /** A backend snapshot for the given status; only the fields the store reads. */
@@ -95,12 +87,31 @@ describe('session-flow Retry (§9.3)', () => {
     })
   })
 
-  it('canStart accepts idle and error states, rejects starting/ready', () => {
-    expect(canStart({ ...base, sessionStatus: 'idle' })).toBe(true)
-    expect(canStart({ ...base, sessionStatus: 'error' })).toBe(true)
-    expect(canStart({ ...base, sessionStatus: 'starting' })).toBe(false)
-    expect(canStart({ ...base, sessionStatus: 'ready' })).toBe(false)
-    expect(canStart({ ...base, sessionStatus: 'stopping' })).toBe(false)
+  it('canStartNow accepts idle and error states, rejects starting/ready', () => {
+    // No live session yet — the seeded selection is just a preflight target.
+    useSessionStore.setState({
+      sessionStatus: 'idle',
+      sessionProjectPath: null,
+    })
+    expect(canStartNow()).toBe(true)
+    useSessionStore.setState({ sessionStatus: 'error', sessionError: 'boom' })
+    expect(canStartNow()).toBe(true)
+    // The session's own card selected: the plain gate holds.
+    useSessionStore.setState({
+      sessionStatus: 'starting',
+      sessionProjectPath: '/p',
+    })
+    expect(canStartNow()).toBe(false)
+    useSessionStore.setState({
+      sessionStatus: 'ready',
+      sessionProjectPath: '/p',
+    })
+    expect(canStartNow()).toBe(false)
+    useSessionStore.setState({
+      sessionStatus: 'stopping',
+      sessionProjectPath: '/p',
+    })
+    expect(canStartNow()).toBe(false)
   })
 
   it('drives idle -> starting -> ready', async () => {
@@ -289,16 +300,13 @@ describe('startReplacing (confirm-and-replace switch)', () => {
     })
   })
 
-  it('canStart allows a non-running selection over a ready session', () => {
-    expect(
-      canStart({
-        ...base,
-        sessionStatus: 'ready',
-        selectionIsRunningCard: false,
-      })
-    ).toBe(true)
+  it('canStartNow allows a non-running selection over a ready session', () => {
+    // beforeEach: A runs (ready on /a), the selection is B — Load means
+    // the confirm-and-replace switch, so the idle/error gate does not apply.
+    expect(canStartNow()).toBe(true)
     // The running card itself still follows the idle/error gate.
-    expect(canStart({ ...base, sessionStatus: 'ready' })).toBe(false)
+    useProjectStore.setState({ currentProject: { path: '/a', manifest } })
+    expect(canStartNow()).toBe(false)
   })
 
   it('stops the old session, then starts the selection with its config', async () => {
@@ -402,21 +410,26 @@ describe('「设置节点」gate (#58)', () => {
     expect(nodeGateBlocksStart()).toBe(false)
   })
 
-  it('canStart refuses a gated start, whichever card is selected', () => {
-    expect(
-      canStart({ ...base, sessionStatus: 'idle', nodeGateBlocked: true })
-    ).toBe(false)
-    expect(
-      canStart({
-        ...base,
-        sessionStatus: 'ready',
-        selectionIsRunningCard: false,
-        nodeGateBlocked: true,
-      })
-    ).toBe(false)
-    expect(
-      canStart({ ...base, sessionStatus: 'idle', nodeGateBlocked: false })
-    ).toBe(true)
+  it('canStartNow refuses a gated start, whichever card is selected', () => {
+    // beforeEach: telematic manifest + an incomplete node config.
+    useSessionStore.setState({
+      sessionStatus: 'idle',
+      sessionProjectPath: null,
+    })
+    expect(canStartNow()).toBe(false)
+    // Another card over a live session is gated just the same.
+    useSessionStore.setState({
+      sessionStatus: 'ready',
+      sessionProjectPath: '/other',
+    })
+    expect(canStartNow()).toBe(false)
+    // A complete config releases the gate.
+    seedNodeConfig('Node', 'wss://hub', 'token')
+    useSessionStore.setState({
+      sessionStatus: 'idle',
+      sessionProjectPath: null,
+    })
+    expect(canStartNow()).toBe(true)
   })
 
   it('start() and startReplacing() refuse while gated', async () => {

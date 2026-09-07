@@ -1,6 +1,6 @@
 import { commands } from '@/lib/tauri-bindings'
 import { logger } from '@/lib/logger'
-import { useSessionStore } from '@/store/session-store'
+import { selectionIsRunningCard, useSessionStore } from '@/store/session-store'
 import { useProjectStore } from '@/store/project-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { isNodeConfigComplete, isValidOscTarget } from '@/lib/preferences'
@@ -11,8 +11,12 @@ import { isNodeConfigComplete, isValidOscTarget } from '@/lib/preferences'
  * components (§2 in the architecture review), and the OSC-target ternary
  * appeared verbatim three times.
  *
- * Components call `canStart()` for the Load button verdict and
- * `start()` / `restart()` for the actual IPC.
+ * The gate reads the live stores directly — zero arguments. Callers can
+ * no longer assemble a stale or partial view of the world (the old
+ * 8-input `canStart` was an interface as wide as the rules themselves;
+ * every optional input was a gate a caller could forget to pass), and
+ * the #58 node gate has exactly one derivation for every consumer: the
+ * session button, the Enter alias, and every start path.
  */
 
 /**
@@ -31,57 +35,71 @@ export function nodeGateBlocksStart(): boolean {
   return !isNodeConfigComplete(nodeNameSetting, hubUrlSetting, hubTokenSetting)
 }
 
-/**
- * Whether a session can be started right now (§8.1 gating).
- *
- * `selectionIsRunningCard` (v1.2.3 #39/T4): false when the selected card
- * is NOT the session's own project — then Load means "start this over
- * whatever runs" and the idle/error sessionStatus gate does not apply
- * (the confirm-and-replace flow stops the old session itself).
- *
- * #58: `nodeGateBlocked` (from `nodeGateBlocksStart()`) refuses the start
- * of a telematic-declared project until the node config is complete.
- */
-export function canStart(input: {
-  currentProject: unknown
-  preflightStatus: string
-  sessionStatus: string
-  lanIp: string | null
+/** What a start submits to the backend — §8.1's inputs, narrowed. */
+interface StartPlan {
+  path: string
   audioMode: string
-  oscTargetInput: string
-  selectionIsRunningCard?: boolean
-  nodeGateBlocked?: boolean
-}): boolean {
-  const {
-    currentProject,
-    preflightStatus,
-    sessionStatus,
-    lanIp,
-    audioMode,
-    oscTargetInput,
-    selectionIsRunningCard = true,
-    nodeGateBlocked = false,
-  } = input
+  lanIp: string
+  /** §6.6: the external OSC target; null in every other mode. */
+  oscTarget: string | null
+}
 
+/**
+ * §8.1 gate + submit inputs in a single read of the live stores: the
+ * selected project's start plan, or null when any gate refuses. Private —
+ * the module's interface is the gate booleans plus the start verbs; the
+ * plan is what the verbs consume once the gate passes (under the old
+ * `canStart`, callers re-read these fields and `!`-narrowed them again).
+ *
+ * The session gate depends on the verb: `plain` (start/Retry, §9.3)
+ * requires idle|error; `replace` (confirm-and-replace, v1.2.3 #39/T4)
+ * skips it — that flow stops the live session itself.
+ */
+function resolveStartPlan(gate: 'plain' | 'replace'): StartPlan | null {
+  const { currentProject, preflightStatus } = useProjectStore.getState()
+  const { sessionStatus, lanIp, audioMode, oscTargetInput } =
+    useSessionStore.getState()
+
+  if (nodeGateBlocksStart()) return null
+  if (!currentProject || preflightStatus !== 'ready' || !lanIp) return null
+  // §9.3: Retry starts from the error state without an explicit stop —
+  // the failed generation was already cleaned up before the error
+  // snapshot was emitted.
   if (
-    !currentProject ||
-    preflightStatus !== 'ready' ||
-    // §9.3: Retry starts from the error state without an explicit stop —
-    // the failed generation was already cleaned up before the error
-    // snapshot was emitted.
-    (selectionIsRunningCard &&
-      sessionStatus !== 'idle' &&
-      sessionStatus !== 'error') ||
-    !lanIp ||
-    nodeGateBlocked
+    gate === 'plain' &&
+    sessionStatus !== 'idle' &&
+    sessionStatus !== 'error'
   ) {
-    return false
+    return null
   }
   // §6.6: external mode cannot start with an invalid target.
   if (audioMode === 'external' && !isValidOscTarget(oscTargetInput)) {
-    return false
+    return null
   }
-  return true
+  return {
+    path: currentProject.path,
+    audioMode,
+    lanIp,
+    oscTarget: audioMode === 'external' ? oscTargetInput : null,
+  }
+}
+
+/**
+ * Whether the session for the currently selected card can be started
+ * right now (§8.1 gating) — the Load button's verdict. The running card
+ * follows the plain idle/error gate; another card selected over a live
+ * session follows the replace gate (v1.2.3 #39/T4: its Load IS the
+ * confirm-and-replace switch, which stops the old session itself).
+ */
+export function canStartNow(): boolean {
+  const { currentProject } = useProjectStore.getState()
+  if (!currentProject) return false
+  const { sessionStatus, sessionProjectPath } = useSessionStore.getState()
+  const runningCardSelected = selectionIsRunningCard(
+    { sessionStatus, sessionProjectPath },
+    currentProject.path
+  )
+  return resolveStartPlan(runningCardSelected ? 'plain' : 'replace') !== null
 }
 
 /** The OSC target parameter for startProject (null unless external). */
@@ -106,38 +124,21 @@ let startInFlight = false
  *  `error` is a legal starting point and no stop is issued first. */
 export async function start(): Promise<void> {
   if (startInFlight) return
-  const { currentProject, preflightStatus } = useProjectStore.getState()
-  const { audioMode, lanIp, sessionStatus, oscTargetInput } =
-    useSessionStore.getState()
-  if (
-    !canStart({
-      currentProject,
-      preflightStatus,
-      sessionStatus,
-      lanIp,
-      audioMode,
-      oscTargetInput,
-      nodeGateBlocked: nodeGateBlocksStart(),
-    })
-  ) {
-    return
-  }
-
-  // `canStart()` already verified these — narrow for TS.
-  if (!currentProject || !lanIp) return
+  const plan = resolveStartPlan('plain')
+  if (!plan) return
 
   logger.info('Starting project', {
-    path: currentProject.path,
-    mode: audioMode,
-    lanIp,
+    path: plan.path,
+    mode: plan.audioMode,
+    lanIp: plan.lanIp,
   })
   startInFlight = true
   try {
     const result = await commands.startProject(
-      currentProject.path,
-      audioMode,
-      lanIp,
-      resolveOscTarget()
+      plan.path,
+      plan.audioMode,
+      plan.lanIp,
+      plan.oscTarget
     )
     if (result.status === 'error') {
       useSessionStore.getState().failLocal(result.error)
@@ -206,29 +207,13 @@ export async function restart(): Promise<void> {
  */
 export async function startReplacing(): Promise<void> {
   if (startInFlight) return
-  const { currentProject, preflightStatus } = useProjectStore.getState()
-  const { audioMode, lanIp, sessionStatus, oscTargetInput } =
-    useSessionStore.getState()
-  if (
-    !canStart({
-      currentProject,
-      preflightStatus,
-      sessionStatus,
-      lanIp,
-      audioMode,
-      oscTargetInput,
-      selectionIsRunningCard: false,
-      nodeGateBlocked: nodeGateBlocksStart(),
-    })
-  ) {
-    return
-  }
-  if (!currentProject || !lanIp) return
+  const plan = resolveStartPlan('replace')
+  if (!plan) return
 
   logger.info('Switching session', {
-    path: currentProject.path,
-    mode: audioMode,
+    path: plan.path,
+    mode: plan.audioMode,
   })
   useSessionStore.getState().setPendingChanges(false)
-  await stopThenStart(currentProject.path, audioMode, lanIp, resolveOscTarget())
+  await stopThenStart(plan.path, plan.audioMode, plan.lanIp, plan.oscTarget)
 }

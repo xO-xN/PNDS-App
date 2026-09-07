@@ -1,8 +1,13 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { stopAndReset } from '@/lib/open-project'
-import { canStart, start, restart, startReplacing } from '@/lib/session-flow'
-import { isNodeConfigComplete } from '@/lib/preferences'
+import {
+  canStartNow,
+  nodeGateBlocksStart,
+  restart,
+  start,
+  startReplacing,
+} from '@/lib/session-flow'
 import { useProjectStore } from '@/store/project-store'
 import { useSettingsStore } from '@/store/settings-store'
 import {
@@ -45,12 +50,16 @@ import {
  * #58: a telematic-declared selection with incomplete node config turns
  * the button into「设置节点」(routes to the settings Node section) — see
  * the render branch below. Enter never starts through the gate: the
- * verdict flows into `canStart`.
+ * verdict flows into `canStartNow`.
  */
 export function SessionActionButton() {
   const { t } = useTranslation()
   const currentProject = useProjectStore(state => state.currentProject)
-  const preflightStatus = useProjectStore(state => state.preflightStatus)
+  // Gate-input subscriptions: `canStartNow()` / `nodeGateBlocksStart()`
+  // read the live stores themselves, so these exist purely to re-render
+  // the footer when a gate input changes. The values below the named
+  // selectors are not otherwise read here.
+  useProjectStore(state => state.preflightStatus)
   const sessionStatus = useSessionStore(state => state.sessionStatus)
   const sessionProjectPath = useSessionStore(state => state.sessionProjectPath)
   const projectDisplayNames = useProjectStore(
@@ -59,13 +68,13 @@ export function SessionActionButton() {
   const manifestProjectNames = useProjectStore(
     state => state.manifestProjectNames
   )
-  const audioMode = useSessionStore(state => state.audioMode)
-  const lanIp = useSessionStore(state => state.lanIp)
-  const oscTargetInput = useSessionStore(state => state.oscTargetInput)
+  useSessionStore(state => state.audioMode)
+  useSessionStore(state => state.lanIp)
+  useSessionStore(state => state.oscTargetInput)
   const pendingChanges = useSessionStore(state => state.pendingChanges)
-  const nodeNameSetting = useSettingsStore(state => state.nodeNameSetting)
-  const hubUrlSetting = useSettingsStore(state => state.hubUrlSetting)
-  const hubTokenSetting = useSettingsStore(state => state.hubTokenSetting)
+  useSettingsStore(state => state.nodeNameSetting)
+  useSettingsStore(state => state.hubUrlSetting)
+  useSettingsStore(state => state.hubTokenSetting)
   const [confirmSwitchOpen, setConfirmSwitchOpen] = useState(false)
 
   const running = sessionStatus === 'ready'
@@ -75,10 +84,9 @@ export function SessionActionButton() {
   // App-global node config is incomplete. Replaces the Load/Change forms
   // (Close survives — a running session must stay closable); completing
   // the config in the routed settings section restores them. Completeness
-  // only, never connectivity.
-  const nodeGated =
-    currentProject?.manifest.telematic === true &&
-    !isNodeConfigComplete(nodeNameSetting, hubUrlSetting, hubTokenSetting)
+  // only, never connectivity. One derivation (session-flow) for the
+  // button, the Enter alias and every start path.
+  const nodeGated = nodeGateBlocksStart()
   // v1.2.3 (#39/T4): false while a different card is selected over a live
   // session — the footer then belongs to that card's pending start config.
   const runningCardSelected = selectionIsRunningCard(
@@ -96,16 +104,7 @@ export function SessionActionButton() {
           currentProject
         )
       : fallback
-  const loadable = canStart({
-    currentProject,
-    preflightStatus,
-    sessionStatus,
-    lanIp,
-    audioMode,
-    oscTargetInput,
-    selectionIsRunningCard: runningCardSelected,
-    nodeGateBlocked: nodeGated,
-  })
+  const loadable = canStartNow()
 
   /** Load/Enter submit: confirm-and-replace over a live session, plain
    * start otherwise (idle, or a dead `error` the Retry semantics cover). */
