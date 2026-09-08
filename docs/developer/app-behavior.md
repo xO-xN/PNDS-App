@@ -33,16 +33,16 @@ App 不是：
 
 必须支持：
 
-- macOS Apple Silicon ARM64；
+- macOS（arm64 与 x86_64 双轨）；
 - Tauri v2 + 单一主窗口；
-- 随包 ARM64 Node 与 scsynth（固定版本见运行契约 §2）；
+- 随包 Node 与 scsynth（按架构双轨，固定版本见运行契约 §2）；
 - Host + 手机/平板的局域网演出；
 - 1–64 路离散 Internal 输出；
 - ad-hoc 签名发行与独立 Tauri updater 签名。
 
 当前不要求：
 
-- Intel Mac、Windows、Linux 或 universal binary；
+- Windows、Linux 或 universal binary；
 - 跨互联网分布式演出；
 - 打开端强制 checksum / 目标平台校验（`.pnds` 本身见 pnds-bundle.md）；
 - Creator Guide 与在线工程库；
@@ -291,7 +291,7 @@ Back/Close 返回 Welcome，不自动重启。
 - 全屏进入/退出时 monitor 正确 resize 且 Socket.IO 不重连；
 - 红灯淡出/hide、Dock 淡入/reopen、`⌘Q` 清理；
 - 强制错误后 Retry 生效；
-- release artifact 在干净 Apple Silicon Mac 安装运行。
+- release artifact 在干净 Apple Silicon 与 Intel Mac 安装运行。
 
 ## Definition of Done
 
@@ -307,4 +307,4 @@ Back/Close 返回 Welcome，不自动重启。
 10. red close、Dock reopen 与真正退出的窗口行为正确；
 11. 无残留 Node/scsynth，日志正确写入和轮转；
 12. Multichannel Signal Generator（staged 内置副本）可验证 16 路路由；
-13. 可产出可更新的 macOS ARM64 release artifact。
+13. 可产出可更新的 macOS arm64 / x86_64 release artifact。

@@ -29,7 +29,7 @@ Score project Node server
 
 ## 2. 固定 Runtime
 
-PNDS App 使用随包 ARM64 Node.js `24.18.1` 启动 score server。App 不调用系统 Node，也不执行 npm 安装。
+PNDS App 使用按架构随包的 Node.js（arm64 为 `24.18.1`，x86_64 为 `22.23.2`）启动 score server。App 不调用系统 Node，也不执行 npm 安装。
 
 启动形式等价于：
 
@@ -49,7 +49,7 @@ PNDS App 使用随包 ARM64 Node.js `24.18.1` 启动 score server。App 不调�
 --audio-mode > manifest.audio.defaultMode
 ```
 
-工程应将 Node 24 作为当前官方 runtime 基线。`package.json#engines` 仅供开发工具提示，App 暂不解析。
+工程应将随包 Node 系列（arm64 Node 24 / x86_64 Node 22）作为当前官方 runtime 基线。`package.json#engines` 仅供开发工具提示，App 暂不解析。
 
 ## 3. App 注入的环境变量
 
@@ -485,4 +485,4 @@ Orphan cleanup 永远跳过属于当前活跃 session 的子进程（以 Session
 - `N > H` 时仍 ready，只创建 K 个 master instances；
 - master group gain 更新与释放；
 - monitor resize 不产生 iframe reload 或 Socket.IO reconnect；
-- 固定 Node `24.18.1` 下官方工程完整启动。
+- 固定随包 Node（arm64 `24.18.1` / x86_64 `22.23.2`）下官方工程完整启动。

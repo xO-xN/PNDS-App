@@ -1,6 +1,6 @@
 # AGENTS.md
 
-PNDS App：演出现场运行 PNDS 数字乐谱工程的 macOS（Apple Silicon）桌面 Host。Tauri v2 + React + TypeScript。参考 score project 实现在父目录的 `PNDS Template`。
+PNDS App：演出现场运行 PNDS 数字乐谱工程的 macOS（arm64 / x86_64）桌面 Host。Tauri v2 + React + TypeScript。参考 score project 实现在父目录的 `PNDS Template`。
 
 ## 规则
 

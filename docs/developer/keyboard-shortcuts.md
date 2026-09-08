@@ -237,7 +237,7 @@ See [Menus](./menus.md) for full menu integration details.
 ## Modifier Keys
 
 ```typescript
-// macOS-only Cmd layer (this is a macOS Apple Silicon app)
+// macOS-only Cmd layer (this is a macOS app)
 if (event.metaKey) {
 }
 

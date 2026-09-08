@@ -4,7 +4,7 @@ Thanks for contributing to PNDS App.
 
 ## Prerequisites
 
-- macOS (Apple Silicon)
+- macOS (Apple Silicon or Intel)
 - Node.js 24
 - Rust (latest stable via rustup)
 - npm only — this repository does not use pnpm / yarn

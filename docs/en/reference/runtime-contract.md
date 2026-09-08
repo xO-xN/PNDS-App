@@ -29,7 +29,7 @@ Rules:
 
 ## 2. The fixed runtime
 
-PNDS App starts the score server with its bundled ARM64 Node.js `24.18.1`. The App never calls a system Node and never runs npm installs.
+PNDS App starts the score server with its bundled per-architecture Node.js (`24.18.1` on arm64, `22.23.2` on x86_64). The App never calls a system Node and never runs npm installs.
 
 The launch is equivalent to:
 
@@ -49,7 +49,7 @@ Mode precedence:
 --audio-mode > manifest.audio.defaultMode
 ```
 
-Projects should treat Node 24 as the current official runtime baseline. `package.json#engines` is a hint for development tooling only; the App does not parse it yet.
+Projects should treat the bundled Node series (Node 24 on arm64 / Node 22 on x86_64) as the current official runtime baseline. `package.json#engines` is a hint for development tooling only; the App does not parse it yet.
 
 ## 3. Environment variables the App injects
 
@@ -464,4 +464,4 @@ Verify at minimum:
 - ready with `N > H`, creating only K master instances;
 - master group gain updates and release;
 - monitor resize without iframe reload or Socket.IO reconnect;
-- full startup of official Projects under the fixed Node `24.18.1`.
+- full startup of official Projects under the fixed bundled Node (`24.18.1` on arm64 / `22.23.2` on x86_64).

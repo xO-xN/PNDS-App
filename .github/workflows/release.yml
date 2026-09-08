@@ -38,6 +38,9 @@ jobs:
       RELEASE_BODY: |
         ## PNDS ${{ github.ref_name || inputs.version }}
 
+        **Intel Macs join the stage**
+        - This release ships two installers — the `_aarch64.dmg` for Apple Silicon Macs (M-series, macOS 13.5+) and the `_x64.dmg` for Intel Macs (macOS 12+). Pick the one that matches your Mac; the auto-updater already picks its lane on its own.
+
         ### What's New in V1.4.1 — the reload button truly reloads & a quieter, tougher session core
 
         **Reload Monitor is now a true cold fetch**

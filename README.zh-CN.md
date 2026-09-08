@@ -17,7 +17,7 @@ PNDS 池谱（Platform for Networked Digital Score），寓意「多池相连」
 
 ## 下载
 
-- **PNDS App**：[Releases](https://github.com/xO-xN/PNDS-App/releases/latest) 的 `.dmg`，需 Apple Silicon（M 系列）Mac。
+- **PNDS App**：[Releases](https://github.com/xO-xN/PNDS-App/releases/latest) 的 `.dmg`，支持 Apple Silicon（M 系列，macOS 13.5 起）与 Intel（macOS 12 起）Mac，按机器选择 `_aarch64` / `_x64` 版本。
 - **PNDS Template**：[Releases](https://github.com/xO-xN/PNDS-Template/releases/latest)。
 
 ## 文档
