@@ -86,6 +86,22 @@ The same pattern drives menu actions in `src/lib/menu.ts` (e.g. `useSettingsStor
 - In `useEffect` with empty deps when you need current state on mount only
 - In async operations when state might change during execution
 
+**Never in a render-path derivation.** The React Compiler memoizes any
+computation whose dependencies it cannot see — a `getState()` call inside
+render looks dependency-free to it, so it is computed ONCE and replayed
+from the memo cache forever after. This froze the Load button at its
+boot verdict (user report 2026-09-08: `const loadable = canStartNow()`
+in `SessionActionButton`, where `canStartNow` read live stores via
+`getState()`). The fix pattern lives in `src/lib/session-flow.ts`: the
+gate inputs are subscribed in ONE hook (`useStartGateInputs()`), the
+verdict derives from those subscribed values (`canStartNowFrom(inputs)`)
+so the dependency is compiler-visible, and the zero-arg `getState()`
+form remains only for event handlers and effects. Note the test-suite
+gap: vitest compiles through `@vitejs/plugin-react`, the dev/build
+pipelines through rolldown's babel — the two React Compiler outputs
+differ, so a render-path `getState()` can pass every test and still
+freeze in the real app.
+
 ### Navigation-Time Snapshots: The Accessor Pattern
 
 **Problem**: Sometimes a value derived during render must be _frozen_ per

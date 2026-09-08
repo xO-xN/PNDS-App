@@ -1,7 +1,15 @@
-import { commands, type AudioMode } from '@/lib/tauri-bindings'
+import {
+  commands,
+  type AudioMode,
+  type SessionStatus,
+} from '@/lib/tauri-bindings'
 import { logger } from '@/lib/logger'
 import { selectionIsRunningCard, useSessionStore } from '@/store/session-store'
-import { useProjectStore } from '@/store/project-store'
+import {
+  useProjectStore,
+  type CurrentProject,
+  type PreflightStatus,
+} from '@/store/project-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { isNodeConfigComplete, isValidOscTarget } from '@/lib/preferences'
 
@@ -17,22 +25,107 @@ import { isNodeConfigComplete, isValidOscTarget } from '@/lib/preferences'
  * every optional input was a gate a caller could forget to pass), and
  * the #58 node gate has exactly one derivation for every consumer: the
  * session button, the Enter alias, and every start path.
+ *
+ * React Compiler caveat (user report 2026-09-08): a RENDER-path verdict
+ * must derive from SUBSCRIBED values (`useStartGateInputs()` +
+ * `canStartNowFrom`), never from the zero-arg `getState()` readers — the
+ * compiler sees the latter as a dependency-free constant and memoizes it
+ * after the first render, freezing the Load button at its boot verdict.
+ * The zero-arg verbs stay for event handlers and effects, where they run
+ * per invocation.
  */
+
+/**
+ * Every input the start gate can read, in one record. One home for the
+ * list means adding a gate input is a one-file change: subscribe here,
+ * derive in `canStartNowFrom`, and no consumer can forget a re-render
+ * subscription again.
+ */
+export interface StartGateInputs {
+  currentProject: CurrentProject | null
+  preflightStatus: PreflightStatus
+  sessionStatus: SessionStatus
+  sessionProjectPath: string | null
+  audioMode: AudioMode
+  lanIp: string | null
+  oscTargetInput: string
+  nodeNameSetting: string
+  hubUrlSetting: string
+  hubTokenSetting: string
+}
+
+/** The gate inputs as live subscriptions — for render paths. */
+export function useStartGateInputs(): StartGateInputs {
+  const currentProject = useProjectStore(state => state.currentProject)
+  const preflightStatus = useProjectStore(state => state.preflightStatus)
+  const sessionStatus = useSessionStore(state => state.sessionStatus)
+  const sessionProjectPath = useSessionStore(state => state.sessionProjectPath)
+  const audioMode = useSessionStore(state => state.audioMode)
+  const lanIp = useSessionStore(state => state.lanIp)
+  const oscTargetInput = useSessionStore(state => state.oscTargetInput)
+  const nodeNameSetting = useSettingsStore(state => state.nodeNameSetting)
+  const hubUrlSetting = useSettingsStore(state => state.hubUrlSetting)
+  const hubTokenSetting = useSettingsStore(state => state.hubTokenSetting)
+  return {
+    currentProject,
+    preflightStatus,
+    sessionStatus,
+    sessionProjectPath,
+    audioMode,
+    lanIp,
+    oscTargetInput,
+    nodeNameSetting,
+    hubUrlSetting,
+    hubTokenSetting,
+  }
+}
+
+/** The gate inputs straight from the live stores — for event handlers. */
+function readStartGateInputs(): StartGateInputs {
+  const { currentProject, preflightStatus } = useProjectStore.getState()
+  const {
+    sessionStatus,
+    sessionProjectPath,
+    audioMode,
+    lanIp,
+    oscTargetInput,
+  } = useSessionStore.getState()
+  const { nodeNameSetting, hubUrlSetting, hubTokenSetting } =
+    useSettingsStore.getState()
+  return {
+    currentProject,
+    preflightStatus,
+    sessionStatus,
+    sessionProjectPath,
+    audioMode,
+    lanIp,
+    oscTargetInput,
+    nodeNameSetting,
+    hubUrlSetting,
+    hubTokenSetting,
+  }
+}
 
 /**
  * #58: the「设置节点」gate's verdict — the SELECTED project declares
  * telematic capability but the App-global node config (node name / hub
- * address / token) is incomplete. Reads the live stores so every consumer
- * (the session button, the Enter alias, every start path) shares one
- * derivation; undeclared projects are never gated, and the gate checks
- * completeness only, never connectivity.
+ * address / token) is incomplete. Undeclared projects are never gated,
+ * and the gate checks completeness only, never connectivity. Derived
+ * from gate inputs so render paths stay reactive; `nodeGateBlocksStart`
+ * is the event-handler form.
  */
+export function nodeGateBlocked(inputs: StartGateInputs): boolean {
+  if (inputs.currentProject?.manifest.telematic !== true) return false
+  return !isNodeConfigComplete(
+    inputs.nodeNameSetting,
+    inputs.hubUrlSetting,
+    inputs.hubTokenSetting
+  )
+}
+
+/** #58 gate for imperative contexts (menu, keyboard, start paths). */
 export function nodeGateBlocksStart(): boolean {
-  const { currentProject } = useProjectStore.getState()
-  if (currentProject?.manifest.telematic !== true) return false
-  const { nodeNameSetting, hubUrlSetting, hubTokenSetting } =
-    useSettingsStore.getState()
-  return !isNodeConfigComplete(nodeNameSetting, hubUrlSetting, hubTokenSetting)
+  return nodeGateBlocked(readStartGateInputs())
 }
 
 /** What a start submits to the backend — §8.1's inputs, narrowed. */
@@ -45,61 +138,89 @@ interface StartPlan {
 }
 
 /**
- * §8.1 gate + submit inputs in a single read of the live stores: the
- * selected project's start plan, or null when any gate refuses. Private —
- * the module's interface is the gate booleans plus the start verbs; the
- * plan is what the verbs consume once the gate passes (under the old
- * `canStart`, callers re-read these fields and `!`-narrowed them again).
+ * §8.1 gate + submit inputs from gate inputs: the selected project's
+ * start plan, or null when any gate refuses. Private — the module's
+ * interface is the gate booleans plus the start verbs; the plan is what
+ * the verbs consume once the gate passes (under the old `canStart`,
+ * callers re-read these fields and `!`-narrowed them again).
  *
  * The session gate depends on the verb: `plain` (start/Retry, §9.3)
  * requires idle|error; `replace` (confirm-and-replace, v1.2.3 #39/T4)
  * skips it — that flow stops the live session itself.
  */
-function resolveStartPlan(gate: 'plain' | 'replace'): StartPlan | null {
-  const { currentProject, preflightStatus } = useProjectStore.getState()
-  const { sessionStatus, lanIp, audioMode, oscTargetInput } =
-    useSessionStore.getState()
-
-  if (nodeGateBlocksStart()) return null
-  if (!currentProject || preflightStatus !== 'ready' || !lanIp) return null
+function resolveStartPlanFrom(
+  gate: 'plain' | 'replace',
+  inputs: StartGateInputs
+): StartPlan | null {
+  if (nodeGateBlocked(inputs)) return null
+  if (
+    !inputs.currentProject ||
+    inputs.preflightStatus !== 'ready' ||
+    !inputs.lanIp
+  )
+    return null
   // §9.3: Retry starts from the error state without an explicit stop —
   // the failed generation was already cleaned up before the error
   // snapshot was emitted.
   if (
     gate === 'plain' &&
-    sessionStatus !== 'idle' &&
-    sessionStatus !== 'error'
+    inputs.sessionStatus !== 'idle' &&
+    inputs.sessionStatus !== 'error'
   ) {
     return null
   }
   // §6.6: external mode cannot start with an invalid target.
-  if (audioMode === 'external' && !isValidOscTarget(oscTargetInput)) {
+  if (
+    inputs.audioMode === 'external' &&
+    !isValidOscTarget(inputs.oscTargetInput)
+  ) {
     return null
   }
   return {
-    path: currentProject.path,
-    audioMode,
-    lanIp,
-    oscTarget: audioMode === 'external' ? oscTargetInput : null,
+    path: inputs.currentProject.path,
+    audioMode: inputs.audioMode,
+    lanIp: inputs.lanIp,
+    oscTarget: inputs.audioMode === 'external' ? inputs.oscTargetInput : null,
   }
+}
+
+/** The live-stores form for the start verbs below. */
+function resolveStartPlan(gate: 'plain' | 'replace'): StartPlan | null {
+  return resolveStartPlanFrom(gate, readStartGateInputs())
+}
+
+/**
+ * Whether the session for the given gate inputs can be started right now
+ * (§8.1 gating) — the Load button's RENDER verdict. Deriving from the
+ * subscribed `useStartGateInputs()` record keeps the dependency visible
+ * to the React Compiler; the running card follows the plain idle/error
+ * gate, another card selected over a live session follows the replace
+ * gate (v1.2.3 #39/T4: its Load IS the confirm-and-replace switch, which
+ * stops the old session itself).
+ */
+export function canStartNowFrom(inputs: StartGateInputs): boolean {
+  if (!inputs.currentProject) return false
+  const runningCardSelected = selectionIsRunningCard(
+    {
+      sessionStatus: inputs.sessionStatus,
+      sessionProjectPath: inputs.sessionProjectPath,
+    },
+    inputs.currentProject.path
+  )
+  return (
+    resolveStartPlanFrom(runningCardSelected ? 'plain' : 'replace', inputs) !==
+    null
+  )
 }
 
 /**
  * Whether the session for the currently selected card can be started
- * right now (§8.1 gating) — the Load button's verdict. The running card
- * follows the plain idle/error gate; another card selected over a live
- * session follows the replace gate (v1.2.3 #39/T4: its Load IS the
- * confirm-and-replace switch, which stops the old session itself).
+ * right now — the event-handler form (Enter alias, tests). In render
+ * paths use `canStartNowFrom(useStartGateInputs())` instead; see the
+ * module doc for the React Compiler caveat.
  */
 export function canStartNow(): boolean {
-  const { currentProject } = useProjectStore.getState()
-  if (!currentProject) return false
-  const { sessionStatus, sessionProjectPath } = useSessionStore.getState()
-  const runningCardSelected = selectionIsRunningCard(
-    { sessionStatus, sessionProjectPath },
-    currentProject.path
-  )
-  return resolveStartPlan(runningCardSelected ? 'plain' : 'replace') !== null
+  return canStartNowFrom(readStartGateInputs())
 }
 
 /** The OSC target parameter for startProject (null unless external). */

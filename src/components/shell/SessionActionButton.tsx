@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { stopAndReset } from '@/lib/open-project'
 import {
-  canStartNow,
-  nodeGateBlocksStart,
+  canStartNowFrom,
+  nodeGateBlocked,
   restart,
   start,
   startReplacing,
+  useStartGateInputs,
 } from '@/lib/session-flow'
 import { useProjectStore } from '@/store/project-store'
 import { useSettingsStore } from '@/store/settings-store'
@@ -50,31 +51,27 @@ import {
  * #58: a telematic-declared selection with incomplete node config turns
  * the button into「设置节点」(routes to the settings Node section) — see
  * the render branch below. Enter never starts through the gate: the
- * verdict flows into `canStartNow`.
+ * verdict flows into `canStartNowFrom`.
  */
 export function SessionActionButton() {
   const { t } = useTranslation()
-  const currentProject = useProjectStore(state => state.currentProject)
-  // Gate-input subscriptions: `canStartNow()` / `nodeGateBlocksStart()`
-  // read the live stores themselves, so these exist purely to re-render
-  // the footer when a gate input changes. The values below the named
-  // selectors are not otherwise read here.
-  useProjectStore(state => state.preflightStatus)
-  const sessionStatus = useSessionStore(state => state.sessionStatus)
-  const sessionProjectPath = useSessionStore(state => state.sessionProjectPath)
+  // The gate's every input, one subscription. The verdict below derives
+  // FROM these values on purpose: the React Compiler memoizes any
+  // derivation it cannot see dependencies for, and the zero-arg
+  // `getState()` readers are invisible to it — a `canStartNow()` call in
+  // render froze at its boot verdict (user report 2026-09-08). Keeping
+  // inputs + verdict in session-flow means a new gate input updates one
+  // file and no consumer can miss its re-render subscription.
+  const gate = useStartGateInputs()
+  const currentProject = gate.currentProject
+  const sessionStatus = gate.sessionStatus
   const projectDisplayNames = useProjectStore(
     state => state.projectDisplayNames
   )
   const manifestProjectNames = useProjectStore(
     state => state.manifestProjectNames
   )
-  useSessionStore(state => state.audioMode)
-  useSessionStore(state => state.lanIp)
-  useSessionStore(state => state.oscTargetInput)
   const pendingChanges = useSessionStore(state => state.pendingChanges)
-  useSettingsStore(state => state.nodeNameSetting)
-  useSettingsStore(state => state.hubUrlSetting)
-  useSettingsStore(state => state.hubTokenSetting)
   const [confirmSwitchOpen, setConfirmSwitchOpen] = useState(false)
 
   const running = sessionStatus === 'ready'
@@ -86,11 +83,14 @@ export function SessionActionButton() {
   // the config in the routed settings section restores them. Completeness
   // only, never connectivity. One derivation (session-flow) for the
   // button, the Enter alias and every start path.
-  const nodeGated = nodeGateBlocksStart()
+  const nodeGated = nodeGateBlocked(gate)
   // v1.2.3 (#39/T4): false while a different card is selected over a live
   // session — the footer then belongs to that card's pending start config.
   const runningCardSelected = selectionIsRunningCard(
-    { sessionStatus, sessionProjectPath },
+    {
+      sessionStatus,
+      sessionProjectPath: gate.sessionProjectPath,
+    },
     currentProject?.path
   )
   /** The confirm dialog names both cards as the sidebar lists them —
@@ -104,7 +104,7 @@ export function SessionActionButton() {
           currentProject
         )
       : fallback
-  const loadable = canStartNow()
+  const loadable = canStartNowFrom(gate)
 
   /** Load/Enter submit: confirm-and-replace over a live session, plain
    * start otherwise (idle, or a dead `error` the Retry semantics cover). */
@@ -267,7 +267,7 @@ export function SessionActionButton() {
             </AlertDialogTitle>
             <AlertDialogDescription>
               {t('startOver.description', {
-                running: displayName(sessionProjectPath, ''),
+                running: displayName(gate.sessionProjectPath, ''),
               })}
             </AlertDialogDescription>
           </AlertDialogHeader>
