@@ -66,6 +66,16 @@ jobs:
           releaseBody: |
             ## PNDS ${{ github.ref_name || inputs.version }}
 
+            ### What's New in V1.4.1 — the reload button truly reloads & a quieter, tougher session core
+
+            **Reload Monitor is now a true cold fetch**
+            - The reload button (sidebar Refresh / ⌘⇧R) rebuilt the monitor page, but the system webview kept answering from its own on-disk cache: a project whose server sends no `Cache-Control` header stayed "fresh" by HTTP heuristic, so the reload brought back exactly the old page — and the stale copy survived even an app restart. An explicit reload now appends a changing cache-bust parameter to the monitor address, forcing a real request to the project's server every time.
+            - Ordinary navigations (loading a work, an address change) keep their plain addresses and normal cache semantics, and projects that want fine-grained cache control still just send their own `Cache-Control` headers. Projects need zero changes — pages already tolerate unknown query parameters (runtime contract §10).
+
+            **A core hardened underneath — zero intended behavior change**
+            - The Rust session now walks one validated state machine: every status change passes a single gate that checks the run's generation first, so a stop racing a fresh start can no longer stomp the newcomer's state. The score server and the audio engine are supervised by one module that owns spawn → watch → bounded shutdown, including the registry that cleans up orphaned processes after a crash.
+            - On the React side, the session-start gate's verdict reads its inputs through explicit subscriptions (a rendering pitfall that could freeze a derived verdict after the first render is structurally gone), the sidebar lives as focused modules instead of one 1,700-line file, and the monitor's guest-focus gate sits in one tested hook. The typed event channel from v1.4.0's groundwork now carries every backend event — raw listeners are gone.
+
             ### What's New in V1.4.0 — telematic config lives in the App, setlists travel between machines & updates work behind proxies
 
             **Your hub config, set once in the App**
