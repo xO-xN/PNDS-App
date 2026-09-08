@@ -293,31 +293,14 @@ pub const TRANSIENT_RETRY_DELAY: Duration = Duration::from_millis(750);
 /// output, after the CoreAudio device list.
 const CRASH_OUTPUT_TAIL: usize = 8;
 
-/// Locates the bundled scsynth binary. V1 is Apple Silicon only.
+/// Locates the bundled scsynth binary for the architecture this App was
+/// built for. It lives in Contents/Resources (not Contents/MacOS) so
+/// LaunchServices never registers it as a second foreground application
+/// with the PNDS Dock icon.
 pub fn scsynth_binary_path() -> Result<PathBuf, String> {
-    const TRIPLE: &str = "aarch64-apple-darwin";
-    let name = format!("scsynth-{TRIPLE}");
-
-    // 1. Bundled resource: Contents/Resources/scsynth. Keeping scsynth out
-    // of Contents/MacOS prevents LaunchServices from registering it as a
-    // second foreground application with the PNDS Dock icon.
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            let candidate = dir.join("../Resources/scsynth");
-            if candidate.is_file() {
-                return Ok(candidate);
-            }
-        }
-    }
-    // 2. Development fallback: src-tauri/binaries (raw fetched binary, still
-    // named with the target-triple suffix as `scripts/fetch-scsynth.sh` leaves it).
-    let dev = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("binaries")
-        .join(&name);
-    if dev.is_file() {
-        return Ok(dev);
-    }
-    Err("Embedded scsynth not found.\nRun `npm run scsynth:fetch` and try again.".to_string())
+    crate::project::sidecars::resolve("scsynth", "../Resources/scsynth").ok_or_else(|| {
+        "Embedded scsynth not found.\nRun `npm run scsynth:fetch` and try again.".to_string()
+    })
 }
 
 /// Locates the master synth definition artifact (built by

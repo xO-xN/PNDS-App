@@ -31,6 +31,7 @@ src-tauri/src/
     ├── children.rs     # SupervisedChild lifecycle + registry + orphan cleanup
     ├── ports.rs        # Port occupancy / release (lsof + SIGTERM→SIGKILL)
     ├── audio.rs        # CoreAudio capabilities + scsynth bridge
+    ├── sidecars.rs     # Bundled node/scsynth lookup by build target triple (build.rs forwards cargo TARGET)
     ├── logs.rs         # Per-session logs
     └── synthdef.rs     # sclang compile service
 ```

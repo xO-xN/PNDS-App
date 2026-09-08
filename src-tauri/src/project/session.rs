@@ -122,31 +122,13 @@ pub struct SessionSnapshot {
 // Pure / testable helpers
 // ============================================================================
 
-/// Locates the bundled Node.js sidecar. V1 is Apple Silicon only.
+/// Locates the bundled Node.js sidecar for the architecture this App was
+/// built for. Tauri strips the `-{target-triple}` suffix from `externalBin`
+/// sidecars placed next to the executable, so the packaged file is just `node`.
 pub fn node_binary_path() -> Result<PathBuf, String> {
-    const TRIPLE: &str = "aarch64-apple-darwin";
-    let name = format!("node-{TRIPLE}");
-
-    // 1. Next to the executable (bundled app; also dev when the CLI copies it).
-    // Tauri strips the `-{target-triple}` suffix from `externalBin` sidecars
-    // when placing them next to the executable, so the file is just `node`.
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            let candidate = dir.join("node");
-            if candidate.exists() {
-                return Ok(candidate);
-            }
-        }
-    }
-    // 2. Development fallback: src-tauri/binaries (compile-time source dir,
-    // raw fetched sidecar still named with the target-triple suffix)
-    let dev = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("binaries")
-        .join(&name);
-    if dev.exists() {
-        return Ok(dev);
-    }
-    Err("Embedded Node.js runtime not found.\nRun `npm run node:fetch` and try again.".to_string())
+    crate::project::sidecars::resolve("node", "node").ok_or_else(|| {
+        "Embedded Node.js runtime not found.\nRun `npm run node:fetch` and try again.".to_string()
+    })
 }
 
 /// What to start (v1.3.2, issue #77): the conceptual inputs of one
@@ -1366,13 +1348,14 @@ impl SessionManager {
         let registry = ChildRegistry::new(app_data_dir.to_path_buf());
         let mut cmd =
             crate::project::audio::scsynth_command(&binary, sc_cfg, k, port, &plugins, device);
+        // §12 marker: the resolved path is part of the spawned command line
+        // in both the packaged and the dev layout, so a later targeted
+        // cleanup matches exactly this scsynth — never a performer's own.
+        let marker = binary.to_string_lossy().into_owned();
         let mut child =
-            SupervisedChild::spawn_deferred(&registry, "scsynth-aarch64-apple-darwin", &mut cmd)
-                .map_err(|e| {
-                    crate::project::audio::BootFailure::other(format!(
-                        "Failed to start scsynth: {e}"
-                    ))
-                })?;
+            SupervisedChild::spawn_deferred(&registry, marker, &mut cmd).map_err(|e| {
+                crate::project::audio::BootFailure::other(format!("Failed to start scsynth: {e}"))
+            })?;
         let pid = child.id();
 
         let wait = match crate::project::audio::OscClient::connect(&format!("127.0.0.1:{port}")) {

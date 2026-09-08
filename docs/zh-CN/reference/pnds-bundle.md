@@ -61,7 +61,7 @@ staging 与排除清单：
   "formatVersion": 1,
   "packedWith": "1.2.0",
   "packedAt": "2026-08-17T12:00:00Z",
-  "sourcePlatform": "macos-arm64"
+  "sourcePlatform": "macos"
 }
 ```
 

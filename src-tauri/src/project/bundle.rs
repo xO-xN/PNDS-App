@@ -297,7 +297,9 @@ fn write_bundle_zip(
         format_version: BUNDLE_FORMAT_VERSION,
         packed_with: packed_with.to_string(),
         packed_at: rfc3339_utc_now(),
-        source_platform: format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH),
+        // OS family only: a bundle packed on either Mac architecture is the
+        // same artifact, and the field is record-only (never validated).
+        source_platform: std::env::consts::OS.to_string(),
     };
     writer
         .start_file(
@@ -763,7 +765,9 @@ mod tests {
         assert_eq!(metadata.format_version, BUNDLE_FORMAT_VERSION);
         assert_eq!(metadata.packed_with, APP_VERSION);
         assert!(!metadata.packed_at.is_empty());
-        assert!(!metadata.source_platform.is_empty());
+        // Record-only field (pnds-bundle reference): the packing machine's
+        // OS family, deliberately without the CPU architecture.
+        assert_eq!(metadata.source_platform, std::env::consts::OS);
     }
 
     #[test]

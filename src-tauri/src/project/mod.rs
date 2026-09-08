@@ -9,4 +9,5 @@ pub mod ports;
 pub mod preflight;
 pub mod session;
 pub mod setlist;
+pub mod sidecars;
 pub mod synthdef;
