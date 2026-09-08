@@ -431,9 +431,9 @@ This preserves scroll position, form state, and animation continuity.
 A pill that slides over targets (the folder segment track, the selected project card) is positioned by direct style writes, never React state — a state update per move would re-render whole rows for a purely visual shift. Since v1.3.2 (issue #78) one engine serves both pills, `src/hooks/use-indicator-pill.ts`:
 
 - `useIndicatorPill({ apply, remeasure })` runs `apply` after every commit (a layout effect, so nothing paints stale) and `remeasure` on window resize and once `document.fonts.ready` settles — web fonts change widths after first paint. `remeasure` defaults to `apply`; override it when reflow-time inputs differ. Both Sidebar pills re-read the store directly there, and the card pill deliberately drops its drag/snap hide (a resize mid-drag briefly ignores the hide; the next commit corrects it).
-- `applyIndicatorGeometry(pill, target, axis)` / `clearIndicatorGeometry(pill, axis)` are the shared geometry writes — translate along the axis, size across it. Target resolution and animation policy stay with each pill's own module-level function (`applyFolderPill` resolves the active segment; `applyCardSelectionPill` owns the anchor/slide/rise logic), so the engine never grows per-pill flags.
+- `applyIndicatorGeometry(pill, target, axis)` / `clearIndicatorGeometry(pill, axis)` are the shared geometry writes — translate along the axis, size across it. Target resolution and animation policy live in `src/lib/selection-pills.ts` (`applyFolderPill` resolves the active segment — consumed by `FolderSwitch`; `applyCardSelectionPill` owns the anchor/slide/rise logic — consumed by Sidebar), so the engine never grows per-pill flags. The same module declares `CARD_SELECTOR` (`[data-project-path]`) once — the DOM contract the card pill, the selection-reveal scroll effect, and the drag adapter all query; never re-spell that attribute selector.
 
-To add a third pill: render an absolutely positioned element with a class-owned transition, resolve the target in a policy function, and schedule it with the hook.
+To add a third pill: render an absolutely positioned element with a class-owned transition, resolve the target in a policy function in `selection-pills.ts`, and schedule it with the hook.
 
 ## Best Practices
 

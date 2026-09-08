@@ -16,6 +16,7 @@ import {
   type Rect,
 } from '@/lib/drag-reorder'
 import type { CardDragAdapter, CardDragPress } from '@/hooks/use-card-drag'
+import { CARD_SELECTOR } from '@/lib/selection-pills'
 
 /** One drag source — a visible project card or a top-level folder segment. */
 export type DragSource =
@@ -137,7 +138,7 @@ export const sidebarDragAdapter: CardDragAdapter<DragSource> = {
         stride,
       },
       spaces: {
-        list: hitSpaceOf(navEl?.querySelectorAll('[data-project-path]')),
+        list: hitSpaceOf(navEl?.querySelectorAll(CARD_SELECTOR)),
         folders: rowHitSpaceOf(
           navEl?.querySelectorAll('[data-folder-segment]')
         ),

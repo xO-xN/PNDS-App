@@ -3,6 +3,8 @@ import {
   clampZoom,
   shouldConfirmClose,
   isSessionBusy,
+  isSessionLive,
+  isSessionRunning,
   DEFAULT_SESSION_VOLUME,
   useSessionStore,
 } from './session-store'
@@ -235,6 +237,20 @@ describe('session-store', () => {
       expect(isSessionBusy('ready')).toBe(false)
       expect(isSessionBusy('idle')).toBe(false)
       expect(isSessionBusy('error')).toBe(false)
+    })
+
+    it('isSessionRunning is true only for a fully-up session; isSessionLive for any live one', () => {
+      expect(isSessionRunning('ready')).toBe(true)
+      expect(isSessionRunning('starting')).toBe(false)
+      expect(isSessionRunning('stopping')).toBe(false)
+      expect(isSessionRunning('idle')).toBe(false)
+      expect(isSessionRunning('error')).toBe(false)
+
+      expect(isSessionLive('starting')).toBe(true)
+      expect(isSessionLive('ready')).toBe(true)
+      expect(isSessionLive('stopping')).toBe(true)
+      expect(isSessionLive('idle')).toBe(false)
+      expect(isSessionLive('error')).toBe(false)
     })
   })
 

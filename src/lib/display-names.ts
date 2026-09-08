@@ -5,6 +5,8 @@
  */
 
 import type { CurrentProject } from '@/store/project-store'
+import { isProtectedFolder } from '@/store/project-store'
+import i18n from '@/i18n/config'
 import {
   BUILTIN_UTILITY_DISPLAY_NAMES,
   builtinUtilityId,
@@ -64,4 +66,21 @@ export function projectDisplayName(
   if (manifestNames[path]) return manifestNames[path]
   if (path === currentProject?.path) return currentProject.manifest.name
   return titleCasePath(path)
+}
+
+/**
+ * v1.2.2 (user feedback on #29): the protected folder's name localizes at
+ * display time — the persisted index keeps the canonical "Utilities",
+ * the zh UI reads 工具. Shared by the folder switch's segments (and their
+ * delete confirm) and the sidebar's drag clone, so a dragged segment
+ * labels itself exactly like the row it came from. Reads i18n directly:
+ * the module-level helper is called from event handlers, not render.
+ */
+export function folderDisplayName(folder: {
+  id: string
+  name: string
+}): string {
+  return isProtectedFolder(folder.id)
+    ? i18n.t('sidebar.utilitiesFolder')
+    : folder.name
 }

@@ -40,6 +40,14 @@ export function isSessionLive(status: SessionStatus): boolean {
   return status === 'starting' || status === 'ready' || status === 'stopping'
 }
 
+/** True only while the session is fully up ('ready') — Share/Refresh and
+ * the running indicators (running bar, folder in-use dot) follow the
+ * session being actually usable, not merely live. The sidebar's badge
+ * booleans derive through this instead of re-spelling the status. */
+export function isSessionRunning(status: SessionStatus): boolean {
+  return status === 'ready'
+}
+
 /**
  * v1.2.3 (#39/T4): true when a live session's own card is the selected
  * one — the footer then keeps Close/Change and the live volume; any other
@@ -121,7 +129,10 @@ interface SessionState {
   /** Volume to restore on unmute — the last non-zero volume (0 = none
    * recorded; unmute then falls back to the 80% default). */
   prevVolume: number
-  /** Incremented to force the monitor iframe to reload (sidebar refresh). */
+  /** Incremented to force the monitor iframe to reload (sidebar refresh,
+   * ⌘⇧R). Also rides the iframe URL as the `_r` cache-buster: WKWebView's
+   * persistent NetworkCache keys on the full URL, so the changed query
+   * string is what makes the reload a cold fetch. */
   monitorReloadNonce: number
   /** v1.3.0 (#50): the CURRENT iframe navigation reported its load —
    * the loading→monitor cross-fade (and the reload cover) may release.
