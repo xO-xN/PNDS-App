@@ -87,6 +87,17 @@ Then GitHub Actions will:
    `Contents/Resources/utilities`, where `builtinUtilities` resolves them
    for the Utilities folder. The app runs them in place; there is no
    first-run install.
+
+   Provisioning is per build target: `node:fetch` takes `PNDS_TARGET`
+   (aarch64 → Node 24, x86_64 → Node 22 whose official binary still runs on
+   macOS 12; Node 24's darwin binaries require macOS 13.5), while
+   `scsynth:fetch` writes both scsynth slices from the universal dmg and
+   keeps `libsndfile.dylib` universal. Base `tauri.conf.json` carries the
+   arm64 lane's scsynth mapping and minimumSystemVersion 13.5; the x86_64
+   lane overrides both via `npm run tauri:build:x64`
+   (`--config src-tauri/tauri.x86_64.conf.json`, which deletes the arm64
+   mapping and maps its own slice at macOS 12.0).
+
 2. Build the app for macOS (Apple Silicon)
 3. Create a draft release
 4. Generate `latest.json` for auto-updates

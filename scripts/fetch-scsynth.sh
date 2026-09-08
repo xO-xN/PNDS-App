@@ -7,10 +7,14 @@
 # (built-in speakers, TVs, etc.). 3.14 guards the input setup with
 # mNumInputs > 0, so any CoreAudio device works (§6.5).
 #
-# Everything is thinned to the arm64 slice (V1 is Apple Silicon only, §2):
-#   - scsynth            → src-tauri/binaries/ (staging source; bundled as Resources/scsynth)
-#   - libsndfile.dylib   → src-tauri/Frameworks/ (bundle Frameworks)
-#   - UGen plugins       → src-tauri/plugins/   (bundle Resources, -U flag)
+# The dmg is universal. Both build targets are served from one download:
+#   - scsynth            → src-tauri/binaries/scsynth-<target-triple>, one thin
+#                          slice per target (bundled as Resources/scsynth by the
+#                          per-target tauri.<arch>.conf.json overlay)
+#   - libsndfile.dylib   → src-tauri/Frameworks/, kept UNIVERSAL: dev shares one
+#                          Frameworks dir across targets, and the plugins load it
+#                          through @loader_path/../../Frameworks
+#   - UGen plugins       → src-tauri/plugins/ (universal as shipped; -U flag)
 #
 # While the dmg is mounted we also use its sclang to compile
 # src-tauri/resources/synthdefs/pndsMaster.scsyndef (see
@@ -35,7 +39,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BIN_DIR="$ROOT/src-tauri/binaries"
 FMW_DIR="$ROOT/src-tauri/Frameworks"
 PLUGINS_DIR="$ROOT/src-tauri/plugins"
-SIDECAR="$BIN_DIR/scsynth-aarch64-apple-darwin"
+# <target-triple>:<lipo arch>
+LANES=("aarch64-apple-darwin:arm64" "x86_64-apple-darwin:x86_64")
 SYNTHDEF_SRC="$ROOT/src-tauri/resources/synthdefs/source/pnds-master.scd"
 SYNTHDEF_OUT_DIR="$ROOT/src-tauri/resources/synthdefs"
 
@@ -62,13 +67,17 @@ fi
 
 mkdir -p "$BIN_DIR" "$FMW_DIR" "$PLUGINS_DIR"
 
-echo "[pnds] extracting arm64 scsynth…"
-lipo -thin arm64 "$SC_RES/scsynth" -output "$SIDECAR"
-chmod +x "$SIDECAR"
+for lane in "${LANES[@]}"; do
+  triple="${lane%%:*}"
+  arch="${lane##*:}"
+  echo "[pnds] extracting $arch scsynth → scsynth-${triple}…"
+  lipo -thin "$arch" "$SC_RES/scsynth" -output "$BIN_DIR/scsynth-$triple"
+  chmod +x "$BIN_DIR/scsynth-$triple"
+done
 
-echo "[pnds] extracting arm64 libsndfile…"
+echo "[pnds] copying universal libsndfile…"
 rm -f "$FMW_DIR"/*.dylib 2>/dev/null || true
-lipo -thin arm64 "$SC_FMW/libsndfile.dylib" -output "$FMW_DIR/libsndfile.dylib"
+cp "$SC_FMW/libsndfile.dylib" "$FMW_DIR/libsndfile.dylib"
 chmod +w "$FMW_DIR/libsndfile.dylib"
 
 echo "[pnds] copying UGen plugins (scsynth .scx, skipping supernova)…"
@@ -102,7 +111,9 @@ fi
 # bundle that maps to Contents/Frameworks (correct); in dev it maps to
 # <repo>/Frameworks — bridge it with a symlink so DiskIO_UGens loads too.
 # scsynth itself is added to the macOS bundle as a resource at
-# Contents/Resources/scsynth (see tauri.conf.json), not as an externalBin.
+# Contents/Resources/scsynth (per-target mapping: base tauri.conf.json for
+# arm64, the x86_64 overlay deletes that key and maps its own slice), not
+# as an externalBin.
 ln -sfn "src-tauri/Frameworks" "$ROOT/Frameworks"
 
 # GPL-3.0 license text + source pointer (required when distributing binaries).
@@ -122,10 +133,22 @@ scsynth, libsndfile, and the bundled UGen plugins are part of SuperCollider
 
 Source code: https://github.com/supercollider/supercollider
 These binaries were extracted, unmodified, from the official
-SuperCollider-$SC_VERSION macOS dmg (arm64 slices).
+SuperCollider-$SC_VERSION macOS dmg (scsynth as the build target's single
+architecture slice; libsndfile and the plugins as shipped, universal).
 EOF
 
-echo "[pnds] scsynth binary ready: $SIDECAR"
-lipo -info "$SIDECAR"
-echo "[pnds] verifying it runs…"
-"$SIDECAR" -v 2>&1 | head -1
+for lane in "${LANES[@]}"; do
+  lipo -info "$BIN_DIR/scsynth-${lane%%:*}"
+done
+echo "[pnds] verifying the host-architecture scsynth runs…"
+case "$(uname -m)" in
+  arm64 | aarch64)
+    "$BIN_DIR/scsynth-aarch64-apple-darwin" -v 2>&1 | head -1
+    ;;
+  x86_64)
+    "$BIN_DIR/scsynth-x86_64-apple-darwin" -v 2>&1 | head -1
+    ;;
+  *)
+    echo "[pnds] unsupported host architecture $(uname -m); skipping run check" >&2
+    ;;
+esac

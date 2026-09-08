@@ -113,7 +113,7 @@
     "copyright": "Copyright © 2026 xO-xN. All rights reserved.",
     "macOS": {
       "frameworks": ["Frameworks/libsndfile.dylib"],
-      "minimumSystemVersion": "10.15",
+      "minimumSystemVersion": "13.5",
       "signingIdentity": "-",
       "providerShortName": null,
       "entitlements": "entitlements.plist",
