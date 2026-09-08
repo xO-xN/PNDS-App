@@ -493,6 +493,24 @@ async openAppLogDir() : Promise<Result<null, string>> {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+/**
+ * v1.4.2 (#110): the installed Safari version — the user-facing proxy for
+ * the system WebKit. WKWebView's `navigator.userAgent` is frozen at
+ * `AppleWebKit/605.1.15` (since Safari 13), so the frontend cannot learn
+ * the engine version from JS; Safari ships every system WebKit update, so
+ * its bundle version ("15.1" / "16.4" / "17.6" …) is the number the
+ * baseline contract speaks in. `None` when the bundle is missing or
+ * carries no readable version — the frontend treats unknown as "stay
+ * silent", keeping the zero-disturbance half of the contract.
+ */
+async systemSafariVersion() : Promise<Result<string | null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("system_safari_version") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 

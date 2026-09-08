@@ -57,6 +57,35 @@ describe('App', () => {
     })
   })
 
+  // v1.4.2 (#110): the WebKit baseline check runs once at startup; the
+  // setup mock's default is a supported Safari, so the gate stays closed.
+  it('runs the WebKit baseline check at startup and stays silent when met', async () => {
+    render(<App />)
+
+    await waitFor(() => expect(commands.systemSafariVersion).toHaveBeenCalled())
+    expect(screen.queryByText('Safari Needs an Update')).not.toBeInTheDocument()
+  })
+
+  // #110's other half: below the baseline, the prompt and update
+  // guidance are visible right at startup.
+  it('surfaces the WebKit baseline dialog at startup when below the baseline', async () => {
+    vi.mocked(commands.systemSafariVersion).mockResolvedValue({
+      status: 'ok',
+      data: '15.1',
+    })
+    render(<App />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Safari Needs an Update')).toBeInTheDocument()
+    })
+    expect(screen.getByTestId('webkit-baseline-details')).toHaveTextContent(
+      'Safari 15.1'
+    )
+    expect(
+      screen.getByRole('button', { name: 'Open Update Guide' })
+    ).toBeInTheDocument()
+  })
+
   /**
    * v1.3.0 (#51): the cold-start reveal gate. The window is created
    * hidden and only shown (fadeInWindow) once the saved theme has

@@ -69,9 +69,11 @@ reqwest = { version = "0.13", default-features = false, features = ["system-prox
 # project directories and .pnds bundle files.
 # v1.3.3 (#79): NSMenu/NSMenuItem power the native context-menu guard
 # (the willOpenMenu hook empties non-text web menus at the NSMenu level).
+# v1.4.2 (#110): NSBundle/NSDictionary read /Applications/Safari.app's
+# version for the startup WebKit baseline gate.
 objc2 = "0.6"
 objc2-app-kit = { version = "0.3", features = ["std", "NSWindow", "NSOpenPanel", "NSMenu", "NSMenuItem"] }
-objc2-foundation = { version = "0.3", features = ["std", "NSString", "NSProcessInfo"] }
+objc2-foundation = { version = "0.3", features = ["std", "NSString", "NSProcessInfo", "NSBundle", "NSDictionary"] }
 
 [dev-dependencies]
 

@@ -245,5 +245,10 @@
   "updater.failureDetailsLabel": "Error details",
   "updater.failureCopyAction": "Copy details",
   "updater.failureDismiss": "Close",
-  "updater.failureReleasesAction": "Open Releases Page"
+  "updater.failureReleasesAction": "Open Releases Page",
+  "webkit.belowBaselineTitle": "Safari Needs an Update",
+  "webkit.belowBaselineBody": "This Mac's Safari is {{version}}, older than the Safari 16.4 baseline. PNDS runs on the system WebKit that Safari provides, so parts of the interface may not work. Use Software Update to update macOS (this also updates Safari), then restart PNDS.",
+  "webkit.detailsLabel": "Detected versions",
+  "webkit.updateAction": "Open Update Guide",
+  "webkit.dismiss": "Close"
 }

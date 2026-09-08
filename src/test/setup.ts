@@ -204,6 +204,12 @@ vi.mock('@/lib/tauri-bindings', async () => {
       // v1.2.0 (issue #13): Settings About section reveal buttons
       openAppDataDir: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
       openAppLogDir: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
+      // v1.4.2 (#110): WebKit baseline gate — default: a supported
+      // Safari, so the gate stays closed in every test that doesn't
+      // override it.
+      systemSafariVersion: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: '26.6.2' }),
       // v1.2.0 (issue #14): port occupancy — default: both ports free.
       checkPortStatus: vi.fn().mockImplementation((port: number) =>
         Promise.resolve({

@@ -245,5 +245,10 @@
   "updater.failureDetailsLabel": "错误详情",
   "updater.failureCopyAction": "复制详情",
   "updater.failureDismiss": "关闭",
-  "updater.failureReleasesAction": "打开 Releases 页面"
+  "updater.failureReleasesAction": "打开 Releases 页面",
+  "webkit.belowBaselineTitle": "需要更新 Safari",
+  "webkit.belowBaselineBody": "本机 Safari 版本为 {{version}}，低于 Safari 16.4 基线。PNDS 依赖 Safari 提供的系统 WebKit 运行，界面可能无法正常工作。请通过「软件更新」更新 macOS（会一并更新 Safari），然后重新启动 PNDS。",
+  "webkit.detailsLabel": "检测到的版本",
+  "webkit.updateAction": "打开更新指引",
+  "webkit.dismiss": "关闭"
 }

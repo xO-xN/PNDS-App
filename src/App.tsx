@@ -8,6 +8,7 @@ import {
 } from './lib/menu'
 import { setupHelpWindowBridge } from './lib/help-window'
 import { startBootUpdateCheck } from './lib/updater'
+import { runWebKitBaselineCheck } from './lib/webkit-baseline'
 import { bootFailureDialogRenderer } from './store/updater-store'
 import {
   initializeLanguage,
@@ -36,6 +37,7 @@ import {
   CloseConfirmDialog,
   QuitConfirmDialog,
   UpdaterFailureDialog,
+  WebKitBaselineDialog,
 } from './components/shell'
 import { SettingsPanel } from './components/settings'
 import { ThemeProvider } from './components/ThemeProvider'
@@ -47,6 +49,12 @@ function App() {
     logger.info('🚀 PNDS starting up')
 
     initWindowState()
+
+    // v1.4.2 (#110): the WebKit baseline gate — the system Safari (and
+    // with it the WebKit this UI renders on) must reach the 16.4
+    // baseline; below it, the App-styled dialog states the problem and
+    // the update path. Met or unknown both stay silent.
+    void runWebKitBaselineCheck()
 
     // §7.4: ⌘Q must not wait for the fade animation — mark the manager
     // as quitting so in-flight ramps cancel and close hides immediately.
@@ -200,6 +208,9 @@ function App() {
         {/* v1.4.0 (#60): update failures (boot or manual check) land on
             the App-styled dialog — same rule. */}
         <UpdaterFailureDialog />
+        {/* v1.4.2 (#110): system WebKit below the Safari 16.4 baseline —
+            same rule, mounted outside AppShell. */}
+        <WebKitBaselineDialog />
         {/* v1.2.0 (issue #13): the settings panel — reachable in every
             window state, like the confirm dialogs above. */}
         <SettingsPanel />

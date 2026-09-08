@@ -42,6 +42,7 @@ pub fn generate_bindings() -> Builder<tauri::Wry> {
         help::help_corpus,
         system::open_app_data_dir,
         system::open_app_log_dir,
+        system::system_safari_version,
     ])
 }
 

@@ -241,6 +241,8 @@ Retry 必须真正重新启动：
 
 Back/Close 返回 Welcome，不自动重启。
 
+启动 WebKit 基线门（v1.4.2，#110）：启动时由后端读已安装的 Safari 版本（WKWebView 的 UA 冻结在 AppleWebKit/605.1.15，JS 侧无版本可读），低于 Safari 16.4 基线时经 App 风格错误对话框（`WebKitBaselineDialog`，与更新失败对话同规挂 AppShell 外）说明缘由并指引「软件更新」；满足基线或版本不可读时零打扰。文案进 locales `webkit.*`，中英成对。
+
 ## 日志与清理
 
 每个 session 写独立日志，保存在 App data 的 `session-logs/`，记录：manifest/preflight；session 元数据；Node/scsynth stdout/stderr——issue #93 起逐行落盘、带 `[node]`/`[scsynth]` 来源前缀、随写随 flush，且**包含关停窗口内该 generation 的最终输出**（落盘以日志所属 generation 为守卫：旧 generation 的迟到行不进新会话日志，也不进错误页 tail）；health；master stage；scsynth 瞬态重试（issue #92）；关停标记与结果（`Session ending` → 各子进程 stopped/未确认 → `All processes stopped`）；错误。保留最近 20 份，删除最旧文件。日志不写入工程目录，也不上传。
