@@ -13,13 +13,13 @@ use std::collections::{HashSet, VecDeque};
 use std::io::{BufRead, BufReader};
 use std::net::UdpSocket;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 use tauri::AppHandle;
 use tauri_specta::Event as _;
 
-use crate::project::children::{self, ChildRegistry};
+use crate::project::children::{self, ChildRegistry, ShutdownOutcome, SupervisedChild};
 use crate::project::manifest::{load_manifest, Manifest};
 use crate::project::preflight;
 use crate::types::{AudioMode, SessionStatus};
@@ -375,9 +375,11 @@ fn fetch_health(performer_port: u16) -> Result<HealthPayload, String> {
 
 struct SessionInner {
     status: SessionStatus,
-    child: Option<Child>,
+    /// The node score server and the scsynth engine, held through their
+    /// `SupervisedChild` lifecycle (spawn-recorded → bounded shutdown).
+    child: Option<SupervisedChild>,
     /// scsynth process and its OSC port (internal mode only, §7).
-    scsynth: Option<Child>,
+    scsynth: Option<SupervisedChild>,
     scsynth_port: Option<u16>,
     /// Whether the App Master Synth has been created (§7.4).
     master_synth_ready: bool,
@@ -537,26 +539,39 @@ impl SessionManager {
         app_data_dir: PathBuf,
         request: StartRequest,
     ) -> Result<(), String> {
-        let generation = {
-            let mut inner = self.lock();
-            inner.generation += 1;
-            inner.reset_run_state();
-            inner.status = SessionStatus::Starting;
-            inner.project_path = Some(request.path.clone());
-            inner.audio_mode = Some(request.mode);
-            inner.lan_ip = Some(request.lan_ip.clone());
-            // #62: the pre-manifest default — the declared performer
-            // address (if any) overrides this once the manifest is loaded
-            // in `start_generation`.
-            inner.host_address = Some(request.lan_ip.clone());
-            inner.startup_stage = 1;
-            inner.generation
-        };
-        self.emit(&app);
+        let generation = self.lock().generation + 1;
+        // §12 + Retry: the opening move (`any → Starting` on a new
+        // generation) also resets the previous run's state, so the first
+        // snapshot the UI sees is a clean `starting` at stage 1. A
+        // rejection means another start/stop opened a generation after we
+        // read ours — surface it instead of plowing over the winner.
+        let opened = Self::transition(
+            &app,
+            &self.inner,
+            generation,
+            SessionStatus::Starting,
+            |inner| {
+                inner.reset_run_state();
+                inner.project_path = Some(request.path.clone());
+                inner.audio_mode = Some(request.mode);
+                inner.lan_ip = Some(request.lan_ip.clone());
+                // #62: the pre-manifest default — the declared performer
+                // address (if any) overrides this once the manifest is loaded
+                // in `start_generation`.
+                inner.host_address = Some(request.lan_ip.clone());
+                inner.startup_stage = 1;
+            },
+        );
+        if !opened {
+            return Err(
+                "The session changed while starting; wait for it to settle and try again."
+                    .to_string(),
+            );
+        }
 
         let result = self.start_generation(&app, &app_data_dir, generation, request);
         if let Err(message) = &result {
-            self.fail_start(&app, &app_data_dir, generation, message);
+            self.fail_start(&app, generation, message);
         }
         result
     }
@@ -815,10 +830,10 @@ impl SessionManager {
                 // §12: hand the handle to the session immediately. Every
                 // failure below this point is now covered by the teardown
                 // in `fail_start` instead of leaking a live scsynth.
-                if let Some(stdout) = sc_child.stdout.take() {
+                if let Some(stdout) = sc_child.child().stdout.take() {
                     self.spawn_output_reader(stdout, "scsynth", generation);
                 }
-                if let Some(stderr) = sc_child.stderr.take() {
+                if let Some(stderr) = sc_child.child().stderr.take() {
                     self.spawn_output_reader(stderr, "scsynth", generation);
                 }
                 {
@@ -862,12 +877,17 @@ impl SessionManager {
             .stderr(Stdio::piped())
             .envs(env.iter().map(|(k, v)| (k, v)));
 
-        let mut child = cmd.spawn().map_err(|e| {
-            format!("Failed to start the score server with the embedded Node.js runtime: {e}")
-        })?;
+        // §12: spawn + ownership record (pid + entry marker) in one step —
+        // if the App dies, the next launch's targeted cleanup finds it.
+        let mut child =
+            SupervisedChild::spawn(&registry, entry.to_string_lossy().to_string(), &mut cmd)
+                .map_err(|e| {
+                    format!(
+                        "Failed to start the score server with the embedded Node.js runtime: {e}"
+                    )
+                })?;
         let pid = child.id();
 
-        registry.record(pid, entry.to_string_lossy().to_string());
         log::info!(
             "Score server started (pid {pid}): {} --audio-mode {}",
             entry.display(),
@@ -875,10 +895,10 @@ impl SessionManager {
         );
 
         // Pipe node stdout/stderr into the session tail (app-behavior「Error Page」).
-        if let Some(stdout) = child.stdout.take() {
+        if let Some(stdout) = child.child().stdout.take() {
             self.spawn_output_reader(stdout, "node", generation);
         }
-        if let Some(stderr) = child.stderr.take() {
+        if let Some(stderr) = child.child().stderr.take() {
             self.spawn_output_reader(stderr, "node", generation);
         }
 
@@ -889,13 +909,7 @@ impl SessionManager {
         }
         self.emit(app);
 
-        self.spawn_supervisor(
-            app.clone(),
-            app_data_dir.to_path_buf(),
-            pid,
-            manifest,
-            generation,
-        );
+        self.spawn_supervisor(app.clone(), pid, manifest, generation);
         Ok(())
     }
 
@@ -903,15 +917,9 @@ impl SessionManager {
     /// Tears down whatever this generation already spawned, clears the
     /// handles, and only then publishes the `error` snapshot — so the
     /// state the user retries from is provably clean.
-    fn fail_start<R: tauri::Runtime>(
-        &self,
-        app: &AppHandle<R>,
-        app_data_dir: &Path,
-        generation: u64,
-        message: &str,
-    ) {
+    fn fail_start<R: tauri::Runtime>(&self, app: &AppHandle<R>, generation: u64, message: &str) {
         let inner = Arc::clone(&self.inner);
-        Self::fail_generation(app, &inner, app_data_dir, generation, message.to_string());
+        Self::fail_generation(app, &inner, generation, message.to_string());
     }
 
     /// §12: the **single** failure exit for a generation, shared by the
@@ -922,7 +930,6 @@ impl SessionManager {
     fn fail_generation<R: tauri::Runtime>(
         app: &AppHandle<R>,
         inner: &Arc<Mutex<SessionInner>>,
-        app_data_dir: &Path,
         generation: u64,
         message: String,
     ) {
@@ -932,17 +939,17 @@ impl SessionManager {
                 return;
             }
         }
-        Self::teardown_children(inner, app_data_dir);
-        {
-            let mut guard = inner.lock().unwrap_or_else(|e| e.into_inner());
-            if guard.generation != generation {
-                return;
-            }
-            guard.status = SessionStatus::Error;
+        Self::teardown_children(inner);
+        // Only the status/error write and its publication route through the
+        // transition; the teardown ORDER above stays this function's own
+        // contract (cleanup first, `error` snapshot second). The lattice
+        // covers the second generation check: `Starting`/`Ready → Error` is
+        // steady, so a stop/retry that opened a newer generation in between
+        // is rejected here.
+        Self::transition(app, inner, generation, SessionStatus::Error, |guard| {
             guard.error = Some(message);
             guard.startup_stage = 0;
-        }
-        Self::emit_static(app, inner);
+        });
     }
 
     /// Pipes one child's stdout/stderr into the in-memory output tail and,
@@ -991,7 +998,6 @@ impl SessionManager {
     fn spawn_supervisor<R: tauri::Runtime>(
         &self,
         app: AppHandle<R>,
-        app_data_dir: PathBuf,
         pid: u32,
         manifest: Manifest,
         generation: u64,
@@ -1024,7 +1030,6 @@ impl SessionManager {
                     Self::fail_generation(
                         &app,
                         &inner,
-                        &app_data_dir,
                         generation,
                         format!("Score server exited during startup ({status}). See output below."),
                     );
@@ -1043,17 +1048,10 @@ impl SessionManager {
                                 if Self::complete_startup(
                                     &app,
                                     &inner,
-                                    &app_data_dir,
                                     generation,
                                     Self::create_master_stage,
                                 ) {
-                                    Self::watch_running(
-                                        &app,
-                                        &inner,
-                                        &app_data_dir,
-                                        pid,
-                                        generation,
-                                    );
+                                    Self::watch_running(&app, &inner, pid, generation);
                                 }
                                 return;
                             }
@@ -1062,7 +1060,6 @@ impl SessionManager {
                                 Self::fail_generation(
                                     &app,
                                     &inner,
-                                    &app_data_dir,
                                     generation,
                                     health_error_message(&health),
                                 );
@@ -1080,7 +1077,6 @@ impl SessionManager {
                             Self::fail_generation(
                                 &app,
                                 &inner,
-                                &app_data_dir,
                                 generation,
                                 format!(
                                     "Timed out waiting for the project to report ready ({}s).",
@@ -1109,7 +1105,6 @@ impl SessionManager {
     fn complete_startup<R: tauri::Runtime, F>(
         app: &AppHandle<R>,
         inner: &Arc<Mutex<SessionInner>>,
-        app_data_dir: &Path,
         generation: u64,
         create_master: F,
     ) -> bool
@@ -1145,32 +1140,28 @@ impl SessionManager {
                 Self::fail_generation(
                     app,
                     inner,
-                    app_data_dir,
                     generation,
                     format!("Audio master stage failed: {e}"),
                 );
                 return false;
             }
         }
-        let mut guard = inner.lock().unwrap_or_else(|e| e.into_inner());
-        if guard.generation != generation || guard.status != SessionStatus::Starting {
-            return false; // a retry already replaced this generation
-        }
-        if needs_master_stage {
-            guard.master_synth_ready = true;
-        }
-        guard.status = SessionStatus::Ready;
-        guard.startup_stage = 4;
-        drop(guard);
-        Self::emit_static(app, inner);
-        true
+        // The lattice is the authority: `Starting → Ready` is a steady
+        // move, so a stop/retry that replaced this generation in the
+        // meantime (generation or status moved) is rejected — the session
+        // stays exactly as the winner left it.
+        Self::transition(app, inner, generation, SessionStatus::Ready, |guard| {
+            if needs_master_stage {
+                guard.master_synth_ready = true;
+            }
+            guard.startup_stage = 4;
+        })
     }
 
     /// After ready: watch for unexpected exits until stop is requested.
     fn watch_running<R: tauri::Runtime>(
         app: &AppHandle<R>,
         inner: &Arc<Mutex<SessionInner>>,
-        app_data_dir: &Path,
         pid: u32,
         generation: u64,
     ) {
@@ -1193,7 +1184,6 @@ impl SessionManager {
                 Self::fail_generation(
                     app,
                     inner,
-                    app_data_dir,
                     generation,
                     format!("Score server exited unexpectedly ({status})."),
                 );
@@ -1206,8 +1196,84 @@ impl SessionManager {
         Self::publish_snapshot(app, inner);
     }
 
-    /// The single funnel every state publication passes through (both
-    /// entry points above route here): refreshes the App-Nap activity —
+    /// The single authority for production status changes: every
+    /// `guard.status = ...` write outside tests routes through here. Owns,
+    /// in order, (1) generation validation, (2) the legal-move lattice,
+    /// (3) the caller's mutation plus the status write in one critical
+    /// section, and (4) publication through the funnel below (App-Nap
+    /// refresh included). Returns false — after a `log::warn!` — when the
+    /// move is stale or illegal, touching nothing; stale supervisors are
+    /// expected life, not bugs, so nothing panics.
+    ///
+    /// The lattice, derived from the production writers:
+    ///
+    /// * **Opening moves** — `start` and `stop` open the NEXT generation
+    ///   (`generation == current + 1`, installed here), which retires every
+    ///   in-flight worker of the old one:
+    ///   * `any → Starting` — `start` (first run and Retry from any state)
+    ///   * `any → Stopping` — `stop` while child handles are still held
+    ///   * `any → Idle` — `stop` with no children (idempotent stop)
+    /// * **Steady moves** — the caller acts under the current generation:
+    ///   * `Starting → Ready` — `complete_startup`
+    ///   * `Starting → Error` / `Ready → Error` — `fail_generation` (startup
+    ///     failures and the running watchdog)
+    ///   * `Stopping → Idle` — stop's teardown completion (a second `stop`
+    ///     racing that teardown re-opens as `any → Idle` above)
+    ///
+    /// Everything else is rejected: `Idle → Ready` (readiness is claimed
+    /// only from `starting`), `Ready → Starting` without a new generation
+    /// (a Retry must open one), `Stopping → Error` (a stopped generation
+    /// cannot fail — entering `stopping` already retired its supervisors).
+    fn transition<R: tauri::Runtime>(
+        app: &AppHandle<R>,
+        inner: &Arc<Mutex<SessionInner>>,
+        generation: u64,
+        to: SessionStatus,
+        mutate: impl FnOnce(&mut SessionInner),
+    ) -> bool {
+        let mut guard = inner.lock().unwrap_or_else(|e| e.into_inner());
+        let from = guard.status;
+        let opens_generation = generation == guard.generation + 1;
+        let steady = generation == guard.generation;
+        let legal = match (from, to) {
+            // start's reset path and stop's openings leave any status —
+            // but only by opening a new generation.
+            (_, SessionStatus::Starting) | (_, SessionStatus::Stopping) => opens_generation,
+            // stop's childless opening (any status, new generation) and
+            // stop's teardown completion (`stopping → idle` on the same
+            // generation the stop opened).
+            (_, SessionStatus::Idle) => {
+                opens_generation || (steady && from == SessionStatus::Stopping)
+            }
+            // complete_startup: readiness is claimed from `starting` only.
+            (SessionStatus::Starting, SessionStatus::Ready) => steady,
+            // fail_generation: the single failure exit, from startup or the
+            // running watchdog.
+            (SessionStatus::Starting, SessionStatus::Error)
+            | (SessionStatus::Ready, SessionStatus::Error) => steady,
+            _ => false,
+        };
+        if !legal {
+            log::warn!(
+                "Rejected session transition {from} → {to} \
+                 (generation {generation}, current {}): stale or illegal move",
+                guard.generation
+            );
+            return false;
+        }
+        mutate(&mut guard);
+        guard.status = to;
+        if opens_generation {
+            guard.generation = generation;
+        }
+        drop(guard);
+        Self::publish_snapshot(app, inner);
+        true
+    }
+
+    /// The single funnel every state publication passes through (`emit`,
+    /// `emit_static` and the transition authority above route here):
+    /// refreshes the App-Nap activity —
     /// hold one while the session is live, release it once idle/error
     /// settles (process_activity.rs) — snapshots under the lock, and
     /// emits `pnds:session`. Previously the App-Nap refresh was inlined
@@ -1278,41 +1344,50 @@ impl SessionManager {
     /// Boots scsynth on a fresh dynamic UDP port with K hardware output
     /// channels (§7.2) and waits for /status (§8 step 4). On failure the
     /// attempt is classified for the transient-crash gate (issue #92) and
-    /// the child is killed before returning; an unconfirmed kill keeps its
-    /// registry record so the next start's targeted cleanup can free the
-    /// audio device.
+    /// the child is shut down through the supervised §12 escalation; an
+    /// unconfirmed kill records the pid so the next start's targeted cleanup
+    /// can free the audio device.
     fn boot_scsynth(
         app_data_dir: &Path,
         sc_cfg: &crate::project::manifest::ScsynthConfig,
         k: u32,
         device: Option<&str>,
-    ) -> Result<(Child, u16), crate::project::audio::BootFailure> {
+    ) -> Result<(SupervisedChild, u16), crate::project::audio::BootFailure> {
         let port = allocate_udp_port().map_err(crate::project::audio::BootFailure::other)?;
         let binary = crate::project::audio::scsynth_binary_path()
             .map_err(crate::project::audio::BootFailure::other)?;
         let plugins = crate::project::audio::plugins_dir()
             .map_err(crate::project::audio::BootFailure::other)?;
+        // §12: the ownership record is DEFERRED until the boot proves
+        // healthy — a failed boot kills the child right here (below), and a
+        // concurrent preflight's orphan cleanup must not see a boot in
+        // flight. `shutdown` records on its own when a kill stays
+        // unconfirmed.
+        let registry = ChildRegistry::new(app_data_dir.to_path_buf());
+        let mut cmd =
+            crate::project::audio::scsynth_command(&binary, sc_cfg, k, port, &plugins, device);
         let mut child =
-            crate::project::audio::spawn_scsynth(&binary, sc_cfg, k, port, &plugins, device)
-                .map_err(crate::project::audio::BootFailure::other)?;
+            SupervisedChild::spawn_deferred(&registry, "scsynth-aarch64-apple-darwin", &mut cmd)
+                .map_err(|e| {
+                    crate::project::audio::BootFailure::other(format!(
+                        "Failed to start scsynth: {e}"
+                    ))
+                })?;
         let pid = child.id();
 
         let wait = match crate::project::audio::OscClient::connect(&format!("127.0.0.1:{port}")) {
-            Ok(client) => crate::project::audio::wait_for_scsynth(&client, &mut child),
+            Ok(client) => crate::project::audio::wait_for_scsynth(&client, child.child()),
             Err(e) => Err(crate::project::audio::BootWaitFailure::Osc(e)),
         };
         if let Err(wait_failure) = wait {
-            let failure = crate::project::audio::classify_boot_failure(&wait_failure, &mut child);
-            if !children::kill_escalate(&mut child, pid, children::SCSYNTH_SHUTDOWN_GRACE_WINDOW) {
-                // §12: record the unconfirmed kill so the next start's
-                // targeted orphan cleanup frees the audio device.
-                ChildRegistry::new(app_data_dir.to_path_buf())
-                    .record(pid, "scsynth-aarch64-apple-darwin".to_string());
-            }
+            let failure =
+                crate::project::audio::classify_boot_failure(&wait_failure, child.child());
+            // §12 bounded shutdown: an unconfirmed kill keeps (here:
+            // creates) the ownership record for the next start's cleanup.
+            child.shutdown(children::SCSYNTH_SHUTDOWN_GRACE_WINDOW);
             return Err(failure);
         }
-        ChildRegistry::new(app_data_dir.to_path_buf())
-            .record(pid, "scsynth-aarch64-apple-darwin".to_string());
+        child.register();
         log::info!(
             "scsynth ready on UDP port {port} (pid {pid}, device: {})",
             device.unwrap_or("system default")
@@ -1345,18 +1420,15 @@ impl SessionManager {
     ///
     /// The session-children record is only cleared for a **confirmed** kill;
     /// an unconfirmed one keeps its ownership record so the next start
-    /// re-runs the targeted orphan cleanup before its port preflight.
-    fn teardown_children(inner: &Arc<Mutex<SessionInner>>, app_data_dir: &Path) {
-        let registry = ChildRegistry::new(app_data_dir.to_path_buf());
-        let (node_child, node_pid, sc_child, sc_pid, sc_port, master_ready, log_generation) = {
+    /// re-runs the targeted orphan cleanup before its port preflight. Both
+    /// rules live in `SupervisedChild::shutdown` — teardown only sequences
+    /// the two children and mirrors the outcomes into the logs.
+    fn teardown_children(inner: &Arc<Mutex<SessionInner>>) {
+        let (node_child, sc_child, sc_port, master_ready, log_generation) = {
             let mut guard = inner.lock().unwrap_or_else(|e| e.into_inner());
-            let node_pid = guard.child.as_ref().map(|c| c.id());
-            let sc_pid = guard.scsynth.as_ref().map(|c| c.id());
             (
                 guard.child.take(),
-                node_pid,
                 guard.scsynth.take(),
-                sc_pid,
                 guard.scsynth_port.take(),
                 std::mem::take(&mut guard.master_synth_ready),
                 // Issue #93: teardown may only touch the log of the session
@@ -1371,13 +1443,10 @@ impl SessionManager {
         let had_children = node_child.is_some() || sc_child.is_some();
         Self::write_session_log_line(inner, log_generation, "Session ending — stopping processes");
 
-        if let Some(mut c) = node_child {
-            let pid = node_pid.unwrap_or(0);
+        if let Some(mut node) = node_child {
             Self::stop_child_and_log(
                 inner,
-                &registry,
-                &mut c,
-                pid,
+                &mut node,
                 children::SCORE_SERVER_SHUTDOWN_GRACE_WINDOW,
                 "Score server",
                 log_generation,
@@ -1385,7 +1454,6 @@ impl SessionManager {
         }
 
         if let Some(mut sc) = sc_child {
-            let pid = sc_pid.unwrap_or(0);
             if let Some(port) = sc_port {
                 if let Ok(client) =
                     crate::project::audio::OscClient::connect(&format!("127.0.0.1:{port}"))
@@ -1395,9 +1463,7 @@ impl SessionManager {
             }
             Self::stop_child_and_log(
                 inner,
-                &registry,
                 &mut sc,
-                pid,
                 children::SCSYNTH_SHUTDOWN_GRACE_WINDOW,
                 "scsynth",
                 log_generation,
@@ -1426,33 +1492,32 @@ impl SessionManager {
         }
     }
 
-    /// Issue #93: kills one child through the §12 escalation and mirrors
-    /// the outcome into both the App log and the session log (gated on
-    /// `log_generation` so a concurrent newer session's log is never
-    /// touched). The session-children record is only cleared for a
-    /// **confirmed** kill; an unconfirmed one keeps its ownership record so
-    /// the next start re-runs the targeted orphan cleanup.
-    #[allow(clippy::too_many_arguments)]
+    /// Issue #93: shuts one child down through the supervised §12 escalation
+    /// and mirrors the outcome into both the App log and the session log
+    /// (gated on `log_generation` so a concurrent newer session's log is
+    /// never touched). The registry discipline (clear on confirm, keep on
+    /// unconfirmed) is `SupervisedChild::shutdown`'s own.
     fn stop_child_and_log(
         inner: &Arc<Mutex<SessionInner>>,
-        registry: &ChildRegistry,
-        child: &mut Child,
-        pid: u32,
+        child: &mut SupervisedChild,
         window: std::time::Duration,
         label: &str,
         log_generation: Option<u64>,
     ) {
-        let line = if children::kill_escalate(child, pid, window) {
-            registry.clear(pid);
-            log::info!("{label} stopped (pid {pid})");
-            format!("{label} stopped (pid {pid})")
-        } else {
-            log::warn!(
-                "{label} (pid {pid}) could not be confirmed dead; keeping its ownership record for the next start"
-            );
-            format!(
-                "{label} (pid {pid}) could not be confirmed dead; keeping its ownership record for the next start"
-            )
+        let pid = child.id();
+        let line = match child.shutdown(window) {
+            ShutdownOutcome::Confirmed => {
+                log::info!("{label} stopped (pid {pid})");
+                format!("{label} stopped (pid {pid})")
+            }
+            ShutdownOutcome::Unconfirmed => {
+                log::warn!(
+                    "{label} (pid {pid}) could not be confirmed dead; keeping its ownership record for the next start"
+                );
+                format!(
+                    "{label} (pid {pid}) could not be confirmed dead; keeping its ownership record for the next start"
+                )
+            }
         };
         Self::write_session_log_line(inner, log_generation, &line);
     }
@@ -1478,37 +1543,50 @@ impl SessionManager {
     ///
     /// NOTE: never call `emit` while holding the inner lock — `emit` takes a
     /// snapshot, which locks again (std Mutex is not reentrant → deadlock).
-    pub fn stop<R: tauri::Runtime>(
-        &self,
-        app: &AppHandle<R>,
-        app_data_dir: &Path,
-    ) -> Result<(), String> {
-        {
-            let mut inner = self.lock();
-            inner.generation += 1;
-            if inner.child.is_none() && inner.scsynth.is_none() {
+    pub fn stop<R: tauri::Runtime>(&self, app: &AppHandle<R>) -> Result<(), String> {
+        let (generation, had_children) = {
+            let guard = self.lock();
+            (
+                guard.generation + 1,
+                guard.child.is_some() || guard.scsynth.is_some(),
+            )
+        };
+        // The opening move: `any → Stopping` while child handles are still
+        // held (clearing mode/ip so the frontend's ??-guard preserves the
+        // user's pending selection across the stop barrier), or the direct
+        // `any → Idle` of an idempotent stop. Either way a new generation
+        // opens, retiring every supervisor of the old one.
+        if had_children {
+            Self::transition(
+                app,
+                &self.inner,
+                generation,
+                SessionStatus::Stopping,
+                |inner| {
+                    inner.audio_mode = None;
+                    inner.lan_ip = None;
+                    inner.host_address = None;
+                },
+            );
+        } else {
+            Self::transition(app, &self.inner, generation, SessionStatus::Idle, |inner| {
                 inner.reset_run_state();
-                inner.status = SessionStatus::Idle;
-            } else {
-                inner.status = SessionStatus::Stopping;
-                // Clear mode/ip so the frontend's ??-guard preserves the
-                // user's pending selection across the stop barrier.
-                inner.audio_mode = None;
-                inner.lan_ip = None;
-                inner.host_address = None;
-            }
+            });
         }
-        self.emit(app);
 
         let inner = Arc::clone(&self.inner);
-        Self::teardown_children(&inner, app_data_dir);
+        Self::teardown_children(&inner);
 
-        {
-            let mut guard = self.lock();
-            guard.reset_run_state();
-            guard.status = SessionStatus::Idle;
+        // The completion move closes `stopping` on the generation this stop
+        // opened. If a start interleaved during the kill windows, the
+        // generation has moved and this is rejected — a dying stop must
+        // never overwrite the retry that replaced it (the same §12 rule
+        // `fail_generation` upholds for dying supervisors).
+        if had_children {
+            Self::transition(app, &self.inner, generation, SessionStatus::Idle, |inner| {
+                inner.reset_run_state();
+            });
         }
-        self.emit(app);
         Ok(())
     }
 
@@ -1605,6 +1683,15 @@ fn health_error_message(health: &HealthPayload) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A supervised `sleep` child recorded in `dir`'s registry — the test
+    /// stand-in for a session child (node score server / scsynth).
+    fn supervised_sleep(dir: &Path, seconds: u32) -> SupervisedChild {
+        let registry = ChildRegistry::new(dir.to_path_buf());
+        let mut cmd = Command::new("sleep");
+        cmd.arg(seconds.to_string());
+        SupervisedChild::spawn(&registry, format!("sleep {seconds}"), &mut cmd).unwrap()
+    }
 
     #[test]
     fn env_internal_injects_osc_bus_and_channels() {
@@ -1899,11 +1986,10 @@ mod tests {
         // mount the real event set on the mock app.
         crate::events::events_builder().mount_events(&app);
         let manager = SessionManager::default();
-        let dir = tempfile::tempdir().unwrap();
-        manager.stop(&app, dir.path()).unwrap();
+        manager.stop(&app).unwrap();
         assert_eq!(manager.snapshot().status, SessionStatus::Idle);
         // Idempotent: a second stop is fine too.
-        manager.stop(&app, dir.path()).unwrap();
+        manager.stop(&app).unwrap();
     }
 
     #[test]
@@ -1915,16 +2001,17 @@ mod tests {
         let manager = SessionManager::default();
         let dir = tempfile::tempdir().unwrap();
 
-        let child = Command::new("sleep").arg("30").spawn().unwrap();
-        let pid = child.id();
-        {
+        let pid = {
             let mut inner = manager.lock();
+            let child = supervised_sleep(dir.path(), 30);
+            let pid = child.id();
             inner.child = Some(child);
             inner.status = SessionStatus::Ready;
-        }
+            pid
+        };
         assert!(manager.has_active_session());
 
-        manager.stop(&app, dir.path()).unwrap();
+        manager.stop(&app).unwrap();
 
         assert!(!manager.has_active_session());
         assert_eq!(manager.snapshot().status, SessionStatus::Idle);
@@ -1950,18 +2037,19 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         assert!(manager.active_child_pids().is_empty());
 
-        let node = Command::new("sleep").arg("30").spawn().unwrap();
-        let scsynth = Command::new("sleep").arg("31").spawn().unwrap();
-        let expected: HashSet<u32> = [node.id(), scsynth.id()].into_iter().collect();
-        {
+        let expected: HashSet<u32> = {
             let mut inner = manager.lock();
+            let node = supervised_sleep(dir.path(), 30);
+            let scsynth = supervised_sleep(dir.path(), 31);
+            let expected: HashSet<u32> = [node.id(), scsynth.id()].into_iter().collect();
             inner.child = Some(node);
             inner.scsynth = Some(scsynth);
             inner.status = SessionStatus::Ready;
-        }
+            expected
+        };
         assert_eq!(manager.active_child_pids(), expected);
 
-        manager.stop(&app, dir.path()).unwrap();
+        manager.stop(&app).unwrap();
         assert!(manager.active_child_pids().is_empty());
     }
 
@@ -1973,18 +2061,19 @@ mod tests {
         let manager = SessionManager::default();
         let dir = tempfile::tempdir().unwrap();
 
-        let child = Command::new("sleep").arg("30").spawn().unwrap();
-        let pid = child.id();
-        {
+        let pid = {
             let mut inner = manager.lock();
+            let child = supervised_sleep(dir.path(), 30);
+            let pid = child.id();
             inner.child = Some(child);
             inner.status = SessionStatus::Error;
-        }
+            pid
+        };
 
         // Simulate the supervisor's failure path: teardown, then the
         // error snapshot.
         let inner = std::sync::Arc::clone(&manager.inner);
-        SessionManager::teardown_children(&inner, dir.path());
+        SessionManager::teardown_children(&inner);
 
         let snapshot = manager.snapshot();
         assert_eq!(snapshot.status, SessionStatus::Error);
@@ -2010,8 +2099,8 @@ mod tests {
         let manager = SessionManager::default();
         let dir = tempfile::tempdir().unwrap();
 
-        let node = Command::new("sleep").arg("30").spawn().unwrap();
-        let scsynth = Command::new("sleep").arg("30").spawn().unwrap();
+        let node = supervised_sleep(dir.path(), 30);
+        let scsynth = supervised_sleep(dir.path(), 30);
         let (node_pid, sc_pid) = (node.id(), scsynth.id());
         let generation = {
             let mut inner = manager.lock();
@@ -2028,7 +2117,6 @@ mod tests {
         SessionManager::fail_generation(
             &app,
             &inner,
-            dir.path(),
             generation,
             "Timed out waiting for the project to report ready (30s).".to_string(),
         );
@@ -2068,7 +2156,6 @@ mod tests {
         // mount the real event set on the mock app.
         crate::events::events_builder().mount_events(&app);
         let manager = SessionManager::default();
-        let dir = tempfile::tempdir().unwrap();
         let generation = {
             let mut inner = manager.lock();
             inner.generation += 1;
@@ -2081,16 +2168,11 @@ mod tests {
 
         let inner = std::sync::Arc::clone(&manager.inner);
         let observed = std::sync::Mutex::new(SessionStatus::Idle);
-        let reached_ready = SessionManager::complete_startup(
-            &app,
-            &inner,
-            dir.path(),
-            generation,
-            |_port, _k, _b, _gain| {
+        let reached_ready =
+            SessionManager::complete_startup(&app, &inner, generation, |_port, _k, _b, _gain| {
                 *observed.lock().unwrap() = manager.lock().status;
                 Ok(())
-            },
-        );
+            });
 
         assert!(reached_ready);
         assert_eq!(
@@ -2113,7 +2195,6 @@ mod tests {
         // mount the real event set on the mock app.
         crate::events::events_builder().mount_events(&app);
         let manager = SessionManager::default();
-        let dir = tempfile::tempdir().unwrap();
         let generation = {
             let mut inner = manager.lock();
             inner.generation += 1;
@@ -2125,13 +2206,10 @@ mod tests {
         };
 
         let inner = std::sync::Arc::clone(&manager.inner);
-        let reached_ready = SessionManager::complete_startup(
-            &app,
-            &inner,
-            dir.path(),
-            generation,
-            |_port, _k, _b, _gain| Err("synthdef load timed out".to_string()),
-        );
+        let reached_ready =
+            SessionManager::complete_startup(&app, &inner, generation, |_port, _k, _b, _gain| {
+                Err("synthdef load timed out".to_string())
+            });
 
         assert!(!reached_ready);
         let snapshot = manager.snapshot();
@@ -2153,7 +2231,6 @@ mod tests {
         // mount the real event set on the mock app.
         crate::events::events_builder().mount_events(&app);
         let manager = SessionManager::default();
-        let dir = tempfile::tempdir().unwrap();
         let generation = {
             let mut inner = manager.lock();
             inner.generation += 1;
@@ -2163,13 +2240,10 @@ mod tests {
         };
 
         let inner = std::sync::Arc::clone(&manager.inner);
-        let reached_ready = SessionManager::complete_startup(
-            &app,
-            &inner,
-            dir.path(),
-            generation,
-            |_port, _k, _b, _gain| panic!("none mode must not touch scsynth"),
-        );
+        let reached_ready =
+            SessionManager::complete_startup(&app, &inner, generation, |_port, _k, _b, _gain| {
+                panic!("none mode must not touch scsynth")
+            });
 
         assert!(reached_ready);
         let snapshot = manager.snapshot();
@@ -2187,7 +2261,6 @@ mod tests {
         // mount the real event set on the mock app.
         crate::events::events_builder().mount_events(&app);
         let manager = SessionManager::default();
-        let dir = tempfile::tempdir().unwrap();
 
         let stale_generation = {
             let mut inner = manager.lock();
@@ -2206,7 +2279,6 @@ mod tests {
         SessionManager::fail_generation(
             &app,
             &inner,
-            dir.path(),
             stale_generation,
             "stale supervisor error".to_string(),
         );
@@ -2215,6 +2287,199 @@ mod tests {
         assert_eq!(snapshot.status, SessionStatus::Starting);
         assert_eq!(snapshot.error, None);
         assert_eq!(snapshot.startup_stage, 2);
+    }
+
+    /// A mock app with the real event set mounted plus a typed
+    /// `SessionSnapshotEvent` recorder. Tauri's Rust listeners live in the
+    /// app manager — runtime-agnostic — and are invoked synchronously
+    /// during emit, so a committed transition's snapshot is already in the
+    /// vec by the time the call returns.
+    fn app_with_snapshot_recorder() -> (
+        tauri::AppHandle<tauri::test::MockRuntime>,
+        Arc<Mutex<Vec<SessionSnapshot>>>,
+    ) {
+        let app = tauri::test::mock_app().handle().clone();
+        // tauri-specta emits resolve their registry entry at call time;
+        // mount the real event set on the mock app.
+        crate::events::events_builder().mount_events(&app);
+        let received: Arc<Mutex<Vec<SessionSnapshot>>> = Arc::new(Mutex::new(Vec::new()));
+        let sink = Arc::clone(&received);
+        crate::events::SessionSnapshotEvent::listen_any(&app, move |event| {
+            sink.lock().unwrap().push(event.payload.snapshot);
+        });
+        (app, received)
+    }
+
+    /// The production lattice: every legal move commits — the status lands,
+    /// the mutation ran, and an opening move installed the new generation
+    /// it acted on. `true` = the move opens the next generation (start,
+    /// stop); `false` = a steady move under the current one.
+    #[test]
+    fn transition_commits_every_legal_production_move() {
+        let (app, _received) = app_with_snapshot_recorder();
+        let cases: &[(SessionStatus, SessionStatus, bool)] = &[
+            // start's reset path: any status → Starting on a new generation.
+            (SessionStatus::Idle, SessionStatus::Starting, true),
+            (SessionStatus::Starting, SessionStatus::Starting, true),
+            (SessionStatus::Ready, SessionStatus::Starting, true),
+            (SessionStatus::Error, SessionStatus::Starting, true),
+            (SessionStatus::Stopping, SessionStatus::Starting, true),
+            // complete_startup.
+            (SessionStatus::Starting, SessionStatus::Ready, false),
+            // fail_generation from startup and from the running watchdog.
+            (SessionStatus::Starting, SessionStatus::Error, false),
+            (SessionStatus::Ready, SessionStatus::Error, false),
+            // stop's opening with children held.
+            (SessionStatus::Idle, SessionStatus::Stopping, true),
+            (SessionStatus::Starting, SessionStatus::Stopping, true),
+            (SessionStatus::Ready, SessionStatus::Stopping, true),
+            (SessionStatus::Error, SessionStatus::Stopping, true),
+            // stop's opening without children (idempotent stop).
+            (SessionStatus::Idle, SessionStatus::Idle, true),
+            (SessionStatus::Error, SessionStatus::Idle, true),
+            // stop's teardown completion, and a second stop racing it.
+            (SessionStatus::Stopping, SessionStatus::Idle, false),
+            (SessionStatus::Stopping, SessionStatus::Idle, true),
+        ];
+        for &(from, to, opens_generation) in cases {
+            let manager = SessionManager::default();
+            let generation = {
+                let mut inner = manager.lock();
+                inner.status = from;
+                inner.generation + u64::from(opens_generation)
+            };
+            let committed =
+                SessionManager::transition(&app, &manager.inner, generation, to, |inner| {
+                    inner.output_tail.push_back("mutated".to_string())
+                });
+            assert!(committed, "{from} → {to} is a legal production move");
+            let guard = manager.lock();
+            assert_eq!(guard.status, to, "{from} → {to}");
+            assert_eq!(guard.generation, generation, "{from} → {to}");
+            assert_eq!(
+                guard.output_tail.back().map(String::as_str),
+                Some("mutated"),
+                "{from} → {to}: the mutation must run"
+            );
+        }
+    }
+
+    /// Everything off the lattice is rejected and logged: no status write,
+    /// no mutation, no publication. The last two cases pin the generation
+    /// discipline — readiness is claimed under the CURRENT generation, and
+    /// a Retry MUST open a new one (Ready → Starting same generation is the
+    /// stale-supervisor shape).
+    #[test]
+    fn transition_rejects_illegal_moves_and_touches_nothing() {
+        let (app, received) = app_with_snapshot_recorder();
+        // (from, to, generation offset from the current one)
+        let cases: &[(SessionStatus, SessionStatus, u64)] = &[
+            (SessionStatus::Idle, SessionStatus::Ready, 0),
+            (SessionStatus::Idle, SessionStatus::Error, 0),
+            (SessionStatus::Error, SessionStatus::Ready, 0),
+            (SessionStatus::Error, SessionStatus::Error, 0),
+            (SessionStatus::Stopping, SessionStatus::Error, 0),
+            (SessionStatus::Stopping, SessionStatus::Ready, 0),
+            (SessionStatus::Ready, SessionStatus::Ready, 0),
+            (SessionStatus::Ready, SessionStatus::Idle, 0),
+            // A Retry that did not open a new generation.
+            (SessionStatus::Ready, SessionStatus::Starting, 0),
+            // A steady move claiming the NEXT generation.
+            (SessionStatus::Starting, SessionStatus::Ready, 1),
+        ];
+        for &(from, to, offset) in cases {
+            let manager = SessionManager::default();
+            {
+                let mut inner = manager.lock();
+                inner.status = from;
+            }
+            let generation = manager.lock().generation + offset;
+            let committed =
+                SessionManager::transition(&app, &manager.inner, generation, to, |inner| {
+                    inner.output_tail.push_back("must not run".to_string())
+                });
+            assert!(
+                !committed,
+                "{from} → {to} (generation +{offset}) must be rejected"
+            );
+            let guard = manager.lock();
+            assert_eq!(
+                guard.status, from,
+                "{from} → {to}: the state must be untouched"
+            );
+            assert!(
+                guard.output_tail.is_empty(),
+                "{from} → {to}: the mutation must not run"
+            );
+        }
+        assert!(
+            received.lock().unwrap().is_empty(),
+            "a rejected transition must not publish"
+        );
+    }
+
+    /// A stale generation is the expected life of superseded supervisor
+    /// threads: the move is a no-op — no status change, no mutation, no
+    /// publication — whatever the target.
+    #[test]
+    fn transition_with_a_stale_generation_is_a_noop() {
+        let (app, received) = app_with_snapshot_recorder();
+        let manager = SessionManager::default();
+        {
+            let mut inner = manager.lock();
+            inner.generation = 8;
+            inner.status = SessionStatus::Starting;
+        }
+        // One behind: the supervisor's captured generation.
+        assert!(!SessionManager::transition(
+            &app,
+            &manager.inner,
+            7,
+            SessionStatus::Ready,
+            |inner| inner.startup_stage = 4,
+        ));
+        // Skipping ahead is just as stale: generations only advance by one.
+        assert!(!SessionManager::transition(
+            &app,
+            &manager.inner,
+            10,
+            SessionStatus::Starting,
+            |_| {},
+        ));
+        let guard = manager.lock();
+        assert_eq!(guard.status, SessionStatus::Starting);
+        assert_eq!(guard.generation, 8);
+        assert_eq!(guard.startup_stage, 0);
+        drop(guard);
+        assert!(
+            received.lock().unwrap().is_empty(),
+            "a stale transition must not publish"
+        );
+    }
+
+    /// A committed transition publishes exactly one snapshot, through the
+    /// same funnel as every other publication, carrying the new status and
+    /// the mutation's fields.
+    #[test]
+    fn committed_transition_publishes_exactly_one_snapshot() {
+        let (app, received) = app_with_snapshot_recorder();
+        let manager = SessionManager::default();
+        {
+            let mut inner = manager.lock();
+            inner.generation = 3;
+            inner.status = SessionStatus::Starting;
+        }
+        assert!(SessionManager::transition(
+            &app,
+            &manager.inner,
+            3,
+            SessionStatus::Ready,
+            |inner| inner.startup_stage = 4,
+        ));
+        let events = received.lock().unwrap();
+        assert_eq!(events.len(), 1, "one committed transition, one snapshot");
+        assert_eq!(events[0].status, SessionStatus::Ready);
+        assert_eq!(events[0].startup_stage, 4);
     }
 
     /// §12: `start` opens a new generation before it does any work — the
@@ -2456,17 +2721,19 @@ mod tests {
         // ready, and only then keeps running — so the teardown SIGTERM
         // always arrives at an armed, listening process (exactly like the
         // real score server; a bare `echo` would race the signal and lose).
-        let mut child = Command::new("/bin/sh")
-            .arg("-c")
-            .arg(
-                "trap 'echo shutting-down; exit 0' TERM; echo ready; \
+        let mut child = {
+            let registry = ChildRegistry::new(dir.path().to_path_buf());
+            let mut cmd = Command::new("/bin/sh");
+            cmd.arg("-c")
+                .arg(
+                    "trap 'echo shutting-down; exit 0' TERM; echo ready; \
                  while :; do sleep 0.1; done",
-            )
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .unwrap();
-        let reader = manager.spawn_output_reader(child.stdout.take().unwrap(), "node", 3);
+                )
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped());
+            SupervisedChild::spawn(&registry, "graceful-shutdown-fixture", &mut cmd).unwrap()
+        };
+        let reader = manager.spawn_output_reader(child.child().stdout.take().unwrap(), "node", 3);
         {
             let mut inner = manager.lock();
             inner.status = SessionStatus::Stopping;
@@ -2489,7 +2756,7 @@ mod tests {
         }
 
         let inner = std::sync::Arc::clone(&manager.inner);
-        SessionManager::teardown_children(&inner, dir.path());
+        SessionManager::teardown_children(&inner);
         reader.join().unwrap();
 
         {
@@ -2608,27 +2875,18 @@ mod tests {
         ))
         .unwrap();
 
-        let generation = {
-            let child = Command::new("sleep").arg("30").spawn().unwrap();
+        let (pid, generation) = {
             let mut inner = manager.lock();
+            let child = supervised_sleep(dir.path(), 30);
+            let pid = child.id();
             inner.generation += 1;
             inner.status = SessionStatus::Starting;
             inner.startup_stage = 3;
             inner.child = Some(child);
-            inner.generation
-        };
-        let pid = {
-            let guard = manager.lock();
-            guard.child.as_ref().unwrap().id()
+            (pid, inner.generation)
         };
 
-        manager.spawn_supervisor(
-            app.clone(),
-            dir.path().to_path_buf(),
-            pid,
-            manifest,
-            generation,
-        );
+        manager.spawn_supervisor(app.clone(), pid, manifest, generation);
 
         let deadline = Instant::now() + Duration::from_secs(10);
         loop {
@@ -2655,7 +2913,7 @@ mod tests {
             Some("ready")
         );
 
-        manager.stop(&app, dir.path()).unwrap();
+        manager.stop(&app).unwrap();
         assert_eq!(manager.snapshot().status, SessionStatus::Idle);
         assert!(!manager.has_active_session());
     }

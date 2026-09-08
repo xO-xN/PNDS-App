@@ -2,6 +2,13 @@
 //! audio-server (scsynth) processes. Owns the session-children bookkeeping
 //! (§12) and the SIGTERM → grace → SIGKILL escalation policy.
 //!
+//! `SupervisedChild` bundles the whole owned-child lifecycle — spawn (with
+//! the §12 ownership record) → supervise (poll) → bounded shutdown — so the
+//! escalation policy and its registry discipline are written once; session
+//! children (node score server, scsynth) are held as this type.
+//! `terminate_pid_escalate` is the same escalation for foreign processes
+//! the App holds no Child handle of (port release, orphan cleanup).
+//!
 //! Formerly these responsibilities were split between `session.rs`
 //! (`stop_child_gracefully` + record calls) and `preflight.rs`
 //! (`terminate`, `process_alive`, the orphan registry).
@@ -113,6 +120,9 @@ pub(crate) fn process_command_line(pid: u32) -> Option<String> {
 // Child registry
 // ---------------------------------------------------------------------------
 
+/// Cheap to clone (a directory path) so a `SupervisedChild` can carry its
+/// own registry handle from spawn to shutdown.
+#[derive(Clone)]
 pub struct ChildRegistry {
     dir: PathBuf,
 }
@@ -269,6 +279,123 @@ pub(crate) fn wait_until_gone(pid: u32, timeout: Duration) -> bool {
     }
 }
 
+// ---------------------------------------------------------------------------
+// SupervisedChild: spawn → supervise → bounded shutdown, written once
+// ---------------------------------------------------------------------------
+
+/// §12 outcome of [`SupervisedChild::shutdown`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShutdownOutcome {
+    /// The child was reaped — provably gone. The ownership record (if any)
+    /// is removed from the registry.
+    Confirmed,
+    /// The child ignored SIGTERM and could not be confirmed dead after
+    /// SIGKILL. The ownership record is KEPT (created for a never-registered
+    /// child) so the next start re-runs the targeted orphan cleanup before
+    /// its port preflight.
+    Unconfirmed,
+}
+
+/// One child process the App owns and must clean up: spawn → supervise →
+/// bounded shutdown, with the §12 registry discipline attached. Session-side
+/// children (node score server, scsynth) are held as this type so the kill
+/// policy and the record-keeping rule exist exactly here.
+pub struct SupervisedChild {
+    child: Child,
+    pid: u32,
+    registry: ChildRegistry,
+    marker: String,
+    registered: bool,
+}
+
+impl SupervisedChild {
+    /// Spawns `cmd` and records ownership immediately (§12): if the App
+    /// dies, the next launch's targeted cleanup finds the pid + marker.
+    pub fn spawn(
+        registry: &ChildRegistry,
+        marker: impl Into<String>,
+        cmd: &mut Command,
+    ) -> std::io::Result<Self> {
+        let mut supervised = Self::spawn_deferred(registry, marker, cmd)?;
+        supervised.register();
+        Ok(supervised)
+    }
+
+    /// Spawns `cmd` WITHOUT the ownership record — for boots whose record
+    /// must wait until the process proves healthy (scsynth: a failed boot
+    /// kills the child itself, so only a live process earns a record; a
+    /// concurrent preflight's orphan cleanup must not see a boot in flight).
+    /// Call [`register`](Self::register) once it has; an unconfirmed
+    /// [`shutdown`](Self::shutdown) records on its own — a corpse still owns
+    /// its port / audio device.
+    pub fn spawn_deferred(
+        registry: &ChildRegistry,
+        marker: impl Into<String>,
+        cmd: &mut Command,
+    ) -> std::io::Result<Self> {
+        let child = cmd.spawn()?;
+        let pid = child.id();
+        Ok(Self {
+            child,
+            pid,
+            registry: registry.clone(),
+            marker: marker.into(),
+            registered: false,
+        })
+    }
+
+    /// Writes the ownership record now (idempotent).
+    pub fn register(&mut self) {
+        if !self.registered {
+            self.registry.record(self.pid, self.marker.clone());
+            self.registered = true;
+        }
+    }
+
+    /// §12 bounded shutdown: SIGTERM → grace window → SIGKILL → confirm.
+    /// `Confirmed` drops the ownership record; `Unconfirmed` keeps it.
+    pub fn shutdown(&mut self, window: Duration) -> ShutdownOutcome {
+        let outcome = if kill_escalate(&mut self.child, self.pid, window) {
+            ShutdownOutcome::Confirmed
+        } else {
+            ShutdownOutcome::Unconfirmed
+        };
+        self.settle_registry(outcome);
+        outcome
+    }
+
+    /// The §12 record-keeping rule as one unit, so the outcome → registry
+    /// mapping is testable without faking a SIGKILL-proof process:
+    /// `Confirmed` clears the record; `Unconfirmed` keeps it — creating one
+    /// for a never-registered child (a boot whose health wait failed).
+    fn settle_registry(&mut self, outcome: ShutdownOutcome) {
+        match outcome {
+            ShutdownOutcome::Confirmed => {
+                if self.registered {
+                    self.registry.clear(self.pid);
+                }
+            }
+            ShutdownOutcome::Unconfirmed => self.register(),
+        }
+    }
+
+    pub fn id(&self) -> u32 {
+        self.pid
+    }
+
+    /// Non-blocking reap poll — the supervisor / watchdog exit checks.
+    pub fn try_wait(&mut self) -> std::io::Result<Option<std::process::ExitStatus>> {
+        self.child.try_wait()
+    }
+
+    /// The raw handle, for what only it can do (taking the stdout/stderr
+    /// pipes, handing the live child to a health waiter). Escalation stays
+    /// here.
+    pub fn child(&mut self) -> &mut Child {
+        &mut self.child
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -401,5 +528,107 @@ mod tests {
         let remaining = reg.read().unwrap();
         assert_eq!(remaining.len(), 1);
         assert_eq!(remaining[0].pid, 5678);
+    }
+
+    // --- SupervisedChild -----------------------------------------------------
+
+    /// §12: shutdown of a live child is Confirmed and clears the ownership
+    /// record `spawn` wrote.
+    #[test]
+    fn supervised_shutdown_confirms_and_clears_the_record() {
+        let dir = tempfile::tempdir().unwrap();
+        let reg = ChildRegistry::new(dir.path().to_path_buf());
+        let mut cmd = Command::new("sleep");
+        cmd.arg("30");
+        let mut child = SupervisedChild::spawn(&reg, "sleep 30", &mut cmd).unwrap();
+        let pid = child.id();
+        assert_eq!(reg.read().unwrap().len(), 1, "spawn records ownership");
+
+        assert_eq!(
+            child.shutdown(Duration::from_secs(2)),
+            ShutdownOutcome::Confirmed
+        );
+        assert!(!process_alive(pid));
+        assert!(
+            reg.read().unwrap().is_empty(),
+            "a confirmed kill clears the record"
+        );
+    }
+
+    /// `kill_escalate`'s first `try_wait` already sees an exited child, so an
+    /// already-exited child shuts down Confirmed — and its record clears.
+    #[test]
+    fn supervised_shutdown_of_an_already_exited_child_is_confirmed() {
+        let dir = tempfile::tempdir().unwrap();
+        let reg = ChildRegistry::new(dir.path().to_path_buf());
+        let mut cmd = Command::new("sleep");
+        cmd.arg("0");
+        let mut child = SupervisedChild::spawn_deferred(&reg, "sleep 0", &mut cmd).unwrap();
+        let _ = child.child().wait(); // exited AND reaped before shutdown
+        assert!(
+            reg.read().unwrap().is_empty(),
+            "deferred spawn records nothing"
+        );
+        child.register();
+
+        assert_eq!(
+            child.shutdown(Duration::from_secs(2)),
+            ShutdownOutcome::Confirmed
+        );
+        assert!(reg.read().unwrap().is_empty());
+    }
+
+    /// §12 record-keeping, unit-tested at its own seam: no honest
+    /// short-lived process can be made to survive SIGKILL, so each outcome
+    /// is mapped onto a registered / deferred child directly instead of
+    /// faking the kill itself.
+    #[test]
+    fn unconfirmed_shutdown_keeps_or_creates_the_ownership_record() {
+        let dir = tempfile::tempdir().unwrap();
+        let reg = ChildRegistry::new(dir.path().to_path_buf());
+
+        // Registered + Unconfirmed → the record survives.
+        let mut cmd = Command::new("sleep");
+        cmd.arg("0");
+        let mut registered = SupervisedChild::spawn(&reg, "sleep 0", &mut cmd).unwrap();
+        registered.settle_registry(ShutdownOutcome::Unconfirmed);
+        assert_eq!(reg.read().unwrap().len(), 1);
+
+        // Never registered + Unconfirmed → the record is CREATED: an
+        // unconfirmable corpse still owns its port / audio device, and the
+        // next start must retry the cleanup.
+        let mut cmd = Command::new("sleep");
+        cmd.arg("0");
+        let mut deferred = SupervisedChild::spawn_deferred(&reg, "sleep 0", &mut cmd).unwrap();
+        deferred.settle_registry(ShutdownOutcome::Unconfirmed);
+        assert_eq!(reg.read().unwrap().len(), 2);
+
+        // Never registered + Confirmed → still no record (nothing to clear).
+        let mut cmd = Command::new("sleep");
+        cmd.arg("0");
+        let mut clean = SupervisedChild::spawn_deferred(&reg, "sleep 0", &mut cmd).unwrap();
+        clean.settle_registry(ShutdownOutcome::Confirmed);
+        assert_eq!(reg.read().unwrap().len(), 2);
+
+        let _ = registered.child().wait();
+        let _ = deferred.child().wait();
+        let _ = clean.child().wait();
+    }
+
+    /// §12 pid-based escalation for a foreign process the App holds no Child
+    /// handle of (the port-release shape). Spawned detached — re-parented to
+    /// launchd — so this test truly owns no handle, and the killed orphan is
+    /// reaped by init rather than zombified under the test (a forgotten
+    /// direct child would zombie, and `kill -0` would keep reporting it
+    /// alive, lying about the outcome).
+    #[test]
+    fn terminate_pid_escalate_kills_a_process_without_a_handle() {
+        let out = Command::new("/bin/sh")
+            .args(["-c", "sleep 41 >/dev/null 2>&1 & echo $!"])
+            .output()
+            .unwrap();
+        let pid: u32 = String::from_utf8_lossy(&out.stdout).trim().parse().unwrap();
+        assert!(terminate_pid_escalate(pid, ORPHAN_GRACE_WINDOW));
+        assert!(!process_alive(pid));
     }
 }

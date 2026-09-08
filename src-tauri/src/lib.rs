@@ -382,10 +382,8 @@ pub fn run() {
                 {
                     let session = app_handle.state::<crate::project::session::SessionManager>();
                     if session.has_active_session() {
-                        if let Ok(dir) = commands::project::app_data_dir(app_handle) {
-                            if let Err(e) = session.stop(app_handle, &dir) {
-                                log::warn!("Failed to stop score server on exit: {e}");
-                            }
+                        if let Err(e) = session.stop(app_handle) {
+                            log::warn!("Failed to stop score server on exit: {e}");
                         }
                     }
                 }
@@ -398,10 +396,8 @@ pub fn run() {
                 {
                     let session = app_handle.state::<crate::project::session::SessionManager>();
                     if session.has_active_session() {
-                        if let Ok(dir) = commands::project::app_data_dir(app_handle) {
-                            if let Err(e) = session.stop(app_handle, &dir) {
-                                log::warn!("Failed to stop score server on exit: {e}");
-                            }
+                        if let Err(e) = session.stop(app_handle) {
+                            log::warn!("Failed to stop score server on exit: {e}");
                         }
                     }
                 }

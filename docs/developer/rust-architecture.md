@@ -28,7 +28,7 @@ src-tauri/src/
     ├── preflight.rs    # Dependency + port availability checks
     ├── bundle.rs       # .pnds zip pack/install/reclaim service
     ├── session.rs      # SessionManager (Rust source of truth)
-    ├── children.rs     # Child process registry + orphan cleanup
+    ├── children.rs     # SupervisedChild lifecycle + registry + orphan cleanup
     ├── ports.rs        # Port occupancy / release (lsof + SIGTERM→SIGKILL)
     ├── audio.rs        # CoreAudio capabilities + scsynth bridge
     ├── logs.rs         # Per-session logs
@@ -87,6 +87,51 @@ plan and OSC target of a start) live on the same record as `Option` fields
 the inner layers fill in, so the deepest helpers (like env construction)
 read everything from the record alone. New inputs become record fields
 without widening any signature.
+
+## Supervised Child Processes (children.rs)
+
+Any child process the App owns and must clean up is a
+`SupervisedChild` — spawn (with the §12 ownership record) → supervise
+(`try_wait` polling) → bounded shutdown (`SIGTERM → grace → SIGKILL →
+confirm`), with the registry discipline attached: a **confirmed** kill
+clears the ownership record; an **unconfirmed** one keeps it (creating
+it for a never-registered child) so the next start's targeted orphan
+cleanup retries. Never re-assemble the escalation by hand at a call
+site:
+
+- Ownership record at spawn is the default (`SupervisedChild::spawn`).
+  Use `spawn_deferred` + `register()` only when the record must wait
+  for the child to prove healthy (scsynth boot: a concurrent
+  preflight's orphan cleanup must not see a boot in flight).
+- Foreign processes the App holds no `Child` handle of (port release,
+  orphan cleanup) use `terminate_pid_escalate` — the same escalation
+  policy, no registry.
+- A run-to-completion compile with output capture (sclang in
+  `synthdef.rs`) is a different lifecycle shape and deliberately stays
+  on plain `Command` — don't force it into `SupervisedChild`.
+
+## Session State Machine (session.rs)
+
+Every production `SessionStatus` write goes through one private
+`SessionManager::transition` — never write `guard.status` directly.
+It owns, under one critical section: generation validation →
+transition legality → the caller's mutation + status write → snapshot
+publication through `publish_snapshot` (which also carries the AppNap
+discipline). Illegal or stale moves are logged and rejected with no
+state or emission side effects.
+
+Legality is not a plain (from, to) table — it splits by generation
+discipline: **opening moves** (`any → Starting`, `any → Stopping`,
+`any → Idle`) are legal only when they carry `generation == current + 1`
+and install that generation; **steady moves** (`Starting → Ready`,
+`Starting/Ready → Error`, `Stopping → Idle`) require the current
+generation. That encoding is what lets "start-from-Ready" and
+"Ready→Starting on the same generation" resolve differently.
+
+Tests observe emissions without any sink abstraction: mount the real
+event set on `tauri::test::mock_app()` and record with
+`SessionSnapshotEvent::listen_any` (delivery is synchronous and
+in-process) — see the `app_with_snapshot_recorder` test helper.
 
 ## Platform-Specific Code
 

@@ -407,6 +407,28 @@ pub fn scsynth_args(
     args
 }
 
+/// The §7.2 launch configuration for one scsynth boot (flags + stdio),
+/// unspawned — for callers that supervise the spawn themselves (session
+/// start hands it to `SupervisedChild`). stdout/stderr are piped for wiring
+/// into the session output tail; stdin is closed so a crashed script can
+/// never park scsynth on a terminal. `device` selects the output via -H
+/// (see [`spawn_scsynth`] for the resolution rules).
+pub fn scsynth_command(
+    binary: &Path,
+    cfg: &ScsynthConfig,
+    hw_output_channels: u32,
+    port: u16,
+    plugins: &Path,
+    device: Option<&str>,
+) -> Command {
+    let mut cmd = Command::new(binary);
+    cmd.args(scsynth_args(cfg, hw_output_channels, port, plugins, device))
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    cmd
+}
+
 /// Spawns scsynth with the §7.2 flags and returns the child (stdout/stderr
 /// are wired into the session output tail by the caller). `device` selects
 /// the output via -H (app-behavior「音频 Host 行为」). Issue #100: callers pass
@@ -427,11 +449,7 @@ pub fn spawn_scsynth(
     plugins: &Path,
     device: Option<&str>,
 ) -> Result<Child, String> {
-    Command::new(binary)
-        .args(scsynth_args(cfg, hw_output_channels, port, plugins, device))
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+    scsynth_command(binary, cfg, hw_output_channels, port, plugins, device)
         .spawn()
         .map_err(|e| format!("Failed to start scsynth: {e}"))
 }

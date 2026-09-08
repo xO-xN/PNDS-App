@@ -107,8 +107,7 @@ pub async fn start_project(
 #[tauri::command]
 #[specta::specta]
 pub async fn stop_project(app: AppHandle, state: State<'_, SessionManager>) -> Result<(), String> {
-    let dir = app_data_dir(&app)?;
-    state.stop(&app, &dir)
+    state.stop(&app)
 }
 
 /// Current session snapshot (frontend restores state on load).
