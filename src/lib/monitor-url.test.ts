@@ -44,6 +44,61 @@ describe('buildMonitorUrl', () => {
 })
 
 /**
+ * The reload cache-buster: WKWebView's on-disk NetworkCache keys on the
+ * FULL URL, so an explicit reload must change the query string (`_r`)
+ * to become a cold fetch — while everything else stays put, so a reload
+ * with the same theme/lang never re-snapshots those.
+ */
+describe('buildMonitorUrl reload cache-buster', () => {
+  it('sends no _r for an ordinary navigation', () => {
+    expect(
+      buildMonitorUrl('192.168.1.10', 6869, { theme: 'stage', lang: 'en' })
+    ).toBe('http://192.168.1.10:6869/?theme=stage&lang=en')
+    expect(
+      buildMonitorUrl('192.168.1.10', 6869, {
+        theme: 'stage',
+        lang: 'en',
+        reload: 0,
+      })
+    ).toBe('http://192.168.1.10:6869/?theme=stage&lang=en')
+  })
+
+  it('appends _r after the first-frame parameters on a reload', () => {
+    expect(
+      buildMonitorUrl('192.168.1.10', 6869, {
+        theme: 'stage',
+        lang: 'en',
+        reload: 1,
+      })
+    ).toBe('http://192.168.1.10:6869/?theme=stage&lang=en&_r=1')
+  })
+
+  it('changes only _r between reloads — the rest of the URL is stable', () => {
+    const withoutR = (url: string) => {
+      const search = new URL(url).searchParams
+      search.delete('_r')
+      return search.toString()
+    }
+    const first = buildMonitorUrl('192.168.1.10', 6869, {
+      theme: 'stage',
+      lang: 'en',
+      reload: 1,
+    })
+    const second = buildMonitorUrl('192.168.1.10', 6869, {
+      theme: 'stage',
+      lang: 'en',
+      reload: 2,
+    })
+
+    expect(first).toContain('&_r=1')
+    expect(second).toContain('&_r=2')
+    expect(first).not.toBe(second)
+    expect(withoutR(first)).toBe('theme=stage&lang=en')
+    expect(withoutR(first)).toBe(withoutR(second))
+  })
+})
+
+/**
  * v1.4.0 (#62): the effective connection address — a manifest-declared
  * `performerAddress` replaces the selected LAN IP, mirroring what Rust
  * injects as `PNDS_HOST_IP`. Blank declarations read as undeclared

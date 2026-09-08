@@ -7,11 +7,17 @@
  *
  * - `?theme=<name>` — the App ALWAYS sends it on load and reload (#49);
  * - `?lang=<code>` — same first-frame semantics, from the locale
- *   bridge (#54).
+ *   bridge (#54);
+ * - `?_r=<n>` — the reload cache-buster: WKWebView keeps an on-disk
+ *   NetworkCache keyed by the FULL URL (query included) that survives
+ *   app restarts, so a project server sending no Cache-Control gets
+ *   RFC 7234 heuristic freshness and a plain remount serves the stale
+ *   entry offline. Sent ONLY on an explicit reload, changing with each
+ *   one, so the refresh button is a true cold fetch.
  *
  * Contract: docs/zh-CN/reference/runtime-contract.md §11 (theme and
- * locale push). Pages must still tolerate both parameters being
- * absent.
+ * locale push). Pages must still tolerate all parameters being
+ * absent, and must ignore unknown query parameters.
  */
 
 /** First-frame URL parameters. Empty-string values are treated as absent. */
@@ -20,6 +26,8 @@ export interface MonitorUrlParams {
   theme?: string
   /** Resolved language code (e.g. "zh-CN") pushed by the locale bridge. */
   lang?: string
+  /** Reload nonce (0/absent = ordinary navigation; >0 = cache-busted). */
+  reload?: number
 }
 
 export function buildMonitorUrl(
@@ -30,6 +38,9 @@ export function buildMonitorUrl(
   const search = new URLSearchParams()
   if (params.theme) search.set('theme', params.theme)
   if (params.lang) search.set('lang', params.lang)
+  // Falsy (0/undefined) reads as "no reload yet" — the first navigation
+  // keeps the plain address and normal HTTP semantics.
+  if (params.reload) search.set('_r', String(params.reload))
   const query = search.toString()
   return `http://${host}:${port}/${query ? `?${query}` : ''}`
 }

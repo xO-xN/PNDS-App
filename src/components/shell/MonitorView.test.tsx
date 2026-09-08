@@ -538,6 +538,10 @@ describe('MonitorView iframe URL (#49)', () => {
       sessionLanIp: null,
       sessionHostAddress: null,
       health: readyHealth,
+      // Hermetic too: earlier describes in this file bump the reload
+      // nonce, and a stale nonce would leak `_r` into the first-frame
+      // assertions below.
+      monitorReloadNonce: 0,
     })
     useSettingsStore.setState({ colorThemeSetting: 'brutal' })
     await i18n.changeLanguage('en')
@@ -602,7 +606,32 @@ describe('MonitorView iframe URL (#49)', () => {
       useSessionStore.getState().bumpMonitorReload()
     })
 
-    expect(frameSrc()).toBe('http://192.168.1.10:6869/?theme=stage&lang=zh-CN')
+    expect(frameSrc()).toBe(
+      'http://192.168.1.10:6869/?theme=stage&lang=zh-CN&_r=1'
+    )
+  })
+
+  it('cache-busts an explicit reload: only _r moves, nothing else', () => {
+    // WKWebView's persistent NetworkCache keys on the full URL, so the
+    // remount alone would re-serve a heuristically-fresh entry. The
+    // reload must change the query string to be a true cold fetch — and
+    // change nothing else, so the page still consumes the same snapshot.
+    render(<MonitorView />)
+    expect(frameSrc()).toBe('http://192.168.1.10:6869/?theme=brutal&lang=en')
+
+    act(() => {
+      useSessionStore.getState().bumpMonitorReload()
+    })
+    expect(frameSrc()).toBe(
+      'http://192.168.1.10:6869/?theme=brutal&lang=en&_r=1'
+    )
+
+    act(() => {
+      useSessionStore.getState().bumpMonitorReload()
+    })
+    expect(frameSrc()).toBe(
+      'http://192.168.1.10:6869/?theme=brutal&lang=en&_r=2'
+    )
   })
 })
 

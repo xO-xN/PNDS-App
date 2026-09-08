@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef } from 'react'
-import { onWindowFocus } from '@/lib/events'
 import { useTranslation } from 'react-i18next'
 import {
   sessionConnectionAddress,
@@ -24,26 +23,8 @@ import {
   MONITOR_REVEAL_FADE_TRANSITION,
 } from '@/lib/monitor-reveal'
 import { cn } from '@/lib/utils'
+import { useGuestFocusGate } from '@/hooks/use-guest-focus-gate'
 import { HoverSidebar } from './HoverSidebar'
-
-/** The payload shape of the injected reporter's pnds:guest-focus
- * messages (window.rs GUEST_FOCUS_SCRIPT) — anything else arriving on
- * `message` is not the reporter and must not move the gate. */
-function isGuestFocusPayload(
-  data: unknown
-): data is { type: 'pnds:guest-focus'; interacting: boolean } {
-  if (typeof data !== 'object' || data === null) return false
-  const candidate = data as { type?: unknown; interacting?: unknown }
-  return (
-    candidate.type === 'pnds:guest-focus' &&
-    typeof candidate.interacting === 'boolean'
-  )
-}
-
-/** v1.3.5 (#107): how long a frame-area leave holds before the reclaim
- * machinery re-arms — boundary jitter (the title strip overlays the
- * frame's top edge) must not flicker the gate. */
-const FRAME_POINTER_LEAVE_DEBOUNCE_MS = 500
 
 /**
  * Performance view (§10.1): the project's monitor page fills the whole
@@ -112,14 +93,17 @@ export function MonitorView() {
   // inside the memo (latest values), never from the render-time
   // `colorTheme` / `locale` (which would defrost the snapshot).
   const iframeSrc = useMemo(() => {
-    // The nonce only widens the memo: each bump remounts the iframe
-    // (its React key), and the fresh load re-snapshots the theme. The
+    // The nonce rides the URL as the `_r` cache-buster: WKWebView's
+    // persistent NetworkCache keys on the full URL, so a changed query
+    // string is what turns a reload into a true cold fetch (the iframe
+    // key remount alone would re-serve a heuristically-fresh entry).
+    // It is the memo's dep, which both widens it AND feeds `_r`; the
     // address fallbacks never reach the DOM — the guard below replaces
     // the whole view until a real address exists.
-    void reloadNonce
     return buildMonitorUrl(hostAddress ?? '', monitorPort ?? 0, {
       theme: currentColorThemeSetting(),
       lang: currentResolvedLanguage(),
+      reload: reloadNonce,
     })
   }, [hostAddress, monitorPort, reloadNonce])
   // v1.3.0 (#50): the reveal gate. Every navigation reports readiness
@@ -137,8 +121,9 @@ export function MonitorView() {
     return () => clearTimeout(id)
   }, [reloadNonce, revealed])
   // Initial push + re-push on theme/language switch and monitor reload.
-  // (The focus-regain re-push lives in the reclaim effect below, keyed on
-  // the same values so its closure is never stale.)
+  // (The focus-regain re-push lives in the guest-focus gate's onRegain —
+  // pushBridges below — read through a ref so its closure is never
+  // stale.)
   useEffect(() => {
     pushThemeToFrame(iframeRef.current, monitorOrigin, colorTheme)
     pushLocaleToFrame(iframeRef.current, monitorOrigin, locale)
@@ -161,144 +146,25 @@ export function MonitorView() {
   useEffect(() => {
     reclaimKeyboardFocus()
   }, [])
-  // v1.3.5 (#105): the guest focus signal. The all-frames user script
-  // (window.rs GUEST_FOCUS_SCRIPT) makes the monitor page report its
-  // focus state: `interacting: true` while a page element (anything but
-  // body/html) holds focus, `false` the moment focus falls back to the
-  // page body or leaves the page. The page's keyboard is never stolen
-  // mid-interaction (tnd/template inputs and dropdowns); when the page
-  // is done with it, the keyboard comes back at once.
-  const guestInteractingRef = useRef(false)
-  // v1.3.5 (#107): the pointer-area gate. Homemade page controls (div
-  // menus with no tabindex) never fire focusin, so the guest-focus gate
-  // alone can miss them — but the pointer sitting inside the monitor
-  // frame means the user is working in the page. mouseenter/mouseleave
-  // on the iframe element are main-frame events (the pointer's moves
-  // INSIDE the frame never cross the origin boundary); a ≤500ms debounce
-  // absorbs boundary jitter, and every reclaim re-verifies with
-  // elementFromPoint at the last known coordinates so a missed leave
-  // cannot strand the gate.
-  const pointerInsideFrameRef = useRef(false)
-  const pointerPositionRef = useRef({ x: 0, y: 0 })
-  const frameLeaveTimerRef = useRef<number | null>(null)
-  // The leave debounce needs to run a reclaim check the moment it lifts
-  // the gate; the effect below keeps the current closure here.
-  const reclaimNowRef = useRef<() => void>(() => undefined)
-  const rememberPointer = (x: number, y: number) => {
-    pointerPositionRef.current = { x, y }
+  // #44/#54: the bridges ride every regain moment the gate reports — a
+  // suspended OOPIF drops messages, so each regain re-pushes the theme
+  // and the language (latest value wins, the page applies them
+  // idempotently). The pushes are focus-neutral, so they run even while
+  // the gates hold.
+  const pushBridges = () => {
+    pushThemeToFrame(iframeRef.current, monitorOrigin, colorTheme)
+    pushLocaleToFrame(iframeRef.current, monitorOrigin, locale)
   }
-  const cancelFrameLeave = () => {
-    if (frameLeaveTimerRef.current !== null) {
-      clearTimeout(frameLeaveTimerRef.current)
-      frameLeaveTimerRef.current = null
-    }
-  }
-  const handleFramePointerEnter = (
-    event: React.MouseEvent<HTMLIFrameElement>
-  ) => {
-    cancelFrameLeave()
-    pointerInsideFrameRef.current = true
-    rememberPointer(event.clientX, event.clientY)
-  }
-  const handleFramePointerLeave = () => {
-    cancelFrameLeave()
-    frameLeaveTimerRef.current = window.setTimeout(() => {
-      frameLeaveTimerRef.current = null
-      pointerInsideFrameRef.current = false
-      // The gate lifted: if focus sits stranded in the frame, take it
-      // back now instead of waiting for the next heartbeat.
-      reclaimNowRef.current()
-    }, FRAME_POINTER_LEAVE_DEBOUNCE_MS)
-  }
-  // v1.2.2 (user report on #29): switching to another desktop and back can
-  // hand the first responder to the monitor iframe again — every
-  // window-level key (the ⌘ layer above all) then goes dead until the next
-  // click. Reclaim on focus/visibility regain, but only when
-  // nothing meaningful holds focus: never steal from a sidebar input or
-  // an open dialog — and since v1.3.5 (#105) never from the guest page
-  // the user is working in.
-  useEffect(() => {
-    // #107: the pointer gate's vote — true while the enter flag holds.
-    // With a leave settling, the debounce window owns the verdict (the
-    // re-check below would cut it short over boundary jitter: the
-    // pointer grazing chrome already refreshed the coordinates). With no
-    // leave pending, the hit test at the last known coordinates guards
-    // against a MISSED leave stranding the gate — chrome overlays above
-    // the frame (the title strip, the hover sidebar) answer with
-    // themselves, correctly un-gating.
-    const pointerInFrameArea = () => {
-      if (!pointerInsideFrameRef.current) return false
-      if (frameLeaveTimerRef.current !== null) return true
-      const { x, y } = pointerPositionRef.current
-      return document.elementFromPoint(x, y) === iframeRef.current
-    }
-    // #44/#54: both bridges ride along on every keyboard-reclaim path —
-    // a suspended OOPIF drops messages, so each regain re-pushes the
-    // theme and the language (latest value wins, the page applies them
-    // idempotently). Keyed on the values so the closure never goes
-    // stale. The pushes are focus-neutral, so they run even while the
-    // gates hold.
-    const reclaimIfLost = () => {
-      if (!guestInteractingRef.current && !pointerInFrameArea()) {
-        const active = document.activeElement
-        if (
-          active === null ||
-          active === document.body ||
-          active instanceof HTMLIFrameElement
-        ) {
-          reclaimKeyboardFocus()
-        }
-      }
-      pushThemeToFrame(iframeRef.current, monitorOrigin, colorTheme)
-      pushLocaleToFrame(iframeRef.current, monitorOrigin, locale)
-    }
-    reclaimNowRef.current = reclaimIfLost
-    // The pointer's coordinates only ever arrive from main-frame surfaces
-    // (chrome moves, the frame's enter event) — the freshest possible
-    // position for the hit test above.
-    const handlePointerMove = (event: MouseEvent) => {
-      rememberPointer(event.clientX, event.clientY)
-    }
-    const handleGuestFocusMessage = (event: MessageEvent) => {
-      // Only THIS iframe's reporter is trusted — anything else flying by
-      // (another window, the page's own postMessage traffic) must not
-      // move the gate.
-      if (event.source !== iframeRef.current?.contentWindow) return
-      if (!isGuestFocusPayload(event.data)) return
-      guestInteractingRef.current = event.data.interacting
-      // Focus back on the page body (or gone from the page): hand the
-      // keyboard over immediately — activeElement is typically still the
-      // iframe (the body inside it), the exact state reclaimIfLost
-      // targets, and a meaningful main-frame holder is never stolen
-      // from.
-      if (!guestInteractingRef.current) reclaimIfLost()
-    }
-    const handleVisibility = () => {
-      if (!document.hidden) reclaimIfLost()
-    }
-    window.addEventListener('focus', reclaimIfLost)
-    window.addEventListener('mousemove', handlePointerMove)
-    window.addEventListener('message', handleGuestFocusMessage)
-    document.addEventListener('visibilitychange', handleVisibility)
-    // The Rust-side regain signal (NSWindowDidBecomeKey via lib.rs) —
-    // WKWebView does not reliably surface DOM focus events for desktop
-    // switches, the exact case the steal was reported on.
-    const offWindowFocus = onWindowFocus(reclaimIfLost)
-    // Heartbeat backstop: every event path above can be dropped by the
-    // suspended webview, but the interval itself was throttled with it —
-    // the first tick after the webview resumes reclaims without needing
-    // any event to arrive (user retest: the events alone proved inert).
-    const heartbeat = setInterval(reclaimIfLost, 2000)
-    return () => {
-      window.removeEventListener('focus', reclaimIfLost)
-      window.removeEventListener('mousemove', handlePointerMove)
-      window.removeEventListener('message', handleGuestFocusMessage)
-      document.removeEventListener('visibilitychange', handleVisibility)
-      clearInterval(heartbeat)
-      cancelFrameLeave()
-      offWindowFocus()
-    }
-  }, [monitorOrigin, colorTheme, locale])
+  // v1.3.5 (#105/#107): the guest-focus gate — all listening, gating,
+  // debounce and heartbeat live in the hook (its file documents the
+  // wire contract with window.rs); this view keeps only what a reclaim
+  // means here (the keyboard surface) and what rides every regain (the
+  // bridges above).
+  const gate = useGuestFocusGate({
+    frame: iframeRef,
+    onReclaim: reclaimKeyboardFocus,
+    onRegain: pushBridges,
+  })
 
   if (!hostAddress || !monitorPort) {
     // Should not happen for a ready session; fail visibly rather than blank.
@@ -340,16 +206,15 @@ export function MonitorView() {
           src={iframeSrc}
           title="Project monitor"
           className="block h-full w-full border-0"
-          onMouseEnter={handleFramePointerEnter}
-          onMouseLeave={handleFramePointerLeave}
+          onMouseEnter={gate.onFramePointerEnter}
+          onMouseLeave={gate.onFramePointerLeave}
           onLoad={() => {
             // A fresh document has not been interacted with — the guest
             // gate re-arms for the page that just loaded (its reporter
             // re-registers with it).
-            guestInteractingRef.current = false
+            gate.rearm()
             reclaimKeyboardFocus()
-            pushThemeToFrame(iframeRef.current, monitorOrigin, colorTheme)
-            pushLocaleToFrame(iframeRef.current, monitorOrigin, locale)
+            pushBridges()
             // #50: the load event IS the reveal signal — the splash (or
             // the reload cover) may now dissolve off this navigation.
             useSessionStore.getState().markMonitorLoaded()

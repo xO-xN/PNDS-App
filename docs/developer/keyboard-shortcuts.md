@@ -138,15 +138,24 @@ window-level shortcuts (⌘ layer, Esc) then go dead until the next click.
 `MonitorView` prevents this by focusing its host root (`tabIndex={-1}`)
 on mount and on every iframe `onLoad` (project switches and monitor
 reloads included). v1.3.5 (#105): the reclaim yields to the page — an
-all-frames reporter script (`window.rs` `GUEST_FOCUS_SCRIPT`) publishes
-the page's focus state, and while a page element other than body/html
-holds focus, every reclaim path stands down and the web ⌘ layer lets
-the page keep the keyboard (page-focus priority — app-behavior
-「网络与 Monitor」; native menu accelerators are unaffected). #107 adds
-the second gate: the pointer sitting inside the monitor frame area
-holds the same stand-down (homemade no-focusin controls included),
-until it leaves — with a ≤500ms debounce and an elementFromPoint
-re-check so a missed leave can't strand the gate.
+all-frames reporter script (built in `window.rs` from the
+`GUEST_FOCUS_MESSAGE_TYPE` const) publishes the page's focus state,
+and while a page element other than body/html holds focus, every
+reclaim path stands down and the web ⌘ layer lets the page keep the
+keyboard (page-focus priority — app-behavior「网络与 Monitor」; native
+menu accelerators are unaffected). #107 adds the second gate: the
+pointer sitting inside the monitor frame area holds the same
+stand-down (homemade no-focusin controls included), until it leaves —
+with a ≤500ms debounce and an elementFromPoint re-check so a missed
+leave can't strand the gate.
+
+The whole gate machine — both gates, the debounce, the heartbeat, the
+message guard — lives in `src/hooks/use-guest-focus-gate.ts` (a deep
+module; MonitorView only supplies what a reclaim/regain means). The
+wire contract is pinned from both sides: `GUEST_FOCUS_MESSAGE_TYPE` in
+the hook mirrors the Rust const, and a test on each side asserts the
+literal — changing one without the other fails a test, not a
+performance.
 
 ## Mute Shortcut (v1.2.2, issue #30 feedback)
 

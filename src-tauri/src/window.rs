@@ -477,8 +477,18 @@ const CONTEXT_MENU_SCRIPT: &str = "document.addEventListener('contextmenu', func
     if (!editable) e.preventDefault();\
 }, false);";
 
+/// v1.3.5 (#105): the guest-focus wire message type — the single Rust
+/// source of the contract. The TypeScript twin is
+/// `GUEST_FOCUS_MESSAGE_TYPE` in src/hooks/use-guest-focus-gate.ts (the
+/// gate that listens for the reporter's messages); Rust cannot import
+/// TypeScript, so keep the two literals identical — the
+/// `guest_focus_script_is_built_from_the_message_type_const` test pins
+/// the pairing on this side.
+const GUEST_FOCUS_MESSAGE_TYPE: &str = "pnds:guest-focus";
+
 /// v1.3.5 (#105): the guest focus reporter script (see
-/// `inject_guest_focus_reporter`). Runs in EVERY frame and reports the
+/// `inject_guest_focus_reporter`), built from
+/// [GUEST_FOCUS_MESSAGE_TYPE]. Runs in EVERY frame and reports the
 /// page's focus state to the host: `focusin` on anything but body/html
 /// posts `interacting: true` (the user is working in the page); focus
 /// falling back to the page body, leaving the page, or the page losing
@@ -487,37 +497,42 @@ const CONTEXT_MENU_SCRIPT: &str = "document.addEventListener('contextmenu', func
 /// same-document element moves (and shadow DOM caps it), so the script
 /// re-checks `document.activeElement` / `document.hasFocus()` and lets a
 /// following `focusin` win — the gate must never drop mid-interaction.
-/// MonitorView gates its keyboard-reclaim machinery on the signal, so
+/// The guest-focus gate (src/hooks/use-guest-focus-gate.ts, driven by
+/// MonitorView) gates the keyboard-reclaim machinery on the signal, so
 /// page interaction (tnd/template inputs, dropdowns) is never
 /// interrupted. Frames only (the main frame's parent is itself, so the
 /// app UI stays silent); the payload carries nothing sensitive and the
 /// host validates the message source before trusting it.
-const GUEST_FOCUS_SCRIPT: &str = "(function () {\
-    if (window.parent === window) return;\
-    var last = null;\
-    function post(interacting) {\
-        if (interacting === last) return;\
-        last = interacting;\
-        window.parent.postMessage({ type: 'pnds:guest-focus', interacting: interacting }, '*');\
-    }\
-    function container(el) {\
-        return !el || el === document.body || el === document.documentElement || el === document;\
-    }\
-    document.addEventListener('focusin', function (e) { post(!container(e.target)); }, true);\
-    document.addEventListener('focusout', function (e) {\
-        var next = e.relatedTarget;\
-        if (next && !container(next)) return;\
-        setTimeout(function () {\
-            if (!document.hasFocus() || container(document.activeElement)) post(false);\
-        }, 0);\
-    }, true);\
-})();";
+fn guest_focus_script() -> String {
+    format!(
+        "(function () {{\
+            if (window.parent === window) return;\
+            var last = null;\
+            function post(interacting) {{\
+                if (interacting === last) return;\
+                last = interacting;\
+                window.parent.postMessage({{ type: '{GUEST_FOCUS_MESSAGE_TYPE}', interacting: interacting }}, '*');\
+            }}\
+            function container(el) {{\
+                return !el || el === document.body || el === document.documentElement || el === document;\
+            }}\
+            document.addEventListener('focusin', function (e) {{ post(!container(e.target)); }}, true);\
+            document.addEventListener('focusout', function (e) {{\
+                var next = e.relatedTarget;\
+                if (next && !container(next)) return;\
+                setTimeout(function () {{\
+                    if (!document.hasFocus() || container(document.activeElement)) post(false);\
+                }}, 0);\
+            }}, true);\
+        }})();"
+    )
+}
 
-/// The injection contract for [GUEST_FOCUS_SCRIPT] — document start,
+/// The injection contract for [guest_focus_script] — document start,
 /// every frame — kept as data so the unit test can pin what the objc
 /// registration passes.
-fn guest_focus_injection() -> (&'static str, isize, bool) {
-    (GUEST_FOCUS_SCRIPT, 0, false)
+fn guest_focus_injection() -> (String, isize, bool) {
+    (guest_focus_script(), 0, false)
 }
 
 /// Adds `source` as a `WKUserScript` on the window's WKWebView (the
@@ -620,11 +635,12 @@ pub fn suppress_default_context_menu<R: Runtime>(window: &WebviewWindow<R>) {
     log::info!("Default webview context menu suppressed (all frames)");
 }
 
-/// v1.3.5 (#105): inject the guest focus reporter ([GUEST_FOCUS_SCRIPT])
+/// v1.3.5 (#105): inject the guest focus reporter ([guest_focus_script])
 /// into every frame. The monitor pages — cross-origin iframes the app
-/// cannot script — report their focus state over postMessage, and
-/// MonitorView gates its keyboard-reclaim machinery on the signal so
-/// page interaction is never interrupted. No eval for the already-loading
+/// cannot script — report their focus state over postMessage, and the
+/// guest-focus gate (src/hooks/use-guest-focus-gate.ts, driven by
+/// MonitorView) reclaims the keyboard on the signal so page interaction
+/// is never interrupted. No eval for the already-loading
 /// main document: the script's first line keeps the app frame silent,
 /// and the monitor iframes navigate later and get the user script.
 /// Main thread only; call once at startup.
@@ -633,7 +649,7 @@ pub fn inject_guest_focus_reporter<R: Runtime>(window: &WebviewWindow<R>) {
     let (source, injection_time, main_frame_only) = guest_focus_injection();
     add_webview_user_script(
         window,
-        source,
+        &source,
         injection_time,
         main_frame_only,
         "guest focus reporter",
@@ -1195,7 +1211,7 @@ mod tests {
             "WKUserScriptInjectionTimeAtDocumentStart"
         );
         assert!(!main_frame_only, "must reach the monitor iframes");
-        assert!(source.contains("'pnds:guest-focus'"));
+        assert!(source.contains(GUEST_FOCUS_MESSAGE_TYPE));
         assert!(source.contains("focusin"));
         assert!(source.contains("focusout"));
         assert!(
@@ -1206,6 +1222,21 @@ mod tests {
             source.contains("document.hasFocus()"),
             "the deferred false must settle via hasFocus/activeElement — \
              relatedTarget alone misreports same-document moves"
+        );
+    }
+
+    /// The guest-focus wire contract is single-sourced: the reporter
+    /// script is BUILT from [GUEST_FOCUS_MESSAGE_TYPE], whose literal
+    /// must stay identical to the TypeScript gate's twin
+    /// (src/hooks/use-guest-focus-gate.ts, `GUEST_FOCUS_MESSAGE_TYPE`).
+    /// Rust cannot import TypeScript, so this pin is the drift guard
+    /// between the two languages.
+    #[test]
+    fn guest_focus_script_is_built_from_the_message_type_const() {
+        assert_eq!(GUEST_FOCUS_MESSAGE_TYPE, "pnds:guest-focus");
+        assert!(
+            guest_focus_script().contains(&format!("type: '{GUEST_FOCUS_MESSAGE_TYPE}'")),
+            "the reporter must post the shared message type"
         );
     }
 

@@ -225,7 +225,7 @@ Loading 保持两阶段 Logo 契约（v1.3.0 #50 起，第 3–5 步由 reveal �
 
 停止与切换（v1.3.0 用户反馈）：live session 停止（切换工程 / 关闭工程）时，shell 让旧 monitor 继续挂载，StopCover 主题色盖层淡入盖住输出画面（旧页面消隐而非被切断）；后端到达 idle 后，Welcome 在盖层下挂载、由同一淡出揭开（关闭工程路径），或由切换的 starting 快照直接接管为 loading splash——全程不闪现 Welcome。揭开记忆由 session-store 的 `stopUncoverPending` 承载（applySnapshot 事件上下文维护：stopping→idle 置位、重复 idle 保持、其他生命周期清除）。
 
-reload monitor（⌘⇧R / 侧栏 Refresh）走同一套门控：重建的 iframe 由主题色 cover 即时遮盖（无淡入——淡入会闪出未就绪画面），新导航上报就绪或超时后交叉淡出。放行条件与生命周期在 `src/lib/monitor-reveal.ts`（纯函数 + 常量）与 session-store（`monitorLoaded` / `monitorLoadTimedOut`）实现并测试。
+reload monitor（⌘⇧R / 侧栏 Refresh）走同一套门控：重建的 iframe 由主题色 cover 即时遮盖（无淡入——淡入会闪出未就绪画面），新导航上报就绪或超时后交叉淡出。放行条件与生命周期在 `src/lib/monitor-reveal.ts`（纯函数 + 常量）与 session-store（`monitorLoaded` / `monitorLoadTimedOut`）实现并测试。v1.4.1 起显式刷新还是真正的冷拉取：`bumpMonitorReload` 的 nonce 经 `buildMonitorUrl` 以 `?_r=<n>` 随 URL 下发（只随刷新变化，theme/lang 仍是导航时快照）——WKWebView 的磁盘缓存按完整 URL 作键，只重挂 iframe 会把启发式新鲜的旧页面原样直出（契约 §10「重载与 HTTP 缓存」）。
 
 揭示淡出与主题（v1.3.0 用户反馈）：splash 交叉淡出、monitor 揭示盖层与 StopCover 三个 400ms 淡出统一带 `data-reveal-motion` 标记，theme-variables.css 据此将它们豁免于 Brutal 主题的全局 `transition-duration: 0s !important` 即时规则——防闪契约（#48）优先于主题的即时美学；Brutal 下其余状态切换仍然即时。`prefers-reduced-motion` 的全局降级不受此豁免影响（无障碍优先）。
 
