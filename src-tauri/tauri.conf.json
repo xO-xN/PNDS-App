@@ -55,7 +55,7 @@
       "resources/synthdefs/pndsMaster.scsyndef": "synthdefs/pndsMaster.scsyndef",
       "plugins": "plugins",
       "resources/utilities": "utilities",
-      "binaries/NODE-LICENSE.txt": "licenses/NODE-LICENSE.txt",
+      "binaries/NODE-LICENSE-aarch64-apple-darwin.txt": "licenses/NODE-LICENSE.txt",
       "binaries/SC-GPL-3.0.txt": "licenses/SC-GPL-3.0.txt",
       "binaries/SC-SOURCE.txt": "licenses/SC-SOURCE.txt",
       "../docs/zh-CN/app-tutorial.md": "help/zh-CN/app-tutorial.md",

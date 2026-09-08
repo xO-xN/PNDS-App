@@ -6,13 +6,16 @@
 # “Provisioning is per build target”); the runtime contract's Node baseline
 # tracks the arm64 lane.
 # One sidecar per build target, named `node-<target-triple>` as Tauri's
-# `externalBin` convention requires:
+# `externalBin` convention requires; its LICENSE lands beside it as
+# `NODE-LICENSE-<target-triple>.txt` (the license text is version-specific —
+# the bundled deps differ per Node series — so each lane bundles its own,
+# mapped by the per-target tauri.<arch>.conf.json overlays):
 #   aarch64-apple-darwin → Node 24 LTS (official binaries need macOS 13.5+)
 #   x86_64-apple-darwin  → Node 22 LTS (the Intel build's floor is macOS 12,
 #                          and Node 24's darwin-x64 binary refuses to run there)
 # The binary is ~100 MB and is NOT committed to git; run this script once
-# after cloning, and again whenever a version below changes. The release
-# workflow does the same for each target it builds.
+# after cloning, and again whenever a version or path below changes. The
+# release workflow does the same for each target it builds.
 #
 # Usage: npm run node:fetch                                  # host target
 #        PNDS_TARGET=x86_64-apple-darwin npm run node:fetch   # Intel target
@@ -64,7 +67,7 @@ fi
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BIN_DIR="$ROOT/src-tauri/binaries"
 SIDECAR="$BIN_DIR/node-${TARGET}"
-LICENSE_DEST="$BIN_DIR/NODE-LICENSE.txt"
+LICENSE_DEST="$BIN_DIR/NODE-LICENSE-${TARGET}.txt"
 
 mkdir -p "$BIN_DIR"
 TMP="$(mktemp -d)"

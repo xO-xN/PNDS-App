@@ -9,7 +9,7 @@ The release system provides:
 - Automated GitHub Actions workflow for building releases
 - Version management script for updating all version files
 - Auto-updater for seamless user updates
-- macOS (Apple Silicon) builds
+- macOS builds in two lanes: Apple Silicon (arm64, mainline) and Intel (x86_64, macOS ≥ 12)
 
 ## Initial Setup
 
@@ -90,43 +90,65 @@ Then GitHub Actions will:
 
    Provisioning is per build target: `node:fetch` takes `PNDS_TARGET`
    (aarch64 → Node 24, x86_64 → Node 22 whose official binary still runs on
-   macOS 12; Node 24's darwin binaries require macOS 13.5), while
-   `scsynth:fetch` writes both scsynth slices from the universal dmg and
-   keeps `libsndfile.dylib` universal. Base `tauri.conf.json` carries the
-   arm64 lane's scsynth mapping and minimumSystemVersion 13.5; the x86_64
-   lane overrides both via `npm run tauri:build:x64`
+   macOS 12; Node 24's darwin binaries require macOS 13.5) and stages the
+   sidecar plus its version-specific `NODE-LICENSE-<target>.txt` (the
+   license text differs per Node series, so each lane bundles its own),
+   while `scsynth:fetch` writes both scsynth slices from the universal dmg
+   and keeps `libsndfile.dylib` universal. Base `tauri.conf.json` carries
+   the arm64 lane's scsynth + license mappings and minimumSystemVersion
+   13.5; the x86_64 lane overrides both via `npm run tauri:build:x64`
    (`--config src-tauri/tauri.x86_64.conf.json`, which deletes the arm64
-   mapping and maps its own slice at macOS 12.0).
+   mappings and maps its own slice + license at macOS 12.0).
 
-2. Build the app for macOS (Apple Silicon)
-3. Create a draft release
-4. Generate `latest.json` for auto-updates
-5. Upload all installers and signatures
+2. Build both lanes in one job, sequentially (issue #112):
+   lane 1 builds the arm64 mainline natively (base `tauri.conf.json`),
+   lane 2 cross-compiles the x86_64 lane on the same arm64 runner
+   (`--target x86_64-apple-darwin --config src-tauri/tauri.x86_64.conf.json`).
+   Lane 1 creates the draft release; lane 2 finds it by tag (tauri-action
+   scans drafts by tag name) and adds its assets.
+3. Merge `latest.json` for auto-updates: each lane's `uploadUpdaterJson`
+   re-reads the release's existing `latest.json`, keeps its `platforms`
+   entries, and layers its own in (`darwin-aarch64` + `darwin-aarch64-app`
+   from lane 1, then `darwin-x86_64` + `darwin-x86_64-app` from lane 2 —
+   the updater's platform keys, verified in #111). Running lane 2 after
+   lane 1 in the same job avoids the concurrent-asset-upload races the
+   tauri-action authors note around this file.
+4. Upload all installers and signatures (both lanes share one minisign key:
+   the `pubkey` in `tauri.conf.json` verifies both).
 
 Finally, run the manual verification checklist below, then publish the
 draft release on GitHub.
 
 ### Manual verification before publishing
 
-The v1.4.0 pre-publish matrix (issue #64) — every gate below passes on
-real machines before the draft release is published:
+The pre-publish matrix (seeded v1.4.0, issue #64; extended each release) —
+every gate below passes on real machines before the draft release is
+published:
 
-1. **Local Network Diagnostics v0.6.0 is published** (no longer a draft)
+1. **The dual-lane draft is complete** (v1.4.2, #112): both `…_aarch64.dmg`
+   and `…_x64.dmg` assets present and installable on their machines;
+   `latest.json` carries `darwin-aarch64` and `darwin-x86_64` entries with
+   valid signatures; the two `Info.plist`s read `LSMinimumSystemVersion`
+   13.5 (arm64) and 12.0 (x64) (`plutil -extract
+LSMinimumSystemVersion raw <PNDS.app/Contents/Info.plist>`); an
+   installed arm64 copy's Check for Updates still resolves to the
+   `darwin-aarch64` entry.
+2. **Local Network Diagnostics v0.6.0 is published** (no longer a draft)
    in `xO-xN/Local-Network-Diagnostics`. `utilities:fetch` runs inside
    `beforeBuildCommand` and draft-release assets are not publicly
    downloadable — while that release sits in draft, every `tauri build`
    (local and CI alike) fails with a 404 on the pinned artifact.
-2. **Two sites + a VPS hub run TND end to end** — the telematic path the
+3. **Two sites + a VPS hub run TND end to end** — the telematic path the
    v1.4.0 Node section feeds: one machine at each of the two performance
    sites (different networks) against the hub on the VPS, node names
    visible on the hub, measurements flowing both ways. This also
    completes TND's deferred「双节点实测校准质量阈值」step.
-3. **Auto-update downloads and installs behind a system proxy** — the
+4. **Auto-update downloads and installs behind a system proxy** — the
    updater-proxy checklist (v1.4.0, #60), on a real machine:
    1. System Settings → Network → Proxies pointing at a local proxy (e.g. Charles/mitmproxy): launch the App, run Check for Updates, confirm the request appears in the proxy's log.
    2. `launchctl setenv https_proxy http://127.0.0.1:7890` (see [Proxies](#proxies-v140-issue-60)), relaunch the App, repeat the check.
    3. Point the proxy at a dead address: the boot auto-check and the manual check must both open the failure dialog — copy the error, open the Releases page.
-4. **`.local` custom address on an Android phone** — a work declaring a
+5. **`.local` custom address on an Android phone** — a work declaring a
    `*.local` performer address: scan its QR code with the Android device
    that will actually perform, confirm the page loads. Write the
    conclusion back into the「Android mDNS 兼容性待真机验证」note in
@@ -201,8 +223,11 @@ Proxy behavior is a Cargo-feature effect — there is nothing to unit-test; it i
 
 Each release creates:
 
-- **macOS (Apple Silicon)**: `.dmg` installer and `.app` bundle (built with `--bundles app,dmg` on `macos-latest`)
-- **Auto-updater**: `latest.json` manifest and `.sig` signature files
+- **macOS (Apple Silicon)**: `.dmg` installer and `.app` bundle (built natively on `macos-latest`, min macOS 13.5)
+- **macOS (Intel)**: `.dmg` installer and `.app` bundle (cross-compiled on the same runner, min macOS 12.0)
+- **Auto-updater**: `latest.json` manifest — one `platforms` map with both
+  `darwin-aarch64` and `darwin-x86_64` entries — and per-artifact `.sig`
+  signature files
 
 ## Security
 

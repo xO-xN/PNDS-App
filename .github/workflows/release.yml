@@ -18,13 +18,144 @@ jobs:
   publish-tauri:
     permissions:
       contents: write
-    # V1 scope: macOS Apple Silicon only (see docs/developer/app-behavior.md 平台与交付范围)
+    # macOS dual-lane (see docs/developer/app-behavior.md 平台与交付范围):
+    # the arm64 mainline (bundled Node 24, min macOS 13.5) plus an x86_64
+    # lane for Intel Macs (bundled Node 22, min macOS 12.0), cross-compiled
+    # on this arm64 runner. Both lanes build sequentially in this one job:
+    # the second tauri-action step finds the draft release the first created
+    # (lookup by tag) and merges its platform entry into the existing
+    # latest.json — tauri-action re-reads that asset and keeps the other
+    # platforms' entries, so arm64 updates never regress.
     runs-on: macos-latest
+    env:
+      # One derivation of the tag both lanes' tagName/releaseName share —
+      # a lane mismatch there would create two releases instead of one
+      # merged draft. (RELEASE_BODY below repeats the expression inline;
+      # job-level env values cannot reference each other.)
+      RELEASE_TAG: ${{ github.ref_name || inputs.version }}
+      # Shared by both lanes' tauri-action steps; whichever lane creates the
+      # draft release writes it (the other finds the existing draft by tag).
+      RELEASE_BODY: |
+        ## PNDS ${{ github.ref_name || inputs.version }}
+
+        ### What's New in V1.4.1 — the reload button truly reloads & a quieter, tougher session core
+
+        **Reload Monitor is now a true cold fetch**
+        - The reload button (sidebar Refresh / ⌘⇧R) rebuilt the monitor page, but the system webview kept answering from its own on-disk cache: a project whose server sends no `Cache-Control` header stayed "fresh" by HTTP heuristic, so the reload brought back exactly the old page — and the stale copy survived even an app restart. An explicit reload now appends a changing cache-bust parameter to the monitor address, forcing a real request to the project's server every time.
+        - Ordinary navigations (loading a work, an address change) keep their plain addresses and normal cache semantics, and projects that want fine-grained cache control still just send their own `Cache-Control` headers. Projects need zero changes — pages already tolerate unknown query parameters (runtime contract §10).
+
+        **A core hardened underneath — zero intended behavior change**
+        - The Rust session now walks one validated state machine: every status change passes a single gate that checks the run's generation first, so a stop racing a fresh start can no longer stomp the newcomer's state. The score server and the audio engine are supervised by one module that owns spawn → watch → bounded shutdown, including the registry that cleans up orphaned processes after a crash.
+        - On the React side, the session-start gate's verdict reads its inputs through explicit subscriptions (a rendering pitfall that could freeze a derived verdict after the first render is structurally gone), the sidebar lives as focused modules instead of one 1,700-line file, and the monitor's guest-focus gate sits in one tested hook. The typed event channel from v1.4.0's groundwork now carries every backend event — raw listeners are gone.
+
+        ### What's New in V1.4.0 — telematic config lives in the App, setlists travel between machines & updates work behind proxies
+
+        **Your hub config, set once in the App**
+        - Works that perform across the internet (like the built-in Telematic Network Diagnostics) used to make you retype the hub address, token and node name into the monitor's connect form every single time you opened them. Settings now has a Node section: a node name for this Mac (defaults to the machine's hostname, editable) plus the hub address and token, remembered per work like an External OSC target. On every start the App injects them as the environment the work reads — the connect form comes up prefilled and stays overridable for probing. The room still derives itself from the work and its group number; you never type it.
+        - The token is masked in the UI and never rides a URL. Works that don't declare telematic capability never see the section. Changes apply at the next work start — a running session is never disturbed.
+
+        **Performers connect by name, not by digits**
+        - A work's manifest can now declare a performer address string — say `mywork.local` — and the QR code, the monitor URL and the address injected into the work all carry it instead of a numeric LAN IP. Works that don't declare one behave exactly as before, and projects need zero changes to adopt it.
+        - The discipline for `.local`: every Mac running the work must carry the matching local hostname (System Settings → General → Sharing), and Android's in-browser mDNS support varies from device to device — scan the QR on the actual phone before the show; if it won't resolve, fall back to the IP injection.
+
+        **Setlists travel between machines**
+        - A performance folder — a multi-work setlist — exports as one directory: every work as its `.pnds` bundle, a human-readable `set.json` (order, display names, default audio modes, External targets) and an import instructions file. The export shows per-work progress as it packs.
+        - Importing that directory on another Mac installs every work (same overwrite semantics as a plain `.pnds` install) and rebuilds the folder, its order and its display names. Machine-local preferences — output device, sample rate — deliberately don't travel.
+
+        **Updates work behind proxies — and a failure has a way out**
+        - The updater's HTTP client now honors the proxy configured in macOS System Settings (and `launchctl setenv` environment variables): on networks where GitHub is reachable only through the proxy, Check for Updates no longer dies with a 403.
+        - When a check or install does fail, the App opens its own failure dialog: the full error text, copyable, plus an Open Releases Page action for a manual download — on the boot auto-check and the manual check alike. The old one-line browser alert is retired.
+
+        **Settings, polished after stage rehearsals**
+        - The Appearance section is gone — the theme row lives in General now, one identity row beside the language.
+        - The audio rows (output device, sample rate) are editable while a session runs: the change persists immediately, the running session keeps the audio configuration it was spawned with, and the hint says exactly that. The output device sits above the sample rate — the physical output comes first.
+        - The Node section's LAN address list refreshes whenever the panel opens or its dropdown gains focus, so a first launch with no work opened no longer stares at a "Select…" placeholder.
+
+        **Diagnostics ride along**
+        - Telematic Network Diagnostics v0.6.0 declares its telematic capability to the App and prefills its connect form from the injected environment. Local Network Diagnostics v0.6.0 ships alongside. The Help Center gained a chapter on performing across the internet, the page-interaction contract and the built-in tools.
+
+        ### What's New in V1.3.5 — the monitor page keeps its keyboard, folder switching is ⌘-only & the stuck-Cmd ghost is gone
+
+        **Typing in a monitor page is never interrupted again**
+        - The App used to take the keyboard back from the monitor page on a timer — typing into a project's input field or picking from a dropdown (tnd, the Template) could get cut off mid-gesture. The page now reports its own focus state to the App (a reporter script injected into every frame — projects need to do nothing), and while you are working in the page every reclaim path stands down. The keyboard returns the instant the page is done with it.
+        - The pointer sitting inside the monitor area holds the same protection, so homemade controls that never take focus (div-based menus) are covered too. Moving the mouse to the title strip or the sidebar hands the keyboard back at once.
+        - While the page holds focus, the web ⌘ layer (⌘1..9, ⌘ arrows, ⌘R, ⌘,) lets the page keep the keys; native menu shortcuts (⌘M mute, zoom, ⌘⇧R, ⌘W) are never affected. The desktop-switch reclaim from earlier releases still fires when nothing holds the keyboard.
+
+        **Folder switching is ⌘-only — and no frozen focus ring**
+        - Plain ←/→ no longer switch folder views. Focus used to park on a segment after a click, and the bare arrows then moved the view — reading exactly like the ⌘ shortcuts firing without ⌘ held. ⌘←/⌘→ (wrapping at the ends) and clicking are the two ways to switch; Tab order is unchanged. The focus ring a click used to leave behind — a blue box that appeared on the next keypress and wouldn't move — is gone as well: it only ever appears for Tab now.
+
+        **The stuck ⌘ state heals itself**
+        - If the key-up was swallowed while focus sat inside the monitor page, the App could keep believing ⌘ was held: number badges that wouldn't clear, a peek sidebar that wouldn't retract. The next pointer move or plain keypress reports the truth and resets it — a real hold is never touched.
+
+        **Telematic Network Diagnostics v0.5.0 rides along**
+        - Performers can leave on their own — the leave is measured, the card disappears server-side, and coming back gets a full-page rejoin. The hub can remove a performer from the card's ✕ (the phone shows a removed notice and a fresh rejoin). The monitor's connect button gained a four-state machine that dirty-checks the live config, and the burst marker is off the display.
+
+        ### What's New in V1.3.4 — the startup crash fixed at the root, a bounded shutdown & a session log that tells the story
+
+        **The scsynth startup crash — fixed at the root, with the self-heal kept as the fuse**
+        - The bundled audio engine can die right after launch on macOS 26 — a SuperCollider 3.14.1 ObjC runtime race (the SIGTRAP / "Audio engine exited during startup" error that a manual Retry used to clear). A controlled experiment on the crash-storm machine pinned the root cause: the dice roll lives in scsynth's own default-device resolution — spawned without an explicit device name, it died 14–16 times out of 30; spawned with a name the App had already resolved, it booted 30 out of 30. Every scsynth start — session load and the launch warmup alike — now hands scsynth the device name the App resolved (`-H`): your saved preference, or the system default resolved at the moment of launch. That default-resolution path is never taken again.
+        - The session pins the device it resolved at start: a Bluetooth headset pairing or a display claiming the system default mid-show can no longer reroute your audio. And if the device disappears between resolution and start, scsynth reports it and the App stops at the error page with the reason in the session log — never a silent switch to another device.
+        - The transparent auto-retry stays as the fuse: any signal-death boot retries on a fresh port while the loading screen stays put (real crashes always print the CoreAudio device list first, so the gate is signal death alone) — while a configuration error such as a rejected device still exits cleanly, straight to the error page, unmasked: if the error page appears, it still means a human should look. The launch warmup retries through the same gate, silently, so the first project load boots on a warm subsystem. Every auto-retry is recorded in the App log and the session log — the crash-rate record that will decide the eventual SuperCollider upgrade.
+
+        **Shutdown is bounded — closing a project can't blank the screen for five seconds**
+        - A pathological score server that ignored SIGTERM used to stretch the stop cover into a 5–10 second white screen. The score server's grace window now tightens to 2 seconds — healthy projects exit in a twentieth of that, and phones sit in their reconnect loop either way — while the audio engine keeps its full window for CoreAudio teardown. Stop order is unchanged: the project releases its synths first, the engine follows.
+        - The project server's and the audio engine's raw output now lands, line by line, in the per-session log with `[node]` / `[scsynth]` prefixes — including their final words during shutdown, flushed as written so the log survives even a hard crash. Slow shutdowns and startup failures can finally be read straight from `session-logs/`, bracketed by the App's own teardown markers.
+
+        **The bundled diagnostics tools ride along**
+        - Local Network Diagnostics v0.5.0 and Telematic Network Diagnostics v0.4.0 now force-close their live connections on stop, so they exit comfortably inside the new window — and their step-by-step shutdown timings land in the session log.
+
+        ### What's New in V1.3.3 — the native belt, a dressed Utilities shelf & the Pond
+
+        **The right-click bug, finished — and the right click handed to authors**
+        - The stubborn WKWebView right-click menu ("Open Frame in New Window") is now stopped at the native NSMenu level, with the JS layers kept as the first belt. Menus carrying a text affordance — copy/cut/paste on editable fields and selections — pass through untouched.
+        - Right-click inside a project's monitor page belongs to the page's author now: a project can design its own context menu and the App stays out of the way (runtime contract §10).
+
+        **Window edges behave**
+        - The bottom-right rounded corner no longer clicks through to apps underneath: an invisible grip drives the native resize session.
+        - ⌘← / ⌘→ folder switching is back. WKWebView had been claiming exactly Command+horizontal arrows as its own back/forward keys before the page could see them; a native guard reroutes that pair onto the normal key path. Every other shortcut keeps its original routing (⌘↓/⌘↑ untouched).
+
+        **The Utilities shelf, dressed as app content**
+        - The built-in tools sit in a fixed registry order — Multichannel → Local → Telematic — and every launch re-settles installs seeded before the reorder.
+        - Concise card names that fit the 320px sidebar — Multichannel Gen, Local Diagnostics, Telematic Diagnostics — resolved above every learned manifest name, in the sidebar, the settings list and the running title alike; selection can no longer flip them back to the long names.
+        - Each tool's card carries an illustrative icon: a waveform, a node pair, a globe — a wrench for whatever ships next.
+        - The two diagnostics tools ship refreshed. Their stability reading no longer mistook the test cycle's own idle phase for network trouble (Wi-Fi power-save wake-up used to paint a ~4 s wave on "stability" and pin healthy performers yellow): quality now judges the load condition, and only real degradation under load raises a flag. Each performer's phone mirrors its own measured verdict live — green/yellow/red on the dot. The telematic monitor is rebuilt as a one-screen compact console (three-column top row, scan-sized join QR beside the performer cards, capped event log).
+
+        **A Welcome with an identity, themes with dressing**
+        - The Welcome page carries the app icon on a rippling halo stage, ported from the project homepage and recolored by each theme's accent; Brutal keeps its hard plane and sits it out.
+        - The Stage theme's selection pills — the folder segment and the project card — render as frosted liquid glass (a strict port of the pure-CSS recipe, then tuned frosty; the folder pill's whites sit one step softer).
+        - The default theme is now 池塘 / Pond — display name and internal id alike. Stored preferences migrate silently, and following project pages are none the wiser: a page that does not recognize an id keeps its own default palette, which is exactly the Pond look.
+
+        **Documentation**
+        - network.md is the performance networking guide it always should have been: playing over the LAN (start the show, scan or type the address) and over the internet (VPN, port forwarding, JackTrip for inter-site audio), with an honest best-effort disclaimer. The port tables moved to the manifest reference, appearance syncing to the runtime contract.
+        - The Module Manual sits below the Reference Manual in the Help center, and the English README matches the Chinese one again.
+
+        ### What's New in V1.3.2 — the Module Manual, tools that stay put & an architecture hardening pass
+
+        **A fourth book in the Help center: the Module Manual**
+        - The Help center gains the Module Manual — six paired Chinese/English documents (an overview plus qr, players, theme-follow, locale-follow and audio) sourced from the module creator documentation that ships inside the PNDS Template itself, fact-checked against the Template source. It sits between the Creator Guide and the Reference Manual, and cross-links with both.
+
+        **Built-in tools are app content — and now locked as such**
+        - The bundled utility tools (Local Network Diagnostics & co.) can no longer be dragged out of order, moved out of or into the Utilities folder, removed with ✕, or renamed with ⌘R: their position, membership, presence and names are locked, enforced by the store's structural actions. Selecting and starting them is unchanged. (User report.)
+
+        **Update checks share one lifecycle**
+        - The automatic boot check and the manual menu/Settings check now flow through one lifecycle module with typed outcomes. "Update available" and "installed" toasts carry action buttons; the native confirm/alert dialogs are retired; the boot path stays silent when there is nothing to report.
+
+        **An architecture hardening pass — zero behavior change**
+        - Four pure refactors landed alongside: the sidebar drag engine extracted into a useCardDrag controller with a geometry adapter; the folder and card pill indicators unified into one useIndicatorPill engine, so scheduling and geometry writes exist exactly once; the project store gained replaceProjectIndex — a single-call wholesale rebuild that persists in one snapshot, the seam the upcoming setlist import will call, with the set.json keying decision (manifest id + version, never absolute paths) recorded ahead of the format freeze; and the Rust start pipeline now threads one StartRequest record through all four layers, so v1.4.0's networked-hub variables will land as record fields instead of widening four signatures.
+
+        ### Earlier releases
+        The V1.3.2–V1.1 notes live on the [releases page](https://github.com/xO-xN/PNDS-App/releases).
+
+        ### Auto-Updates
+        Existing users will receive automatic update notifications.
+
+        **Full Changelog**: https://github.com/${{ github.repository }}/commits/${{ github.ref_name || inputs.version }}
     steps:
       - uses: actions/checkout@v4
 
-      # Pin the Node 24 series to match the bundled sidecar runtime
-      # (scripts/fetch-node.sh); lts/* drifts to newer majors over time.
+      # Pins the CI's own Node (frontend build) to the arm64 lane's sidecar
+      # series (scripts/fetch-node.sh); lts/* drifts to newer majors over
+      # time. The sidecars themselves are fetched per lane below.
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -33,6 +164,9 @@ jobs:
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
+        with:
+          # The x86_64 lane cross-compiles on this arm64 runner.
+          targets: x86_64-apple-darwin
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
@@ -48,137 +182,51 @@ jobs:
       # utility tools (unpacked under resources/utilities) are fetched,
       # checksum-verified, and unpacked automatically by the build's
       # beforeBuildCommand (npm run utilities:fetch).
-      - name: Fetch Node sidecar
-        run: npm run node:fetch
+      - name: Fetch Node sidecars (both lanes)
+        run: |
+          npm run node:fetch
+          PNDS_TARGET=x86_64-apple-darwin npm run node:fetch
 
+      # One run writes both scsynth slices (the dmg is universal); each lane
+      # bundles its own slice via its tauri config.
       - name: Fetch scsynth binary and compile master synthdef
         run: npm run scsynth:fetch
 
-      - name: Build and release
+      # Lane 1 — arm64 mainline: native build, base tauri.conf.json (Node 24
+      # sidecar, scsynth aarch64 slice, min macOS 13.5). Creates the draft
+      # release; uploadUpdaterJson writes latest.json with the darwin-aarch64
+      # entries.
+      - name: Build and release (arm64)
         uses: tauri-apps/tauri-action@dev
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: ${{ github.ref_name || inputs.version }}
-          releaseName: 'PNDS ${{ github.ref_name || inputs.version }}'
-          releaseBody: |
-            ## PNDS ${{ github.ref_name || inputs.version }}
-
-            ### What's New in V1.4.1 — the reload button truly reloads & a quieter, tougher session core
-
-            **Reload Monitor is now a true cold fetch**
-            - The reload button (sidebar Refresh / ⌘⇧R) rebuilt the monitor page, but the system webview kept answering from its own on-disk cache: a project whose server sends no `Cache-Control` header stayed "fresh" by HTTP heuristic, so the reload brought back exactly the old page — and the stale copy survived even an app restart. An explicit reload now appends a changing cache-bust parameter to the monitor address, forcing a real request to the project's server every time.
-            - Ordinary navigations (loading a work, an address change) keep their plain addresses and normal cache semantics, and projects that want fine-grained cache control still just send their own `Cache-Control` headers. Projects need zero changes — pages already tolerate unknown query parameters (runtime contract §10).
-
-            **A core hardened underneath — zero intended behavior change**
-            - The Rust session now walks one validated state machine: every status change passes a single gate that checks the run's generation first, so a stop racing a fresh start can no longer stomp the newcomer's state. The score server and the audio engine are supervised by one module that owns spawn → watch → bounded shutdown, including the registry that cleans up orphaned processes after a crash.
-            - On the React side, the session-start gate's verdict reads its inputs through explicit subscriptions (a rendering pitfall that could freeze a derived verdict after the first render is structurally gone), the sidebar lives as focused modules instead of one 1,700-line file, and the monitor's guest-focus gate sits in one tested hook. The typed event channel from v1.4.0's groundwork now carries every backend event — raw listeners are gone.
-
-            ### What's New in V1.4.0 — telematic config lives in the App, setlists travel between machines & updates work behind proxies
-
-            **Your hub config, set once in the App**
-            - Works that perform across the internet (like the built-in Telematic Network Diagnostics) used to make you retype the hub address, token and node name into the monitor's connect form every single time you opened them. Settings now has a Node section: a node name for this Mac (defaults to the machine's hostname, editable) plus the hub address and token, remembered per work like an External OSC target. On every start the App injects them as the environment the work reads — the connect form comes up prefilled and stays overridable for probing. The room still derives itself from the work and its group number; you never type it.
-            - The token is masked in the UI and never rides a URL. Works that don't declare telematic capability never see the section. Changes apply at the next work start — a running session is never disturbed.
-
-            **Performers connect by name, not by digits**
-            - A work's manifest can now declare a performer address string — say `mywork.local` — and the QR code, the monitor URL and the address injected into the work all carry it instead of a numeric LAN IP. Works that don't declare one behave exactly as before, and projects need zero changes to adopt it.
-            - The discipline for `.local`: every Mac running the work must carry the matching local hostname (System Settings → General → Sharing), and Android's in-browser mDNS support varies from device to device — scan the QR on the actual phone before the show; if it won't resolve, fall back to the IP injection.
-
-            **Setlists travel between machines**
-            - A performance folder — a multi-work setlist — exports as one directory: every work as its `.pnds` bundle, a human-readable `set.json` (order, display names, default audio modes, External targets) and an import instructions file. The export shows per-work progress as it packs.
-            - Importing that directory on another Mac installs every work (same overwrite semantics as a plain `.pnds` install) and rebuilds the folder, its order and its display names. Machine-local preferences — output device, sample rate — deliberately don't travel.
-
-            **Updates work behind proxies — and a failure has a way out**
-            - The updater's HTTP client now honors the proxy configured in macOS System Settings (and `launchctl setenv` environment variables): on networks where GitHub is reachable only through the proxy, Check for Updates no longer dies with a 403.
-            - When a check or install does fail, the App opens its own failure dialog: the full error text, copyable, plus an Open Releases Page action for a manual download — on the boot auto-check and the manual check alike. The old one-line browser alert is retired.
-
-            **Settings, polished after stage rehearsals**
-            - The Appearance section is gone — the theme row lives in General now, one identity row beside the language.
-            - The audio rows (output device, sample rate) are editable while a session runs: the change persists immediately, the running session keeps the audio configuration it was spawned with, and the hint says exactly that. The output device sits above the sample rate — the physical output comes first.
-            - The Node section's LAN address list refreshes whenever the panel opens or its dropdown gains focus, so a first launch with no work opened no longer stares at a "Select…" placeholder.
-
-            **Diagnostics ride along**
-            - Telematic Network Diagnostics v0.6.0 declares its telematic capability to the App and prefills its connect form from the injected environment. Local Network Diagnostics v0.6.0 ships alongside. The Help Center gained a chapter on performing across the internet, the page-interaction contract and the built-in tools.
-
-            ### What's New in V1.3.5 — the monitor page keeps its keyboard, folder switching is ⌘-only & the stuck-Cmd ghost is gone
-
-            **Typing in a monitor page is never interrupted again**
-            - The App used to take the keyboard back from the monitor page on a timer — typing into a project's input field or picking from a dropdown (tnd, the Template) could get cut off mid-gesture. The page now reports its own focus state to the App (a reporter script injected into every frame — projects need to do nothing), and while you are working in the page every reclaim path stands down. The keyboard returns the instant the page is done with it.
-            - The pointer sitting inside the monitor area holds the same protection, so homemade controls that never take focus (div-based menus) are covered too. Moving the mouse to the title strip or the sidebar hands the keyboard back at once.
-            - While the page holds focus, the web ⌘ layer (⌘1..9, ⌘ arrows, ⌘R, ⌘,) lets the page keep the keys; native menu shortcuts (⌘M mute, zoom, ⌘⇧R, ⌘W) are never affected. The desktop-switch reclaim from earlier releases still fires when nothing holds the keyboard.
-
-            **Folder switching is ⌘-only — and no frozen focus ring**
-            - Plain ←/→ no longer switch folder views. Focus used to park on a segment after a click, and the bare arrows then moved the view — reading exactly like the ⌘ shortcuts firing without ⌘ held. ⌘←/⌘→ (wrapping at the ends) and clicking are the two ways to switch; Tab order is unchanged. The focus ring a click used to leave behind — a blue box that appeared on the next keypress and wouldn't move — is gone as well: it only ever appears for Tab now.
-
-            **The stuck ⌘ state heals itself**
-            - If the key-up was swallowed while focus sat inside the monitor page, the App could keep believing ⌘ was held: number badges that wouldn't clear, a peek sidebar that wouldn't retract. The next pointer move or plain keypress reports the truth and resets it — a real hold is never touched.
-
-            **Telematic Network Diagnostics v0.5.0 rides along**
-            - Performers can leave on their own — the leave is measured, the card disappears server-side, and coming back gets a full-page rejoin. The hub can remove a performer from the card's ✕ (the phone shows a removed notice and a fresh rejoin). The monitor's connect button gained a four-state machine that dirty-checks the live config, and the burst marker is off the display.
-
-            ### What's New in V1.3.4 — the startup crash fixed at the root, a bounded shutdown & a session log that tells the story
-
-            **The scsynth startup crash — fixed at the root, with the self-heal kept as the fuse**
-            - The bundled audio engine can die right after launch on macOS 26 — a SuperCollider 3.14.1 ObjC runtime race (the SIGTRAP / "Audio engine exited during startup" error that a manual Retry used to clear). A controlled experiment on the crash-storm machine pinned the root cause: the dice roll lives in scsynth's own default-device resolution — spawned without an explicit device name, it died 14–16 times out of 30; spawned with a name the App had already resolved, it booted 30 out of 30. Every scsynth start — session load and the launch warmup alike — now hands scsynth the device name the App resolved (`-H`): your saved preference, or the system default resolved at the moment of launch. That default-resolution path is never taken again.
-            - The session pins the device it resolved at start: a Bluetooth headset pairing or a display claiming the system default mid-show can no longer reroute your audio. And if the device disappears between resolution and start, scsynth reports it and the App stops at the error page with the reason in the session log — never a silent switch to another device.
-            - The transparent auto-retry stays as the fuse: any signal-death boot retries on a fresh port while the loading screen stays put (real crashes always print the CoreAudio device list first, so the gate is signal death alone) — while a configuration error such as a rejected device still exits cleanly, straight to the error page, unmasked: if the error page appears, it still means a human should look. The launch warmup retries through the same gate, silently, so the first project load boots on a warm subsystem. Every auto-retry is recorded in the App log and the session log — the crash-rate record that will decide the eventual SuperCollider upgrade.
-
-            **Shutdown is bounded — closing a project can't blank the screen for five seconds**
-            - A pathological score server that ignored SIGTERM used to stretch the stop cover into a 5–10 second white screen. The score server's grace window now tightens to 2 seconds — healthy projects exit in a twentieth of that, and phones sit in their reconnect loop either way — while the audio engine keeps its full window for CoreAudio teardown. Stop order is unchanged: the project releases its synths first, the engine follows.
-            - The project server's and the audio engine's raw output now lands, line by line, in the per-session log with `[node]` / `[scsynth]` prefixes — including their final words during shutdown, flushed as written so the log survives even a hard crash. Slow shutdowns and startup failures can finally be read straight from `session-logs/`, bracketed by the App's own teardown markers.
-
-            **The bundled diagnostics tools ride along**
-            - Local Network Diagnostics v0.5.0 and Telematic Network Diagnostics v0.4.0 now force-close their live connections on stop, so they exit comfortably inside the new window — and their step-by-step shutdown timings land in the session log.
-
-            ### What's New in V1.3.3 — the native belt, a dressed Utilities shelf & the Pond
-
-            **The right-click bug, finished — and the right click handed to authors**
-            - The stubborn WKWebView right-click menu ("Open Frame in New Window") is now stopped at the native NSMenu level, with the JS layers kept as the first belt. Menus carrying a text affordance — copy/cut/paste on editable fields and selections — pass through untouched.
-            - Right-click inside a project's monitor page belongs to the page's author now: a project can design its own context menu and the App stays out of the way (runtime contract §10).
-
-            **Window edges behave**
-            - The bottom-right rounded corner no longer clicks through to apps underneath: an invisible grip drives the native resize session.
-            - ⌘← / ⌘→ folder switching is back. WKWebView had been claiming exactly Command+horizontal arrows as its own back/forward keys before the page could see them; a native guard reroutes that pair onto the normal key path. Every other shortcut keeps its original routing (⌘↓/⌘↑ untouched).
-
-            **The Utilities shelf, dressed as app content**
-            - The built-in tools sit in a fixed registry order — Multichannel → Local → Telematic — and every launch re-settles installs seeded before the reorder.
-            - Concise card names that fit the 320px sidebar — Multichannel Gen, Local Diagnostics, Telematic Diagnostics — resolved above every learned manifest name, in the sidebar, the settings list and the running title alike; selection can no longer flip them back to the long names.
-            - Each tool's card carries an illustrative icon: a waveform, a node pair, a globe — a wrench for whatever ships next.
-            - The two diagnostics tools ship refreshed. Their stability reading no longer mistook the test cycle's own idle phase for network trouble (Wi-Fi power-save wake-up used to paint a ~4 s wave on "stability" and pin healthy performers yellow): quality now judges the load condition, and only real degradation under load raises a flag. Each performer's phone mirrors its own measured verdict live — green/yellow/red on the dot. The telematic monitor is rebuilt as a one-screen compact console (three-column top row, scan-sized join QR beside the performer cards, capped event log).
-
-            **A Welcome with an identity, themes with dressing**
-            - The Welcome page carries the app icon on a rippling halo stage, ported from the project homepage and recolored by each theme's accent; Brutal keeps its hard plane and sits it out.
-            - The Stage theme's selection pills — the folder segment and the project card — render as frosted liquid glass (a strict port of the pure-CSS recipe, then tuned frosty; the folder pill's whites sit one step softer).
-            - The default theme is now 池塘 / Pond — display name and internal id alike. Stored preferences migrate silently, and following project pages are none the wiser: a page that does not recognize an id keeps its own default palette, which is exactly the Pond look.
-
-            **Documentation**
-            - network.md is the performance networking guide it always should have been: playing over the LAN (start the show, scan or type the address) and over the internet (VPN, port forwarding, JackTrip for inter-site audio), with an honest best-effort disclaimer. The port tables moved to the manifest reference, appearance syncing to the runtime contract.
-            - The Module Manual sits below the Reference Manual in the Help center, and the English README matches the Chinese one again.
-
-            ### What's New in V1.3.2 — the Module Manual, tools that stay put & an architecture hardening pass
-
-            **A fourth book in the Help center: the Module Manual**
-            - The Help center gains the Module Manual — six paired Chinese/English documents (an overview plus qr, players, theme-follow, locale-follow and audio) sourced from the module creator documentation that ships inside the PNDS Template itself, fact-checked against the Template source. It sits between the Creator Guide and the Reference Manual, and cross-links with both.
-
-            **Built-in tools are app content — and now locked as such**
-            - The bundled utility tools (Local Network Diagnostics & co.) can no longer be dragged out of order, moved out of or into the Utilities folder, removed with ✕, or renamed with ⌘R: their position, membership, presence and names are locked, enforced by the store's structural actions. Selecting and starting them is unchanged. (User report.)
-
-            **Update checks share one lifecycle**
-            - The automatic boot check and the manual menu/Settings check now flow through one lifecycle module with typed outcomes. "Update available" and "installed" toasts carry action buttons; the native confirm/alert dialogs are retired; the boot path stays silent when there is nothing to report.
-
-            **An architecture hardening pass — zero behavior change**
-            - Four pure refactors landed alongside: the sidebar drag engine extracted into a useCardDrag controller with a geometry adapter; the folder and card pill indicators unified into one useIndicatorPill engine, so scheduling and geometry writes exist exactly once; the project store gained replaceProjectIndex — a single-call wholesale rebuild that persists in one snapshot, the seam the upcoming setlist import will call, with the set.json keying decision (manifest id + version, never absolute paths) recorded ahead of the format freeze; and the Rust start pipeline now threads one StartRequest record through all four layers, so v1.4.0's networked-hub variables will land as record fields instead of widening four signatures.
-
-            ### Earlier releases
-            The V1.3.2–V1.1 notes live on the [releases page](https://github.com/xO-xN/PNDS-App/releases).
-
-            ### Auto-Updates
-            Existing users will receive automatic update notifications.
-
-            **Full Changelog**: https://github.com/${{ github.repository }}/commits/${{ github.ref_name || inputs.version }}
+          tagName: ${{ env.RELEASE_TAG }}
+          releaseName: 'PNDS ${{ env.RELEASE_TAG }}'
+          releaseBody: ${{ env.RELEASE_BODY }}
           releaseDraft: true
           prerelease: false
           uploadUpdaterJson: true
           args: '--bundles app,dmg'
+
+      # Lane 2 — Intel: cross-compiled with --target, tauri.x86_64.conf.json
+      # overlays the Node 22 sidecar's scsynth slice and min macOS 12.0.
+      # Finds the draft release from lane 1 by tag, adds its dmg/.app.tar.gz
+      # assets, and uploadUpdaterJson merges the darwin-x86_64 entries into
+      # the existing latest.json (arm64 entries are preserved).
+      - name: Build and release (x86_64)
+        uses: tauri-apps/tauri-action@dev
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ env.RELEASE_TAG }}
+          releaseName: 'PNDS ${{ env.RELEASE_TAG }}'
+          releaseBody: ${{ env.RELEASE_BODY }}
+          releaseDraft: true
+          prerelease: false
+          uploadUpdaterJson: true
+          args: '--target x86_64-apple-darwin --config src-tauri/tauri.x86_64.conf.json --bundles app,dmg'
