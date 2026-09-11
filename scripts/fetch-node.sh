@@ -1,25 +1,21 @@
 #!/usr/bin/env bash
 # Fetch the Node.js runtime bundled with PNDS App (Tauri sidecar).
 #
-# The App ships a Node.js sidecar to run score-project servers, one per
-# build target (per-target versions & rationale: docs/developer/releases.md
-# “Provisioning is per build target”); the runtime contract's Node baseline
-# tracks the arm64 lane.
-# One sidecar per build target, named `node-<target-triple>` as Tauri's
-# `externalBin` convention requires; its LICENSE lands beside it as
-# `NODE-LICENSE-<target-triple>.txt` (the license text is version-specific —
-# the bundled deps differ per Node series — so each lane bundles its own,
-# mapped by the per-target tauri.<arch>.conf.json overlays):
-#   aarch64-apple-darwin → Node 24 LTS (official binaries need macOS 13.5+)
-#   x86_64-apple-darwin  → Node 22 LTS (the Intel build's floor is macOS 12,
-#                          and Node 24's darwin-x64 binary refuses to run there)
+# The App ships a Node.js sidecar to run score-project servers, one binary
+# per build target (named `node-<target-triple>` as Tauri's `externalBin`
+# convention requires) — but every target resolves the SAME Node version
+# below: one runtime baseline for all supported Macs (the guard test
+# src/lib/build-baseline.test.mjs turns red if the lanes ever drift apart).
+# Both lanes' Node series being identical also makes the LICENSE text
+# identical, so it lands beside the sidecars as a single target-neutral
+# NODE-LICENSE.txt.
 # The binary is ~100 MB and is NOT committed to git; run this script once
 # after cloning, and again whenever a version or path below changes. The
 # release workflow does the same for each target it builds.
 #
 # Usage: npm run node:fetch                                  # host target
 #        PNDS_TARGET=x86_64-apple-darwin npm run node:fetch   # Intel target
-# Override version for the selected target: NODE_VERSION=22.23.2 npm run node:fetch
+# Override the version for the selected target: NODE_VERSION=24.19.0 npm run node:fetch
 
 set -euo pipefail
 
@@ -34,14 +30,16 @@ host_triple() {
   esac
 }
 
+# One Node series for every build target (see header) — bumping it moves
+# both lanes together; the guard test fails the build if they ever split.
+DEFAULT_VERSION="24.18.1"
+
 TARGET="${PNDS_TARGET:-$(host_triple)}"
 case "$TARGET" in
   aarch64-apple-darwin)
-    DEFAULT_VERSION="24.18.1"
     NODE_ARCH="arm64"
     ;;
   x86_64-apple-darwin)
-    DEFAULT_VERSION="22.23.2"
     NODE_ARCH="x64"
     ;;
   *)
@@ -67,7 +65,7 @@ fi
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BIN_DIR="$ROOT/src-tauri/binaries"
 SIDECAR="$BIN_DIR/node-${TARGET}"
-LICENSE_DEST="$BIN_DIR/NODE-LICENSE-${TARGET}.txt"
+LICENSE_DEST="$BIN_DIR/NODE-LICENSE.txt"
 
 mkdir -p "$BIN_DIR"
 TMP="$(mktemp -d)"

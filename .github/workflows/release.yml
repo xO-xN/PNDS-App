@@ -156,9 +156,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Pins the CI's own Node (frontend build) to the arm64 lane's sidecar
-      # series (scripts/fetch-node.sh); lts/* drifts to newer majors over
-      # time. The sidecars themselves are fetched per lane below.
+      # Pins the CI's own Node (frontend build) to the sidecar series the
+      # App bundles (scripts/fetch-node.sh); lts/* drifts to newer majors
+      # over time. The sidecars themselves are fetched per lane below.
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:

@@ -3,12 +3,7 @@
   "bundle": {
     "resources": {
       "binaries/scsynth-aarch64-apple-darwin": null,
-      "binaries/scsynth-x86_64-apple-darwin": "scsynth",
-      "binaries/NODE-LICENSE-aarch64-apple-darwin.txt": null,
-      "binaries/NODE-LICENSE-x86_64-apple-darwin.txt": "licenses/NODE-LICENSE.txt"
-    },
-    "macOS": {
-      "minimumSystemVersion": "12.0"
+      "binaries/scsynth-x86_64-apple-darwin": "scsynth"
     }
   }
 }
