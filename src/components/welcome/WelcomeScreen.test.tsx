@@ -1,8 +1,17 @@
-import { render, screen } from '@/test/test-utils'
-import { describe, it, expect, beforeEach } from 'vitest'
+import { render, screen, fireEvent } from '@/test/test-utils'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { openUrl } from '@tauri-apps/plugin-opener'
 import { useProjectStore } from '@/store/project-store'
+import { useUpdaterStore } from '@/store/updater-store'
+import { RELEASES_URL } from '@/lib/updater'
 import pndsIcon from '@/assets/pnds-icon.png'
 import { WelcomeScreen } from './WelcomeScreen'
+
+// The update notice's button funnels into lib/updater's
+// openReleasesPage — stub the opener so the click asserts without IPC.
+vi.mock('@tauri-apps/plugin-opener', () => ({
+  openUrl: vi.fn().mockResolvedValue(undefined),
+}))
 
 /**
  * v1.2.0 (spec issue #15): the starting page is copy plus preflight
@@ -12,6 +21,7 @@ import { WelcomeScreen } from './WelcomeScreen'
  */
 describe('WelcomeScreen', () => {
   beforeEach(() => {
+    useUpdaterStore.setState({ available: null, failure: null })
     useProjectStore.setState({
       currentProject: null,
       recentProjectPaths: [],
@@ -75,5 +85,45 @@ describe('WelcomeScreen', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(
       'scoreServer.monitorPort'
     )
+  })
+
+  // v1.4.3 (#121): the check-only update notice — one docked line plus a
+  // Releases button, present for the whole session once any check
+  // (boot or manual) found a version.
+  it('shows the update notice with a Releases button when a version is available', () => {
+    useUpdaterStore.getState().setUpdateAvailable('1.4.3')
+
+    render(<WelcomeScreen />)
+
+    expect(screen.getByTestId('welcome-update-notice')).toHaveTextContent(
+      'v1.4.3 is available'
+    )
+    expect(
+      screen.getByRole('button', { name: 'Go to Releases' })
+    ).toBeInTheDocument()
+  })
+
+  it('opens the Releases page from the notice button', () => {
+    useUpdaterStore.getState().setUpdateAvailable('1.4.3')
+
+    render(<WelcomeScreen />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Go to Releases' }))
+    expect(openUrl).toHaveBeenCalledWith(RELEASES_URL)
+  })
+
+  it('keeps the notice docked under a preflight error without hiding it', () => {
+    useUpdaterStore.getState().setUpdateAvailable('1.4.3')
+    useProjectStore.setState({
+      preflightStatus: 'error',
+      preflightError: 'score server port taken',
+    })
+
+    render(<WelcomeScreen />)
+
+    // Both docked residents coexist — the notice never replaces the
+    // error the operator is currently acting on.
+    expect(screen.getByTestId('welcome-update-notice')).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent('port taken')
   })
 })

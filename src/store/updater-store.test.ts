@@ -1,15 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { toast } from 'sonner'
+import type { MouseEvent } from 'react'
+import { toast, type Action, type ExternalToast } from 'sonner'
+import { openUrl } from '@tauri-apps/plugin-opener'
 import {
-  bootFailureDialogRenderer,
-  manualFailureDialogRenderer,
+  bootCheckRenderer,
+  manualCheckRenderer,
   useUpdaterStore,
 } from './updater-store'
 
-// The dialog renderers spread the toast renderers from @/lib/updater;
-// sonner is stubbed (same mock as updater.test.ts) so the inherited toast
-// branches assert without a <Toaster/>. The updater plugin itself is
-// mocked globally in src/test/setup.ts; no path here reaches relaunch.
+// The store renderers spread the toast renderers from @/lib/updater;
+// sonner is stubbed (same mock as updater.test.ts) so the inherited
+// toast branches assert without a <Toaster/>, and the opener is stubbed
+// so the available toast's Releases action asserts without IPC. The
+// updater plugin itself is mocked globally in src/test/setup.ts; no
+// path here downloads, installs, or relaunches anything (#121).
 vi.mock('sonner', () => ({
   toast: {
     info: vi.fn(),
@@ -19,55 +23,86 @@ vi.mock('sonner', () => ({
   },
 }))
 
-describe('updater-store (#60 failure dialog renderers)', () => {
+vi.mock('@tauri-apps/plugin-opener', () => ({
+  openUrl: vi.fn().mockResolvedValue(undefined),
+}))
+
+/** Sonner types `action` as `Action | ReactNode`; the updater renderers
+ * always pass an Action — narrow so assertions can reach label/onClick. */
+function actionOf(options: ExternalToast | undefined): Action | undefined {
+  const action = options?.action
+  return action && typeof action === 'object' && 'onClick' in action
+    ? action
+    : undefined
+}
+
+/** Click argument for an Action's onClick — sonner hands the button
+ * event; the updater's handlers ignore it. */
+function click(): MouseEvent<HTMLButtonElement> {
+  return {} as MouseEvent<HTMLButtonElement>
+}
+
+describe('updater-store (#121 check-only renderers)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    useUpdaterStore.setState({ failure: null })
+    useUpdaterStore.setState({ available: null, failure: null })
   })
 
-  it('escalates check and install failures to the dialog on both entries', () => {
-    for (const renderer of [
-      manualFailureDialogRenderer,
-      bootFailureDialogRenderer,
-    ]) {
-      renderer.checkFailed('dns broke')
-      expect(useUpdaterStore.getState().failure).toEqual({
-        phase: 'check',
-        reason: 'dns broke',
-      })
-      renderer.installFailed('network dropped')
-      expect(useUpdaterStore.getState().failure).toEqual({
-        phase: 'install',
-        reason: 'network dropped',
-      })
-    }
+  it('manual: available persists into the store and toasts with a Releases action', () => {
+    manualCheckRenderer.available('1.4.3')
+
+    expect(useUpdaterStore.getState().available).toBe('1.4.3')
+    expect(toast.info).toHaveBeenCalledTimes(1)
+    const infoCall = vi.mocked(toast.info).mock.calls[0]
+    expect(infoCall?.[0]).toBe('Update Available')
+    expect(actionOf(infoCall?.[1])?.label).toBe('Go to Releases')
+
+    actionOf(infoCall?.[1])?.onClick(click())
+    expect(openUrl).toHaveBeenCalledWith(
+      'https://github.com/xO-xN/PNDS-App/releases'
+    )
+  })
+
+  it('manual: up-to-date confirms with a toast, check failure opens the dialog', () => {
+    manualCheckRenderer.upToDate()
+    expect(toast.success).toHaveBeenCalledTimes(1)
+    expect(toast.error).not.toHaveBeenCalled()
+
+    manualCheckRenderer.checkFailed('dns broke')
+    expect(useUpdaterStore.getState().failure).toEqual({ reason: 'dns broke' })
     expect(toast.error).not.toHaveBeenCalled()
   })
 
-  it('manual renderer keeps the toast outcomes — available / up-to-date / installed', () => {
-    manualFailureDialogRenderer.available('1.4.0', () => undefined)
-    expect(toast.info).toHaveBeenCalledTimes(1)
+  it('boot: available persists silently; every other outcome renders nothing', () => {
+    bootCheckRenderer.available('1.4.3')
+    expect(useUpdaterStore.getState().available).toBe('1.4.3')
+    expect(toast.info).not.toHaveBeenCalled()
 
-    manualFailureDialogRenderer.upToDate()
-    manualFailureDialogRenderer.installed(() => undefined)
-    expect(toast.success).toHaveBeenCalledTimes(2)
+    bootCheckRenderer.upToDate()
+    bootCheckRenderer.checkFailed('offline')
+    expect(toast.success).not.toHaveBeenCalled()
+    expect(toast.error).not.toHaveBeenCalled()
+    // The failure dialog stays closed on the boot path — an offline
+    // venue machine must never see a dialog.
+    expect(useUpdaterStore.getState().failure).toBeNull()
   })
 
-  it('boot renderer stays quiet on up-to-date but toasts an available update', () => {
-    bootFailureDialogRenderer.upToDate()
-    expect(toast.success).not.toHaveBeenCalled()
+  it('the available state survives unrelated store churn (in-app persistence)', () => {
+    useUpdaterStore.getState().setUpdateAvailable('1.4.3')
 
-    bootFailureDialogRenderer.available('1.4.0', () => undefined)
-    expect(toast.info).toHaveBeenCalledTimes(1)
+    // Failure/clear only touch the dialog slice, like a manual check
+    // failing after the boot check already found a version.
+    useUpdaterStore.getState().showUpdaterFailure('dns broke')
+    useUpdaterStore.getState().clearUpdaterFailure()
+
+    expect(useUpdaterStore.getState().available).toBe('1.4.3')
+    expect(useUpdaterStore.getState().failure).toBeNull()
   })
 
   it('the latest failure wins and clearUpdaterFailure closes the dialog', () => {
-    useUpdaterStore.getState().showUpdaterFailure('check', 'first')
-    useUpdaterStore.getState().showUpdaterFailure('install', 'second')
-    expect(useUpdaterStore.getState().failure).toEqual({
-      phase: 'install',
-      reason: 'second',
-    })
+    useUpdaterStore.getState().showUpdaterFailure('first')
+    useUpdaterStore.getState().showUpdaterFailure('second')
+    expect(useUpdaterStore.getState().failure).toEqual({ reason: 'second' })
 
     useUpdaterStore.getState().clearUpdaterFailure()
     expect(useUpdaterStore.getState().failure).toBeNull()

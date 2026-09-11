@@ -126,7 +126,7 @@
       "endpoints": [
         "https://github.com/xO-xN/PNDS-App/releases/latest/download/latest.json"
       ],
-      "dialog": true,
+      "dialog": false,
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDU2MDUxNzYxNzVBNTZGRjcKUldUM2I2VjFZUmNGVnNzYlIxMVV1MFM5Umw3akdoaEkyL0F4YzVMMHowb2F4WmJSSGcxcC9BNFAK"
     }
   }

@@ -8,7 +8,7 @@ The release system provides:
 
 - Automated GitHub Actions workflow for building releases
 - Version management script for updating all version files
-- Auto-updater for seamless user updates
+- Check-only update notifier (v1.4.3, #121): the app checks latest.json and points at Releases — it never downloads, installs, or relaunches
 - macOS builds in two lanes: Apple Silicon (arm64, mainline) and Intel (x86_64, macOS ≥ 12)
 
 ## Initial Setup
@@ -40,7 +40,7 @@ Add these secrets (Settings → Secrets and variables → Actions):
       "endpoints": [
         "https://github.com/xO-xN/PNDS-App/releases/latest/download/latest.json"
       ],
-      "dialog": true,
+      "dialog": false,
       "pubkey": "YOUR_PUBLIC_KEY_FROM_STEP_1"
     }
   }
@@ -143,11 +143,12 @@ LSMinimumSystemVersion raw <PNDS.app/Contents/Info.plist>`); an
    sites (different networks) against the hub on the VPS, node names
    visible on the hub, measurements flowing both ways. This also
    completes TND's deferred「双节点实测校准质量阈值」step.
-4. **Auto-update downloads and installs behind a system proxy** — the
-   updater-proxy checklist (v1.4.0, #60), on a real machine:
-   1. System Settings → Network → Proxies pointing at a local proxy (e.g. Charles/mitmproxy): launch the App, run Check for Updates, confirm the request appears in the proxy's log.
+4. **The check-only update notice works behind a system proxy** — the
+   updater-proxy checklist (v1.4.0, #60; reworked for check-only #121),
+   on a real machine:
+   1. System Settings → Network → Proxies pointing at a local proxy (e.g. Charles/mitmproxy): launch the App, run Check for Updates, confirm the latest.json request appears in the proxy's log.
    2. `launchctl setenv https_proxy http://127.0.0.1:7890` (see [Proxies](#proxies-v140-issue-60)), relaunch the App, repeat the check.
-   3. Point the proxy at a dead address: the boot auto-check and the manual check must both open the failure dialog — copy the error, open the Releases page.
+   3. Point the proxy at a dead address: the manual check must open the failure dialog — copy the error, open the Releases page; the boot auto-check (5 s after launch) must stay completely silent, and an offline launch shows no dialog at all.
 5. **`.local` custom address on an Android phone** — a work declaring a
    `*.local` performer address: scan its QR code with the Android device
    that will actually perform, confirm the page loads. Write the
@@ -180,29 +181,33 @@ All three files must have matching versions:
 - `src-tauri/Cargo.toml` → `version = "1.0.0"`
 - `src-tauri/tauri.conf.json` → `"version": "1.0.0"`
 
-## Auto-Update System
+## Update Check System (check-only since v1.4.3, issue #121)
 
 ### Behavior
 
 - Checks for updates 5 seconds after app launch (boot path)
-- "Update available" toast carries an **Install** action button (no native `confirm()`/`alert()` anywhere on the update paths)
-- Downloads and installs in background, then offers a **Restart** toast action
-- Boot path stays silent on "up to date"; v1.4.0 (#60): a check **or** install failure on either path (boot and manual) opens the App-styled failure dialog — full copyable error text plus an **Open Releases Page** action for a manual download. The manual path toasts the up-to-date outcome as before
+- The app never downloads, installs, or relaunches — `downloadAndInstall` and `relaunch` are gone, the updater plugin's built-in `dialog` is off, and `tauri-plugin-process` is removed with them
+- Found update (boot or manual): the version persists into the updater store and the starting page docks one line — 「有新版 vX.Y.Z」 — with a **Go to Releases** button; the manual path additionally toasts the same offer with the same action
+- Boot path is completely silent on "up to date" **and** on failure/offline — a venue machine that cannot reach GitHub must never see a dialog
+- Manual path (app menu, Settings About) keeps full three-state feedback: up-to-date toast; available toast (action → Releases); check failure opens the App-styled failure dialog — full copyable error text plus an **Open Releases Page** action. The failure dialog is reachable from the manual path only
 
 ### Update Flow
 
 ```
-check → typed outcome → renderer (toast) → [Install action] → download + install → [Restart action] → relaunch
+check → typed outcome → renderer
+  boot:   silent (failure too) — available persists for the starting page notice
+  manual: toast (up-to-date | available → Releases) | failure dialog
 ```
 
-### Implementation (v1.3.2, issue #74)
+### Implementation (v1.3.2, issue #74; reworked #121)
 
 The whole lifecycle lives in `src/lib/updater.ts` — one module, both entries:
 
 - `checkForUpdates()` — the manual entry (app menu item, Settings About button)
 - `startBootUpdateCheck()` — the boot entry; `App.tsx` only schedules it and cancels on unmount
+- `openReleasesPage()` / `RELEASES_URL` — the single action every update surface offers (manual toast, starting page notice, failure dialog)
 
-The check resolves to a typed outcome (`available` / `up-to-date` / `check-failed`), and install to `installed` / `install-failed`. Outcomes are handed to a `UpdaterRenderer` — a pure rendering seam. The toast renderers (`manualToastRenderer`, `bootToastRenderer`) draw the available/installed toasts; the failure-dialog renderer pair (v1.4.0, #60 — `manualFailureDialogRenderer` / `bootFailureDialogRenderer` in `src/store/updater-store.ts`) escalates check/install failures to the App-styled dialog (`UpdaterFailureDialog`) by spreading the toast renderers and overriding only the two failure outcomes — the lifecycle itself is untouched. The three entries hand the renderers in: the app menu item and the Settings About button (manual), `App.tsx`'s boot auto-check (boot). All copy lives in `/locales` under `updater.*` (en + zh-CN). Collocated tests: `src/lib/updater.test.ts` (lifecycle + toast renderers), `src/store/updater-store.test.ts` + `src/components/shell/UpdaterFailureDialog.test.tsx` (dialog renderer + dialog).
+The check resolves to a typed outcome (`available` / `up-to-date` / `check-failed`) — there is no install continuation. Outcomes are handed to a `UpdaterRenderer` — a pure rendering seam. The lib's toast renderers (`manualToastRenderer`, `bootQuietRenderer`) are the vocabulary; the production pair (`manualCheckRenderer` / `bootCheckRenderer` in `src/store/updater-store.ts`) spreads them and adds the store effects: both persist an available version into `useUpdaterStore.available` (in-app persistent — the starting page's notice survives navigating away and back), the manual one escalates check failures to the App-styled dialog (`UpdaterFailureDialog`), the boot one renders nothing at all. The three entries hand the renderers in: the app menu item and the Settings About button (manual), `App.tsx`'s boot auto-check (boot). All copy lives in `/locales` under `updater.*` (en + zh-CN). Collocated tests: `src/lib/updater.test.ts` (lifecycle + toast renderers + Releases action), `src/store/updater-store.test.ts` + `src/components/shell/UpdaterFailureDialog.test.tsx` (entry renderers + dialog), `src/components/welcome/WelcomeScreen.test.tsx` (the starting page notice).
 
 ### Proxies (v1.4.0, issue #60)
 
@@ -217,7 +222,7 @@ launchctl setenv http_proxy http://127.0.0.1:7890
 # remove again with: launchctl unsetenv https_proxy
 ```
 
-Proxy behavior is a Cargo-feature effect — there is nothing to unit-test; it is verified on a real machine as a pre-publish checklist item (see [Manual verification before publishing](#manual-verification-before-publishing)). When a check or install fails behind a broken proxy, the failure dialog is the operator's way out: copy the error, open the Releases page, download manually.
+Proxy behavior is a Cargo-feature effect — there is nothing to unit-test; it is verified on a real machine as a pre-publish checklist item (see [Manual verification before publishing](#manual-verification-before-publishing)). When the manual check fails behind a broken proxy, the failure dialog is the operator's way out: copy the error, open the Releases page, download manually. The boot path stays silent either way (#121).
 
 ## Release Artifacts
 
@@ -231,18 +236,14 @@ Each release creates:
 
 ## Security
 
-All updates are cryptographically signed:
-
-1. Private key signs releases during build
-2. Public key in config verifies downloads
-3. Invalid signatures are automatically rejected
+The signing pipeline is retained unchanged (check-only #121): the private key signs every release artifact during the build, the `pubkey` stays in `tauri.conf.json`, and `latest.json` plus `.sig` files ship as before. The app itself no longer consumes the download — the infrastructure stays in place and verified.
 
 ## Troubleshooting
 
-| Issue                    | Solution                                                                            |
-| ------------------------ | ----------------------------------------------------------------------------------- |
-| Workflow doesn't trigger | Ensure tag starts with `v` and is pushed                                            |
-| Build fails              | Check GitHub secrets, run `npm run check:all` locally                               |
-| Updates not detected     | Verify endpoint URL and public key match                                            |
-| Download fails           | Check signatures, file permissions, disk space                                      |
-| Check fails behind proxy | See [Proxies](#proxies-v140-issue-60) — System Settings proxy or `launchctl setenv` |
+| Issue                    | Solution                                                                                                |
+| ------------------------ | ------------------------------------------------------------------------------------------------------- |
+| Workflow doesn't trigger | Ensure tag starts with `v` and is pushed                                                                |
+| Build fails              | Check GitHub secrets, run `npm run check:all` locally                                                   |
+| Updates not detected     | Verify endpoint URL and public key match                                                                |
+| Download fails           | Downloads happen in the browser now (check-only) — check the release assets, signatures, and disk space |
+| Check fails behind proxy | See [Proxies](#proxies-v140-issue-60) — System Settings proxy or `launchctl setenv`                     |

@@ -5,7 +5,8 @@ import { writeText } from '@tauri-apps/plugin-clipboard-manager'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { toast } from 'sonner'
 import { useUpdaterStore } from '@/store/updater-store'
-import { UpdaterFailureDialog, RELEASES_URL } from './UpdaterFailureDialog'
+import { RELEASES_URL } from '@/lib/updater'
+import { UpdaterFailureDialog } from './UpdaterFailureDialog'
 
 // Clipboard + opener are mocked globally in src/test/setup.ts (writeText)
 // and here (openUrl); sonner is stubbed like the other dialog tests.
@@ -21,7 +22,7 @@ vi.mock('sonner', () => ({
   },
 }))
 
-describe('UpdaterFailureDialog (#60)', () => {
+describe('UpdaterFailureDialog (#60, check-only #121)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     useUpdaterStore.setState({ failure: null })
@@ -33,7 +34,7 @@ describe('UpdaterFailureDialog (#60)', () => {
   })
 
   it('titles a check failure and shows the full reason text', () => {
-    useUpdaterStore.getState().showUpdaterFailure('check', 'no route to host')
+    useUpdaterStore.getState().showUpdaterFailure('no route to host')
     render(<UpdaterFailureDialog />)
 
     expect(screen.getByText('Update Check Failed')).toBeInTheDocument()
@@ -45,20 +46,8 @@ describe('UpdaterFailureDialog (#60)', () => {
     )
   })
 
-  it('titles an install failure', () => {
-    useUpdaterStore
-      .getState()
-      .showUpdaterFailure('install', 'signature rejected')
-    render(<UpdaterFailureDialog />)
-
-    expect(screen.getByText('Update Failed')).toBeInTheDocument()
-    expect(screen.getByTestId('updater-failure-reason')).toHaveTextContent(
-      'signature rejected'
-    )
-  })
-
   it('copies the full error text and confirms with a toast', async () => {
-    useUpdaterStore.getState().showUpdaterFailure('check', 'offline')
+    useUpdaterStore.getState().showUpdaterFailure('offline')
     render(<UpdaterFailureDialog />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Copy details' }))
@@ -68,7 +57,7 @@ describe('UpdaterFailureDialog (#60)', () => {
 
   it('toasts a generic error when the clipboard copy fails', async () => {
     vi.mocked(writeText).mockRejectedValueOnce(new Error('clipboard busy'))
-    useUpdaterStore.getState().showUpdaterFailure('check', 'offline')
+    useUpdaterStore.getState().showUpdaterFailure('offline')
     render(<UpdaterFailureDialog />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Copy details' }))
@@ -79,7 +68,7 @@ describe('UpdaterFailureDialog (#60)', () => {
 
   it('opens the Releases page with the primary action and closes the dialog', async () => {
     const user = userEvent.setup()
-    useUpdaterStore.getState().showUpdaterFailure('install', 'network dropped')
+    useUpdaterStore.getState().showUpdaterFailure('network dropped')
     render(<UpdaterFailureDialog />)
 
     // The primary (filled) action is the Enter default, like the
@@ -94,7 +83,7 @@ describe('UpdaterFailureDialog (#60)', () => {
   })
 
   it('cancel closes the dialog without touching the escape hatch', async () => {
-    useUpdaterStore.getState().showUpdaterFailure('check', 'dns broke')
+    useUpdaterStore.getState().showUpdaterFailure('dns broke')
     render(<UpdaterFailureDialog />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))

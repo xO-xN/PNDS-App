@@ -53,14 +53,15 @@ pub fn run() {
         );
     }
 
-    // Updater plugin for in-app updates
+    // Updater plugin — check-only since v1.4.3 (#121): the app queries
+    // latest.json and points at Releases; it never downloads, installs,
+    // or relaunches (the plugin's built-in dialog stays off).
     #[cfg(desktop)]
     {
         app_builder = app_builder.plugin(tauri_plugin_updater::Builder::new().build());
     }
 
     app_builder = app_builder
-        .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_notification::init())
         .manage(crate::project::session::SessionManager::default())
         .manage(crate::window::WindowManager::default())

@@ -243,6 +243,14 @@ Back/Close 返回 Welcome，不自动重启。
 
 启动 WebKit 基线门（v1.4.2，#110）：启动时由后端读已安装的 Safari 版本（WKWebView 的 UA 冻结在 AppleWebKit/605.1.15，JS 侧无版本可读），低于 Safari 16.4 基线时经 App 风格错误对话框（`WebKitBaselineDialog`，与更新失败对话同规挂 AppShell 外）说明缘由并指引「软件更新」；满足基线或版本不可读时零打扰。文案进 locales `webkit.*`，中英成对。
 
+## 更新检查（v1.4.3，#121）
+
+更新提示为 check-only：App 只查询 latest.json，**绝不下载、安装或重启**——updater 插件的 `dialog` 配置关闭（原生弹窗与 `downloadAndInstall` / `relaunch` 反馈链一起退场，`tauri-plugin-process` 随之移除）。下载与安装永远是操作者自己的动作：所有更新面（手动 toast 的按钮、starting page 通知、失败对话框主按钮）统一走 `openReleasesPage()` 直达 Releases 页。
+
+- 启动自动检查（启动 5 秒后，`startBootUpdateCheck`）**彻底静默**：失败/离线不弹任何框——演出环境连不上 GitHub 是常态，那是噪音。发现新版只把版本号持久进 updater store（会话内存级，不写偏好文件），starting page 底部显示一行「有新版 vX.Y.Z」+「前往 Releases 页」按钮；会话运行中发现也一样，下次回到 starting page 时可见。
+- 手动检查（App 菜单 / 设置 About，`checkForUpdates` + `manualCheckRenderer`）保留完整三态反馈：「已是最新」toast；「有新版」toast（按钮为前往 Releases）；失败弹 App 风格失败对话框（可复制错误 + 打开 Releases）——失败对话框**仅手动路径可达**，boot 渲染器不触碰它。
+- updater 插件、签名产物与 latest.json 基建保持不动（发布流程照旧产出可更新的双架构 dmg，只是 App 侧不再消费下载产物）。
+
 ## 日志与清理
 
 每个 session 写独立日志，保存在 App data 的 `session-logs/`，记录：manifest/preflight；session 元数据；Node/scsynth stdout/stderr——issue #93 起逐行落盘、带 `[node]`/`[scsynth]` 来源前缀、随写随 flush，且**包含关停窗口内该 generation 的最终输出**（落盘以日志所属 generation 为守卫：旧 generation 的迟到行不进新会话日志，也不进错误页 tail）；health；master stage；scsynth 瞬态重试（issue #92）；关停标记与结果（`Session ending` → 各子进程 stopped/未确认 → `All processes stopped`）；错误。保留最近 20 份，删除最旧文件。日志不写入工程目录，也不上传。
@@ -278,6 +286,7 @@ Back/Close 返回 Welcome，不自动重启。
 - error → Load/Retry；
 - 全屏 action 的菜单、快捷键与按钮入口；
 - 窗口 fade 状态机；
+- 更新检查 check-only 三态（boot 静默、available 状态持久、手动反馈与 Releases 动作）；
 - 日志轮转；
 - 子进程关闭与 orphan cleanup。
 

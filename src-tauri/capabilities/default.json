@@ -27,7 +27,6 @@
     "fs:default",
     "log:default",
     "notification:default",
-    "process:default",
     "os:default"
   ]
 }

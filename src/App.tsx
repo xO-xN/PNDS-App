@@ -9,7 +9,7 @@ import {
 import { setupHelpWindowBridge } from './lib/help-window'
 import { startBootUpdateCheck } from './lib/updater'
 import { runWebKitBaselineCheck } from './lib/webkit-baseline'
-import { bootFailureDialogRenderer } from './store/updater-store'
+import { bootCheckRenderer } from './store/updater-store'
 import {
   initializeLanguage,
   languageSettingFromPrefs,
@@ -152,13 +152,11 @@ function App() {
     })
 
     // v1.3.2 (#74): the boot auto-check lives in the updater module — App
-    // only schedules it and cancels on unmount. v1.4.0 (#60): failures
-    // hand over to the dialog renderer — the App-styled failure dialog —
-    // while an available update still toasts; the old inline flow with
-    // native confirm()/alert() is retired.
-    const cancelBootUpdateCheck = startBootUpdateCheck(
-      bootFailureDialogRenderer
-    )
+    // only schedules it and cancels on unmount. v1.4.3 (#121): check-only
+    // and completely silent — a found update persists into the updater
+    // store for the starting page's notice; failures and offline render
+    // nothing (a venue that cannot reach GitHub is the norm).
+    const cancelBootUpdateCheck = startBootUpdateCheck(bootCheckRenderer)
     return () => {
       cancelBootUpdateCheck()
       window.removeEventListener('beforeunload', onBeforeUnload)
@@ -205,8 +203,9 @@ function App() {
         <CloseConfirmDialog />
         {/* v1.1.2 T7: quit-confirm (⌘Q with a live session) — same rule. */}
         <QuitConfirmDialog />
-        {/* v1.4.0 (#60): update failures (boot or manual check) land on
-            the App-styled dialog — same rule. */}
+        {/* v1.4.0 (#60): manual update-check failures land on the
+            App-styled dialog — same rule (boot failures are silent,
+            #121). */}
         <UpdaterFailureDialog />
         {/* v1.4.2 (#110): system WebKit below the Safari 16.4 baseline —
             same rule, mounted outside AppShell. */}

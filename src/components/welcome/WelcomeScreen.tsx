@@ -1,5 +1,8 @@
 import { useTranslation } from 'react-i18next'
 import { useProjectStore } from '@/store/project-store'
+import { useUpdaterStore } from '@/store/updater-store'
+import { openReleasesPage } from '@/lib/updater'
+import { Button } from '@/components/ui/button'
 import pndsIcon from '@/assets/pnds-icon.png'
 
 /**
@@ -12,12 +15,14 @@ import pndsIcon from '@/assets/pnds-icon.png'
  * the add-project suggestion: opening an existing project is the
  * performer's main path. Projects start by clicking a sidebar entry —
  * preflight runs directly (v1.2.0 removed the trust gate, spec issue
- * #15) and starting is explicit via the Load button.
+ * #15) and starting is explicit via the Load button. The one standing
+ * exception is the docked update notice (#121) — see the bottom dock.
  */
 export function WelcomeScreen() {
   const { t } = useTranslation()
   const preflightStatus = useProjectStore(state => state.preflightStatus)
   const preflightError = useProjectStore(state => state.preflightError)
+  const updateVersion = useUpdaterStore(state => state.available)
 
   return (
     <div className="relative flex min-h-full flex-col items-center justify-center bg-(--pnds-bg) p-8 animate-[fade-in_0.8s_ease-in]">
@@ -77,8 +82,28 @@ export function WelcomeScreen() {
           or disappearing box (any height) must never re-center the content
           above. The transient "Checking project…" state uses the same
           docked rounded box as preflight errors, in the neutral gray
-          variant; only one of the two can show at a time. */}
-      <div className="absolute inset-x-8 bottom-8 flex justify-center">
+          variant; only one of the two can show at a time. The update
+          notice (#121) is the one persistent resident — a check (boot or
+          manual) that found a version leaves it here for the rest of the
+          session, so an update noticed mid-performance is still on the
+          wall when the operator is back at the starting page; its button
+          opens the Releases page (check-only — the app never installs). */}
+      <div className="absolute inset-x-8 bottom-8 flex flex-col items-center gap-2">
+        {updateVersion && (
+          <div
+            data-testid="welcome-update-notice"
+            className="font-manrope flex items-center gap-3 rounded-xl border border-(--pnds-accent)/30 bg-(--pnds-pill) px-4 py-2.5 text-sm text-(--pnds-text)/70"
+          >
+            <span>{t('updater.noticeLine', { version: updateVersion })}</span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void openReleasesPage()}
+            >
+              {t('updater.releasesAction')}
+            </Button>
+          </div>
+        )}
         {preflightStatus === 'checking' && (
           <div
             data-testid="welcome-checking"

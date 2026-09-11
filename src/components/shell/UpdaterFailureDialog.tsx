@@ -1,8 +1,8 @@
 import { useTranslation } from 'react-i18next'
 import { writeText } from '@tauri-apps/plugin-clipboard-manager'
-import { openUrl } from '@tauri-apps/plugin-opener'
 import { toast } from 'sonner'
 import { useUpdaterStore } from '@/store/updater-store'
+import { openReleasesPage } from '@/lib/updater'
 import { logger } from '@/lib/logger'
 import { Button } from '@/components/ui/button'
 import {
@@ -16,18 +16,13 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 
-/** The manual-download escape hatch — the repo the updater endpoint
- * (tauri.conf.json) downloads from, minus the manifest path. Exported
- * for the component tests to pin the target. */
-export const RELEASES_URL = 'https://github.com/xO-xN/PNDS-App/releases'
-
 /**
- * v1.4.0 (issue #60): the update failure dialog — check and install
- * failures from both entries (boot auto-check, menu / Settings manual
- * check) render here through the dialog renderers in updater-store,
- * instead of the old silent (boot) / toast (manual) treatment. The full
+ * v1.4.0 (issue #60): the update failure dialog — manual-path check
+ * failures render here through the manual renderer in updater-store,
+ * instead of the old toast treatment. v1.4.3 (#121): check-only removed
+ * the install phase, so every failure is a check failure. The full
  * reason text is shown selectable and one click copies it; the primary
- * action opens the Releases page so a broken update always has a way
+ * action opens the Releases page so a failed check always has a way
  * out. Same AlertDialog family as the close/quit confirms, mounted
  * outside AppShell so it is reachable in every window state.
  */
@@ -46,15 +41,6 @@ export function UpdaterFailureDialog() {
     }
   }
 
-  const openReleases = async () => {
-    try {
-      await openUrl(RELEASES_URL)
-    } catch (error) {
-      logger.warn('Failed to open the releases page', { error })
-      toast.error(t('toast.error.generic'))
-    }
-  }
-
   return (
     <AlertDialog
       open={failure !== null}
@@ -64,11 +50,7 @@ export function UpdaterFailureDialog() {
     >
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>
-            {failure?.phase === 'install'
-              ? t('updater.installFailedTitle')
-              : t('updater.checkFailedTitle')}
-          </AlertDialogTitle>
+          <AlertDialogTitle>{t('updater.checkFailedTitle')}</AlertDialogTitle>
           <AlertDialogDescription>
             {t('updater.failureBody')}
           </AlertDialogDescription>
@@ -96,7 +78,7 @@ export function UpdaterFailureDialog() {
           <AlertDialogCancel>{t('updater.failureDismiss')}</AlertDialogCancel>
           {/* autoFocus makes the primary action the Enter default, same
               rule as the close/quit confirms. */}
-          <AlertDialogAction autoFocus onClick={() => void openReleases()}>
+          <AlertDialogAction autoFocus onClick={() => void openReleasesPage()}>
             {t('updater.failureReleasesAction')}
           </AlertDialogAction>
         </AlertDialogFooter>

@@ -34,7 +34,7 @@ import { buildMonitorUrl, effectiveHostAddress } from '@/lib/monitor-url'
 import { notifications } from '@/lib/notifications'
 import { promptOpenProject } from '@/lib/open-project'
 import { checkForUpdates } from '@/lib/updater'
-import { manualFailureDialogRenderer } from '@/store/updater-store'
+import { manualCheckRenderer } from '@/store/updater-store'
 import {
   closeHelpWindow,
   HELP_WINDOW_LABEL,
@@ -137,9 +137,10 @@ export async function buildAppMenu(): Promise<Menu> {
         await MenuItem.new({
           id: 'check-updates',
           text: t('menu.checkForUpdates'),
-          // v1.4.0 (#60): check/install failures escalate to the
-          // App-styled failure dialog; the toast outcomes are unchanged.
-          action: () => void checkForUpdates(manualFailureDialogRenderer),
+          // v1.4.3 (#121): check-only — the available toast points at
+          // Releases; a check failure escalates to the App-styled
+          // failure dialog.
+          action: () => void checkForUpdates(manualCheckRenderer),
         }),
         await PredefinedMenuItem.new({ item: 'Separator' }),
         await PredefinedMenuItem.new({
