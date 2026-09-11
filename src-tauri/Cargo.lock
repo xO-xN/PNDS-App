@@ -3450,7 +3450,7 @@ dependencies = [
 
 [[package]]
 name = "pnds-app"
-version = "1.4.2"
+version = "1.4.3"
 dependencies = [
  "cpal",
  "if-addrs",
