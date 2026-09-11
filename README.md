@@ -17,7 +17,7 @@ A performance needs just one Mac and a router: the App opens a project and sets 
 
 ## Download
 
-- **PNDS App**: the `.dmg` from [Releases](https://github.com/xO-xN/PNDS-App/releases/latest) — runs on Apple Silicon (M-series, macOS 13.5+) and Intel (macOS 12+) Macs; pick the `_aarch64` / `_x64` build that matches your Mac.
+- **PNDS App**: the `.dmg` from [Releases](https://github.com/xO-xN/PNDS-App/releases/latest) — runs on Apple Silicon (M-series) and Intel Macs alike, macOS 13.5+ (Ventura); pick the `_aarch64` / `_x64` build that matches your Mac.
 - **PNDS Template**: [Releases](https://github.com/xO-xN/PNDS-Template/releases/latest).
 
 ## Documentation

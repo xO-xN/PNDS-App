@@ -4,8 +4,10 @@ import { useWebKitBaselineStore } from '@/store/webkit-baseline-store'
 
 /** The Safari release whose system WebKit the frontend build actually
  * requires (v1.4.2 #110; spec #108): 16.4 is the frontend's real feature
- * baseline, and macOS 12's system WebKit spans 15.1 (factory) to 17.6
- * (last update), so the gap is real on the venue Intel machines. */
+ * baseline. The gate was load-bearing on v1.4.2's Intel lane, whose
+ * macOS 12 floor allowed system WebKit as old as 15.1; since v1.4.3
+ * (#116) every supported Mac runs macOS 13.5+ (system WebKit ≥ 16.4),
+ * so the gate is a never-expected safety net, kept unchanged. */
 export const SAFARI_BASELINE = '16.4'
 
 /** Apple's "Update to the latest version of Safari" guide, localized to

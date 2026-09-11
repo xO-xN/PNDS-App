@@ -33,9 +33,9 @@ App 不是：
 
 必须支持：
 
-- macOS（arm64 与 x86_64 双轨）；
+- macOS（arm64 与 x86_64 双轨，系统底线统一为 macOS 13.5）；
 - Tauri v2 + 单一主窗口；
-- 随包 Node 与 scsynth（按架构双轨，固定版本见运行契约 §2）；
+- 随包 Node（双架构同版，见运行契约 §2）与 scsynth（按架构双轨切片）；
 - Host + 手机/平板的局域网演出；
 - 1–64 路离散 Internal 输出；
 - ad-hoc 签名发行与独立 Tauri updater 签名。

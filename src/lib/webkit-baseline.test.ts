@@ -15,10 +15,12 @@ describe('evaluateWebKitBaseline (#110)', () => {
     expect(SAFARI_BASELINE).toBe('16.4')
   })
 
-  // Spec samples: a stock macOS 12 machine ships Safari 15.1 — below the
-  // baseline; Software Update can take it to 16.4 (the baseline itself)
-  // or 17.6 (Monterey's last Safari) — both fine.
-  it('judges the macOS 12 span: 15.x below, 16.4/17.6 at or above', () => {
+  // Historical span (v1.4.2's macOS 12 Intel lane, retired by v1.4.3's
+  // 13.5 floor): a stock macOS 12 machine shipped Safari 15.1 — below the
+  // baseline; Software Update could take it to 16.4 (the baseline itself)
+  // or 17.6 (Monterey's last Safari) — both fine. The values stay as
+  // regression anchors for the version comparison itself.
+  it('judges the historical macOS 12 span: 15.x below, 16.4/17.6 at or above', () => {
     expect(evaluateWebKitBaseline('15.1')).toBe('below-baseline')
     expect(evaluateWebKitBaseline('15.6.1')).toBe('below-baseline')
     expect(evaluateWebKitBaseline('16.3')).toBe('below-baseline')

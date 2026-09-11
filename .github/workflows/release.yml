@@ -19,9 +19,11 @@ jobs:
     permissions:
       contents: write
     # macOS dual-lane (see docs/developer/app-behavior.md 平台与交付范围):
-    # the arm64 mainline (bundled Node 24, min macOS 13.5) plus an x86_64
-    # lane for Intel Macs (bundled Node 22, min macOS 12.0), cross-compiled
-    # on this arm64 runner. Both lanes build sequentially in this one job:
+    # the arm64 mainline plus an x86_64 lane for Intel Macs, cross-compiled
+    # on this arm64 runner. Both lanes bundle the same Node 24 sidecar
+    # series and share the base config's min macOS 13.5 floor (v1.4.3,
+    # #116); the x86_64 config swaps only the scsynth slice. Both lanes
+    # build sequentially in this one job:
     # the second tauri-action step finds the draft release the first created
     # (lookup by tag) and merges its platform entry into the existing
     # latest.json — tauri-action re-reads that asset and keeps the other
@@ -38,8 +40,22 @@ jobs:
       RELEASE_BODY: |
         ## PNDS ${{ github.ref_name || inputs.version }}
 
-        **Intel Macs join the stage**
-        - This release ships two installers — the `_aarch64.dmg` for Apple Silicon Macs (M-series, macOS 13.5+) and the `_x64.dmg` for Intel Macs (macOS 12+). Pick the one that matches your Mac; the auto-updater already picks its lane on its own.
+        **One baseline for every Mac — Apple Silicon and Intel alike, macOS 13.5+**
+        - This release ships two installers — the `_aarch64.dmg` for Apple Silicon Macs (M-series) and the `_x64.dmg` for Intel Macs — both requiring macOS 13.5 (Ventura) or newer. Pick the one that matches your Mac; the auto-updater already picks its lane on its own.
+
+        ### What's New in V1.4.3 — one runtime baseline for every Mac, quieter update checks & welcome-page fixes
+
+        **The system floor is macOS 13.5 on every Mac — including Intel**
+        - v1.4.2 accepted Intel Macs down to macOS 12, but that promise never held: on macOS 12 the system WebKit cannot run the App's monitor pages, so the App was effectively unusable there. v1.4.3 raises the Intel lane to the same macOS 13.5 the Apple Silicon lane has always required, and both lanes now ship the exact same runtime — the bundled Node 24 sidecar is identical on both architectures, so a Project that runs on one Mac runs the same on the other. For authors this means a single official runtime baseline to test against, with no per-architecture footnotes.
+        - If your Mac stays on macOS 12: after this update the App will no longer open there — that is deliberate, and v1.4.2 was already unusable on that system (WebKit). Ventura supports MacBook Pro 2017+, iMac 2017+, Mac mini 2018+ and Mac Pro 2019+; upgrading brings the machine onto the single supported baseline.
+
+        **Update checks no longer install — they take you to the Releases page**
+        - The App no longer downloads and installs updates itself. The automatic check on launch is now completely silent when it cannot reach GitHub — a show environment must never be interrupted by an update error. When an update is available, the starting page shows a one-line notice with a button straight to the Releases page; if you are mid-session, the notice is waiting at your next return to the starting page.
+        - The manual Check for Updates keeps its full feedback — the up-to-date toast, the new-version toast (its button opens the Releases page), and on failure a dialog with the copyable error plus a Releases-page way out. Installers stay signed and the updater keeps picking your Mac's lane automatically; installing is now a plain dmg download.
+
+        **Welcome page: the logo stays in, the ripple rests properly**
+        - The welcome logo can no longer be dragged out of the App (it used to land on the desktop as an image file).
+        - With Reduce Motion enabled, the ripple animation now settles into the static halo instead of freezing mid-ring.
 
         ### What's New in V1.4.1 — the reload button truly reloads & a quieter, tougher session core
 
@@ -150,7 +166,7 @@ jobs:
         The V1.3.2–V1.1 notes live on the [releases page](https://github.com/xO-xN/PNDS-App/releases).
 
         ### Auto-Updates
-        Existing users will receive automatic update notifications.
+        Existing users receive update notices (the starting page's one-line notice and the manual check's toast); since V1.4.3 the App itself no longer installs updates — grab the dmg from the Releases page it points you to.
 
         **Full Changelog**: https://github.com/${{ github.repository }}/commits/${{ github.ref_name || inputs.version }}
     steps:
@@ -215,7 +231,8 @@ jobs:
           args: '--bundles app,dmg'
 
       # Lane 2 — Intel: cross-compiled with --target, tauri.x86_64.conf.json
-      # overlays the Node 22 sidecar's scsynth slice and min macOS 12.0.
+      # swaps only the scsynth slice for x86_64 — Node sidecar, license and
+      # the 13.5 floor all come from the base config (v1.4.3, #117).
       # Finds the draft release from lane 1 by tag, adds its dmg/.app.tar.gz
       # assets, and uploadUpdaterJson merges the darwin-x86_64 entries into
       # the existing latest.json (arm64 entries are preserved).

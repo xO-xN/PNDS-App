@@ -88,17 +88,18 @@ Then GitHub Actions will:
    for the Utilities folder. The app runs them in place; there is no
    first-run install.
 
-   Provisioning is per build target: `node:fetch` takes `PNDS_TARGET`
-   (aarch64 → Node 24, x86_64 → Node 22 whose official binary still runs on
-   macOS 12; Node 24's darwin binaries require macOS 13.5) and stages the
-   sidecar plus its version-specific `NODE-LICENSE-<target>.txt` (the
-   license text differs per Node series, so each lane bundles its own),
-   while `scsynth:fetch` writes both scsynth slices from the universal dmg
-   and keeps `libsndfile.dylib` universal. Base `tauri.conf.json` carries
-   the arm64 lane's scsynth + license mappings and minimumSystemVersion
-   13.5; the x86_64 lane overrides both via `npm run tauri:build:x64`
-   (`--config src-tauri/tauri.x86_64.conf.json`, which deletes the arm64
-   mappings and maps its own slice + license at macOS 12.0).
+   Provisioning is per build target only where the binaries differ
+   (v1.4.3, #117): `node:fetch` takes `PNDS_TARGET` but resolves the SAME
+   Node version for every target — one runtime baseline, kept from drifting
+   by the guard test `src/lib/build-baseline.test.mjs` — and stages the
+   sidecar plus a single target-neutral `NODE-LICENSE.txt` (same Node
+   series, same license text). `scsynth:fetch` writes both scsynth slices
+   from the universal dmg and keeps `libsndfile.dylib` universal. Base
+   `tauri.conf.json` carries the license mapping and
+   `minimumSystemVersion` 13.5 for both lanes; the x86_64 lane swaps only
+   its scsynth slice via `npm run tauri:build:x64` (`--config
+src-tauri/tauri.x86_64.conf.json`, which deletes the arm64 slice
+   mapping and maps its own).
 
 2. Build both lanes in one job, sequentially (issue #112):
    lane 1 builds the arm64 mainline natively (base `tauri.conf.json`),
@@ -125,14 +126,15 @@ The pre-publish matrix (seeded v1.4.0, issue #64; extended each release) —
 every gate below passes on real machines before the draft release is
 published:
 
-1. **The dual-lane draft is complete** (v1.4.2, #112): both `…_aarch64.dmg`
-   and `…_x64.dmg` assets present and installable on their machines;
-   `latest.json` carries `darwin-aarch64` and `darwin-x86_64` entries with
-   valid signatures; the two `Info.plist`s read `LSMinimumSystemVersion`
-   13.5 (arm64) and 12.0 (x64) (`plutil -extract
-LSMinimumSystemVersion raw <PNDS.app/Contents/Info.plist>`); an
-   installed arm64 copy's Check for Updates still resolves to the
-   `darwin-aarch64` entry.
+1. **The dual-lane draft is complete** (v1.4.2, #112; floor unified to 13.5
+   in v1.4.3, #116): both `…_aarch64.dmg` and `…_x64.dmg` assets present
+   and installable on their machines; `latest.json` carries
+   `darwin-aarch64` and `darwin-x86_64` entries with valid signatures; the
+   two `Info.plist`s both read `LSMinimumSystemVersion` 13.5, arm64 and
+   x64 alike:
+   `plutil -extract LSMinimumSystemVersion raw <PNDS.app/Contents/Info.plist>`;
+   an installed copy's Check for Updates still resolves each lane to its
+   own entry (`darwin-aarch64` on Apple Silicon, `darwin-x86_64` on Intel).
 2. **Local Network Diagnostics v0.6.0 is published** (no longer a draft)
    in `xO-xN/Local-Network-Diagnostics`. `utilities:fetch` runs inside
    `beforeBuildCommand` and draft-release assets are not publicly
@@ -229,7 +231,7 @@ Proxy behavior is a Cargo-feature effect — there is nothing to unit-test; it i
 Each release creates:
 
 - **macOS (Apple Silicon)**: `.dmg` installer and `.app` bundle (built natively on `macos-latest`, min macOS 13.5)
-- **macOS (Intel)**: `.dmg` installer and `.app` bundle (cross-compiled on the same runner, min macOS 12.0)
+- **macOS (Intel)**: `.dmg` installer and `.app` bundle (cross-compiled on the same runner, min macOS 13.5 — the same floor as arm64 since v1.4.3, #116)
 - **Auto-updater**: `latest.json` manifest — one `platforms` map with both
   `darwin-aarch64` and `darwin-x86_64` entries — and per-artifact `.sig`
   signature files
