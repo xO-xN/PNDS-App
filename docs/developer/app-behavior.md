@@ -58,7 +58,7 @@ App 不是：
 - 点击历史条目重新 preflight；
 - 支持拖拽排序和移除历史记录；
 - 失效路径显示可读错误；
-- App 启动进入 Welcome，不自动运行历史工程。Welcome 标题上方是涟漪 logo 舞台（v1.3.3 #86，用户要求自 site welcome 页移植）：App icon（`src/assets/pnds-icon.png`，与 site 同图）浮在 172px 圆形舞台上，三道错相水纹环扩散消散、整台缓浮——涟漪与光环取 `--pnds-accent`（各主题自有色），icon 保持自身配色（如 macOS 图标之于暗色模式）；`prefers-reduced-motion` 下动画按全局规则静止；纯装饰（`aria-hidden`）。Brutal 下整个舞台不渲染（#87 用户要求：柔光语言不属于硬线条平面，`[data-color-theme='brutal'] [data-welcome-logo]` 隐藏，hero 文案独立承载页面）。
+- App 启动进入 Welcome，不自动运行历史工程。Welcome 标题上方是涟漪 logo 舞台（v1.3.3 #86，用户要求自 site welcome 页移植）：App icon（`src/assets/pnds-icon.png`，与 site 同图）浮在 172px 圆形舞台上，三道错相水纹环扩散消散、整台缓浮——涟漪与光环取 `--pnds-accent`（各主题自有色），icon 保持自身配色（如 macOS 图标之于暗色模式）；icon 不可拖出 App（#122：`draggable=false` + App.css `-webkit-user-drag: none`，拖出去会存出裸图片文件）；`prefers-reduced-motion` 下水纹环整体隐藏、只余静态 halo + 图标（#122 修正 #115 的错误表述：fill-mode 默认 none，0.01ms 播完回退基础样式会定格满尺寸静止圈，环带 `data-welcome-ring` 钩子供该规则命中）；纯装饰（`aria-hidden`）。Brutal 下整个舞台不渲染（#87 用户要求：柔光语言不属于硬线条平面，`[data-color-theme='brutal'] [data-welcome-logo]` 隐藏，hero 文案独立承载页面）。
 
 打开路径不弹信任确认：PNDS App 是「操作者即机主」的演出工具，打开的工程由操作者本人放入本机，运行前再弹一次本地代码确认是纯摩擦。工程历史的增删与数据格式（`recentProjects`）保持不变。
 

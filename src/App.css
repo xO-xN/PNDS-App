@@ -132,6 +132,14 @@
     }
   }
 
+  /* #122: the welcome icon is decor, not data — dragging it out of the
+     app must not save a bare image file. draggable="false" on the <img>
+     is the attribute half; -webkit-user-drag is the WebKit enforcement
+     half (the attribute alone does not stop a WKWebView image drag). */
+  [data-welcome-logo] img {
+    -webkit-user-drag: none;
+  }
+
   @keyframes dissolve-out {
     from {
       opacity: 1;
@@ -219,11 +227,18 @@
    every state change (hover tints, the folder pill's slide, the sidebar's
    hover reveal) still lands, it just stops animating. The LoadingScreen
    logo is canvas-drawn per frame, not CSS, and stays as is.
-   #115: infinite animations (the welcome logo stage) must STOP after that
-   instant play, not loop — 0.01ms × infinite replays at refresh rate and
-   reads as strobing. iteration-count 1 lets each ring run once to its
-   end state (ripples end at opacity 0, float settles raised), so the
-   stage is a calm static halo + icon under the preference. */
+   #115: infinite animations must STOP after that instant play, not loop —
+   0.01ms × infinite replays at refresh rate and reads as strobing, so
+   iteration-count 1 caps every animation at one instant run.
+   #122 defect 1: an instant run does NOT park the keyframes' end states —
+   the default fill-mode is none, so once the 0.01ms iteration is over an
+   element reverts to its base style. The welcome ripple rings' base is a
+   full-size accent-bordered circle, so the cap alone left a static ring
+   (the old comment's "ripples end at opacity 0" was wrong — that end
+   state holds only inside a fill window the default never enters, and
+   the float likewise settles at its base, unraised). The rings are
+   therefore hidden outright under the preference: the stage is a calm
+   static halo + icon. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -231,6 +246,10 @@
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+  }
+
+  [data-welcome-ring] {
+    display: none;
   }
 }
 

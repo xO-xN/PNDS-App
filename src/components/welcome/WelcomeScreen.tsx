@@ -31,12 +31,17 @@ export function WelcomeScreen() {
           apart (negative delays, so a wave is already travelling at first
           paint) while the whole stage floats. The rings and halo take
           --pnds-accent so every theme owns its ripple; the icon keeps its
-          own art, like a macOS icon in dark mode. Purely decorative. */}
+          own art, like a macOS icon in dark mode. Purely decorative.
+          #122: the rings carry data-welcome-ring — the reduce-motion rule
+          (App.css) hides them outright, because the instant-play cap parks
+          them at their base style (a full-size static ring), not at the
+          keyframes' opacity-0 end. */}
       <div
         data-testid="welcome-logo-stage"
-        /* data-welcome-logo: Brutal's hook — that theme hides the stage
-           entirely (theme-variables.css; soft glow has no place on its
-           hard plane). */
+        /* data-welcome-logo has two consumers: Brutal hides the whole
+           stage on it (theme-variables.css — soft glow has no place on
+           its hard plane), and App.css scopes the icon's no-drag rule
+           to [data-welcome-logo] img (#122). */
         data-welcome-logo=""
         aria-hidden="true"
         className="relative mb-3 flex size-[172px] animate-[welcome-float_5.5s_ease-in-out_infinite_alternate] items-center justify-center rounded-full"
@@ -45,14 +50,28 @@ export function WelcomeScreen() {
             'radial-gradient(closest-side, color-mix(in oklab, var(--pnds-accent) 13%, transparent), transparent 72%)',
         }}
       >
-        <span className="absolute inset-0 rounded-full border-[1.5px] border-(--pnds-accent)/40 animate-[welcome-logo-ripple_4.2s_cubic-bezier(0.2,0.55,0.35,1)_infinite]" />
-        <span className="absolute inset-0 rounded-full border-[1.5px] border-(--pnds-accent)/40 animate-[welcome-logo-ripple_4.2s_cubic-bezier(0.2,0.55,0.35,1)_infinite] [animation-delay:-1.4s]" />
-        <span className="absolute inset-0 rounded-full border-[1.5px] border-(--pnds-accent)/40 animate-[welcome-logo-ripple_4.2s_cubic-bezier(0.2,0.55,0.35,1)_infinite] [animation-delay:-2.8s]" />
+        {/* The phase delays stay literal strings — Tailwind only
+            generates arbitrary classes it can scan, so the map must
+            not compose them at runtime. */}
+        {['', '[animation-delay:-1.4s]', '[animation-delay:-2.8s]'].map(
+          delayClass => (
+            <span
+              key={delayClass}
+              data-welcome-ring=""
+              className={`absolute inset-0 rounded-full border-[1.5px] border-(--pnds-accent)/40 animate-[welcome-logo-ripple_4.2s_cubic-bezier(0.2,0.55,0.35,1)_infinite] ${delayClass}`}
+            />
+          )
+        )}
         <img
           src={pndsIcon}
           alt=""
           width={84}
           height={84}
+          /* #122: the icon is decor, not data — dragging it out of the
+             app must not save a bare image file. Attribute half; the
+             WebKit enforcement half (-webkit-user-drag) lives in
+             App.css. */
+          draggable={false}
           className="relative z-[1] size-[84px] rounded-[18px] shadow-[0_10px_30px_rgba(16,24,40,0.16),0_2px_6px_rgba(16,24,40,0.08)]"
         />
       </div>

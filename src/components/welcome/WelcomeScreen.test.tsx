@@ -59,10 +59,24 @@ describe('WelcomeScreen', () => {
     const stage = screen.getByTestId('welcome-logo-stage')
     expect(stage).toHaveAttribute('aria-hidden', 'true')
     expect(stage).toHaveAttribute('data-welcome-logo', '')
-    expect(stage.querySelectorAll('span')).toHaveLength(3)
+    const rings = stage.querySelectorAll('span')
+    expect(rings).toHaveLength(3)
+    // #122 defect 1: each ring carries data-welcome-ring — the
+    // reduce-motion rule (App.css) keys on it to hide the rings
+    // outright (an instant play with fill-mode none would otherwise
+    // park them at their base style: a full-size static ring). The CSS
+    // itself is human-verified in tauri dev, like the other motion
+    // rules; this pins the hook it depends on.
+    for (const ring of rings) {
+      expect(ring).toHaveAttribute('data-welcome-ring', '')
+    }
     const icon = stage.querySelector('img')
     expect(icon).toHaveAttribute('src', pndsIcon)
     expect(icon).toHaveAttribute('alt', '')
+    // #122: the icon must not be draggable out of the app (saving a
+    // bare image file). Attribute half — the WebKit enforcement half
+    // (-webkit-user-drag in App.css) is human-verified in tauri dev.
+    expect(icon).toHaveAttribute('draggable', 'false')
   })
 
   it('shows the checking feedback while preflight runs', () => {
