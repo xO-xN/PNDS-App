@@ -89,7 +89,7 @@ describe('ProjectReadme', () => {
     )
     expect(openHelpWindow).toHaveBeenCalledWith({
       kind: 'doc',
-      docId: 'reference-structure',
+      docId: 'readme-guide',
     })
   })
 

@@ -19,8 +19,8 @@ import { openHelpWindow } from '@/lib/help-window'
  * is in flight the panel keeps its frame (and dock) and renders no
  * content — the IPC read is fast. No README (or an unreadable one —
  * the wrapper logs and lands here too) is the empty state, pointing at
- * the writing rules in Help (the structure reference, where #127's
- * README chapter lives).
+ * the writing rules in Help (the "Writing a Project README" chapter,
+ * added by #127; the structure reference carries the contract).
  */
 export function ProjectReadme({ path }: { path: string }) {
   const { t } = useTranslation()
@@ -72,7 +72,7 @@ export function ProjectReadme({ path }: { path: string }) {
             variant="link"
             className="mt-2 self-start px-0"
             onClick={() =>
-              void openHelpWindow({ kind: 'doc', docId: 'reference-structure' })
+              void openHelpWindow({ kind: 'doc', docId: 'readme-guide' })
             }
           >
             {t('projectReadme.writingRules')}

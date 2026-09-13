@@ -44,7 +44,7 @@ staging 与排除清单：
 - 复制在系统临时目录的 staging 中进行，源工程目录零改动；
 - 排除清单（不进入 bundle）：任意深度的 `.DS_Store` 与 `.git*` 文件/目录；仅工程根目录下的 `docs/`、`test/`、`tests/` 目录（创作期资料，非运行资产）；
 - 源工程中的符号链接：目标位于工程目录内的按普通文件物化拷贝；指向工程外的跳过；
-- 其余文件原样复制（含 `node_modules/`、`.scd` 源、audio/、public/ 等——排除只做减法，从不重排或改写内容）；
+- 其余文件原样复制（含 `node_modules/`、`.scd` 源、audio/、public/ 等——排除只做减法，从不重排或改写内容）。工程根的 `README.md`（自述，见 [structure.md](./structure.md)）也在其中：它随包旅行，接收方在 App 里选中工程卡时被渲染；
 - devDependencies 不影响打包校验，但会随 `node_modules` 原样进包——发布前 `npm prune --omit=dev` 清理可显著减小 `.pnds` 体积。
 
 产物：

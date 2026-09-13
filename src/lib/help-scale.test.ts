@@ -8,6 +8,7 @@ import { buildHelpIndex, searchHelp } from './help-search'
 
 import appTutorial from '../../docs/zh-CN/app-tutorial.md?raw'
 import templateGuide from '../../docs/zh-CN/template-guide.md?raw'
+import readmeGuide from '../../docs/zh-CN/readme-guide.md?raw'
 import modulesReadme from '../../docs/zh-CN/modules/README.md?raw'
 import modulesQr from '../../docs/zh-CN/modules/qr.md?raw'
 import modulesPlayers from '../../docs/zh-CN/modules/players.md?raw'
@@ -41,6 +42,7 @@ import referencePageInteraction from '../../docs/zh-CN/reference/page-interactio
 const RAW_CORPUS: Record<string, string> = {
   'app-tutorial': appTutorial,
   'template-guide': templateGuide,
+  'readme-guide': readmeGuide,
   'modules-readme': modulesReadme,
   'modules-qr': modulesQr,
   'modules-players': modulesPlayers,
@@ -65,6 +67,7 @@ const RAW_CORPUS: Record<string, string> = {
 const DOC_PATHS: Record<string, string> = {
   'app-tutorial': 'app-tutorial.md',
   'template-guide': 'template-guide.md',
+  'readme-guide': 'readme-guide.md',
   'modules-readme': 'modules/README.md',
   'modules-qr': 'modules/qr.md',
   'modules-players': 'modules/players.md',
@@ -101,11 +104,12 @@ describe('help corpus at real scale (#53)', () => {
   const index = buildHelpIndex(corpus)
 
   it('places every shipped document and derives its own title', () => {
-    expect(corpus).toHaveLength(20)
+    expect(corpus).toHaveLength(21)
     expect(corpus[0]?.title).toBe('PNDS App 使用教程')
     expect(corpus[1]?.title).toBe('PNDS Template 创作指南')
-    expect(corpus[2]?.title).toBe('PNDS 参考手册')
-    expect(corpus[14]?.title).toBe('模块手册')
+    expect(corpus[2]?.title).toBe('给工程写 README')
+    expect(corpus[3]?.title).toBe('PNDS 参考手册')
+    expect(corpus[15]?.title).toBe('模块手册')
     for (const document of corpus) {
       expect(document.title).not.toBe(document.id)
       expect(document.sections.length).toBeGreaterThan(0)

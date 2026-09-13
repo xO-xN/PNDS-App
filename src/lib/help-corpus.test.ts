@@ -32,6 +32,11 @@ const FIXTURES: RawHelpDocument[] = [
     markdown: '# PNDS Template 创作指南\n\n## 准备工作\n\nNode.js 24。',
   },
   {
+    id: 'readme-guide',
+    path: 'readme-guide.md',
+    markdown: '# 给工程写 README\n\n## 推荐大纲\n\n五个部分。',
+  },
+  {
     id: 'reference-readme',
     path: 'reference/README.md',
     markdown: '# PNDS 参考手册\n\n按问题检索。',
@@ -76,15 +81,16 @@ describe('help-corpus (#53)', () => {
   it('builds the corpus in manifest order with books, titles and sections', () => {
     const corpus = buildHelpCorpus(FIXTURES)
 
-    expect(corpus).toHaveLength(20)
+    expect(corpus).toHaveLength(21)
     expect(
-      corpus.slice(0, 3).map(doc => [doc.id, doc.book, doc.title])
+      corpus.slice(0, 4).map(doc => [doc.id, doc.book, doc.title])
     ).toEqual([
       ['app-tutorial', 'tutorial', 'PNDS App 使用教程'],
       ['template-guide', 'creator-guide', 'PNDS Template 创作指南'],
+      ['readme-guide', 'creator-guide', '给工程写 README'],
       ['reference-readme', 'reference', 'PNDS 参考手册'],
     ])
-    expect(corpus.slice(17).map(doc => [doc.id, doc.book, doc.title])).toEqual([
+    expect(corpus.slice(18).map(doc => [doc.id, doc.book, doc.title])).toEqual([
       ['modules-theme-follow', 'modules', 'modules-theme-follow'],
       ['modules-locale-follow', 'modules', 'modules-locale-follow'],
       ['modules-audio', 'modules', 'modules-audio'],
@@ -127,7 +133,7 @@ describe('help-corpus (#53)', () => {
   it('declares the manifest as every shippable document with a book', () => {
     expect(HELP_BOOKS.map(book => [book.id, ...book.documentIds])).toEqual([
       ['tutorial', 'app-tutorial'],
-      ['creator-guide', 'template-guide'],
+      ['creator-guide', 'template-guide', 'readme-guide'],
       [
         'reference',
         'reference-readme',

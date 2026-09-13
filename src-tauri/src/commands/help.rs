@@ -57,6 +57,7 @@ pub struct HelpCorpusDocument {
 const HELP_DOCUMENTS: &[(&str, &str)] = &[
     ("app-tutorial", "app-tutorial.md"),
     ("template-guide", "template-guide.md"),
+    ("readme-guide", "readme-guide.md"),
     ("modules-readme", "modules/README.md"),
     ("modules-qr", "modules/qr.md"),
     ("modules-players", "modules/players.md"),

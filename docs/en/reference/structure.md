@@ -31,6 +31,7 @@ project/
 ├── node_modules/                 # required only when production dependencies exist
 ├── public/                       # performer / monitor static assets
 ├── audio/                        # the Project's audio and OSC control code
+├── README.md                     # optional project self-description (next section)
 └── supercollider/
     └── synthdefs/*.scsyndef      # runtime artifacts for Internal mode
 ```
@@ -55,6 +56,41 @@ Rules:
 - `.scd` belongs to authoring and debugging only and must not ship as an App-hosted runtime asset;
 - a Project must not depend on the host machine having Node.js, SuperCollider, `sclang` or third-party UGens installed;
 - official Projects should declare the Node major they were developed and verified against in `package.json` (e.g. `">=24 <25"`).
+
+## Project README.md (optional)
+
+The `README.md` at a Project's root is the self-description written for **people at the performance venue**. The App reads and renders it in its main area when the Project's card is selected (since v1.5.0); a Project without one simply shows an empty state — **preflight never checks it**: it is documentation, not a compliance condition.
+
+Conventions:
+
+- plain markdown; GFM tables and fenced code blocks render, raw HTML never does;
+- keep it small (an oversized README is refused rendering with a readable note);
+- it travels inside the `.pnds` verbatim (the packing exclusion list never subtracts it) — what the receiving machine sees in the App is exactly this file.
+
+Recommended outline (work title, author, intro, how to perform, optional technical needs):
+
+```markdown
+# <Work title>
+
+**Author**: <name / ensemble>
+
+## Intro
+
+<What this work is, its instrumentation, its duration — a paragraph
+for the performance operator>
+
+## How to perform
+
+<How to start and operate it: page assignments, interaction
+gestures, things to watch for>
+
+## Technical needs (optional)
+
+<Audio mode, external equipment, networking — whatever the venue
+must prepare>
+```
+
+For the full writing guide see "Writing a Project README" under the Help center's Creator Guide. Do not confuse this file with the **performance folder's 自述**: that one is the folder intro written through the App's in-app form (stored structurally and synthesized into the setlist export directory's `README.md` on export) — a different species from this file.
 
 ## Project compliance checklist
 

@@ -66,7 +66,7 @@ export const HELP_BOOKS: readonly {
   documentIds: readonly string[]
 }[] = [
   { id: 'tutorial', documentIds: ['app-tutorial'] },
-  { id: 'creator-guide', documentIds: ['template-guide'] },
+  { id: 'creator-guide', documentIds: ['template-guide', 'readme-guide'] },
   {
     id: 'reference',
     documentIds: [
