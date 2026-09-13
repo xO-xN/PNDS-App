@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next'
 import { useUpdaterStore } from '@/store/updater-store'
 import { openReleasesPage } from '@/lib/updater'
 import { Button } from '@/components/ui/button'
-import { PreflightStatusBoxes } from '@/components/shell/PreflightStatusBoxes'
+import { PreflightDock } from '@/components/shell/PreflightDock'
 import pndsIcon from '@/assets/pnds-icon.png'
 
 /**
@@ -97,15 +97,15 @@ export function WelcomeScreen() {
 
       {/* Bottom-docked status, out of the centered column: an appearing
           or disappearing box (any height) must never re-center the content
-          above. The preflight checking/error boxes are the shared
-          main-area dock (PreflightStatusBoxes, extracted v1.5.0 #124);
-          the update notice (#121) is the one persistent resident — a
-          check (boot or manual) that found a version leaves it here for
-          the rest of the session, so an update noticed mid-performance
-          is still on the wall when the operator is back at the starting
+          above. The dock itself (checking/error boxes) is the shared
+          main-area PreflightDock (v1.5.0 #124/#125); the update notice
+          (#121) is the starting page's one persistent resident — a check
+          (boot or manual) that found a version leaves it here for the
+          rest of the session, so an update noticed mid-performance is
+          still on the wall when the operator is back at the starting
           page; its button opens the Releases page (check-only — the app
           never installs). */}
-      <div className="absolute inset-x-8 bottom-8 flex flex-col items-center gap-2">
+      <PreflightDock>
         {updateVersion && (
           <div
             data-testid="welcome-update-notice"
@@ -121,8 +121,7 @@ export function WelcomeScreen() {
             </Button>
           </div>
         )}
-        <PreflightStatusBoxes />
-      </div>
+      </PreflightDock>
     </div>
   )
 }

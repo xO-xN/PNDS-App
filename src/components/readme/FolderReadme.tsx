@@ -5,22 +5,22 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { PreflightStatusBoxes } from '@/components/shell/PreflightStatusBoxes'
+import { PreflightDock } from '@/components/shell/PreflightDock'
 
 /**
  * v1.5.0 (#124): the folder's self-written intro (文件夹自述) in the main
  * area. The folder resolves live from the store by id, so an intro save
  * or a rename elsewhere re-renders this panel without any prop wiring;
  * a vanished folder (deleted while drilled in — the store exits the view
- * anyway) renders nothing. AppShell mounts this for the drilled-in,
- * self-created folder; protected folders (Utilities) render no edit
- * entry (the store guard behind it refuses writes all the same). The
- * form's fields are the spec's minimal set: the folder name, brought
+ * anyway) renders nothing. Since #125 the README routing mounts this
+ * for EVERY drilled-in folder, protected ones included — protected
+ * folders (Utilities) render no edit entry and carry the app-maintained
+ * empty state (the store guard behind it refuses writes all the same).
+ * The form's fields are the spec's minimal set: the folder name, brought
  * along automatically and read-only (renaming stays a sidebar concern),
  * and the multi-line intro. Save commits through the store's structural
  * action, so persistence rides the same commit as every folder edit.
- * The bottom dock keeps the main-area preflight feedback (the display
- * routing in #125 keeps this coexistence).
+ * The bottom dock keeps the main-area preflight feedback.
  */
 export function FolderReadme({ folderId }: { folderId: string }) {
   const { t } = useTranslation()
@@ -135,9 +135,7 @@ export function FolderReadme({ folderId }: { folderId: string }) {
 
       {/* Same bottom-docked preflight feedback as the starting page —
           drilled into a folder, a check's Checking…/error stays visible. */}
-      <div className="absolute inset-x-8 bottom-8 flex flex-col items-center gap-2">
-        <PreflightStatusBoxes />
-      </div>
+      <PreflightDock />
     </div>
   )
 }

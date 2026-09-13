@@ -7,6 +7,7 @@ pub mod logs;
 pub mod manifest;
 pub mod ports;
 pub mod preflight;
+pub mod readme;
 pub mod session;
 pub mod setlist;
 pub mod sidecars;

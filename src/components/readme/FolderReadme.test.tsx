@@ -75,7 +75,12 @@ describe('FolderReadme', () => {
     expect(
       screen.queryByRole('button', { name: 'Edit' })
     ).not.toBeInTheDocument()
-    expect(screen.getByText('No intro.')).toBeInTheDocument()
+    // #125: the protected empty state is guidance, not a bare "none".
+    expect(
+      screen.getByText(
+        'This folder is maintained by the App — there is no intro to edit.'
+      )
+    ).toBeInTheDocument()
   })
 
   it('edits the intro through the form and persists on save', async () => {

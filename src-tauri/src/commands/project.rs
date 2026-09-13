@@ -179,3 +179,12 @@ pub async fn check_port_status(port: u16) -> Result<PortStatus, String> {
 pub async fn release_port(port: u16) -> Result<PortStatus, String> {
     Ok(crate::project::ports::release_port(port))
 }
+
+/// v1.5.0 (#125): reads a project's root README.md for the main area's
+/// display routing — the read policy (missing pieces, size cap, readable
+/// errors) lives in `project::readme`.
+#[tauri::command]
+#[specta::specta]
+pub async fn read_project_readme(path: String) -> Result<Option<String>, String> {
+    crate::project::readme::read_project_readme(PathBuf::from(&path))
+}

@@ -120,6 +120,11 @@ vi.mock('@/lib/tauri-bindings', async () => {
         status: 'error',
         error: 'preflightProject not mocked',
       }),
+      // v1.5.0 (#125): project README — default: none (the empty state);
+      // routing tests override this with fixture markdown.
+      readProjectReadme: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
       cleanupOrphanedProcesses: vi
         .fn()
         .mockResolvedValue({ status: 'ok', data: 0 }),

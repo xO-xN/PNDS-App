@@ -18,6 +18,7 @@ pub fn generate_bindings() -> Builder<tauri::Wry> {
         preferences::save_preferences,
         notifications::send_native_notification,
         project::preflight_project,
+        project::read_project_readme,
         project::cleanup_orphaned_processes,
         project::start_project,
         project::stop_project,

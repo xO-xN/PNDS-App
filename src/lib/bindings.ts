@@ -179,6 +179,21 @@ async preflightProject(path: string) : Promise<Result<Manifest, string>> {
 }
 },
 /**
+ * v1.5.0 (#125): reads a project's root README.md for the main area's
+ * display routing. `Ok(None)` = nothing to render (no README, or the
+ * project directory itself is gone — preflight owns the real
+ * diagnostics when starting); a README that exists but cannot be
+ * served (unreadable, invalid UTF-8, oversized) is an explicit error.
+ */
+async readProjectReadme(path: string) : Promise<Result<string | null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("read_project_readme", { path }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * Cleans up child processes left behind by an abnormal previous exit.
  * Also runs automatically at app startup and at the start of preflight.
  * Children of the live session are never touched (v1.2.3, issue #37).

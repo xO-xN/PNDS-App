@@ -78,6 +78,10 @@ describe('AppShell', () => {
       recentProjectPaths: [],
       projectFolders: [],
       pendingPreflightPath: null,
+      // v1.5.0 (#125): the README routing reads the whole selection
+      // chain — a failed selection leaked from an earlier test would
+      // reroute this test's main area to a project README.
+      failedPreflightPath: null,
       activeFolderId: null,
       preflightStatus: 'idle',
       preflightError: null,
@@ -98,9 +102,10 @@ describe('AppShell', () => {
     ).toBeInTheDocument()
   })
 
-  // v1.5.0 (#124): the drilled-in, self-created folder claims the main
-  // area for its README; home and the protected Utilities folder keep
-  // the starting page (the full display routing is #125).
+  // v1.5.0 (#124/#125): the main area's README routing — a drilled-in
+  // folder claims it for its 自述 (protected folders included, with the
+  // app-maintained empty state); home and nothing selected keeps the
+  // starting page.
   it('shows the folder README instead of the starting page when drilled into a user folder', () => {
     useProjectStore.setState({
       activeFolderId: 'f1',
@@ -118,7 +123,7 @@ describe('AppShell', () => {
     ).not.toBeInTheDocument()
   })
 
-  it('keeps the starting page when drilled into the protected Utilities folder', () => {
+  it('shows the protected Utilities folder’s 自述 when drilled in (#125)', () => {
     useProjectStore.setState({
       activeFolderId: 'utilities',
       projectFolders: [
@@ -128,10 +133,10 @@ describe('AppShell', () => {
 
     render(<AppShell />)
 
-    expect(screen.queryByTestId('folder-readme')).not.toBeInTheDocument()
+    expect(screen.getByTestId('folder-readme')).toBeInTheDocument()
     expect(
-      screen.getByRole('heading', { name: 'Hi! Welcome to PNDS' })
-    ).toBeInTheDocument()
+      screen.queryByRole('heading', { name: 'Hi! Welcome to PNDS' })
+    ).not.toBeInTheDocument()
   })
 
   it('keeps the start-page sidebar permanently visible in fullscreen (§7.4)', () => {
