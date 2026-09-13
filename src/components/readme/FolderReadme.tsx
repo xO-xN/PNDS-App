@@ -14,20 +14,28 @@ import { PreflightDock } from '@/components/shell/PreflightDock'
  * a vanished folder (deleted while drilled in — the store exits the view
  * anyway) renders nothing. Since #125 the README routing mounts this
  * for EVERY drilled-in folder, protected ones included — protected
- * folders (Utilities) render no edit entry and carry the app-maintained
- * empty state (the store guard behind it refuses writes all the same).
- * The form's fields are the spec's minimal set: the folder name, brought
- * along automatically and read-only (renaming stays a sidebar concern),
- * and the multi-line intro. Save commits through the store's structural
- * action, so persistence rides the same commit as every folder edit.
- * The bottom dock keeps the main-area preflight feedback.
+ * folders (Utilities) render no edit entry (the store guard behind it
+ * refuses writes all the same).
+ *
+ * The form edits both fields (user report after #124: the name box was
+ * read-only and read as broken): the name commits through the same
+ * `renameFolder` seam as the sidebar's inline ⌘R — the uniqueness and
+ * protected-folder guards apply unchanged, a refused or blank name
+ * keeps the form open with its reason and saves nothing — and the
+ * multi-line intro through `setFolderIntro`; both persist with the
+ * index like every structural commit. The bottom dock keeps the
+ * main-area preflight feedback.
  */
 export function FolderReadme({ folderId }: { folderId: string }) {
   const { t } = useTranslation()
   const nameFieldId = useId()
   const introFieldId = useId()
-  // null = display mode; a string is the in-edit draft of the intro.
-  const [draft, setDraft] = useState<string | null>(null)
+  // null = display mode; an object is the in-edit draft (name + intro).
+  const [draft, setDraft] = useState<{ name: string; intro: string } | null>(
+    null
+  )
+  // The refused-name reason line under the name field (blank or taken).
+  const [nameError, setNameError] = useState(false)
   const folder = useProjectStore(state =>
     state.projectFolders.find(folder => folder.id === folderId)
   )
@@ -38,16 +46,30 @@ export function FolderReadme({ folderId }: { folderId: string }) {
   const editable = !isProtectedFolder(folder.id)
 
   const startEditing = () => {
-    setDraft(folder.intro ?? '')
+    setDraft({ name: folder.name, intro: folder.intro ?? '' })
+    setNameError(false)
   }
 
-  const saveIntro = () => {
+  const saveDraft = () => {
     // The save button only renders in edit mode; the guard keeps a stray
     // call (draft already reset) from clearing the stored intro.
     if (draft === null) return
-    // getState() in the handler (never a render-path read): the action
-    // travels with the store, the identity with the closure.
-    useProjectStore.getState().setFolderIntro(folder.id, draft)
+    const nextName = draft.name.trim()
+    if (nextName === '') {
+      setNameError(true)
+      return
+    }
+    // getState() in the handler (never a render-path read): the actions
+    // travel with the store, the identity with the closure. The rename
+    // runs the sidebar's own guards; a refusal (duplicate name — a
+    // protected folder cannot reach this form) keeps the form open with
+    // the reason and commits nothing.
+    const { setFolderIntro, renameFolder } = useProjectStore.getState()
+    if (nextName !== folder.name && !renameFolder(folder.id, nextName)) {
+      setNameError(true)
+      return
+    }
+    setFolderIntro(folder.id, draft.intro)
     setDraft(null)
   }
 
@@ -79,21 +101,31 @@ export function FolderReadme({ folderId }: { folderId: string }) {
             className="mt-6 flex flex-col gap-5"
             onSubmit={event => {
               event.preventDefault()
-              saveIntro()
+              saveDraft()
             }}
           >
             <div className="flex flex-col gap-2">
               <Label htmlFor={nameFieldId}>{t('folderReadme.nameLabel')}</Label>
-              {/* The name is brought along automatically and read-only —
-                  renaming a folder stays with the sidebar's inline ⌘R. */}
+              {/* The name commits through renameFolder — the same guards
+                  as the sidebar's inline ⌘R apply on save. */}
               <Input
                 id={nameFieldId}
-                value={folder.name}
-                readOnly
+                value={draft.name}
+                onChange={event => {
+                  setDraft({ ...draft, name: event.target.value })
+                  setNameError(false)
+                }}
                 autoComplete="off"
                 spellCheck={false}
                 dir="auto"
               />
+              {nameError && (
+                <p role="alert" className="text-sm text-(--pnds-danger)">
+                  {draft.name.trim() === ''
+                    ? t('folderReadme.nameInvalid')
+                    : t('sidebar.folderNameTaken', { name: draft.name.trim() })}
+                </p>
+              )}
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor={introFieldId}>
@@ -101,8 +133,10 @@ export function FolderReadme({ folderId }: { folderId: string }) {
               </Label>
               <Textarea
                 id={introFieldId}
-                value={draft ?? ''}
-                onChange={event => setDraft(event.target.value)}
+                value={draft.intro}
+                onChange={event =>
+                  setDraft({ ...draft, intro: event.target.value })
+                }
                 placeholder={t('folderReadme.introPlaceholder')}
                 rows={6}
                 className="resize-y field-sizing-fixed"

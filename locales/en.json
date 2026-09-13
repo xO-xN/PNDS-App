@@ -129,6 +129,7 @@
   "welcome.checking": "Checking project…",
   "folderReadme.edit": "Edit",
   "folderReadme.nameLabel": "Folder name",
+  "folderReadme.nameInvalid": "The folder name cannot be empty.",
   "folderReadme.introLabel": "Intro",
   "folderReadme.introPlaceholder": "What is this folder for? Programme, set list notes, line-up…",
   "folderReadme.empty": "No intro yet. Choose Edit to write one.",

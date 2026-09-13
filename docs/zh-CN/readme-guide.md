@@ -39,6 +39,18 @@
 
 「演奏方式」是现场最有价值的一段：写清楚操作顺序和容易踩的坑，别假设读者看过彩排。
 
+## 双语 README
+
+演出可能跨语言，官方工程必须给出双语 README：`README.md`（默认语言）+ `README.<locale>.md`（如 `README.zh-CN.md`）。**App 会按界面语言自适应打开对应变体**（界面是中文就优先 `README.zh-CN.md`），没有对应变体或只有单一 README 时回落到 `README.md`，行为不变。
+
+在 GitHub 上阅读时给读者一行语言切换链接（App 内这类相对链接不会导航，点击无副作用）：
+
+```markdown
+[中文](README.zh-CN.md) | **English**
+```
+
+两份 README 保持同一大纲；翻译滞后时以默认语言那份为准更新。
+
 ## 写作要点
 
 - **纯 markdown**：GFM 表格、围栏代码块都正常渲染；裸 HTML 一律不渲染，写了也白写；

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { commands } from '@/lib/tauri-bindings'
 import { logger } from '@/lib/logger'
-import { readProjectReadme } from './project-readme'
+import { readProjectReadme, resolveProjectReadmeLink } from './project-readme'
 
 // The failure paths assert the warn — stub the logger (IPC-free tests).
 vi.mock('@/lib/logger', () => ({
@@ -29,7 +29,7 @@ describe('readProjectReadme (#125)', () => {
       data: '# Night Sky',
     })
 
-    expect(await readProjectReadme('/p')).toEqual({
+    expect(await readProjectReadme('/p', 'en')).toEqual({
       readme: '# Night Sky',
       error: null,
     })
@@ -41,7 +41,10 @@ describe('readProjectReadme (#125)', () => {
       data: null,
     })
 
-    expect(await readProjectReadme('/p')).toEqual({ readme: null, error: null })
+    expect(await readProjectReadme('/p', 'en')).toEqual({
+      readme: null,
+      error: null,
+    })
     expect(logger.warn).not.toHaveBeenCalled()
   })
 
@@ -51,7 +54,7 @@ describe('readProjectReadme (#125)', () => {
       error: 'README.md is too large to render',
     })
 
-    expect(await readProjectReadme('/p')).toEqual({
+    expect(await readProjectReadme('/p', 'en')).toEqual({
       readme: null,
       error: 'README.md is too large to render',
     })
@@ -63,10 +66,42 @@ describe('readProjectReadme (#125)', () => {
       new Error('IPC unavailable')
     )
 
-    expect(await readProjectReadme('/p')).toEqual({
+    expect(await readProjectReadme('/p', 'en')).toEqual({
       readme: null,
       error: 'IPC unavailable',
     })
     expect(logger.warn).toHaveBeenCalled()
+  })
+})
+
+/**
+ * User report after #127: links inside a project README must never
+ * navigate the main webview. Schemed URLs hand off to the system
+ * browser; relative references (the README language switcher, hand
+ * file links) are dead no-ops.
+ */
+describe('resolveProjectReadmeLink (user report after #127)', () => {
+  it('hands schemed URLs to the system browser', () => {
+    expect(resolveProjectReadmeLink('https://example.com/x')).toEqual({
+      kind: 'external',
+      url: 'https://example.com/x',
+    })
+    expect(resolveProjectReadmeLink('http://localhost:6868/')).toEqual({
+      kind: 'external',
+      url: 'http://localhost:6868/',
+    })
+    expect(resolveProjectReadmeLink('mailto:someone@example.org')).toEqual({
+      kind: 'external',
+      url: 'mailto:someone@example.org',
+    })
+  })
+
+  it('no-ops on relative references and empty hrefs', () => {
+    // The exact shape that once navigated the webview away (the
+    // README language switcher line).
+    expect(resolveProjectReadmeLink('README.zh-CN.md')).toBeNull()
+    expect(resolveProjectReadmeLink('./PROJECT_HANDSOFF.md')).toBeNull()
+    expect(resolveProjectReadmeLink('#section')).toBeNull()
+    expect(resolveProjectReadmeLink('')).toBeNull()
   })
 })

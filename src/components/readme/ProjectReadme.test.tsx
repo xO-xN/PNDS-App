@@ -1,14 +1,22 @@
 import { render, screen, fireEvent } from '@/test/test-utils'
 import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { openUrl } from '@tauri-apps/plugin-opener'
 import { commands } from '@/lib/tauri-bindings'
 import { openHelpWindow } from '@/lib/help-window'
 import { useProjectStore } from '@/store/project-store'
+import i18n from '@/i18n/config'
 import { ProjectReadme } from './ProjectReadme'
 
 // The writing-rules pointer funnels into lib/help-window — stub the
 // window lifecycle so the click asserts without IPC or a real window.
 vi.mock('@/lib/help-window', () => ({
   openHelpWindow: vi.fn().mockResolvedValue(undefined),
+}))
+
+// Link clicks hand external URLs to the system browser — stub the
+// opener so the click asserts without IPC.
+vi.mock('@tauri-apps/plugin-opener', () => ({
+  openUrl: vi.fn().mockResolvedValue(undefined),
 }))
 
 /** A README exercising the render contract: GFM table, fenced code, and
@@ -125,8 +133,8 @@ describe('ProjectReadme', () => {
     expect(
       await screen.findByRole('heading', { name: 'Second' })
     ).toBeInTheDocument()
-    expect(commands.readProjectReadme).toHaveBeenNthCalledWith(1, '/a')
-    expect(commands.readProjectReadme).toHaveBeenNthCalledWith(2, '/b')
+    expect(commands.readProjectReadme).toHaveBeenNthCalledWith(1, '/a', 'en')
+    expect(commands.readProjectReadme).toHaveBeenNthCalledWith(2, '/b', 'en')
   })
 
   it('docks the preflight feedback alongside the README', async () => {
@@ -142,5 +150,48 @@ describe('ProjectReadme', () => {
     expect(
       await screen.findByRole('heading', { name: 'Night Sky' })
     ).toBeInTheDocument()
+  })
+  // User report after #127: a README's links must never navigate the
+  // main webview — the relative language-switcher line once booted the
+  // raw file full-screen and stranded the app. External URLs leave via
+  // the system browser; relative references are dead no-ops.
+  it('never navigates on README links: external to the browser, relative no-ops', async () => {
+    mockReadme(
+      [
+        '# Night Sky',
+        '',
+        '[中文](README.zh-CN.md) | [releases](https://example.com/rel) | [notes](./PROJECT_HANDSOFF.md)',
+      ].join('\n')
+    )
+
+    render(<ProjectReadme path="/p" />)
+    const external = await screen.findByRole('link', { name: 'releases' })
+
+    fireEvent.click(external)
+    expect(openUrl).toHaveBeenCalledWith('https://example.com/rel')
+
+    fireEvent.click(screen.getByRole('link', { name: '中文' }))
+    fireEvent.click(screen.getByRole('link', { name: 'notes' }))
+    expect(openUrl).toHaveBeenCalledTimes(1)
+  })
+
+  it('re-reads the locale variant when the UI language changes', async () => {
+    mockReadme('# English')
+
+    render(<ProjectReadme path="/p" />)
+    expect(
+      await screen.findByRole('heading', { name: 'English' })
+    ).toBeInTheDocument()
+
+    try {
+      mockReadme('# 中文')
+      await i18n.changeLanguage('zh-CN')
+      expect(
+        await screen.findByRole('heading', { name: '中文' })
+      ).toBeInTheDocument()
+      expect(commands.readProjectReadme).toHaveBeenLastCalledWith('/p', 'zh-CN')
+    } finally {
+      await i18n.changeLanguage('en')
+    }
   })
 })

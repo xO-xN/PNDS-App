@@ -1,10 +1,16 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type MouseEvent } from 'react'
 import { useTranslation } from 'react-i18next'
+import { openUrl } from '@tauri-apps/plugin-opener'
 import { HelpMarkdown } from '@/components/help/HelpMarkdown'
 import { PreflightDock } from '@/components/shell/PreflightDock'
 import { Button } from '@/components/ui/button'
-import { readProjectReadme, type ProjectReadmeRead } from '@/lib/project-readme'
+import {
+  readProjectReadme,
+  resolveProjectReadmeLink,
+  type ProjectReadmeRead,
+} from '@/lib/project-readme'
 import { openHelpWindow } from '@/lib/help-window'
+import { logger } from '@/lib/logger'
 
 /**
  * v1.5.0 (#125): the project's root README.md in the main area — the
@@ -15,6 +21,15 @@ import { openHelpWindow } from '@/lib/help-window'
  * decoupling was needed: the component is prop-driven (markdown +
  * className) with no help-window coupling.
  *
+ * User report after #127: the read is locale-aware — a project shipping
+ * `README.<locale>.md` serves the App's UI-language variant, falling
+ * back to the plain `README.md` — and a language switch re-reads, so
+ * the panel follows the UI. Links inside the README NEVER navigate the
+ * main webview: external URLs leave via the system browser, relative
+ * references (a `[中文](README.zh-CN.md)` switcher, hand file links)
+ * are dead no-ops — a stray navigation once stranded the whole app on
+ * the raw file.
+ *
  * The read re-runs when the selection moves to another path; while it
  * is in flight the panel keeps its frame (and dock) and renders no
  * content — the IPC read is fast. No README (or an unreadable one —
@@ -23,32 +38,57 @@ import { openHelpWindow } from '@/lib/help-window'
  * added by #127; the structure reference carries the contract).
  */
 export function ProjectReadme({ path }: { path: string }) {
-  const { t } = useTranslation()
-  // The last completed read, keyed by the path it belongs to: a prop
-  // change renders as "still reading" (no content) until the new read
-  // lands — no synchronous reset inside the effect, and neither the
-  // empty state nor the read-failure state ever flashes mid-flight.
+  const { t, i18n } = useTranslation()
+  // The registered tag ("en" / "zh-CN") — drives the README variant the
+  // backend picks; useTranslation re-renders on languageChanged, so the
+  // dependency below stays live.
+  const locale = i18n.resolvedLanguage ?? i18n.language ?? 'en'
+  // The last completed read, keyed by the path AND locale it belongs
+  // to: a change of either renders as "still reading" (no content)
+  // until the new read lands — no synchronous reset inside the effect,
+  // and neither the empty state nor the read-failure state ever flashes
+  // mid-flight.
   const [loaded, setLoaded] = useState<{
     path: string
+    locale: string
     read: ProjectReadmeRead
   } | null>(null)
 
   useEffect(() => {
     let cancelled = false
-    void readProjectReadme(path).then(read => {
-      if (!cancelled) setLoaded({ path, read })
+    void readProjectReadme(path, locale).then(read => {
+      if (!cancelled) setLoaded({ path, locale, read })
     })
     return () => {
       cancelled = true
     }
-  }, [path])
+  }, [path, locale])
 
-  const settled = loaded !== null && loaded.path === path
+  const settled =
+    loaded !== null && loaded.path === path && loaded.locale === locale
   const read = settled ? loaded.read : null
+
+  // One interception at the panel root: no anchor click ever reaches the
+  // webview's default navigation. External URLs hand off to the system
+  // browser; everything else no-ops.
+  const onRootClick = (event: MouseEvent<HTMLDivElement>) => {
+    const anchor = (event.target as HTMLElement).closest('a')
+    if (!anchor) return
+    event.preventDefault()
+    const target = resolveProjectReadmeLink(anchor.getAttribute('href') ?? '')
+    if (target?.kind === 'external') {
+      // Same failure posture as the help center's link handoff — a
+      // browser that refuses to open logs, it never rejects unhandled.
+      openUrl(target.url).catch((error: unknown) => {
+        logger.warn('Failed to open a README link in the browser', { error })
+      })
+    }
+  }
 
   return (
     <div
       data-testid="project-readme"
+      onClick={onRootClick}
       className="relative flex min-h-full flex-col bg-(--pnds-bg) p-8 animate-[fade-in_0.8s_ease-in]"
     >
       {settled && read !== null && read.error !== null ? (

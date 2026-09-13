@@ -129,6 +129,7 @@
   "welcome.checking": "正在检查工程…",
   "folderReadme.edit": "编辑",
   "folderReadme.nameLabel": "文件夹名称",
+  "folderReadme.nameInvalid": "文件夹名称不能为空。",
   "folderReadme.introLabel": "简介",
   "folderReadme.introPlaceholder": "这个文件夹用于什么？节目安排、曲目备注、人员编制……",
   "folderReadme.empty": "还没有简介。点「编辑」写一段吧。",

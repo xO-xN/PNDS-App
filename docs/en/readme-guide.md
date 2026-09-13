@@ -42,6 +42,25 @@ must prepare in advance.
 
 "How to perform" is the most valuable section on site: spell out the operating order and the common traps; never assume the reader sat in rehearsal.
 
+## Bilingual READMEs
+
+Performances cross languages; official projects MUST ship bilingual
+READMEs: `README.md` (the default language) + `README.<locale>.md` (e.g.
+`README.zh-CN.md`). **The App auto-selects the variant matching its UI
+language** (a Chinese UI prefers `README.zh-CN.md`); with no matching
+variant, or a single-README project, it falls back to the plain
+`README.md` — unchanged behavior.
+
+Give GitHub readers a language-switcher line (in-app such relative links
+never navigate; clicking them is a harmless no-op):
+
+```markdown
+[中文](README.zh-CN.md) | **English**
+```
+
+Keep both READMEs on the same outline; when translation lags, update the
+default-language file first.
+
 ## Writing notes
 
 - **plain markdown**: GFM tables and fenced code blocks render; raw HTML never does — writing it is wasted;

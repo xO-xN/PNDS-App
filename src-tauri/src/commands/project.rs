@@ -182,9 +182,14 @@ pub async fn release_port(port: u16) -> Result<PortStatus, String> {
 
 /// v1.5.0 (#125): reads a project's root README.md for the main area's
 /// display routing — the read policy (missing pieces, size cap, readable
-/// errors) lives in `project::readme`.
+/// errors) lives in `project::readme`. `locale` (user report after #127)
+/// is the App's resolved UI language: a `README.<locale>.md` variant is
+/// preferred when the project ships one, else the plain `README.md`.
 #[tauri::command]
 #[specta::specta]
-pub async fn read_project_readme(path: String) -> Result<Option<String>, String> {
-    crate::project::readme::read_project_readme(PathBuf::from(&path))
+pub async fn read_project_readme(
+    path: String,
+    locale: Option<String>,
+) -> Result<Option<String>, String> {
+    crate::project::readme::read_project_readme(PathBuf::from(&path), locale.as_deref())
 }

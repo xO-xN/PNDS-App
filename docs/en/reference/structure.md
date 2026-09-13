@@ -66,6 +66,7 @@ Conventions:
 - plain markdown; GFM tables and fenced code blocks render, raw HTML never does;
 - keep it small (an oversized README is refused rendering with a readable note);
 - it travels inside the `.pnds` verbatim (the packing exclusion list never subtracts it) — what the receiving machine sees in the App is exactly this file.
+- optional language variants: `README.<locale>.md` (e.g. `README.zh-CN.md`) — the App auto-selects the variant matching its UI language and falls back to the plain `README.md`;
 
 Recommended outline (work title, author, intro, how to perform, optional technical needs):
 

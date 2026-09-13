@@ -181,11 +181,13 @@ async preflightProject(path: string) : Promise<Result<Manifest, string>> {
 /**
  * v1.5.0 (#125): reads a project's root README.md for the main area's
  * display routing — the read policy (missing pieces, size cap, readable
- * errors) lives in `project::readme`.
+ * errors) lives in `project::readme`. `locale` (user report after #127)
+ * is the App's resolved UI language: a `README.<locale>.md` variant is
+ * preferred when the project ships one, else the plain `README.md`.
  */
-async readProjectReadme(path: string) : Promise<Result<string | null, string>> {
+async readProjectReadme(path: string, locale: string | null) : Promise<Result<string | null, string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("read_project_readme", { path }) };
+    return { status: "ok", data: await TAURI_INVOKE("read_project_readme", { path, locale }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
