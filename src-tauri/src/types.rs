@@ -172,6 +172,14 @@ pub struct ProjectFolder {
     pub id: String,
     pub name: String,
     pub project_paths: Vec<String>,
+    /// v1.5.0 (#124): the folder's self-written intro (文件夹自述) — plain
+    /// text the in-app form edits; the setlist export later synthesizes it
+    /// into the exported README.md. `None` = never written (empty state);
+    /// pre-v1.5.0 preference files serde-default here, so old data loads
+    /// as the empty state with no migration step. App-local, never touches
+    /// project manifests; rides the project-index persistence.
+    #[serde(default)]
+    pub intro: Option<String>,
 }
 
 impl Default for AppPreferences {
@@ -323,6 +331,46 @@ mod tests {
         let prefs: AppPreferences = serde_json::from_str(legacy).expect("legacy prefs parse");
         assert!(prefs.project_display_names.is_empty());
         assert_eq!(prefs.project_folders.len(), 1);
+    }
+
+    /// v1.5.0 (#124): folders persisted before the `intro` field existed
+    /// (both bare and inside preferences) must load losslessly as the
+    /// empty state — serde default, no migration step.
+    #[test]
+    fn deserializes_project_folder_without_intro() {
+        let legacy = r#"{
+            "theme": "dark",
+            "language": null,
+            "recentProjects": ["/a"],
+            "projectFolders": [
+                { "id": "f1", "name": "Gig", "projectPaths": ["/a"] }
+            ]
+        }"#;
+        let prefs: AppPreferences = serde_json::from_str(legacy).expect("legacy prefs parse");
+        assert_eq!(prefs.project_folders.len(), 1);
+        assert_eq!(prefs.project_folders[0].intro, None);
+    }
+
+    /// v1.5.0 (#124): a written intro survives a load-save round trip,
+    /// serialized camelCase inside the folder entry like every other
+    /// preference field.
+    #[test]
+    fn roundtrips_project_folder_intro() {
+        let modern = r#"{
+            "theme": "system",
+            "language": null,
+            "recentProjects": ["/a"],
+            "projectFolders": [
+                { "id": "f1", "name": "Gig", "projectPaths": ["/a"], "intro": "Spring tour set" }
+            ]
+        }"#;
+        let prefs: AppPreferences = serde_json::from_str(modern).expect("modern prefs parse");
+        assert_eq!(
+            prefs.project_folders[0].intro.as_deref(),
+            Some("Spring tour set")
+        );
+        let reserialized = serde_json::to_string(&prefs).expect("prefs serialize");
+        assert!(reserialized.contains("\"intro\":\"Spring tour set\""));
     }
 
     #[test]

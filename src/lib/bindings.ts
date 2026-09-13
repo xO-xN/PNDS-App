@@ -793,7 +793,16 @@ export type PortStatus = { port: number; occupant: PortOccupant | null }
 /**
  * A named one-level group of project paths (spec issue #4).
  */
-export type ProjectFolder = { id: string; name: string; projectPaths: string[] }
+export type ProjectFolder = { id: string; name: string; projectPaths: string[]; 
+/**
+ * v1.5.0 (#124): the folder's self-written intro (文件夹自述) — plain
+ * text the in-app form edits; the setlist export later synthesizes it
+ * into the exported README.md. `None` = never written (empty state);
+ * pre-v1.5.0 preference files serde-default here, so old data loads
+ * as the empty state with no migration step. App-local, never touches
+ * project manifests; rides the project-index persistence.
+ */
+intro?: string | null }
 export type ScoreServer = { entry: string; workingDirectory: string; performerPort: number; monitorPort: number }
 export type ScsynthConfig = { 
 /**

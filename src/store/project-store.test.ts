@@ -776,6 +776,125 @@ describe('project-store persistence (structural actions commit + save)', () => {
     await settle()
     expect(commands.savePreferences).not.toHaveBeenCalled()
   })
+
+  // v1.5.0 (#124): the folder's self-written intro persists with the
+  // index like every structural commit; the guards keep protected
+  // folders intro-less and blank saves land back on the empty state.
+  it('setFolderIntro persists the intro with the index', async () => {
+    const id = createFolderOrFail('Gig')
+
+    useProjectStore.getState().setFolderIntro(id, 'Spring tour set')
+
+    await vi.waitFor(() => {
+      expect(commands.savePreferences).toHaveBeenCalledWith(
+        expect.objectContaining({
+          projectFolders: [
+            expect.objectContaining({ id, intro: 'Spring tour set' }),
+          ],
+        })
+      )
+    })
+    expect(
+      useProjectStore.getState().projectFolders.find(folder => folder.id === id)
+        ?.intro
+    ).toBe('Spring tour set')
+  })
+
+  it('setFolderIntro writes nothing when nothing changed', async () => {
+    const id = createFolderOrFail('Gig')
+    useProjectStore.getState().setFolderIntro(id, 'Spring tour set')
+    await settle()
+    vi.mocked(commands.savePreferences).mockClear()
+
+    useProjectStore.getState().setFolderIntro(id, 'Spring tour set')
+    await settle()
+
+    expect(commands.savePreferences).not.toHaveBeenCalled()
+  })
+
+  it('setFolderIntro on a protected folder is a no-op that writes nothing', async () => {
+    useProjectStore
+      .getState()
+      .restoreProjectIndex(
+        ['/a'],
+        [{ id: UTILITIES_FOLDER_ID, name: 'Utilities', projectPaths: ['/a'] }]
+      )
+    await settle()
+    vi.mocked(commands.savePreferences).mockClear()
+
+    useProjectStore.getState().setFolderIntro(UTILITIES_FOLDER_ID, 'X')
+
+    await settle()
+    expect(commands.savePreferences).not.toHaveBeenCalled()
+    const utilities = useProjectStore
+      .getState()
+      .projectFolders.find(folder => folder.id === UTILITIES_FOLDER_ID)
+    expect(utilities?.intro).toBeUndefined()
+  })
+
+  it('setFolderIntro with blank text clears the field back to the empty state', async () => {
+    const id = createFolderOrFail('Gig')
+    useProjectStore.getState().setFolderIntro(id, 'Spring tour set')
+    await settle()
+
+    useProjectStore.getState().setFolderIntro(id, '   ')
+
+    await vi.waitFor(() => {
+      expect(commands.savePreferences).toHaveBeenCalledWith(
+        expect.objectContaining({
+          projectFolders: [expect.objectContaining({ id, intro: undefined })],
+        })
+      )
+    })
+    expect(
+      useProjectStore.getState().projectFolders.find(folder => folder.id === id)
+        ?.intro
+    ).toBeUndefined()
+  })
+
+  // v1.5.0 (#124): the launch-restore migration — pre-v1.5.0 folders carry
+  // no intro (and the wire form of "never written" is null); both must
+  // load without error and land on the empty state, writing nothing.
+  it('restoreProjectIndex normalizes legacy folders to the empty-state intro', async () => {
+    useProjectStore.getState().restoreProjectIndex(
+      ['/a'],
+      [
+        { id: 'f-legacy', name: 'Old Gig', projectPaths: ['/a'] },
+        { id: 'f-null', name: 'Null Gig', projectPaths: [], intro: null },
+      ]
+    )
+
+    const { projectFolders } = useProjectStore.getState()
+    expect(projectFolders).toHaveLength(2)
+    for (const folder of projectFolders) {
+      expect(folder.intro).toBeUndefined()
+    }
+    await settle()
+    expect(commands.savePreferences).not.toHaveBeenCalled()
+  })
+
+  // The other half of the restore contract (#124): a folder that DID
+  // persist an intro keeps it through the launch restore — restart must
+  // not land a written intro back on the empty state.
+  it('restoreProjectIndex keeps a persisted intro as-is', async () => {
+    useProjectStore.getState().restoreProjectIndex(
+      ['/a'],
+      [
+        {
+          id: 'f1',
+          name: 'Gig',
+          projectPaths: ['/a'],
+          intro: 'Spring tour set',
+        },
+      ]
+    )
+
+    expect(
+      useProjectStore.getState().projectFolders.find(f => f.id === 'f1')?.intro
+    ).toBe('Spring tour set')
+    await settle()
+    expect(commands.savePreferences).not.toHaveBeenCalled()
+  })
 })
 
 /**

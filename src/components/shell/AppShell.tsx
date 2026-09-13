@@ -3,13 +3,18 @@ import { onSessionSnapshot, onWindowFocus, onWindowState } from '@/lib/events'
 import { Toaster } from 'sonner'
 import { commands } from '@/lib/tauri-bindings'
 import { useSessionStore } from '@/store/session-store'
-import { useProjectStore } from '@/store/project-store'
+import {
+  useProjectStore,
+  isProtectedFolder,
+  useActiveFolder,
+} from '@/store/project-store'
 import { useWindowStore } from '@/store/window-store'
 import { useCommandKeyboard } from '@/hooks/use-command-keyboard'
 import { loadPreferences } from '@/lib/preferences'
 import { ensureUtilitiesFolder } from '@/lib/utilities-folder'
 import { cn } from '@/lib/utils'
 import { WelcomeScreen } from '@/components/welcome'
+import { FolderReadme } from '@/components/readme'
 import { Sidebar } from './Sidebar'
 import { MonitorView } from './MonitorView'
 import { HoverSidebar } from './HoverSidebar'
@@ -66,6 +71,9 @@ export function AppShell() {
   // carries none — no MonitorView must mount for it (its no-address
   // fallback would flash an error text instead of a fade).
   const health = useSessionStore(state => state.health)
+  // v1.5.0 (#124): the folder the sidebar is drilled into — the main
+  // area below shows its README instead of the starting page.
+  const activeFolder = useActiveFolder()
 
   // v1.1.2: shell-level Cmd keyboard layer (badges, Cmd+1..9, sidebar
   // peek) — registered once, active in every window state (spec issue #4).
@@ -285,7 +293,16 @@ export function AppShell() {
           fullscreen — only loaded sessions retract it on fullscreen. */}
         <Sidebar variant="static" />
         <main className="flex-1 overflow-auto">
-          <WelcomeScreen />
+          {/* v1.5.0 (#124): the drilled-in, self-created folder claims the
+              main area for its README; home and the protected Utilities
+              folder keep the starting page (the full display routing —
+              selected project cards, protected-folder empty state — is
+              #125, built on this seam). */}
+          {activeFolder && !isProtectedFolder(activeFolder.id) ? (
+            <FolderReadme folderId={activeFolder.id} />
+          ) : (
+            <WelcomeScreen />
+          )}
         </main>
         {/* #user-report: a stop that lands on Welcome (close project)
             uncovers it — the cover fades out over the freshly mounted

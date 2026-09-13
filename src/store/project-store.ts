@@ -213,6 +213,14 @@ interface ProjectState {
   /** Deletes the grouping; member projects return to ungrouped. */
   deleteFolder: (id: string) => void
   /**
+   * v1.5.0 (#124): sets a folder's self-written intro (文件夹自述) and
+   * persists it with the index like every structural commit. Protected
+   * folders keep no intro — the guard is a no-op, so their README area
+   * stays the empty state with no edit entry. Text that is blank after
+   * trimming clears the field back to the empty state.
+   */
+  setFolderIntro: (id: string, intro: string) => void
+  /**
    * Moves a path into a folder (appended last), out of any other folder.
    * v1.2.1 (issue #26): joining a folder already holding
    * `PROJECT_LIMIT_PER_DIRECTORY` members is refused (false) — unless the
@@ -360,6 +368,23 @@ export const selectSelectedPath = (state: ProjectState): string | null =>
   state.currentProject?.path ??
   state.failedPreflightPath ??
   null
+
+/**
+ * v1.5.0 (#124): the folder the sidebar is drilled into, as a named
+ * selector — the find returns the same folder reference across unrelated
+ * store changes, so the subscription stays quiet. The main area's README
+ * routing reads this; the sidebar/folder-switch derive the same shape in
+ * render from values they already subscribe to.
+ */
+export function useActiveFolder(): ProjectFolder | null {
+  return useProjectStore(state =>
+    state.activeFolderId === null
+      ? null
+      : (state.projectFolders.find(
+          folder => folder.id === state.activeFolderId
+        ) ?? null)
+  )
+}
 
 /**
  * Structural actions persist the app-side project index as part of their
@@ -548,7 +573,17 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
   setRenameTarget: target => set({ renameTarget: target }),
 
   restoreProjectIndex: (paths, folders) =>
-    set({ recentProjectPaths: paths, projectFolders: folders }),
+    set({
+      recentProjectPaths: paths,
+      // v1.5.0 (#124): pre-v1.5.0 persisted folders carry no intro, and
+      // the wire form of "never written" is null (Rust Option) — both
+      // normalize to undefined, the empty state the UI keys on. The bulk
+      // restore stays non-persisting, so this migration never writes.
+      projectFolders: folders.map(folder => ({
+        ...folder,
+        intro: folder.intro ?? undefined,
+      })),
+    }),
 
   replaceProjectIndex: (paths, folders, names) => {
     const before = get()
@@ -655,6 +690,21 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
         : state.projectFolders.filter(folder => folder.id !== id),
       // Deleting the folder the sidebar is drilled into exits to the top.
       activeFolderId: state.activeFolderId === id ? null : state.activeFolderId,
+    }))
+    persistIndexIfChanged(before, get())
+  },
+
+  setFolderIntro: (id, intro) => {
+    const before = get()
+    if (isProtectedFolder(id)) return
+    set(state => ({
+      projectFolders: state.projectFolders.map(folder =>
+        folder.id === id
+          ? // The raw text is stored as typed (WYSIWYG); only the blank
+            // check trims — an all-whitespace save clears the field.
+            { ...folder, intro: intro.trim() === '' ? undefined : intro }
+          : folder
+      ),
     }))
     persistIndexIfChanged(before, get())
   },

@@ -78,6 +78,7 @@ describe('AppShell', () => {
       recentProjectPaths: [],
       projectFolders: [],
       pendingPreflightPath: null,
+      activeFolderId: null,
       preflightStatus: 'idle',
       preflightError: null,
     })
@@ -92,6 +93,42 @@ describe('AppShell', () => {
   it('shows Welcome with an always-open sidebar when idle (§10.4)', () => {
     render(<AppShell />)
     expect(screen.getByTestId('sidebar')).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: 'Hi! Welcome to PNDS' })
+    ).toBeInTheDocument()
+  })
+
+  // v1.5.0 (#124): the drilled-in, self-created folder claims the main
+  // area for its README; home and the protected Utilities folder keep
+  // the starting page (the full display routing is #125).
+  it('shows the folder README instead of the starting page when drilled into a user folder', () => {
+    useProjectStore.setState({
+      activeFolderId: 'f1',
+      projectFolders: [
+        { id: 'f1', name: 'Gig', projectPaths: [], intro: 'Spring tour set' },
+      ],
+    })
+
+    render(<AppShell />)
+
+    expect(screen.getByTestId('folder-readme')).toBeInTheDocument()
+    expect(screen.getByText('Spring tour set')).toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', { name: 'Hi! Welcome to PNDS' })
+    ).not.toBeInTheDocument()
+  })
+
+  it('keeps the starting page when drilled into the protected Utilities folder', () => {
+    useProjectStore.setState({
+      activeFolderId: 'utilities',
+      projectFolders: [
+        { id: 'utilities', name: 'Utilities', projectPaths: [] },
+      ],
+    })
+
+    render(<AppShell />)
+
+    expect(screen.queryByTestId('folder-readme')).not.toBeInTheDocument()
     expect(
       screen.getByRole('heading', { name: 'Hi! Welcome to PNDS' })
     ).toBeInTheDocument()

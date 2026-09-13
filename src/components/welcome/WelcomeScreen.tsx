@@ -1,8 +1,8 @@
 import { useTranslation } from 'react-i18next'
-import { useProjectStore } from '@/store/project-store'
 import { useUpdaterStore } from '@/store/updater-store'
 import { openReleasesPage } from '@/lib/updater'
 import { Button } from '@/components/ui/button'
+import { PreflightStatusBoxes } from '@/components/shell/PreflightStatusBoxes'
 import pndsIcon from '@/assets/pnds-icon.png'
 
 /**
@@ -20,8 +20,6 @@ import pndsIcon from '@/assets/pnds-icon.png'
  */
 export function WelcomeScreen() {
   const { t } = useTranslation()
-  const preflightStatus = useProjectStore(state => state.preflightStatus)
-  const preflightError = useProjectStore(state => state.preflightError)
   const updateVersion = useUpdaterStore(state => state.available)
 
   return (
@@ -99,14 +97,14 @@ export function WelcomeScreen() {
 
       {/* Bottom-docked status, out of the centered column: an appearing
           or disappearing box (any height) must never re-center the content
-          above. The transient "Checking project…" state uses the same
-          docked rounded box as preflight errors, in the neutral gray
-          variant; only one of the two can show at a time. The update
-          notice (#121) is the one persistent resident — a check (boot or
-          manual) that found a version leaves it here for the rest of the
-          session, so an update noticed mid-performance is still on the
-          wall when the operator is back at the starting page; its button
-          opens the Releases page (check-only — the app never installs). */}
+          above. The preflight checking/error boxes are the shared
+          main-area dock (PreflightStatusBoxes, extracted v1.5.0 #124);
+          the update notice (#121) is the one persistent resident — a
+          check (boot or manual) that found a version leaves it here for
+          the rest of the session, so an update noticed mid-performance
+          is still on the wall when the operator is back at the starting
+          page; its button opens the Releases page (check-only — the app
+          never installs). */}
       <div className="absolute inset-x-8 bottom-8 flex flex-col items-center gap-2">
         {updateVersion && (
           <div
@@ -123,22 +121,7 @@ export function WelcomeScreen() {
             </Button>
           </div>
         )}
-        {preflightStatus === 'checking' && (
-          <div
-            data-testid="welcome-checking"
-            className="font-manrope max-w-xl rounded-xl border border-(--pnds-text)/10 bg-(--pnds-pill) p-4 text-sm text-(--pnds-text)/60"
-          >
-            {t('welcome.checking')}
-          </div>
-        )}
-        {preflightStatus === 'error' && preflightError && (
-          <div
-            role="alert"
-            className="font-manrope max-w-xl whitespace-pre-wrap rounded-xl border border-(--pnds-danger)/20 bg-(--pnds-danger)/10 p-4 text-start text-sm text-(--pnds-text)"
-          >
-            {preflightError}
-          </div>
-        )}
+        <PreflightStatusBoxes />
       </div>
     </div>
   )
