@@ -2,15 +2,18 @@
 //!
 //! An export directory is a wholly-copyable handover unit: each member
 //! project's `.pnds` (packer name `<sanitized name>-<version>.pnds`), a
-//! `set.json` describing the set, and an import instructions `README.txt`.
-//! The set.json body itself is assembled and serialized by the frontend
+//! `set.json` describing the set, and the folder's self-description
+//! `README.md` (v1.5.0, #126 — the frontend composes it from the
+//! folder's name + intro, and the import parses the intro back out;
+//! the pre-v1.5.0 import-instructions `README.txt` is retired). The
+//! set.json body itself is assembled and serialized by the frontend
 //! (`src/lib/setlist.ts` pins the schema — the field set is a UI concern,
 //! and hand-editability is the format's point); this module owns the
 //! on-disk work: the packability gate, the per-project describe the
 //! frontend assembles from, packing into the chosen directory, the two
 //! text files, and — for the import (#63) — reading a directory back:
-//! the raw set.json body plus the identity probe of every `.pnds` beside
-//! it.
+//! the raw set.json body, the README.md body, and the identity probe of
+//! every `.pnds` beside it.
 //!
 //! All functions here are path-based (no AppHandle) so the export and
 //! import flows are testable with tempdir fixtures, like `bundle.rs`.
@@ -26,9 +29,16 @@ use crate::project::bundle;
 /// The setlist's manifest file inside an export directory.
 pub const SETLIST_FILE_NAME: &str = "set.json";
 
-/// The import instructions file beside it (composed by the frontend so it
-/// localizes in the exporting machine's language).
-pub const SETLIST_README_FILE_NAME: &str = "README.txt";
+/// The folder self-description file beside it — the folder's name + intro
+/// in markdown, composed by the frontend (#126) and parsed back on
+/// import.
+pub const SETLIST_README_FILE_NAME: &str = "README.md";
+
+/// The pre-v1.5.0 import-instructions file (#126 retires it): an export
+/// best-effort removes a stale one so a re-export owns its directory's
+/// file set. The import never reads it — a directory with only this is
+/// a legacy export whose intro lands on the empty state.
+const LEGACY_README_FILE_NAME: &str = "README.txt";
 
 /// v1.4.0 (#59): what the frontend needs to assemble one set.json entry —
 /// the manifest identity plus the `.pnds` file name the export will
@@ -66,13 +76,20 @@ pub struct SetlistBundleFile {
 
 /// v1.4.0 (#63): what the import reads out of an export directory — the
 /// raw set.json body (the frontend's `parseSetlist` is the validation
-/// seam; this side only proves the file exists and reads) plus every
-/// `.pnds` beside it with its probed identity.
+/// seam; this side only proves the file exists and reads), the README.md
+/// body (#126: the folder 自述 the import parses the intro back from),
+/// plus every `.pnds` beside it with its probed identity.
 #[derive(Debug, Clone, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct SetlistReadout {
     pub setlist_json: String,
     pub bundles: Vec<SetlistBundleFile>,
+    /// #126: `None` when the directory holds no README.md (pre-v1.5.0
+    /// exports carry README.txt only) or it is unreadable — the intro
+    /// then lands on its empty state. Lenient by design: this is
+    /// matching data, not validation, and an error here would reroute
+    /// the open flow away from a valid set.
+    pub readme: Option<String>,
 }
 
 /// The export pre-flight: every path through the same packability gate a
@@ -102,10 +119,13 @@ pub fn describe_projects(project_paths: &[String]) -> Result<Vec<SetlistProjectI
 
 /// Writes the export into `dest_dir`: every project packed (in list order)
 /// into its `<name>-<version>.pnds`, then the frontend-serialized
-/// `set.json` and the instructions `README.txt` beside them. An existing
-/// same-named artifact is replaced — a re-export owns its directory's
-/// artifacts. On any failure every file this run wrote is removed again,
-/// so a failed export never leaves a directory that reads as complete.
+/// `set.json` and the folder's self-description `README.md` beside them
+/// (#126 — composed by the frontend from the folder's name + intro; the
+/// pre-v1.5.0 README.txt instructions file is retired, and a stale one
+/// from an earlier export is removed best-effort). An existing same-named
+/// artifact is replaced — a re-export owns its directory's artifacts. On
+/// any failure every file this run wrote is removed again, so a failed
+/// export never leaves a directory that reads as complete.
 ///
 /// `progress` runs before each pack with the project's 0-based index, the
 /// total and the artifact file name (v1.4.0, user report after #59: the
@@ -114,7 +134,7 @@ pub fn export_setlist(
     dest_dir: &Path,
     project_paths: &[String],
     setlist_json: &str,
-    instructions: &str,
+    readme_md: &str,
     packed_with: &str,
     progress: &dyn Fn(usize, usize, &str),
 ) -> Result<SetlistExportResult, String> {
@@ -141,8 +161,12 @@ pub fn export_setlist(
         write_text_atomically(&setlist_path, setlist_json)?;
         written.push(setlist_path);
         let readme_path = dest_dir.join(SETLIST_README_FILE_NAME);
-        write_text_atomically(&readme_path, instructions)?;
+        write_text_atomically(&readme_path, readme_md)?;
         written.push(readme_path);
+        // #126: a README.txt from a pre-v1.5.0 export of the same set
+        // would sit beside the new README.md with retired instructions —
+        // best-effort removal, never a failure of its own.
+        let _ = fs::remove_file(dest_dir.join(LEGACY_README_FILE_NAME));
         Ok(())
     })();
 
@@ -174,7 +198,9 @@ fn output_file_name(output: &Path) -> Result<String, String> {
 
 /// v1.4.0 (#63): reads an export directory for the import. The raw
 /// set.json body comes back untouched (the frontend's `parseSetlist`
-/// validates); every `.pnds` beside it is probed for its manifest
+/// validates); the README.md body rides along for the intro read-back
+/// (#126 — leniently: absent or unreadable reads as `None`, never an
+/// error); every `.pnds` beside it is probed for its manifest
 /// identity, in file-name order so duplicate identities resolve
 /// deterministically. Directories without a `set.json` are an error —
 /// the routing seam reads exactly that as "not a setlist export".
@@ -185,6 +211,7 @@ pub fn read_setlist(dir: &Path) -> Result<SetlistReadout, String> {
     }
     let setlist_json = fs::read_to_string(&setlist_path)
         .map_err(|e| format!("Failed to read {}: {e}", setlist_path.display()))?;
+    let readme = fs::read_to_string(dir.join(SETLIST_README_FILE_NAME)).ok();
 
     let mut names: Vec<String> = Vec::new();
     let entries =
@@ -214,6 +241,7 @@ pub fn read_setlist(dir: &Path) -> Result<SetlistReadout, String> {
     }
     Ok(SetlistReadout {
         setlist_json,
+        readme,
         bundles,
     })
 }
@@ -453,7 +481,7 @@ mod tests {
 
         let dest = parent.path().join("Export");
         let setlist_json = "{\n  \"formatVersion\": 1\n}\n";
-        let instructions = "import me\n";
+        let readme_md = "# Gig\n\nSpring tour set\n";
         let result = export_setlist(
             &dest,
             &[
@@ -461,7 +489,7 @@ mod tests {
                 first.to_string_lossy().into_owned(),
             ],
             setlist_json,
-            instructions,
+            readme_md,
             APP_VERSION,
             &|_, _, _| {},
         )
@@ -469,15 +497,17 @@ mod tests {
 
         assert_eq!(result.output_dir, dest.to_string_lossy());
         // Every artifact the format pins is present, byte-exact for the
-        // text files.
+        // text files. #126: the folder 自述 travels as README.md, and the
+        // retired README.txt instructions file is never produced.
         assert_eq!(
             fs::read_to_string(dest.join(SETLIST_FILE_NAME)).unwrap(),
             setlist_json
         );
         assert_eq!(
             fs::read_to_string(dest.join(SETLIST_README_FILE_NAME)).unwrap(),
-            instructions
+            readme_md
         );
+        assert!(!dest.join(LEGACY_README_FILE_NAME).exists());
         for file in ["First-1.0.0.pnds", "Second-2.0.0.pnds"] {
             assert!(dest.join(file).is_file(), "missing {file}");
         }
@@ -485,6 +515,38 @@ mod tests {
         let bundles = parent.path().join("bundles");
         let installed = bundle::install_bundle(&bundles, &dest.join("First-1.0.0.pnds")).unwrap();
         assert!(installed.join("manifest.json").is_file());
+    }
+
+    /// #126: a README.txt left by a pre-v1.5.0 export of the same set
+    /// would sit beside the new README.md with retired instructions —
+    /// the export removes it best-effort.
+    #[test]
+    fn export_removes_a_legacy_readme_txt() {
+        let parent = tempfile::tempdir().unwrap();
+        let project = parent.path().join("P");
+        fs::create_dir_all(&project).unwrap();
+        fixture_project(&project, "p", "P", "1.0.0", "internal");
+
+        let dest = parent.path().join("Export");
+        fs::create_dir_all(&dest).unwrap();
+        fs::write(
+            dest.join(LEGACY_README_FILE_NAME),
+            "old import instructions",
+        )
+        .unwrap();
+
+        export_setlist(
+            &dest,
+            &[project.to_string_lossy().into_owned()],
+            "{\"formatVersion\":1}\n",
+            "# Gig\n\nSpring tour set\n",
+            APP_VERSION,
+            &|_, _, _| {},
+        )
+        .unwrap();
+
+        assert!(dest.join(SETLIST_README_FILE_NAME).is_file());
+        assert!(!dest.join(LEGACY_README_FILE_NAME).exists());
     }
 
     #[test]
@@ -553,7 +615,7 @@ mod tests {
     }
 
     #[test]
-    fn read_returns_the_setlist_body_and_bundle_identities() {
+    fn read_returns_the_setlist_body_readme_and_bundle_identities() {
         let parent = tempfile::tempdir().unwrap();
         let first = parent.path().join("First");
         let second = parent.path().join("Second");
@@ -564,6 +626,7 @@ mod tests {
 
         let dest = parent.path().join("Export");
         let setlist_json = "{\"formatVersion\":1,\"name\":\"Gig\"}\n";
+        let readme_md = "# Gig\n\nSpring tour set\n";
         export_setlist(
             &dest,
             &[
@@ -571,7 +634,7 @@ mod tests {
                 second.to_string_lossy().into_owned(),
             ],
             setlist_json,
-            "readme\n",
+            readme_md,
             APP_VERSION,
             &|_, _, _| {},
         )
@@ -579,8 +642,10 @@ mod tests {
 
         let readout = read_setlist(&dest).unwrap();
         // The body comes back byte-exact — validation is the frontend's
-        // parse seam, this side only proves it reads.
+        // parse seam, this side only proves it reads. #126: the README.md
+        // body rides along for the intro read-back.
         assert_eq!(readout.setlist_json, setlist_json);
+        assert_eq!(readout.readme.as_deref(), Some(readme_md));
         assert_eq!(readout.bundles.len(), 2);
         assert_eq!(readout.bundles[0].file_name, "First-1.0.0.pnds");
         assert_eq!(readout.bundles[0].id, "first");
@@ -591,6 +656,32 @@ mod tests {
         );
         assert_eq!(readout.bundles[1].id, "second");
         assert_eq!(readout.bundles[1].version, "2.0.0");
+    }
+
+    /// #126: a pre-v1.5.0 export (README.txt instructions only, no
+    /// README.md) reads back with no readme — the import lands the intro
+    /// on its empty state, and the missing file is never an error that
+    /// could reroute the open flow.
+    #[test]
+    fn read_returns_no_readme_for_a_legacy_export() {
+        let parent = tempfile::tempdir().unwrap();
+        let dest = parent.path().join("OldExport");
+        fs::create_dir_all(&dest).unwrap();
+        fs::write(
+            dest.join(SETLIST_FILE_NAME),
+            "{\"formatVersion\":1,\"name\":\"Gig\"}\n",
+        )
+        .unwrap();
+        fs::write(
+            dest.join(LEGACY_README_FILE_NAME),
+            "old import instructions",
+        )
+        .unwrap();
+
+        let readout = read_setlist(&dest).unwrap();
+        assert_eq!(readout.readme, None);
+        assert!(readout.setlist_json.contains("Gig"));
+        assert!(readout.bundles.is_empty());
     }
 
     #[test]

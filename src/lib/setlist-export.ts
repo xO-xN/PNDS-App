@@ -3,9 +3,12 @@
  * command behind the sidebar menu item. A performance folder becomes a
  * wholly-copyable directory: each member's `.pnds` (packed by the Rust
  * side into the chosen destination), a hand-editable `set.json`
- * (serialized by `setlist.ts`, which pins the schema) and a localized
- * import instructions `README.txt`. Machine-local preferences (audio
- * device, sample rate, node config) never travel with it.
+ * (serialized by `setlist.ts`, which pins the schema) and the folder's
+ * self-description `README.md` (v1.5.0, #126 — the folder's name + intro
+ * in markdown; the import parses the intro back out, and the retired
+ * README.txt instructions file is removed best-effort). Machine-local
+ * preferences (audio device, sample rate, node config) never travel
+ * with it.
  */
 
 import { open } from '@tauri-apps/plugin-dialog'
@@ -20,25 +23,11 @@ import { projectDisplayName } from '@/lib/display-names'
 import { isProtectedFolder, useProjectStore } from '@/store/project-store'
 import {
   SETLIST_FORMAT_VERSION,
+  composeSetlistReadme,
   duplicateSetlistIdentity,
   serializeSetlist,
   type SetlistProject,
 } from '@/lib/setlist'
-
-/** The localized import instructions written beside the bundles. */
-function readmeText(folderName: string, projectCount: number): string {
-  return [
-    i18n.t('setlist.readmeHeading', { name: folderName }),
-    '',
-    i18n.t('setlist.readmeContents', { count: projectCount }),
-    i18n.t('setlist.readmeImport'),
-    '',
-    i18n.t('setlist.readmeHandEdit'),
-    i18n.t('setlist.readmeSingleBundle'),
-    i18n.t('setlist.readmeLocalPrefs'),
-    '',
-  ].join('\n')
-}
 
 /**
  * Exports the folder `folderId` into a directory the operator picks:
@@ -147,7 +136,9 @@ export async function exportSetlistFolder(folderId: string): Promise<void> {
     const result = await commands.exportSetlist(
       destDir,
       setlistJson,
-      readmeText(folder.name, projects.length),
+      // #126: the folder's 自述 travels as README.md — heading with the
+      // folder's name, intro verbatim below (set.json stays machine-only).
+      composeSetlistReadme(folder.name, folder.intro),
       paths
     )
     if (result.status === 'error') {

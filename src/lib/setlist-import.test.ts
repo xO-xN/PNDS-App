@@ -43,12 +43,15 @@ const setlist: SetlistFile = {
 
 function mockReadout(
   setlistJson: string,
-  bundles: { fileName: string; id: string; version: string }[]
+  bundles: { fileName: string; id: string; version: string }[],
+  // #126: the README.md body — null by default (a pre-v1.5.0 export).
+  readme: string | null = null
 ) {
   vi.mocked(commands.readSetlist).mockResolvedValue({
     status: 'ok',
     data: {
       setlistJson,
+      readme,
       bundles: bundles.map(bundle => ({
         path: `${EXPORT_DIR}/${bundle.fileName}`,
         ...bundle,
@@ -103,10 +106,15 @@ describe('importSetlistDirectory (issue #63)', () => {
       preflightError: null,
     })
     useSessionStore.getState().resetSession()
-    mockReadout(serializeSetlist(setlist), [
-      { fileName: 'Project A-1.0.0.pnds', id: 'proj-a', version: '1.0.0' },
-      { fileName: 'Project B-2.0.0.pnds', id: 'proj-b', version: '2.0.0' },
-    ])
+    mockReadout(
+      serializeSetlist(setlist),
+      [
+        { fileName: 'Project A-1.0.0.pnds', id: 'proj-a', version: '1.0.0' },
+        { fileName: 'Project B-2.0.0.pnds', id: 'proj-b', version: '2.0.0' },
+      ],
+      // #126: the exporting machine's README.md rides along.
+      '# Gig Friday\n\nSpring tour set\n'
+    )
     // Install results in call order (set order: B first, then A).
     vi.mocked(commands.installBundle).mockImplementation(
       async (path: string) =>
@@ -139,6 +147,9 @@ describe('importSetlistDirectory (issue #63)', () => {
     // Utilities survives with its tool, bottom-pinned.
     const [first, second] = state.projectFolders
     expect(first?.name).toBe('Gig Friday')
+    // #126: the 自述 parsed back out of the export's README.md lands on
+    // the rebuilt folder.
+    expect(first?.intro).toBe('Spring tour set')
     expect(first?.projectPaths).toEqual([
       '/bundles/proj-b-2.0.0',
       '/bundles/proj-a-1.0.0',
@@ -195,6 +206,23 @@ describe('importSetlistDirectory (issue #63)', () => {
       'Setlist imported',
       'Gig Friday'
     )
+  })
+
+  // #126: a pre-v1.5.0 export carries README.txt only — no README.md body
+  // comes back, and the import lands the rebuilt folder's 自述 on its
+  // empty state without so much as a warning.
+  it('a legacy export without README.md imports with the intro empty', async () => {
+    mockReadout(serializeSetlist(setlist), [
+      { fileName: 'Project A-1.0.0.pnds', id: 'proj-a', version: '1.0.0' },
+      { fileName: 'Project B-2.0.0.pnds', id: 'proj-b', version: '2.0.0' },
+    ])
+
+    const handled = await importSetlistDirectory(EXPORT_DIR)
+
+    expect(handled).toBe(true)
+    const [first] = useProjectStore.getState().projectFolders
+    expect(first?.name).toBe('Gig Friday')
+    expect(first?.intro).toBeUndefined()
   })
 
   it('an invalid oscTarget is refused instead of persisted', async () => {

@@ -4,7 +4,9 @@
  * rebuilt performance folder: every `.pnds` installs through the EXISTING
  * bundle install pipeline (`<id>-<version>` slot, same id+version always
  * reinstalls — no third install behavior), then one `replaceProjectIndex`
- * rebuilds history, the folder and its order, and the display names.
+ * rebuilds history, the folder and its order, the display names, and the
+ * folder's 自述 parsed back out of the export's README.md (#126 — a
+ * pre-v1.5.0 export carries none, so the intro lands on its empty state).
  * Machine-local preferences never travel; the per-project external OSC
  * targets are the one setting set.json carries, merged back key-by-key.
  */
@@ -17,6 +19,7 @@ import { isValidOscTarget, updateOscTarget } from '@/lib/preferences'
 import {
   matchSetlistBundles,
   parseSetlist,
+  parseIntroFromSetlistReadme,
   setlistRebuild,
 } from '@/lib/setlist'
 import { newFolderId, useProjectStore } from '@/store/project-store'
@@ -84,14 +87,16 @@ export async function importSetlistDirectory(dir: string): Promise<boolean> {
   }
 
   // One wholesale rebuild: history, the folder (in set order under the
-  // set's name) and the display-name overrides commit as one snapshot.
-  // App content rides through; the batch bypasses the per-directory caps
-  // exactly like legacy over-limit data (the v1.3.2 seam decision).
+  // set's name, with the 自述 parsed back out of README.md — #126) and
+  // the display-name overrides commit as one snapshot. App content rides
+  // through; the batch bypasses the per-directory caps exactly like
+  // legacy over-limit data (the v1.3.2 seam decision).
   const folderId = newFolderId()
   const { paths, folders, names } = setlistRebuild(
     setlist,
     installedPaths,
-    folderId
+    folderId,
+    parseIntroFromSetlistReadme(read.data.readme)
   )
   useProjectStore.getState().replaceProjectIndex(paths, folders, names)
 

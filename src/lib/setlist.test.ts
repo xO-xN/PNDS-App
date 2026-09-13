@@ -2,8 +2,10 @@ import { describe, it, expect } from 'vitest'
 import {
   SETLIST_FILE_NAME,
   SETLIST_FORMAT_VERSION,
+  composeSetlistReadme,
   duplicateSetlistIdentity,
   matchSetlistBundles,
+  parseIntroFromSetlistReadme,
   parseSetlist,
   serializeSetlist,
   setlistRebuild,
@@ -267,10 +269,20 @@ describe('setlist import planning (issue #63)', () => {
 
   it('setlistRebuild derives the replaceProjectIndex inputs', () => {
     const installed = ['/bundles/a-0.1.0', '/bundles/b-2.0.0']
-    const rebuild = setlistRebuild(setlist, installed, 'folder-x')
+    const rebuild = setlistRebuild(
+      setlist,
+      installed,
+      'folder-x',
+      'Parsed back from README.md'
+    )
     expect(rebuild.paths).toEqual(installed)
     expect(rebuild.folders).toEqual([
-      { id: 'folder-x', name: 'Gig Berlin', projectPaths: installed },
+      {
+        id: 'folder-x',
+        name: 'Gig Berlin',
+        projectPaths: installed,
+        intro: 'Parsed back from README.md',
+      },
     ])
     // Display-name overrides key by LOCAL path — never by the export
     // machine's paths or identities.
@@ -278,6 +290,16 @@ describe('setlist import planning (issue #63)', () => {
       '/bundles/a-0.1.0': 'Opening Set',
       '/bundles/b-2.0.0': 'Another Score',
     })
+  })
+
+  it('setlistRebuild carries the empty-state intro for old exports (#126)', () => {
+    const rebuild = setlistRebuild(
+      setlist,
+      ['/bundles/a-0.1.0'],
+      'f',
+      undefined
+    )
+    expect(rebuild.folders[0]?.intro).toBeUndefined()
   })
 
   it('an empty displayName is an absent override, not a blank name', () => {
@@ -290,8 +312,64 @@ describe('setlist import planning (issue #63)', () => {
         projects: [{ id: 'a', version: '1', displayName: '  ' }],
       },
       ['/bundles/a-1'],
-      'f'
+      'f',
+      undefined
     )
     expect(rebuilt.names).toEqual({})
+  })
+})
+
+/**
+ * v1.5.0 (#126): the README.md roundtrip — compose on the exporting
+ * machine, parse on the receiving one. The two functions are exact
+ * inverses for everything the app writes, and lenient for hand edits.
+ */
+describe('setlist README.md roundtrip (#126)', () => {
+  it('composes the folder name as a heading with the intro verbatim', () => {
+    expect(composeSetlistReadme('Gig Berlin', 'Spring tour set')).toBe(
+      '# Gig Berlin\n\nSpring tour set\n'
+    )
+  })
+
+  it('composes the heading alone when the folder has no intro', () => {
+    expect(composeSetlistReadme('Gig Berlin', undefined)).toBe('# Gig Berlin\n')
+  })
+
+  it('parses the intro back out of a composed README', () => {
+    expect(
+      parseIntroFromSetlistReadme(composeSetlistReadme('Gig', 'Spring\ntour'))
+    ).toBe('Spring\ntour')
+  })
+
+  it('roundtrips a no-intro README to the empty state', () => {
+    expect(
+      parseIntroFromSetlistReadme(composeSetlistReadme('Gig', undefined))
+    ).toBeUndefined()
+  })
+
+  it('treats a legacy export (no README) as the empty state', () => {
+    expect(parseIntroFromSetlistReadme(null)).toBeUndefined()
+    expect(parseIntroFromSetlistReadme(undefined)).toBeUndefined()
+  })
+
+  it('reads a headingless or hand-edited README leniently', () => {
+    // A hand editor dropped the heading — the content is still the intro.
+    expect(parseIntroFromSetlistReadme('Just intro text\n')).toBe(
+      'Just intro text'
+    )
+    // Extra hand-added lines below the intro travel with it (WYSIWYG).
+    expect(
+      parseIntroFromSetlistReadme('# Gig\n\nIntro line.\n\nHand note.\n')
+    ).toBe('Intro line.\n\nHand note.')
+    // Whitespace-only remainder = no intro.
+    expect(parseIntroFromSetlistReadme('# Gig\n\n   \n')).toBeUndefined()
+    // Only a real ATX h1 strips: a `## Sub` or `#Tag` first line is
+    // hand-edited content, not the folder's name heading.
+    expect(parseIntroFromSetlistReadme('## Sub\n\nIntro\n')).toBe(
+      '## Sub\n\nIntro'
+    )
+    expect(parseIntroFromSetlistReadme('#Tag line\nIntro\n')).toBe(
+      '#Tag line\nIntro'
+    )
   })
 })

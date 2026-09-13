@@ -85,9 +85,11 @@ pub async fn get_setlist_export_info(
 }
 
 /// v1.4.0 (#59): packs every project (in list order) into `destDir`, then
-/// writes the frontend-serialized set.json and the import instructions
-/// beside them. A failure removes everything this run wrote — a partial
-/// export never reads as complete. Each pack is announced on
+/// writes the frontend-serialized set.json and the folder's
+/// self-description README.md beside them (#126 — frontend-composed from
+/// the folder's name + intro; the retired README.txt instructions file
+/// is removed best-effort). A failure removes everything this run wrote
+/// — a partial export never reads as complete. Each pack is announced on
 /// `pnds:setlist-export-progress` (`{ done, total, fileName }`, done
 /// 0-based) so the UI can show per-project progress.
 #[tauri::command]
@@ -96,7 +98,7 @@ pub async fn export_setlist(
     app: AppHandle,
     dest_dir: String,
     setlist_json: String,
-    instructions: String,
+    readme: String,
     project_paths: Vec<String>,
 ) -> Result<SetlistExportResult, String> {
     let packed_with = app.package_info().version.to_string();
@@ -105,7 +107,7 @@ pub async fn export_setlist(
         &PathBuf::from(dest_dir),
         &project_paths,
         &setlist_json,
-        &instructions,
+        &readme,
         &packed_with,
         &|done, total, file_name| {
             let _ = crate::events::SetlistExportProgressEvent {

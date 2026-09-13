@@ -180,10 +180,8 @@ async preflightProject(path: string) : Promise<Result<Manifest, string>> {
 },
 /**
  * v1.5.0 (#125): reads a project's root README.md for the main area's
- * display routing. `Ok(None)` = nothing to render (no README, or the
- * project directory itself is gone — preflight owns the real
- * diagnostics when starting); a README that exists but cannot be
- * served (unreadable, invalid UTF-8, oversized) is an explicit error.
+ * display routing — the read policy (missing pieces, size cap, readable
+ * errors) lives in `project::readme`.
  */
 async readProjectReadme(path: string) : Promise<Result<string | null, string>> {
     try {
@@ -388,15 +386,17 @@ async getSetlistExportInfo(paths: string[]) : Promise<Result<SetlistProjectInfo[
 },
 /**
  * v1.4.0 (#59): packs every project (in list order) into `destDir`, then
- * writes the frontend-serialized set.json and the import instructions
- * beside them. A failure removes everything this run wrote — a partial
- * export never reads as complete. Each pack is announced on
+ * writes the frontend-serialized set.json and the folder's
+ * self-description README.md beside them (#126 — frontend-composed from
+ * the folder's name + intro; the retired README.txt instructions file
+ * is removed best-effort). A failure removes everything this run wrote
+ * — a partial export never reads as complete. Each pack is announced on
  * `pnds:setlist-export-progress` (`{ done, total, fileName }`, done
  * 0-based) so the UI can show per-project progress.
  */
-async exportSetlist(destDir: string, setlistJson: string, instructions: string, projectPaths: string[]) : Promise<Result<SetlistExportResult, string>> {
+async exportSetlist(destDir: string, setlistJson: string, readme: string, projectPaths: string[]) : Promise<Result<SetlistExportResult, string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("export_setlist", { destDir, setlistJson, instructions, projectPaths }) };
+    return { status: "ok", data: await TAURI_INVOKE("export_setlist", { destDir, setlistJson, readme, projectPaths }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -902,10 +902,19 @@ fileName: string }
 /**
  * v1.4.0 (#63): what the import reads out of an export directory — the
  * raw set.json body (the frontend's `parseSetlist` is the validation
- * seam; this side only proves the file exists and reads) plus every
- * `.pnds` beside it with its probed identity.
+ * seam; this side only proves the file exists and reads), the README.md
+ * body (#126: the folder 自述 the import parses the intro back from),
+ * plus every `.pnds` beside it with its probed identity.
  */
-export type SetlistReadout = { setlistJson: string; bundles: SetlistBundleFile[] }
+export type SetlistReadout = { setlistJson: string; bundles: SetlistBundleFile[]; 
+/**
+ * #126: `None` when the directory holds no README.md (pre-v1.5.0
+ * exports carry README.txt only) or it is unreadable — the intro
+ * then lands on its empty state. Lenient by design: this is
+ * matching data, not validation, and an error here would reroute
+ * the open flow away from a valid set.
+ */
+readme: string | null }
 export type SynthdefCompileResult = { 
 /**
  * The sclang binary this run used (standard app path or PATH hit).

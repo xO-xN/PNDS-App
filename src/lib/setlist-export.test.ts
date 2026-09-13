@@ -56,8 +56,14 @@ describe('exportSetlistFolder (issue #59)', () => {
     useProjectStore.setState({
       currentProject: null,
       projectFolders: [
-        // Folder order is the set order: B leads.
-        { id: 'folder-1', name: 'Gig Friday', projectPaths: [PATH_B, PATH_A] },
+        // Folder order is the set order: B leads. #126: the folder's
+        // 自述 travels as README.md.
+        {
+          id: 'folder-1',
+          name: 'Gig Friday',
+          projectPaths: [PATH_B, PATH_A],
+          intro: 'Spring tour set\nTwo acts.',
+        },
         // The protected folder exists but exports nothing (app content).
         { id: 'utilities', name: 'Utilities', projectPaths: [] },
       ],
@@ -69,7 +75,7 @@ describe('exportSetlistFolder (issue #59)', () => {
     })
   })
 
-  it('exports the folder in order: set.json entries, README text, reveal', async () => {
+  it('exports the folder in order: set.json entries, README.md, reveal', async () => {
     vi.mocked(commands.getSetlistExportInfo).mockResolvedValue({
       status: 'ok',
       data: [INFO_B, INFO_A],
@@ -93,9 +99,14 @@ describe('exportSetlistFolder (issue #59)', () => {
 
     const exportCall = vi.mocked(commands.exportSetlist).mock.calls[0]
     if (!exportCall) throw new Error('Expected the export command to run')
-    const [destDir, setlistJson, instructions, projectPaths] = exportCall
+    const [destDir, setlistJson, readme, projectPaths] = exportCall
     expect(destDir).toBe('/Users/test/Desktop/Gig Export')
     expect(projectPaths).toEqual([PATH_B, PATH_A])
+
+    // #126: the README the Rust side writes as README.md — the folder's
+    // name as a heading, the 自述 verbatim below (the intro never enters
+    // set.json, whose schema stays pinned at formatVersion 1).
+    expect(readme).toBe('# Gig Friday\n\nSpring tour set\nTwo acts.\n')
 
     // The serialized set.json: folder name, folder order, the app's one
     // naming rule for display names, manifest audio modes, and the saved
@@ -125,9 +136,12 @@ describe('exportSetlistFolder (issue #59)', () => {
       ],
     })
 
-    // The README is localized text naming the set and its size.
-    expect(instructions).toContain('Gig Friday')
-    expect(instructions).toContain('2')
+    // The README.md is the folder's 自述: heading with the folder's name,
+    // intro verbatim below — no import-instructions prose travels anymore
+    // (#126, README.txt retired).
+    expect(readme).toContain('# Gig Friday')
+    expect(readme).toContain('Spring tour set')
+    expect(readme).not.toContain('import')
 
     expect(notifications.flow.succeed).toHaveBeenCalledWith(
       'setlist-export:folder-1',

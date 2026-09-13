@@ -3,8 +3,11 @@ import type { ProjectFolder } from '@/lib/tauri-bindings'
 /**
  * v1.4.0 (issue #59): the `set.json` exchange format for setlist exports
  * (spec #57). An exported directory holds each project's `.pnds` (packer
- * name `<sanitized name>-<version>.pnds`), this `set.json`, and an import
- * instructions `README.txt` written by the Rust side.
+ * name `<sanitized name>-<version>.pnds`), this `set.json`, and the
+ * folder's self-description `README.md` (v1.5.0, #126 — composed by the
+ * frontend from the folder's name + intro and parsed back on import; the
+ * pre-v1.5.0 import-instructions `README.txt` is retired, and the export
+ * removes a stale one best-effort).
  *
  * v1.4.0 (#63): the import planning helpers live here too — entry→bundle
  * matching and the index-rebuild inputs (see `matchSetlistBundles`,
@@ -193,6 +196,43 @@ function stringifyError(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+// ─────────────────── README.md roundtrip (#126) ───────────────────
+
+/**
+ * v1.5.0 (#126): composes the export's README.md — the folder's name as
+ * a markdown heading followed by its intro verbatim (absent/blank intro
+ * = the heading alone; the generated binding types the store's intro as
+ * `string | null | undefined`, all absent shapes compose identically).
+ * The intro never travels in set.json (its schema is pinned at
+ * formatVersion 1); this file is its only vehicle, and
+ * `parseIntroFromSetlistReadme` below is the exact inverse a receiving
+ * machine runs.
+ */
+export function composeSetlistReadme(
+  name: string,
+  intro: string | null | undefined
+): string {
+  return intro ? `# ${name}\n\n${intro}\n` : `# ${name}\n`
+}
+
+/**
+ * v1.5.0 (#126): reads the intro back out of an export's README.md —
+ * everything after the leading `# ` h1, trimmed. Lenient by design (it
+ * is user data, hand-editable like the rest of the format): a
+ * null/undefined body (a pre-v1.5.0 export, or none at all) is the
+ * empty state; a README whose first line is not an h1 reads as intro
+ * anyway; blank remainder = no intro. Only a real ATX h1 (`#` + space)
+ * is stripped — `## Sub` and `#Tag` first lines are content, not the
+ * folder's name heading.
+ */
+export function parseIntroFromSetlistReadme(
+  readme: string | null | undefined
+): string | undefined {
+  if (typeof readme !== 'string') return undefined
+  const stripped = readme.replace(/^#(?:[ \t][^\n]*)?\n/, '').trim()
+  return stripped === '' ? undefined : stripped
+}
+
 // ─────────────────────── import planning (#63) ───────────────────────
 
 /** One `.pnds` the import found in an export directory — the Rust
@@ -245,11 +285,14 @@ export function matchSetlistBundles(
  * in set order), one folder holding them in that order under the set's
  * name, and the display-name overrides keyed by the LOCAL paths (empty
  * names are absent overrides — the card falls back to its manifest name).
+ * #126: `intro` is the folder 自述 parsed back out of the export's
+ * README.md (undefined for pre-v1.5.0 exports — the empty state).
  */
 export function setlistRebuild(
   setlist: SetlistFile,
   installedPaths: readonly string[],
-  folderId: string
+  folderId: string,
+  intro: string | undefined
 ): {
   paths: string[]
   folders: ProjectFolder[]
@@ -265,7 +308,7 @@ export function setlistRebuild(
   })
   return {
     paths,
-    folders: [{ id: folderId, name: setlist.name, projectPaths: paths }],
+    folders: [{ id: folderId, name: setlist.name, projectPaths: paths, intro }],
     names,
   }
 }

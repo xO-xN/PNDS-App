@@ -52,6 +52,9 @@ describe('Sidebar setlist import landing (issue #63)', () => {
     vi.mocked(commands.readSetlist).mockResolvedValue({
       status: 'ok',
       data: {
+        // #126: no README.md body in this fixture — the intro lands on
+        // its empty state, exactly like a pre-v1.5.0 export.
+        readme: null,
         setlistJson: serializeSetlist({
           formatVersion: 1,
           name: 'Gig Friday',

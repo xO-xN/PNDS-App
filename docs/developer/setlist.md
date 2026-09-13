@@ -11,7 +11,7 @@ v1.4.0（#59 导出、#63 导入，spec #57）。演出文件夹的移交机制�
 ├── <name>-<version>.pnds   # 每个成员工程一份，文件名与 .pnds 打包规则一致
 ├── …
 ├── set.json                # 演出描述（人可读、可手改）
-└── README.txt              # 导入说明（按导出机界面语言生成）
+└── README.md              # 文件夹自述（文件夹名 + 简介，#126；导入时读回简介）
 ```
 
 `set.json` 的 schema 唯一权威是 `src/lib/setlist.ts` 的模块注释（序列化 + 解析同一处）；字段变更必须升 `formatVersion`。要点：
@@ -20,6 +20,7 @@ v1.4.0（#59 导出、#63 导入，spec #57）。演出文件夹的移交机制�
 - `projects` 数组顺序即演出顺序；`file` 字段是提示性的（手改文件名不破坏导入匹配）；
 - 记录显示名、默认音频模式、External OSC target；**不含**设备、采样率、主题、节点配置等本机偏好——设备是本机偏好，契约不变；
 - `oscTarget` 省略 = 从未设置（不写默认值 `127.0.0.1:3333`，手改者读「缺省」为「未设置」）；
+- **文件夹简介只经 README.md 旅行（#126），不进 set.json**——导出由前端合成为 `# 文件夹名` 标题 + 简介原文，导入按「标题行之下、trim」读回（`setlist.ts` 的 compose/parse 是一对精确互逆）；v1.5.0 前的旧导出只有 README.txt，导入后简介为空态、不报错，导出会尽力清掉同目录遗留的 README.txt；
 - 解析（`parseSetlist`，导入侧消费）：非法 JSON、不认识的 `formatVersion`、空 `name`/`id`/`version`、同一身份出现两次——可读错误拒绝；未知字段忽略。
 
 ## 导出链路
@@ -34,6 +35,7 @@ v1.4.0（#59 导出、#63 导入，spec #57）。演出文件夹的移交机制�
        │   会静默互相覆盖）→ 拒绝
        ├─ 组装 + serializeSetlist（显示名走 display-names 的唯一命名规则；
        │   oscTarget 来自 preferences.oscTargets[manifest id]）
+       ├─ composeSetlistReadme（文件夹名 + 简介 → README.md，#126；README.txt 退役）
        ├─ commands.exportSetlist(destDir, setlistJson, readme, paths)（Rust）
        │    ← 每个工程打包前发 pnds:setlist-export-progress 事件
        │      （{ done, total, fileName }，done 0 基）
@@ -54,6 +56,7 @@ src/lib/setlist-import.ts   importSetlistDirectory(dir) → boolean
   ├─ commands.readSetlist(dir)（Rust）   ← Err = 无 set.json，路由回落 openProject
   ├─ parseSetlist（纯逻辑缝校验 set.json）→ 可读错误
   ├─ matchSetlistBundles（纯逻辑缝）      ← 身份匹配，缺包点名拒绝
+  ├─ parseIntroFromSetlistReadme（#126）  ← README.md 读回文件夹简介（旧导出=空态）
   ├─ 逐个 commands.installBundle(file)    ← 现有安装管线，绝不第三种安装行为；
   │                                        失败即中止在索引重建之前
   ├─ replaceProjectIndex(paths, folders, names)（v1.3.2 预留缝，见
@@ -62,7 +65,7 @@ src/lib/setlist-import.ts   importSetlistDirectory(dir) → boolean
   └─ setActiveFolderView(新文件夹)        ← 落地即见重建后的演出顺序
 ```
 
-- Rust `read_setlist`（`project/setlist.rs`）：`set.json` **原文**返回（校验在前端解析缝）；旁扫每个 `.pnds` 的 manifest 身份（宽松打探——坏包跳过，安装才是校验门），按文件名排序保证重名身份确定性；
+- Rust `read_setlist`（`project/setlist.rs`）：`set.json` **原文**返回（校验在前端解析缝），README.md **原文**随行（缺失/不可读 = None，宽松——错误会把开放流程从合法演出目录上引走，#126）；旁扫每个 `.pnds` 的 manifest 身份（宽松打探——坏包跳过，安装才是校验门），按文件名排序保证重名身份确定性；
 - 重建语义 = `replaceProjectIndex` 的既有决策（do not relitigate）：导入即加载，接收机原有非工具工程让位；Utilities 与本轮工具随行、底部钉扎；显示名按**本机安装路径**建覆盖；
 - 默认音频模式不落盘：App 模型里它来自 manifest，预取时重置（导出侧本就取自 manifest）；`set.json` 的 `audioMode` 是给人读的演出配置记录；
 - 安装中途失败：已装产物留在 `bundles/`（幂等，重跑导入即治愈），索引不重建——不出现半个演出文件夹。
