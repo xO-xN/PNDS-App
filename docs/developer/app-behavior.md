@@ -217,7 +217,7 @@ v1.5.0（#129）投影窗口骨架——又一个多页入口的 webview 窗口�
 - 窗口标题「PNDS 投影 — <工程名>」（简介或 monitor 在台时）/ 无演出时「PNDS 投影」，随界面语言实时更新（页面 `setTitle`；capabilities 需 `core:window:allow-set-title`）。
 - **⌘W 按聚焦窗口分发**：投影窗口在前台时只关它（普通销毁），演出与主窗口不受影响；红灯关闭即销毁，退出 App 随之关闭。
 - v1.5.0（#131）键盘与缩放作用域（全部沿用 focused-window-label 分派）：
-  - **⌘=/⌘-/⌘0** 只调聚焦窗口的 monitor 缩放——投影窗口持自己的值（页面本地状态：跨工程与简介⇄monitor 切换保持、关窗重开复位、不写 preferences），与主窗口的 session 级缩放互相独立；渲染同 MonitorView 的 transform + inverse-size 方案，缩放只作用于 monitor 内容（简介/待机自适应排版不缩放）。
+  - **⌘=/⌘-/⌘0** 只调聚焦窗口的 monitor 缩放——投影窗口持自己的值（与主窗口的 session 级缩放互相独立），且**被记忆**：经 `projectionZoom` preference 持久化（跨工程、跨关窗重开、跨启动保持）。渲染走共享 MonitorScaleFrame（transform + inverse-size）；投影窗口内 monitor 与简介（封面页）都参与缩放，待机固定排版不缩放。持久化走单写者纪律：投影页持值并上报（`pnds:projection-zoom` 事件），**主窗口**是唯一的 preferences 写入方（两个 webview 各自整文件写会互相踩），投影开窗时从 preferences 读初值（越界钳制回 50–200）。
   - **⌘⇧R** 一个和弦同时重载主窗口与投影窗口的 monitor（各自的 `_r` nonce 冷拉取语义一致；投影在简介/待机时该动作为 no-op）。
   - **⌃⌘F** 切换聚焦窗口的全屏——投影窗口保持原生标题栏、自管全屏（不进主窗口的 WindowStateEvent chrome 机制）；侧栏全屏按钮仍属主窗口。
   - **Esc 在投影窗口直接归页面**——瘦根无 App web ⌘ 层、无关闭工程确认流；主窗口自 v1.2.0 起 plain-Esc 本就无 App 功能（关闭工程确认走 ⌘W），page-interaction.md 契约已按窗口作用域同步改写（并废止陈旧的「Esc → 关闭工程」表述）。

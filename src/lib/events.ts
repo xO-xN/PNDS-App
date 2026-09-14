@@ -28,6 +28,9 @@ export const HELP_WINDOW_LABEL = 'help'
 /** v1.5.0 (#129): the projection window's stable label. */
 export const PROJECTION_WINDOW_LABEL = 'projection'
 
+/** The main window's label — the app's sole preferences writer. */
+export const MAIN_WINDOW_LABEL = 'main'
+
 /** Where the help window should navigate: the search box or one document. */
 export type HelpTarget = { kind: 'search' } | { kind: 'doc'; docId: string }
 
@@ -200,9 +203,9 @@ export function emitProjectionTheme(theme: ColorTheme): Promise<void> {
 /**
  * v1.5.0 (#131): a keyboard action the main window's menu dispatches TO
  * the projection window (its accelerators are app-wide but their effect
- * is per-window). The zoom lives in the projection page's local state —
- * independent of the main window's, alive with the window, never in
- * preferences — so the action is a verb, never a value.
+ * is per-window). The zoom VALUE lives in the projection page's state
+ * and is remembered in preferences (see the zoom report below) — so the
+ * action stays a verb, never a value.
  */
 export type ProjectionAction =
   | { kind: 'zoom-in' }
@@ -222,4 +225,27 @@ export function onProjectionAction(
 /** Main-window side: dispatch a keyboard action to the projection window. */
 export function emitProjectionAction(action: ProjectionAction): Promise<void> {
   return emitTo(PROJECTION_WINDOW_LABEL, PROJECTION_ACTION, action)
+}
+
+const PROJECTION_ZOOM = 'pnds:projection-zoom'
+
+/**
+ * v1.5.0 (user request after #131): the projection window reports its
+ * live zoom so it is REMEMBERED — the reverse direction of the action
+ * channel. The projection page owns the value (where it renders), but
+ * the MAIN window is the app's sole preferences writer: two webviews
+ * whole-file-writing preferences through separate queues would clobber
+ * each other's fields, so the report lands here and rides the one
+ * serialized queue. The projection page reads its initial value from
+ * loadPreferences at boot — the report is only for changes.
+ */
+export function onProjectionZoom(cb: (zoom: number) => void): Unsubscribe {
+  return toUnsubscribe(
+    listen<{ zoom: number }>(PROJECTION_ZOOM, e => cb(e.payload.zoom))
+  )
+}
+
+/** Projection side: report the new zoom value for persistence. */
+export function emitProjectionZoom(zoom: number): Promise<void> {
+  return emitTo(MAIN_WINDOW_LABEL, PROJECTION_ZOOM, { zoom })
 }

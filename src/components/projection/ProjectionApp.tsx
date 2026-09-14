@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { currentResolvedLanguage } from '@/i18n/config'
 import {
+  emitProjectionZoom,
   onProjectionAction,
   onProjectionLocale,
   onProjectionTheme,
@@ -401,7 +402,15 @@ function ProjectionStage({
           reloadNonce={reloadNonce}
         />
       ) : displayed.kind === 'intro' ? (
-        <ProjectionIntro content={displayed} />
+        /* The 简介 rides the SAME zoom frame as the monitor (user
+           request after #131 — the cover page scales with the window's
+           remembered zoom; its container queries resolve against the
+           pre-transform layout box, so the fit math and the visual
+           scale compose). 投影待机 stays unscaled — it is a fixed
+           standby layout, not content. */
+        <MonitorScaleFrame zoom={zoom}>
+          <ProjectionIntro content={displayed} />
+        </MonitorScaleFrame>
       ) : (
         <ProjectionStandby />
       )}
@@ -421,7 +430,12 @@ function ProjectionStage({
   )
 }
 
-export function ProjectionApp() {
+export function ProjectionApp({
+  initialZoom = DEFAULT_MONITOR_ZOOM,
+}: {
+  /** The remembered zoom (boot-read from preferences); 100 when unset. */
+  initialZoom?: number
+}) {
   const { i18n } = useTranslation()
   const [snapshot, setSnapshot] = useState<SessionSnapshot | null>(null)
   const [restoreFailed, setRestoreFailed] = useState(false)
@@ -486,14 +500,15 @@ export function ProjectionApp() {
     }
   }, [i18n])
 
-  // #131: the projection window's OWN monitor zoom and reload nonce —
-  // page-local state, so the value lives with the WINDOW (kept across
-  // project switches and 简介⇄monitor swaps, reset when the window
-  // closes and reopens, never written to preferences) and stays
-  // independent of the main window's session-store zoom. Actions arrive
-  // from the main window's focused-window menu dispatch; the step math
-  // is the shared applyZoomAction (§v1.1.1 browser zoom).
-  const [zoom, setZoom] = useState(DEFAULT_MONITOR_ZOOM)
+  // #131 + the zoom-memory follow-up: the projection window's OWN zoom
+  // and reload nonce. The zoom seeds from the REMEMBERED preference
+  // (boot-read by projection-main), applies to the monitor AND the 简介,
+  // and every change is reported to the main window (the app's sole
+  // preferences writer) so it survives window reopens AND app
+  // launches — still independent of the main window's session-store
+  // zoom. Actions arrive from the main window's focused-window menu
+  // dispatch; the step math is the shared applyZoomAction (§v1.1.1).
+  const [zoom, setZoom] = useState(initialZoom)
   const [reloadNonce, setReloadNonce] = useState(0)
   useEffect(() => {
     return onProjectionAction(action => {
@@ -501,7 +516,18 @@ export function ProjectionApp() {
         setReloadNonce(nonce => nonce + 1)
         return
       }
-      setZoom(current => applyZoomAction(current, action.kind))
+      setZoom(current => {
+        const next = applyZoomAction(current, action.kind)
+        if (next !== current) {
+          // Report for persistence — best-effort; the value's live
+          // authority is this page either way.
+          emitProjectionZoom(next).catch(() => {
+            // The main window is always alive (it opened this one) — a
+            // failed report logs nothing; the next change retries.
+          })
+        }
+        return next
+      })
     })
   }, [])
 

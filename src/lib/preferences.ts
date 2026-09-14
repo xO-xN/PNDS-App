@@ -77,6 +77,7 @@ export type PreferencesPatch = Partial<
     | 'hubUrl'
     | 'hubToken'
     | 'hubRooms'
+    | 'projectionZoom'
   >
 >
 

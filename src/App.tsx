@@ -1,5 +1,9 @@
 import { useEffect } from 'react'
-import { onOpenBundle, onProjectionWindow } from '@/lib/events'
+import {
+  onOpenBundle,
+  onProjectionWindow,
+  onProjectionZoom,
+} from '@/lib/events'
 import {
   getCurrentWebviewWindow,
   WebviewWindow,
@@ -22,7 +26,7 @@ import {
 import { hostname } from '@tauri-apps/plugin-os'
 import { logger } from './lib/logger'
 import { commands } from './lib/tauri-bindings'
-import { DEFAULT_SAMPLE_RATE } from './lib/preferences'
+import { DEFAULT_SAMPLE_RATE, updatePreferences } from './lib/preferences'
 import {
   colorThemeFromPrefs,
   setColorThemeAttribute,
@@ -85,6 +89,14 @@ function App() {
       .catch(() => {
         // A failed probe changes nothing — the listener owns the truth.
       })
+
+    // v1.5.0 (zoom memory): the projection window reports its live zoom;
+    // THIS window is the sole preferences writer, so the value persists
+    // through the serialized queue — a second webview whole-file-writing
+    // preferences would race the queue and clobber fields.
+    onProjectionZoom(zoom => {
+      void updatePreferences({ projectionZoom: zoom })
+    })
 
     const initLanguageAndMenu = async () => {
       try {

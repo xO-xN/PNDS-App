@@ -157,12 +157,23 @@ pub struct AppPreferences {
     #[serde(default)]
     pub hub_token: Option<String>,
     /// v1.4.0 (issue #58): telematic room group number (1..=3) per project
-    /// manifest id — the user-visible「Room」dropdown. The App derives the
-    /// wire room as `{manifest.id}_{group}`; absent entry = group 1.
+    /// manifest id — the user-visible「Room」dropdown. The App derives
+    /// the wire room as `{manifest.id}_{group}`; absent entry = group 1.
     /// Persisted per project and never reset: crash recovery must land a
     /// machine back in its own group's room (ADR-0004).
     #[serde(default)]
     pub hub_rooms: HashMap<String, u8>,
+    /// v1.5.0 (user request after #131): the PROJECTION window's zoom
+    /// percent (50–200, §v1.1.1 browser-zoom bounds) — remembered across
+    /// window reopens and app launches, applying to the projection's
+    /// monitor AND its 简介 screen (the main window's own zoom stays
+    /// session-local and never rides here). The projection page owns the
+    /// live value; the MAIN window is the sole preferences writer, so
+    /// the value reaches storage by event → the serialized queue — two
+    /// webviews whole-file-writing preferences would race each other.
+    /// `None` = never set → 100.
+    #[serde(default)]
+    pub projection_zoom: Option<u8>,
 }
 
 /// A named one-level group of project paths (spec issue #4).
@@ -200,6 +211,7 @@ impl Default for AppPreferences {
             hub_url: None,
             hub_token: None,
             hub_rooms: HashMap::new(),
+            projection_zoom: None,
         }
     }
 }
@@ -465,6 +477,22 @@ mod tests {
         let prefs: AppPreferences = serde_json::from_str(legacy).expect("legacy prefs parse");
         assert_eq!(prefs.sample_rate, None);
         assert_eq!(prefs.effective_sample_rate(), 48_000);
+    }
+
+    /// v1.5.0: preference files written before `projectionZoom` existed
+    /// load as the unset zoom (serde default), and the value round-trips.
+    #[test]
+    fn deserializes_and_roundtrips_projection_zoom() {
+        let legacy = r#"{ "theme": "dark" }"#;
+        let prefs: AppPreferences = serde_json::from_str(legacy).expect("legacy prefs parse");
+        assert_eq!(prefs.projection_zoom, None);
+
+        let modern = r#"{ "theme": "dark", "projectionZoom": 130 }"#;
+        let prefs: AppPreferences = serde_json::from_str(modern).expect("modern prefs parse");
+        assert_eq!(prefs.projection_zoom, Some(130));
+        let written = serde_json::to_string(&prefs).expect("prefs serialize");
+        let reread: AppPreferences = serde_json::from_str(&written).expect("prefs reparse");
+        assert_eq!(reread.projection_zoom, Some(130));
     }
 
     #[test]

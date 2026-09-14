@@ -686,12 +686,24 @@ hubUrl?: string | null;
 hubToken?: string | null; 
 /**
  * v1.4.0 (issue #58): telematic room group number (1..=3) per project
- * manifest id — the user-visible「Room」dropdown. The App derives the
- * wire room as `{manifest.id}_{group}`; absent entry = group 1.
+ * manifest id — the user-visible「Room」dropdown. The App derives
+ * the wire room as `{manifest.id}_{group}`; absent entry = group 1.
  * Persisted per project and never reset: crash recovery must land a
  * machine back in its own group's room (ADR-0004).
  */
-hubRooms?: Partial<{ [key in string]: number }> }
+hubRooms?: Partial<{ [key in string]: number }>; 
+/**
+ * v1.5.0 (user request after #131): the PROJECTION window's zoom
+ * percent (50–200, §v1.1.1 browser-zoom bounds) — remembered across
+ * window reopens and app launches, applying to the projection's
+ * monitor AND its 简介 screen (the main window's own zoom stays
+ * session-local and never rides here). The projection page owns the
+ * live value; the MAIN window is the sole preferences writer, so
+ * the value reaches storage by event → the serialized queue — two
+ * webviews whole-file-writing preferences would race each other.
+ * `None` = never set → 100.
+ */
+projectionZoom?: number | null }
 export type AudioConfig = { 
 /**
  * The raw-JSON validation below has already rejected unknown mode

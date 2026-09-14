@@ -1,4 +1,5 @@
 import { render, screen, act, fireEvent } from '@/test/test-utils'
+import { emitTo } from '@tauri-apps/api/event'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import i18n from '@/i18n/config'
 import { commands } from '@/lib/tauri-bindings'
@@ -393,27 +394,37 @@ describe('ProjectionApp (#130 gate)', () => {
     )
   })
 
-  // v1.5.0 (#131): the projection window's OWN monitor zoom — the
+  // v1.5.0 (#131 + zoom memory): the projection window's OWN zoom —
   // dispatched ⌘±/⌘0 actions from the main window's focused-window
-  // menu dispatch, the §v1.1.1 transform+inverse-size rendering, and
-  // the window-lifetime lifecycle (kept across content swaps, reset on
-  // reopen — never in preferences).
+  // menu dispatch, the §v1.1.1 transform+inverse-size rendering via the
+  // shared MonitorScaleFrame, applied to the monitor AND the 简介, and
+  // every change REPORTED to the main window so it is remembered in
+  // preferences (reopen/boot restores the value).
   const dispatchAction = (kind: string) => {
     act(() => {
       listeners.get('pnds:projection-action')?.({ kind })
     })
   }
 
-  it('zooms only the monitor, keeping the value through content swaps', async () => {
+  it('zooms the 简介 too, keeping the value through content swaps', async () => {
     vi.useFakeTimers()
     render(<ProjectionApp />)
     await flush()
 
-    // Zoom while the 简介 holds: the intro never scales, but the value
-    // moves (it is the monitor's zoom).
+    // Zoom while the 简介 holds: the SAME frame scales the intro (the
+    // user request — the cover page zooms with the window), and the
+    // change is reported for persistence.
     dispatchAction('zoom-in')
     dispatchAction('zoom-in')
-    expect(screen.queryByTestId('monitor-scale-frame')).not.toBeInTheDocument()
+    expect(screen.getByTestId('monitor-scale-frame').style.transform).toBe(
+      'scale(1.2)'
+    )
+    expect(emitTo).toHaveBeenCalledWith('main', 'pnds:projection-zoom', {
+      zoom: 110,
+    })
+    expect(emitTo).toHaveBeenLastCalledWith('main', 'pnds:projection-zoom', {
+      zoom: 120,
+    })
 
     // 开演 → the monitor renders at the kept value (transform +
     // inverse size, the MonitorView approach).
@@ -445,33 +456,36 @@ describe('ProjectionApp (#130 gate)', () => {
       'scale(1.2)'
     )
 
-    // ⌘0 resets the projection's own value.
+    // ⌘0 resets the projection's own value — and reports the reset.
     dispatchAction('zoom-reset')
     expect(screen.getByTestId('monitor-scale-frame').style.transform).toBe(
       'scale(1)'
     )
+    expect(emitTo).toHaveBeenLastCalledWith('main', 'pnds:projection-zoom', {
+      zoom: 100,
+    })
   })
 
-  it('resets the zoom when the window closes and reopens', async () => {
+  it('seeds from the remembered zoom and restores it on reopen', async () => {
     vi.useFakeTimers()
     vi.mocked(commands.getSessionState).mockResolvedValue({
       status: 'ok',
       data: snapshot({ projectionStarted: true }),
     })
-    const first = render(<ProjectionApp />)
+    // Boot with a remembered preference (projection-main clamps and
+    // passes it): the FIRST frame already renders at that scale.
+    render(<ProjectionApp initialZoom={130} />)
     await flush()
+    expect(screen.getByTestId('monitor-scale-frame').style.transform).toBe(
+      'scale(1.3)'
+    )
     dispatchAction('zoom-out')
     expect(screen.getByTestId('monitor-scale-frame').style.transform).toBe(
-      'scale(0.9)'
+      'scale(1.2)'
     )
-    first.unmount()
-
-    // A reopened window is a fresh page: the zoom starts over at 100%.
-    render(<ProjectionApp />)
-    await flush()
-    expect(screen.getByTestId('monitor-scale-frame').style.transform).toBe(
-      'scale(1)'
-    )
+    expect(emitTo).toHaveBeenLastCalledWith('main', 'pnds:projection-zoom', {
+      zoom: 120,
+    })
   })
 
   it('reloads the monitor on the ⌘⇧R action — nonce semantics, fresh reveal gate', async () => {
