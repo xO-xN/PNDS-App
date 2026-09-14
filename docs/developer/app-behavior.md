@@ -215,7 +215,12 @@ v1.5.0（#129）投影窗口骨架——又一个多页入口的 webview 窗口�
 - monitor 组装复用主窗口契约：地址快照语义（`hostAddress` 优先）、`?theme=`/`?lang=` 首帧参数按导航快照、iframe load 事件 + 10 秒超时的 reveal 防闪盖层、theme/locale 桥推送。session 事实经广播 `SessionSnapshotEvent` + `getSessionState` 恢复（visibility/focus 重拉，occlusion 丢事件先例同主窗口）。
 - 内容切换全部渐变（400ms 主题色盖层，`data-reveal-motion` 豁免 Brutal 即时规则）：待机↔简介↔monitor、切换工程的地址/工程变化都走同一盖层（简介按 projectPath 键控，A→B 切换也渐变）；快照序列中途变卦时收敛到最新内容；**首个落定内容直接呈现**（开演后重开直接落 monitor，无简介/待机闪帧）。
 - 窗口标题「PNDS 投影 — <工程名>」（简介或 monitor 在台时）/ 无演出时「PNDS 投影」，随界面语言实时更新（页面 `setTitle`；capabilities 需 `core:window:allow-set-title`）。
-- **⌘W 按聚焦窗口分发**：投影窗口在前台时只关它（普通销毁），演出与主窗口不受影响；红灯关闭即销毁，退出 App 随之关闭。全屏与缩放等窗口级快捷键的投影侧分派属后续票。
+- **⌘W 按聚焦窗口分发**：投影窗口在前台时只关它（普通销毁），演出与主窗口不受影响；红灯关闭即销毁，退出 App 随之关闭。
+- v1.5.0（#131）键盘与缩放作用域（全部沿用 focused-window-label 分派）：
+  - **⌘=/⌘-/⌘0** 只调聚焦窗口的 monitor 缩放——投影窗口持自己的值（页面本地状态：跨工程与简介⇄monitor 切换保持、关窗重开复位、不写 preferences），与主窗口的 session 级缩放互相独立；渲染同 MonitorView 的 transform + inverse-size 方案，缩放只作用于 monitor 内容（简介/待机自适应排版不缩放）。
+  - **⌘⇧R** 一个和弦同时重载主窗口与投影窗口的 monitor（各自的 `_r` nonce 冷拉取语义一致；投影在简介/待机时该动作为 no-op）。
+  - **⌃⌘F** 切换聚焦窗口的全屏——投影窗口保持原生标题栏、自管全屏（不进主窗口的 WindowStateEvent chrome 机制）；侧栏全屏按钮仍属主窗口。
+  - **Esc 在投影窗口直接归页面**——瘦根无 App web ⌘ 层、无关闭工程确认流；主窗口自 v1.2.0 起 plain-Esc 本就无 App 功能（关闭工程确认走 ⌘W），page-interaction.md 契约已按窗口作用域同步改写（并废止陈旧的「Esc → 关闭工程」表述）。
 - 主题/语言实时跟随：主窗口 `setupProjectionWindowBridge()` 推送（与帮助中心同模式）；投影窗口自身不写 preferences。
 
 ## Sidebar

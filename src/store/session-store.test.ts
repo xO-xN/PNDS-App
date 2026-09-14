@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import {
   clampZoom,
+  applyZoomAction,
   shouldConfirmClose,
   isSessionBusy,
   isSessionLive,
@@ -132,6 +133,16 @@ describe('session-store', () => {
       expect(clampZoom(200, 10)).toBe(200)
       expect(clampZoom(50, -10)).toBe(50)
       expect(clampZoom(150, 10)).toBe(160)
+    })
+
+    it('applyZoomAction is the shared ⌘=/⌘-/⌘0 step math (#131)', () => {
+      // The pure path both windows' zoom actions share: step, clamp,
+      // and the ⌘0 reset to the default.
+      expect(applyZoomAction(100, 'zoom-in')).toBe(110)
+      expect(applyZoomAction(100, 'zoom-out')).toBe(90)
+      expect(applyZoomAction(200, 'zoom-in')).toBe(200)
+      expect(applyZoomAction(50, 'zoom-out')).toBe(50)
+      expect(applyZoomAction(170, 'zoom-reset')).toBe(100)
     })
 
     it('zoomIn/zoomOut act only while the monitor is showing (ready)', () => {

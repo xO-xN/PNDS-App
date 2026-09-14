@@ -43,8 +43,10 @@ import {
 import {
   closeProjectionWindow,
   PROJECTION_WINDOW_LABEL,
+  toggleProjectionFullscreen,
   toggleProjectionGate,
 } from '@/lib/projection-window'
+import { emitProjectionAction } from '@/lib/events'
 import { commands } from '@/lib/tauri-bindings'
 import { useProjectStore } from '@/store/project-store'
 import { useProjectionStore } from '@/store/projection-store'
@@ -79,22 +81,31 @@ async function copyAddress(url: string): Promise<void> {
 }
 
 /**
+ * The focused window's label — "main" on an unfocused moment or a failed
+ * query. Every focused-window dispatch below (and ⌘W's) reads through
+ * this one helper, so the fallback posture is one decision, not four.
+ */
+async function focusedLabel(): Promise<string> {
+  const focused = await commands.focusedWindowLabel()
+  return focused.status === 'ok' ? focused.data : 'main'
+}
+
+/**
  * v1.3.0 (#56): ⌘W acts on the FRONT window. The menu's Close Window
  * accelerator fires app-wide, so with a secondary window focused it must
  * close that window — running the main window's close flow instead
  * would hide the app (or pop its session confirm) behind the user's
  * back. v1.5.0 (#129): the projection window joins the dispatch —
  * closing it is a plain destroy: the running session and the main
- * window are untouched (临时撤投影不影响演出). An unfocused moment or a
- * query failure falls back to main.
+ * window are untouched (临时撤投影不影响演出).
  */
 async function closeFrontWindow(): Promise<void> {
-  const focused = await commands.focusedWindowLabel()
-  if (focused.status === 'ok' && focused.data === HELP_WINDOW_LABEL) {
+  const focused = await focusedLabel()
+  if (focused === HELP_WINDOW_LABEL) {
     await closeHelpWindow()
     return
   }
-  if (focused.status === 'ok' && focused.data === PROJECTION_WINDOW_LABEL) {
+  if (focused === PROJECTION_WINDOW_LABEL) {
     await closeProjectionWindow()
     return
   }
@@ -103,6 +114,54 @@ async function closeFrontWindow(): Promise<void> {
     return
   }
   void requestClose()
+}
+
+/**
+ * v1.5.0 (#131): ⌘=/⌘-/⌘0 act on the FOCUSED window's monitor zoom —
+ * the projection window's value is its own (page-local, alive with the
+ * window, never in preferences), the main window's stays the session
+ * store's. Main focused (or an unfocused moment) keeps the existing
+ * store actions.
+ */
+async function dispatchMonitorZoom(
+  kind: 'zoom-in' | 'zoom-out' | 'zoom-reset'
+): Promise<void> {
+  if ((await focusedLabel()) === PROJECTION_WINDOW_LABEL) {
+    void emitProjectionAction({ kind })
+    return
+  }
+  const session = useSessionStore.getState()
+  if (kind === 'zoom-in') session.zoomIn()
+  else if (kind === 'zoom-out') session.zoomOut()
+  else session.resetZoom()
+}
+
+/**
+ * v1.5.0 (#131): ⌘⇧R reloads BOTH windows' monitors — the main store's
+ * bump (same ready guard as ever) plus a reload action to the
+ * projection page (no live window → nothing delivered; a projection
+ * showing 简介/待机 has no monitor to reload and no-ops).
+ */
+function reloadBothMonitors(): void {
+  const session = useSessionStore.getState()
+  if (session.sessionStatus === 'ready') {
+    session.bumpMonitorReload()
+  }
+  void emitProjectionAction({ kind: 'reload-monitor' })
+}
+
+/**
+ * v1.5.0 (#131): ⌃⌘F toggles the FOCUSED window's fullscreen — the
+ * projection window keeps its native titlebar and toggles its own state
+ * (no main-window chrome machinery involved); main keeps the shared
+ * fullscreen action (menu, sidebar button, §7.4 single action).
+ */
+async function dispatchFullscreenToggle(): Promise<void> {
+  if ((await focusedLabel()) === PROJECTION_WINDOW_LABEL) {
+    await toggleProjectionFullscreen()
+    return
+  }
+  void toggleFullscreen()
 }
 
 /**
@@ -250,19 +309,20 @@ export async function buildAppMenu(): Promise<Menu> {
           id: 'zoom-in',
           text: t('menu.zoomIn'),
           accelerator: 'Cmd+=',
-          action: () => useSessionStore.getState().zoomIn(),
+          // v1.5.0 (#131): dispatches on the focused window.
+          action: () => void dispatchMonitorZoom('zoom-in'),
         }),
         await MenuItem.new({
           id: 'zoom-out',
           text: t('menu.zoomOut'),
           accelerator: 'Cmd+-',
-          action: () => useSessionStore.getState().zoomOut(),
+          action: () => void dispatchMonitorZoom('zoom-out'),
         }),
         await MenuItem.new({
           id: 'actual-size',
           text: t('menu.actualSize'),
           accelerator: 'Cmd+0',
-          action: () => useSessionStore.getState().resetZoom(),
+          action: () => void dispatchMonitorZoom('zoom-reset'),
         }),
         await PredefinedMenuItem.new({ item: 'Separator' }),
         // v1.2.2 (#30 feedback): ⌘M mute. The accelerator exists to CLAIM
@@ -281,12 +341,8 @@ export async function buildAppMenu(): Promise<Menu> {
           id: 'reload-monitor',
           text: t('menu.reloadMonitor'),
           accelerator: 'Cmd+Shift+R',
-          action: () => {
-            const session = useSessionStore.getState()
-            if (session.sessionStatus === 'ready') {
-              session.bumpMonitorReload()
-            }
-          },
+          // v1.5.0 (#131): both windows' monitors, one chord.
+          action: reloadBothMonitors,
         }),
       ],
     })
@@ -355,12 +411,13 @@ export async function buildAppMenu(): Promise<Menu> {
         // v1.2.0 (issue #13): the predefined Maximize ("Zoom") item is
         // dropped — it does nothing on this undecorated window.
         // §7.4: the single fullscreen action — same handler as ⌃⌘F and
-        // the sidebar button.
+        // the sidebar button. v1.5.0 (#131): ⌃⌘F dispatches on the
+        // FOCUSED window (the projection window toggles its own).
         await MenuItem.new({
           id: 'toggle-fullscreen',
           text: t('menu.enterFullScreen'),
           accelerator: 'Ctrl+Cmd+F',
-          action: () => void toggleFullscreen(),
+          action: () => void dispatchFullscreenToggle(),
         }),
         // v1.5.0 (#130): ⌘⏎ — the projection start gate's menu
         // accelerator. The label follows the gate (开演 ⇄ 撤回) and the

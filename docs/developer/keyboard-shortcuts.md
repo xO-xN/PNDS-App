@@ -6,26 +6,26 @@ Keyboard input reaches the app through two layers: native menu accelerators
 
 ## Current Shortcuts
 
-| Shortcut      | Action                                                                                                       | Layer                             |
-| ------------- | ------------------------------------------------------------------------------------------------------------ | --------------------------------- |
-| Cmd+W         | Close-confirm flow (v1.1.1); #56: dispatches on the FOCUSED window (closes the help center when it is front) | Menu (`menu.ts`)                  |
-| Cmd+Shift+/   | Open the help center on search (= ⌘?, same physical chord; v1.3.0 #56)                                       | Menu (`menu.ts`)                  |
-| Cmd+Q         | Quit-confirm flow with a live session (v1.1.2 T7)                                                            | Menu (`menu.ts`)                  |
-| Cmd+O         | Import a project                                                                                             | Menu (`menu.ts`)                  |
-| Cmd+,         | Toggle the in-app settings panel (v1.2.0 #13; the web copy covers the pre-menu moment)                       | Menu (`menu.ts`) + Web            |
-| Cmd+= / Cmd+- | Monitor zoom in/out (v1.1.1)                                                                                 | Menu (`menu.ts`)                  |
-| Cmd+0         | Monitor zoom: actual size (v1.1.1)                                                                           | Menu (`menu.ts`)                  |
-| Cmd+Shift+R   | Reload monitor (v1.1.1)                                                                                      | Menu (`menu.ts`)                  |
-| Cmd+M         | Master mute toggle (v1.2.2 #30)                                                                              | Menu (`menu.ts`)                  |
-| Cmd+R         | Rename selected project / folder (v1.1.2)                                                                    | Menu + Web (shared `startRename`) |
-| Ctrl+Cmd+F    | Toggle fullscreen (app-behavior Window 与全屏)                                                               | Menu (`menu.ts`)                  |
-| Cmd+Return    | Projection start gate 开演/撤回 (v1.5.0 #130; enabled with a venue screen + ready session)                   | Menu (`menu.ts`)                  |
-| Cmd (hold)    | Number badges + sidebar peek while running                                                                   | Web (`use-command-keyboard.ts`)   |
-| Cmd+1..9      | Select the Nth visible project (v1.1.2)                                                                      | Web (`use-command-keyboard.ts`)   |
-| Cmd+↓ / Cmd+↑ | Next/previous project in the visible order (v1.1.2 T7)                                                       | Web (`use-command-keyboard.ts`)   |
-| Cmd+← / Cmd+→ | Previous/next folder view, wrapping at the ends — the only keyboard path (bare ←/→ removed v1.3.5 #104)      | Web (`use-command-keyboard.ts`)   |
-| Enter         | Load (idle) / Change-restart (pending)                                                                       | Web (`SessionActionButton.tsx`)   |
-| Esc           | Close-project confirmation (v1.1.2 T7)                                                                       | Web (`SessionActionButton.tsx`)   |
+| Shortcut      | Action                                                                                                                 | Layer                             |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
+| Cmd+W         | Close-confirm flow (v1.1.1); #56: dispatches on the FOCUSED window (closes the help center when it is front)           | Menu (`menu.ts`)                  |
+| Cmd+Shift+/   | Open the help center on search (= ⌘?, same physical chord; v1.3.0 #56)                                                 | Menu (`menu.ts`)                  |
+| Cmd+Q         | Quit-confirm flow with a live session (v1.1.2 T7)                                                                      | Menu (`menu.ts`)                  |
+| Cmd+O         | Import a project                                                                                                       | Menu (`menu.ts`)                  |
+| Cmd+,         | Toggle the in-app settings panel (v1.2.0 #13; the web copy covers the pre-menu moment)                                 | Menu (`menu.ts`) + Web            |
+| Cmd+= / Cmd+- | Monitor zoom in/out — the FOCUSED window's own value (v1.5.0 #131; projection's zoom is window-local, never persisted) | Menu (`menu.ts`)                  |
+| Cmd+0         | Monitor zoom: actual size — focused window (v1.5.0 #131)                                                               | Menu (`menu.ts`)                  |
+| Cmd+Shift+R   | Reload BOTH windows' monitors — main + projection (v1.5.0 #131 dual reload)                                            | Menu (`menu.ts`)                  |
+| Cmd+M         | Master mute toggle (v1.2.2 #30)                                                                                        | Menu (`menu.ts`)                  |
+| Cmd+R         | Rename selected project / folder (v1.1.2)                                                                              | Menu + Web (shared `startRename`) |
+| Ctrl+Cmd+F    | Toggle fullscreen of the FOCUSED window (v1.5.0 #131; sidebar button stays main-only)                                  | Menu (`menu.ts`)                  |
+| Cmd+Return    | Projection start gate 开演/撤回 (v1.5.0 #130; enabled with a venue screen + ready session)                             | Menu (`menu.ts`)                  |
+| Cmd (hold)    | Number badges + sidebar peek while running                                                                             | Web (`use-command-keyboard.ts`)   |
+| Cmd+1..9      | Select the Nth visible project (v1.1.2)                                                                                | Web (`use-command-keyboard.ts`)   |
+| Cmd+↓ / Cmd+↑ | Next/previous project in the visible order (v1.1.2 T7)                                                                 | Web (`use-command-keyboard.ts`)   |
+| Cmd+← / Cmd+→ | Previous/next folder view, wrapping at the ends — the only keyboard path (bare ←/→ removed v1.3.5 #104)                | Web (`use-command-keyboard.ts`)   |
+| Enter         | Load (idle) / Change-restart (pending)                                                                                 | Web (`SessionActionButton.tsx`)   |
+| Esc           | No app function — always the page's, in both windows (plain-Esc alias retired v1.2.0; page-interaction.md)             | —                                 |
 
 ## Web Cmd Layer (v1.1.2)
 
@@ -74,7 +74,7 @@ Its behaviors (spec issue #4, later additions noted):
 - **Cmd+0** is deliberately NOT consumed here; it stays the native
   "Actual Size" menu accelerator.
 
-## Enter Session Action / Esc Close (v1.1.2)
+## Enter Session Action (v1.1.2; Esc retired v1.2.0)
 
 Enter is a keyboard alias for the sidebar's session-action footer, handled
 where its state lives (`SessionActionButton.tsx`) so key and click share
@@ -82,13 +82,15 @@ one set of conditions:
 
 - **idle/error + loadable** → `start()` (same gate as the Load button)
 - **running + pending config change** → `restart()` (the amber Change)
-- **running, no pending change** → Enter deliberately NOT mapped; **Esc**
-  only opens the close-project confirmation (`confirmCloseProjectOpen` in
-  the project store, rendered in the Sidebar like the switch confirm) —
-  the confirm or the Close button are the only ways a keypress/click
-  stops a live show. A ⌘Esc direct alias was tried and dropped: macOS
-  owns that chord (Siri/dictation), so the webview never sees it
-  reliably.
+- **running, no pending change** → Enter deliberately NOT mapped — the
+  close-project confirmation (⌘W while a session runs) or the Close
+  button are the only ways a keypress/click stops a live show.
+
+**Esc has had no app function since v1.2.0** (the plain-Esc close alias
+and its ⌘Esc variant were retired — macOS owns ⌘Esc, and closing behind
+a keypress proved too easy to hit mid-show). In every window — main and
+projection alike — Esc reaches the page; the contract lives in
+`page-interaction.md` (window-scoped since v1.5.0 #131).
 
 ## Folder Switch Tabs (v1.2.2, issue #28)
 

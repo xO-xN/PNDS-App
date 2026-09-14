@@ -21,12 +21,14 @@ This page is for **Project creators**: it states precisely which interaction eve
 | `⌘ R`         | Rename the selected Project / folder             |
 | `⌘ ,`         | Open / close the settings panel                  |
 | `⌘ ?` (⇧⌘/)   | Open the help center                             |
-| `⌘ 0`         | Monitor zoom: actual size                        |
-| `⌘ =` / `⌘ -` | Monitor zoom in / out                            |
-| `⌘ ⇧ R`       | Reload the monitor page                          |
-| `⌃ ⌘ F`       | Enter / leave full screen                        |
+| `⌘ 0`         | Monitor zoom: actual size (per focused window)   |
+| `⌘ =` / `⌘ -` | Monitor zoom in / out (per focused window)       |
+| `⌘ ⇧ R`       | Reload BOTH windows' monitor pages               |
+| `⌃ ⌘ F`       | Focused window: enter / leave full screen        |
 
 These are macOS menu-bar accelerators: the chord is consumed by the App before it reaches the page, and they **keep working during page interaction**. A work's key plan must route around them.
+
+Since v1.5.0 (#131) a monitor page can appear in **two windows** — the main window and the projection window (the venue-screen display). The accelerators stay app-wide, but their effect dispatches on the **focused window**: `⌘ 0`/`⌘ =`/`⌘ -` adjust only the focused window's own monitor zoom (each window holds an independent value); `⌃ ⌘ F` toggles only the focused window's fullscreen; `⌘ ⇧ R` is the exception — one chord reloads **both** windows' monitor pages. For the page, Table A's meaning is unchanged: none of these chords reach a page in either window.
 
 ### Table B: conditionally available — belong to the page while the user interacts with it
 
@@ -36,9 +38,13 @@ These are macOS menu-bar accelerators: the chord is consumed by the App before i
 | `⌘ ↓` / `⌘ ↑` | Next / previous Project                               |
 | `⌘ ←` / `⌘ →` | Switch folder view (wrapping at the ends)             |
 | `Enter`       | Load the Project / restart after a change             |
-| `Esc`         | Close the Project (confirm flow)                      |
 
 **"During page interaction"** means: any element of the page holds keyboard focus (other than body / html), or the pointer sits inside the monitor area (a safety net for homemade controls that never fire focus events, e.g. a div menu with no tabindex). While that holds, the App's web ⌘ layer stands down and never steals the keyboard back — the chords above are the page's to handle. When the interaction ends (focus falls back to the page body, the pointer leaves the area) the keyboard returns to the App at once.
+
+Two v1.5.0 (#131) revisions:
+
+- **Table B exists only in the main window** — the projection window has no App web layer (no sidebar, no ⌘ badge layer); every non-accelerator chord belongs to the page there.
+- **`Esc` has no App function in either window and always belongs to the page** (the main window's plain-Esc close-Project alias was retired in v1.2.0 — closing a Project goes through `⌘ W`'s confirm flow; the projection window never held that flow). The earlier "`Esc` → Close the Project (confirm flow)" wording is void.
 
 Special note (`⌘ ←` / `⌘ →`): WKWebView natively treats Cmd + left/right as its own back / forward equivalents and swallows them — the keydown never reaches any page. The App reroutes exactly this chord at the native layer back onto the ordinary keyDown path so pages can listen for it; inside editable elements it keeps the system's line-start / line-end editing behaviour.
 

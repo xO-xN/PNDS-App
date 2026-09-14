@@ -155,6 +155,24 @@ export async function closeProjectionWindow(): Promise<void> {
 }
 
 /**
+ * v1.5.0 (#131): ⌃⌘F for the projection window — the focused-window
+ * fullscreen dispatch. The projection window keeps its native titlebar,
+ * so its fullscreen is plain window state (no traffic-light sync, no
+ * WindowStateEvent bookkeeping — the main window's chrome machinery
+ * stays main-only). No-op when no window exists.
+ */
+export async function toggleProjectionFullscreen(): Promise<void> {
+  const existing = await WebviewWindow.getByLabel(PROJECTION_WINDOW_LABEL)
+  if (!existing) return
+  try {
+    const fullscreen = await existing.isFullscreen()
+    await existing.setFullscreen(!fullscreen)
+  } catch (error) {
+    logger.warn('Failed to toggle the projection fullscreen', { error })
+  }
+}
+
+/**
  * v1.5.0 (#130): 投影开演 ⇄ 撤回 — THE gate action. Every entry (the ▶
  * button in the monitor title bar, the ⌘⏎ menu accelerator) calls this
  * one helper, which calls the Rust authority; the new state arrives for

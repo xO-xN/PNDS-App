@@ -1,5 +1,6 @@
 import { render, screen, act, fireEvent } from '@/test/test-utils'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import i18n from '@/i18n/config'
 import { commands } from '@/lib/tauri-bindings'
 import type { SessionSnapshot } from '@/lib/tauri-bindings'
 import { MONITOR_REVEAL_FADE_MS } from '@/lib/monitor-reveal'
@@ -281,10 +282,12 @@ describe('ProjectionApp (#130 gate)', () => {
     await flush()
     expect(setTitle).toHaveBeenLastCalledWith('PNDS 投影')
 
-    act(() => {
-      listeners.get('pnds:projection-locale')?.({ locale: 'en' })
+    // Restore the suite's language for the tests that follow — awaited
+    // DIRECTLY (fake timers starve vi.waitFor's polling): a leaky zh-CN
+    // would ride the next URL snapshot's first-frame params.
+    await act(async () => {
+      await i18n.changeLanguage('en')
     })
-    await flush()
   })
 
   it('follows the main window theme pushes live', async () => {
@@ -306,5 +309,130 @@ describe('ProjectionApp (#130 gate)', () => {
     expect(document.documentElement.getAttribute('data-color-theme')).toBe(
       'pond'
     )
+  })
+
+  // v1.5.0 (#131): the projection window's OWN monitor zoom — the
+  // dispatched ⌘±/⌘0 actions from the main window's focused-window
+  // menu dispatch, the §v1.1.1 transform+inverse-size rendering, and
+  // the window-lifetime lifecycle (kept across content swaps, reset on
+  // reopen — never in preferences).
+  const dispatchAction = (kind: string) => {
+    act(() => {
+      listeners.get('pnds:projection-action')?.({ kind })
+    })
+  }
+
+  it('zooms only the monitor, keeping the value through content swaps', async () => {
+    vi.useFakeTimers()
+    render(<ProjectionApp />)
+    await flush()
+
+    // Zoom while the 简介 holds: the intro never scales, but the value
+    // moves (it is the monitor's zoom).
+    dispatchAction('zoom-in')
+    dispatchAction('zoom-in')
+    expect(screen.queryByTestId('monitor-scale-frame')).not.toBeInTheDocument()
+
+    // 开演 → the monitor renders at the kept value (transform +
+    // inverse size, the MonitorView approach).
+    publish(snapshot({ projectionStarted: true }))
+    await settleSwap()
+    const scale = screen.getByTestId('monitor-scale-frame')
+    expect(scale.style.transform).toBe('scale(1.2)')
+    expect(scale.style.width).toBe(`${100 / 1.2}%`)
+    expect(scale.style.height).toBe(`${100 / 1.2}%`)
+
+    // A project switch walks the content machinery (intro → monitor);
+    // the zoom is ProjectionApp-owned and survives the swap.
+    publish(
+      snapshot({
+        status: 'starting',
+        projectPath: '/Users/test/Other',
+        projectionStarted: false,
+      })
+    )
+    await settleSwap()
+    publish(
+      snapshot({
+        projectPath: '/Users/test/Other',
+        projectionStarted: true,
+      })
+    )
+    await settleSwap()
+    expect(screen.getByTestId('monitor-scale-frame').style.transform).toBe(
+      'scale(1.2)'
+    )
+
+    // ⌘0 resets the projection's own value.
+    dispatchAction('zoom-reset')
+    expect(screen.getByTestId('monitor-scale-frame').style.transform).toBe(
+      'scale(1)'
+    )
+  })
+
+  it('resets the zoom when the window closes and reopens', async () => {
+    vi.useFakeTimers()
+    vi.mocked(commands.getSessionState).mockResolvedValue({
+      status: 'ok',
+      data: snapshot({ projectionStarted: true }),
+    })
+    const first = render(<ProjectionApp />)
+    await flush()
+    dispatchAction('zoom-out')
+    expect(screen.getByTestId('monitor-scale-frame').style.transform).toBe(
+      'scale(0.9)'
+    )
+    first.unmount()
+
+    // A reopened window is a fresh page: the zoom starts over at 100%.
+    render(<ProjectionApp />)
+    await flush()
+    expect(screen.getByTestId('monitor-scale-frame').style.transform).toBe(
+      'scale(1)'
+    )
+  })
+
+  it('reloads the monitor on the ⌘⇧R action — nonce semantics, fresh reveal gate', async () => {
+    vi.useFakeTimers()
+    vi.mocked(commands.getSessionState).mockResolvedValue({
+      status: 'ok',
+      data: snapshot({ projectionStarted: true }),
+    })
+    render(<ProjectionApp />)
+    await flush()
+
+    const iframe = screen.getByTitle('Project monitor') as HTMLIFrameElement
+    expect(iframe.src).not.toContain('_r=')
+    fireEvent.load(iframe)
+    expect(screen.getByTestId('projection-reveal-cover').className).toContain(
+      'opacity-0'
+    )
+
+    dispatchAction('reload-monitor')
+    const reloaded = screen.getByTitle('Project monitor') as HTMLIFrameElement
+    // The nonce rides the URL as the cache-buster (`_r`) — the same
+    // cold-fetch semantics as the main window's reload.
+    expect(reloaded.src).toBe(
+      'http://192.168.1.10:6869/?theme=pond&lang=en&_r=1'
+    )
+    // The remounted navigation holds its reveal gate until the load.
+    expect(
+      screen.getByTestId('projection-reveal-cover').className
+    ).not.toContain('opacity-0')
+  })
+
+  it('leaves Esc to the page — no app dialog ever opens from the projection', async () => {
+    render(<ProjectionApp />)
+    await flush()
+
+    fireEvent.keyDown(window, { key: 'Escape' })
+    fireEvent.keyDown(screen.getByTestId('projection-root'), {
+      key: 'Escape',
+    })
+
+    // The thin root has no ⌘ layer and no close-project confirm — the
+    // keypress belongs to the page (page-interaction.md, window-scoped).
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByTestId('projection-intro')).toBeInTheDocument()
   })
 })

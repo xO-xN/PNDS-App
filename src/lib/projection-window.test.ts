@@ -11,6 +11,7 @@ import {
   PROJECTION_WINDOW_LABEL,
   openProjectionWindow,
   closeProjectionWindow,
+  toggleProjectionFullscreen,
   setupProjectionWindowBridge,
 } from './projection-window'
 
@@ -50,7 +51,9 @@ vi.mock('@tauri-apps/api/event', () => ({
   emit: vi.fn().mockResolvedValue(undefined),
 }))
 
-const instanceFor = (overrides: Record<string, unknown> = {}) => ({
+const instanceFor = (
+  overrides: Record<string, unknown> = {}
+): Record<string, ReturnType<typeof vi.fn>> => ({
   setFocus: vi.fn().mockResolvedValue(undefined),
   close: vi.fn().mockResolvedValue(undefined),
   isVisible: vi.fn().mockResolvedValue(true),
@@ -154,6 +157,34 @@ describe('projection-window (#129)', () => {
 
     expect(existing.setFocus).toHaveBeenCalledTimes(1)
     expect(WebviewWindow).not.toHaveBeenCalled()
+  })
+
+  it('toggles the projection fullscreen from its current state (#131)', async () => {
+    // Windowed → fullscreen.
+    const windowed = instanceFor({
+      isFullscreen: vi.fn().mockResolvedValue(false),
+      setFullscreen: vi.fn().mockResolvedValue(undefined),
+    })
+    vi.mocked(WebviewWindow.getByLabel).mockResolvedValue(
+      windowed as unknown as WebviewWindow
+    )
+    await toggleProjectionFullscreen()
+    expect(windowed.setFullscreen).toHaveBeenCalledWith(true)
+
+    // Fullscreen → windowed.
+    const fullscreen = instanceFor({
+      isFullscreen: vi.fn().mockResolvedValue(true),
+      setFullscreen: vi.fn().mockResolvedValue(undefined),
+    })
+    vi.mocked(WebviewWindow.getByLabel).mockResolvedValue(
+      fullscreen as unknown as WebviewWindow
+    )
+    await toggleProjectionFullscreen()
+    expect(fullscreen.setFullscreen).toHaveBeenCalledWith(false)
+
+    // No window — a quiet no-op.
+    vi.mocked(WebviewWindow.getByLabel).mockResolvedValue(null)
+    await expect(toggleProjectionFullscreen()).resolves.toBeUndefined()
   })
 
   it('re-reveals an existing window left hidden instead of focusing the void', async () => {

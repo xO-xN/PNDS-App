@@ -19,6 +19,21 @@ export function clampZoom(current: number, delta: number): number {
   return Math.min(Math.max(current + delta, MIN_MONITOR_ZOOM), MAX_MONITOR_ZOOM)
 }
 
+/**
+ * v1.5.0 (#131): the one zoom-step math behind the ⌘=/⌘-/⌘0 actions —
+ * shared by the main window's store actions and the projection window's
+ * page-local zoom (via the dispatched ProjectionAction), so the two
+ * windows can never drift in semantics while keeping independent values.
+ */
+export function applyZoomAction(
+  current: number,
+  kind: 'zoom-in' | 'zoom-out' | 'zoom-reset'
+): number {
+  if (kind === 'zoom-in') return clampZoom(current, MONITOR_ZOOM_STEP)
+  if (kind === 'zoom-out') return clampZoom(current, -MONITOR_ZOOM_STEP)
+  return DEFAULT_MONITOR_ZOOM
+}
+
 /** §v1.1.1: a session is "live" while starting or running — the close flow
  * confirms before stopping it. Idle/failed sessions close without asking. */
 export function shouldConfirmClose(status: SessionStatus): boolean {

@@ -165,6 +165,7 @@ export function emitHelpTheme(theme: ColorTheme): Promise<void> {
 
 const PROJECTION_LOCALE = 'pnds:projection-locale'
 const PROJECTION_THEME = 'pnds:projection-theme'
+const PROJECTION_ACTION = 'pnds:projection-action'
 
 /** Projection side: follow the main window's UI language. */
 export function onProjectionLocale(cb: (locale: string) => void): Unsubscribe {
@@ -194,4 +195,31 @@ export function emitProjectionTheme(theme: ColorTheme): Promise<void> {
   return emitTo(PROJECTION_WINDOW_LABEL, PROJECTION_THEME, {
     colorTheme: theme,
   })
+}
+
+/**
+ * v1.5.0 (#131): a keyboard action the main window's menu dispatches TO
+ * the projection window (its accelerators are app-wide but their effect
+ * is per-window). The zoom lives in the projection page's local state —
+ * independent of the main window's, alive with the window, never in
+ * preferences — so the action is a verb, never a value.
+ */
+export type ProjectionAction =
+  | { kind: 'zoom-in' }
+  | { kind: 'zoom-out' }
+  | { kind: 'zoom-reset' }
+  | { kind: 'reload-monitor' }
+
+/** Projection side: receive a dispatched keyboard action. */
+export function onProjectionAction(
+  cb: (action: ProjectionAction) => void
+): Unsubscribe {
+  return toUnsubscribe(
+    listen<ProjectionAction>(PROJECTION_ACTION, e => cb(e.payload))
+  )
+}
+
+/** Main-window side: dispatch a keyboard action to the projection window. */
+export function emitProjectionAction(action: ProjectionAction): Promise<void> {
+  return emitTo(PROJECTION_WINDOW_LABEL, PROJECTION_ACTION, action)
 }

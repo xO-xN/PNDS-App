@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { emitTo } from '@tauri-apps/api/event'
 import { writeText } from '@tauri-apps/plugin-clipboard-manager'
 import { MenuItem } from '@tauri-apps/api/menu'
 import i18n from '@/i18n/config'
@@ -103,6 +104,7 @@ vi.mock('@/lib/help-window', () => helpWindowMock)
 const projectionWindowMock = vi.hoisted(() => ({
   openProjectionWindow: vi.fn().mockResolvedValue(undefined),
   closeProjectionWindow: vi.fn().mockResolvedValue(undefined),
+  toggleProjectionFullscreen: vi.fn().mockResolvedValue(undefined),
   toggleProjectionGate: vi.fn(),
   PROJECTION_WINDOW_LABEL: 'projection',
 }))
@@ -663,5 +665,96 @@ describe('buildAppMenu help menu (v1.3.0, #56)', () => {
     useSessionStore.setState({ sessionStatus: 'starting' })
     await buildAppMenu()
     expect(item('projection-start').enabled).toBe(false)
+  })
+
+  // v1.5.0 (#131): the keyboard scope dispatch — the accelerators are
+  // app-wide, their effect is per-window.
+  it('scopes ⌘±/⌘0 to the focused window — two independent zoom values', async () => {
+    useSessionStore.setState({ sessionStatus: 'ready', monitorZoom: 100 })
+    vi.mocked(commands.focusedWindowLabel).mockResolvedValue({
+      status: 'ok',
+      data: 'projection',
+    })
+    item('zoom-in').action?.()
+    await vi.waitFor(() =>
+      expect(emitTo).toHaveBeenCalledWith(
+        'projection',
+        'pnds:projection-action',
+        {
+          kind: 'zoom-in',
+        }
+      )
+    )
+    // The main window's zoom is untouched while the projection zooms.
+    expect(useSessionStore.getState().monitorZoom).toBe(100)
+
+    // Main focused — the existing store actions, nothing forwarded.
+    vi.mocked(emitTo).mockClear()
+    vi.mocked(commands.focusedWindowLabel).mockResolvedValue({
+      status: 'ok',
+      data: 'main',
+    })
+    item('zoom-in').action?.()
+    await vi.waitFor(() =>
+      expect(useSessionStore.getState().monitorZoom).toBe(110)
+    )
+    expect(emitTo).not.toHaveBeenCalledWith(
+      'projection',
+      'pnds:projection-action',
+      expect.anything()
+    )
+
+    // ⌘0 resets the focused window's own value.
+    item('actual-size').action?.()
+    await vi.waitFor(() =>
+      expect(useSessionStore.getState().monitorZoom).toBe(100)
+    )
+  })
+
+  it("reloads BOTH windows' monitors on ⌘⇧R", async () => {
+    useSessionStore.setState({ sessionStatus: 'ready' })
+    const before = useSessionStore.getState().monitorReloadNonce
+
+    item('reload-monitor').action?.()
+
+    await vi.waitFor(() =>
+      expect(useSessionStore.getState().monitorReloadNonce).toBe(before + 1)
+    )
+    expect(emitTo).toHaveBeenCalledWith(
+      'projection',
+      'pnds:projection-action',
+      {
+        kind: 'reload-monitor',
+      }
+    )
+  })
+
+  it("toggles the FOCUSED window's fullscreen on ⌃⌘F", async () => {
+    vi.mocked(commands.toggleFullscreen).mockClear()
+    vi.mocked(commands.focusedWindowLabel).mockResolvedValue({
+      status: 'ok',
+      data: 'projection',
+    })
+    item('toggle-fullscreen').action?.()
+    await vi.waitFor(() =>
+      expect(
+        projectionWindowMock.toggleProjectionFullscreen
+      ).toHaveBeenCalledTimes(1)
+    )
+    expect(commands.toggleFullscreen).not.toHaveBeenCalled()
+
+    // Main focused — the shared §7.4 action.
+    projectionWindowMock.toggleProjectionFullscreen.mockClear()
+    vi.mocked(commands.focusedWindowLabel).mockResolvedValue({
+      status: 'ok',
+      data: 'main',
+    })
+    item('toggle-fullscreen').action?.()
+    await vi.waitFor(() =>
+      expect(commands.toggleFullscreen).toHaveBeenCalledTimes(1)
+    )
+    expect(
+      projectionWindowMock.toggleProjectionFullscreen
+    ).not.toHaveBeenCalled()
   })
 })

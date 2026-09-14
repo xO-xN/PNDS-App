@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { currentResolvedLanguage } from '@/i18n/config'
 import {
+  onProjectionAction,
   onProjectionLocale,
   onProjectionTheme,
   onSessionSnapshot,
@@ -11,6 +12,7 @@ import {
 } from '@/lib/events'
 import { commands } from '@/lib/tauri-bindings'
 import type { SessionSnapshot } from '@/lib/tauri-bindings'
+import { applyZoomAction, DEFAULT_MONITOR_ZOOM } from '@/store/session-store'
 import {
   currentColorThemeSetting,
   useSettingsStore,
@@ -32,6 +34,7 @@ import {
 } from '@/lib/projection-state'
 import { readProjectReadme } from '@/lib/project-readme'
 import { HelpMarkdown } from '@/components/help/HelpMarkdown'
+import { MonitorScaleFrame } from '@/components/shell/MonitorScaleFrame'
 import { logger } from '@/lib/logger'
 import { cn } from '@/lib/utils'
 
@@ -70,8 +73,14 @@ import { cn } from '@/lib/utils'
 /** The venue screen's monitor half — one navigation per remount. */
 function ProjectionMonitor({
   content,
+  zoom,
+  reloadNonce,
 }: {
   content: Extract<ProjectionContent, { kind: 'monitor' }>
+  /** #131: the projection window's OWN zoom (page-local; see below). */
+  zoom: number
+  /** #131: ⌘⇧R's cache-buster — rides the URL only when > 0. */
+  reloadNonce: number
 }) {
   // v1.2.3 (#44)/v1.3.0 (#54): the bridges keep a LIVE session recolored
   // and re-localized; the URL below carries the same values only as
@@ -81,17 +90,20 @@ function ProjectionMonitor({
   const locale = i18n.resolvedLanguage ?? i18n.language ?? 'en'
   const monitorOrigin = `http://${content.host}:${content.port}`
   // The MonitorView contract (#39/#49/#54): the src is snapshotted per
-  // NAVIGATION (mount, address change) — a live theme or language switch
-  // must NOT retarget the src; the bridges push the new values instead.
-  // Both are therefore read from their live sources inside the memo,
-  // never from the render-time values above.
+  // NAVIGATION (mount, address change, reload) — a live theme or language
+  // switch must NOT retarget the src; the bridges push the new values
+  // instead. Both are therefore read from their live sources inside the
+  // memo, never from the render-time values above. #131: the reload
+  // nonce rides the URL as the `_r` cache-buster (only an explicit ⌘⇧R
+  // bumps it — same semantics as the main window's).
   const iframeSrc = useMemo(
     () =>
       buildMonitorUrl(content.host, content.port, {
         theme: currentColorThemeSetting(),
         lang: currentResolvedLanguage(),
+        reload: reloadNonce,
       }),
-    [content.host, content.port]
+    [content.host, content.port, reloadNonce]
   )
   return (
     <MonitorNavigation
@@ -100,24 +112,28 @@ function ProjectionMonitor({
       origin={monitorOrigin}
       colorTheme={colorTheme}
       locale={locale}
+      zoom={zoom}
     />
   )
 }
 
 /**
- * One monitor navigation (an address change remounts this whole
- * subtree, which is what resets the #50 reveal gate per navigation).
+ * One monitor navigation (an address change or reload remounts this
+ * whole subtree, which is what resets the #50 reveal gate per
+ * navigation).
  */
 function MonitorNavigation({
   src,
   origin,
   colorTheme,
   locale,
+  zoom,
 }: {
   src: string
   origin: string
   colorTheme: string
   locale: string
+  zoom: number
 }) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
   // #50: the reveal gate — released by the iframe's own load event or
@@ -139,17 +155,22 @@ function MonitorNavigation({
 
   return (
     <div className="relative h-full w-full overflow-hidden bg-black">
-      <iframe
-        ref={iframeRef}
-        src={src}
-        title="Project monitor"
-        className="block h-full w-full border-0"
-        onLoad={() => {
-          setLoaded(true)
-          pushThemeToFrame(iframeRef.current, origin, colorTheme)
-          pushLocaleToFrame(iframeRef.current, origin, locale)
-        }}
-      />
+      {/* #131: the shared §v1.1.1 zoom frame (same mechanism as the main
+          window's MonitorView — each window its own VALUE); the reveal
+          cover is a SIBLING and never scales (仅作用 monitor 内容). */}
+      <MonitorScaleFrame zoom={zoom}>
+        <iframe
+          ref={iframeRef}
+          src={src}
+          title="Project monitor"
+          className="block h-full w-full border-0"
+          onLoad={() => {
+            setLoaded(true)
+            pushThemeToFrame(iframeRef.current, origin, colorTheme)
+            pushLocaleToFrame(iframeRef.current, origin, locale)
+          }}
+        />
+      </MonitorScaleFrame>
       {/* #50 reveal cover — appears INSTANTLY over a loading iframe,
           fades out once the gate releases (data-reveal-motion exempts
           the fade from Brutal's instant rule). */}
@@ -282,9 +303,14 @@ function ProjectionIntro({
 function ProjectionStage({
   latest,
   projectName,
+  zoom,
+  reloadNonce,
 }: {
   latest: ProjectionContent
   projectName: string | null
+  /** #131: owned by ProjectionApp so it survives content swaps. */
+  zoom: number
+  reloadNonce: number
 }) {
   const { t, i18n } = useTranslation()
   const [displayed, setDisplayed] = useState(latest)
@@ -318,7 +344,11 @@ function ProjectionStage({
   return (
     <>
       {displayed.kind === 'monitor' ? (
-        <ProjectionMonitor content={displayed} />
+        <ProjectionMonitor
+          content={displayed}
+          zoom={zoom}
+          reloadNonce={reloadNonce}
+        />
       ) : displayed.kind === 'intro' ? (
         <ProjectionIntro content={displayed} />
       ) : (
@@ -405,6 +435,25 @@ export function ProjectionApp() {
     }
   }, [i18n])
 
+  // #131: the projection window's OWN monitor zoom and reload nonce —
+  // page-local state, so the value lives with the WINDOW (kept across
+  // project switches and 简介⇄monitor swaps, reset when the window
+  // closes and reopens, never written to preferences) and stays
+  // independent of the main window's session-store zoom. Actions arrive
+  // from the main window's focused-window menu dispatch; the step math
+  // is the shared applyZoomAction (§v1.1.1 browser zoom).
+  const [zoom, setZoom] = useState(DEFAULT_MONITOR_ZOOM)
+  const [reloadNonce, setReloadNonce] = useState(0)
+  useEffect(() => {
+    return onProjectionAction(action => {
+      if (action.kind === 'reload-monitor') {
+        setReloadNonce(nonce => nonce + 1)
+        return
+      }
+      setZoom(current => applyZoomAction(current, action.kind))
+    })
+  }, [])
+
   // `restoreFailed`: the initial fetch answered with an error — a
   // themed standby screen, not an empty window.
   const latest =
@@ -423,6 +472,8 @@ export function ProjectionApp() {
         <ProjectionStage
           latest={latest}
           projectName={snapshot?.projectName ?? null}
+          zoom={zoom}
+          reloadNonce={reloadNonce}
         />
       )}
     </div>

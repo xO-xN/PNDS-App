@@ -29,6 +29,7 @@ import {
 import { cn } from '@/lib/utils'
 import { useGuestFocusGate } from '@/hooks/use-guest-focus-gate'
 import { HoverSidebar } from './HoverSidebar'
+import { MonitorScaleFrame } from './MonitorScaleFrame'
 
 /**
  * Performance view (§10.1): the project's monitor page fills the whole
@@ -148,7 +149,6 @@ export function MonitorView() {
     pushThemeToFrame(iframeRef.current, monitorOrigin, colorTheme)
     pushLocaleToFrame(iframeRef.current, monitorOrigin, locale)
   }, [colorTheme, locale, reloadNonce, monitorOrigin])
-  const scale = monitorZoom / 100
 
   // WKWebView hands the keyboard first responder to a freshly loaded
   // out-of-process iframe when no element in the main frame holds focus.
@@ -202,22 +202,11 @@ export function MonitorView() {
       data-testid="monitor-host"
       className="relative h-screen w-screen overflow-hidden bg-black outline-none"
     >
-      {/* §v1.1.1: browser-style zoom. CSS `zoom` does not visually scale a
-          cross-origin iframe (rendered out-of-process) in WKWebView, so the
-          wrapper is scaled with a compositing transform and sized inversely
-          (100/scale %) — the standard extension-style zoom. transform-origin
-          top-left keeps the top-left pinned; the outer overflow-hidden clips
-          the overflow. The title strip and hover sidebar are siblings and
-          stay at 100%. */}
-      <div
-        className="h-full w-full"
-        style={{
-          width: `${100 / scale}%`,
-          height: `${100 / scale}%`,
-          transform: `scale(${scale})`,
-          transformOrigin: 'top left',
-        }}
-      >
+      {/* §v1.1.1: browser-style zoom — the shared MonitorScaleFrame
+          (transform + inverse size; #131: the projection window's
+          monitor half renders its own zoom through the same frame). The
+          title strip and hover sidebar are siblings and stay at 100%. */}
+      <MonitorScaleFrame zoom={monitorZoom}>
         <iframe
           key={reloadNonce}
           ref={node => {
@@ -240,7 +229,7 @@ export function MonitorView() {
             useSessionStore.getState().markMonitorLoaded()
           }}
         />
-      </div>
+      </MonitorScaleFrame>
 
       {/* #50: reveal cover — appears INSTANTLY over a rebuilding iframe
           (a fading-in cover would flash it through), fades out with the
