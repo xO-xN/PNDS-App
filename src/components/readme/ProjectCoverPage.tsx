@@ -81,7 +81,11 @@ export function ProjectCoverPage({
       data-testid="project-cover-page"
       className="@container flex h-full w-full flex-col overflow-hidden"
     >
-      {/* Header: diamond mark + wordmark, composer pill on the right. */}
+      {/* Header: diamond mark + wordmark, composer pill on the right.
+          EDGE INSET — this top distance (9.5cqh) is mirrored verbatim
+          by the band's bottom margin below: the frame's gap to the
+          window bottom equals the PNDS / composer row's gap to the
+          window top. Change them together. */}
       <div className="flex shrink-0 items-center justify-between px-[12.6cqw] pt-[9.5cqh]">
         <div className="flex items-center gap-[2.7cqw]">
           <DiamondMark palette={page.palette} />
@@ -121,11 +125,12 @@ export function ProjectCoverPage({
           the square cover can never outgrow the band's width), the
           cover fills that height flush against the band's left edge,
           and the text column scrolls inside when the window is short.
-          It sits low — its side edges echo the header's PNDS /
-          composer positions (same inset), its bottom margin is a thin
-          breath off the panel foot. The panel's content ends here
-          (the README's --- boundary). */}
-      <div className="mx-auto mb-[6cqh] flex h-[min(24.3cqh,40cqw)] w-[74.8cqw] shrink-0 gap-[5.9cqw] border border-(--pnds-text)/40">
+          Its bottom margin is the EDGE INSET — the SAME 9.5cqh the
+          header sits from the top, so the band mirrors the PNDS /
+          composer row against the window's bottom edge (user
+          direction; keep in lockstep with the header's pt). The
+          panel's content ends here (the README's --- boundary). */}
+      <div className="mx-auto mb-[9.5cqh] flex h-[min(24.3cqh,40cqw)] w-[74.8cqw] shrink-0 gap-[5.9cqw] border border-(--pnds-text)/40">
         {cover !== null && (
           <img
             data-testid="cover-image"
