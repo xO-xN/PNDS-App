@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, type CSSProperties } from 'react'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { HelpMarkdown } from '@/components/help/HelpMarkdown'
 import { logger } from '@/lib/logger'
@@ -48,10 +48,19 @@ import type { ReadmeCoverPage } from '@/lib/readme-cover-page'
 export function ProjectCoverPage({
   page,
   cover,
+  bandHeight,
 }: {
   page: ReadmeCoverPage
   /** The cover image as a data URL; null renders the band text-only. */
   cover: string | null
+  /** Overrides the band's height token (`--cover-band-h`, default
+   *  `min(26cqh,42cqw)`) for embeddings that want a roomier band — the
+   *  projection screen (user request: 带内容上下增长、可容纳更多) passes
+   *  a taller share; the title's open field shrinks by the same amount,
+   *  so the title rides higher while the composition stays vertically
+   *  centered. Keep the cqw cap when overriding — it bounds the square
+   *  cover by the band's width. */
+  bandHeight?: string
 }) {
   const titleRef = useRef<HTMLHeadingElement>(null)
   // Destructured so the null-guards below narrow inside the click
@@ -199,6 +208,14 @@ export function ProjectCoverPage({
     <div
       data-testid="project-cover-page"
       className="[container-type:size] relative flex min-h-0 w-full flex-1 flex-col overflow-hidden [--cover-edge-inset:5cqh] [--cover-band-h:min(26cqh,42cqw)]"
+      // An embedding's band-height override rides the SAME token as the
+      // class default — the title zone's bottom reserve reads the
+      // variable, so the whole composition re-balances around it.
+      style={
+        bandHeight !== undefined
+          ? ({ '--cover-band-h': bandHeight } as CSSProperties)
+          : undefined
+      }
     >
       {/* Header: diamond mark + wordmark left; the composer and github
           pills right (a pill is a button only when its URL metadata

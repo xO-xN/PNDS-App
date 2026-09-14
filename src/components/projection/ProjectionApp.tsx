@@ -346,7 +346,18 @@ function ProjectionIntro({
             height: `${(80 * zoom) / 100}%`,
           }}
         >
-          <ProjectCoverPage page={coverPage} cover={coverImage} />
+          {/* Venue-screen only (user request): a ROOMIER band — the
+             taller share holds more of the first section before the
+             in-band scroll takes over; the title's open field shrinks
+             by the same amount, so the title rides higher while the
+             composition stays vertically centered (the reserve reads
+             the same token). The main window's README panel keeps the
+             stock 26cqh band. */}
+          <ProjectCoverPage
+            page={coverPage}
+            cover={coverImage}
+            bandHeight="min(34cqh,42cqw)"
+          />
         </div>
       </div>
     )

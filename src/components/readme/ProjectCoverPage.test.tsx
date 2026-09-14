@@ -171,6 +171,30 @@ describe('ProjectCoverPage', () => {
     ).toContain('calc(var(--cover-edge-inset)')
   })
 
+  // The projection screen passes a roomier band (user request: 带内容
+  // 上下增长); the override rides the SAME token inline, over the class
+  // default — absent, the class default (the README panel's share) holds.
+  it('overrides the band height token per embedding, defaulting to the class share', () => {
+    const { rerender, container } = render(
+      <ProjectCoverPage page={PAGE} cover={null} />
+    )
+    const root = container.firstElementChild as HTMLElement
+    expect(root.style.getPropertyValue('--cover-band-h')).toBe('')
+
+    rerender(
+      <ProjectCoverPage
+        page={PAGE}
+        cover={null}
+        bandHeight="min(34cqh,42cqw)"
+      />
+    )
+    expect(root.style.getPropertyValue('--cover-band-h')).toBe(
+      'min(34cqh,42cqw)'
+    )
+    // The class default stays as the non-override baseline.
+    expect(root.className).toContain('[--cover-band-h:min(26cqh,42cqw)]')
+  })
+
   it('opens the composer and github links in the system browser', () => {
     render(
       <ProjectCoverPage
