@@ -106,34 +106,15 @@
   }
 }
 
-/* Cover page band roll (v1.5.0): a section that outgrows the band
-   auto-scrolls — the inner wrapper translates through the measured
-   overflow (--roll-range, set inline by the component) over
-   --roll-duration. Ping-pong with 8% holds at both ends and equal
-   travel legs, so both directions crawl at the same reading pace.
-   Hover pauses it for a closer read; the global
-   prefers-reduced-motion clamp freezes it at the top. */
-.cover-band-roll {
-  animation: cover-band-roll var(--roll-duration, 30s) linear infinite;
+/* Cover page band text (v1.5.0): the section column scrolls without a
+   visible scrollbar — the component's auto-drive writes scrollTop and
+   the wheel drives it just the same. */
+.cover-band-text {
+  scrollbar-width: none;
 }
 
-.cover-band-roll:hover {
-  animation-play-state: paused;
-}
-
-@keyframes cover-band-roll {
-  0%,
-  8% {
-    transform: translateY(0);
-  }
-  46%,
-  54% {
-    transform: translateY(var(--roll-range, 0px));
-  }
-  92%,
-  100% {
-    transform: translateY(0);
-  }
+.cover-band-text::-webkit-scrollbar {
+  display: none;
 }
 
 @custom-variant dark (&:is(.dark *));
