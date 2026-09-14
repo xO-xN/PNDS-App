@@ -111,9 +111,11 @@ export function ProjectCoverPage({
   // at the top. A section that fits never moves; reduced-motion never
   // auto-drives (the wheel still works).
   const bandColumnRef = useRef<HTMLDivElement>(null)
+  const rollInnerRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     const column = bandColumnRef.current
-    if (!column) return
+    const inner = rollInnerRef.current
+    if (!column || !inner) return
     const SPEED_PX_PER_S = 12
     const HOLD_MS = 3500
     const RESUME_MS = 2500
@@ -146,7 +148,9 @@ export function ProjectCoverPage({
         // An external jump (the reader's wheel) bigger than our own
         // drift resyncs the accumulator to their position; ordinary
         // quantization loss (fractions of a pixel) does not.
-        if (Math.abs(column.scrollTop - pos) > 1.5) pos = column.scrollTop
+        if (Math.abs(column.scrollTop - Math.floor(pos)) > 1.5) {
+          pos = column.scrollTop
+        }
         const atTop = pos <= 0.5
         const atBottom = pos >= range - 0.5
         if (atTop || atBottom) {
@@ -154,14 +158,22 @@ export function ProjectCoverPage({
             pos = atBottom
               ? 0 // The pass ends — restart it from the top.
               : Math.min(1.5, range) // clear of WebKit's quantization
-            column.scrollTop = pos
             arrivedAt = now
           }
         } else {
           pos = Math.min(pos + SPEED_PX_PER_S * dt, range)
-          column.scrollTop = pos
           if (pos >= range - 0.5) arrivedAt = now
         }
+        // WebKit quantizes scrollTop to whole pixels, and a crawl of a
+        // few px/s would step 1px at a time — visible judder. The
+        // integer part rides scrollTop (the wheel stays native); the
+        // subpixel remainder rides a transform on the inner layer,
+        // composited smoothly between the steps.
+        column.scrollTop = Math.floor(pos)
+        inner.style.transform = `translateY(${-(pos - Math.floor(pos))}px)`
+      } else {
+        // The reader holds the wheel — drop our offset entirely.
+        inner.style.transform = ''
       }
       raf = requestAnimationFrame(step)
     }
@@ -285,16 +297,18 @@ export function ProjectCoverPage({
           data-testid="cover-band-text"
           className="cover-band-text min-w-0 flex-1 overflow-y-auto py-[3.2cqh] pe-[5.5cqw]"
         >
-          <p
-            data-testid="cover-label"
-            className="font-hans text-[1.92cqw] font-[250] leading-[1.45] text-(--pnds-text)"
-          >
-            {page.sectionLabel}
-          </p>
-          <HelpMarkdown
-            markdown={page.sectionMarkdown}
-            className="text-[1.92cqw] leading-[1.45] text-(--pnds-text) [&_li]:my-[0.5cqw] [&_p]:my-0 [&_ul]:my-[1cqw]"
-          />
+          <div ref={rollInnerRef} className="will-change-transform">
+            <p
+              data-testid="cover-label"
+              className="font-hans text-[1.92cqw] font-[250] leading-[1.45] text-(--pnds-text)"
+            >
+              {page.sectionLabel}
+            </p>
+            <HelpMarkdown
+              markdown={page.sectionMarkdown}
+              className="text-[1.92cqw] leading-[1.45] text-(--pnds-text) [&_li]:my-[0.5cqw] [&_p]:my-0 [&_ul]:my-[1cqw]"
+            />
+          </div>
         </div>
       </div>
     </div>
