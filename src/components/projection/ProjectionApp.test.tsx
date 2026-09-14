@@ -138,6 +138,88 @@ describe('ProjectionApp (#130 gate)', () => {
     ).toContain('[&_img]:hidden')
   })
 
+  // User report after #130: a cover-format README must render the
+  // creator-designed title page — the SAME layout the app window's
+  // README panel shows (PNDS + composer/github pills, the huge title,
+  // the cover band with the cover image) — never raw markdown.
+  it('renders the cover-format README as the cover page, matching the app window', async () => {
+    vi.mocked(commands.readProjectReadme).mockResolvedValue({
+      status: 'ok',
+      data: [
+        '# 失语 III',
+        '',
+        'title: 失语 III',
+        'composer: @肖翔',
+        'github_url: https://github.com/xO-xN/pnds-app',
+        '',
+        '## 作品简介：',
+        '',
+        '为场地屏幕而作。',
+        '',
+        '---',
+        '',
+        '## 关于作品',
+        'GitHub boilerplate beyond the boundary.',
+      ].join('\n'),
+    })
+    vi.mocked(commands.readProjectCover).mockResolvedValue({
+      status: 'ok',
+      data: 'data:image/png;base64,cover',
+    })
+
+    render(<ProjectionApp />)
+    await flush()
+
+    expect(intro().dataset.introView).toBe('cover')
+    expect(screen.getByTestId('project-cover-page')).toBeInTheDocument()
+    expect(screen.getByTestId('cover-title')).toHaveTextContent('失语 III')
+    expect(screen.getByTestId('cover-composer')).toHaveTextContent('@肖翔')
+    expect(screen.getByTestId('cover-github')).toBeInTheDocument()
+    expect(screen.getByTestId('cover-label')).toHaveTextContent('作品简介：')
+    expect(screen.getByText('为场地屏幕而作。')).toBeInTheDocument()
+    // The panel stops at the --- boundary; the boilerplate never shows.
+    expect(
+      screen.queryByText(/boilerplate beyond the boundary/)
+    ).not.toBeInTheDocument()
+    // The band carries the project's cover image (fetched once, keyed
+    // by path — the same readProjectCover channel as the app panel).
+    expect(commands.readProjectCover).toHaveBeenCalledWith(
+      '/Users/test/Inarticulate III'
+    )
+    expect(screen.getByTestId('cover-image')).toHaveAttribute(
+      'src',
+      'data:image/png;base64,cover'
+    )
+  })
+
+  it('renders a cover-format README band text-only when the project ships no cover image', async () => {
+    vi.mocked(commands.readProjectReadme).mockResolvedValue({
+      status: 'ok',
+      data: [
+        '# No Image',
+        '',
+        'composer: @someone',
+        '',
+        '## About:',
+        '',
+        'Text is enough.',
+      ].join('\n'),
+    })
+    // The previous test's cover override persists through clearAllMocks
+    // (it clears calls, not implementations) — re-pin the no-cover read.
+    vi.mocked(commands.readProjectCover).mockResolvedValue({
+      status: 'ok',
+      data: null,
+    })
+
+    render(<ProjectionApp />)
+    await flush()
+
+    expect(intro().dataset.introView).toBe('cover')
+    expect(screen.queryByTestId('cover-image')).not.toBeInTheDocument()
+    expect(screen.getByText('Text is enough.')).toBeInTheDocument()
+  })
+
   it('cross-fades to the monitor when 开演 lands (snapshot flip)', async () => {
     vi.useFakeTimers()
     render(<ProjectionApp />)

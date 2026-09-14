@@ -32,8 +32,10 @@ import {
   projectionContentKey,
   type ProjectionContent,
 } from '@/lib/projection-state'
-import { readProjectReadme } from '@/lib/project-readme'
+import { readProjectCover, readProjectReadme } from '@/lib/project-readme'
+import { parseReadmeCoverPage } from '@/lib/readme-cover-page'
 import { HelpMarkdown } from '@/components/help/HelpMarkdown'
+import { ProjectCoverPage } from '@/components/readme/ProjectCoverPage'
 import { MonitorScaleFrame } from '@/components/shell/MonitorScaleFrame'
 import { logger } from '@/lib/logger'
 import { cn } from '@/lib/utils'
@@ -214,12 +216,16 @@ function ProjectionStandby() {
  * v1.5.0 (#130): the 简介 — what the venue screen holds from the Load's
  * Starting snapshot until the conductor 开演s. The project's root
  * README renders through #125's channel (read keyed by path AND locale,
- * so a language switch re-reads into that language's variant) on the
- * help center's HelpMarkdown — v1.5 renders TEXT ONLY: images are
- * hidden, and anchor clicks never navigate this webview (the projection
- * is a display, not a browser — every link is a dead no-op). No README
- * (or an unreadable one) falls back to the project-name card — a
- * missing file must not break the venue screen's look (spec story 23).
+ * so a language switch re-reads into that language's variant) with the
+ * SAME composition as the main window's README panel (user report after
+ * #130: the venue screen must show the cover page, not raw markdown): a
+ * cover-format README renders the creator-designed title page
+ * (ProjectCoverPage — PNDS wordmark + composer/github pills, the huge
+ * title, the cover band with the cover image); any other README stays
+ * the plain document view, still text-only (v1.5 scope — images hidden,
+ * anchor clicks never navigate this webview). No README (or an
+ * unreadable one) falls back to the project-name card — a missing file
+ * must not break the venue screen's look (spec story 23).
  */
 function ProjectionIntro({
   content,
@@ -254,6 +260,36 @@ function ProjectionIntro({
     loaded.locale === locale
   const markdown = settled ? loaded.readme : null
 
+  // The cover-format parse is pure — an unparseable README is simply
+  // "not the format" and keeps the document view (ProjectReadme's rule).
+  const coverPage = markdown !== null ? parseReadmeCoverPage(markdown) : null
+  const wantsCover = coverPage !== null
+
+  // The cover image, keyed by path (a cover is locale-independent) —
+  // one fetch per project, only when the format actually wants one.
+  // Same keyed-state pattern as `loaded`: no synchronous reset, no
+  // stale image across projects.
+  const [coverLoaded, setCoverLoaded] = useState<{
+    path: string
+    cover: string | null
+  } | null>(null)
+  useEffect(() => {
+    if (!wantsCover) return
+    let cancelled = false
+    void readProjectCover(content.projectPath).then(result => {
+      if (!cancelled) {
+        setCoverLoaded({ path: content.projectPath, cover: result.cover })
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [content.projectPath, wantsCover])
+  const coverImage =
+    coverLoaded !== null && coverLoaded.path === content.projectPath
+      ? coverLoaded.cover
+      : null
+
   // The projection is a display: no anchor click ever navigates this
   // webview (the stranded-app lesson from the main window) and nothing
   // leaves for a browser mid-performance — every link is a no-op.
@@ -271,6 +307,21 @@ function ProjectionIntro({
         <span className="max-w-full truncate text-center text-4xl font-semibold text-(--pnds-text)/45">
           {content.projectName ?? 'PNDS'}
         </span>
+      </div>
+    )
+  }
+  if (coverPage !== null) {
+    // The creator-designed title page, same framing as the app panel's
+    // cover branch (p-8, the fade-in arrival); ProjectCoverPage pins
+    // its band to this container's edges, so the box must be definite
+    // (h-full inside the stage) — the ProjectReadme lesson.
+    return (
+      <div
+        data-testid="projection-intro"
+        data-intro-view="cover"
+        className="relative flex h-full w-full flex-col bg-(--pnds-bg) p-8 animate-[fade-in_0.8s_ease-in]"
+      >
+        <ProjectCoverPage page={coverPage} cover={coverImage} />
       </div>
     )
   }
