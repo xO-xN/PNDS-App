@@ -198,6 +198,11 @@ describe('ProjectionApp (#130 gate)', () => {
     expect(coverRoot.style.getPropertyValue('--cover-band-h')).toBe(
       'min(40cqh,42cqw)'
     )
+    // …and roomier title breathing room above and below (user request).
+    expect(coverRoot.style.getPropertyValue('--cover-title-pt')).toBe('4cqh')
+    expect(coverRoot.style.getPropertyValue('--cover-title-pb-gap')).toBe(
+      '7.5cqh'
+    )
     // The venue-screen frame: the cover composes inside a generously
     // inset stage box (user report: 大屏要更多四周留白) — and the zoom
     // scales the STAGE BOX itself (real layout, crisp text; the cq
