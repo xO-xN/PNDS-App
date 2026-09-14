@@ -163,7 +163,9 @@ export function ProjectReadme({ path }: { path: string }) {
       ) : coverPage !== null ? (
         // The cover format owns the full panel width — the doc-width
         // column below is the legacy view's constraint, not this one.
-        <div className="w-full flex-1">
+        // min-h-0 lets the flex child shrink with the window: the cover
+        // page FITS the panel (it never page-scrolls).
+        <div className="min-h-0 w-full flex-1">
           <ProjectCoverPage page={coverPage} cover={coverImage} />
         </div>
       ) : (

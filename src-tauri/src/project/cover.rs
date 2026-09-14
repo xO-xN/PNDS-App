@@ -79,7 +79,6 @@ fn read_cover_candidate(candidate: &Path, mime: &str) -> Result<Option<String>, 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use base64::Engine as _;
     use std::fs;
 
     /// The cover read contract behind the README panel's band: the

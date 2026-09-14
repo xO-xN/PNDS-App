@@ -11,13 +11,18 @@ import type { ReadmeCoverPage } from '@/lib/readme-cover-page'
  * and the bordered band — cover square left, the first section's label
  * and body right.
  *
- * Every size is a container-query percentage of the panel (the frames'
- * proportions: 350px type on a 2080px panel → 16.8cqw), so the
- * composition scales with the window exactly as the mock does. The
- * design's fixed light values become tokens — text on --pnds-text,
- * rules at 40% text, the pill on --pnds-sidebar-bg with the theme's
- * card shadow — so Pond renders the frames verbatim and the dark
- * themes get the same page in their own palette.
+ * Fluid layout (user report after the first build): the page FITS the
+ * panel — never taller, never page-scrolling. Horizontal metrics track
+ * the panel's width (cqw), vertical metrics its height (cqh), so every
+ * element keeps its frame-relative position whichever axis the window
+ * moves on; the title zone flexes to absorb the remainder, and the
+ * band's text column scrolls INSIDE the band when the window is short.
+ *
+ * The title is centered under the hairline's column, and its tracking
+ * is the flexible variable: the design's 0.37em when it fits, squeezed
+ * toward 0 for long titles, and only then does the type scale down —
+ * measured imperatively (the style is the state; no React re-render),
+ * re-run on panel resize.
  */
 export function ProjectCoverPage({
   page,
@@ -28,42 +33,56 @@ export function ProjectCoverPage({
   cover: string | null
 }) {
   const titleRef = useRef<HTMLHeadingElement>(null)
-  const zoneRef = useRef<HTMLDivElement>(null)
 
-  // The 0.37em tracking makes long titles overflow a narrow panel, and
-  // the composition is single-line — so the type scales down to fit.
-  // Measured imperatively on the DOM (the style is the state; no React
-  // re-render), re-run when the panel resizes.
   useEffect(() => {
     const title = titleRef.current
-    const zone = zoneRef.current
-    if (!title || !zone) return
+    if (!title) return
     const fit = () => {
-      // Back to the cqw class size first, then measure the natural
-      // width at that size.
+      // Back to the class values first (base size, 0.37em tracking),
+      // then measure. The title is a block spanning its column, so
+      // clientWidth IS the available width — the hairline's width.
+      title.style.letterSpacing = ''
       title.style.fontSize = ''
-      const available = zone.clientWidth
+      title.style.textIndent = ''
+      const available = title.clientWidth
       if (available === 0) return
-      const needed = title.scrollWidth
-      if (needed <= available) return
-      const base = Number.parseFloat(getComputedStyle(title).fontSize)
-      if (Number.isNaN(base) || base === 0) return
-      title.style.fontSize = `${(base * available) / needed}px`
+      // CSS letter-spacing lands after every glyph, including the
+      // last — a same-size text-indent pulls that trailing space back
+      // into the box so the centered text is optically centered.
+      const em = Number.parseFloat(getComputedStyle(title).fontSize)
+      if (Number.isNaN(em) || em === 0) return
+      if (title.scrollWidth <= available) {
+        title.style.textIndent = `${0.37 * em}px`
+        return
+      }
+      // Too wide at the design tracking: measure the zero-tracking
+      // width and spend whatever room is left on tracking.
+      title.style.letterSpacing = '0px'
+      const natural = title.scrollWidth
+      const glyphs = [...(title.textContent ?? '')].length || 1
+      if (natural <= available) {
+        const spacing = Math.max(0, (available - natural) / glyphs)
+        title.style.letterSpacing = `${spacing}px`
+        title.style.textIndent = `${spacing}px`
+        return
+      }
+      // Still too wide with no tracking at all: the type shrinks.
+      title.style.fontSize = `${(em * available) / natural}px`
     }
     fit()
     if (typeof ResizeObserver === 'undefined') return
     const observer = new ResizeObserver(fit)
-    observer.observe(zone)
+    observer.observe(title)
     return () => observer.disconnect()
   }, [page.title])
 
   return (
     <div
       data-testid="project-cover-page"
-      className="@container flex min-h-full w-full flex-col"
+      className="@container flex h-full w-full flex-col overflow-hidden"
     >
       {/* Header: diamond mark + wordmark, composer pill on the right. */}
-      <div className="flex items-center justify-between px-[12.6cqw] pt-[9.5cqw]">
+      <div className="flex shrink-0 items-center justify-between px-[12.6cqw] pt-[9.5cqh]">
         <div className="flex items-center gap-[2.7cqw]">
           <DiamondMark palette={page.palette} />
           <span className="font-[family-name:Comfortaa] text-[2.9cqw] font-medium text-(--pnds-text)">
@@ -79,36 +98,37 @@ export function ProjectCoverPage({
           </span>
         )}
       </div>
-      <div className="mx-[12.6cqw] mt-[4.4cqw] border-t border-(--pnds-text)/40" />
+      <div className="mx-[12.6cqw] mt-[4.4cqh] shrink-0 border-t border-(--pnds-text)/40" />
 
-      {/* The title, centered in the open field between rule and band. */}
-      <div
-        ref={zoneRef}
-        className="flex min-h-0 flex-1 items-center px-[12.6cqw] py-[4cqw]"
-      >
+      {/* The title, centered in the open field between rule and band.
+          Its column is the hairline's width (same inset), its size caps
+          against BOTH panel axes, and the tracking flexes to fit. */}
+      <div className="flex min-h-0 flex-1 items-center overflow-hidden px-[12.6cqw] py-[4cqh]">
         <h1
           ref={titleRef}
           data-testid="cover-title"
           dir="auto"
-          className="font-hans text-[16.8cqw] font-bold leading-[1.05] tracking-[0.37em] whitespace-nowrap text-(--pnds-text)"
+          className="w-full text-center font-hans text-[min(16.8cqw,20.5cqh)] font-bold leading-[1.05] tracking-[0.37em] whitespace-nowrap text-(--pnds-text)"
         >
           {page.title}
         </h1>
       </div>
 
-      {/* The band: cover square left, the first section's label and
-          body right — the panel's content ends here (the README's ---
-          boundary). */}
-      <div className="mx-auto mb-[12cqw] flex w-[74.8cqw] items-start gap-[5.9cqw] border border-(--pnds-text)/40">
+      {/* The band: its height is a frame share of the panel (capped so
+          the square cover can never outgrow the band's width), the
+          cover fills that height flush against the band's left edge,
+          and the text column scrolls inside when the window is short.
+          The panel's content ends here (the README's --- boundary). */}
+      <div className="mx-auto mb-[14.8cqh] flex h-[min(24.3cqh,40cqw)] w-[74.8cqw] shrink-0 gap-[5.9cqw] border border-(--pnds-text)/40">
         {cover !== null && (
           <img
             data-testid="cover-image"
             src={cover}
             alt=""
-            className="aspect-square w-[20cqw] shrink-0 object-cover"
+            className="aspect-square h-full shrink-0 object-cover"
           />
         )}
-        <div className="min-w-0 flex-1 py-[2.6cqw] pe-[5.5cqw]">
+        <div className="min-w-0 flex-1 overflow-y-auto py-[3.2cqh] pe-[5.5cqw]">
           <p
             data-testid="cover-label"
             className="font-hans text-[1.92cqw] font-[250] leading-[1.45] text-(--pnds-text)"
