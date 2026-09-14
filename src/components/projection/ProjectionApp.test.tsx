@@ -192,14 +192,18 @@ describe('ProjectionApp (#130 gate)', () => {
       'data:image/png;base64,cover'
     )
     // The venue-screen frame: the cover composes inside a generously
-    // inset stage box (user report: 大屏要更多四周留白) — the margins
-    // are proportional, so they ride any screen size and zoom.
-    expect(screen.getByTestId('projection-cover-stage').className).toContain(
-      'inset-x-[8%]'
-    )
-    expect(screen.getByTestId('projection-cover-stage').className).toContain(
-      'inset-y-[10%]'
-    )
+    // inset stage box (user report: 大屏要更多四周留白) — and the zoom
+    // scales the STAGE BOX itself (real layout, crisp text; the cq
+    // composition rides along). Base frame at 100%: 85% × 80%.
+    const stage = screen.getByTestId('projection-cover-stage')
+    expect(stage.style.width).toBe('85%')
+    expect(stage.style.height).toBe('80%')
+    // ⌘+ grows the poster frame — 110% zoom → 93.5% × 88%.
+    act(() => {
+      listeners.get('pnds:projection-action')?.({ kind: 'zoom-in' })
+    })
+    expect(stage.style.width).toBe('93.5%')
+    expect(stage.style.height).toBe('88%')
   })
 
   it('renders a cover-format README band text-only when the project ships no cover image', async () => {
@@ -405,10 +409,12 @@ describe('ProjectionApp (#130 gate)', () => {
 
   // v1.5.0 (#131 + zoom memory): the projection window's OWN zoom —
   // dispatched ⌘±/⌘0 actions from the main window's focused-window
-  // menu dispatch, the §v1.1.1 transform+inverse-size rendering via the
-  // shared MonitorScaleFrame, applied to the monitor AND the 简介, and
-  // every change REPORTED to the main window so it is remembered in
-  // preferences (reopen/boot restores the value).
+  // menu dispatch, applied to the monitor (§v1.1.1 transform frame) AND
+  // the 简介 (which scales its CONTENT — CSS layout zoom on the card /
+  // document, the stage box itself on the cover; a transform frame
+  // self-compensates the cover's cq layout and blurs text, user
+  // report), and every change REPORTED to the main window so it is
+  // remembered in preferences (reopen/boot restores the value).
   const dispatchAction = (kind: string) => {
     act(() => {
       listeners.get('pnds:projection-action')?.({ kind })
@@ -420,14 +426,12 @@ describe('ProjectionApp (#130 gate)', () => {
     render(<ProjectionApp />)
     await flush()
 
-    // Zoom while the 简介 holds: the SAME frame scales the intro (the
-    // user request — the cover page zooms with the window), and the
-    // change is reported for persistence.
+    // Zoom while the 简介 holds (the name card here — no README): CSS
+    // LAYOUT zoom, so the text re-rasterizes crisp at the new size, and
+    // the change is reported for persistence.
     dispatchAction('zoom-in')
     dispatchAction('zoom-in')
-    expect(screen.getByTestId('monitor-scale-frame').style.transform).toBe(
-      'scale(1.2)'
-    )
+    expect(intro().style.zoom).toBe('1.2')
     expect(emitTo).toHaveBeenCalledWith('main', 'pnds:projection-zoom', {
       zoom: 110,
     })
@@ -454,6 +458,7 @@ describe('ProjectionApp (#130 gate)', () => {
       })
     )
     await settleSwap()
+    expect(intro().style.zoom).toBe('1.2')
     publish(
       snapshot({
         projectPath: '/Users/test/Other',

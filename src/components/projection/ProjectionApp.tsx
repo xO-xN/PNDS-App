@@ -230,8 +230,12 @@ function ProjectionStandby() {
  */
 function ProjectionIntro({
   content,
+  zoom,
 }: {
   content: Extract<ProjectionContent, { kind: 'intro' }>
+  /** The window's remembered zoom percent — applied per branch (see
+   *  the branch comments); never a transform on text. */
+  zoom: number
 }) {
   const { i18n } = useTranslation()
   const locale = i18n.resolvedLanguage ?? i18n.language ?? 'en'
@@ -304,6 +308,9 @@ function ProjectionIntro({
         data-testid="projection-intro"
         data-intro-view="card"
         className="flex h-full w-full flex-col items-center justify-center bg-(--pnds-bg) p-10"
+        // CSS `zoom` is a LAYOUT zoom in WebKit — the name re-rasterizes
+        // at the effective scale (crisp), unlike a transform on text.
+        style={{ zoom: zoom / 100 }}
       >
         <span className="max-w-full truncate text-center text-4xl font-semibold text-(--pnds-text)/45">
           {content.projectName ?? 'PNDS'}
@@ -316,19 +323,28 @@ function ProjectionIntro({
     // (user report: 大屏要更多四周留白) — the composition lives inside a
     // generously inset STAGE box (a poster on the wall, not
     // edge-to-edge), and the cover's own container queries scale the
-    // whole layout to the frame, so the margins ride any screen size
-    // and zoom. The stage must be a definite box (the cover root is a
-    // size container — content cannot size it), hence the absolute
-    // insets; p-8 gives way to the proportional frame.
+    // whole layout to the frame. The zoom scales the STAGE BOX ITSELF
+    // (base 85% × 80% of the window × zoom): real layout, text crisp at
+    // every step, the cq composition riding along — the monitor's
+    // inverse-sized transform frame would self-compensate here (the
+    // visual size would never move, user report). Above 100% the box
+    // outgrows the window and the root's overflow-hidden crops it —
+    // first into the frame's own margins, then the edges: poster zoom.
+    // The stage must be a definite box (the cover root is a size
+    // container — content cannot size it).
     return (
       <div
         data-testid="projection-intro"
         data-intro-view="cover"
-        className="relative h-full w-full bg-(--pnds-bg) animate-[fade-in_0.8s_ease-in]"
+        className="relative h-full w-full overflow-hidden bg-(--pnds-bg) animate-[fade-in_0.8s_ease-in]"
       >
         <div
           data-testid="projection-cover-stage"
-          className="absolute inset-x-[8%] inset-y-[10%] flex flex-col"
+          className="absolute top-1/2 left-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col"
+          style={{
+            width: `${(85 * zoom) / 100}%`,
+            height: `${(80 * zoom) / 100}%`,
+          }}
         >
           <ProjectCoverPage page={coverPage} cover={coverImage} />
         </div>
@@ -341,6 +357,9 @@ function ProjectionIntro({
       data-intro-view="readme"
       onClick={swallowAnchor}
       className="h-full w-full overflow-y-auto bg-(--pnds-bg)"
+      // Flow text zooms by CSS `zoom` (layout zoom — crisp), the same
+      // reason as the name card above.
+      style={{ zoom: zoom / 100 }}
     >
       <div className="mx-auto w-full max-w-3xl px-10 py-12 text-(--pnds-text) [&_img]:hidden">
         <HelpMarkdown markdown={markdown} />
@@ -411,15 +430,15 @@ function ProjectionStage({
           reloadNonce={reloadNonce}
         />
       ) : displayed.kind === 'intro' ? (
-        /* The 简介 rides the SAME zoom frame as the monitor (user
-           request after #131 — the cover page scales with the window's
-           remembered zoom; its container queries resolve against the
-           pre-transform layout box, so the fit math and the visual
-           scale compose). 投影待机 stays unscaled — it is a fixed
-           standby layout, not content. */
-        <MonitorScaleFrame zoom={zoom}>
-          <ProjectionIntro content={displayed} />
-        </MonitorScaleFrame>
+        /* The 简介 zooms by its OWN mechanisms (see ProjectionIntro) —
+           NOT the monitor's inverse-sized transform frame: the cover's
+           cq-proportional layout SELF-COMPENSATES such a frame (the
+           layout box narrows by 1/z, cq sizes grow by z, the transform
+           folds it back — the visual size never moves, only the text
+           rasterization blurs; user report), so the intro scales its
+           CONTENT BOX instead — real layout, crisp text at every step.
+           投影待机 stays unscaled — it is a fixed standby layout. */
+        <ProjectionIntro content={displayed} zoom={zoom} />
       ) : (
         <ProjectionStandby />
       )}
