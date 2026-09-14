@@ -49,6 +49,13 @@ pub fn run() {
                 // show the window itself, bypassing the hidden-create
                 // reveal gate (the theme-gated first frame).
                 .with_state_flags(crate::window::persisted_state_flags())
+                // v1.5.0 (#129): the projection window places itself on
+                // the App's current monitor at EVERY open; cross-launch
+                // geometry persistence is out of scope (spec #128) and a
+                // restored stale position would fight that placement.
+                // The help center stays tracked (its size/position
+                // persisting is documented behavior).
+                .with_denylist(&["projection"])
                 .build(),
         );
     }

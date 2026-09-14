@@ -6,11 +6,12 @@
  * `onX(cb)` returns a synchronous unsubscribe, so effect cleanups and
  * try/finally blocks never juggle unlisten promises.
  *
- * The help-window protocol has no generated form — `emitTo` (main window
- * → help webview) is not part of tauri-specta's generated surface — so
- * its names and payloads live here too: this is the single module that
- * knows them. `HELP_WINDOW_LABEL`/`HelpTarget` are defined here and
- * re-exported from help-window.ts for existing importers.
+ * The help- and projection-window protocols have no generated form —
+ * `emitTo` (main window → the secondary webviews) is not part of
+ * tauri-specta's generated surface — so their names and payloads live
+ * here too: this is the single module that knows them.
+ * `HELP_WINDOW_LABEL`/`HelpTarget` are defined here and re-exported from
+ * help-window.ts for existing importers.
  */
 import { emitTo, listen } from '@tauri-apps/api/event'
 import { events } from '@/lib/tauri-bindings'
@@ -23,6 +24,9 @@ import type { ColorTheme } from '@/lib/color-theme'
 
 /** The help webview's Tauri window label. */
 export const HELP_WINDOW_LABEL = 'help'
+
+/** v1.5.0 (#129): the projection window's stable label. */
+export const PROJECTION_WINDOW_LABEL = 'projection'
 
 /** Where the help window should navigate: the search box or one document. */
 export type HelpTarget = { kind: 'search' } | { kind: 'doc'; docId: string }
@@ -129,4 +133,46 @@ export function onHelpTheme(cb: (theme: ColorTheme) => void): Unsubscribe {
 /** Main-window side: push a color-theme change to the help window. */
 export function emitHelpTheme(theme: ColorTheme): Promise<void> {
   return emitTo(HELP_WINDOW_LABEL, HELP_THEME, { colorTheme: theme })
+}
+
+// ---------------------------------------------------------------------------
+// Projection window protocol (emitTo-targeted; names held only here) —
+// v1.5.0 (#129). Thinner than the help protocol on purpose: the session
+// content arrives through the broadcast SessionSnapshotEvent (plus the
+// getSessionState restore), so only the live-follow bridges — theme and
+// language — need a main-window push. There is no navigation target and
+// no ready handshake to replay.
+// ---------------------------------------------------------------------------
+
+const PROJECTION_LOCALE = 'pnds:projection-locale'
+const PROJECTION_THEME = 'pnds:projection-theme'
+
+/** Projection side: follow the main window's UI language. */
+export function onProjectionLocale(cb: (locale: string) => void): Unsubscribe {
+  return toUnsubscribe(
+    listen<{ locale: string }>(PROJECTION_LOCALE, e => cb(e.payload.locale))
+  )
+}
+
+/** Main-window side: push a UI-language change to the projection window. */
+export function emitProjectionLocale(locale: string): Promise<void> {
+  return emitTo(PROJECTION_WINDOW_LABEL, PROJECTION_LOCALE, { locale })
+}
+
+/** Projection side: follow the main window's color theme. */
+export function onProjectionTheme(
+  cb: (theme: ColorTheme) => void
+): Unsubscribe {
+  return toUnsubscribe(
+    listen<{ colorTheme: ColorTheme }>(PROJECTION_THEME, e =>
+      cb(e.payload.colorTheme)
+    )
+  )
+}
+
+/** Main-window side: push a color-theme change to the projection window. */
+export function emitProjectionTheme(theme: ColorTheme): Promise<void> {
+  return emitTo(PROJECTION_WINDOW_LABEL, PROJECTION_THEME, {
+    colorTheme: theme,
+  })
 }

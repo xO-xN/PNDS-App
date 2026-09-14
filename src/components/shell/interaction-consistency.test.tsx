@@ -55,7 +55,7 @@ const SECOND_PATH = '/Users/test/PNDS Score 1'
  * enumeration cannot drift between them. */
 const NAMED_CONTROLS = [
   'Remove from history',
-  'Open in browser',
+  'Open projection window',
   'Reload monitor',
 ] as const
 

@@ -83,3 +83,23 @@ App 内的帮助窗口，浏览帮助语料四本书：教程、创作者指南�
 **实现手册 / Implementation Manual**:
 PNDS Template 仓库中描述模板示例工程的文档（`docs/implementation.md`）：示例行为规格、目录职责、「创作时改哪里」。与帮助语料的「创作指南」（工作流）互指分工。
 _Avoid_: creator-guide（旧名）、handoff（已并入 Template 的 AGENTS.md）
+
+**投影窗口 / projection window**:
+面向场地屏幕的演出显示窗口：原生标题栏、单实例、跨工程保持原位与全屏，由侧栏按钮打开；内容经「投影开演」门控，主窗口 monitor 显示不受影响。
+_Avoid_: monitor 窗口、外部窗口、镜像窗口、浏览器 monitor
+
+**投影开演 / projection start**:
+指挥在主窗口触发的投影内容切换动作（▶ 按钮 / ⌘⏎），可反向：投影窗口在「简介」与 monitor 页之间渐变过渡。
+_Avoid_: 开始演出（指该动作时）、start show
+
+**投影已开演 / projection started**:
+「投影开演」后的状态：按钮常亮绿，投影窗口显示 monitor 页；session 级，每次 Load / 切换工程重置回简介态。
+_Avoid_: 演出中（指投影状态时）
+
+**投影待机 / projection standby**:
+无运行工程时投影窗口的状态（错误态同此）：主题底色 + PNDS 标识 + 「无演出」。
+_Avoid_: 屏保、no-signal 画面
+
+**简介 / intro**:
+投影开演前投影窗口的状态与内容：渲染工程根目录 `README.md`（v1.5 仅文本），无 README 时回落工程名卡片。
+_Avoid_: README 页（作状态名）、封面

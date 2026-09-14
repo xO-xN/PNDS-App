@@ -40,6 +40,10 @@ import {
   HELP_WINDOW_LABEL,
   openHelpWindow,
 } from '@/lib/help-window'
+import {
+  closeProjectionWindow,
+  PROJECTION_WINDOW_LABEL,
+} from '@/lib/projection-window'
 import { commands } from '@/lib/tauri-bindings'
 import { useProjectStore } from '@/store/project-store'
 import { useSettingsStore } from '@/store/settings-store'
@@ -74,15 +78,22 @@ async function copyAddress(url: string): Promise<void> {
 
 /**
  * v1.3.0 (#56): ⌘W acts on the FRONT window. The menu's Close Window
- * accelerator fires app-wide, so with the help center focused it must
+ * accelerator fires app-wide, so with a secondary window focused it must
  * close that window — running the main window's close flow instead
  * would hide the app (or pop its session confirm) behind the user's
- * back. An unfocused moment or a query failure falls back to main.
+ * back. v1.5.0 (#129): the projection window joins the dispatch —
+ * closing it is a plain destroy: the running session and the main
+ * window are untouched (临时撤投影不影响演出). An unfocused moment or a
+ * query failure falls back to main.
  */
 async function closeFrontWindow(): Promise<void> {
   const focused = await commands.focusedWindowLabel()
   if (focused.status === 'ok' && focused.data === HELP_WINDOW_LABEL) {
     await closeHelpWindow()
+    return
+  }
+  if (focused.status === 'ok' && focused.data === PROJECTION_WINDOW_LABEL) {
+    await closeProjectionWindow()
     return
   }
   if (useSessionStore.getState().sessionStatus === 'ready') {

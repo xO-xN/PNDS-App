@@ -4,14 +4,13 @@ import { useTranslation } from 'react-i18next'
 import {
   Plus,
   X,
-  Share,
+  Projector,
   RefreshCw,
   Command,
   Music,
   FolderOpen,
   AlertCircle,
 } from 'lucide-react'
-import { openUrl } from '@tauri-apps/plugin-opener'
 import i18n from '@/i18n/config'
 import {
   PROJECT_LIMIT_PER_DIRECTORY,
@@ -24,13 +23,13 @@ import {
   isSessionBusy,
   isSessionLive,
   isSessionRunning,
-  sessionConnectionAddress,
   useSessionStore,
 } from '@/store/session-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { useKeyboardStore } from '@/store/keyboard-store'
 import { notifications } from '@/lib/notifications'
 import { promptOpenProject, stopAndReset } from '@/lib/open-project'
+import { openProjectionWindow } from '@/lib/projection-window'
 import { Spinner } from '@/components/ui/spinner'
 import { selectProject } from '@/lib/project-select'
 import { reclaimIfManagedBundle } from '@/lib/bundle-project'
@@ -206,15 +205,6 @@ export function Sidebar({
   // accent bar or the folder in-use dot.
   const sessionProjectPath = useSessionStore(state => state.sessionProjectPath)
   const commandKeyPressed = useKeyboardStore(state => state.commandKeyPressed)
-  // v1.2.3 (#39/T4): Share targets the SESSION's address (snapshot
-  // mirror) — another card's preflight seeding must never retarget the
-  // live link. v1.4.0 (#62): the session's `hostAddress` comes first — a
-  // manifest-declared performer address replaces the IP, keeping the
-  // shared URL identical to the monitor's actual origin.
-  const hostAddress = useSessionStore(sessionConnectionAddress)
-  const monitorPort = useSessionStore(
-    state => state.health?.scoreServer?.monitorPort
-  )
   const busy = isSessionBusy(sessionStatus)
   const running = isSessionRunning(sessionStatus)
   // v1.1.2 T3: the running bar shows from the moment the session starts,
@@ -363,10 +353,14 @@ export function Sidebar({
       currentProject
     )
 
-  /** Share: open the monitor page in the default external browser. */
-  const handleShare = async () => {
-    if (!running || !hostAddress || !monitorPort) return
-    await openUrl(`http://${hostAddress}:${monitorPort}/`)
+  /**
+   * v1.5.0 (#129): the projection entry — opens (or focuses) the venue
+   * screen's own window. Always available: with no running session the
+   * window itself stands by (投影待机), so the button carries no
+   * session-address gating of its own.
+   */
+  const handleOpenProjection = () => {
+    void openProjectionWindow()
   }
 
   /** v1.1.2 T7: the lone-Esc close confirmation's submit — same teardown
@@ -537,15 +531,18 @@ export function Sidebar({
           <TrafficLights />
         </div>
         <div data-tauri-drag-region="false" className="flex items-center gap-1">
+          {/* v1.5.0 (#129): the venue screen replaces the retired
+              browser entry (openUrl) — a same-app window with the same
+              engine, single instance, reused by focus. */}
           <button
             type="button"
-            aria-label={t('sidebar.share')}
-            title={t('sidebar.shareHint')}
-            disabled={!running || !hostAddress || !monitorPort}
-            onClick={() => void handleShare()}
+            data-testid="open-projection-button"
+            aria-label={t('sidebar.openProjection')}
+            title={t('sidebar.openProjection')}
+            onClick={handleOpenProjection}
             className="pnds-focus-ring rounded-md p-1.5 text-(--pnds-text)/70 transition hover:bg-(--pnds-text)/5 hover:text-(--pnds-text) active:scale-90 disabled:opacity-40"
           >
-            <Share size={15} />
+            <Projector size={15} />
           </button>
           <button
             type="button"

@@ -205,9 +205,21 @@ v1.3.0（#56）帮助中心窗口——第二个 webview 窗口（label `help`�
 - 语料内链接永不导航 webview（用户报告教训）：文档间 `.md` 链接解析为窗口内跳转（`#fragment` 为小节锚点），外部 URL 走系统浏览器，解析不到则无操作。文档正文用平台标准字体，不用品牌字体。
 - 语料加载失败：显示错误态 + 重试；窗口仍被揭示（不得留用户对着不可见窗口）。
 
+v1.5.0（#129）投影窗口骨架——又一个多页入口的 webview 窗口（label `projection`，独立 `projection.html` 入口，ADR-0006 瘦根：不挂 AppShell）：
+
+- 入口是侧栏右上角的「打开投影窗口」按钮（原「用默认浏览器打开」位置，浏览器入口与 `sidebar.share`/`shareHint` 文案已彻底移除）；按钮不随会话状态禁用——无演出时窗口自己进入待机。
+- 单实例：已开再点 = 聚焦（或卡隐藏态时重跑揭示）；不重建。**切换工程窗口不重建、全屏与位置保持**（窗口生命周期与 session 完全解耦），内容随快照过渡。
+- 打开时落在 **App 当前所在显示器**（`currentMonitor()` 居中落位，查询失败回退系统居中）；window-state 插件 denylist 掉 `projection`——跨启动几何持久化不在 v1.5 范围（spec #128），恢复的旧位置会与落位规则打架（帮助窗口仍被跟踪）。
+- 内容状态机是纯函数 `projectionContent(snapshot)`（`src/lib/projection-state.ts`）：session ready 且有 hostAddress/monitorPort → monitor（本票 tracer bullet，直接显示，无简介门）；其余（idle/starting/stopping/error/缺地址）→ **投影待机**（主题底色 + PNDS 字标 + 「无演出」，双语、随主题）。
+- monitor 组装复用主窗口契约：地址快照语义（`hostAddress` 优先）、`?theme=`/`?lang=` 首帧参数按导航快照、iframe load 事件 + 10 秒超时的 reveal 防闪盖层、theme/locale 桥推送。session 事实经广播 `SessionSnapshotEvent` + `getSessionState` 恢复（visibility/focus 重拉，occlusion 丢事件先例同主窗口）。
+- 内容切换全部渐变（400ms 主题色盖层，`data-reveal-motion` 豁免 Brutal 即时规则）：待机↔monitor、切换工程的地址变化都走同一盖层；快照序列中途变卦时收敛到最新内容；**首个落定内容直接呈现**（演出中打开直接落 monitor，无待机闪帧）。
+- 窗口标题「PNDS 投影 — <工程名>」/ 无演出时「PNDS 投影」，随界面语言实时更新（页面 `setTitle`；capabilities 需 `core:window:allow-set-title`）。
+- **⌘W 按聚焦窗口分发**：投影窗口在前台时只关它（普通销毁），演出与主窗口不受影响；红灯关闭即销毁，退出 App 随之关闭。全屏与缩放等窗口级快捷键的投影侧分派属后续票。
+- 主题/语言实时跟随：主窗口 `setupProjectionWindowBridge()` 推送（与帮助中心同模式）；投影窗口自身不写 preferences。
+
 ## Sidebar
 
-必须包含：Recent Projects 与打开工程；当前工程名称；Audio Mode；External OSC target；CoreAudio device 与通道能力；master gain；Load/Change/Close；Share 与手动 monitor Refresh；全屏入口。
+必须包含：Recent Projects 与打开工程；当前工程名称；Audio Mode；External OSC target；CoreAudio device 与通道能力；master gain；Load/Change/Close；打开投影窗口与手动 monitor Refresh；全屏入口。
 
 正常演出不显示常驻 Node/scsynth 技术状态面板。侧栏字体和 App icon 属于发行前人工视觉调整，不是实现任务的阻塞项。
 
@@ -286,6 +298,7 @@ Back/Close 返回 Welcome，不自动重启。
 - error → Load/Retry；
 - 全屏 action 的菜单、快捷键与按钮入口；
 - 窗口 fade 状态机；
+- 投影窗口：内容状态机（快照序列）、窗口生命周期（单例/聚焦/落屏/桥）、⌘W 分派；
 - 更新检查 check-only 三态（boot 静默、available 状态持久、手动反馈与 Releases 动作）；
 - 日志轮转；
 - 子进程关闭与 orphan cleanup。

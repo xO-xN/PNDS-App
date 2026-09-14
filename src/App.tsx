@@ -7,6 +7,7 @@ import {
   setupMenuStateListener,
 } from './lib/menu'
 import { setupHelpWindowBridge } from './lib/help-window'
+import { setupProjectionWindowBridge } from './lib/projection-window'
 import { startBootUpdateCheck } from './lib/updater'
 import { runWebKitBaselineCheck } from './lib/webkit-baseline'
 import { bootCheckRenderer } from './store/updater-store'
@@ -130,6 +131,9 @@ function App() {
         // language switches and Appearance theme changes are pushed to
         // it, and its boot handshake replays the last navigate target.
         setupHelpWindowBridge()
+        // v1.5.0 (#129): an open projection window live-follows the
+        // app's language and theme the same way.
+        setupProjectionWindowBridge()
       } catch (error) {
         logger.warn('Failed to initialize language or menu', { error })
       } finally {

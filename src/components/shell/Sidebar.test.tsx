@@ -8,6 +8,7 @@ import {
 } from '@/test/test-utils'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { openUrl } from '@tauri-apps/plugin-opener'
 import { commands } from '@/lib/tauri-bindings'
 import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
@@ -19,6 +20,13 @@ import type { Manifest, SessionSnapshot } from '@/lib/tauri-bindings'
 vi.mock('@tauri-apps/plugin-opener', () => ({
   openUrl: vi.fn().mockResolvedValue(undefined),
 }))
+
+/** v1.5.0 (#129): the projection window lifecycle is a lib seam —
+ *  stubbed where the retired openUrl branch used to be. */
+const projectionWindowMock = vi.hoisted(() => ({
+  openProjectionWindow: vi.fn().mockResolvedValue(undefined),
+}))
+vi.mock('@/lib/projection-window', () => projectionWindowMock)
 
 const manifest: Manifest = {
   schemaVersion: 1,
@@ -155,7 +163,7 @@ describe('Sidebar', () => {
       screen.getByRole('button', { name: /toggle full screen/i })
     ).toBeInTheDocument()
     expect(
-      screen.getByRole('button', { name: /open in browser/i })
+      screen.getByRole('button', { name: /open projection window/i })
     ).toBeInTheDocument()
     expect(
       screen.getByRole('button', { name: /reload monitor/i })
@@ -171,6 +179,26 @@ describe('Sidebar', () => {
     expect(commands.toggleFullscreen).toHaveBeenCalledTimes(1)
   })
 
+  // v1.5.0 (#129): the projection entry — always available (the window
+  //  itself stands by with no session), never the browser.
+  it('opens the projection window from the sidebar entry, with no session running', async () => {
+    const user = userEvent.setup()
+    useSessionStore.setState({
+      sessionStatus: 'idle',
+      projectName: null,
+      health: null,
+    })
+    render(<Sidebar variant="static" />)
+
+    const button = screen.getByTestId('open-projection-button')
+    expect(button).toBeEnabled()
+    await user.click(button)
+
+    expect(projectionWindowMock.openProjectionWindow).toHaveBeenCalledTimes(1)
+    // The browser entry is gone for good (v1.5.0 #129).
+    expect(openUrl).not.toHaveBeenCalled()
+  })
+
   it('hides custom traffic lights while the native title bar shows (§7.4)', () => {
     useWindowStore.setState({
       fullscreen: true,
@@ -181,7 +209,7 @@ describe('Sidebar', () => {
     expect(
       screen.queryByRole('button', { name: /close window/i })
     ).not.toBeInTheDocument()
-    // Share/refresh remain available in fullscreen.
+    // Projection/refresh remain available in fullscreen.
     expect(
       screen.getByRole('button', { name: /reload monitor/i })
     ).toBeInTheDocument()

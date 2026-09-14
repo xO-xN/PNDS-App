@@ -99,6 +99,13 @@ const helpWindowMock = vi.hoisted(() => ({
 }))
 vi.mock('@/lib/help-window', () => helpWindowMock)
 
+const projectionWindowMock = vi.hoisted(() => ({
+  openProjectionWindow: vi.fn().mockResolvedValue(undefined),
+  closeProjectionWindow: vi.fn().mockResolvedValue(undefined),
+  PROJECTION_WINDOW_LABEL: 'projection',
+}))
+vi.mock('@/lib/projection-window', () => projectionWindowMock)
+
 /** Custom items by id, asserting presence so callers stay non-null. With
  * store-driven rebuilds the captures hold several builds' items — the
  * LATEST build's entry is the live one. */
@@ -588,6 +595,24 @@ describe('buildAppMenu help menu (v1.3.0, #56)', () => {
       expect(helpWindowMock.closeHelpWindow).toHaveBeenCalledTimes(1)
     )
     expect(commands.closeWindowWithFade).not.toHaveBeenCalled()
+
+    // v1.5.0 (#129): the projection window front: a plain destroy — the
+    // session confirm never pops behind the venue screen's back.
+    vi.mocked(commands.closeWindowWithFade).mockClear()
+    vi.mocked(commands.focusedWindowLabel).mockResolvedValue({
+      status: 'ok',
+      data: 'projection',
+    })
+    useSessionStore.setState({ sessionStatus: 'ready' })
+    item('close-window').action?.()
+    await vi.waitFor(() =>
+      expect(projectionWindowMock.closeProjectionWindow).toHaveBeenCalledTimes(
+        1
+      )
+    )
+    expect(useProjectStore.getState().confirmCloseProjectOpen).toBe(false)
+    expect(commands.closeWindowWithFade).not.toHaveBeenCalled()
+    useSessionStore.setState({ sessionStatus: 'idle' })
 
     // The main window is front: the existing close flow runs.
     helpWindowMock.closeHelpWindow.mockClear()

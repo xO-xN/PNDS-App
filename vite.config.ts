@@ -32,6 +32,9 @@ export default defineConfig(async () => ({
         // v1.3.0 (#56): the help center's own minimal webview page — the
         // second window must not boot the whole main app shell.
         help: resolve(__dirname, 'help.html'),
+        // v1.5.0 (#129): the projection window's thin root — same
+        // multi-page pattern, no AppShell boots on the venue screen.
+        projection: resolve(__dirname, 'projection.html'),
       },
     },
   },
