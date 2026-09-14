@@ -68,4 +68,27 @@ describe('ProjectCoverPage', () => {
 
     expect(screen.queryByTestId('cover-composer')).not.toBeInTheDocument()
   })
+
+  // The user's hard spec, locked: the band's gap to the window bottom
+  // equals the PNDS/composer row's gap to the window top. Both sides
+  // must resolve the SAME --cover-edge-inset token (defined once on
+  // the root) — this goes red the moment anyone hardcodes one side.
+  it('mirrors the window-edge gaps through one shared inset token', () => {
+    const { container } = render(<ProjectCoverPage page={PAGE} cover={null} />)
+
+    const root = container.firstElementChild as HTMLElement
+    expect(root.className).toContain('[--cover-edge-inset:9.5cqh]')
+    expect(root.className).toContain('[--cover-band-h:min(24.3cqh,40cqw)]')
+    expect(screen.getByTestId('cover-header').className).toContain(
+      'pt-(--cover-edge-inset)'
+    )
+    expect(screen.getByTestId('cover-band').className).toContain(
+      'bottom-(--cover-edge-inset)'
+    )
+    // The title reserves the band's full footprint above the inset,
+    // so it rides directly on top of the band.
+    expect(
+      screen.getByTestId('cover-title').parentElement?.className
+    ).toContain('calc(var(--cover-edge-inset)')
+  })
 })

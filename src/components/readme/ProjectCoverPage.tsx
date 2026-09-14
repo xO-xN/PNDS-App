@@ -17,6 +17,10 @@ import type { ReadmeCoverPage } from '@/lib/readme-cover-page'
  * element keeps its frame-relative position whichever axis the window
  * moves on; the title zone flexes to absorb the remainder, and the
  * band's text column scrolls INSIDE the band when the window is short.
+ * The band is pinned ABSOLUTELY to the panel's bottom edge; its offset
+ * and the header's top padding resolve the SAME --cover-edge-inset
+ * token, so the band's gap to the window bottom equals the PNDS row's
+ * gap to the window top by construction, not by matched constants.
  *
  * The title is centered under the hairline's column, and its tracking
  * is the flexible variable: the design's 0.37em when it fits, squeezed
@@ -79,14 +83,17 @@ export function ProjectCoverPage({
   return (
     <div
       data-testid="project-cover-page"
-      className="@container flex h-full w-full flex-col overflow-hidden"
+      className="@container relative flex h-full w-full flex-col overflow-hidden [--cover-edge-inset:9.5cqh] [--cover-band-h:min(24.3cqh,40cqw)]"
     >
       {/* Header: diamond mark + wordmark, composer pill on the right.
-          EDGE INSET — this top distance (9.5cqh) is mirrored verbatim
-          by the band's bottom margin below: the frame's gap to the
-          window bottom equals the PNDS / composer row's gap to the
-          window top. Change them together. */}
-      <div className="flex shrink-0 items-center justify-between px-[12.6cqw] pt-[9.5cqh]">
+          Its top padding is --cover-edge-inset — the ONE token that
+          also pins the band at the bottom — so this row's gap to the
+          window top and the band's gap to the window bottom are the
+          same number. Change the token on the root, never one side. */}
+      <div
+        data-testid="cover-header"
+        className="flex shrink-0 items-center justify-between px-[12.6cqw] pt-(--cover-edge-inset)"
+      >
         <div className="flex items-center gap-[2.7cqw]">
           <DiamondMark palette={page.palette} />
           <span className="font-[family-name:Comfortaa] text-[2.9cqw] font-medium text-(--pnds-text)">
@@ -104,13 +111,13 @@ export function ProjectCoverPage({
       </div>
       <div className="mx-[12.6cqw] mt-[4.4cqh] shrink-0 border-t border-(--pnds-text)/40" />
 
-      {/* The title, anchored LOW in the open field — it rides just
-          above the band (user direction: the title moves down with
-          the band, echoing the header's positions at the page foot).
-          Its column is the hairline's width (same inset), its size
-          caps against BOTH panel axes, and the tracking flexes to
-          fit. */}
-      <div className="flex min-h-0 flex-1 items-end overflow-hidden px-[12.6cqw] pt-[2cqh] pb-[4.5cqh]">
+      {/* The title, anchored LOW: items-end plus a reserved bottom
+          (edge inset + band height + gap) park it directly above the
+          band, so it rides down with it (user direction: the title
+          and the band move together). Its column is the hairline's
+          width (same inset), its size caps against BOTH panel axes,
+          and the tracking flexes to fit. */}
+      <div className="flex min-h-0 flex-1 items-end overflow-hidden px-[12.6cqw] pt-[2cqh] pb-[calc(var(--cover-edge-inset)_+_var(--cover-band-h)_+_4.5cqh)]">
         <h1
           ref={titleRef}
           data-testid="cover-title"
@@ -121,16 +128,19 @@ export function ProjectCoverPage({
         </h1>
       </div>
 
-      {/* The band: its height is a frame share of the panel (capped so
-          the square cover can never outgrow the band's width), the
-          cover fills that height flush against the band's left edge,
-          and the text column scrolls inside when the window is short.
-          Its bottom margin is the EDGE INSET — the SAME 9.5cqh the
-          header sits from the top, so the band mirrors the PNDS /
-          composer row against the window's bottom edge (user
-          direction; keep in lockstep with the header's pt). The
-          panel's content ends here (the README's --- boundary). */}
-      <div className="mx-auto mb-[9.5cqh] flex h-[min(24.3cqh,40cqw)] w-[74.8cqw] shrink-0 gap-[5.9cqw] border border-(--pnds-text)/40">
+      {/* The band: ABSOLUTELY pinned to the panel's bottom edge at
+          --cover-edge-inset — its gap to the window bottom is the
+          token itself, independent of the flow above and of anything
+          the panel grows around it. Its height is a frame share of
+          the panel (capped so the square cover can never outgrow the
+          band's width), the cover fills that height flush against the
+          band's left edge, and the text column scrolls inside when
+          the window is short. The panel's content ends here (the
+          README's --- boundary). */}
+      <div
+        data-testid="cover-band"
+        className="absolute bottom-(--cover-edge-inset) left-1/2 flex h-(--cover-band-h) w-[74.8cqw] -translate-x-1/2 gap-[5.9cqw] border border-(--pnds-text)/40"
+      >
         {cover !== null && (
           <img
             data-testid="cover-image"
