@@ -11,6 +11,8 @@
  *
  * title: 失语 III
  * composer: @肖翔
+ * composer_url: https://…
+ * github_url: https://github.com/…
  * color_palette: [#000000, #C9D8B6, #F1ECC3, #57837B]
  *
  * ## 作品简介：
@@ -41,6 +43,12 @@ export interface ReadmeCoverPage {
   title: string
   /** Metadata `composer:` verbatim (the pill text); null hides the pill. */
   composer: string | null
+  /** Metadata `composer_url:` — when an http(s) URL, the pill becomes a
+   * button opening it in the system browser; null keeps it inert. */
+  composerUrl: string | null
+  /** Metadata `github_url:` — when an http(s) URL, a `github` button
+   * joins the header; null hides it. */
+  githubUrl: string | null
   /** Four sanitized hex colors for the diamond mark, in panel order
    * (left, top, right, bottom). */
   palette: readonly [string, string, string, string]
@@ -56,11 +64,18 @@ export interface ReadmeCoverPage {
 export const DEFAULT_COVER_PALETTE: readonly [string, string, string, string] =
   ['#34c759', '#ffcc00', '#ff3b30', '#af52de']
 
-type MetadataKey = 'title' | 'composer' | 'colorPalette'
+type MetadataKey =
+  | 'title'
+  | 'composer'
+  | 'composerUrl'
+  | 'githubUrl'
+  | 'colorPalette'
 
 const METADATA_KEYS: Record<string, MetadataKey> = {
   title: 'title',
   composer: 'composer',
+  composer_url: 'composerUrl',
+  github_url: 'githubUrl',
   color_palette: 'colorPalette',
 }
 
@@ -74,6 +89,14 @@ const FENCE = /^\s{0,3}(?:```|~~~)/
 
 /** Hex colors (3/4/6/8 digits) inside a color_palette value. */
 const HEX = /#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\b/g
+
+/** A link field: only http(s) URLs are honored — anything else (ftp,
+ * javascript:, garbage) is treated as absent rather than handed to the
+ * system browser. */
+function sanitizeUrl(raw: string | undefined): string | null {
+  const value = (raw ?? '').trim()
+  return /^https?:\/\//i.test(value) ? value : null
+}
 
 function sanitizePalette(
   raw: string | undefined
@@ -157,6 +180,8 @@ export function parseReadmeCoverPage(markdown: string): ReadmeCoverPage | null {
   return {
     title,
     composer: (metadata.composer ?? '').trim() || null,
+    composerUrl: sanitizeUrl(metadata.composerUrl),
+    githubUrl: sanitizeUrl(metadata.githubUrl),
     palette: sanitizePalette(metadata.colorPalette),
     sectionLabel: firstLabel ?? '',
     sectionMarkdown: bodyLines.join('\n').trim(),

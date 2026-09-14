@@ -1,5 +1,7 @@
 import { useEffect, useRef } from 'react'
+import { openUrl } from '@tauri-apps/plugin-opener'
 import { HelpMarkdown } from '@/components/help/HelpMarkdown'
+import { logger } from '@/lib/logger'
 import type { ReadmeCoverPage } from '@/lib/readme-cover-page'
 
 /**
@@ -21,6 +23,9 @@ import type { ReadmeCoverPage } from '@/lib/readme-cover-page'
  * and the header's top padding resolve the SAME --cover-edge-inset
  * token, so the band's gap to the window bottom equals the PNDS row's
  * gap to the window top by construction, not by matched constants.
+ * The composer and github pills are buttons when their README URL
+ * metadata (composer_url / github_url, http(s) only) parsed — a click
+ * hands off to the system browser, never the webview.
  *
  * The title is centered under the hairline's column, and its tracking
  * is the flexible variable: the design's 0.37em when it fits, squeezed
@@ -37,6 +42,21 @@ export function ProjectCoverPage({
   cover: string | null
 }) {
   const titleRef = useRef<HTMLHeadingElement>(null)
+  // Destructured so the null-guards below narrow inside the click
+  // closures too (property narrowing doesn't survive into callbacks).
+  const { composerUrl, githubUrl } = page
+
+  // The header's link pills share one shape; a pill only becomes a
+  // button when the README gave it an http(s) URL.
+  const pillClass =
+    'rounded-full bg-(--pnds-sidebar-bg) px-[2cqw] py-[0.9cqw] font-hans text-[1.8cqw] tracking-[0.1em] text-(--pnds-text) shadow-(--pnds-card-shadow)'
+  const openExternal = (url: string) => {
+    // Same failure posture as the README panel's link handoff — a
+    // browser that refuses to open logs, it never rejects unhandled.
+    openUrl(url).catch((error: unknown) => {
+      logger.warn('Failed to open a cover link in the browser', { error })
+    })
+  }
 
   useEffect(() => {
     const title = titleRef.current
@@ -83,16 +103,18 @@ export function ProjectCoverPage({
   return (
     <div
       data-testid="project-cover-page"
-      className="@container relative flex min-h-0 w-full flex-1 flex-col overflow-hidden [--cover-edge-inset:9.5cqh] [--cover-band-h:min(24.3cqh,40cqw)]"
+      className="@container relative flex min-h-0 w-full flex-1 flex-col overflow-hidden [--cover-edge-inset:5cqh] [--cover-band-h:min(26cqh,42cqw)]"
     >
-      {/* Header: diamond mark + wordmark, composer pill on the right.
-          Its top padding is --cover-edge-inset — the ONE token that
-          also pins the band at the bottom — so this row's gap to the
-          window top and the band's gap to the window bottom are the
-          same number. Change the token on the root, never one side. */}
+      {/* Header: diamond mark + wordmark left; the composer and github
+          pills right (a pill is a button only when its URL metadata
+          parsed; the click hands off to the system browser). The row's
+          top padding is --cover-edge-inset — the ONE token that also
+          pins the band at the bottom — so this row's gap to the window
+          top and the band's gap to the window bottom are the same
+          number. Change the token on the root, never one side. */}
       <div
         data-testid="cover-header"
-        className="flex shrink-0 items-center justify-between px-[12.6cqw] pt-(--cover-edge-inset)"
+        className="flex shrink-0 items-center justify-between px-[8cqw] pt-(--cover-edge-inset)"
       >
         <div className="flex items-center gap-[2cqw]">
           <DiamondMark palette={page.palette} />
@@ -100,24 +122,44 @@ export function ProjectCoverPage({
             PNDS
           </span>
         </div>
-        {page.composer !== null && (
-          <span
-            data-testid="cover-composer"
-            className="rounded-full bg-(--pnds-sidebar-bg) px-[2cqw] py-[0.9cqw] font-hans text-[1.8cqw] tracking-[0.1em] text-(--pnds-text) shadow-(--pnds-card-shadow)"
-          >
-            {page.composer}
-          </span>
-        )}
+        <div className="flex items-center gap-[1.6cqw]">
+          {page.composer !== null &&
+            (composerUrl !== null ? (
+              <button
+                type="button"
+                data-testid="cover-composer"
+                className={`cursor-pointer ${pillClass}`}
+                onClick={() => openExternal(composerUrl)}
+              >
+                {page.composer}
+              </button>
+            ) : (
+              <span data-testid="cover-composer" className={pillClass}>
+                {page.composer}
+              </span>
+            ))}
+          {githubUrl !== null && (
+            <button
+              type="button"
+              data-testid="cover-github"
+              className={`cursor-pointer ${pillClass}`}
+              onClick={() => openExternal(githubUrl)}
+            >
+              github
+            </button>
+          )}
+        </div>
       </div>
-      <div className="mx-[12.6cqw] mt-[4.4cqh] shrink-0 border-t border-(--pnds-text)/40" />
+      <div className="mx-[8cqw] mt-[4.4cqh] shrink-0 border-t border-(--pnds-text)/40" />
 
-      {/* The title, anchored LOW: items-end plus a reserved bottom
-          (edge inset + band height + gap) park it directly above the
-          band, so it rides down with it (user direction: the title
-          and the band move together). Its column is the hairline's
-          width (same inset), its size caps against BOTH panel axes,
-          and the tracking flexes to fit. */}
-      <div className="flex min-h-0 flex-1 items-end overflow-hidden px-[12.6cqw] pt-[2cqh] pb-[calc(var(--cover-edge-inset)_+_var(--cover-band-h)_+_4.5cqh)]">
+      {/* The title, vertically CENTERED in the open field between the
+          hairline and the band: the zone's bottom reserve (edge inset
+          + band height + gap) excludes the band's footprint, so
+          items-center centers on the true open field, never over the
+          band. Its column is the hairline's width (same inset), its
+          size caps against BOTH panel axes, and the tracking flexes
+          to fit. */}
+      <div className="flex min-h-0 flex-1 items-center overflow-hidden px-[8cqw] pt-[2cqh] pb-[calc(var(--cover-edge-inset)_+_var(--cover-band-h)_+_4.5cqh)]">
         <h1
           ref={titleRef}
           data-testid="cover-title"
@@ -139,7 +181,7 @@ export function ProjectCoverPage({
           README's --- boundary). */}
       <div
         data-testid="cover-band"
-        className="absolute bottom-(--cover-edge-inset) left-1/2 flex h-(--cover-band-h) w-[74.8cqw] -translate-x-1/2 gap-[5.9cqw] border border-(--pnds-text)/40"
+        className="absolute bottom-(--cover-edge-inset) left-1/2 flex h-(--cover-band-h) w-[84cqw] -translate-x-1/2 gap-[5.9cqw] border border-(--pnds-text)/40"
       >
         {cover !== null && (
           <img
@@ -158,7 +200,7 @@ export function ProjectCoverPage({
           </p>
           <HelpMarkdown
             markdown={page.sectionMarkdown}
-            className="mt-[3.65cqw] text-[1.92cqw] leading-[1.45] text-(--pnds-text) [&_li]:my-[0.5cqw] [&_p]:my-0 [&_ul]:my-[1cqw]"
+            className="text-[1.92cqw] leading-[1.45] text-(--pnds-text) [&_li]:my-[0.5cqw] [&_p]:my-0 [&_ul]:my-[1cqw]"
           />
         </div>
       </div>

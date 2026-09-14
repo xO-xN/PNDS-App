@@ -13,6 +13,8 @@ const CANONICAL = [
   '',
   'title: 失语 III',
   'composer: @肖翔',
+  'composer_url: https://arthur.example',
+  'github_url: https://github.com/user/repo',
   'color_palette: [#000000, #C9D8B6, #F1ECC3, #57837B]',
   '',
   '## 作品简介：',
@@ -46,6 +48,8 @@ describe('parseReadmeCoverPage', () => {
 
     expect(page.title).toBe('失语 III')
     expect(page.composer).toBe('@肖翔')
+    expect(page.composerUrl).toBe('https://arthur.example')
+    expect(page.githubUrl).toBe('https://github.com/user/repo')
     expect(page.palette).toEqual(['#000000', '#c9d8b6', '#f1ecc3', '#57837b'])
     expect(page.sectionLabel).toBe('作品简介：')
     // The wrapped lines stay one markdown paragraph; the --- and the
@@ -112,6 +116,29 @@ describe('parseReadmeCoverPage', () => {
     expect(
       parseOrThrow(CANONICAL.replace('composer: @肖翔', 'composer:')).composer
     ).toBeNull()
+  })
+
+  it('drops link metadata that is not an http(s) URL', () => {
+    const hostile = parseOrThrow(
+      CANONICAL.replace(
+        'composer_url: https://arthur.example',
+        'composer_url: javascript:alert(1)'
+      ).replace(
+        'github_url: https://github.com/user/repo',
+        'github_url: ftp://nope.example'
+      )
+    )
+    expect(hostile.composerUrl).toBeNull()
+    expect(hostile.githubUrl).toBeNull()
+
+    const absent = parseOrThrow(
+      CANONICAL.replace('composer_url: https://arthur.example\n', '').replace(
+        'github_url: https://github.com/user/repo\n',
+        ''
+      )
+    )
+    expect(absent.composerUrl).toBeNull()
+    expect(absent.githubUrl).toBeNull()
   })
 
   it('keeps the first four valid hexes, lowercased', () => {

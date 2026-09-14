@@ -1,11 +1,18 @@
-import { render, screen } from '@/test/test-utils'
-import { describe, it, expect } from 'vitest'
+import { render, screen, fireEvent } from '@/test/test-utils'
+import { describe, it, expect, vi } from 'vitest'
+import { openUrl } from '@tauri-apps/plugin-opener'
 import type { ReadmeCoverPage } from '@/lib/readme-cover-page'
 import { ProjectCoverPage } from './ProjectCoverPage'
+
+vi.mock('@tauri-apps/plugin-opener', () => ({
+  openUrl: vi.fn().mockResolvedValue(undefined),
+}))
 
 const PAGE: ReadmeCoverPage = {
   title: '失语 III',
   composer: '@肖翔',
+  composerUrl: null,
+  githubUrl: null,
   palette: ['#000000', '#c9d8b6', '#f1ecc3', '#57837b'],
   sectionLabel: '作品简介：',
   sectionMarkdown: '失语III 是为三个手机演奏者而作的数字乐谱作品。',
@@ -77,8 +84,8 @@ describe('ProjectCoverPage', () => {
     const { container } = render(<ProjectCoverPage page={PAGE} cover={null} />)
 
     const root = container.firstElementChild as HTMLElement
-    expect(root.className).toContain('[--cover-edge-inset:9.5cqh]')
-    expect(root.className).toContain('[--cover-band-h:min(24.3cqh,40cqw)]')
+    expect(root.className).toContain('[--cover-edge-inset:5cqh]')
+    expect(root.className).toContain('[--cover-band-h:min(26cqh,42cqw)]')
     expect(screen.getByTestId('cover-header').className).toContain(
       'pt-(--cover-edge-inset)'
     )
@@ -90,5 +97,30 @@ describe('ProjectCoverPage', () => {
     expect(
       screen.getByTestId('cover-title').parentElement?.className
     ).toContain('calc(var(--cover-edge-inset)')
+  })
+
+  it('opens the composer and github links in the system browser', () => {
+    render(
+      <ProjectCoverPage
+        page={{
+          ...PAGE,
+          composerUrl: 'https://arthur.example',
+          githubUrl: 'https://github.com/user/repo',
+        }}
+        cover={null}
+      />
+    )
+
+    fireEvent.click(screen.getByTestId('cover-composer'))
+    fireEvent.click(screen.getByTestId('cover-github'))
+    expect(openUrl).toHaveBeenCalledWith('https://arthur.example')
+    expect(openUrl).toHaveBeenCalledWith('https://github.com/user/repo')
+  })
+
+  it('keeps the pill inert and hides github without url metadata', () => {
+    render(<ProjectCoverPage page={PAGE} cover={null} />)
+
+    expect(screen.getByTestId('cover-composer').tagName).toBe('SPAN')
+    expect(screen.queryByTestId('cover-github')).not.toBeInTheDocument()
   })
 })
