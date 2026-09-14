@@ -18,15 +18,6 @@ import type { ReadmeCoverPage } from '@/lib/readme-cover-page'
  * moves on; the title zone flexes to absorb the remainder, and the
  * band's text column scrolls INSIDE the band when the window is short.
  *
- * Neo-brutalist finish (the creator's declared style): full-strength
- * 2px rules, hard zero-blur offset shadows in the text token, squared
- * corners everywhere (the diamond's dots are squares — the app's own
- * Brutal theme squares the logo the same way), a solid accent block
- * for the composer pill, and an inverted text-token tag for the
- * section label. Every value still rides theme tokens, so Pond renders
- * the classic cream-and-black neubrutalist page and the dark themes
- * carry the same grammar inverted.
- *
  * The title is centered under the hairline's column, and its tracking
  * is the flexible variable: the design's 0.37em when it fits, squeezed
  * toward 0 for long titles, and only then does the type scale down —
@@ -90,34 +81,37 @@ export function ProjectCoverPage({
       data-testid="project-cover-page"
       className="@container flex h-full w-full flex-col overflow-hidden"
     >
-      {/* Header: diamond mark + wordmark, composer block on the right. */}
-      <div className="flex shrink-0 items-center justify-between px-[12.6cqw] pt-[7.2cqh]">
-        <div className="flex items-center gap-[2.2cqw]">
+      {/* Header: diamond mark + wordmark, composer pill on the right. */}
+      <div className="flex shrink-0 items-center justify-between px-[12.6cqw] pt-[9.5cqh]">
+        <div className="flex items-center gap-[2.7cqw]">
           <DiamondMark palette={page.palette} />
-          <span className="font-(--pnds-font-ui) text-[3cqw] font-bold tracking-[0.04em] text-(--pnds-text)">
+          <span className="font-[family-name:Comfortaa] text-[2.9cqw] font-medium text-(--pnds-text)">
             PNDS
           </span>
         </div>
         {page.composer !== null && (
           <span
             data-testid="cover-composer"
-            className="rounded-none border-2 border-(--pnds-text) bg-(--pnds-accent) px-[2.4cqw] py-[1.1cqw] font-hans text-[2.4cqw] font-bold tracking-[0.18em] text-(--pnds-accent-foreground) shadow-[0.3cqw_0.3cqw_0_var(--pnds-text)]"
+            className="rounded-full bg-(--pnds-sidebar-bg) px-[2.7cqw] py-[1.2cqw] font-hans text-[2.4cqw] tracking-[0.25em] text-(--pnds-text) shadow-(--pnds-card-shadow)"
           >
             {page.composer}
           </span>
         )}
       </div>
-      <div className="mx-[12.6cqw] mt-[3.2cqh] shrink-0 border-t-2 border-(--pnds-text)" />
+      <div className="mx-[12.6cqw] mt-[4.4cqh] shrink-0 border-t border-(--pnds-text)/40" />
 
-      {/* The title, centered in the open field between rule and band.
-          Its column is the rule's width (same inset), its size caps
-          against BOTH panel axes, and the tracking flexes to fit. */}
-      <div className="flex min-h-0 flex-1 items-center overflow-hidden px-[12.6cqw] py-[3cqh]">
+      {/* The title, anchored LOW in the open field — it rides just
+          above the band (user direction: the title moves down with
+          the band, echoing the header's positions at the page foot).
+          Its column is the hairline's width (same inset), its size
+          caps against BOTH panel axes, and the tracking flexes to
+          fit. */}
+      <div className="flex min-h-0 flex-1 items-end overflow-hidden px-[12.6cqw] pt-[2cqh] pb-[4.5cqh]">
         <h1
           ref={titleRef}
           data-testid="cover-title"
           dir="auto"
-          className="w-full text-center font-hans text-[min(17.2cqw,21cqh)] font-bold leading-[1.05] tracking-[0.37em] whitespace-nowrap text-(--pnds-text)"
+          className="w-full text-center font-hans text-[min(16.8cqw,20.5cqh)] font-bold leading-[1.05] tracking-[0.37em] whitespace-nowrap text-(--pnds-text)"
         >
           {page.title}
         </h1>
@@ -127,28 +121,29 @@ export function ProjectCoverPage({
           the square cover can never outgrow the band's width), the
           cover fills that height flush against the band's left edge,
           and the text column scrolls inside when the window is short.
-          A card in the neubrutalist grammar: 2px rule, hard offset
-          shadow, no radius. The panel's content ends here (the
-          README's --- boundary). */}
-      <div className="mx-auto mb-[9.5cqh] flex h-[min(26cqh,42cqw)] w-[74.8cqw] shrink-0 gap-[4.5cqw] border-2 border-(--pnds-text) bg-(--pnds-card) shadow-[0.55cqw_0.55cqw_0_var(--pnds-text)]">
+          It sits low — its side edges echo the header's PNDS /
+          composer positions (same inset), its bottom margin is a thin
+          breath off the panel foot. The panel's content ends here
+          (the README's --- boundary). */}
+      <div className="mx-auto mb-[6cqh] flex h-[min(24.3cqh,40cqw)] w-[74.8cqw] shrink-0 gap-[5.9cqw] border border-(--pnds-text)/40">
         {cover !== null && (
           <img
             data-testid="cover-image"
             src={cover}
             alt=""
-            className="aspect-square h-full shrink-0 border-e-2 border-(--pnds-text) object-cover"
+            className="aspect-square h-full shrink-0 object-cover"
           />
         )}
-        <div className="min-w-0 flex-1 overflow-y-auto py-[3cqh] pe-[4.2cqw]">
+        <div className="min-w-0 flex-1 overflow-y-auto py-[3.2cqh] pe-[5.5cqw]">
           <p
             data-testid="cover-label"
-            className="inline-block bg-(--pnds-text) px-[1.5cqw] py-[0.7cqh] font-hans text-[1.8cqw] font-semibold tracking-[0.08em] text-(--pnds-bg)"
+            className="font-hans text-[1.92cqw] font-[250] leading-[1.45] text-(--pnds-text)"
           >
             {page.sectionLabel}
           </p>
           <HelpMarkdown
             markdown={page.sectionMarkdown}
-            className="mt-[3cqw] text-[1.92cqw] leading-[1.45] text-(--pnds-text) [&_li]:my-[0.5cqw] [&_p]:my-0 [&_ul]:my-[1cqw]"
+            className="mt-[3.65cqw] text-[1.92cqw] leading-[1.45] text-(--pnds-text) [&_li]:my-[0.5cqw] [&_p]:my-0 [&_ul]:my-[1cqw]"
           />
         </div>
       </div>
@@ -160,9 +155,7 @@ export function ProjectCoverPage({
  * The four-dot diamond mark — the app logo's arrangement in the
  * project's own palette. Palette order is panel order (left, top,
  * right, bottom); the 45° rotation maps the unrotated corners
- * TL→top, TR→right, BR→bottom, BL→left. The dots are SQUARES — the
- * neubrutalist read of the mark, and exactly what the app's own
- * Brutal theme does to the logo (its global 0-radius rule).
+ * TL→top, TR→right, BR→bottom, BL→left.
  */
 function DiamondMark({ palette }: { palette: readonly string[] }) {
   const corners = [
@@ -175,13 +168,13 @@ function DiamondMark({ palette }: { palette: readonly string[] }) {
     <span
       data-testid="cover-diamond"
       aria-hidden
-      className="relative block size-[5.2cqw] shrink-0"
+      className="relative block size-[4.6cqw] shrink-0"
     >
       <span className="absolute inset-0 rotate-45">
         {palette.map((color, index) => (
           <span
             key={index}
-            className="absolute size-[42%] rounded-none"
+            className="absolute size-[42%] rounded-full"
             style={{ backgroundColor: color, ...corners[index] }}
           />
         ))}
