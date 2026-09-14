@@ -330,8 +330,10 @@ function ProjectionIntro({
     // visual size would never move, user report). Above 100% the box
     // outgrows the window and the root's overflow-hidden crops it —
     // first into the frame's own margins, then the edges: poster zoom.
-    // The stage must be a definite box (the cover root is a size
-    // container — content cannot size it).
+    // The stage is also the composition's SIZE container — the cover
+    // root is inline-size only, so every cqh inside resolves against
+    // this definite box (zoom-stable), while the app panel's copy
+    // keeps its viewport fallback (its approved original look).
     return (
       <div
         data-testid="projection-intro"
@@ -340,7 +342,7 @@ function ProjectionIntro({
       >
         <div
           data-testid="projection-cover-stage"
-          className="absolute top-1/2 left-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col"
+          className="absolute top-1/2 left-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col [container-type:size]"
           style={{
             width: `${(85 * zoom) / 100}%`,
             height: `${(80 * zoom) / 100}%`,
@@ -357,12 +359,14 @@ function ProjectionIntro({
             page={coverPage}
             cover={coverImage}
             bandHeight="min(40cqh,42cqw)"
-            /* The venue screen's title breathing room (user report:
-               the projection's title sat tighter than the app panel's
-               — its stage box is the shorter container, so the same
-               shares are fewer pixels; roomier shares close the gap).
-               The app panel passes nothing and renders stock. */
-            titleGaps={{ above: '4cqh', below: '7.5cqh' }}
+            /* The venue screen's title breathing room (user request:
+               title 与上下两部分的间距增大) rides a TIGHTER edge inset:
+               the header lifts and the band drops by the same amount,
+               so the centered title's field grows both ways and each
+               visible gap widens symmetrically — pt/pb overrides
+               cannot do this (the centering slack absorbs them). The
+               stage frame already provides the outer whitespace. */
+            edgeInset="2cqh"
           />
         </div>
       </div>

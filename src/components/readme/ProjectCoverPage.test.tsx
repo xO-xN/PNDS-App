@@ -150,14 +150,16 @@ describe('ProjectCoverPage', () => {
     const root = container.firstElementChild as HTMLElement
     expect(root.className).toContain('[--cover-edge-inset:5cqh]')
     expect(root.className).toContain('[--cover-band-h:min(26cqh,42cqw)]')
-    // A true SIZE container — Tailwind's `@container` (inline-size
-    // only) lets every cqh fall back to the viewport; inside the
-    // projection window's zoom frame that divergence made the title's
-    // fit squeeze its tracking in jumps and the band overrun the
-    // panel's bottom (user report: 字间距突变、内容超出窗口). This
-    // pins the container type the whole cq layout depends on.
-    expect(root.className).toContain('[container-type:size]')
-    expect(root.className).not.toContain('@container')
+    // The cq reference frames are split per axis: the root is an
+    // INLINE-SIZE container (`@container`) so cqw tracks the panel's
+    // width, while cqh resolves against the embedding — the projection
+    // stage box (a size container) or, in the app panel, the viewport
+    // fallback, which IS the approved original look. A size-carrying
+    // root re-referenced every cqh to the p-8-inset panel and shrank
+    // the whole vertical rhythm (user report: app 端间距被扩大) — this
+    // pins the per-axis frames the cq layout depends on.
+    expect(root.className).toContain('@container')
+    expect(root.className).not.toContain('[container-type:size]')
     expect(screen.getByTestId('cover-header').className).toContain(
       'pt-(--cover-edge-inset)'
     )
@@ -165,41 +167,46 @@ describe('ProjectCoverPage', () => {
       'bottom-(--cover-edge-inset)'
     )
     // The title reserves the band's full footprint above the inset,
-    // so it rides directly on top of the band.
-    expect(
-      screen.getByTestId('cover-title').parentElement?.className
-    ).toContain('calc(var(--cover-edge-inset)')
+    // so it rides directly on top of the band — in the ORIGINAL
+    // hard constants (no override tokens left on this axis).
+    const titleZone = screen.getByTestId('cover-title')
+      .parentElement as HTMLElement
+    expect(titleZone.className).toContain('calc(var(--cover-edge-inset)')
+    expect(titleZone.className).toContain('pt-[2cqh]')
+    expect(titleZone.className).toContain('_4.5cqh)]')
   })
 
   // The projection screen passes a roomier band (user request: 带内容
-  // 上下增长); the override rides the SAME token inline, over the class
-  // default — absent, the class default (the README panel's share) holds.
-  it('overrides the band height token per embedding, defaulting to the class share', () => {
+  // 上下增长) and a tighter edge inset (user request: title 与上下两部
+  // 分的间距增大 — the one token that widens the centered title's
+  // visible gaps symmetrically); both overrides ride the SAME tokens
+  // inline, over the class defaults — absent, the class defaults (the
+  // README panel's shares) hold.
+  it('overrides the band and inset tokens per embedding, defaulting to the class shares', () => {
     const { rerender, container } = render(
       <ProjectCoverPage page={PAGE} cover={null} />
     )
     const root = container.firstElementChild as HTMLElement
     expect(root.style.getPropertyValue('--cover-band-h')).toBe('')
+    expect(root.style.getPropertyValue('--cover-edge-inset')).toBe('')
 
     rerender(
       <ProjectCoverPage
         page={PAGE}
         cover={null}
-        bandHeight="min(34cqh,42cqw)"
-        titleGaps={{ above: '4cqh', below: '7.5cqh' }}
+        bandHeight="min(40cqh,42cqw)"
+        edgeInset="2cqh"
       />
     )
     expect(root.style.getPropertyValue('--cover-band-h')).toBe(
-      'min(34cqh,42cqw)'
+      'min(40cqh,42cqw)'
     )
+    expect(root.style.getPropertyValue('--cover-edge-inset')).toBe('2cqh')
     // The class defaults stay as the non-override baseline — the README
     // panel (no props) renders EXACTLY the stock composition, pinned
     // by these token defaults equal to the original hard constants.
+    expect(root.className).toContain('[--cover-edge-inset:5cqh]')
     expect(root.className).toContain('[--cover-band-h:min(26cqh,42cqw)]')
-    expect(root.className).toContain('[--cover-title-pt:2cqh]')
-    expect(root.className).toContain('[--cover-title-pb-gap:4.5cqh]')
-    expect(root.style.getPropertyValue('--cover-title-pt')).toBe('4cqh')
-    expect(root.style.getPropertyValue('--cover-title-pb-gap')).toBe('7.5cqh')
   })
 
   it('opens the composer and github links in the system browser', () => {

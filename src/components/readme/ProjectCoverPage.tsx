@@ -27,16 +27,17 @@ import type { ReadmeCoverPage } from '@/lib/readme-cover-page'
  * metadata (composer_url / github_url, http(s) only) parsed — a click
  * hands off to the system browser, never the webview.
  *
- * The root is a true SIZE container (`container-type: size`), NOT
- * Tailwind's `@container` (inline-size only): with inline-size, every
- * cqh unit silently falls back to the SMALL VIEWPORT, and the two
- * reference frames diverge the moment the panel isn't the viewport —
- * inside the projection window's zoom frame the cqw-scaled column kept
- * a viewport-sized font, so the title's fit squeezed its tracking in
- * jumps and overflowed, and the band (26cqh of the viewport) overran
- * the panel's bottom (user report: 字间距突变、内容超出窗口). Size
- * containment needs a definite-height parent — both embeddings give it
- * one (the README panel's absolute box, the projection's stage frame).
+ * The cq reference frames are split per axis, deliberately: the root
+ * is an inline-size container (Tailwind `@container`) so every cqw
+ * tracks the panel's width, while the block axis resolves against the
+ * EMBEDDING — the projection's stage box carries
+ * `[container-type:size]` (zoom-stable cq layout), and the README
+ * panel has no size container, so its cqh falls back to the viewport.
+ * That fallback is not a leak but the composition's approved original
+ * look: a size-carrying root re-referenced every cqh to the p-8-inset
+ * panel and shrank the whole vertical rhythm by roughly the chrome
+ * share (user report: app 端的间距被扩大) — the stage box gives the
+ * projection its stable frame without touching the panel's rendering.
  * The title is centered under the hairline's column, and its tracking
  * is the flexible variable: the design's 0.37em when it fits, squeezed
  * toward 0 for long titles, and only then does the type scale down —
@@ -49,7 +50,7 @@ export function ProjectCoverPage({
   page,
   cover,
   bandHeight,
-  titleGaps,
+  edgeInset,
 }: {
   page: ReadmeCoverPage
   /** The cover image as a data URL; null renders the band text-only. */
@@ -62,14 +63,19 @@ export function ProjectCoverPage({
    *  centered. Keep the cqw cap when overriding — it bounds the square
    *  cover by the band's width. */
   bandHeight?: string
-  /** Overrides the title's vertical breathing room — the gap ABOVE the
-   *  title (below the hairline) and BELOW it (above the band). The
-   *  tokens default to the stock composition (2cqh / 4.5cqh) so every
-   *  embedding that passes nothing renders EXACTLY as before — the
-   *  projection screen alone passes roomier gaps (user request: the
-   *  venue screen's title sat tighter than the app panel's because its
-   *  stage box is the shorter container — same shares, fewer pixels). */
-  titleGaps?: { above: string; below: string }
+  /** Overrides the edge inset token (`--cover-edge-inset`, default
+   *  `5cqh`) — the ONE number that pins both window-edge gaps (the
+   *  header's top padding and the band's bottom offset) and feeds the
+   *  title's bottom reserve. It is the honest lever for roomier title
+   *  spacing: the title centers in its open field, so pt/pb overrides
+   *  cannot widen the visible gaps (symmetric growth is absorbed by
+   *  the centering slack; asymmetric growth merely shifts the
+   *  midpoint), while a SMALLER inset lifts the header and drops the
+   *  band by the same amount — the field grows 2Δ and each visible
+   *  title gap grows Δ with the title still dead-center. The
+   *  projection screen (user request: title 与上下两部分的间距增大)
+   *  passes a tighter inset; the app panel passes nothing. */
+  edgeInset?: string
 }) {
   const titleRef = useRef<HTMLHeadingElement>(null)
   // Destructured so the null-guards below narrow inside the click
@@ -216,21 +222,18 @@ export function ProjectCoverPage({
   return (
     <div
       data-testid="project-cover-page"
-      className="[container-type:size] relative flex min-h-0 w-full flex-1 flex-col overflow-hidden [--cover-edge-inset:5cqh] [--cover-band-h:min(26cqh,42cqw)] [--cover-title-pt:2cqh] [--cover-title-pb-gap:4.5cqh]"
-      // An embedding's band-height override rides the SAME token as the
-      // class default — the title zone's bottom reserve reads the
-      // variable, so the whole composition re-balances around it.
+      className="@container relative flex min-h-0 w-full flex-1 flex-col overflow-hidden [--cover-edge-inset:5cqh] [--cover-band-h:min(26cqh,42cqw)]"
+      // An embedding's overrides ride the SAME tokens as the class
+      // defaults — the title zone's bottom reserve reads both
+      // variables, so the whole composition re-balances around them.
       style={
-        bandHeight !== undefined || titleGaps !== undefined
+        bandHeight !== undefined || edgeInset !== undefined
           ? ({
               ...(bandHeight !== undefined
                 ? { '--cover-band-h': bandHeight }
                 : {}),
-              ...(titleGaps !== undefined
-                ? {
-                    '--cover-title-pt': titleGaps.above,
-                    '--cover-title-pb-gap': titleGaps.below,
-                  }
+              ...(edgeInset !== undefined
+                ? { '--cover-edge-inset': edgeInset }
                 : {}),
             } as CSSProperties)
           : undefined
@@ -290,7 +293,7 @@ export function ProjectCoverPage({
           band. Its column is the hairline's width (same inset), its
           size caps against BOTH panel axes, and the tracking flexes
           to fit. */}
-      <div className="flex min-h-0 flex-1 items-center overflow-hidden px-[8cqw] pt-(--cover-title-pt) pb-[calc(var(--cover-edge-inset)_+_var(--cover-band-h)_+_var(--cover-title-pb-gap))]">
+      <div className="flex min-h-0 flex-1 items-center overflow-hidden px-[8cqw] pt-[2cqh] pb-[calc(var(--cover-edge-inset)_+_var(--cover-band-h)_+_4.5cqh)]">
         <h1
           ref={titleRef}
           data-testid="cover-title"

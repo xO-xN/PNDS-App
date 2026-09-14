@@ -192,24 +192,29 @@ describe('ProjectionApp (#130 gate)', () => {
       'data:image/png;base64,cover'
     )
     // Venue-screen only (user request): the band rides the roomier
-    // 34cqh share — more first-section content before the in-band
+    // 40cqh share — more first-section content before the in-band
     // scroll; the title rides higher, composition still centered.
     const coverRoot = screen.getByTestId('project-cover-page')
     expect(coverRoot.style.getPropertyValue('--cover-band-h')).toBe(
       'min(40cqh,42cqw)'
     )
+    // …and the venue screen's roomier title spacing (user request:
+    // title 与上下两部分的间距增大) rides a TIGHTER edge inset — the
+    // centered title's field grows both ways (pt/pb overrides are
+    // absorbed by the centering slack and only shift the title; the
+    // inset lifts the header and drops the band by the same amount, so
+    // each visible gap widens symmetrically).
+    expect(coverRoot.style.getPropertyValue('--cover-edge-inset')).toBe('2cqh')
     // The venue-screen frame: the cover composes inside a generously
     // inset stage box (user report: 大屏要更多四周留白) — and the zoom
     // scales the STAGE BOX itself (real layout, crisp text; the cq
-    // …and the venue screen's roomier title breathing room (user
-    // report: the projection's title sat tighter than the app panel's
-    // — its stage box is the shorter container, same shares fewer px).
-    expect(coverRoot.style.getPropertyValue('--cover-title-pt')).toBe('4cqh')
-    expect(coverRoot.style.getPropertyValue('--cover-title-pb-gap')).toBe(
-      '7.5cqh'
-    )
-    // composition rides along). Base frame at 100%: 85% × 80%.
+    // composition rides along). Base frame at 100%: 85% × 80%. The
+    // stage is also the composition's SIZE container — the cover root
+    // is inline-size only, so every cqh resolves against this definite
+    // box (the app panel's copy keeps its viewport fallback, its
+    // approved original look).
     const stage = screen.getByTestId('projection-cover-stage')
+    expect(stage.className).toContain('[container-type:size]')
     expect(stage.style.width).toBe('85%')
     expect(stage.style.height).toBe('80%')
     // ⌘+ grows the poster frame — 110% zoom → 93.5% × 88%.
