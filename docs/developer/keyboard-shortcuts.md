@@ -19,6 +19,7 @@ Keyboard input reaches the app through two layers: native menu accelerators
 | Cmd+M         | Master mute toggle (v1.2.2 #30)                                                                              | Menu (`menu.ts`)                  |
 | Cmd+R         | Rename selected project / folder (v1.1.2)                                                                    | Menu + Web (shared `startRename`) |
 | Ctrl+Cmd+F    | Toggle fullscreen (app-behavior Window 与全屏)                                                               | Menu (`menu.ts`)                  |
+| Cmd+Return    | Projection start gate 开演/撤回 (v1.5.0 #130; enabled with a venue screen + ready session)                   | Menu (`menu.ts`)                  |
 | Cmd (hold)    | Number badges + sidebar peek while running                                                                   | Web (`use-command-keyboard.ts`)   |
 | Cmd+1..9      | Select the Nth visible project (v1.1.2)                                                                      | Web (`use-command-keyboard.ts`)   |
 | Cmd+↓ / Cmd+↑ | Next/previous project in the visible order (v1.1.2 T7)                                                       | Web (`use-command-keyboard.ts`)   |

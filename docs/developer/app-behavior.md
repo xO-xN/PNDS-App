@@ -210,10 +210,11 @@ v1.5.0（#129）投影窗口骨架——又一个多页入口的 webview 窗口�
 - 入口是侧栏右上角的「打开投影窗口」按钮（原「用默认浏览器打开」位置，浏览器入口与 `sidebar.share`/`shareHint` 文案已彻底移除）；按钮不随会话状态禁用——无演出时窗口自己进入待机。
 - 单实例：已开再点 = 聚焦（或卡隐藏态时重跑揭示）；不重建。**切换工程窗口不重建、全屏与位置保持**（窗口生命周期与 session 完全解耦），内容随快照过渡。
 - 打开时落在 **App 当前所在显示器**（`currentMonitor()` 居中落位，查询失败回退系统居中）；window-state 插件 denylist 掉 `projection`——跨启动几何持久化不在 v1.5 范围（spec #128），恢复的旧位置会与落位规则打架（帮助窗口仍被跟踪）。
-- 内容状态机是纯函数 `projectionContent(snapshot)`（`src/lib/projection-state.ts`）：session ready 且有 hostAddress/monitorPort → monitor（本票 tracer bullet，直接显示，无简介门）；其余（idle/starting/stopping/error/缺地址）→ **投影待机**（主题底色 + PNDS 字标 + 「无演出」，双语、随主题）。
+- 内容状态机是纯函数 `projectionContent(snapshot)`（`src/lib/projection-state.ts`）：session 在台（starting/ready）且门未开 → **简介**（工程根 README.md，经 #125 读取/渲染通道，HelpMarkdown + GFM，v1.5 只渲染文字——图片隐藏、链接一律无操作；无 README/读取失败回落工程名卡片；starting 快照已带 projectPath，加载期即显示）；ready 且门开且有 hostAddress/monitorPort → monitor；idle/stopping/error（或门开但缺地址）→ 简介/待机兜底，**投影待机** = 主题底色 + PNDS 字标 + 「无演出」，双语、随主题。
+- **投影开演门（#130，session 级）**：门状态 `projectionStarted` 权威在 Rust（`SessionInner`，随 session 快照族事件下发；`toggle_projection_start` 命令只对 ready 会话生效）——双窗口同源一致，菜单加速器不经 web 状态。每次 Load/切换工程（`reset_run_state`）重置回简介；开演后关窗重开直接落 monitor（门是 session 事实，不是窗口事实）。主窗口 monitor 标题条右侧的**无文字 ▶ 按钮**（仅投影窗口存在时渲染；存在性由 `ProjectionWindowEvent` 驱动——创建由 opener 在 `tauri://created` 宣布、销毁由 Rust `Destroyed` 观察兜底）与 **⌘⏎** 菜单项（Window 菜单，标签随门翻转 开演⇄撤回）都调同一命令；未开演 ▶ 持续闪烁（`projection-start-blink`，关键帧自高亮态下沉，reduce-motion 全局钳制后即静态高亮），开演后常亮绿（`#34c759`）。
 - monitor 组装复用主窗口契约：地址快照语义（`hostAddress` 优先）、`?theme=`/`?lang=` 首帧参数按导航快照、iframe load 事件 + 10 秒超时的 reveal 防闪盖层、theme/locale 桥推送。session 事实经广播 `SessionSnapshotEvent` + `getSessionState` 恢复（visibility/focus 重拉，occlusion 丢事件先例同主窗口）。
-- 内容切换全部渐变（400ms 主题色盖层，`data-reveal-motion` 豁免 Brutal 即时规则）：待机↔monitor、切换工程的地址变化都走同一盖层；快照序列中途变卦时收敛到最新内容；**首个落定内容直接呈现**（演出中打开直接落 monitor，无待机闪帧）。
-- 窗口标题「PNDS 投影 — <工程名>」/ 无演出时「PNDS 投影」，随界面语言实时更新（页面 `setTitle`；capabilities 需 `core:window:allow-set-title`）。
+- 内容切换全部渐变（400ms 主题色盖层，`data-reveal-motion` 豁免 Brutal 即时规则）：待机↔简介↔monitor、切换工程的地址/工程变化都走同一盖层（简介按 projectPath 键控，A→B 切换也渐变）；快照序列中途变卦时收敛到最新内容；**首个落定内容直接呈现**（开演后重开直接落 monitor，无简介/待机闪帧）。
+- 窗口标题「PNDS 投影 — <工程名>」（简介或 monitor 在台时）/ 无演出时「PNDS 投影」，随界面语言实时更新（页面 `setTitle`；capabilities 需 `core:window:allow-set-title`）。
 - **⌘W 按聚焦窗口分发**：投影窗口在前台时只关它（普通销毁），演出与主窗口不受影响；红灯关闭即销毁，退出 App 随之关闭。全屏与缩放等窗口级快捷键的投影侧分派属后续票。
 - 主题/语言实时跟随：主窗口 `setupProjectionWindowBridge()` 推送（与帮助中心同模式）；投影窗口自身不写 preferences。
 

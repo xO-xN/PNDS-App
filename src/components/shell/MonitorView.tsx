@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Play } from 'lucide-react'
 import {
   sessionConnectionAddress,
   useSessionStore,
 } from '@/store/session-store'
 import { useProjectStore } from '@/store/project-store'
+import { useProjectionStore } from '@/store/projection-store'
 import {
   useSettingsStore,
   currentColorThemeSetting,
@@ -12,6 +14,8 @@ import {
 import { pushThemeToFrame } from '@/lib/theme-bridge'
 import { pushLocaleToFrame } from '@/lib/locale-bridge'
 import { buildMonitorUrl } from '@/lib/monitor-url'
+import { projectionStartButton } from '@/lib/projection-state'
+import { toggleProjectionGate } from '@/lib/projection-window'
 import {
   BUILTIN_UTILITY_DISPLAY_NAMES,
   builtinUtilityId,
@@ -37,6 +41,16 @@ export function MonitorView() {
   const hostRef = useRef<HTMLDivElement>(null)
   const health = useSessionStore(state => state.health)
   const projectName = useSessionStore(state => state.projectName)
+  // v1.5.0 (#130): the ▶ gate button's inputs — the window-existence
+  // store (ProjectionWindowEvent-driven) plus the session mirrors; the
+  // derivation itself is the pure projectionStartButton.
+  const sessionStatus = useSessionStore(state => state.sessionStatus)
+  const projectionStarted = useSessionStore(state => state.projectionStarted)
+  const projectionWindowExists = useProjectionStore(state => state.windowExists)
+  const projectionStart = projectionStartButton(projectionWindowExists, {
+    status: sessionStatus,
+    projectionStarted,
+  })
   // v1.2.3 (#42): the title names the RUNNING session's project — looked
   // up by the session's own path, so selecting another card (whose
   // rename map entry differs) never retitles the live show.
@@ -77,7 +91,13 @@ export function MonitorView() {
   // hook's instance (subscription-reactive), while the URL memo below
   // must go through the accessor (a render-scope value here would become
   // a memo dependency and defrost the navigation snapshot).
-  const { i18n } = useTranslation()
+  const { i18n, t } = useTranslation()
+  // One label for aria and tooltip — the action wording follows the gate.
+  const gateLabel = t(
+    projectionStart.started
+      ? 'projection.withdrawAction'
+      : 'projection.startAction'
+  )
   const locale = i18n.resolvedLanguage ?? i18n.language ?? 'en'
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
   const monitorPort = health?.scoreServer?.monitorPort
@@ -247,9 +267,38 @@ export function MonitorView() {
           page, so light themes keep the dark value. */}
       <div
         data-tauri-drag-region
-        className="absolute left-1/2 top-0 z-40 -translate-x-1/2 cursor-default select-none rounded-b-xl bg-(--pnds-monitor-bar) px-5 py-1.5 text-xs font-medium tracking-wide text-(--pnds-monitor-bar-text) backdrop-blur-md"
+        className="absolute left-1/2 top-0 z-40 flex -translate-x-1/2 cursor-default select-none items-center rounded-b-xl bg-(--pnds-monitor-bar) px-5 py-1.5 text-xs font-medium tracking-wide text-(--pnds-monitor-bar-text) backdrop-blur-md"
       >
         PNDS - {displayOverride ?? projectName}
+        {/* v1.5.0 (#130): the ▶ projection gate — textless, rendered only
+            while the projection window exists (windowExists store). Not
+            started: a continuous blink asking for 开演 (static highlight
+            under reduce-motion — the keyframes dip from the solid rest
+            state, App.css); started: solid green (the logo palette's
+            system green). Both entries (this and ⌘⏎) toggle the
+            Rust-authoritative gate; the state lands back through the
+            session snapshot. The wrapper opts out of the drag region —
+            the strip is one, the button must stay clickable. */}
+        {projectionStart.visible && (
+          <span data-tauri-drag-region="false" className="ms-2 inline-flex">
+            <button
+              type="button"
+              data-testid="projection-start-button"
+              aria-label={gateLabel}
+              title={gateLabel}
+              disabled={!projectionStart.enabled}
+              onClick={toggleProjectionGate}
+              className={cn(
+                'pnds-focus-ring rounded-full p-1 leading-none transition disabled:opacity-40',
+                projectionStart.started
+                  ? 'text-[#34c759]'
+                  : 'animate-[projection-start-blink_1.6s_ease-in-out_infinite] text-[#ff9f0a]'
+              )}
+            >
+              <Play size={11} fill="currentColor" aria-hidden="true" />
+            </button>
+          </span>
+        )}
       </div>
 
       <HoverSidebar />

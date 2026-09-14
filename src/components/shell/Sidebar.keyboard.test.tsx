@@ -98,6 +98,7 @@ function seedRunningSession(currentPath: string) {
       startupStage: 0,
       channelPlan: null,
       outputDevice: null,
+      projectionStarted: false,
     },
   })
 }

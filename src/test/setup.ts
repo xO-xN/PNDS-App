@@ -57,13 +57,17 @@ vi.mock('@tauri-apps/api/event', () => ({
 
 // v1.2.0 (issue #16): window-level drag-and-drop wiring in App.tsx — no
 // native drop events in jsdom; tests that exercise routing use the
-// handleDroppedPaths unit tests instead.
+// handleDroppedPaths unit tests instead. WebviewWindow.getByLabel backs
+// App.tsx's projection-existence boot probe (#130) — default: no window.
 vi.mock('@tauri-apps/api/webviewWindow', () => ({
   getCurrentWebviewWindow: vi.fn(() => ({
     onDragDropEvent: vi.fn().mockResolvedValue(() => {
       // Mock unlisten function
     }),
   })),
+  WebviewWindow: Object.assign(vi.fn(), {
+    getByLabel: vi.fn().mockResolvedValue(null),
+  }),
 }))
 
 vi.mock('@tauri-apps/plugin-updater', () => ({
@@ -107,6 +111,7 @@ vi.mock('@/lib/tauri-bindings', async () => {
       setlistExportProgressEvent: makeEvent('setlist-export-progress-event'),
       windowFocusEvent: makeEvent('window-focus-event'),
       windowStateEvent: makeEvent('window-state-event'),
+      projectionWindowEvent: makeEvent('projection-window-event'),
     },
     commands: {
       loadPreferences: vi
@@ -146,8 +151,13 @@ vi.mock('@/lib/tauri-bindings', async () => {
           error: null,
           outputTail: [],
           volume: 80,
+          projectionStarted: false,
         },
       }),
+      // v1.5.0 (#130): the projection start gate — default: no-op ok.
+      toggleProjectionStart: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
       listLanAddresses: vi
         .fn()
         .mockResolvedValue({ status: 'ok', data: ['192.168.1.10'] }),

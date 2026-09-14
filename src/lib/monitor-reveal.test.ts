@@ -14,6 +14,7 @@ const snapshot = (overrides: Partial<SessionSnapshot>): SessionSnapshot => ({
   audioMode: null,
   lanIp: null,
   hostAddress: null,
+  projectionStarted: false,
   oscTarget: null,
   health: null,
   error: null,

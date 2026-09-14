@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { currentResolvedLanguage } from '@/i18n/config'
@@ -30,6 +30,8 @@ import {
   projectionContentKey,
   type ProjectionContent,
 } from '@/lib/projection-state'
+import { readProjectReadme } from '@/lib/project-readme'
+import { HelpMarkdown } from '@/components/help/HelpMarkdown'
 import { logger } from '@/lib/logger'
 import { cn } from '@/lib/utils'
 
@@ -50,17 +52,19 @@ import { cn } from '@/lib/utils'
  *
  * The stage below mounts only once the first snapshot has settled, so
  * its useState initializer captures that first content directly — a
- * session already running when the operator opens the window lands on
- * the monitor with no standby flash. Every LATER content change
- * (standby↔monitor, a project switch's address change) cross-fades
- * through the themed cover — the audience never sees a hard cut (spec
- * #128: 投影内容切换都是渐变). The window reveals itself once its first
- * snapshot settles (#51 anti-flash; a failed restore still reveals —
- * never an invisible window).
+ * session already 开演'd when the window (re)opens lands on the monitor
+ * with no 简介 flash. Every LATER content change (standby↔简介↔monitor,
+ * a project switch's address change) cross-fades through the themed
+ * cover — the audience never sees a hard cut (spec #128: 投影内容切换
+ * 都是渐变). The window reveals itself once its first snapshot settles
+ * (#51 anti-flash; a failed restore still reveals — never an invisible
+ * window).
  *
- * This ticket is the tracer bullet: a ready session projects the
- * monitor DIRECTLY. The 简介 gate (README screen, ▶ button, ⌘⏎) is the
- * next ticket in the #128 line.
+ * v1.5.0 (#130): the content is GATED — a session on stage holds the
+ * 简介 (the project's README, or its name card) from the Starting
+ * snapshot until the conductor opens the gate (▶ / ⌘⏎ → the
+ * Rust-authoritative toggleProjectionStart command; the flag arrives
+ * with the next session snapshot, so both windows move together).
  */
 
 /** The venue screen's monitor half — one navigation per remount. */
@@ -186,6 +190,84 @@ function ProjectionStandby() {
 }
 
 /**
+ * v1.5.0 (#130): the 简介 — what the venue screen holds from the Load's
+ * Starting snapshot until the conductor 开演s. The project's root
+ * README renders through #125's channel (read keyed by path AND locale,
+ * so a language switch re-reads into that language's variant) on the
+ * help center's HelpMarkdown — v1.5 renders TEXT ONLY: images are
+ * hidden, and anchor clicks never navigate this webview (the projection
+ * is a display, not a browser — every link is a dead no-op). No README
+ * (or an unreadable one) falls back to the project-name card — a
+ * missing file must not break the venue screen's look (spec story 23).
+ */
+function ProjectionIntro({
+  content,
+}: {
+  content: Extract<ProjectionContent, { kind: 'intro' }>
+}) {
+  const { i18n } = useTranslation()
+  const locale = i18n.resolvedLanguage ?? i18n.language ?? 'en'
+  // The last completed read, keyed by the path and locale it belongs
+  // to — the ProjectReadme pattern: a change renders "still reading"
+  // (the name card) until the new read lands, with no synchronous
+  // reset and no stale cross-project flash.
+  const [loaded, setLoaded] = useState<{
+    path: string
+    locale: string
+    readme: string | null
+  } | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    void readProjectReadme(content.projectPath, locale).then(read => {
+      if (!cancelled) {
+        setLoaded({ path: content.projectPath, locale, readme: read.readme })
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [content.projectPath, locale])
+  const settled =
+    loaded !== null &&
+    loaded.path === content.projectPath &&
+    loaded.locale === locale
+  const markdown = settled ? loaded.readme : null
+
+  // The projection is a display: no anchor click ever navigates this
+  // webview (the stranded-app lesson from the main window) and nothing
+  // leaves for a browser mid-performance — every link is a no-op.
+  const swallowAnchor = (event: MouseEvent<HTMLDivElement>) => {
+    if ((event.target as HTMLElement).closest('a')) event.preventDefault()
+  }
+
+  if (markdown === null) {
+    return (
+      <div
+        data-testid="projection-intro"
+        data-intro-view="card"
+        className="flex h-full w-full flex-col items-center justify-center bg-(--pnds-bg) p-10"
+      >
+        <span className="max-w-full truncate text-center text-4xl font-semibold text-(--pnds-text)/45">
+          {content.projectName ?? 'PNDS'}
+        </span>
+      </div>
+    )
+  }
+  return (
+    <div
+      data-testid="projection-intro"
+      data-intro-view="readme"
+      onClick={swallowAnchor}
+      className="h-full w-full overflow-y-auto bg-(--pnds-bg)"
+    >
+      <div className="mx-auto w-full max-w-3xl px-10 py-12 text-(--pnds-text) [&_img]:hidden">
+        <HelpMarkdown markdown={markdown} />
+      </div>
+    </div>
+  )
+}
+
+/**
  * The content stage — mounted with the FIRST settled content as its
  * baseline (the initializer; no fade, it rides the window reveal). A
  * LATER content change keeps the displayed screen on stage under the
@@ -217,12 +299,13 @@ function ProjectionStage({
     projectionContentKey(displayed) !== projectionContentKey(latest)
 
   // The native title describes what the venue screen shows — the
-  // project's name while the monitor is projected, plain otherwise —
-  // and follows the UI language (t and locale both move on a switch).
+  // project's name while a session is on stage (简介 or monitor, #130),
+  // plain on standby — and follows the UI language (t and locale both
+  // move on a switch).
   const locale = i18n.resolvedLanguage ?? i18n.language ?? 'en'
   useEffect(() => {
     const title =
-      displayed.kind === 'monitor' && projectName
+      displayed.kind !== 'standby' && projectName
         ? t('projection.windowTitle', { name: projectName })
         : t('projection.windowTitleIdle')
     getCurrentWebviewWindow()
@@ -236,6 +319,8 @@ function ProjectionStage({
     <>
       {displayed.kind === 'monitor' ? (
         <ProjectionMonitor content={displayed} />
+      ) : displayed.kind === 'intro' ? (
+        <ProjectionIntro content={displayed} />
       ) : (
         <ProjectionStandby />
       )}

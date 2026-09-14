@@ -43,6 +43,7 @@ function snapshot(over: Partial<SessionSnapshot> = {}): SessionSnapshot {
     lanIp: '192.168.1.10',
     hostAddress: null,
     oscTarget: null,
+    projectionStarted: false,
     health: null,
     error: null,
     outputTail: [],

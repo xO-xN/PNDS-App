@@ -119,6 +119,20 @@ pub async fn get_session_state(
     Ok(state.snapshot())
 }
 
+/// v1.5.0 (#130): toggles the projection start gate (投影开演 ⇄ 撤回).
+/// Rust-authoritative and session-level: the ▶ button in the monitor
+/// title bar, the ⌘⏎ menu accelerator and the projection window all
+/// read the gate from the session snapshots this publishes — an
+/// occluded webview cannot hold a stale view of it.
+#[tauri::command]
+#[specta::specta]
+pub async fn toggle_projection_start(
+    app: AppHandle,
+    state: State<'_, SessionManager>,
+) -> Result<(), String> {
+    state.toggle_projection_start(&app)
+}
+
 /// §7.5: set the master volume (0-100, dB-linear; live via OSC in internal
 /// mode). External/none modes store the value but apply nothing.
 #[tauri::command]

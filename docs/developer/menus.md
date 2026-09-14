@@ -48,7 +48,7 @@ Window
 ├── Performer — http://<lanIp>:<performerPort>/   (copies the URL; disabled with no project/LAN)
 ├── Conductor — http://<lanIp>:<monitorPort>/     (same)
 ├── ────────────────────
-└── Enter Full Screen        (Ctrl+Cmd+F)
+└── Start/Withdraw Projection (Cmd+Return — v1.5.0 #130; label follows the gate, enabled with a venue screen + ready session)
 
 Help                        (v1.3.0, #56 — macOS's last submenu)
 ├── Search Help             (Cmd+Shift+Slash — the physical chord behind ⌘?)
@@ -129,7 +129,7 @@ export function setupMenuLanguageListener(): () => void {
 
 ### Store-Driven Rebuilds (address segment)
 
-Menu content that mirrors store state (the Window menu's Performer/Conductor addresses) rebuilds through `setupMenuStateListener()` — the same whole-menu rebuild, subscribed to the watched slices (`project-store`'s `currentProject`, `session-store`'s `lanIp`). These stores are plain Zustand creates (no `subscribeWithSelector`), so the subscription filters by hand inside the module: the rebuild fires only when a watched value actually changed, never on the session store's unrelated churn (volume drags, health snapshots).
+Menu content that mirrors store state (the Window menu's Performer/Conductor addresses) rebuilds through `setupMenuStateListener()` — the same whole-menu rebuild, subscribed to the watched slices (`project-store`'s `currentProject`, `session-store`'s `lanIp`, `sessionHostAddress` and — v1.5.0 #130 — `projectionStarted`, plus `projection-store`'s `windowExists` for the ⌘⏎ entry). These stores are plain Zustand creates (no `subscribeWithSelector`), so the subscription filters by hand inside the module: the rebuild fires only when a watched value actually changed, never on the session store's unrelated churn (volume drags, health snapshots).
 
 `buildAppMenu()` and both listeners are called during app startup in `src/App.tsx`. Menu item actions read live values via `getState()`; the address items instead capture their URL at build time, so the label shown and the URL copied can never disagree.
 

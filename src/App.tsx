@@ -1,6 +1,10 @@
 import { useEffect } from 'react'
-import { onOpenBundle } from '@/lib/events'
-import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
+import { onOpenBundle, onProjectionWindow } from '@/lib/events'
+import {
+  getCurrentWebviewWindow,
+  WebviewWindow,
+} from '@tauri-apps/api/webviewWindow'
+import { useProjectionStore } from '@/store/projection-store'
 import {
   buildAppMenu,
   setupMenuLanguageListener,
@@ -63,6 +67,24 @@ function App() {
       void markQuitting()
     }
     window.addEventListener('beforeunload', onBeforeUnload)
+
+    // v1.5.0 (#130): the projection window's existence (opener-announced
+    // creation, Rust-observed destruction) feeds the ▶ gate button's
+    // visibility and the ⌘⏎ menu entry — one listener, one store. The
+    // App never unmounts, so the subscription stays for the run (same
+    // posture as the menu listeners above). The boot probe heals the one
+    // gap in the announcement scheme: a main-window reload (dev or
+    // crash) would otherwise leave a LIVE venue screen unaccounted for.
+    onProjectionWindow(exists =>
+      useProjectionStore.getState().setWindowExists(exists)
+    )
+    void WebviewWindow.getByLabel('projection')
+      .then(existing =>
+        useProjectionStore.getState().setWindowExists(existing !== null)
+      )
+      .catch(() => {
+        // A failed probe changes nothing — the listener owns the truth.
+      })
 
     const initLanguageAndMenu = async () => {
       try {

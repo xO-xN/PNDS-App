@@ -2,8 +2,10 @@ import { fireEvent, render, screen, act } from '@/test/test-utils'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { useSessionStore } from '@/store/session-store'
 import { useProjectStore } from '@/store/project-store'
+import { useProjectionStore } from '@/store/projection-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { MONITOR_REVEAL_TIMEOUT_MS } from '@/lib/monitor-reveal'
+import { commands } from '@/lib/tauri-bindings'
 import { logger } from '@/lib/logger'
 import i18n from '@/i18n/config'
 import { MonitorView } from './MonitorView'
@@ -778,5 +780,74 @@ describe('MonitorView title strip (#84)', () => {
     render(<MonitorView />)
 
     expect(screen.getByText('PNDS - Inarticulate III')).toBeTruthy()
+  })
+})
+
+/**
+ * v1.5.0 (#130): the ▶ projection gate button on the title strip's
+ * right — rendered only while the projection window exists, blinking
+ * while the venue screen holds the 简介, solid green once 开演'd, and
+ * both it and ⌘⏎ act through the same Rust toggle command.
+ */
+describe('MonitorView projection gate button (#130)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useSessionStore.setState({
+      sessionStatus: 'ready',
+      projectName: 'Inarticulate III',
+      lanIp: '192.168.1.10',
+      health: readyHealth,
+      projectionStarted: false,
+    })
+    useProjectionStore.setState({ windowExists: false })
+  })
+
+  it('is absent while the projection window does not exist', () => {
+    render(<MonitorView />)
+
+    expect(
+      screen.queryByTestId('projection-start-button')
+    ).not.toBeInTheDocument()
+  })
+
+  it('blinks (ungated) once the projection window exists, and toggles on click', async () => {
+    useProjectionStore.setState({ windowExists: true })
+
+    render(<MonitorView />)
+
+    const button = screen.getByTestId('projection-start-button')
+    // The ungated light: system-orange blink — its rest state (and the
+    // reduce-motion clamp) is the static orange highlight, distinct
+    // from both the strip text and the started green.
+    expect(button.className).toContain('projection-start-blink')
+    expect(button.className).toContain('text-[#ff9f0a]')
+    expect(button).toBeEnabled()
+    expect(button.getAttribute('aria-label')).toBe('Start Projection')
+
+    fireEvent.click(button)
+    await vi.waitFor(() =>
+      expect(commands.toggleProjectionStart).toHaveBeenCalledTimes(1)
+    )
+  })
+
+  it('goes solid green with the withdraw label once the gate opens', () => {
+    useProjectionStore.setState({ windowExists: true })
+    useSessionStore.setState({ projectionStarted: true })
+
+    render(<MonitorView />)
+
+    const button = screen.getByTestId('projection-start-button')
+    expect(button.className).not.toContain('projection-start-blink')
+    expect(button.className).toContain('text-[#34c759]')
+    expect(button.getAttribute('aria-label')).toBe('Withdraw Projection')
+  })
+
+  it('disables off-ready — the Rust guard mirrored in the UI', () => {
+    useProjectionStore.setState({ windowExists: true })
+    useSessionStore.setState({ sessionStatus: 'stopping' })
+
+    render(<MonitorView />)
+
+    expect(screen.getByTestId('projection-start-button')).toBeDisabled()
   })
 })

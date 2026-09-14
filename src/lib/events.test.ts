@@ -24,6 +24,7 @@ const snapshot: SessionSnapshot = {
   startupStage: 4,
   channelPlan: null,
   outputDevice: null,
+  projectionStarted: false,
 }
 
 /**

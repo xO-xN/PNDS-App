@@ -180,9 +180,14 @@ node's `data-color-theme` attribute:
   its own label/surface; recheck when touching theme values.
 - Intentionally NOT themed: the traffic-light glyphs, the PndsLogo's
   brand-color dots (the halo rings behind them ARE tokens), the shadcn
-  vendored scrims (`bg-black/50`), and the theme row's accent
+  vendored scrims (`bg-black/50`), the theme row's accent
   swatch — it previews each theme's accent by definition, so it cannot be
-  one token.
+  one token — and the monitor title strip's ▶ projection-gate light
+  (v1.5.0 #130): a STATUS light on the dark monitor-bar scrim, like the
+  traffic lights — ungated blinks Apple system orange `#ff9f0a` (its
+  reduce-motion clamp rests there as the static highlight), 开演'd holds
+  Apple system green `#34c759` (the logo palette's green). Green/orange
+  mean the same thing in every theme; a per-theme accent would not.
 
 ## The Light/Dark Axis
 

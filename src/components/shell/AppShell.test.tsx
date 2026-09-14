@@ -51,6 +51,7 @@ const readySnapshot: SessionSnapshot = {
   startupStage: 0,
   channelPlan: null,
   outputDevice: null,
+  projectionStarted: false,
 }
 
 /** Captured handler for the shell-level session snapshot subscription. */

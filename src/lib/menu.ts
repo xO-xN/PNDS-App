@@ -43,9 +43,11 @@ import {
 import {
   closeProjectionWindow,
   PROJECTION_WINDOW_LABEL,
+  toggleProjectionGate,
 } from '@/lib/projection-window'
 import { commands } from '@/lib/tauri-bindings'
 import { useProjectStore } from '@/store/project-store'
+import { useProjectionStore } from '@/store/projection-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { useSessionStore } from '@/store/session-store'
 import {
@@ -300,8 +302,16 @@ export async function buildAppMenu(): Promise<Menu> {
     // the settings-card LAN choice, mirroring what Rust injects as
     // `PNDS_HOST_IP`. No project or no address yet → the items fall back
     // to bare disabled labels, never a made-up address.
-    const { lanIp, sessionHostAddress, sessionProjectPath } =
-      useSessionStore.getState()
+    const {
+      lanIp,
+      sessionHostAddress,
+      sessionProjectPath,
+      sessionStatus,
+      projectionStarted,
+    } = useSessionStore.getState()
+    // v1.5.0 (#130): the ⌘⏎ projection-gate entry's label and
+    // enablement read the same mirrors the ▶ button renders from.
+    const projectionWindowExists = useProjectionStore.getState().windowExists
     const currentProject = useProjectStore.getState().currentProject
     const manifest = currentProject?.manifest
     const scoreServer = manifest?.scoreServer
@@ -351,6 +361,22 @@ export async function buildAppMenu(): Promise<Menu> {
           text: t('menu.enterFullScreen'),
           accelerator: 'Ctrl+Cmd+F',
           action: () => void toggleFullscreen(),
+        }),
+        // v1.5.0 (#130): ⌘⏎ — the projection start gate's menu
+        // accelerator. The label follows the gate (开演 ⇄ 撤回) and the
+        // item is enabled only while a venue screen exists AND a
+        // session is ready (the Rust command's guard is the twin of
+        // this enablement); the action goes straight to the Rust
+        // authority, so the main window, the projection window and the
+        // button all move on the snapshot it publishes.
+        await MenuItem.new({
+          id: 'projection-start',
+          text: projectionStarted
+            ? t('projection.withdrawAction')
+            : t('projection.startAction'),
+          accelerator: 'Cmd+Return',
+          enabled: projectionWindowExists && sessionStatus === 'ready',
+          action: toggleProjectionGate,
         }),
       ],
     })
@@ -466,10 +492,25 @@ export function setupMenuStateListener(): () => void {
     state => state.sessionHostAddress,
     rebuild
   )
+  // v1.5.0 (#130): the ⌘⏎ entry follows the projection gate (its label
+  // flips on 开演/撤回) and the projection window's existence (its
+  // enablement) — both plain-value slices of their stores.
+  const unsubProjectionGate = subscribeIfChanged(
+    useSessionStore,
+    state => state.projectionStarted,
+    rebuild
+  )
+  const unsubProjectionWindow = subscribeIfChanged(
+    useProjectionStore,
+    state => state.windowExists,
+    rebuild
+  )
   return () => {
     unsubProject()
     unsubSession()
     unsubHostAddress()
+    unsubProjectionGate()
+    unsubProjectionWindow()
   }
 }
 

@@ -116,6 +116,15 @@ pub struct SessionSnapshot {
     pub channel_plan: Option<crate::project::audio::ChannelPlan>,
     /// Final CoreAudio output device in use (internal sessions).
     pub output_device: Option<String>,
+    /// #130: the projection start gate (投影开演) — true once the conductor
+    /// has revealed the monitor on the venue screen, false while it holds
+    /// the 简介 (project README) screen. Session-level and
+    /// Rust-authoritative: `reset_run_state` returns it to false on every
+    /// Load/switch, and both windows plus the ⌘⏎ menu accelerator act
+    /// through `SessionManager::toggle_projection_start` so neither can
+    /// drift. Survives the projection window closing (the gate is a
+    /// session fact, not a window fact).
+    pub projection_started: bool,
 }
 
 // ============================================================================
@@ -383,6 +392,8 @@ struct SessionInner {
     channel_plan: Option<crate::project::audio::ChannelPlan>,
     /// Final output device name for the running internal session.
     output_device: Option<String>,
+    /// #130: the projection start gate — see `SessionSnapshot`.
+    projection_started: bool,
     /// Incremented on every start/stop so stale supervisor threads exit.
     generation: u64,
     /// §12: per-session log file.
@@ -418,6 +429,7 @@ impl Default for SessionInner {
             startup_stage: 0,
             channel_plan: None,
             output_device: None,
+            projection_started: false,
             generation: 0,
             logger: None,
             logger_generation: None,
@@ -443,6 +455,7 @@ impl SessionInner {
             startup_stage: self.startup_stage,
             channel_plan: self.channel_plan.clone(),
             output_device: self.output_device.clone(),
+            projection_started: self.projection_started,
         }
     }
 
@@ -464,6 +477,10 @@ impl SessionInner {
         self.channel_plan = None;
         self.output_device = None;
         self.startup_stage = 0;
+        // #130: every Load/switch re-gates the projection to 简介 — the
+        // next work's monitor is never revealed by the previous one's
+        // 开演.
+        self.projection_started = false;
     }
 }
 
@@ -1619,6 +1636,32 @@ impl SessionManager {
         Ok(())
     }
 
+    /// v1.5.0 (#130): flips the projection start gate (投影开演 ⇄ 撤回).
+    /// The gate is Rust-authoritative and session-level: both windows and
+    /// the ⌘⏎ menu accelerator act through here (an occluded projection
+    /// webview can drop frontend-relayed events; a command + snapshot
+    /// publication cannot), and `reset_run_state` returns it to 简介 on
+    /// every Load/switch. Only a READY session has a stage to reveal —
+    /// anything else is a diagnosable error (the UI entries are gated on
+    /// ready; this is the defense behind them).
+    pub fn toggle_projection_start<R: tauri::Runtime>(
+        &self,
+        app: &AppHandle<R>,
+    ) -> Result<(), String> {
+        let started = {
+            let mut inner = self.lock();
+            if inner.status != SessionStatus::Ready {
+                return Err("The projection gate only acts on a ready session.".to_string());
+            }
+            inner.projection_started = !inner.projection_started;
+            inner.projection_started
+        };
+        log::info!("Projection gate toggled: {started}");
+        // Outside the inner lock (the emit funnel takes its own).
+        self.emit(app);
+        Ok(())
+    }
+
     /// True while a score-server child is (or should be) running.
     pub fn has_active_session(&self) -> bool {
         let inner = self.lock();
@@ -1934,6 +1977,39 @@ mod tests {
         }
         manager.set_master_volume(&app, 40.0).unwrap();
         assert_eq!(manager.snapshot().volume, 40.0);
+    }
+
+    /// #130: the projection gate — ready-gated toggling, session-level
+    /// reset through `reset_run_state` (the Load/switch reset point).
+    #[test]
+    fn projection_gate_toggles_on_ready_and_resets_per_session() {
+        let app = tauri::test::mock_app().handle().clone();
+        crate::events::events_builder().mount_events(&app);
+        let manager = SessionManager::default();
+
+        // Not a ready session: a diagnosable error, never a silent flip.
+        let err = manager.toggle_projection_start(&app).unwrap_err();
+        assert!(err.contains("ready"), "unexpected: {err}");
+        assert!(!manager.snapshot().projection_started);
+
+        {
+            let mut inner = manager.lock();
+            inner.status = SessionStatus::Ready;
+        }
+        manager.toggle_projection_start(&app).unwrap();
+        assert!(manager.snapshot().projection_started);
+        // 撤回 — the same action reverses.
+        manager.toggle_projection_start(&app).unwrap();
+        assert!(!manager.snapshot().projection_started);
+
+        // 开演 again, then a Load/switch (reset_run_state) re-gates the
+        // NEXT work to 简介 even if the previous one was revealed.
+        manager.toggle_projection_start(&app).unwrap();
+        {
+            let mut inner = manager.lock();
+            inner.reset_run_state();
+        }
+        assert!(!manager.snapshot().projection_started);
     }
 
     #[test]

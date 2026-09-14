@@ -357,6 +357,22 @@ pub fn run() {
                 }
             }
 
+            // v1.5.0 (#130): the projection window's destruction drives
+            // the ▶ gate button out of the main window — observed here,
+            // at the run-event level, so every close path (the ⌘W
+            // dispatch, the red traffic light, app quit) is seen, not
+            // just the ones passing through frontend code. Creation is
+            // announced by the opener (projection-window.ts, on the
+            // webview's own `tauri://created`) — Tauri 2 has no
+            // run-level window-created event.
+            RunEvent::WindowEvent {
+                label,
+                event: WindowEvent::Destroyed,
+                ..
+            } if label == "projection" => {
+                let _ = crate::events::ProjectionWindowEvent { exists: false }.emit(app_handle);
+            }
+
             // macOS: a document the App was asked to open — i.e. a
             // double-clicked .pnds bundle (v1.2.0, issue #16). Queue it and
             // wake the frontend; the frontend drains the queue both on this

@@ -59,6 +59,25 @@ export function onWindowState(
 }
 
 /**
+ * v1.5.0 (#130): the projection window's existence. Destruction is
+ * observed by Rust (every close path); creation is announced by the
+ * opener on the webview's own `tauri://created` (Tauri 2 has no
+ * run-level window-created event) — both through this one generated
+ * event, so the main window's ▶ gate button follows the truth, not a
+ * frontend guess.
+ */
+export function onProjectionWindow(cb: (exists: boolean) => void): Unsubscribe {
+  return toUnsubscribe(
+    events.projectionWindowEvent.listen(e => cb(e.payload.exists))
+  )
+}
+
+/** Opener side: announce the projection window just came alive. */
+export function emitProjectionWindowExists(exists: boolean): Promise<void> {
+  return events.projectionWindowEvent.emit({ exists })
+}
+
+/**
  * The window regained macOS focus (emitted payload-less; consumers
  * re-derive from stores — AppShell restores the session snapshot,
  * MonitorView reclaims the keyboard focus).

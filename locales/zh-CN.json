@@ -40,6 +40,8 @@
   "projection.windowTitle": "PNDS 投影 — {{name}}",
   "projection.windowTitleIdle": "PNDS 投影",
   "projection.standby": "无演出",
+  "projection.startAction": "投影开演",
+  "projection.withdrawAction": "撤回开演",
   "help.searchPlaceholder": "搜索文档…",
   "help.searchPrompt": "输入关键词搜索文档",
   "help.noResults": "没有找到“{{query}}”的结果",

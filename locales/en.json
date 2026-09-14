@@ -40,6 +40,8 @@
   "projection.windowTitle": "PNDS Projection — {{name}}",
   "projection.windowTitleIdle": "PNDS Projection",
   "projection.standby": "No performance",
+  "projection.startAction": "Start Projection",
+  "projection.withdrawAction": "Withdraw Projection",
   "help.searchPlaceholder": "Search the docs…",
   "help.searchPrompt": "Type to search the documentation",
   "help.noResults": "No results for “{{query}}”",

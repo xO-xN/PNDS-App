@@ -6,13 +6,13 @@ import { MONITOR_REVEAL_FADE_MS } from '@/lib/monitor-reveal'
 import { ProjectionApp } from './ProjectionApp'
 
 /**
- * v1.5.0 (#129): the projection thin root — driven by snapshot
- * SEQUENCES through the same mocked event channel the app uses. The
- * acceptance is about transitions: opening during a run lands DIRECTLY
- * on the monitor with the main-window URL contract (no standby flash),
- * a close/switch fades back to 投影待机, the window reveals itself once
- * its first snapshot settles, and the native title follows the content
- * and the UI language.
+ * v1.5.0 (#129/#130): the projection thin root — driven by snapshot
+ * SEQUENCES through the same mocked event channel the app uses. #130's
+ * acceptance is the gate: Load/switch holds the 简介 (README, or the
+ * project-name card), 开演 (the snapshot's projectionStarted flip —
+ * Rust-authoritative) cross-fades to the monitor, a close/stop fades
+ * back to 投影待机, and a window reopened after 开演 lands DIRECTLY on
+ * the monitor (the gate is a session fact, not a window fact).
  */
 
 const listeners = vi.hoisted(
@@ -56,6 +56,7 @@ const snapshot = (
   startupStage: 5,
   channelPlan: null,
   outputDevice: 'System default',
+  projectionStarted: false,
   ...overrides,
 })
 
@@ -80,7 +81,9 @@ const settleSwap = async () => {
   })
 }
 
-describe('ProjectionApp (#129)', () => {
+const intro = () => screen.getByTestId('projection-intro')
+
+describe('ProjectionApp (#130 gate)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     listeners.clear()
@@ -88,26 +91,113 @@ describe('ProjectionApp (#129)', () => {
       status: 'ok',
       data: snapshot(),
     })
+    // #125 default: no README — the intro shows the project-name card.
+    vi.mocked(commands.readProjectReadme).mockResolvedValue({
+      status: 'ok',
+      data: null,
+    })
   })
   afterEach(() => {
     vi.useRealTimers()
   })
 
-  it('lands directly on the monitor for a running session — no standby flash', async () => {
+  it('holds the 简介 for a ready session with the gate closed', async () => {
     render(<ProjectionApp />)
     await flush()
 
-    // The main window's first-frame URL contract (#49/#54).
+    expect(intro().dataset.introView).toBe('card')
+    expect(screen.getByText('Inarticulate III')).toBeInTheDocument()
+    expect(screen.queryByTitle('Project monitor')).not.toBeInTheDocument()
+    expect(commands.fadeInWindow).toHaveBeenCalledWith('projection')
+  })
+
+  it('renders the project README from #125 channel — text only', async () => {
+    vi.mocked(commands.readProjectReadme).mockResolvedValue({
+      status: 'ok',
+      data: '# Venue Title\n\nHello audience.',
+    })
+    vi.mocked(commands.getSessionState).mockResolvedValue({
+      status: 'ok',
+      data: snapshot({ status: 'starting' }),
+    })
+    render(<ProjectionApp />)
+    await flush()
+
+    // The README read keys by path + resolved locale.
+    expect(commands.readProjectReadme).toHaveBeenCalledWith(
+      '/Users/test/Inarticulate III',
+      'en'
+    )
+    expect(intro().dataset.introView).toBe('readme')
+    expect(screen.getByText('Venue Title').tagName).toBe('H1')
+    // v1.5 renders TEXT ONLY — images are hidden outright (the inner
+    // markdown wrapper carries the hide).
+    expect(
+      screen.getByText('Hello audience.').closest('div.max-w-3xl')?.className
+    ).toContain('[&_img]:hidden')
+  })
+
+  it('cross-fades to the monitor when 开演 lands (snapshot flip)', async () => {
+    vi.useFakeTimers()
+    render(<ProjectionApp />)
+    await flush()
+    expect(intro()).toBeInTheDocument()
+
+    // The conductor toggled the gate; Rust published the new snapshot.
+    publish(snapshot({ projectionStarted: true }))
+    expect(screen.getByTestId('projection-swap-cover').className).toContain(
+      'opacity-100'
+    )
+    await settleSwap()
+
     const iframe = screen.getByTitle('Project monitor') as HTMLIFrameElement
     expect(iframe.src).toBe('http://192.168.1.10:6869/?theme=pond&lang=en')
-    expect(screen.queryByTestId('projection-standby')).not.toBeInTheDocument()
-    // No cross-fade fired on boot: the first settled content rides the
-    // window reveal instead.
+    // 撤回 — the same action reverses through the same fade.
+    publish(snapshot({ projectionStarted: false }))
+    await settleSwap()
+    expect(intro()).toBeInTheDocument()
+  })
+
+  it('lands DIRECTLY on the monitor when reopened after 开演', async () => {
+    // The gate is a session fact: a window reopened mid-开演 restores a
+    // projectionStarted snapshot — no 简介 flash, no re-asking.
+    vi.mocked(commands.getSessionState).mockResolvedValue({
+      status: 'ok',
+      data: snapshot({ projectionStarted: true }),
+    })
+    render(<ProjectionApp />)
+    await flush()
+
+    const iframe = screen.getByTitle('Project monitor') as HTMLIFrameElement
+    expect(iframe.src).toBe('http://192.168.1.10:6869/?theme=pond&lang=en')
+    expect(screen.queryByTestId('projection-intro')).not.toBeInTheDocument()
     expect(screen.getByTestId('projection-swap-cover').className).toContain(
       'opacity-0'
     )
-    // #51: hidden create → snapshot settled → the page reveals itself.
-    expect(commands.fadeInWindow).toHaveBeenCalledWith('projection')
+  })
+
+  it("shows the next work's 简介 through a switch — the gate resets", async () => {
+    vi.useFakeTimers()
+    vi.mocked(commands.getSessionState).mockResolvedValue({
+      status: 'ok',
+      data: snapshot({ projectionStarted: true }),
+    })
+    render(<ProjectionApp />)
+    await flush()
+    expect(screen.getByTitle('Project monitor')).toBeInTheDocument()
+
+    // Confirm → stop old → start new: starting(B) carries the reset gate.
+    publish(
+      snapshot({
+        status: 'starting',
+        projectPath: '/Users/test/Other',
+        projectName: 'Other Work',
+        projectionStarted: false,
+      })
+    )
+    await settleSwap()
+    expect(intro().dataset.introView).toBe('card')
+    expect(screen.getByText('Other Work')).toBeInTheDocument()
   })
 
   it('reveals even when the restore fails — a themed standby, never an invisible window', async () => {
@@ -135,8 +225,30 @@ describe('ProjectionApp (#129)', () => {
     expect(screen.queryByTitle('Project monitor')).not.toBeInTheDocument()
   })
 
+  it('fades to standby when the session closes', async () => {
+    vi.useFakeTimers()
+    vi.mocked(commands.getSessionState).mockResolvedValue({
+      status: 'ok',
+      data: snapshot({ projectionStarted: true }),
+    })
+    render(<ProjectionApp />)
+    await flush()
+    expect(screen.getByTitle('Project monitor')).toBeInTheDocument()
+
+    publish(snapshot({ status: 'stopping', projectionStarted: true }))
+    expect(screen.getByTestId('projection-swap-cover').className).toContain(
+      'opacity-100'
+    )
+    await settleSwap()
+    expect(screen.getByTestId('projection-standby')).toBeInTheDocument()
+  })
+
   it('holds the reveal cover until the iframe load event', async () => {
     vi.useFakeTimers()
+    vi.mocked(commands.getSessionState).mockResolvedValue({
+      status: 'ok',
+      data: snapshot({ projectionStarted: true }),
+    })
     render(<ProjectionApp />)
     await flush()
 
@@ -147,105 +259,28 @@ describe('ProjectionApp (#129)', () => {
     expect(cover.className).toContain('opacity-0')
   })
 
-  it('releases a stuck navigation through the timeout backstop', async () => {
+  it('titles the window with the project while on stage, plain on standby', async () => {
     vi.useFakeTimers()
     render(<ProjectionApp />)
     await flush()
-
-    const cover = screen.getByTestId('projection-reveal-cover')
-    expect(cover.className).not.toContain('opacity-0')
-
-    await act(async () => {
-      vi.advanceTimersByTime(10_500)
-    })
-    expect(cover.className).toContain('opacity-0')
-  })
-
-  it('fades to standby when the session closes, and to the new monitor on a switch', async () => {
-    vi.useFakeTimers()
-    render(<ProjectionApp />)
-    await flush()
-    expect(screen.getByTitle('Project monitor')).toBeInTheDocument()
-
-    // Close: stopping → idle. The themed cover fades in over the
-    // outgoing monitor before the standby swap.
-    publish(snapshot({ status: 'stopping' }))
-    expect(screen.getByTestId('projection-swap-cover').className).toContain(
-      'opacity-100'
-    )
-    await settleSwap()
-    expect(screen.getByTestId('projection-standby')).toBeInTheDocument()
-
-    // Switch: Load of the next project → ready at a new address. The
-    // iframe re-navigates with fresh first-frame parameters.
-    publish(
-      snapshot({
-        projectName: 'Other Work',
-        hostAddress: '10.0.0.5',
-        health: {
-          status: 'ready',
-          scoreServer: { performerPort: 7000, monitorPort: 7001, error: null },
-        },
-      })
-    )
-    await settleSwap()
-    const iframe = screen.getByTitle('Project monitor') as HTMLIFrameElement
-    expect(iframe.src).toBe('http://10.0.0.5:7001/?theme=pond&lang=en')
-  })
-
-  it('collapses a rapid switch sequence onto the newest content', async () => {
-    vi.useFakeTimers()
-    render(<ProjectionApp />)
-    await flush()
-
-    // ready → starting (fade in) → ready-B lands WITHIN the fade window:
-    // the timer restarts and the single swap shows B, never A-standby-B.
-    publish(snapshot({ status: 'starting' }))
-    await act(async () => {
-      vi.advanceTimersByTime(MONITOR_REVEAL_FADE_MS / 2)
-    })
-    publish(
-      snapshot({
-        hostAddress: '10.0.0.5',
-        health: {
-          status: 'ready',
-          scoreServer: { performerPort: 7000, monitorPort: 7001, error: null },
-        },
-      })
-    )
-    await settleSwap()
-
-    const iframe = screen.getByTitle('Project monitor') as HTMLIFrameElement
-    expect(iframe.src).toBe('http://10.0.0.5:7001/?theme=pond&lang=en')
-    expect(screen.getByTestId('projection-swap-cover').className).toContain(
-      'opacity-0'
-    )
-  })
-
-  it('titles the window with the projected project, plain on standby, following the language', async () => {
-    vi.useFakeTimers()
-    render(<ProjectionApp />)
-    await flush()
+    // The 简介 is on stage — a session IS running.
     expect(setTitle).toHaveBeenLastCalledWith(
       'PNDS Projection — Inarticulate III'
     )
 
-    // Close to standby: the plain title.
     publish(snapshot({ status: 'stopping' }))
     await settleSwap()
     publish(snapshot({ status: 'idle', projectName: null, health: null }))
     await settleSwap()
     expect(setTitle).toHaveBeenLastCalledWith('PNDS Projection')
 
-    // A language switch re-titles live (the main-window bridge pushes
-    // the locale; the page changes language).
+    // A language switch re-titles live.
     act(() => {
       listeners.get('pnds:projection-locale')?.({ locale: 'zh-CN' })
     })
     await flush()
     expect(setTitle).toHaveBeenLastCalledWith('PNDS 投影')
 
-    // Restore the suite's language for the files that follow.
     act(() => {
       listeners.get('pnds:projection-locale')?.({ locale: 'en' })
     })
@@ -264,7 +299,6 @@ describe('ProjectionApp (#129)', () => {
       'stage'
     )
 
-    // Restore the themed document for whatever renders next.
     act(() => {
       listeners.get('pnds:projection-theme')?.({ colorTheme: 'pond' })
     })

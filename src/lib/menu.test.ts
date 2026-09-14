@@ -5,6 +5,7 @@ import i18n from '@/i18n/config'
 import { commands } from '@/lib/tauri-bindings'
 import type { Manifest } from '@/lib/tauri-bindings'
 import { useProjectStore } from '@/store/project-store'
+import { useProjectionStore } from '@/store/projection-store'
 import { useSessionStore } from '@/store/session-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { buildAppMenu, setupMenuStateListener } from './menu'
@@ -102,6 +103,7 @@ vi.mock('@/lib/help-window', () => helpWindowMock)
 const projectionWindowMock = vi.hoisted(() => ({
   openProjectionWindow: vi.fn().mockResolvedValue(undefined),
   closeProjectionWindow: vi.fn().mockResolvedValue(undefined),
+  toggleProjectionGate: vi.fn(),
   PROJECTION_WINDOW_LABEL: 'projection',
 }))
 vi.mock('@/lib/projection-window', () => projectionWindowMock)
@@ -626,5 +628,40 @@ describe('buildAppMenu help menu (v1.3.0, #56)', () => {
       expect(commands.closeWindowWithFade).toHaveBeenCalledTimes(1)
     )
     expect(helpWindowMock.closeHelpWindow).not.toHaveBeenCalled()
+  })
+
+  it('labels and gates the ⌘⏎ projection gate entry with the window and the session', async () => {
+    useProjectionStore.setState({ windowExists: true })
+    useSessionStore.setState({
+      sessionStatus: 'ready',
+      projectionStarted: false,
+    })
+    await buildAppMenu()
+
+    const entry = item('projection-start')
+    expect(entry.accelerator).toBe('Cmd+Return')
+    expect(entry.text).toBe('Start Projection')
+    expect(entry.enabled).toBe(true)
+    expect(submenuItems('Window')).toContain(entry)
+
+    // Both entries act through the one gate helper (the Rust authority).
+    entry.action?.()
+    expect(projectionWindowMock.toggleProjectionGate).toHaveBeenCalledTimes(1)
+
+    // 开演'd — the label flips to the withdraw wording.
+    useSessionStore.setState({ projectionStarted: true })
+    await buildAppMenu()
+    expect(item('projection-start').text).toBe('Withdraw Projection')
+
+    // No venue screen — the accelerator stays present but inert.
+    useProjectionStore.setState({ windowExists: false })
+    await buildAppMenu()
+    expect(item('projection-start').enabled).toBe(false)
+
+    // Off-ready sessions never enable it (the Rust guard's twin).
+    useProjectionStore.setState({ windowExists: true })
+    useSessionStore.setState({ sessionStatus: 'starting' })
+    await buildAppMenu()
+    expect(item('projection-start').enabled).toBe(false)
   })
 })

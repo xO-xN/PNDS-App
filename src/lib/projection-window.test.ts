@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { emitTo } from '@tauri-apps/api/event'
+import { emit, emitTo } from '@tauri-apps/api/event'
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { currentMonitor } from '@tauri-apps/api/window'
 import type { Monitor } from '@tauri-apps/api/window'
@@ -120,6 +120,28 @@ describe('projection-window (#129)', () => {
 
     const [, options] = vi.mocked(WebviewWindow).mock.calls[0] ?? []
     expect(options?.title).toBe('PNDS Projection — Inarticulate III')
+  })
+
+  it('announces the window existence once the webview is created (#130)', async () => {
+    await openProjectionWindow()
+
+    // The create announcement rides the webview's own created event —
+    // fire the registered handler and expect the ProjectionWindowEvent
+    // broadcast (destruction is Rust-observed, its twin in lib.rs).
+    const instance = vi.mocked(WebviewWindow).mock.results[0]?.value as {
+      once: ReturnType<typeof vi.fn>
+    }
+    const createdCall = instance.once.mock.calls.find(
+      ([name]) => name === 'tauri://created'
+    )
+    expect(createdCall).toBeDefined()
+    const handler = createdCall?.[1] as () => void
+    handler()
+    await vi.waitFor(() =>
+      expect(emit).toHaveBeenCalledWith('projection-window-event', {
+        exists: true,
+      })
+    )
   })
 
   it('focuses the live window instead of recreating (single instance)', async () => {

@@ -22,6 +22,7 @@ import {
   PROJECTION_WINDOW_LABEL,
   emitProjectionLocale,
   emitProjectionTheme,
+  emitProjectionWindowExists,
 } from '@/lib/events'
 
 export { PROJECTION_WINDOW_LABEL } from '@/lib/events'
@@ -125,6 +126,17 @@ export async function openProjectionWindow(): Promise<void> {
     logger.error('Failed to create the projection window', { error })
     notifications.error(i18n.t('toast.error.generic'))
   })
+  // #130: announce the window's EXISTENCE — the main window's ▶ gate
+  // button renders only while a venue screen is alive. Creation is
+  // announced here (Tauri 2 has no run-level window-created event);
+  // destruction is Rust-observed (lib.rs Destroyed), so every close
+  // path is covered. A failed create never announces — no ghost button.
+  projectionWindow.once('tauri://created', () => {
+    void emitProjectionWindowExists(true).catch(() => {
+      // Broadcast failed — the Destroyed twin still retires a stale
+      // button if the window dies right away.
+    })
+  })
 }
 
 /**
@@ -140,6 +152,24 @@ export async function closeProjectionWindow(): Promise<void> {
   } catch (error) {
     logger.warn('Failed to close the projection window', { error })
   }
+}
+
+/**
+ * v1.5.0 (#130): 投影开演 ⇄ 撤回 — THE gate action. Every entry (the ▶
+ * button in the monitor title bar, the ⌘⏎ menu accelerator) calls this
+ * one helper, which calls the Rust authority; the new state arrives for
+ * every window with the next session snapshot. A failed toggle (e.g. a
+ * session stopping mid-click) logs — the UI entries are already gated on
+ * a ready session, so an error here is a race, never a user path.
+ */
+export function toggleProjectionGate(): void {
+  void commands.toggleProjectionStart().then(result => {
+    if (result.status === 'error') {
+      logger.warn('Failed to toggle the projection gate', {
+        error: result.error,
+      })
+    }
+  })
 }
 
 /**

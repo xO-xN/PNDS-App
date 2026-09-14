@@ -261,6 +261,21 @@ async getSessionState() : Promise<Result<SessionSnapshot, string>> {
 }
 },
 /**
+ * v1.5.0 (#130): toggles the projection start gate (投影开演 ⇄ 撤回).
+ * Rust-authoritative and session-level: the ▶ button in the monitor
+ * title bar, the ⌘⏎ menu accelerator and the projection window all
+ * read the gate from the session snapshots this publishes — an
+ * occluded webview cannot hold a stale view of it.
+ */
+async toggleProjectionStart() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("toggle_projection_start") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * §7.5: set the master volume (0-100, dB-linear; live via OSC in internal
  * mode). External/none modes store the value but apply nothing.
  */
@@ -551,6 +566,7 @@ async systemSafariVersion() : Promise<Result<string | null, string>> {
 export const events = __makeEvents__<{
 helpReadyEvent: HelpReadyEvent,
 openBundleEvent: OpenBundleEvent,
+projectionWindowEvent: ProjectionWindowEvent,
 sessionSnapshotEvent: SessionSnapshotEvent,
 setlistExportProgressEvent: SetlistExportProgressEvent,
 windowFocusEvent: WindowFocusEvent,
@@ -558,6 +574,7 @@ windowStateEvent: WindowStateEvent
 }>({
 helpReadyEvent: "help-ready-event",
 openBundleEvent: "open-bundle-event",
+projectionWindowEvent: "projection-window-event",
 sessionSnapshotEvent: "session-snapshot-event",
 setlistExportProgressEvent: "setlist-export-progress-event",
 windowFocusEvent: "window-focus-event",
@@ -834,6 +851,13 @@ export type ProjectFolder = { id: string; name: string; projectPaths: string[];
  * project manifests; rides the project-index persistence.
  */
 intro?: string | null }
+/**
+ * v1.5.0 (#130): the projection window came or went — observed at the
+ * run-event level (every close path: the ⌘W dispatch, the red traffic
+ * light, app quit), so the main window can render the ▶ gate button
+ * only while a venue screen actually exists.
+ */
+export type ProjectionWindowEvent = { exists: boolean }
 export type ScoreServer = { entry: string; workingDirectory: string; performerPort: number; monitorPort: number }
 export type ScsynthConfig = { 
 /**
@@ -871,7 +895,18 @@ channelPlan: ChannelPlan | null;
 /**
  * Final CoreAudio output device in use (internal sessions).
  */
-outputDevice: string | null }
+outputDevice: string | null; 
+/**
+ * #130: the projection start gate (投影开演) — true once the conductor
+ * has revealed the monitor on the venue screen, false while it holds
+ * the 简介 (project README) screen. Session-level and
+ * Rust-authoritative: `reset_run_state` returns it to false on every
+ * Load/switch, and both windows plus the ⌘⏎ menu accelerator act
+ * through `SessionManager::toggle_projection_start` so neither can
+ * drift. Survives the projection window closing (the gate is a
+ * session fact, not a window fact).
+ */
+projectionStarted: boolean }
 /**
  * Session state publication — every snapshot the state machine emits
  * (formerly `pnds:session`); statuses per runtime-contract §8/§9.

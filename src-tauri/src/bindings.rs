@@ -24,6 +24,7 @@ pub fn generate_bindings() -> Builder<tauri::Wry> {
         project::start_project,
         project::stop_project,
         project::get_session_state,
+        project::toggle_projection_start,
         project::set_master_volume,
         project::list_lan_addresses,
         project::list_output_devices,

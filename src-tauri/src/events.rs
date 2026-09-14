@@ -62,6 +62,15 @@ pub struct SetlistExportProgressEvent {
 #[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
 pub struct HelpReadyEvent {}
 
+/// v1.5.0 (#130): the projection window came or went — observed at the
+/// run-event level (every close path: the ⌘W dispatch, the red traffic
+/// light, app quit), so the main window can render the ▶ gate button
+/// only while a venue screen actually exists.
+#[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
+pub struct ProjectionWindowEvent {
+    pub exists: bool,
+}
+
 /// The App's event set as a fresh builder for any runtime. The real app
 /// composes it with commands (bindings.rs); tests mount it on
 /// mock-runtime apps so `Event::emit` resolves its registry entry.
@@ -73,5 +82,6 @@ pub fn events_builder<R: tauri::Runtime>() -> tauri_specta::Builder<R> {
         OpenBundleEvent,
         SetlistExportProgressEvent,
         HelpReadyEvent,
+        ProjectionWindowEvent,
     ])
 }

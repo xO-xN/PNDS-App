@@ -151,6 +151,21 @@
     }
   }
 
+  /* v1.5.0 (#130): the ▶ projection-gate button's blink while the venue
+     screen holds the 简介. The keyframes DIP from the solid highlight —
+     the rest state (and whatever the global prefers-reduced-motion
+     clamp freezes the animation to) is the static highlighted look the
+     spec asks for, never a dark button. */
+  @keyframes projection-start-blink {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.3;
+    }
+  }
+
   /* Welcome logo stage (v1.3.3 #86, ported from the site's welcome
      page): the app icon floats gently while three phased rings swell
      past the halo and dissolve — the negative delays live in the

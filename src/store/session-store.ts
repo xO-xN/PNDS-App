@@ -117,6 +117,14 @@ interface SessionState {
    * from what the score server actually received.
    */
   sessionHostAddress: string | null
+  /**
+   * v1.5.0 (#130): the projection start gate (投影开演), mirrored from
+   * the backend snapshot — Rust-authoritative, so the ▶ button, the ⌘⏎
+   * accelerator and the projection window all read the same flag and a
+   * toggle lands for every window at once. Session-level: every
+   * Load/switch resets it to false (简介).
+   */
+  projectionStarted: boolean
   /** OSC target reported by the backend (internal: dynamic; external: §6.6). */
   oscTarget: string | null
   /** Master volume percent (§6.4; every new session starts at 80). */
@@ -216,6 +224,7 @@ export const useSessionStore = create<SessionState>()(set => ({
   sessionProjectPath: null,
   sessionLanIp: null,
   sessionHostAddress: null,
+  projectionStarted: false,
   oscTarget: null,
   volume: DEFAULT_SESSION_VOLUME,
   muted: false,
@@ -292,6 +301,7 @@ export const useSessionStore = create<SessionState>()(set => ({
         sessionProjectPath: snapshot.projectPath,
         sessionLanIp: snapshot.lanIp,
         sessionHostAddress: snapshot.hostAddress,
+        projectionStarted: snapshot.projectionStarted,
         oscTarget: snapshot.oscTarget,
         volume: snapshot.volume,
         // v1.2.2 (#30): mute is session-only — every new run returns to
@@ -384,6 +394,7 @@ export const useSessionStore = create<SessionState>()(set => ({
       sessionProjectPath: null,
       sessionLanIp: null,
       sessionHostAddress: null,
+      projectionStarted: false,
       volume: DEFAULT_SESSION_VOLUME,
       muted: false,
       prevVolume: 0,
