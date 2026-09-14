@@ -101,6 +101,32 @@ describe('ProjectCoverPage', () => {
     ).toHaveLength(0)
   })
 
+  it('auto-rolls the band text only when it overflows the band', () => {
+    // jsdom has no layout: a section that "fits" (zero overflow) never
+    // acquires the roll.
+    const fitting = render(<ProjectCoverPage page={PAGE} cover={null} />)
+    expect(document.querySelector('.cover-band-roll')).toBeNull()
+    fitting.unmount()
+
+    // An overflowing column (content 620 vs viewport 400) rolls through
+    // exactly the measured 220px.
+    const scrollHeight = vi
+      .spyOn(Element.prototype, 'scrollHeight', 'get')
+      .mockReturnValue(620)
+    const clientHeight = vi
+      .spyOn(Element.prototype, 'clientHeight', 'get')
+      .mockReturnValue(400)
+    try {
+      render(<ProjectCoverPage page={PAGE} cover={null} />)
+      const roller = document.querySelector('.cover-band-roll')
+      expect(roller).not.toBeNull()
+      expect(roller?.getAttribute('style')).toContain('--roll-range: -220px')
+    } finally {
+      scrollHeight.mockRestore()
+      clientHeight.mockRestore()
+    }
+  })
+
   // The user's hard spec, locked: the band's gap to the window bottom
   // equals the PNDS/composer row's gap to the window top. Both sides
   // must resolve the SAME --cover-edge-inset token (defined once on

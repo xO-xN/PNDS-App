@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { HelpMarkdown } from '@/components/help/HelpMarkdown'
 import { logger } from '@/lib/logger'
@@ -101,6 +101,29 @@ export function ProjectCoverPage({
     observer.observe(title)
     return () => observer.disconnect()
   }, [page.title])
+
+  // The band's text auto-rolls when the section outgrows the band:
+  // the inner wrapper translates through the MEASURED overflow (see
+  // .cover-band-roll in App.css — ping-pong, equal-speed legs, holds
+  // at both ends, hover-paused). A section that fits never moves.
+  const bandColumnRef = useRef<HTMLDivElement>(null)
+  const [rollRange, setRollRange] = useState(0)
+  useEffect(() => {
+    const column = bandColumnRef.current
+    if (!column) return
+    const measure = () => {
+      const range = column.scrollHeight - column.clientHeight
+      setRollRange(range > 1 ? range : 0)
+    }
+    measure()
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(measure)
+    observer.observe(column)
+    // Content height shifts as fonts settle — watch the body too.
+    const body = column.firstElementChild
+    if (body instanceof Element) observer.observe(body)
+    return () => observer.disconnect()
+  }, [page.sectionMarkdown, page.sectionLabel])
 
   return (
     <div
@@ -209,17 +232,34 @@ export function ProjectCoverPage({
             className="aspect-square h-full shrink-0 object-cover"
           />
         )}
-        <div className="min-w-0 flex-1 overflow-y-auto py-[3.2cqh] pe-[5.5cqw]">
-          <p
-            data-testid="cover-label"
-            className="font-hans text-[1.92cqw] font-[250] leading-[1.45] text-(--pnds-text)"
+        <div
+          ref={bandColumnRef}
+          className="min-w-0 flex-1 overflow-hidden py-[3.2cqh] pe-[5.5cqw]"
+        >
+          <div
+            className={rollRange > 0 ? 'cover-band-roll' : undefined}
+            style={
+              rollRange > 0
+                ? ({
+                    '--roll-range': `-${rollRange}px`,
+                    // 20px/s reading crawl, floored so a small overflow
+                    // still takes a full 8s leg.
+                    '--roll-duration': `${Math.max(rollRange / 20, 8)}s`,
+                  } as CSSProperties)
+                : undefined
+            }
           >
-            {page.sectionLabel}
-          </p>
-          <HelpMarkdown
-            markdown={page.sectionMarkdown}
-            className="text-[1.92cqw] leading-[1.45] text-(--pnds-text) [&_li]:my-[0.5cqw] [&_p]:my-0 [&_ul]:my-[1cqw]"
-          />
+            <p
+              data-testid="cover-label"
+              className="font-hans text-[1.92cqw] font-[250] leading-[1.45] text-(--pnds-text)"
+            >
+              {page.sectionLabel}
+            </p>
+            <HelpMarkdown
+              markdown={page.sectionMarkdown}
+              className="text-[1.92cqw] leading-[1.45] text-(--pnds-text) [&_li]:my-[0.5cqw] [&_p]:my-0 [&_ul]:my-[1cqw]"
+            />
+          </div>
         </div>
       </div>
     </div>
