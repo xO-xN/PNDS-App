@@ -284,7 +284,9 @@ export function AppShell() {
         {/* Start page: the sidebar stays PERMANENTLY visible, including in
           fullscreen — only loaded sessions retract it on fullscreen. */}
         <Sidebar variant="static" />
-        <main className="flex-1 overflow-auto">
+        {/* relative: the cover README's edge-anchored root pins to this
+            box — its geometry must survive every engine's flex quirks. */}
+        <main className="relative flex-1 overflow-auto">
           {/* v1.5.0 (#125): the main area's README display routing — a
               selected card shows the project's README.md, a drilled-in
               folder its 自述; the starting page is the home fallback. */}

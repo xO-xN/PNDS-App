@@ -127,6 +127,25 @@ export function ProjectReadme({ path }: { path: string }) {
     }
   }
 
+  // The cover format's root is EDGE-ANCHORED, not flowed: it pins
+  // absolutely to <main> (relative), so its box IS the panel's box — a
+  // definite height with zero percentage-height links. The flow-based
+  // min-h-full stretch proved unreliable in the webview (the chain can
+  // collapse to content height, which pins the band's absolute bottom
+  // to a folded root — the band hangs mid-window).
+  if (coverPage !== null) {
+    return (
+      <div
+        data-testid="project-readme"
+        onClick={onRootClick}
+        className="absolute inset-0 flex flex-col bg-(--pnds-bg) p-8 animate-[fade-in_0.8s_ease-in]"
+      >
+        <ProjectCoverPage page={coverPage} cover={coverImage} />
+        <PreflightDock />
+      </div>
+    )
+  }
+
   return (
     <div
       data-testid="project-readme"
@@ -159,14 +178,6 @@ export function ProjectReadme({ path }: { path: string }) {
           >
             {t('projectReadme.writingRules')}
           </Button>
-        </div>
-      ) : coverPage !== null ? (
-        // The cover format owns the full panel width — the doc-width
-        // column below is the legacy view's constraint, not this one.
-        // min-h-0 lets the flex child shrink with the window: the cover
-        // page FITS the panel (it never page-scrolls).
-        <div className="min-h-0 w-full flex-1">
-          <ProjectCoverPage page={coverPage} cover={coverImage} />
         </div>
       ) : (
         <div className="mx-auto w-full max-w-2xl flex-1 pb-16 text-(--pnds-text)">

@@ -83,7 +83,7 @@ export function ProjectCoverPage({
   return (
     <div
       data-testid="project-cover-page"
-      className="@container relative flex h-full w-full flex-col overflow-hidden [--cover-edge-inset:9.5cqh] [--cover-band-h:min(24.3cqh,40cqw)]"
+      className="@container relative flex min-h-0 w-full flex-1 flex-col overflow-hidden [--cover-edge-inset:9.5cqh] [--cover-band-h:min(24.3cqh,40cqw)]"
     >
       {/* Header: diamond mark + wordmark, composer pill on the right.
           Its top padding is --cover-edge-inset — the ONE token that
