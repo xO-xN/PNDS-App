@@ -5,12 +5,15 @@ import { HelpMarkdown } from '@/components/help/HelpMarkdown'
 import { PreflightDock } from '@/components/shell/PreflightDock'
 import { Button } from '@/components/ui/button'
 import {
+  readProjectCover,
   readProjectReadme,
   resolveProjectReadmeLink,
   type ProjectReadmeRead,
 } from '@/lib/project-readme'
+import { parseReadmeCoverPage } from '@/lib/readme-cover-page'
 import { openHelpWindow } from '@/lib/help-window'
 import { logger } from '@/lib/logger'
+import { ProjectCoverPage } from './ProjectCoverPage'
 
 /**
  * v1.5.0 (#125): the project's root README.md in the main area — the
@@ -36,6 +39,12 @@ import { logger } from '@/lib/logger'
  * the wrapper logs and lands here too) is the empty state, pointing at
  * the writing rules in Help (the "Writing a Project README" chapter,
  * added by #127; the structure reference carries the contract).
+ *
+ * v1.5.0 (README cover page): a README in the creator's cover format
+ * (metadata block + first section, see lib/readme-cover-page) renders
+ * as the designed title page instead of the document view —
+ * ProjectCoverPage composes it; every other README keeps rendering
+ * exactly as before.
  */
 export function ProjectReadme({ path }: { path: string }) {
   const { t, i18n } = useTranslation()
@@ -67,6 +76,39 @@ export function ProjectReadme({ path }: { path: string }) {
   const settled =
     loaded !== null && loaded.path === path && loaded.locale === locale
   const read = settled ? loaded.read : null
+
+  // v1.5.0 (README cover page): a README in the creator's cover format
+  // (metadata block + first section) renders as the designed title
+  // page; anything else stays the legacy document view. The parse is
+  // pure — an unparseable README is simply "not the format".
+  const coverPage =
+    settled && read !== null && read.readme !== null
+      ? parseReadmeCoverPage(read.readme)
+      : null
+  const wantsCover = coverPage !== null
+
+  // The band's cover image, keyed by path (a cover is
+  // locale-independent — one fetch per selected project, only when the
+  // format actually wants one). Same keyed-state pattern as `loaded`:
+  // no synchronous reset, no stale image across selections.
+  const [coverLoaded, setCoverLoaded] = useState<{
+    path: string
+    cover: string | null
+  } | null>(null)
+
+  useEffect(() => {
+    if (!wantsCover) return
+    let cancelled = false
+    void readProjectCover(path).then(result => {
+      if (!cancelled) setCoverLoaded({ path, cover: result.cover })
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [path, wantsCover])
+
+  const coverImage =
+    coverLoaded !== null && coverLoaded.path === path ? coverLoaded.cover : null
 
   // One interception at the panel root: no anchor click ever reaches the
   // webview's default navigation. External URLs hand off to the system
@@ -117,6 +159,12 @@ export function ProjectReadme({ path }: { path: string }) {
           >
             {t('projectReadme.writingRules')}
           </Button>
+        </div>
+      ) : coverPage !== null ? (
+        // The cover format owns the full panel width — the doc-width
+        // column below is the legacy view's constraint, not this one.
+        <div className="w-full flex-1">
+          <ProjectCoverPage page={coverPage} cover={coverImage} />
         </div>
       ) : (
         <div className="mx-auto w-full max-w-2xl flex-1 pb-16 text-(--pnds-text)">

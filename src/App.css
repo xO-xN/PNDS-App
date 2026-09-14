@@ -72,6 +72,17 @@
   font-family: var(--pnds-font-text);
 }
 
+/* Han-face role (v1.5.0 README cover page): the cover page's title and
+   section label follow the creator-side Source Han Sans SC. No CJK face
+   is bundled (offline weight budget) — the stack falls to the platform
+   gothic (PingFang SC on macOS), visually near-identical at these
+   weights; Latin runs fall to the system sans. */
+.font-hans {
+  font-family:
+    'Source Han Sans SC', 'Noto Sans SC', 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', sans-serif;
+}
+
 @custom-variant dark (&:is(.dark *));
 
 @layer base {

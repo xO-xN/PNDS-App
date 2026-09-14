@@ -40,6 +40,9 @@ cpal = "0.18"
 zip = { version = "4.6", default-features = false, features = ["deflate-flate2"] }
 # v1.2.0 (issue #16): sha256 of the packed .pnds for out-of-band verification.
 sha2 = "0.10"
+# v1.5.0: the README cover page hands the project's cover.png to the
+# webview as a base64 data URL (self-contained, no asset-protocol scope).
+base64 = "0.22"
 # v1.2.0 (issue #16): staging dir for read-only .pnds packing (also used by tests).
 tempfile = "3"
 

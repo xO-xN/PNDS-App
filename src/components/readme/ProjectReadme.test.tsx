@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@/test/test-utils'
+import { render, screen, fireEvent, waitFor } from '@/test/test-utils'
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { commands } from '@/lib/tauri-bindings'
@@ -193,5 +193,103 @@ describe('ProjectReadme', () => {
     } finally {
       await i18n.changeLanguage('en')
     }
+  })
+})
+
+/** The creator's cover format (metadata block + first section), as
+ * shipped by Inarticulate III. */
+const COVER_FIXTURE = [
+  '# 失语 III',
+  '',
+  '**中文** | [English](README.md)',
+  '',
+  'title: 失语 III',
+  'composer: @肖翔',
+  'color_palette: [#000000, #C9D8B6, #F1ECC3, #57837B]',
+  '',
+  '## 作品简介：',
+  '',
+  '失语III 是为三个手机演奏者而作的数字乐谱作品。',
+  '',
+  '---',
+  '',
+  '## 关于作品',
+  '',
+  '本作品为 PNDS 工程。',
+].join('\n')
+
+/**
+ * v1.5.0 (README cover page): a README in the cover format renders as
+ * the designed title page — the metadata drives it, the cover image is
+ * fetched once per project, and the boilerplate behind the --- never
+ * shows. Legacy documents (the fixtures above) keep the document view.
+ */
+describe('ProjectReadme cover format', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('renders the cover page with the fetched cover image', async () => {
+    mockReadme(COVER_FIXTURE)
+    vi.mocked(commands.readProjectCover).mockResolvedValue({
+      status: 'ok',
+      data: 'data:image/png;base64,QUJD',
+    })
+
+    render(<ProjectReadme path="/p" />)
+
+    expect(await screen.findByTestId('project-cover-page')).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: '失语 III' })
+    ).toBeInTheDocument()
+    expect(screen.getByTestId('cover-composer')).toHaveTextContent('@肖翔')
+    expect(screen.getByTestId('cover-label')).toHaveTextContent('作品简介：')
+    // The band body is the FIRST section only.
+    expect(
+      screen.getByText(/失语III 是为三个手机演奏者而作的数字乐谱作品/)
+    ).toBeInTheDocument()
+    expect(screen.queryByText('关于作品')).not.toBeInTheDocument()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('cover-image')).toHaveAttribute(
+        'src',
+        'data:image/png;base64,QUJD'
+      )
+    })
+    expect(commands.readProjectCover).toHaveBeenCalledWith('/p')
+  })
+
+  it('renders the cover page text-only when no cover image ships', async () => {
+    mockReadme(COVER_FIXTURE)
+    // clearAllMocks keeps implementations — re-pin the default so the
+    // previous test's data-URL mock cannot leak in here.
+    vi.mocked(commands.readProjectCover).mockResolvedValue({
+      status: 'ok',
+      data: null,
+    })
+
+    render(<ProjectReadme path="/p" />)
+
+    expect(await screen.findByTestId('project-cover-page')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.queryByTestId('cover-image')).not.toBeInTheDocument()
+    })
+  })
+
+  it('keeps a cover-format README under the link policy of the panel', async () => {
+    mockReadme(
+      COVER_FIXTURE.replace(
+        '失语III 是为三个手机演奏者而作的数字乐谱作品。',
+        'See [releases](https://example.com/rel) and [中文](README.zh-CN.md).'
+      )
+    )
+
+    render(<ProjectReadme path="/p" />)
+    const external = await screen.findByRole('link', { name: 'releases' })
+
+    fireEvent.click(external)
+    expect(openUrl).toHaveBeenCalledWith('https://example.com/rel')
+    fireEvent.click(screen.getByRole('link', { name: '中文' }))
+    expect(openUrl).toHaveBeenCalledTimes(1)
   })
 })

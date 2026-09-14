@@ -125,6 +125,9 @@ vi.mock('@/lib/tauri-bindings', async () => {
       readProjectReadme: vi
         .fn()
         .mockResolvedValue({ status: 'ok', data: null }),
+      // v1.5.0 (README cover page): the band's cover image — default:
+      // none (the band renders text-only).
+      readProjectCover: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
       cleanupOrphanedProcesses: vi
         .fn()
         .mockResolvedValue({ status: 'ok', data: 0 }),

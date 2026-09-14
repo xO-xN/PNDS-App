@@ -193,3 +193,13 @@ pub async fn read_project_readme(
 ) -> Result<Option<String>, String> {
     crate::project::readme::read_project_readme(PathBuf::from(&path), locale.as_deref())
 }
+
+/// v1.5.0 (README cover page): reads the project's optional cover image
+/// (`cover.png` → `cover.jpg` → `cover.jpeg` → `cover.webp`) as a base64
+/// data URL for the README panel's band. The read policy (probe order,
+/// missing pieces, size cap, readable errors) lives in `project::cover`.
+#[tauri::command]
+#[specta::specta]
+pub async fn read_project_cover(path: String) -> Result<Option<String>, String> {
+    crate::project::cover::read_project_cover(PathBuf::from(&path))
+}

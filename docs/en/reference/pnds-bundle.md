@@ -44,7 +44,7 @@ Staging and the exclusion list:
 - copying happens in a staging area in the system temp directory; the source Project directory is left untouched;
 - excluded (never enters the bundle): `.DS_Store` and `.git*` files/directories at any depth; the `docs/`, `test/` and `tests/` directories directly under the Project root only (authoring material, not runtime assets);
 - symlinks in the source Project: targets inside the Project directory are materialised as ordinary file copies; targets outside are skipped;
-- every other file is copied verbatim (including `node_modules/`, `.scd` sources, audio/, public/, … — exclusion only subtracts; nothing is ever reordered or rewritten). The Project root's `README.md` (its self-description, see [structure.md](./structure.md)) is among them: it travels with the bundle and the receiving machine's App renders it when the Project's card is selected;
+- every other file is copied verbatim (including `node_modules/`, `.scd` sources, audio/, public/, … — exclusion only subtracts; nothing is ever reordered or rewritten). The Project root's `README.md` (its self-description, see [structure.md](./structure.md)) and the optional cover image `cover.png` are among them: they travel with the bundle and the receiving machine's App renders them when the Project's card is selected (the cover into the README panel's upper zone);
 - devDependencies don't affect the validation but do ride along inside `node_modules` — running `npm prune --omit=dev` before release meaningfully shrinks the `.pnds`.
 
 Artifacts:

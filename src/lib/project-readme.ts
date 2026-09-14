@@ -44,6 +44,39 @@ export async function readProjectReadme(
 }
 
 /**
+ * v1.5.0 (README cover page): the project's optional cover image
+ * (`cover.png` → `cover.jpg` → `cover.jpeg` → `cover.webp`) as a data
+ * URL for the cover band. Same never-throws posture as the README
+ * read, but the panel treats a missing or failed cover as "band
+ * without the image": the wrapper logs and the page still renders.
+ */
+export interface ProjectCoverRead {
+  cover: string | null
+  error: string | null
+}
+
+export async function readProjectCover(
+  path: string
+): Promise<ProjectCoverRead> {
+  const fail = (error: unknown): ProjectCoverRead => {
+    logger.warn('Failed to read project cover', { path, error })
+    return {
+      cover: null,
+      error: error instanceof Error ? error.message : String(error),
+    }
+  }
+  try {
+    const result = await commands.readProjectCover(path)
+    if (result.status === 'error') {
+      return fail(result.error)
+    }
+    return { cover: result.data, error: null }
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+/**
  * What a markdown link inside a project README may do. Mirrors the help
  * corpus's policy (help-links.ts): a schemed URL leaves via the system
  * browser; everything else — relative `.md` hand-references included —

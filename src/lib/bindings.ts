@@ -194,6 +194,20 @@ async readProjectReadme(path: string, locale: string | null) : Promise<Result<st
 }
 },
 /**
+ * v1.5.0 (README cover page): reads the project's optional cover image
+ * (`cover.png` → `cover.jpg` → `cover.jpeg` → `cover.webp`) as a base64
+ * data URL for the README panel's band. The read policy (probe order,
+ * missing pieces, size cap, readable errors) lives in `project::cover`.
+ */
+async readProjectCover(path: string) : Promise<Result<string | null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("read_project_cover", { path }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * Cleans up child processes left behind by an abnormal previous exit.
  * Also runs automatically at app startup and at the start of preflight.
  * Children of the live session are never touched (v1.2.3, issue #37).
