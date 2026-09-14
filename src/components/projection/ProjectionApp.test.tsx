@@ -191,6 +191,15 @@ describe('ProjectionApp (#130 gate)', () => {
       'src',
       'data:image/png;base64,cover'
     )
+    // The venue-screen frame: the cover composes inside a generously
+    // inset stage box (user report: 大屏要更多四周留白) — the margins
+    // are proportional, so they ride any screen size and zoom.
+    expect(screen.getByTestId('projection-cover-stage').className).toContain(
+      'inset-x-[8%]'
+    )
+    expect(screen.getByTestId('projection-cover-stage').className).toContain(
+      'inset-y-[10%]'
+    )
   })
 
   it('renders a cover-format README band text-only when the project ships no cover image', async () => {

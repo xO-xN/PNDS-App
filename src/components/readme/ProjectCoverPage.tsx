@@ -27,6 +27,16 @@ import type { ReadmeCoverPage } from '@/lib/readme-cover-page'
  * metadata (composer_url / github_url, http(s) only) parsed — a click
  * hands off to the system browser, never the webview.
  *
+ * The root is a true SIZE container (`container-type: size`), NOT
+ * Tailwind's `@container` (inline-size only): with inline-size, every
+ * cqh unit silently falls back to the SMALL VIEWPORT, and the two
+ * reference frames diverge the moment the panel isn't the viewport —
+ * inside the projection window's zoom frame the cqw-scaled column kept
+ * a viewport-sized font, so the title's fit squeezed its tracking in
+ * jumps and overflowed, and the band (26cqh of the viewport) overran
+ * the panel's bottom (user report: 字间距突变、内容超出窗口). Size
+ * containment needs a definite-height parent — both embeddings give it
+ * one (the README panel's absolute box, the projection's stage frame).
  * The title is centered under the hairline's column, and its tracking
  * is the flexible variable: the design's 0.37em when it fits, squeezed
  * toward 0 for long titles, and only then does the type scale down —
@@ -188,7 +198,7 @@ export function ProjectCoverPage({
   return (
     <div
       data-testid="project-cover-page"
-      className="@container relative flex min-h-0 w-full flex-1 flex-col overflow-hidden [--cover-edge-inset:5cqh] [--cover-band-h:min(26cqh,42cqw)]"
+      className="[container-type:size] relative flex min-h-0 w-full flex-1 flex-col overflow-hidden [--cover-edge-inset:5cqh] [--cover-band-h:min(26cqh,42cqw)]"
     >
       {/* Header: diamond mark + wordmark left; the composer and github
           pills right (a pill is a button only when its URL metadata

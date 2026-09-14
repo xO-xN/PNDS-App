@@ -150,6 +150,14 @@ describe('ProjectCoverPage', () => {
     const root = container.firstElementChild as HTMLElement
     expect(root.className).toContain('[--cover-edge-inset:5cqh]')
     expect(root.className).toContain('[--cover-band-h:min(26cqh,42cqw)]')
+    // A true SIZE container — Tailwind's `@container` (inline-size
+    // only) lets every cqh fall back to the viewport; inside the
+    // projection window's zoom frame that divergence made the title's
+    // fit squeeze its tracking in jumps and the band overrun the
+    // panel's bottom (user report: 字间距突变、内容超出窗口). This
+    // pins the container type the whole cq layout depends on.
+    expect(root.className).toContain('[container-type:size]')
+    expect(root.className).not.toContain('@container')
     expect(screen.getByTestId('cover-header').className).toContain(
       'pt-(--cover-edge-inset)'
     )

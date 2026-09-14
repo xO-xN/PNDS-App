@@ -312,17 +312,26 @@ function ProjectionIntro({
     )
   }
   if (coverPage !== null) {
-    // The creator-designed title page, same framing as the app panel's
-    // cover branch (p-8, the fade-in arrival); ProjectCoverPage pins
-    // its band to this container's edges, so the box must be definite
-    // (h-full inside the stage) — the ProjectReadme lesson.
+    // The creator-designed title page, framed for the venue screen
+    // (user report: 大屏要更多四周留白) — the composition lives inside a
+    // generously inset STAGE box (a poster on the wall, not
+    // edge-to-edge), and the cover's own container queries scale the
+    // whole layout to the frame, so the margins ride any screen size
+    // and zoom. The stage must be a definite box (the cover root is a
+    // size container — content cannot size it), hence the absolute
+    // insets; p-8 gives way to the proportional frame.
     return (
       <div
         data-testid="projection-intro"
         data-intro-view="cover"
-        className="relative flex h-full w-full flex-col bg-(--pnds-bg) p-8 animate-[fade-in_0.8s_ease-in]"
+        className="relative h-full w-full bg-(--pnds-bg) animate-[fade-in_0.8s_ease-in]"
       >
-        <ProjectCoverPage page={coverPage} cover={coverImage} />
+        <div
+          data-testid="projection-cover-stage"
+          className="absolute inset-x-[8%] inset-y-[10%] flex flex-col"
+        >
+          <ProjectCoverPage page={coverPage} cover={coverImage} />
+        </div>
       </div>
     )
   }
