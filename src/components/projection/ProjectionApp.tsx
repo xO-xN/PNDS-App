@@ -324,7 +324,8 @@ function ProjectionIntro({
     // generously inset STAGE box (a poster on the wall, not
     // edge-to-edge), and the cover's own container queries scale the
     // whole layout to the frame. The zoom scales the STAGE BOX ITSELF
-    // (base 85% × 80% of the window × zoom): real layout, text crisp at
+    // (base 85% × 74% of the window × zoom — the vertical share holds
+    // the screen's breathing room, user-tuned): real layout, text crisp at
     // every step, the cq composition riding along — the monitor's
     // inverse-sized transform frame would self-compensate here (the
     // visual size would never move, user report). Above 100% the box
@@ -343,7 +344,7 @@ function ProjectionIntro({
           className="absolute top-1/2 left-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col"
           style={{
             width: `${(85 * zoom) / 100}%`,
-            height: `${(80 * zoom) / 100}%`,
+            height: `${(74 * zoom) / 100}%`,
           }}
         >
           {/* Venue-screen only (user request): a ROOMIER band — the
@@ -356,7 +357,7 @@ function ProjectionIntro({
           <ProjectCoverPage
             page={coverPage}
             cover={coverImage}
-            bandHeight="min(40cqh,42cqw)"
+            bandHeight="min(43cqh,42cqw)"
           />
         </div>
       </div>
