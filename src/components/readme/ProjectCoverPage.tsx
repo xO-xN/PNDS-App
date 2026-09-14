@@ -49,7 +49,6 @@ export function ProjectCoverPage({
   page,
   cover,
   bandHeight,
-  titleGaps,
 }: {
   page: ReadmeCoverPage
   /** The cover image as a data URL; null renders the band text-only. */
@@ -62,13 +61,6 @@ export function ProjectCoverPage({
    *  centered. Keep the cqw cap when overriding — it bounds the square
    *  cover by the band's width. */
   bandHeight?: string
-  /** Overrides the title's vertical breathing room — the gap ABOVE the
-   *  title (below the hairline, default 2cqh) and the gap BELOW it
-   *  (above the band, default 4.5cqh). The projection screen (user
-   *  request: title 与上下两部分中间的空间增大) passes roomier gaps;
-   *  the title still centers in its field, so the composition keeps
-   *  its balance while the whitespace grows both ways. */
-  titleGaps?: { above: string; below: string }
 }) {
   const titleRef = useRef<HTMLHeadingElement>(null)
   // Destructured so the null-guards below narrow inside the click
@@ -215,23 +207,13 @@ export function ProjectCoverPage({
   return (
     <div
       data-testid="project-cover-page"
-      className="[container-type:size] relative flex min-h-0 w-full flex-1 flex-col overflow-hidden [--cover-edge-inset:5cqh] [--cover-band-h:min(26cqh,42cqw)] [--cover-title-pt:2cqh] [--cover-title-pb-gap:4.5cqh]"
+      className="[container-type:size] relative flex min-h-0 w-full flex-1 flex-col overflow-hidden [--cover-edge-inset:5cqh] [--cover-band-h:min(26cqh,42cqw)]"
       // An embedding's band-height override rides the SAME token as the
       // class default — the title zone's bottom reserve reads the
       // variable, so the whole composition re-balances around it.
       style={
-        bandHeight !== undefined || titleGaps !== undefined
-          ? ({
-              ...(bandHeight !== undefined
-                ? { '--cover-band-h': bandHeight }
-                : {}),
-              ...(titleGaps !== undefined
-                ? {
-                    '--cover-title-pt': titleGaps.above,
-                    '--cover-title-pb-gap': titleGaps.below,
-                  }
-                : {}),
-            } as CSSProperties)
+        bandHeight !== undefined
+          ? ({ '--cover-band-h': bandHeight } as CSSProperties)
           : undefined
       }
     >
@@ -289,7 +271,7 @@ export function ProjectCoverPage({
           band. Its column is the hairline's width (same inset), its
           size caps against BOTH panel axes, and the tracking flexes
           to fit. */}
-      <div className="flex min-h-0 flex-1 items-center overflow-hidden px-[8cqw] pt-(--cover-title-pt) pb-[calc(var(--cover-edge-inset)_+_var(--cover-band-h)_+_var(--cover-title-pb-gap))]">
+      <div className="flex min-h-0 flex-1 items-center overflow-hidden px-[8cqw] pt-[2cqh] pb-[calc(var(--cover-edge-inset)_+_var(--cover-band-h)_+_4.5cqh)]">
         <h1
           ref={titleRef}
           data-testid="cover-title"

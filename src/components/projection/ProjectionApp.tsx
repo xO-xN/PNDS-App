@@ -357,10 +357,6 @@ function ProjectionIntro({
             page={coverPage}
             cover={coverImage}
             bandHeight="min(40cqh,42cqw)"
-            /* …and roomier title gaps (user request: title 与上下两部
-               分之间的空间增大) — the title keeps centering in its
-               field, the whitespace simply grows both ways. */
-            titleGaps={{ above: '4cqh', below: '7.5cqh' }}
           />
         </div>
       </div>
