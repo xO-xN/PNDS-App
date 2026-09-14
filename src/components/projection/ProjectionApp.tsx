@@ -356,7 +356,7 @@ function ProjectionIntro({
           <ProjectCoverPage
             page={coverPage}
             cover={coverImage}
-            bandHeight="min(34cqh,42cqw)"
+            bandHeight="min(40cqh,42cqw)"
           />
         </div>
       </div>

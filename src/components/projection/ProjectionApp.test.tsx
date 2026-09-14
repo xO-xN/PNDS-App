@@ -196,7 +196,7 @@ describe('ProjectionApp (#130 gate)', () => {
     // scroll; the title rides higher, composition still centered.
     const coverRoot = screen.getByTestId('project-cover-page')
     expect(coverRoot.style.getPropertyValue('--cover-band-h')).toBe(
-      'min(34cqh,42cqw)'
+      'min(40cqh,42cqw)'
     )
     // The venue-screen frame: the cover composes inside a generously
     // inset stage box (user report: 大屏要更多四周留白) — and the zoom
