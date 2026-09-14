@@ -186,13 +186,20 @@ describe('ProjectCoverPage', () => {
         page={PAGE}
         cover={null}
         bandHeight="min(34cqh,42cqw)"
+        titleGaps={{ above: '4cqh', below: '7.5cqh' }}
       />
     )
     expect(root.style.getPropertyValue('--cover-band-h')).toBe(
       'min(34cqh,42cqw)'
     )
-    // The class default stays as the non-override baseline.
+    // The class defaults stay as the non-override baseline — the README
+    // panel (no props) renders EXACTLY the stock composition, pinned
+    // by these token defaults equal to the original hard constants.
     expect(root.className).toContain('[--cover-band-h:min(26cqh,42cqw)]')
+    expect(root.className).toContain('[--cover-title-pt:2cqh]')
+    expect(root.className).toContain('[--cover-title-pb-gap:4.5cqh]')
+    expect(root.style.getPropertyValue('--cover-title-pt')).toBe('4cqh')
+    expect(root.style.getPropertyValue('--cover-title-pb-gap')).toBe('7.5cqh')
   })
 
   it('opens the composer and github links in the system browser', () => {

@@ -196,22 +196,28 @@ describe('ProjectionApp (#130 gate)', () => {
     // scroll; the title rides higher, composition still centered.
     const coverRoot = screen.getByTestId('project-cover-page')
     expect(coverRoot.style.getPropertyValue('--cover-band-h')).toBe(
-      'min(43cqh,42cqw)'
+      'min(40cqh,42cqw)'
     )
     // The venue-screen frame: the cover composes inside a generously
     // inset stage box (user report: 大屏要更多四周留白) — and the zoom
     // scales the STAGE BOX itself (real layout, crisp text; the cq
-    // composition rides along). Base frame at 100%: 85% × 74% — the
-    // vertical share is the screen's breathing room (user-tuned).
+    // …and the venue screen's roomier title breathing room (user
+    // report: the projection's title sat tighter than the app panel's
+    // — its stage box is the shorter container, same shares fewer px).
+    expect(coverRoot.style.getPropertyValue('--cover-title-pt')).toBe('4cqh')
+    expect(coverRoot.style.getPropertyValue('--cover-title-pb-gap')).toBe(
+      '7.5cqh'
+    )
+    // composition rides along). Base frame at 100%: 85% × 80%.
     const stage = screen.getByTestId('projection-cover-stage')
     expect(stage.style.width).toBe('85%')
-    expect(stage.style.height).toBe('74%')
-    // ⌘+ grows the poster frame — 110% zoom → 93.5% × 81.4%.
+    expect(stage.style.height).toBe('80%')
+    // ⌘+ grows the poster frame — 110% zoom → 93.5% × 88%.
     act(() => {
       listeners.get('pnds:projection-action')?.({ kind: 'zoom-in' })
     })
     expect(stage.style.width).toBe('93.5%')
-    expect(stage.style.height).toBe('81.4%')
+    expect(stage.style.height).toBe('88%')
   })
 
   it('renders a cover-format README band text-only when the project ships no cover image', async () => {
