@@ -94,16 +94,16 @@ export function ProjectCoverPage({
         data-testid="cover-header"
         className="flex shrink-0 items-center justify-between px-[12.6cqw] pt-(--cover-edge-inset)"
       >
-        <div className="flex items-center gap-[2.7cqw]">
+        <div className="flex items-center gap-[2cqw]">
           <DiamondMark palette={page.palette} />
-          <span className="font-[family-name:Comfortaa] text-[2.9cqw] font-medium text-(--pnds-text)">
+          <span className="font-[family-name:Comfortaa] text-[2.2cqw] font-medium text-(--pnds-text)">
             PNDS
           </span>
         </div>
         {page.composer !== null && (
           <span
             data-testid="cover-composer"
-            className="rounded-full bg-(--pnds-sidebar-bg) px-[2.7cqw] py-[1.2cqw] font-hans text-[2.4cqw] tracking-[0.25em] text-(--pnds-text) shadow-(--pnds-card-shadow)"
+            className="rounded-full bg-(--pnds-sidebar-bg) px-[2cqw] py-[0.9cqw] font-hans text-[1.8cqw] tracking-[0.1em] text-(--pnds-text) shadow-(--pnds-card-shadow)"
           >
             {page.composer}
           </span>
@@ -183,7 +183,7 @@ function DiamondMark({ palette }: { palette: readonly string[] }) {
     <span
       data-testid="cover-diamond"
       aria-hidden
-      className="relative block size-[4.6cqw] shrink-0"
+      className="relative block size-[3.4cqw] shrink-0"
     >
       <span className="absolute inset-0 rotate-45">
         {palette.map((color, index) => (
