@@ -126,6 +126,11 @@ export function ProjectCoverPage({
     let arrivedAt = performance.now()
     let raf = 0
     let last = performance.now()
+    // WebKit quantizes scrollTop to whole pixels: a per-frame +0.2px
+    // write would truncate back to the same integer forever and the
+    // crawl would never move. The float position lives HERE; every
+    // frame writes the absolute value.
+    let pos = 0
     const markUser = () => {
       lastUser = performance.now()
     }
@@ -138,24 +143,24 @@ export function ProjectCoverPage({
       last = now
       const range = column.scrollHeight - column.clientHeight
       if (range > 1 && now - lastUser > RESUME_MS) {
-        const atTop = column.scrollTop <= 0.5
-        const atBottom = column.scrollTop >= range - 0.5
+        // An external jump (the reader's wheel) bigger than our own
+        // drift resyncs the accumulator to their position; ordinary
+        // quantization loss (fractions of a pixel) does not.
+        if (Math.abs(column.scrollTop - pos) > 1.5) pos = column.scrollTop
+        const atTop = pos <= 0.5
+        const atBottom = pos >= range - 0.5
         if (atTop || atBottom) {
           if (now - arrivedAt >= HOLD_MS) {
-            if (atBottom) {
-              // The pass ends — restart it from the top.
-              column.scrollTop = 0
-            } else {
-              column.scrollTop = Math.min(0.5 + SPEED_PX_PER_S * dt, range)
-            }
+            pos = atBottom
+              ? 0 // The pass ends — restart it from the top.
+              : Math.min(1.5, range) // clear of WebKit's quantization
+            column.scrollTop = pos
             arrivedAt = now
           }
         } else {
-          column.scrollTop = Math.min(
-            column.scrollTop + SPEED_PX_PER_S * dt,
-            range
-          )
-          if (column.scrollTop >= range - 0.5) arrivedAt = now
+          pos = Math.min(pos + SPEED_PX_PER_S * dt, range)
+          column.scrollTop = pos
+          if (pos >= range - 0.5) arrivedAt = now
         }
       }
       raf = requestAnimationFrame(step)
