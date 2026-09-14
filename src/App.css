@@ -83,6 +83,29 @@
     'Microsoft YaHei', sans-serif;
 }
 
+/* Cover page title ripple (v1.5.0): each glyph is an inline-block
+   carrying the same slow wave with a per-glyph negative delay, so one
+   gentle crest travels across the title. Deliberately light — a
+   0.045em rise with a whisper of scaleY — the deformation reads as
+   breathing, not bobbing. The global prefers-reduced-motion block
+   above clamps it to a standstill. Keyframe units are em so the
+   amplitude scales with the fit algorithm's font-size. */
+.cover-title-glyph {
+  display: inline-block;
+  animation: cover-title-ripple 5.2s ease-in-out infinite;
+  will-change: transform;
+}
+
+@keyframes cover-title-ripple {
+  0%,
+  100% {
+    transform: translateY(0) scaleY(1);
+  }
+  50% {
+    transform: translateY(-0.045em) scaleY(1.015);
+  }
+}
+
 @custom-variant dark (&:is(.dark *));
 
 @layer base {

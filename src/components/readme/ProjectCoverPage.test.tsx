@@ -76,6 +76,31 @@ describe('ProjectCoverPage', () => {
     expect(screen.queryByTestId('cover-composer')).not.toBeInTheDocument()
   })
 
+  it('ripples the title per glyph without changing its text', () => {
+    render(
+      <ProjectCoverPage
+        page={{ ...PAGE, title: 'Inarticulate III' }}
+        cover={null}
+      />
+    )
+
+    const title = screen.getByTestId('cover-title')
+    // The visible text survives the split (copy/selection still work).
+    expect(title.textContent).toBe('Inarticulate III')
+    // Spaces ride as plain text; every other grapheme gets a ripple span.
+    expect(title.querySelectorAll('.cover-title-glyph')).toHaveLength(
+      'Inarticulate III'.replaceAll(' ', '').length
+    )
+  })
+
+  it('keeps joined-script titles whole (glyph splits would break letter joining)', () => {
+    render(<ProjectCoverPage page={{ ...PAGE, title: 'موجة' }} cover={null} />)
+
+    expect(
+      screen.getByTestId('cover-title').querySelectorAll('.cover-title-glyph')
+    ).toHaveLength(0)
+  })
+
   // The user's hard spec, locked: the band's gap to the window bottom
   // equals the PNDS/composer row's gap to the window top. Both sides
   // must resolve the SAME --cover-edge-inset token (defined once on

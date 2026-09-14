@@ -31,7 +31,9 @@ import type { ReadmeCoverPage } from '@/lib/readme-cover-page'
  * is the flexible variable: the design's 0.37em when it fits, squeezed
  * toward 0 for long titles, and only then does the type scale down —
  * measured imperatively (the style is the state; no React re-render),
- * re-run on panel resize.
+ * re-run on panel resize. The glyphs each carry a slow, staggered
+ * ripple (see .cover-title-glyph in App.css) — one gentle crest
+ * traveling across the word; joined-script titles stay whole.
  */
 export function ProjectCoverPage({
   page,
@@ -164,9 +166,25 @@ export function ProjectCoverPage({
           ref={titleRef}
           data-testid="cover-title"
           dir="auto"
+          aria-label={page.title}
           className="w-full text-center font-hans text-[min(16.8cqw,20.5cqh)] font-bold leading-[1.05] tracking-[0.37em] whitespace-nowrap text-(--pnds-text)"
         >
-          {page.title}
+          {JOINED_SCRIPT.test(page.title)
+            ? page.title
+            : titleGlyphs(page.title).map((glyph, index) =>
+                glyph === ' ' ? (
+                  ' '
+                ) : (
+                  <span
+                    key={index}
+                    aria-hidden="true"
+                    className="cover-title-glyph"
+                    style={{ animationDelay: `${-(index * 0.16)}s` }}
+                  >
+                    {glyph}
+                  </span>
+                )
+              )}
         </h1>
       </div>
 
@@ -206,6 +224,24 @@ export function ProjectCoverPage({
       </div>
     </div>
   )
+}
+
+/** Connected scripts (Arabic et al.) must never be split per glyph —
+ * the letters would come apart. */
+const JOINED_SCRIPT =
+  /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/
+
+/** Graphemes, not code points — a combining mark must ride its base
+ * glyph into its own ripple span. */
+function titleGlyphs(title: string): string[] {
+  if (typeof Intl.Segmenter === 'function') {
+    return [
+      ...new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(
+        title
+      ),
+    ].map(part => part.segment)
+  }
+  return [...title]
 }
 
 /**
