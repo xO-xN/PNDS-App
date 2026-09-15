@@ -1,7 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { PreflightDock } from '@/components/shell/PreflightDock'
 import { BUILTIN_UTILITY_DISPLAY_NAMES } from '@/lib/builtin-utilities'
-import { DEFAULT_COVER_PALETTE } from '@/lib/readme-cover-page'
 import { ProjectCoverPage } from './ProjectCoverPage'
 import type { ReadmeCoverPage } from '@/lib/readme-cover-page'
 
@@ -14,10 +13,16 @@ import type { ReadmeCoverPage } from '@/lib/readme-cover-page'
  * Instead the utility gets the cover page's composition in its minimal
  * form (user spec: 越简单越好): the alias as the big title, a one-line
  * intro in the band's text column (no cover image on the band's left),
- * and plain "PNDS Utility" text in the header's right corner — no
- * composer/github pills. The intro copy lives in the locales (zh/en
- * pairs), keyed by registry id; the band's own auto-scroll takes over
- * if a translation outgrows it.
+ * and a "PNDS Utility" pill in the header's right corner — no
+ * composer/github pills. The follow-up round tuned it onto the project
+ * cover's own language: the pill shares the projects' pill background,
+ * the diamond mark goes monochrome in the theme's ink (a utility is
+ * app content — the brand rainbow stays reserved for authored works),
+ * and the band text centers on both axes.
+ *
+ * The intro copy lives in the locales (zh/en pairs), keyed by registry
+ * id; the band's own auto-scroll takes over if a translation outgrows
+ * it.
  */
 export function UtilityIntro({ id }: { id: string }) {
   const { t } = useTranslation()
@@ -26,7 +31,14 @@ export function UtilityIntro({ id }: { id: string }) {
     composer: null,
     composerUrl: null,
     githubUrl: null,
-    palette: DEFAULT_COVER_PALETTE,
+    // The theme's ink as a CSS var — the mark recolors with every
+    // theme instead of shipping a fixed palette.
+    palette: [
+      'var(--pnds-text)',
+      'var(--pnds-text)',
+      'var(--pnds-text)',
+      'var(--pnds-text)',
+    ],
     sectionLabel: '',
     sectionMarkdown: t(`utilities.intro.${id}`, { defaultValue: '' }),
   }
@@ -35,7 +47,12 @@ export function UtilityIntro({ id }: { id: string }) {
       data-testid="utility-intro"
       className="absolute inset-0 flex flex-col bg-(--pnds-bg) p-8 animate-[fade-in_0.8s_ease-in]"
     >
-      <ProjectCoverPage page={page} cover={null} headerNote="PNDS Utility" />
+      <ProjectCoverPage
+        page={page}
+        cover={null}
+        headerNote="PNDS Utility"
+        centerBandText
+      />
       <PreflightDock />
     </div>
   )

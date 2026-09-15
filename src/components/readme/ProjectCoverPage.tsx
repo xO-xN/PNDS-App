@@ -53,6 +53,7 @@ export function ProjectCoverPage({
   bandHeight,
   edgeInset,
   headerNote,
+  centerBandText,
 }: {
   page: ReadmeCoverPage
   /** The cover image as a data URL; null renders the band text-only. */
@@ -78,11 +79,17 @@ export function ProjectCoverPage({
    *  projection screen (user request: title 与上下两部分的间距增大)
    *  passes a tighter inset; the app panel passes nothing. */
   edgeInset?: string
-  /** Plain text on the header's RIGHT for pill-less pages — the
-   *  utility intro's "PNDS Utility" tag (v1.5.0 polish). Renders only
-   *  when the page carries neither a composer pill nor a github
-   *  button. */
+  /** Plain-text pill on the header's RIGHT for pill-less pages — the
+   *  utility intro's "PNDS Utility" tag (v1.5.0 polish; same pill
+   *  background as the project cover's pills per the follow-up
+   *  report). Renders only when the page carries neither a composer
+   *  pill nor a github button. */
   headerNote?: string
+  /** Centers the band's text column (both axes) instead of the
+   *  document-flow start alignment — the utility intro's one-liner
+   *  (follow-up report: 上下左右居中). A column that overflows still
+   *  auto-scrolls; centered text that fits never moves. */
+  centerBandText?: boolean
 }) {
   const titleRef = useRef<HTMLHeadingElement>(null)
   // Destructured so the null-guards below narrow inside the click
@@ -415,12 +422,11 @@ export function ProjectCoverPage({
           {page.composer === null &&
             githubUrl === null &&
             headerNote !== undefined && (
-              // The pill-less corner's plain tag — the utility intro's
-              // "PNDS Utility" (brand label, verbatim like the wordmark).
-              <span
-                data-testid="cover-header-note"
-                className="font-hans text-[1.8cqw] tracking-[0.1em] text-(--pnds-text)/60"
-              >
+              // The pill-less corner's tag (v1.5.0 polish + follow-up:
+              // the user asked for the SAME pill background the project
+              // cover's pills carry) — the utility intro's "PNDS
+              // Utility" (brand label, verbatim like the wordmark).
+              <span data-testid="cover-header-note" className={pillClass}>
                 {headerNote}
               </span>
             )}
@@ -445,20 +451,30 @@ export function ProjectCoverPage({
         >
           {JOINED_SCRIPT.test(page.title)
             ? page.title
-            : titleGlyphs(page.title).map((glyph, index) =>
-                glyph === ' ' ? (
-                  ' '
-                ) : (
+            : titleGlyphs(page.title).map((glyph, index, all) => {
+                if (glyph === ' ') return ' '
+                // One crest reads as ONE crest only while the glyphs'
+                // phase spread stays a small slice of the cycle: a
+                // fixed per-glyph step on a long title (the utility
+                // aliases' 15+ letters) smears across half the 5.2s
+                // period and the wave dissolves into random bobbing
+                // (user report: 波浪运动顺序杂乱). The step therefore
+                // normalizes by the glyph count — short titles keep
+                // the original 0.16s cadence, long ones cap the TOTAL
+                // spread at 0.8s (≈15% of the cycle).
+                const spread = Math.min(0.16 * Math.max(0, all.length - 1), 0.8)
+                const step = all.length > 1 ? spread / (all.length - 1) : 0
+                return (
                   <span
                     key={index}
                     aria-hidden="true"
                     className="cover-title-glyph"
-                    style={{ animationDelay: `${-(index * 0.16)}s` }}
+                    style={{ animationDelay: `${-(step * index)}s` }}
                   >
                     {glyph}
                   </span>
                 )
-              )}
+              })}
         </h1>
       </div>
 
@@ -486,7 +502,15 @@ export function ProjectCoverPage({
         <div
           ref={bandColumnRef}
           data-testid="cover-band-text"
-          className="cover-band-text min-w-0 flex-1 overflow-y-auto py-[3.2cqh] pe-[5.5cqw]"
+          className={
+            centerBandText
+              ? // The utility one-liner rides centered on both axes —
+                // flex centering of the inner layer; the column keeps
+                // its overflow/auto-scroll contract for the day a
+                // translation outgrows it.
+                'cover-band-text flex min-w-0 flex-1 flex-col items-center justify-center overflow-y-auto py-[3.2cqh] text-center'
+              : 'cover-band-text min-w-0 flex-1 overflow-y-auto py-[3.2cqh] pe-[5.5cqw]'
+          }
         >
           <div ref={rollInnerRef} className="will-change-transform">
             {page.sectionLabel !== '' && (

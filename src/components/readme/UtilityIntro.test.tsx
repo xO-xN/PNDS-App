@@ -57,6 +57,44 @@ describe('UtilityIntro', () => {
     expect(screen.queryByTestId('cover-label')).not.toBeInTheDocument()
   })
 
+  // Follow-up round: the corner tag carries the projects' pill
+  // background, the diamond mark goes monochrome in the theme's ink,
+  // and the band text centers on both axes.
+  it('styles the PNDS Utility tag as a pill like the project cover', () => {
+    render(<UtilityIntro id="local-network-diagnostics" />)
+
+    expect(screen.getByTestId('cover-header-note')).toHaveTextContent(
+      'PNDS Utility'
+    )
+    expect(screen.getByTestId('cover-header-note').className).toContain(
+      'rounded-full'
+    )
+  })
+
+  it('renders the diamond mark monochrome in the theme ink', () => {
+    const { container } = render(
+      <UtilityIntro id="local-network-diagnostics" />
+    )
+    const dots = [
+      ...container.querySelectorAll<HTMLElement>(
+        '[data-testid="cover-diamond"] span span'
+      ),
+    ]
+    expect(dots).toHaveLength(4)
+    for (const dot of dots) {
+      expect(dot.style.backgroundColor).toBe('var(--pnds-text)')
+    }
+  })
+
+  it('centers the band text on both axes', () => {
+    render(<UtilityIntro id="local-network-diagnostics" />)
+
+    const column = screen.getByTestId('cover-band-text')
+    expect(column.className).toContain('items-center')
+    expect(column.className).toContain('justify-center')
+    expect(column.className).toContain('text-center')
+  })
+
   // The intro copy is addressed by a DYNAMIC locale key
   // (`utilities.intro.<registry id>`), so nothing at compile time ties
   // the registry to the locale files — this pin does: a utility added

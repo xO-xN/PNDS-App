@@ -94,6 +94,41 @@ describe('ProjectCoverPage', () => {
     )
   })
 
+  it('normalizes the ripple cadence by title length — one crest stays one crest (follow-up report)', () => {
+    // A fixed 0.16s per-glyph step on a LONG title smears the glyphs
+    // across half the 5.2s cycle and the wave reads as random bobbing
+    // (user report on the utility aliases); the step now normalizes so
+    // the TOTAL spread caps at 0.8s whichever the length.
+    const { container } = render(
+      <ProjectCoverPage
+        page={{ ...PAGE, title: 'Multichannel Gen' }}
+        cover={null}
+      />
+    )
+    const delays = [
+      ...container.querySelectorAll<HTMLElement>('.cover-title-glyph'),
+    ].map(span => Math.abs(parseFloat(span.style.animationDelay)))
+    expect(delays.length).toBeGreaterThan(10)
+    // Strictly ordered outward from the first glyph (the traveling
+    // crest) and capped within the normalized spread.
+    for (let i = 1; i < delays.length; i += 1) {
+      expect(delays[i] ?? 0).toBeGreaterThan(delays[i - 1] ?? 0)
+    }
+    expect(Math.max(...delays)).toBeLessThanOrEqual(0.8 + 1e-9)
+
+    // Short titles keep the original cadence: 0.16s per grapheme of
+    // the TITLE (the space rides the index without a span, so the
+    // span count is not the multiplier).
+    const short = render(<ProjectCoverPage page={PAGE} cover={null} />)
+    const shortDelays = [
+      ...short.container.querySelectorAll<HTMLElement>('.cover-title-glyph'),
+    ].map(span => Math.abs(parseFloat(span.style.animationDelay)))
+    expect(shortDelays[shortDelays.length - 1] ?? 0).toBeCloseTo(
+      0.16 * (PAGE.title.length - 1),
+      5
+    )
+  })
+
   it('keeps joined-script titles whole (glyph splits would break letter joining)', () => {
     render(<ProjectCoverPage page={{ ...PAGE, title: 'موجة' }} cover={null} />)
 
