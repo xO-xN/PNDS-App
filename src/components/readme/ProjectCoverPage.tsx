@@ -138,21 +138,37 @@ export function ProjectCoverPage({
     // trailing-space semantic instead of guessing an indent model.
     //
     // v1.5.0 polish (Intel / macOS 13 report: EVERY work's title kept
-    // the huge 0.37em tracking and overflowed the window's right edge
-    // in the app panel): a Range is an engine-computed text rect, and
-    // its letter-spacing semantics are not stable across WebKit
-    // generations — when the Range ignores the spacing, the measured
-    // slope collapses toward 0, the degenerate guard below declines to
-    // commit anything, and the 0.37em class default renders verbatim
-    // (huge tracking, real overflow) with no later event ever
-    // correcting it. The width instrument is therefore no longer the
-    // Range but a PROBE: an absolutely-positioned, hidden, shrink-to-
-    // fit (`width: max-content`) clone of the title appended INSIDE the
+    // the huge 0.37em tracking and overflowed the window's right edge,
+    // at EVERY window size — in both windows): the width instrument is
+    // a PROBE — an absolutely-positioned, hidden, shrink-to-fit
+    // (`width: max-content`) clone of the title appended INSIDE the
     // zone (same container-query context), whose border-box width is
-    // plain layout arithmetic on every engine — no rect semantics, no
-    // clamping by the flex column. The Range stays as a SECOND
-    // instrument (its verdict is taken when it reports MORE overflow)
-    // and remains the centering measurement on the real rendered line.
+    // plain layout arithmetic: no Range rect semantics, no clamping by
+    // the flex column. The Range stays as a SECOND instrument (taken
+    // when it reports MORE overflow) and remains the centering
+    // measurement — its glyph-edge positions are honest even where its
+    // width semantics are not. Round three hardening, each targeting a
+    // way an engine can still answer in dialect:
+    //   - the plan carries NO text-indent (an indent shifts a centered
+    //     line by only HALF its value — CSS22 §16.1 — an engine-
+    //     variable half-measure that compounded with the translateX
+    //     correction into the report's persistent right-heavy skew);
+    //     optical centering has ONE source: the measured translateX;
+    //   - the probe's width is compared against the column WITH one
+    //     trailing spacing unit added — engines differ on whether a
+    //     shrink-to-fit box bills the spacing after the LAST glyph,
+    //     and the rendered line does carry it; over-squeezing by one
+    //     unit on engines that bill it is invisible, under-fitting by
+    //     one was the "always ~a bit over" overflow;
+    //   - `em` falls back to the probe's own line-box height
+    //     (leading-[1.05]) when the computed font-size string doesn't
+    //     parse (a cq-unit font-size can serialize as its min()
+    //     expression on older WebKits) — a NaN em used to abort every
+    //     fit, leaving the 0.37em class default standing forever;
+    //   - a HARD fallback ends the "no window size ever fits" class:
+    //     if bounded refinement still overflows, tracking drops to
+    //     zero and the font scales by the measured width RATIO until
+    //     the line fits — pure proportions, no engine vocabulary.
     const fit = (): boolean => {
       const zone = title.parentElement
       if (zone === null) return false
@@ -160,15 +176,12 @@ export function ProjectCoverPage({
       // then measure.
       title.style.letterSpacing = ''
       title.style.fontSize = ''
-      title.style.textIndent = ''
       title.style.transform = ''
       const zoneStyle = getComputedStyle(zone)
-      const padLeft = Number.parseFloat(zoneStyle.paddingLeft)
-      const padRight = Number.parseFloat(zoneStyle.paddingRight)
+      const padLeft = Number.parseFloat(zoneStyle.paddingLeft) || 0
+      const padRight = Number.parseFloat(zoneStyle.paddingRight) || 0
       const available = zone.clientWidth - padLeft - padRight
-      if (Number.isNaN(available) || available <= 0) return false
-      const em = Number.parseFloat(getComputedStyle(title).fontSize)
-      if (Number.isNaN(em) || em === 0) return false
+      if (!(available > 0)) return false
       const textRect = () => {
         const range = document.createRange()
         range.selectNodeContents(title)
@@ -189,6 +202,17 @@ export function ProjectCoverPage({
       probe.style.width = 'max-content'
       zone.appendChild(probe)
       try {
+        // em, two ways: the computed font-size (px on healthy engines),
+        // else the probe's own line-box height over the unitless
+        // leading (1.05) — a cq-unit font-size that serializes as its
+        // min() expression parses to NaN and used to abort EVERY fit.
+        const computedFontSize = getComputedStyle(title).fontSize
+        let em = Number.parseFloat(computedFontSize)
+        if (!(em > 0)) {
+          probe.style.letterSpacing = '0px'
+          em = probe.getBoundingClientRect().height / 1.05
+        }
+        if (!(em > 0)) return false
         // The rendered width per 1px of letter-spacing is MEASURED, not
         // counted: the ripple wraps each glyph in a span and the spacing
         // lands inside the span AND after its box (a spanned "Splash
@@ -211,6 +235,14 @@ export function ProjectCoverPage({
           !(unitSlope > 0) ||
           zeroWidth > designWidth
         ) {
+          logger.info('Cover title fit: degenerate measurements', {
+            title: page.title,
+            available,
+            computedFontSize,
+            designWidth,
+            zeroWidth,
+            unitSlope,
+          })
           return false
         }
         let plan = planTitleFit({
@@ -220,23 +252,41 @@ export function ProjectCoverPage({
           zeroWidth,
           unitSlope,
         })
+        const appliedSpacing = () => Number.parseFloat(plan.letterSpacing) || 0
         const apply = (next: typeof plan) => {
           plan = next
           title.style.letterSpacing = next.letterSpacing
           if (next.fontSize !== undefined) title.style.fontSize = next.fontSize
-          title.style.textIndent = next.textIndent
+        }
+        // Optical centering from measured geometry — the exact offset
+        // between the glyph run's center and the column's center, which
+        // absorbs every engine trailing-space semantic. translateX is
+        // 1:1 in visual coordinates; an indent-based correction would
+        // move a centered line by only half its value (CSS22 §16.1).
+        const settleCentering = () => {
+          const rect = textRect()
+          const zoneRect = zone.getBoundingClientRect()
+          const columnLeft = zoneRect.left + padLeft
+          const columnRight = zoneRect.right - padRight
+          const centerError =
+            (columnLeft + columnRight) / 2 - (rect.left + rect.right) / 2
+          title.style.transform =
+            Math.abs(centerError) > 1 ? `translateX(${centerError}px)` : ''
         }
         apply(plan)
         // Measured-truth convergence: the probe's width (the model's
-        // own arithmetic, engine-stable) AND the real line's Range rect
-        // against the column's edges — whichever reports more overflow
-        // wins, so each instrument covers the other's blind spots
-        // (trailing-space semantics on one side, spacing-blind Ranges
-        // on the other). Width first, then the centering offset.
-        for (let pass = 0; pass < 3; pass += 1) {
+        // own arithmetic, engine-stable) PLUS one trailing spacing unit
+        // (the rendered line carries the spacing after the last glyph;
+        // whether the probe's shrink-to-fit box bills it is engine
+        // dialect), AND the real line's Range rect against the column's
+        // edges — whichever reports more overflow wins, so each
+        // instrument covers the other's blind spots.
+        let settled = false
+        for (let pass = 0; pass < 3 && !settled; pass += 1) {
           probe.style.letterSpacing = plan.letterSpacing
           probe.style.fontSize = plan.fontSize ?? ''
-          const probeOverflow = probe.getBoundingClientRect().width - available
+          const probeOverflow =
+            probe.getBoundingClientRect().width + appliedSpacing() - available
           const rect = textRect()
           const zoneRect = zone.getBoundingClientRect()
           const columnLeft = zoneRect.left + padLeft
@@ -257,24 +307,64 @@ export function ProjectCoverPage({
             )
             continue
           }
-          const centerError =
-            (columnLeft + columnRight) / 2 - (rect.left + rect.right) / 2
-          if (Math.abs(centerError) > 1) {
-            // NOT via text-indent: on a centered line an indent shifts
-            // the glyphs by only HALF its value (the line recenters in
-            // the remaining space — CSS22 §16.1), so an indent-based
-            // correction would leave half the error standing, glaring at
-            // the projection's font scale. translateX is 1:1 in visual
-            // coordinates — exactly the space the error was measured in.
-            title.style.transform = `translateX(${centerError}px)`
+          settleCentering()
+          settled = true
+        }
+        // The hard fallback: bounded refinement did not converge, so
+        // the model's vocabulary (slope, em) is suspect on this engine —
+        // drop to zero tracking and scale the type by the measured
+        // width RATIO until the line fits. Pure proportions; the floor
+        // keeps a pathological measurement from collapsing the type.
+        if (!settled) {
+          const keptSize = plan.fontSize
+          apply(
+            keptSize !== undefined
+              ? { letterSpacing: '0px', fontSize: keptSize }
+              : { letterSpacing: '0px' }
+          )
+          for (let pass = 0; pass < 3; pass += 1) {
+            probe.style.letterSpacing = '0px'
+            probe.style.fontSize = title.style.fontSize
+            const width = probe.getBoundingClientRect().width
+            if (width - available <= 0.5) break
+            const current =
+              Number.parseFloat(getComputedStyle(title).fontSize) || em
+            const next = Math.max(em * 0.25, current * (available / width))
+            title.style.fontSize = `${next}px`
+            plan = { ...plan, fontSize: `${next}px` }
           }
-          break
+          settleCentering()
+          logger.info('Cover title fit: hard fallback engaged', {
+            title: page.title,
+            available,
+            letterSpacing: plan.letterSpacing,
+            fontSize: plan.fontSize,
+          })
+        }
+        if (!loggedFit) {
+          loggedFit = true
+          logger.info('Cover title fit committed', {
+            title: page.title,
+            available,
+            em,
+            computedFontSize,
+            designWidth,
+            zeroWidth,
+            unitSlope,
+            letterSpacing: plan.letterSpacing,
+            fontSize: plan.fontSize ?? null,
+            hardFallback: !settled,
+          })
         }
         return true
       } finally {
         probe.remove()
       }
     }
+    // First-committed diagnostics: one info line per title (resize
+    // refits stay silent — the numbers that matter are the first
+    // honest ones; a still-broken engine shows them in the log file).
+    let loggedFit = false
     // The degenerate bail above must not leave the 0.37em class default
     // standing for good: the scheduled triggers (fonts, reveal, resize)
     // cover their own causes, but a machine whose first layout answers

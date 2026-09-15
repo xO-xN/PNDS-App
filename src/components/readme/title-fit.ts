@@ -1,7 +1,7 @@
 /**
  * v1.5.0 (README cover page): the title fit's branch decision, pure —
  * ProjectCoverPage's effect gathers honest measurements (zone-based
- * available width, Range-based text width, a MEASURED width-per-spacing
+ * available width, probe-based text width, a MEASURED width-per-spacing
  * slope) and applies the returned plan verbatim. Kept out of the
  * component file so Fast Refresh stays component-only and the math is
  * unit-testable.
@@ -12,6 +12,16 @@
  * clamps to its own box — every branch decision was made against
  * garbage-equal numbers, so at some proportions the "fits at 0.37em"
  * branch fired on a title that physically overflowed.
+ *
+ * v1.5.0 polish (Intel / macOS 13, round two): the plan carries NO
+ * text-indent anymore. The old indent=tracking paired with the
+ * trailing letter-space to re-center the line — but on a CENTERED line
+ * an indent shifts the glyphs by only half its value (CSS22 §16.1),
+ * an engine-variable half-measure that compounded with the measured
+ * translateX correction differently per WebKit generation (the Intel
+ * report's persistent right-heavy overflow). Optical centering now has
+ * ONE source of truth: the measured translateX in the component, which
+ * lands on the measured glyph-run center on every engine.
  */
 export function planTitleFit({
   available,
@@ -33,19 +43,18 @@ export function planTitleFit({
    *  characters instead is wrong the day the DOM wraps glyphs (the
    *  ripple spans) — measure the slope, never count. */
   unitSlope: number
-}): { letterSpacing: string; fontSize?: string; textIndent: string } {
+}): { letterSpacing: string; fontSize?: string } {
   if (designWidth <= available) {
-    const tracking = 0.37 * em
-    return { letterSpacing: `${tracking}px`, textIndent: `${tracking}px` }
+    return { letterSpacing: `${0.37 * em}px` }
   }
   if (zeroWidth <= available && unitSlope > 0) {
-    const spacing = Math.max(0, (available - zeroWidth) / unitSlope)
-    return { letterSpacing: `${spacing}px`, textIndent: `${spacing}px` }
+    return {
+      letterSpacing: `${Math.max(0, (available - zeroWidth) / unitSlope)}px`,
+    }
   }
   return {
     letterSpacing: '0px',
     fontSize: `${(em * available) / zeroWidth}px`,
-    textIndent: '0px',
   }
 }
 
@@ -54,12 +63,13 @@ export function planTitleFit({
  * model above decides from measurements taken BEFORE the plan applies —
  * and any one of them can be off in the wild (a fit that ran while the
  * projection webview was still hidden, a font swap between probes, the
- * union-rect's unaccounted trailing space). This refinement takes the
- * RENDERED truth — the applied plan's actual rect, still wider than the
- * column by `overflow` — and pulls the plan in by exactly that much:
- * the tracking shrinks by overflow/slope while any tracking remains,
- * else the type scales to the column. Bounded passes in the component
- * converge; `overflow <= 0` is a no-op so the loop can call it freely.
+ * probe's engine-dependent trailing-space semantics). This refinement
+ * takes the RENDERED truth — the applied plan's actual line, still
+ * wider than the column by `overflow` — and pulls the plan in by
+ * exactly that much: the tracking shrinks by overflow/slope while any
+ * tracking remains, else the type scales to the column. Bounded passes
+ * in the component converge; `overflow <= 0` is a no-op so the loop
+ * can call it freely.
  */
 export function refineTitleFit({
   plan,
@@ -67,12 +77,12 @@ export function refineTitleFit({
   em,
   unitSlope,
 }: {
-  plan: { letterSpacing: string; fontSize?: string; textIndent: string }
+  plan: { letterSpacing: string; fontSize?: string }
   /** How much the rendered line still exceeds the column (px, ≥ 0). */
   overflow: number
   em: number
   unitSlope: number
-}): { letterSpacing: string; fontSize?: string; textIndent: string } {
+}): { letterSpacing: string; fontSize?: string } {
   if (overflow <= 0) return plan
   const spacing = Number.parseFloat(plan.letterSpacing)
   const next = spacing > 0 ? Math.max(0, spacing - overflow / unitSlope) : 0
@@ -82,7 +92,6 @@ export function refineTitleFit({
     return {
       ...plan,
       letterSpacing: `${next}px`,
-      textIndent: `${next}px`,
     }
   }
   // The tracking is spent (or was already zero) — the type itself must
@@ -94,6 +103,5 @@ export function refineTitleFit({
     ...plan,
     letterSpacing: '0px',
     fontSize: `${em * scale}px`,
-    textIndent: '0px',
   }
 }

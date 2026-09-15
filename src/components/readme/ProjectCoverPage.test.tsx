@@ -303,7 +303,7 @@ describe('ProjectCoverPage', () => {
 
 // v1.5.0 (projection user report: 某比例下 title 字间距突然过大且溢出):
 // the title fit's branch math is pure and pinned here — the effect's
-// measurement story (zone-based available, Range-based text width, and
+// measurement story (zone-based available, probe-based text width, and
 // a MEASURED width-per-spacing slope replacing glyph counts: the ripple
 // spans bill letter-spacing twice per glyph) lives in the component.
 describe('planTitleFit', () => {
@@ -316,7 +316,7 @@ describe('planTitleFit', () => {
       zeroWidth: 630,
       unitSlope: 10,
     })
-    expect(plan).toEqual({ letterSpacing: '37px', textIndent: '37px' })
+    expect(plan).toEqual({ letterSpacing: '37px' })
     expect(plan.fontSize).toBeUndefined()
   })
 
@@ -332,7 +332,6 @@ describe('planTitleFit', () => {
       unitSlope: 19,
     })
     expect(plan.letterSpacing).toBe(`${(1142.4 - 838.3) / 19}px`)
-    expect(plan.textIndent).toBe(plan.letterSpacing)
     expect(plan.fontSize).toBeUndefined()
   })
 
@@ -345,7 +344,6 @@ describe('planTitleFit', () => {
       unitSlope: 10,
     })
     expect(plan.letterSpacing).toBe('0px')
-    expect(plan.textIndent).toBe('0px')
     expect(plan.fontSize).toBe(`${(100 * 500) / 600}px`)
   })
 
@@ -373,10 +371,13 @@ describe('planTitleFit', () => {
 // v1.5.0 polish (projection report round two: title 不居中、字距大且右溢):
 // the fit no longer trusts its first verdict — after applying the plan
 // it re-measures the RENDERED line and refines until the truth fits.
-// The refinement math is pure and pinned here.
+// The refinement math is pure and pinned here. The plans carry NO
+// text-indent (Intel round two: an indent shifts a centered line by
+// half its value — engine-vocabulary the measured translateX centering
+// must not compound with).
 describe('refineTitleFit', () => {
   it('is a no-op when the rendered line already fits', () => {
-    const plan = { letterSpacing: '37px', textIndent: '37px' }
+    const plan = { letterSpacing: '37px' }
     expect(refineTitleFit({ plan, overflow: 0, em: 100, unitSlope: 19 })).toBe(
       plan
     )
@@ -386,16 +387,16 @@ describe('refineTitleFit', () => {
   })
 
   it('pulls the tracking in by exactly the measured overflow, via the slope', () => {
-    const plan = { letterSpacing: '60px', textIndent: '60px' }
+    const plan = { letterSpacing: '60px' }
     // 38px of real overflow at 19px-width per 1px spacing — the
-    // tracking must give back 2px, and the indent follows it.
+    // tracking must give back 2px.
     expect(
       refineTitleFit({ plan, overflow: 38, em: 100, unitSlope: 19 })
-    ).toEqual({ letterSpacing: '58px', textIndent: '58px' })
+    ).toEqual({ letterSpacing: '58px' })
   })
 
   it('drops to zero tracking when the overflow eats it all', () => {
-    const plan = { letterSpacing: '10px', textIndent: '10px' }
+    const plan = { letterSpacing: '10px' }
     const refined = refineTitleFit({
       plan,
       overflow: 500,
@@ -403,7 +404,6 @@ describe('refineTitleFit', () => {
       unitSlope: 19,
     })
     expect(refined.letterSpacing).toBe('0px')
-    expect(refined.textIndent).toBe('0px')
     // Already at zero tracking, the type itself shrinks (bounded).
     expect(parseFloat(refined.fontSize ?? '0')).toBeGreaterThan(0)
     expect(parseFloat(refined.fontSize ?? '0')).toBeLessThan(100)
@@ -413,7 +413,6 @@ describe('refineTitleFit', () => {
     const plan = {
       letterSpacing: '0px',
       fontSize: '100px',
-      textIndent: '0px',
     }
     const refined = refineTitleFit({
       plan,
