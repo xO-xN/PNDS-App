@@ -5,6 +5,15 @@ import { logger } from '@/lib/logger'
 import type { ReadmeCoverPage } from '@/lib/readme-cover-page'
 import { planTitleFit, refineTitleFit } from './title-fit'
 
+// TEMPORARY on-page diagnostics for the Intel-machine title-fit
+// investigation (Safari 18.6 renders the line start-aligned at full
+// design tracking while every filesystem log channel stayed empty on
+// that machine): the fit writes its last verdict — or the exact bail
+// stage — into a strip IN THE PAGE (fitDiagRef below), so a photograph
+// of the window carries the whole measurement scene. Flip to false
+// (and delete the strip's JSX) when the investigation closes.
+const FIT_DIAGNOSTICS = true
+
 /**
  * v1.5.0 (README cover page): the creator-designed title page the main
  * area shows for the cover README format (the user's Frames 1/2,
@@ -93,6 +102,7 @@ export function ProjectCoverPage({
   centerBandText?: boolean
 }) {
   const titleRef = useRef<HTMLHeadingElement>(null)
+  const fitDiagRef = useRef<HTMLDivElement>(null)
   // Destructured so the null-guards below narrow inside the click
   // closures too (property narrowing doesn't survive into callbacks).
   const { composerUrl, githubUrl, websiteUrl } = page
@@ -170,8 +180,19 @@ export function ProjectCoverPage({
     //     zero and the font scales by the measured width RATIO until
     //     the line fits — pure proportions, no engine vocabulary.
     const fit = (): boolean => {
+      // The on-page verdict strip (see FIT_DIAGNOSTICS above): every
+      // exit path reports itself, so a photograph of the window is the
+      // complete measurement scene.
+      const diag = (line: string) => {
+        if (FIT_DIAGNOSTICS && fitDiagRef.current) {
+          fitDiagRef.current.textContent = line
+        }
+      }
       const zone = title.parentElement
-      if (zone === null) return false
+      if (zone === null) {
+        diag('fit: no zone')
+        return false
+      }
       // Back to the class values first (base size, 0.37em tracking),
       // then measure.
       title.style.letterSpacing = ''
@@ -181,7 +202,12 @@ export function ProjectCoverPage({
       const padLeft = Number.parseFloat(zoneStyle.paddingLeft) || 0
       const padRight = Number.parseFloat(zoneStyle.paddingRight) || 0
       const available = zone.clientWidth - padLeft - padRight
-      if (!(available > 0)) return false
+      if (!(available > 0)) {
+        diag(
+          `fit bail: available=${zone.clientWidth} pad=${padLeft}/${padRight}`
+        )
+        return false
+      }
       const textRect = () => {
         const range = document.createRange()
         range.selectNodeContents(title)
@@ -208,11 +234,18 @@ export function ProjectCoverPage({
         // min() expression parses to NaN and used to abort EVERY fit.
         const computedFontSize = getComputedStyle(title).fontSize
         let em = Number.parseFloat(computedFontSize)
+        let emFromProbeHeight = false
         if (!(em > 0)) {
           probe.style.letterSpacing = '0px'
           em = probe.getBoundingClientRect().height / 1.05
+          emFromProbeHeight = true
         }
-        if (!(em > 0)) return false
+        if (!(em > 0)) {
+          diag(
+            `fit bail: em computed="${computedFontSize}" probeH=${em * 1.05}`
+          )
+          return false
+        }
         // The rendered width per 1px of letter-spacing is MEASURED, not
         // counted: the ripple wraps each glyph in a span and the spacing
         // lands inside the span AND after its box (a spanned "Splash
@@ -243,6 +276,9 @@ export function ProjectCoverPage({
             zeroWidth,
             unitSlope,
           })
+          diag(
+            `fit bail: degenerate avail=${Math.round(available)} em=${Math.round(em)}${emFromProbeHeight ? '(probeH)' : ''} dW=${Math.round(designWidth)} zW=${Math.round(zeroWidth)} slope=${unitSlope.toFixed(1)} computed="${computedFontSize}"`
+          )
           return false
         }
         let plan = planTitleFit({
@@ -384,6 +420,12 @@ export function ProjectCoverPage({
             hardFallback: !settled,
           })
         }
+        // The strip's verdict line — the WHOLE scene in one photograph:
+        // the inputs, the instruments, the plan it landed on, and the
+        // residual overflow of the very box as finally styled.
+        diag(
+          `fit: avail=${Math.round(available)} em=${Math.round(em)}${emFromProbeHeight ? '(probeH)' : ''} dW=${Math.round(designWidth)} zW=${Math.round(zeroWidth)} slope=${unitSlope.toFixed(1)} → ls=${plan.letterSpacing}${plan.fontSize !== undefined ? ` fs=${plan.fontSize}` : ''} scrollOv=${title.scrollWidth - title.clientWidth}${!settled ? ' HARDFALL' : ''}`
+        )
         return true
       } finally {
         probe.remove()
@@ -743,6 +785,19 @@ export function ProjectCoverPage({
           </div>
         </div>
       </div>
+
+      {/* TEMPORARY (FIT_DIAGNOSTICS — the Intel title-fit
+            investigation): the fit's live verdict strip, parked in the
+            band's left margin corner. Photograph the window and the
+            whole measurement scene is in the shot. Delete with the
+            flag. */}
+      {FIT_DIAGNOSTICS && (
+        <div
+          ref={fitDiagRef}
+          data-testid="cover-fit-diag"
+          className="pointer-events-none absolute bottom-[0.6cqh] left-[1cqw] z-50 max-w-[40cqw] font-mono text-[1.3cqw] leading-tight text-(--pnds-text)/70 select-none"
+        />
+      )}
     </div>
   )
 }
