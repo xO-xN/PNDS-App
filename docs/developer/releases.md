@@ -140,6 +140,31 @@ published:
    `beforeBuildCommand` and draft-release assets are not publicly
    downloadable — while that release sits in draft, every `tauri build`
    (local and CI alike) fails with a 404 on the pinned artifact.
+
+### Building an Intel bundle locally (v1.5.0 lesson)
+
+The default `tauri build` maps the **arm64 scsynth slice** into the
+bundle — cross-compiling with `--target x86_64-apple-darwin` alone
+produces an x64 app that dies on Intel with `Failed to start scsynth:
+Bad CPU type in executable (os error 86)` (the Rust binary and the node
+sidecar are per-target; scsynth is a plain resource mapping). The local
+command is the CI lane's, minus the updater signing (the private key
+lives only in CI):
+
+```bash
+npm run tauri build -- --target x86_64-apple-darwin \
+  --config src-tauri/tauri.x86_64.conf.json --bundles app,dmg
+```
+
+`tauri.x86_64.conf.json` swaps only the scsynth resource slice; the
+`binaries/scsynth-*-apple-darwin` and `node-*-apple-darwin` slices are
+already staged in `src-tauri/binaries/` (refresh with
+`npm run scsynth:fetch` / `PNDS_TARGET=… npm run node:fetch`). The
+`--bundles app,dmg` skips the updater `.tar.gz` step whose missing
+`TAURI_SIGNING_PRIVATE_KEY` would otherwise fail the build **after**
+the dmg is already written. Verify with
+`file <PNDS.app>/Contents/Resources/scsynth` → `x86_64`.
+
 3. **Two sites + a VPS hub run TND end to end** — the telematic path the
    v1.4.0 Node section feeds: one machine at each of the two performance
    sites (different networks) against the hub on the VPS, node names
