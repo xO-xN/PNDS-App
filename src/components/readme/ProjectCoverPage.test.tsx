@@ -3,6 +3,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import type { ReadmeCoverPage } from '@/lib/readme-cover-page'
 import { ProjectCoverPage } from './ProjectCoverPage'
+import { planTitleFit } from './title-fit'
 
 vi.mock('@tauri-apps/plugin-opener', () => ({
   openUrl: vi.fn().mockResolvedValue(undefined),
@@ -232,5 +233,74 @@ describe('ProjectCoverPage', () => {
 
     expect(screen.getByTestId('cover-composer').tagName).toBe('SPAN')
     expect(screen.queryByTestId('cover-github')).not.toBeInTheDocument()
+  })
+})
+
+// v1.5.0 (projection user report: 某比例下 title 字间距突然过大且溢出):
+// the title fit's branch math is pure and pinned here — the effect's
+// measurement story (zone-based available, Range-based text width, and
+// a MEASURED width-per-spacing slope replacing glyph counts: the ripple
+// spans bill letter-spacing twice per glyph) lives in the component.
+describe('planTitleFit', () => {
+  it('keeps the design tracking when the title fits the column (boundary included)', () => {
+    // designWidth === available still belongs to the design branch.
+    const plan = planTitleFit({
+      available: 1000,
+      em: 100,
+      designWidth: 1000,
+      zeroWidth: 630,
+      unitSlope: 10,
+    })
+    expect(plan).toEqual({ letterSpacing: '37px', textIndent: '37px' })
+    expect(plan.fontSize).toBeUndefined()
+  })
+
+  it('squeezes by the measured slope, not the character count', () => {
+    // The real projection numbers: "Splash Ink" bills 19 units for its
+    // 10 characters (9 spanned glyphs × 2 + 1 space) — a count-based
+    // squeeze would underfill by 90% and overflow.
+    const plan = planTitleFit({
+      available: 1142.4,
+      em: 164,
+      designWidth: 1445,
+      zeroWidth: 838.3,
+      unitSlope: 19,
+    })
+    expect(plan.letterSpacing).toBe(`${(1142.4 - 838.3) / 19}px`)
+    expect(plan.textIndent).toBe(plan.letterSpacing)
+    expect(plan.fontSize).toBeUndefined()
+  })
+
+  it('scales the type down when even zero tracking overflows', () => {
+    const plan = planTitleFit({
+      available: 500,
+      em: 100,
+      designWidth: 1000,
+      zeroWidth: 600,
+      unitSlope: 10,
+    })
+    expect(plan.letterSpacing).toBe('0px')
+    expect(plan.textIndent).toBe('0px')
+    expect(plan.fontSize).toBe(`${(100 * 500) / 600}px`)
+  })
+
+  // The physical relation designWidth = zeroWidth + 0.37em × slope
+  // keeps the squeeze branch at or under the design tracking — the
+  // guarantee the honest measurements restore: the broken fit used to
+  // declare a physically overflowing title "fits" and render it at the
+  // full 0.37em.
+  it('never tracks wider than the design when the inputs are physical', () => {
+    const em = 164
+    const zeroWidth = 838.3
+    const unitSlope = 19
+    const designWidth = zeroWidth + 0.37 * em * unitSlope
+    const plan = planTitleFit({
+      available: designWidth - 2,
+      em,
+      designWidth,
+      zeroWidth,
+      unitSlope,
+    })
+    expect(parseFloat(plan.letterSpacing)).toBeLessThanOrEqual(0.37 * em)
   })
 })

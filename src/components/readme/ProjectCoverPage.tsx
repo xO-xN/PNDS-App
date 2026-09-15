@@ -3,6 +3,7 @@ import { openUrl } from '@tauri-apps/plugin-opener'
 import { HelpMarkdown } from '@/components/help/HelpMarkdown'
 import { logger } from '@/lib/logger'
 import type { ReadmeCoverPage } from '@/lib/readme-cover-page'
+import { planTitleFit } from './title-fit'
 
 /**
  * v1.5.0 (README cover page): the creator-designed title page the main
@@ -97,43 +98,89 @@ export function ProjectCoverPage({
   useEffect(() => {
     const title = titleRef.current
     if (!title) return
+    // v1.5.0 (projection user report: 某比例下 title 字间距突然过大且
+    // 溢出): the old fit measured `title.scrollWidth/clientWidth`, but a
+    // centered nowrap flex child clamps BOTH to its own box in WebKit —
+    // design width, zero-tracking width and "available" all read back
+    // the SAME number, so the branch decision was effectively random per
+    // proportion (a false "fits at 0.37em" rendered with huge tracking
+    // and real overflow). Honest measurements instead: available comes
+    // from the ZONE's content box (never shaped by the title's own
+    // styles), and the rendered text width from a Range — immune to the
+    // box feedback (min-width:auto) and scrollWidth clamping. The
+    // branch math lives in planTitleFit (pure, unit-tested).
     const fit = () => {
       // Back to the class values first (base size, 0.37em tracking),
-      // then measure. The title is a block spanning its column, so
-      // clientWidth IS the available width — the hairline's width.
+      // then measure.
       title.style.letterSpacing = ''
       title.style.fontSize = ''
       title.style.textIndent = ''
-      const available = title.clientWidth
-      if (available === 0) return
-      // CSS letter-spacing lands after every glyph, including the
-      // last — a same-size text-indent pulls that trailing space back
-      // into the box so the centered text is optically centered.
+      const zone = title.parentElement
+      if (zone === null) return
+      const zoneStyle = getComputedStyle(zone)
+      const available =
+        zone.clientWidth -
+        Number.parseFloat(zoneStyle.paddingLeft) -
+        Number.parseFloat(zoneStyle.paddingRight)
+      if (Number.isNaN(available) || available <= 0) return
       const em = Number.parseFloat(getComputedStyle(title).fontSize)
       if (Number.isNaN(em) || em === 0) return
-      if (title.scrollWidth <= available) {
-        title.style.textIndent = `${0.37 * em}px`
-        return
+      const textWidth = () => {
+        const range = document.createRange()
+        range.selectNodeContents(title)
+        return range.getBoundingClientRect().width
       }
-      // Too wide at the design tracking: measure the zero-tracking
-      // width and spend whatever room is left on tracking.
+      // The rendered width per 1px of letter-spacing is MEASURED, not
+      // counted: the ripple wraps each glyph in a span and the spacing
+      // lands inside the span AND after its box (a spanned "Splash Ink"
+      // bills 19 units, not its 10 characters — counting glyphs made
+      // every squeeze underfill and overflow by the difference).
+      title.style.letterSpacing = ''
+      const designWidth = textWidth()
       title.style.letterSpacing = '0px'
-      const natural = title.scrollWidth
-      const glyphs = [...(title.textContent ?? '')].length || 1
-      if (natural <= available) {
-        const spacing = Math.max(0, (available - natural) / glyphs)
-        title.style.letterSpacing = `${spacing}px`
-        title.style.textIndent = `${spacing}px`
-        return
-      }
-      // Still too wide with no tracking at all: the type shrinks.
-      title.style.fontSize = `${(em * available) / natural}px`
+      const zeroWidth = textWidth()
+      title.style.letterSpacing = '100px'
+      const unitSlope = (textWidth() - zeroWidth) / 100
+      const plan = planTitleFit({
+        available,
+        em,
+        designWidth,
+        zeroWidth,
+        unitSlope,
+      })
+      title.style.letterSpacing = plan.letterSpacing
+      if (plan.fontSize !== undefined) title.style.fontSize = plan.fontSize
+      title.style.textIndent = plan.textIndent
     }
     fit()
-    if (typeof ResizeObserver === 'undefined') return
-    const observer = new ResizeObserver(fit)
-    observer.observe(title)
-    return () => observer.disconnect()
+    // Webfonts swap in AFTER first paint and nothing about the BOX
+    // changes with the swap (the font-size is cq-based, the line-height
+    // unitless) — the ResizeObserver stays silent while the metrics
+    // change under it, and a fit decided on fallback metrics sticks
+    // (projection report: 某比例下 0.37em 决定 + 真字体溢出). Refit on
+    // EVERY font-load batch; fonts.ready alone is racy (it can resolve
+    // before a late webfont request even starts).
+    const refit = () => {
+      if (titleRef.current === title) fit()
+    }
+    if (typeof document !== 'undefined' && document.fonts) {
+      document.fonts.addEventListener('loadingdone', refit)
+      void document.fonts.ready.then(refit).catch(() => undefined)
+    }
+    const observer =
+      typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(fit)
+    // Observe the ZONE, never the title itself: once the nowrap text's
+    // min-content width matches the column, the h1's own box stops
+    // tracking container changes and an h1 observer goes silent exactly
+    // when a refit is needed (projection report: spacing frozen at one
+    // width's squeeze value while the window kept resizing).
+    observer?.observe(title.parentElement ?? title)
+    return () => {
+      observer?.disconnect()
+      if (typeof document !== 'undefined' && document.fonts) {
+        document.fonts.removeEventListener('loadingdone', refit)
+      }
+    }
   }, [page.title])
 
   // The band's text auto-scrolls in the reading direction when the
@@ -364,7 +411,8 @@ export function ProjectCoverPage({
   )
 }
 
-/** Connected scripts (Arabic et al.) must never be split per glyph —
+/**
+ * Connected scripts (Arabic et al.) must never be split per glyph —
  * the letters would come apart. */
 const JOINED_SCRIPT =
   /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/
