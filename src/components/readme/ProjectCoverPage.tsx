@@ -5,15 +5,6 @@ import { logger } from '@/lib/logger'
 import type { ReadmeCoverPage } from '@/lib/readme-cover-page'
 import { planTitleFit, refineTitleFit } from './title-fit'
 
-// TEMPORARY on-page diagnostics for the Intel-machine title-fit
-// investigation (Safari 18.6 renders the line start-aligned at full
-// design tracking while every filesystem log channel stayed empty on
-// that machine): the fit writes its last verdict — or the exact bail
-// stage — into a strip IN THE PAGE (fitDiagRef below), so a photograph
-// of the window carries the whole measurement scene. Flip to false
-// (and delete the strip's JSX) when the investigation closes.
-const FIT_DIAGNOSTICS = true
-
 /**
  * v1.5.0 (README cover page): the creator-designed title page the main
  * area shows for the cover README format (the user's Frames 1/2,
@@ -102,7 +93,6 @@ export function ProjectCoverPage({
   centerBandText?: boolean
 }) {
   const titleRef = useRef<HTMLHeadingElement>(null)
-  const fitDiagRef = useRef<HTMLDivElement>(null)
   // Destructured so the null-guards below narrow inside the click
   // closures too (property narrowing doesn't survive into callbacks).
   const { composerUrl, githubUrl, websiteUrl } = page
@@ -128,8 +118,8 @@ export function ProjectCoverPage({
   useLayoutEffect(() => {
     const title = titleRef.current
     if (!title) return
-    // Round-nine trace clock: every fit knows its age — the plan-change
-    // log and the settle-gated reveal both speak in ms-since-mount.
+    // Round-nine trace clock: the settle-gated reveal speaks in
+    // ms-since-mount (its hold math below).
     const mountedAt = performance.now()
     // v1.5.0 (projection user report: 某比例下 title 字间距突然过大且
     // 溢出): the old fit measured `title.scrollWidth/clientWidth`, but a
@@ -189,17 +179,8 @@ export function ProjectCoverPage({
     //     zero and the font scales by the measured width RATIO until
     //     the line fits — pure proportions, no engine vocabulary.
     const fit = (): boolean => {
-      // The on-page verdict strip (see FIT_DIAGNOSTICS above): every
-      // exit path reports itself, so a photograph of the window is the
-      // complete measurement scene.
-      const diag = (line: string) => {
-        if (FIT_DIAGNOSTICS && fitDiagRef.current) {
-          fitDiagRef.current.textContent = line
-        }
-      }
       const zone = title.parentElement
       if (zone === null) {
-        diag('fit: no zone')
         return false
       }
       // Back to the class values first (base size, 0.37em tracking),
@@ -215,9 +196,6 @@ export function ProjectCoverPage({
       const padRight = Number.parseFloat(zoneStyle.paddingRight) || 0
       const available = zone.clientWidth - padLeft - padRight
       if (!(available > 0)) {
-        diag(
-          `fit bail: available=${zone.clientWidth} pad=${padLeft}/${padRight}`
-        )
         return false
       }
       // The probe: out of the flex flow (no min-width clamp), shrink-
@@ -269,11 +247,7 @@ export function ProjectCoverPage({
         const computedFontSize = getComputedStyle(title).fontSize
         const probeBox = probeRect('0px')
         const em = (probeBox?.height ?? 0) / 1.05
-        const emFromProbeHeight = true
         if (!(em > 0)) {
-          diag(
-            `fit bail: em probeH=${(probeBox?.height ?? 0).toFixed(1)} computed="${computedFontSize}"`
-          )
           return false
         }
         // The rendered width per 1px of letter-spacing is MEASURED, not
@@ -302,9 +276,6 @@ export function ProjectCoverPage({
             zeroWidth,
             unitSlope,
           })
-          diag(
-            `fit bail: degenerate avail=${Math.round(available)} em=${Math.round(em)}${emFromProbeHeight ? '(probeH)' : ''} dW=${Math.round(designWidth)} zW=${Math.round(zeroWidth)} slope=${unitSlope.toFixed(1)} computed="${computedFontSize}"`
-          )
           return false
         }
         let plan = planTitleFit({
@@ -396,33 +367,6 @@ export function ProjectCoverPage({
             fontSize: plan.fontSize,
           })
         }
-        // Round-nine trace: a fit that lands DIFFERENT values than the
-        // previous one is the exact event the user watches as a jump —
-        // logged with its age so the log file alone can place it on the
-        // timeline (leaves together with the diagnostics strip).
-        const previous = lastPlan
-        const planChanged =
-          previous !== null &&
-          (previous.letterSpacing !== plan.letterSpacing ||
-            previous.fontSize !== plan.fontSize)
-        if (previous !== null && planChanged) {
-          logger.info('Cover title fit plan changed', {
-            title: page.title,
-            ageMs: Math.round(performance.now() - mountedAt),
-            from: {
-              letterSpacing: previous.letterSpacing,
-              fontSize: previous.fontSize ?? null,
-            },
-            to: {
-              letterSpacing: plan.letterSpacing,
-              fontSize: plan.fontSize ?? null,
-            },
-          })
-        }
-        lastPlan = {
-          letterSpacing: plan.letterSpacing,
-          fontSize: plan.fontSize,
-        }
         if (!loggedFit) {
           loggedFit = true
           logger.info('Cover title fit committed', {
@@ -439,13 +383,6 @@ export function ProjectCoverPage({
             hardFallback: !settled,
           })
         }
-        // The strip's verdict line — the WHOLE scene in one photograph:
-        // the inputs, the instruments, the plan it landed on, and the
-        // overflow the PREVIOUS apply left behind (the settled truth —
-        // the fresh apply's own overflow lands on the next beat).
-        diag(
-          `fit: avail=${Math.round(available)} em=${Math.round(em)}${emFromProbeHeight ? '(probeH)' : ''} dW=${Math.round(designWidth)} zW=${Math.round(zeroWidth)} slope=${unitSlope.toFixed(1)} → ls=${plan.letterSpacing}${plan.fontSize !== undefined ? ` fs=${plan.fontSize}` : ''} preOv=${settledOverflow}${!settled ? ' HARDFALL' : ''}${planChanged ? ` !CHANGED age=${Math.round(performance.now() - mountedAt)}` : ''}`
-        )
         return true
       }
     }
@@ -453,9 +390,6 @@ export function ProjectCoverPage({
     // refits stay silent — the numbers that matter are the first
     // honest ones; a still-broken engine shows them in the log file).
     let loggedFit = false
-    // The previous fit's committed values — null until the first fit
-    // lands (the trace above compares against it).
-    let lastPlan: { letterSpacing: string; fontSize?: string } | null = null
     // The degenerate bail above must not leave the 0.37em class default
     // standing for good: the scheduled triggers (fonts, reveal, resize)
     // cover their own causes, but a machine whose first layout answers
@@ -910,19 +844,6 @@ export function ProjectCoverPage({
           </div>
         </div>
       </div>
-
-      {/* TEMPORARY (FIT_DIAGNOSTICS — the Intel title-fit
-            investigation): the fit's live verdict strip, parked in the
-            band's left margin corner. Photograph the window and the
-            whole measurement scene is in the shot. Delete with the
-            flag. */}
-      {FIT_DIAGNOSTICS && (
-        <div
-          ref={fitDiagRef}
-          data-testid="cover-fit-diag"
-          className="pointer-events-none absolute bottom-[0.6cqh] left-[1cqw] z-50 max-w-[40cqw] font-mono text-[1.3cqw] leading-tight text-(--pnds-text)/70 select-none"
-        />
-      )}
     </div>
   )
 }
