@@ -215,19 +215,42 @@ export function ProjectCoverPage({
       }
       // The probe: out of the flex flow (no min-width clamp), shrink-
       // to-fit (its box IS the text width, spacing included), hidden
-      // and never painted (removed synchronously before this task can
-      // render). Same classes as the title, so the cq font size and
-      // the ripple spans resolve identically.
-      const probe = title.cloneNode(true) as HTMLElement
-      probe.style.position = 'absolute'
-      probe.style.visibility = 'hidden'
-      probe.style.pointerEvents = 'none'
-      probe.style.margin = '0'
-      probe.style.left = '0'
-      probe.style.top = '0'
-      probe.style.width = 'max-content'
-      zone.appendChild(probe)
-      try {
+      // and never painted (appended and removed synchronously in one
+      // task — never rendered). Same classes as the title, so the cq
+      // font size and the ripple spans resolve identically.
+      //
+      // A FRESH probe per measurement, styles set BEFORE insertion:
+      // Safari 18.6 (Intel report round five, from the on-page diag
+      // strip: dW === zW === 3119, slope 0.0) serves a STALE intrinsic
+      // width when letter-spacing changes on an already-laid-out
+      // `width: max-content` box — every spacing probe reads the width
+      // of the first layout, the slope collapses to zero, the fit
+      // bails degenerate forever, and the 0.37em class default stands
+      // (Safari 26 recomputes, which is why Apple Silicon was fine).
+      // A clone that enters the document WITH its spacing already set
+      // lays out once, correctly, on every engine.
+      const probeRect = (
+        spacing: string,
+        fontSize?: string
+      ): DOMRect | null => {
+        const probe = title.cloneNode(true) as HTMLElement
+        probe.style.position = 'absolute'
+        probe.style.visibility = 'hidden'
+        probe.style.pointerEvents = 'none'
+        probe.style.margin = '0'
+        probe.style.left = '0'
+        probe.style.top = '0'
+        probe.style.width = 'max-content'
+        probe.style.letterSpacing = spacing
+        if (fontSize !== undefined) probe.style.fontSize = fontSize
+        zone.appendChild(probe)
+        const rect = probe.getBoundingClientRect()
+        probe.remove()
+        return rect.width === 0 && rect.height === 0 ? null : rect
+      }
+      const widthAt = (spacing: string, fontSize?: string) =>
+        probeRect(spacing, fontSize)?.width ?? 0
+      {
         // em, two ways: the computed font-size (px on healthy engines),
         // else the probe's own line-box height over the unitless
         // leading (1.05) — a cq-unit font-size that serializes as its
@@ -236,8 +259,8 @@ export function ProjectCoverPage({
         let em = Number.parseFloat(computedFontSize)
         let emFromProbeHeight = false
         if (!(em > 0)) {
-          probe.style.letterSpacing = '0px'
-          em = probe.getBoundingClientRect().height / 1.05
+          const rect = probeRect('0px')
+          em = (rect?.height ?? 0) / 1.05
           emFromProbeHeight = true
         }
         if (!(em > 0)) {
@@ -251,10 +274,6 @@ export function ProjectCoverPage({
         // lands inside the span AND after its box (a spanned "Splash
         // Ink" bills 19 units, not its 10 characters — counting glyphs
         // made every squeeze underfill and overflow by the difference).
-        const widthAt = (spacing: string) => {
-          probe.style.letterSpacing = spacing
-          return probe.getBoundingClientRect().width
-        }
         const designWidth = widthAt('')
         const zeroWidth = widthAt('0px')
         const unitSlope = (widthAt('100px') - zeroWidth) / 100
@@ -338,10 +357,10 @@ export function ProjectCoverPage({
         //      "does this very box, as laid out right now, overflow").
         let settled = false
         for (let pass = 0; pass < 3 && !settled; pass += 1) {
-          probe.style.letterSpacing = plan.letterSpacing
-          probe.style.fontSize = plan.fontSize ?? ''
           const probeOverflow =
-            probe.getBoundingClientRect().width + appliedSpacing() - available
+            widthAt(plan.letterSpacing, plan.fontSize) +
+            appliedSpacing() -
+            available
           const rect = textRect()
           const zoneRect = zone.getBoundingClientRect()
           const columnLeft = zoneRect.left + padLeft
@@ -383,10 +402,8 @@ export function ProjectCoverPage({
               : { letterSpacing: '0px' }
           )
           for (let pass = 0; pass < 3; pass += 1) {
-            probe.style.letterSpacing = '0px'
-            probe.style.fontSize = title.style.fontSize
             const width = Math.max(
-              probe.getBoundingClientRect().width,
+              widthAt('0px', title.style.fontSize || undefined),
               title.scrollWidth
             )
             if (width - available <= 0.5) break
@@ -427,8 +444,6 @@ export function ProjectCoverPage({
           `fit: avail=${Math.round(available)} em=${Math.round(em)}${emFromProbeHeight ? '(probeH)' : ''} dW=${Math.round(designWidth)} zW=${Math.round(zeroWidth)} slope=${unitSlope.toFixed(1)} → ls=${plan.letterSpacing}${plan.fontSize !== undefined ? ` fs=${plan.fontSize}` : ''} scrollOv=${title.scrollWidth - title.clientWidth}${!settled ? ' HARDFALL' : ''}`
         )
         return true
-      } finally {
-        probe.remove()
       }
     }
     // First-committed diagnostics: one info line per title (resize
