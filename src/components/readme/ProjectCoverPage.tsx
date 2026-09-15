@@ -1,4 +1,4 @@
-import { useEffect, useRef, type CSSProperties } from 'react'
+import { useEffect, useLayoutEffect, useRef, type CSSProperties } from 'react'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { HelpMarkdown } from '@/components/help/HelpMarkdown'
 import { logger } from '@/lib/logger'
@@ -119,7 +119,13 @@ export function ProjectCoverPage({
     })
   }
 
-  useEffect(() => {
+  // A LAYOUT effect, deliberately: the fit's apply must land BEFORE the
+  // browser's first paint, or the title flashes at the class defaults
+  // (huge cq size, full design tracking) and then visibly re-shapes
+  // once the plan applies (Intel round eight: the user saw exactly two
+  // visible steps before it settled). Paired with the fonts-gated
+  // reveal below, the title appears once, already fitted.
+  useLayoutEffect(() => {
     const title = titleRef.current
     if (!title) return
     // v1.5.0 (projection user report: 某比例下 title 字间距突然过大且
@@ -433,7 +439,38 @@ export function ProjectCoverPage({
         if (titleRef.current === title && !fit()) scheduleRetry()
       }, 300)
     }
-    if (!fit()) scheduleRetry()
+    // The fonts-gated reveal's timer (round eight, below) — hoisted
+    // so the cleanup can clear it and never leave a hidden title.
+    let revealTimer: number | undefined
+    // Round eight — the title appears ONCE, already fitted: while
+    // webfonts are ACTIVELY loading it stays invisible (a fit decided
+    // on fallback-font metrics is the second of the two visible steps
+    // the user watched) and reveals with the plan applied when they
+    // settle. Any other state (warm fonts already `loaded`, nothing
+    // ever requested, jsdom) reveals synchronously right here — still
+    // inside the layout phase, nothing to flash. A stalled load gives
+    // up after 400ms rather than hiding the title for good.
+    if (document.fonts?.status === 'loading') {
+      title.style.visibility = 'hidden'
+      let revealed = false
+      const reveal = () => {
+        if (revealed || titleRef.current !== title) return
+        revealed = true
+        if (revealTimer !== undefined) {
+          window.clearTimeout(revealTimer)
+          revealTimer = undefined
+        }
+        if (!fit()) scheduleRetry()
+        title.style.visibility = ''
+      }
+      revealTimer = window.setTimeout(() => {
+        revealTimer = undefined
+        reveal()
+      }, 400)
+      document.fonts.ready.then(reveal).catch(() => reveal())
+    } else {
+      if (!fit()) scheduleRetry()
+    }
     // Post-commit verification beats (Intel report round three: the
     // title rendered LEFT-shifted at full design tracking — a verdict
     // measured against metrics that the engine re-resolved LATER (cq
@@ -482,6 +519,8 @@ export function ProjectCoverPage({
     observer?.observe(title.parentElement ?? title)
     return () => {
       if (retryTimer !== undefined) window.clearTimeout(retryTimer)
+      if (revealTimer !== undefined) window.clearTimeout(revealTimer)
+      title.style.visibility = ''
       verifyTimers.forEach(timer => window.clearTimeout(timer))
       observer?.disconnect()
       document.removeEventListener('visibilitychange', onVisibility)
