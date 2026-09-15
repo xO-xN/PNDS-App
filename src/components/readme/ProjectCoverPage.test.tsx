@@ -129,6 +129,35 @@ describe('ProjectCoverPage', () => {
     )
   })
 
+  it('re-creates the ripple spans on a title change — one shared animation timeline (skew report)', () => {
+    // The skew mechanism (user report: 多选几次不同的工程，波纹逐渐杂乱):
+    // an index-keyed span SURVIVES a selection change and its CSS
+    // animation keeps the start time of the work that created it,
+    // while spans for newly-reached indexes start now — a few
+    // selections later the timelines have skewed arbitrarily. The
+    // title rides the key, so a new title means a fresh element set.
+    const view = render(<ProjectCoverPage page={PAGE} cover={null} />)
+    const firstGlyph = () =>
+      view.container.querySelector<HTMLElement>('.cover-title-glyph')
+
+    const original = firstGlyph()
+    // Re-rendering the SAME title keeps the elements (no needless
+    // remount, no animation restart).
+    view.rerender(<ProjectCoverPage page={PAGE} cover={null} />)
+    expect(firstGlyph()).toBe(original)
+
+    // A different title builds NEW elements — every glyph starts its
+    // animation together.
+    view.rerender(
+      <ProjectCoverPage page={{ ...PAGE, title: 'Night Sky' }} cover={null} />
+    )
+    const switched = firstGlyph()
+    expect(switched).not.toBe(original)
+    // And back again — fresh once more, never the skewed survivor.
+    view.rerender(<ProjectCoverPage page={PAGE} cover={null} />)
+    expect(firstGlyph()).not.toBe(switched)
+  })
+
   it('keeps joined-script titles whole (glyph splits would break letter joining)', () => {
     render(<ProjectCoverPage page={{ ...PAGE, title: 'موجة' }} cover={null} />)
 

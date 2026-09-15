@@ -466,7 +466,17 @@ export function ProjectCoverPage({
                 const step = all.length > 1 ? spread / (all.length - 1) : 0
                 return (
                   <span
-                    key={index}
+                    // The title rides the key: an index-keyed span is
+                    // REUSED when the selection moves to another work
+                    // and its CSS animation never restarts — it keeps
+                    // the start time of the work that created it, while
+                    // spans for newly-reached indexes start NOW. A few
+                    // selections later the elements' timelines have
+                    // skewed arbitrarily and the wave reads as chaos
+                    // (user report: 多选几次不同的工程，逐渐变杂乱). A
+                    // fresh element set per title keeps every glyph on
+                    // ONE shared timeline.
+                    key={`${page.title}:${index}`}
                     aria-hidden="true"
                     className="cover-title-glyph"
                     style={{ animationDelay: `${-(step * index)}s` }}
