@@ -20,6 +20,16 @@ const PAGE: ReadmeCoverPage = {
   sectionMarkdown: '失语III 是为三个手机演奏者而作的数字乐谱作品。',
 }
 
+// A do-nothing ResizeObserver stand-in: its mere PRESENCE flips the
+// cover title into the real-engine code path (the settle-gated reveal
+// keys on `typeof ResizeObserver !== 'undefined'` — the same signal
+// the component uses to detect jsdom's no-layout world).
+class ResizeObserverStub {
+  observe = vi.fn()
+  unobserve = vi.fn()
+  disconnect = vi.fn()
+}
+
 /**
  * v1.5.0 (README cover page): the composed title page — header (mark,
  * wordmark, composer pill), hairline, the huge title, and the band
@@ -165,6 +175,48 @@ describe('ProjectCoverPage', () => {
     expect(
       screen.getByTestId('cover-title').querySelectorAll('.cover-title-glyph')
     ).toHaveLength(0)
+  })
+
+  // Round nine (reduce-motion report: the one post-paint plan change the
+  // container fade normally masks shows as a hard jump without it): a
+  // REAL engine (ResizeObserver present) never paints the title until
+  // the world has been quiet — hidden at mount behind the hold, fitted
+  // and revealed after it expires, and restored if it unmounts still
+  // hidden. jsdom (no ResizeObserver) skips the hidden state entirely.
+  it('holds the title hidden behind the settle window and reveals it once quiet', () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('ResizeObserver', ResizeObserverStub)
+    try {
+      const view = render(<ProjectCoverPage page={PAGE} cover={null} />)
+      const title = screen.getByTestId('cover-title')
+      expect(title.style.visibility).toBe('hidden')
+
+      // Quiet world, hold expired: the reveal applies the plan (the
+      // degenerate jsdom layout bails the fit — the reveal still shows).
+      vi.advanceTimersByTime(200)
+      expect(title.style.visibility).toBe('')
+
+      view.unmount()
+    } finally {
+      vi.unstubAllGlobals()
+      vi.useRealTimers()
+    }
+  })
+
+  it('restores the title if it unmounts while still behind the settle window', () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('ResizeObserver', ResizeObserverStub)
+    try {
+      const view = render(<ProjectCoverPage page={PAGE} cover={null} />)
+      const title = screen.getByTestId('cover-title')
+      expect(title.style.visibility).toBe('hidden')
+
+      view.unmount()
+      expect(title.style.visibility).toBe('')
+    } finally {
+      vi.unstubAllGlobals()
+      vi.useRealTimers()
+    }
   })
 
   // One pass, reading direction only: the column's scrollTop crawls

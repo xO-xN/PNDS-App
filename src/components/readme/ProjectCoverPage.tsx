@@ -123,11 +123,14 @@ export function ProjectCoverPage({
   // browser's first paint, or the title flashes at the class defaults
   // (huge cq size, full design tracking) and then visibly re-shapes
   // once the plan applies (Intel round eight: the user saw exactly two
-  // visible steps before it settled). Paired with the fonts-gated
+  // visible steps before it settled). Paired with the settle-gated
   // reveal below, the title appears once, already fitted.
   useLayoutEffect(() => {
     const title = titleRef.current
     if (!title) return
+    // Round-nine trace clock: every fit knows its age — the plan-change
+    // log and the settle-gated reveal both speak in ms-since-mount.
+    const mountedAt = performance.now()
     // v1.5.0 (projection user report: 某比例下 title 字间距突然过大且
     // 溢出): the old fit measured `title.scrollWidth/clientWidth`, but a
     // centered nowrap flex child clamps BOTH to its own box in WebKit —
@@ -393,6 +396,33 @@ export function ProjectCoverPage({
             fontSize: plan.fontSize,
           })
         }
+        // Round-nine trace: a fit that lands DIFFERENT values than the
+        // previous one is the exact event the user watches as a jump —
+        // logged with its age so the log file alone can place it on the
+        // timeline (leaves together with the diagnostics strip).
+        const previous = lastPlan
+        const planChanged =
+          previous !== null &&
+          (previous.letterSpacing !== plan.letterSpacing ||
+            previous.fontSize !== plan.fontSize)
+        if (previous !== null && planChanged) {
+          logger.info('Cover title fit plan changed', {
+            title: page.title,
+            ageMs: Math.round(performance.now() - mountedAt),
+            from: {
+              letterSpacing: previous.letterSpacing,
+              fontSize: previous.fontSize ?? null,
+            },
+            to: {
+              letterSpacing: plan.letterSpacing,
+              fontSize: plan.fontSize ?? null,
+            },
+          })
+        }
+        lastPlan = {
+          letterSpacing: plan.letterSpacing,
+          fontSize: plan.fontSize,
+        }
         if (!loggedFit) {
           loggedFit = true
           logger.info('Cover title fit committed', {
@@ -414,7 +444,7 @@ export function ProjectCoverPage({
         // overflow the PREVIOUS apply left behind (the settled truth —
         // the fresh apply's own overflow lands on the next beat).
         diag(
-          `fit: avail=${Math.round(available)} em=${Math.round(em)}${emFromProbeHeight ? '(probeH)' : ''} dW=${Math.round(designWidth)} zW=${Math.round(zeroWidth)} slope=${unitSlope.toFixed(1)} → ls=${plan.letterSpacing}${plan.fontSize !== undefined ? ` fs=${plan.fontSize}` : ''} preOv=${settledOverflow}${!settled ? ' HARDFALL' : ''}`
+          `fit: avail=${Math.round(available)} em=${Math.round(em)}${emFromProbeHeight ? '(probeH)' : ''} dW=${Math.round(designWidth)} zW=${Math.round(zeroWidth)} slope=${unitSlope.toFixed(1)} → ls=${plan.letterSpacing}${plan.fontSize !== undefined ? ` fs=${plan.fontSize}` : ''} preOv=${settledOverflow}${!settled ? ' HARDFALL' : ''}${planChanged ? ` !CHANGED age=${Math.round(performance.now() - mountedAt)}` : ''}`
         )
         return true
       }
@@ -423,6 +453,9 @@ export function ProjectCoverPage({
     // refits stay silent — the numbers that matter are the first
     // honest ones; a still-broken engine shows them in the log file).
     let loggedFit = false
+    // The previous fit's committed values — null until the first fit
+    // lands (the trace above compares against it).
+    let lastPlan: { letterSpacing: string; fontSize?: string } | null = null
     // The degenerate bail above must not leave the 0.37em class default
     // standing for good: the scheduled triggers (fonts, reveal, resize)
     // cover their own causes, but a machine whose first layout answers
@@ -439,38 +472,64 @@ export function ProjectCoverPage({
         if (titleRef.current === title && !fit()) scheduleRetry()
       }, 300)
     }
-    // The fonts-gated reveal's timer (round eight, below) — hoisted
-    // so the cleanup can clear it and never leave a hidden title.
+    // Round nine — the SETTLE-GATED reveal. Reduce-motion testing
+    // exposed the last jump (round eight's fonts-only gate was not
+    // enough): with the preference ON the container's 0.8s fade-in is
+    // clamped to 0.01ms (App.css) and the title's ONE post-paint plan
+    // change — the layout context settling after the mount fit — lands
+    // at full opacity as a visible jump; with it OFF the same change
+    // hides inside the fade. The fix is not another measurement: the
+    // title simply does not PAINT until the world has been quiet. It
+    // mounts hidden, every trigger refits it invisibly, and it reveals
+    // only after a HOLD (150ms — the mount fit plus the earliest
+    // settles land inside it, so the first thing the user ever sees is
+    // the post-hold plan) AND a quiet window (90ms with no zone
+    // resize, no fonts in flight, a visible document — every trigger
+    // restarts it), capped at 800ms so a hostile engine still gets a
+    // title. jsdom cannot observe resizes (this file's existing
+    // environment signal) and cannot paint: it skips the hidden state
+    // entirely and the tests keep their synchronous headings.
+    const canSettle = typeof ResizeObserver !== 'undefined'
+    let revealed = !canSettle
     let revealTimer: number | undefined
-    // Round eight — the title appears ONCE, already fitted: while
-    // webfonts are ACTIVELY loading it stays invisible (a fit decided
-    // on fallback-font metrics is the second of the two visible steps
-    // the user watched) and reveals with the plan applied when they
-    // settle. Any other state (warm fonts already `loaded`, nothing
-    // ever requested, jsdom) reveals synchronously right here — still
-    // inside the layout phase, nothing to flash. A stalled load gives
-    // up after 400ms rather than hiding the title for good.
-    if (document.fonts?.status === 'loading') {
-      title.style.visibility = 'hidden'
-      let revealed = false
-      const reveal = () => {
-        if (revealed || titleRef.current !== title) return
-        revealed = true
-        if (revealTimer !== undefined) {
-          window.clearTimeout(revealTimer)
-          revealTimer = undefined
-        }
-        if (!fit()) scheduleRetry()
-        title.style.visibility = ''
+    let settleTimer: number | undefined
+    const reveal = () => {
+      if (revealed || titleRef.current !== title) return
+      revealed = true
+      if (settleTimer !== undefined) {
+        window.clearTimeout(settleTimer)
+        settleTimer = undefined
       }
-      revealTimer = window.setTimeout(() => {
+      if (revealTimer !== undefined) {
+        window.clearTimeout(revealTimer)
         revealTimer = undefined
-        reveal()
-      }, 400)
-      document.fonts.ready.then(reveal).catch(() => reveal())
-    } else {
+      }
       if (!fit()) scheduleRetry()
+      title.style.visibility = ''
     }
+    const scheduleSettle = () => {
+      if (revealed) return
+      if (settleTimer !== undefined) window.clearTimeout(settleTimer)
+      settleTimer = window.setTimeout(
+        () => {
+          settleTimer = undefined
+          if (
+            (document.fonts?.status ?? 'loaded') !== 'loading' &&
+            !document.hidden
+          ) {
+            reveal()
+          }
+        },
+        Math.max(90, 150 - (performance.now() - mountedAt))
+      )
+    }
+    if (canSettle) title.style.visibility = 'hidden'
+    if (!fit()) scheduleRetry()
+    scheduleSettle()
+    revealTimer = window.setTimeout(() => {
+      revealTimer = undefined
+      reveal()
+    }, 800)
     // Post-commit verification beats (Intel report round three: the
     // title rendered LEFT-shifted at full design tracking — a verdict
     // measured against metrics that the engine re-resolved LATER (cq
@@ -478,15 +537,28 @@ export function ProjectCoverPage({
     // it changes a BOX, so the ResizeObserver stays silent forever and
     // the stale verdict sticks). Each beat re-runs the whole fit against
     // the by-then-settled layout: it confirms a healthy plan (and
-    // leaves it) or repairs a stale one. Three beats, cleared on
-    // unmount — no spin.
-    const verifyTimers = [600, 2000, 5000].map(delay =>
+    // leaves it) or repairs a stale one — pre-reveal repairs land
+    // invisibly (the settle gate absorbs them), post-reveal ones are
+    // the hostile-engine net. The FIRST beat also doubles as a reveal
+    // path: a still-hidden title (a font load that never finishes) is
+    // fitted and shown here rather than waiting for the 800ms cap.
+    // Three beats, cleared on unmount — no spin.
+    const verifyDelays = [600, 2000, 5000]
+    const verifyTimers = verifyDelays.map(delay =>
       window.setTimeout(() => {
-        if (titleRef.current === title) fit()
+        if (titleRef.current !== title) return
+        if (delay === verifyDelays[0] && !revealed) reveal()
+        else {
+          fit()
+          scheduleSettle()
+        }
       }, delay)
     )
     const refit = () => {
-      if (titleRef.current === title) fit()
+      if (titleRef.current === title) {
+        fit()
+        scheduleSettle()
+      }
     }
     // Webfonts swap in AFTER first paint and nothing about the BOX
     // changes with the swap (the font-size is cq-based, the line-height
@@ -510,15 +582,23 @@ export function ProjectCoverPage({
     }
     document.addEventListener('visibilitychange', onVisibility)
     const observer =
-      typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(fit)
+      typeof ResizeObserver === 'undefined'
+        ? null
+        : new ResizeObserver(() => {
+            fit()
+            scheduleSettle()
+          })
     // Observe the ZONE, never the title itself: once the nowrap text's
     // min-content width matches the column, the h1's own box stops
     // tracking container changes and an h1 observer goes silent exactly
     // when a refit is needed (projection report: spacing frozen at one
-    // width's squeeze value while the window kept resizing).
+    // width's squeeze value while the window kept resizing). Every
+    // observation is also a settle-window restart: a zone that is still
+    // moving keeps the title hidden (round nine).
     observer?.observe(title.parentElement ?? title)
     return () => {
       if (retryTimer !== undefined) window.clearTimeout(retryTimer)
+      if (settleTimer !== undefined) window.clearTimeout(settleTimer)
       if (revealTimer !== undefined) window.clearTimeout(revealTimer)
       title.style.visibility = ''
       verifyTimers.forEach(timer => window.clearTimeout(timer))
