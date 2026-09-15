@@ -270,17 +270,36 @@ export function ProjectCoverPage({
           const columnRight = zoneRect.right - padRight
           const centerError =
             (columnLeft + columnRight) / 2 - (rect.left + rect.right) / 2
+          // A sane optical correction never exceeds about one spacing
+          // unit plus an em (trailing-space bias + rounding). A LARGER
+          // measured error means the Range's width semantics are lying
+          // on this engine — and an unbounded translateX from such an
+          // error can shove the whole line left into the very overflow
+          // the fit just removed (Intel round four: the line painted
+          // START-aligned at the column's left edge). Clamp: move in
+          // the measured direction, never further than the sane bound.
+          const bound = appliedSpacing() + em
+          const clamped = Math.max(-bound, Math.min(bound, centerError))
           title.style.transform =
-            Math.abs(centerError) > 1 ? `translateX(${centerError}px)` : ''
+            Math.abs(clamped) > 1 ? `translateX(${clamped}px)` : ''
         }
         apply(plan)
-        // Measured-truth convergence: the probe's width (the model's
-        // own arithmetic, engine-stable) PLUS one trailing spacing unit
-        // (the rendered line carries the spacing after the last glyph;
-        // whether the probe's shrink-to-fit box bills it is engine
-        // dialect), AND the real line's Range rect against the column's
-        // edges — whichever reports more overflow wins, so each
-        // instrument covers the other's blind spots.
+        // Measured-truth convergence, THREE instruments, whichever
+        // reports the most overflow wins — each covers the others'
+        // blind spots, and the third is the most literal one possible:
+        //   1. the probe's width (the model's own arithmetic,
+        //      engine-stable) plus one trailing spacing unit (the
+        //      rendered line carries the spacing after the last glyph;
+        //      whether the probe's shrink-to-fit box bills it is engine
+        //      dialect);
+        //   2. the real line's Range rect against the column's edges;
+        //   3. the title's OWN scrollable overflow — scrollWidth −
+        //      clientWidth on the rendered box (Intel report round
+        //      four: the line painted START-aligned and running off
+        //      the right edge, the exact shape scroll overflow
+        //      reports, while the other two instruments somehow agreed
+        //      it fit; no rect semantics, no container units — just
+        //      "does this very box, as laid out right now, overflow").
         let settled = false
         for (let pass = 0; pass < 3 && !settled; pass += 1) {
           probe.style.letterSpacing = plan.letterSpacing
@@ -294,7 +313,8 @@ export function ProjectCoverPage({
           const overflow = Math.max(
             probeOverflow,
             rect.right - columnRight,
-            columnLeft - rect.left
+            columnLeft - rect.left,
+            title.scrollWidth - title.clientWidth
           )
           if (overflow > 0.5) {
             apply(
@@ -313,8 +333,12 @@ export function ProjectCoverPage({
         // The hard fallback: bounded refinement did not converge, so
         // the model's vocabulary (slope, em) is suspect on this engine —
         // drop to zero tracking and scale the type by the measured
-        // width RATIO until the line fits. Pure proportions; the floor
-        // keeps a pathological measurement from collapsing the type.
+        // width RATIO until the line fits. The needed width is the max
+        // of the two direct instruments (the probe at zero tracking,
+        // and the title's own scrollWidth — at zero tracking the line
+        // has no trailing-spacing ambiguity at all). Pure proportions;
+        // the floor keeps a pathological measurement from collapsing
+        // the type.
         if (!settled) {
           const keptSize = plan.fontSize
           apply(
@@ -325,7 +349,10 @@ export function ProjectCoverPage({
           for (let pass = 0; pass < 3; pass += 1) {
             probe.style.letterSpacing = '0px'
             probe.style.fontSize = title.style.fontSize
-            const width = probe.getBoundingClientRect().width
+            const width = Math.max(
+              probe.getBoundingClientRect().width,
+              title.scrollWidth
+            )
             if (width - available <= 0.5) break
             const current =
               Number.parseFloat(getComputedStyle(title).fontSize) || em
@@ -351,6 +378,7 @@ export function ProjectCoverPage({
             designWidth,
             zeroWidth,
             unitSlope,
+            scrollOverflow: title.scrollWidth - title.clientWidth,
             letterSpacing: plan.letterSpacing,
             fontSize: plan.fontSize ?? null,
             hardFallback: !settled,
