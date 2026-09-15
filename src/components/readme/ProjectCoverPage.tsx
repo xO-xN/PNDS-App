@@ -211,11 +211,6 @@ export function ProjectCoverPage({
         )
         return false
       }
-      const textRect = () => {
-        const range = document.createRange()
-        range.selectNodeContents(title)
-        return range.getBoundingClientRect()
-      }
       // The probe: out of the flex flow (no min-width clamp), shrink-
       // to-fit (its box IS the text width, spacing included), hidden
       // and never painted (appended and removed synchronously in one
@@ -315,31 +310,23 @@ export function ProjectCoverPage({
           plan = next
           title.style.letterSpacing = next.letterSpacing
           if (next.fontSize !== undefined) title.style.fontSize = next.fontSize
-        }
-        // Optical centering from measured geometry — the exact offset
-        // between the glyph run's center and the column's center, which
-        // absorbs every engine trailing-space semantic. translateX is
-        // 1:1 in visual coordinates; an indent-based correction would
-        // move a centered line by only half its value (CSS22 §16.1).
-        const settleCentering = () => {
-          const rect = textRect()
-          const zoneRect = zone.getBoundingClientRect()
-          const columnLeft = zoneRect.left + padLeft
-          const columnRight = zoneRect.right - padRight
-          const centerError =
-            (columnLeft + columnRight) / 2 - (rect.left + rect.right) / 2
-          // A sane optical correction never exceeds about one spacing
-          // unit plus an em (trailing-space bias + rounding). A LARGER
-          // measured error means the Range's width semantics are lying
-          // on this engine — and an unbounded translateX from such an
-          // error can shove the whole line left into the very overflow
-          // the fit just removed (Intel round four: the line painted
-          // START-aligned at the column's left edge). Clamp: move in
-          // the measured direction, never further than the sane bound.
-          const bound = appliedSpacing() + em
-          const clamped = Math.max(-bound, Math.min(bound, centerError))
+          // Optical centering, MODELED — never measured. A centered
+          // line carries its trailing letter-space, biasing the glyph
+          // run half a spacing unit off optical center toward the
+          // line's start side; translateX by half the spacing (flipped
+          // for RTL) cancels it exactly. This replaces the measured
+          // Range correction, which on Safari 18.6 read the line one
+          // transform-generation behind (each verify beat measured the
+          // PREVIOUS beat's offset already applied and re-issued the
+          // correction — a limit cycle where the title kept flipping
+          // between shifted and unshifted, never settling centered;
+          // user report round seven). The model is deterministic and
+          // engine-free; at zero tracking there is nothing to correct
+          // (plain text-align: center is already optical center).
+          const spacing = Number.parseFloat(next.letterSpacing) || 0
+          const rtl = getComputedStyle(title).direction === 'rtl' ? -1 : 1
           title.style.transform =
-            Math.abs(clamped) > 1 ? `translateX(${clamped}px)` : ''
+            spacing > 0 ? `translateX(${(rtl * spacing) / 2}px)` : ''
         }
         apply(plan)
         // Convergence is PROBE-ONLY: this engine cannot re-measure the
@@ -400,14 +387,6 @@ export function ProjectCoverPage({
             fontSize: plan.fontSize,
           })
         }
-        // Centering needs the SETTLED line: measured on the NEXT frame,
-        // after this engine has actually re-laid the title out (a
-        // same-tick Range reads the pre-apply line — round six's
-        // left-shifted titles). Clamped, idempotent, re-settled by
-        // every later fit (the verify beats).
-        requestAnimationFrame(() => {
-          if (titleRef.current === title) settleCentering()
-        })
         if (!loggedFit) {
           loggedFit = true
           logger.info('Cover title fit committed', {
