@@ -253,6 +253,36 @@ describe('ProjectionApp (#130 gate)', () => {
     expect(screen.getByText('Text is enough.')).toBeInTheDocument()
   })
 
+  // v1.5.0 polish (follow-up report: the projection had fallen back to
+  // markdown/name card for utilities while the app window showed the
+  // info page): a staged BUILT-IN UTILITY holds its info page on the
+  // venue screen — the SAME utilityCoverPage model the main area's
+  // UtilityIntro renders (alias title, "PNDS Utility" pill), framed by
+  // the cover stage — and no README read is issued (utilities carry
+  // no author README).
+  it('holds a built-in utility as the info page, not a README', async () => {
+    vi.mocked(commands.getSessionState).mockResolvedValue({
+      status: 'ok',
+      data: snapshot({
+        projectName: 'Multichannel Signal Generator',
+        projectPath:
+          '/tmp/AppSupport/PNDS/utilities/multichannel-signal-generator',
+      }),
+    })
+
+    render(<ProjectionApp />)
+    await flush()
+
+    expect(intro().dataset.introView).toBe('utility')
+    expect(
+      screen.getByRole('heading', { name: 'Multichannel Gen' })
+    ).toBeInTheDocument()
+    expect(screen.getByTestId('cover-header-note')).toHaveTextContent(
+      'PNDS Utility'
+    )
+    expect(commands.readProjectReadme).not.toHaveBeenCalled()
+  })
+
   it('cross-fades to the monitor when 开演 lands (snapshot flip)', async () => {
     vi.useFakeTimers()
     render(<ProjectionApp />)

@@ -1,8 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { PreflightDock } from '@/components/shell/PreflightDock'
-import { BUILTIN_UTILITY_DISPLAY_NAMES } from '@/lib/builtin-utilities'
+import { utilityCoverPage } from '@/lib/builtin-utilities'
 import { ProjectCoverPage } from './ProjectCoverPage'
-import type { ReadmeCoverPage } from '@/lib/readme-cover-page'
 
 /**
  * v1.5.0 polish (user request): the built-in utilities' info page in the
@@ -16,40 +15,27 @@ import type { ReadmeCoverPage } from '@/lib/readme-cover-page'
  * and a "PNDS Utility" pill in the header's right corner — no
  * composer/github pills. The follow-up round tuned it onto the project
  * cover's own language: the pill shares the projects' pill background,
- * the diamond mark goes monochrome in the theme's ink (a utility is
- * app content — the brand rainbow stays reserved for authored works),
- * and the band text centers on both axes.
+ * the diamond mark goes monochrome in the theme's ink, and the band
+ * text centers on both axes.
  *
- * The intro copy lives in the locales (zh/en pairs), keyed by registry
- * id; the band's own auto-scroll takes over if a translation outgrows
- * it.
+ * The page MODEL lives in utilityCoverPage (builtin-utilities.ts) so
+ * the projection 简介 renders the identical page (follow-up round: the
+ * venue screen must not fall back to markdown for utilities); the
+ * intro copy lives in the locales (zh/en pairs), keyed by registry id;
+ * the band's own auto-scroll takes over if a translation outgrows it.
  */
 export function UtilityIntro({ id }: { id: string }) {
   const { t } = useTranslation()
-  const page: ReadmeCoverPage = {
-    title: BUILTIN_UTILITY_DISPLAY_NAMES[id] ?? id,
-    composer: null,
-    composerUrl: null,
-    githubUrl: null,
-    websiteUrl: null,
-    // The theme's ink as a CSS var — the mark recolors with every
-    // theme instead of shipping a fixed palette.
-    palette: [
-      'var(--pnds-text)',
-      'var(--pnds-text)',
-      'var(--pnds-text)',
-      'var(--pnds-text)',
-    ],
-    sectionLabel: '',
-    sectionMarkdown: t(`utilities.intro.${id}`, { defaultValue: '' }),
-  }
   return (
     <div
       data-testid="utility-intro"
       className="absolute inset-0 flex flex-col bg-(--pnds-bg) p-8 animate-[fade-in_0.8s_ease-in]"
     >
       <ProjectCoverPage
-        page={page}
+        page={utilityCoverPage(
+          id,
+          t(`utilities.intro.${id}`, { defaultValue: '' })
+        )}
         cover={null}
         headerNote="PNDS Utility"
         centerBandText

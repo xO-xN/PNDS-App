@@ -35,6 +35,7 @@ import {
 } from '@/lib/projection-state'
 import { readProjectCover, readProjectReadme } from '@/lib/project-readme'
 import { parseReadmeCoverPage } from '@/lib/readme-cover-page'
+import { utilityCoverPage, utilityIdFromPath } from '@/lib/builtin-utilities'
 import { HelpMarkdown } from '@/components/help/HelpMarkdown'
 import { ProjectCoverPage } from '@/components/readme/ProjectCoverPage'
 import { MonitorScaleFrame } from '@/components/shell/MonitorScaleFrame'
@@ -231,6 +232,15 @@ function ProjectionStandby() {
  * anchor clicks never navigate this webview). No README (or an
  * unreadable one) falls back to the project-name card — a missing file
  * must not break the venue screen's look (spec story 23).
+ *
+ * v1.5.0 polish (follow-up report: the projection showed the utilities
+ * as markdown/name card while the app window had the info page): a
+ * staged BUILT-IN UTILITY holds its info page here too — the SAME
+ * utilityCoverPage model the main area renders (alias title, ink
+ * diamond, centered one-liner, "PNDS Utility" pill), framed by the same
+ * stage box as a cover README. No README read is issued (utilities
+ * carry none) and no PreflightDock — the venue screen is a display,
+ * not an operator surface.
  */
 function ProjectionIntro({
   content,
@@ -241,8 +251,10 @@ function ProjectionIntro({
    *  the branch comments); never a transform on text. */
   zoom: number
 }) {
-  const { i18n } = useTranslation()
+  const { t, i18n } = useTranslation()
   const locale = i18n.resolvedLanguage ?? i18n.language ?? 'en'
+  // The utility route short-circuits everything README below.
+  const utilityId = utilityIdFromPath(content.projectPath)
   // The last completed read, keyed by the path and locale it belongs
   // to — the ProjectReadme pattern: a change renders "still reading"
   // (the name card) until the new read lands, with no synchronous
@@ -253,6 +265,7 @@ function ProjectionIntro({
     readme: string | null
   } | null>(null)
   useEffect(() => {
+    if (utilityId !== null) return
     let cancelled = false
     void readProjectReadme(content.projectPath, locale).then(read => {
       if (!cancelled) {
@@ -262,7 +275,7 @@ function ProjectionIntro({
     return () => {
       cancelled = true
     }
-  }, [content.projectPath, locale])
+  }, [content.projectPath, locale, utilityId])
   const settled =
     loaded !== null &&
     loaded.path === content.projectPath &&
@@ -306,6 +319,38 @@ function ProjectionIntro({
     if ((event.target as HTMLElement).closest('a')) event.preventDefault()
   }
 
+  if (utilityId !== null) {
+    // The utility info page in the projection's own framing — the same
+    // stage box a cover README gets (the composition's cq sizes scale
+    // to the frame; see the cover branch below for the zoom math), the
+    // page model shared with the app window's UtilityIntro.
+    return (
+      <div
+        data-testid="projection-intro"
+        data-intro-view="utility"
+        className="relative h-full w-full overflow-hidden bg-(--pnds-bg) animate-[fade-in_0.8s_ease-in]"
+      >
+        <div
+          data-testid="projection-cover-stage"
+          className="absolute top-1/2 left-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col [container-type:size]"
+          style={{
+            width: `${(85 * zoom) / 100}%`,
+            height: `${(80 * zoom) / 100}%`,
+          }}
+        >
+          <ProjectCoverPage
+            page={utilityCoverPage(
+              utilityId,
+              t(`utilities.intro.${utilityId}`, { defaultValue: '' })
+            )}
+            cover={null}
+            headerNote="PNDS Utility"
+            centerBandText
+          />
+        </div>
+      </div>
+    )
+  }
   if (markdown === null) {
     return (
       <div
