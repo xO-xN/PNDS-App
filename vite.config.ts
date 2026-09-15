@@ -47,6 +47,12 @@ export default defineConfig(async () => ({
     port: 1420,
     strictPort: true,
     host: host || false,
+    // WKWebView (both app windows) caches dev modules aggressively and
+    // has served stale CSS/JS after an HMR connection silently died
+    // (occluded webviews drop the socket) — and ⌘R CANNOT reload them
+    // because the app menu binds it to 重命名 (menu.ts §v1.1.2 T6). A
+    // real reload must never be answered from cache.
+    headers: { 'Cache-Control': 'no-store' },
     hmr: host
       ? {
           protocol: 'ws',

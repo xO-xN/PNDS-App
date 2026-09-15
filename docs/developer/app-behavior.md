@@ -222,6 +222,7 @@ v1.5.0（#129）投影窗口骨架——又一个多页入口的 webview 窗口�
   - **⌃⌘F** 切换聚焦窗口的全屏——投影窗口保持原生标题栏、自管全屏（不进主窗口的 WindowStateEvent chrome 机制）；侧栏全屏按钮仍属主窗口。
   - **Esc 在投影窗口直接归页面**——瘦根无 App web ⌘ 层、无关闭工程确认流；主窗口自 v1.2.0 起 plain-Esc 本就无 App 功能（关闭工程确认走 ⌘W），page-interaction.md 契约已按窗口作用域同步改写（并废止陈旧的「Esc → 关闭工程」表述）。
 - 主题/语言实时跟随：主窗口 `setupProjectionWindowBridge()` 推送（与帮助中心同模式）；投影窗口自身不写 preferences。
+- **dev 排障须知（v1.5.0 实战教训）**：webview 疑似显示旧版界面时，**⌘R 不会重载 webview**——它被菜单绑定为「重命名工程」（menu.ts §v1.1.2 T6），被遮挡/后台的 webview 还会静默丢 HMR 连接，形成「改了代码但窗口不动」的假象（曾把 cq 布局中间态误诊为回归）。正确刷新：**关掉重开该窗口**或重启 `tauri dev`；vite dev 已配 `Cache-Control: no-store`（vite.config.ts），真实 reload 不会被 WKWebView 缓存喂旧模块，且 vite 自身重启会让存活 webview 整体 reload 自愈。
 
 ## Sidebar
 
