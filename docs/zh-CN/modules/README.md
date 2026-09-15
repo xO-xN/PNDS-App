@@ -6,13 +6,14 @@
 
 ## 篇章
 
-| 篇章                               | 覆盖文件                                                                      | 一句话                            |
-| ---------------------------------- | ----------------------------------------------------------------------------- | --------------------------------- |
-| [QR 码](./qr.md)                   | `lib/qr.js`                                                                   | monitor 页上的扫码入口            |
-| [乐手身份与座位](./players.md)     | `lib/players.js`、`lib/seats-store.js`、`lib/protocol.js`、`public/client.js` | claim token、座位、Socket.IO 协议 |
-| [主题跟随](./theme-follow.md)      | `lib/theme-follow.js`                                                         | monitor 页跟随 App 主题换色       |
-| [语言跟随](./locale-follow.md)     | `lib/locale-follow.js`                                                        | monitor 页跟随 App 界面语言       |
-| [音频：三模式与作品层](./audio.md) | `audio/controller.js`                                                         | 创作者改得最多的文件              |
+| 篇章                                   | 覆盖文件                                                                      | 一句话                            |
+| -------------------------------------- | ----------------------------------------------------------------------------- | --------------------------------- |
+| [QR 码](./qr.md)                       | `lib/qr.js`                                                                   | monitor 页上的扫码入口            |
+| [乐手身份与座位](./players.md)         | `lib/players.js`、`lib/seats-store.js`、`lib/protocol.js`、`public/client.js` | claim token、座位、Socket.IO 协议 |
+| [主题跟随](./theme-follow.md)          | `lib/theme-follow.js`                                                         | monitor 页跟随 App 主题换色       |
+| [语言跟随](./locale-follow.md)         | `lib/locale-follow.js`                                                        | monitor 页跟随 App 界面语言       |
+| [monitor 视图状态](./monitor-state.md) | `lib/monitor-state.js`、`public/client.js`（monitor 侧）                      | monitor 页多副本视图一致          |
+| [音频：三模式与作品层](./audio.md)     | `audio/controller.js`                                                         | 创作者改得最多的文件              |
 
 ## 与其他文档的分工
 

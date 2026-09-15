@@ -53,6 +53,7 @@ const FIXTURES: RawHelpDocument[] = [
     'modules-players',
     'modules-theme-follow',
     'modules-locale-follow',
+    'modules-monitor-state',
     'modules-audio',
   ].map(id => ({
     id,
@@ -81,7 +82,7 @@ describe('help-corpus (#53)', () => {
   it('builds the corpus in manifest order with books, titles and sections', () => {
     const corpus = buildHelpCorpus(FIXTURES)
 
-    expect(corpus).toHaveLength(21)
+    expect(corpus).toHaveLength(22)
     expect(
       corpus.slice(0, 4).map(doc => [doc.id, doc.book, doc.title])
     ).toEqual([
@@ -90,9 +91,9 @@ describe('help-corpus (#53)', () => {
       ['readme-guide', 'creator-guide', '给工程写 README'],
       ['reference-readme', 'reference', 'PNDS 参考手册'],
     ])
-    expect(corpus.slice(18).map(doc => [doc.id, doc.book, doc.title])).toEqual([
-      ['modules-theme-follow', 'modules', 'modules-theme-follow'],
+    expect(corpus.slice(19).map(doc => [doc.id, doc.book, doc.title])).toEqual([
       ['modules-locale-follow', 'modules', 'modules-locale-follow'],
+      ['modules-monitor-state', 'modules', 'modules-monitor-state'],
       ['modules-audio', 'modules', 'modules-audio'],
     ])
     expect(corpus[0]?.sections.map(s => s.id)).toEqual([
@@ -156,6 +157,7 @@ describe('help-corpus (#53)', () => {
         'modules-players',
         'modules-theme-follow',
         'modules-locale-follow',
+        'modules-monitor-state',
         'modules-audio',
       ],
     ])

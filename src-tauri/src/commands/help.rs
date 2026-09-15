@@ -63,6 +63,7 @@ const HELP_DOCUMENTS: &[(&str, &str)] = &[
     ("modules-players", "modules/players.md"),
     ("modules-theme-follow", "modules/theme-follow.md"),
     ("modules-locale-follow", "modules/locale-follow.md"),
+    ("modules-monitor-state", "modules/monitor-state.md"),
     ("modules-audio", "modules/audio.md"),
     ("reference-readme", "reference/README.md"),
     ("reference-digital-score", "reference/digital-score.md"),

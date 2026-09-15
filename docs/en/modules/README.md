@@ -12,6 +12,7 @@ The wording follows the App's shared vocabulary: seat (the code says `seat`), cl
 | [Player Identity and Seats](./players.md)           | `lib/players.js`, `lib/seats-store.js`, `lib/protocol.js`, `public/client.js` | claim tokens, seats, the Socket.IO protocol    |
 | [Theme Following](./theme-follow.md)                | `lib/theme-follow.js`                                                         | the monitor page follows the App's theme       |
 | [Language Following](./locale-follow.md)            | `lib/locale-follow.js`                                                        | the monitor page follows the App's UI language |
+| [Monitor View State](./monitor-state.md)            | `lib/monitor-state.js`, `public/client.js` (monitor side)                     | every monitor copy renders the same view       |
 | [Audio: Three Modes and the Work Layer](./audio.md) | `audio/controller.js`                                                         | the file creators edit most                    |
 
 ## Division of labour with the other documentation

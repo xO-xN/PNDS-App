@@ -14,6 +14,7 @@ import modulesQr from '../../docs/zh-CN/modules/qr.md?raw'
 import modulesPlayers from '../../docs/zh-CN/modules/players.md?raw'
 import modulesThemeFollow from '../../docs/zh-CN/modules/theme-follow.md?raw'
 import modulesLocaleFollow from '../../docs/zh-CN/modules/locale-follow.md?raw'
+import modulesMonitorState from '../../docs/zh-CN/modules/monitor-state.md?raw'
 import modulesAudio from '../../docs/zh-CN/modules/audio.md?raw'
 import referenceReadme from '../../docs/zh-CN/reference/README.md?raw'
 import referenceDigitalScore from '../../docs/zh-CN/reference/digital-score.md?raw'
@@ -48,6 +49,7 @@ const RAW_CORPUS: Record<string, string> = {
   'modules-players': modulesPlayers,
   'modules-theme-follow': modulesThemeFollow,
   'modules-locale-follow': modulesLocaleFollow,
+  'modules-monitor-state': modulesMonitorState,
   'modules-audio': modulesAudio,
   'reference-readme': referenceReadme,
   'reference-digital-score': referenceDigitalScore,
@@ -73,6 +75,7 @@ const DOC_PATHS: Record<string, string> = {
   'modules-players': 'modules/players.md',
   'modules-theme-follow': 'modules/theme-follow.md',
   'modules-locale-follow': 'modules/locale-follow.md',
+  'modules-monitor-state': 'modules/monitor-state.md',
   'modules-audio': 'modules/audio.md',
   'reference-readme': 'reference/README.md',
   'reference-digital-score': 'reference/digital-score.md',
@@ -104,7 +107,7 @@ describe('help corpus at real scale (#53)', () => {
   const index = buildHelpIndex(corpus)
 
   it('places every shipped document and derives its own title', () => {
-    expect(corpus).toHaveLength(21)
+    expect(corpus).toHaveLength(22)
     expect(corpus[0]?.title).toBe('PNDS App 使用教程')
     expect(corpus[1]?.title).toBe('PNDS Template 创作指南')
     expect(corpus[2]?.title).toBe('给工程写 README')
