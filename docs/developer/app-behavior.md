@@ -205,22 +205,67 @@ v1.3.0（#56）帮助中心窗口——第二个 webview 窗口（label `help`�
 - 语料内链接永不导航 webview（用户报告教训）：文档间 `.md` 链接解析为窗口内跳转（`#fragment` 为小节锚点），外部 URL 走系统浏览器，解析不到则无操作。文档正文用平台标准字体，不用品牌字体。
 - 语料加载失败：显示错误态 + 重试；窗口仍被揭示（不得留用户对着不可见窗口）。
 
-v1.5.0（#129）投影窗口骨架——又一个多页入口的 webview 窗口（label `projection`，独立 `projection.html` 入口，ADR-0006 瘦根：不挂 AppShell）：
+## 投影窗口（v1.5.0）
+
+面向场地屏幕的演出显示窗口（spec #128，设计决策见 [ADR-0006](../adr/0006-projection-window.md)）：又一个多页入口的 webview 窗口（label `projection`，独立 `projection.html` 入口，瘦根：不挂 AppShell）。行为票 #129（骨架）/#130（开演门）/#131（键盘与缩放作用域）全部落在本篇；两窗口共享的封面页行为见本篇末节。
+
+### 生命周期与单实例
 
 - 入口是侧栏右上角的「打开投影窗口」按钮（原「用默认浏览器打开」位置，浏览器入口与 `sidebar.share`/`shareHint` 文案已彻底移除）；按钮不随会话状态禁用——无演出时窗口自己进入待机。
 - 单实例：已开再点 = 聚焦（或卡隐藏态时重跑揭示）；不重建。**切换工程窗口不重建、全屏与位置保持**（窗口生命周期与 session 完全解耦），内容随快照过渡。
 - 打开时落在 **App 当前所在显示器**（`currentMonitor()` 居中落位，查询失败回退系统居中）；window-state 插件 denylist 掉 `projection`——跨启动几何持久化不在 v1.5 范围（spec #128），恢复的旧位置会与落位规则打架（帮助窗口仍被跟踪）。
-- 内容状态机是纯函数 `projectionContent(snapshot)`（`src/lib/projection-state.ts`）：session 在台（starting/ready）且门未开 → **简介**（工程根 README.md，经 #125 读取/渲染通道；用户报告后与主窗口 README 面板同组合——封面格式渲染 ProjectCoverPage（PNDS 字标 + composer/github 药丸、大标题、含 cover 图的封面带），其余 README 仍为 HelpMarkdown 文档视图（v1.5 只渲染文字——图片隐藏、链接一律无操作）；无 README/读取失败回落工程名卡片；starting 快照已带 projectPath，加载期即显示。标题自适应（两窗口共用）v1.5 末重写为「诚实测量」：可用宽取自**标题区**内容盒（不受标题自身样式的 min-width 反馈影响）、文字真实宽度用 **Range** 量（居中 nowrap 弹性子的 scrollWidth 会被钳到盒宽——曾致某比例下"放得下 0.37em"误判、字距暴大溢出）、每 px 字距的渲染增量**实测斜率**（不数字符——波纹 span 会双计费）、`fonts.loadingdone` 后补测（cq 字号+无单位行高下字体交换不触发 RO）、ResizeObserver 观察**区域**而非标题（min-content 钉住盒宽后标题自身的 RO 会哑）；分支数学纯函数化于 `title-fit.ts` 并钉测试。投影侧封面以**画框式留白**呈现——封面在约 7.5%（水平）/10%（垂直）内框中构图，随屏幅与缩放等比，且**仅投影侧**做两项加宽：带高走 `min(40cqh,42cqw)` 份额（容纳更多首节内容）、标题上下间距走更紧的边缘内缩 `--cover-edge-inset` 5cqh→2cqh（标题在其开阔区垂直居中——pt/pb 覆写只会被居中余量吸收、或仅平移标题；缩小内缩令上沿抬升与下带下移同量，两侧可见间距对称变宽；外层画框本就提供四周留白。主窗口 README 面板不传覆写、渲染与原版完全一致，测试钉死）；cq 参考系按轴分置：封面根节点是 inline-size 容器（`@container`，cqw 随面板宽），块轴 cqh 随嵌入环境解析——投影画框盒自身挂 `[container-type:size]`（缩放下构图不变式），主窗口 README 面板无尺寸容器、cqh 回退视口解析——这正是组件原版被认可的观感（size 根会把全部 cqh 重参考到 p-8 内缩面板、垂直律动整体缩约一成，用户报告「app 端间距被扩大」后回归））；ready 且门开且有 hostAddress/monitorPort → monitor；idle/stopping/error（或门开但缺地址）→ 简介/待机兜底，**投影待机** = 主题底色 + PNDS 字标 + 「无演出」，双语、随主题。
-- **投影开演门（#130，session 级）**：门状态 `projectionStarted` 权威在 Rust（`SessionInner`，随 session 快照族事件下发；`toggle_projection_start` 命令只对 ready 会话生效）——双窗口同源一致，菜单加速器不经 web 状态。每次 Load/切换工程（`reset_run_state`）重置回简介；开演后关窗重开直接落 monitor（门是 session 事实，不是窗口事实）。主窗口 monitor 标题条右侧的**无文字 ▶ 按钮**（仅投影窗口存在时渲染；存在性由 `ProjectionWindowEvent` 驱动——创建由 opener 在 `tauri://created` 宣布、销毁由 Rust `Destroyed` 观察兜底）与 **⌘⏎** 菜单项（Window 菜单，标签随门翻转 开演⇄撤回）都调同一命令；未开演 ▶ 持续闪烁（`projection-start-blink`，关键帧自高亮态下沉，reduce-motion 全局钳制后即静态高亮），开演后常亮绿（`#34c759`）。
-- monitor 组装复用主窗口契约：地址快照语义（`hostAddress` 优先）、`?theme=`/`?lang=` 首帧参数按导航快照、iframe load 事件 + 10 秒超时的 reveal 防闪盖层、theme/locale 桥推送。session 事实经广播 `SessionSnapshotEvent` + `getSessionState` 恢复（visibility/focus 重拉，occlusion 丢事件先例同主窗口）。
-- 内容切换全部渐变（400ms 主题色盖层，`data-reveal-motion` 豁免 Brutal 即时规则）：待机↔简介↔monitor、切换工程的地址/工程变化都走同一盖层（简介按 projectPath 键控，A→B 切换也渐变）；快照序列中途变卦时收敛到最新内容；**首个落定内容直接呈现**（开演后重开直接落 monitor，无简介/待机闪帧）。
 - 窗口标题「PNDS 投影 — <工程名>」（简介或 monitor 在台时）/ 无演出时「PNDS 投影」，随界面语言实时更新（页面 `setTitle`；capabilities 需 `core:window:allow-set-title`）。
 - **⌘W 按聚焦窗口分发**：投影窗口在前台时只关它（普通销毁），演出与主窗口不受影响；红灯关闭即销毁，退出 App 随之关闭。
-- v1.5.0（#131）键盘与缩放作用域（全部沿用 focused-window-label 分派）：
-  - **⌘=/⌘-/⌘0** 只调聚焦窗口的 monitor 缩放——投影窗口持自己的值（与主窗口的 session 级缩放互相独立），且**被记忆**：经 `projectionZoom` preference 持久化（跨工程、跨关窗重开、跨启动保持）。monitor 走共享 MonitorScaleFrame（transform + inverse-size，跨域 iframe 的既有方案）；简介**不走变换帧**——封面页是 cq 纯比例布局，会自我补偿补偿帧（视觉尺寸不变、只剩文字变糊，用户报告后改），改为**缩放内容本身**：封面缩放画框盒尺寸（85%×80% 基准 × zoom，>100% 由根裁切）、工程名卡片与文档视图用 CSS `zoom`（WebKit 布局级缩放，文字按最终尺寸重新光栅化、保真）；待机固定排版不缩放。持久化走单写者纪律：投影页持值并上报（`pnds:projection-zoom` 事件），**主窗口**是唯一的 preferences 写入方（两个 webview 各自整文件写会互相踩），投影开窗时从 preferences 读初值（越界钳制回 50–200）。
-  - **⌘⇧R** 一个和弦同时重载主窗口与投影窗口的 monitor（各自的 `_r` nonce 冷拉取语义一致；投影在简介/待机时该动作为 no-op）。
-  - **⌃⌘F** 切换聚焦窗口的全屏——投影窗口保持原生标题栏、自管全屏（不进主窗口的 WindowStateEvent chrome 机制）；侧栏全屏按钮仍属主窗口。
-  - **Esc 在投影窗口直接归页面**——瘦根无 App web ⌘ 层、无关闭工程确认流；主窗口自 v1.2.0 起 plain-Esc 本就无 App 功能（关闭工程确认走 ⌘W），page-interaction.md 契约已按窗口作用域同步改写（并废止陈旧的「Esc → 关闭工程」表述）。
+
+### 内容状态机
+
+内容是纯函数 `projectionContent(snapshot)`（`src/lib/projection-state.ts`，钉测试）：
+
+| snapshot 状态           | 开演门 | 地址                         | 投影内容         |
+| ----------------------- | ------ | ---------------------------- | ---------------- |
+| starting / ready        | 未开   | ——                           | **简介**         |
+| ready                   | 开     | 有 hostAddress / monitorPort | monitor          |
+| ready                   | 开     | 缺地址                       | **简介**（兜底） |
+| idle / stopping / error | 任意   | ——                           | **投影待机**     |
+
+- **简介** = 工程根 README.md，经 #125 读取/渲染通道，与主窗口 README 面板**同组合**：封面格式渲染 ProjectCoverPage（PNDS 字标 + composer/github 药丸、大标题、含 cover 图的封面带；行为见「封面页」节），其余 README 仍为 HelpMarkdown 文档视图（v1.5 只渲染文字——图片隐藏、链接一律无操作）；无 README/读取失败回落工程名卡片；starting 快照已带 projectPath，加载期即显示。门开但缺地址事实也落简介——会话在台，「无演出」会是谎言，拼畸形 monitor URL 更糟。
+- **投影待机** = 主题底色 + PNDS 字标 + 「无演出」，双语、随主题（错误态同此——后端恢复失败也是待机屏，不是空窗口）。
+- monitor 组装复用主窗口契约：地址快照语义（`hostAddress` 优先）、`?theme=`/`?lang=` 首帧参数按导航快照、iframe load 事件 + 10 秒超时的 reveal 防闪盖层、theme/locale 桥推送。session 事实经广播 `SessionSnapshotEvent` + `getSessionState` 恢复（visibility/focus 重拉，occlusion 丢事件先例同主窗口）。
+- 内容切换全部渐变（400ms 主题色盖层，`data-reveal-motion` 豁免 Brutal 即时规则）：待机↔简介↔monitor、切换工程的地址/工程变化都走同一盖层（简介按 projectPath 键控，A→B 切换也渐变）；快照序列中途变卦时收敛到最新内容；**首个落定内容直接呈现**（开演后重开直接落 monitor，无简介/待机闪帧）。
+
+### 投影开演门（#130，session 级）
+
+门状态 `projectionStarted` 权威在 Rust（`SessionInner`，随 session 快照族事件下发；`toggle_projection_start` 命令只对 ready 会话生效）——双窗口同源一致，菜单加速器不经 web 状态。每次 Load/切换工程（`reset_run_state`）重置回简介；开演后关窗重开直接落 monitor（门是 session 事实，不是窗口事实）。主窗口 monitor 标题条右侧的**无文字 ▶ 按钮**（仅投影窗口存在时渲染；存在性由 `ProjectionWindowEvent` 驱动——创建由 opener 在 `tauri://created` 宣布、销毁由 Rust `Destroyed` 观察兜底）与 **⌘⏎** 菜单项（Window 菜单，标签随门翻转 开演⇄撤回）都调同一命令；未开演 ▶ 持续闪烁（`projection-start-blink`，关键帧自高亮态下沉，reduce-motion 全局钳制后即静态高亮），开演后常亮绿（`#34c759`）。
+
+### 键盘与缩放作用域（#131）
+
+全部沿用 focused-window-label 分派；对工程页面的键位承诺见 `page-interaction.md`（两树），开发侧速查见 [`keyboard-shortcuts.md`](./keyboard-shortcuts.md)：
+
+| 键位         | 作用域与行为                                                                                                                                                                                                             |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| ⌘⏎           | App 级投影开演门（开演⇄撤回；投影窗口存在 + ready 会话才可用）                                                                                                                                                           |
+| ⌘= / ⌘- / ⌘0 | **聚焦窗口自己的缩放**——投影窗口持自己的值（与主窗口的 session 级缩放互相独立），且**被记忆**：经 `projectionZoom` preference 持久化（跨工程、跨关窗重开、跨启动保持；投影开窗读初值，越界钳制回 50–200）                |
+| ⌃⌘F          | 聚焦窗口的全屏——投影窗口保持原生标题栏、自管全屏（不进主窗口的 WindowStateEvent chrome 机制）；侧栏全屏按钮仍属主窗口                                                                                                    |
+| ⌘⇧R          | 一个和弦**同时**重载主窗口与投影窗口的 monitor（各自的 `_r` nonce 冷拉取语义一致；投影在简介/待机时该动作为 no-op）                                                                                                      |
+| ⌘W           | 聚焦窗口关闭（见「生命周期与单实例」）                                                                                                                                                                                   |
+| Esc          | **在投影窗口直接归页面**——瘦根无 App web ⌘ 层、无关闭工程确认流；主窗口自 v1.2.0 起 plain-Esc 本就无 App 功能（关闭工程确认走 ⌘W），page-interaction.md 契约已按窗口作用域同步改写（并废止陈旧的「Esc → 关闭工程」表述） |
+
+缩放的实现分内容：monitor 走共享 MonitorScaleFrame（transform + inverse-size，跨域 iframe 的既有方案）；简介**不走变换帧**——封面页是 cq 纯比例布局，会自我补偿补偿帧（视觉尺寸不变、只剩文字变糊，用户报告后改），改为**缩放内容本身**：封面缩放画框盒尺寸（85%×80% 基准 × zoom，>100% 由根裁切）、工程名卡片与文档视图用 CSS `zoom`（WebKit 布局级缩放，文字按最终尺寸重新光栅化、保真）；待机固定排版不缩放。持久化走单写者纪律：投影页持值并上报（`pnds:projection-zoom` 事件），**主窗口**是唯一的 preferences 写入方（两个 webview 各自整文件写会互相踩）。
+
+### 封面页（README cover page，两窗口共享）
+
+主窗口 README 面板与投影简介渲染同一 `ProjectCoverPage`；以下是 v1.5 定稿的共享行为（测试锁定）：
+
+- **标题自适应「诚实测量」**（两窗口共用）：可用宽取自**标题区**内容盒（不受标题自身样式的 min-width 反馈影响）、文字真实宽度用 **Range** 量（居中 nowrap 弹性子的 scrollWidth 会被钳到盒宽——曾致某比例下"放得下 0.37em"误判、字距暴大溢出）、每 px 字距的渲染增量**实测斜率**（不数字符——波纹 span 会双计费）、`fonts.loadingdone` 后补测（cq 字号+无单位行高下字体交换不触发 RO）、ResizeObserver 观察**区域**而非标题（min-content 钉住盒宽后标题自身的 RO 会哑）；分支数学纯函数化于 `title-fit.ts` 并钉测试。
+- **边距镜像不变量**：头部行的顶距与封面带的底距解析**同一个 `--cover-edge-inset` token**（默认 5cqh）——上沿间隙 = 下沿间隙由构造保证而非配对常数（`ProjectCoverPage.test.tsx` 钉死）；改 token 只在根上改，永不单改一侧。标题区的底部预留同样读该 token（+ 带高），嵌入侧的加宽覆写（投影侧 2cqh）经同一变量再平衡整个构图。
+- **标题逐字波纹**：标题按字素切分（`Intl.Segmenter` grapheme——组合记号随基字进同一 span），每字素一个 span、错相负延迟，一道缓浪横穿标题（5.2s 循环、0.045em 幅度，幅度用 em 单位随适配算法的字号缩放）；**连字脚本（阿拉伯等）绝不逐字拆分**——字母会被拆散；全局 `prefers-reduced-motion` 块把波纹钳停为静止。
+- **简介单向自动滚动**：封面带文字列超出时自动缓速下滚——12px/s、两端各驻留 3.5s、到底后回顶重走；滚轮/指针一碰即接管，静置 2.5s 后从读者停留处恢复；混合驱动：WebKit 的 scrollTop 整数化（整数部走 scrollTop、亚像素余量走内层 transform 合成补齐），每帧写绝对位置、外部跳动大于自漂移时重同步累加器。放得下的段落永不移动；reduce-motion 下从不自动驱动（滚轮照常可用）。
+- **composer/github 链接按钮**：只有 README 元数据给出 http(s) URL 的药丸才是按钮，点击经系统浏览器打开（opener 插件；打开失败记日志、绝不 unhandled）；其余药丸是纯展示。`github` 按钮文字是品牌名，硬编码在组件里（与 PNDS 字标同姿态），**不入 locales**。
+- **投影侧画框式留白（仅投影）**：封面在约 7.5%（水平）/10%（垂直）内框中构图，随屏幅与缩放等比，且投影侧做两项加宽：带高走 `min(40cqh,42cqw)` 份额（容纳更多首节内容）、标题上下间距走更紧的边缘内缩 `--cover-edge-inset` 5cqh→2cqh（标题在其开阔区垂直居中——pt/pb 覆写只会被居中余量吸收、或仅平移标题；缩小内缩令上沿抬升与下带下移同量，两侧可见间距对称变宽；外层画框本就提供四周留白。主窗口 README 面板不传覆写、渲染与原版完全一致，测试钉死）。
+- **cq 参考系按轴分置**：封面根节点是 inline-size 容器（`@container`，cqw 随面板宽），块轴 cqh 随嵌入环境解析——投影画框盒自身挂 `[container-type:size]`（缩放下构图不变式），主窗口 README 面板无尺寸容器、cqh 回退视口解析——这正是组件原版被认可的观感（size 根会把全部 cqh 重参考到 p-8 内缩面板、垂直律动整体缩约一成，用户报告「app 端间距被扩大」后回归）。
+
+### 桥接与 dev 排障
+
 - 主题/语言实时跟随：主窗口 `setupProjectionWindowBridge()` 推送（与帮助中心同模式）；投影窗口自身不写 preferences。
 - **dev 排障须知（v1.5.0 实战教训）**：webview 疑似显示旧版界面时，**⌘R 不会重载 webview**——它被菜单绑定为「重命名工程」（menu.ts §v1.1.2 T6），被遮挡/后台的 webview 还会静默丢 HMR 连接，形成「改了代码但窗口不动」的假象（曾把 cq 布局中间态误诊为回归）。正确刷新：**关掉重开该窗口**或重启 `tauri dev`；vite dev 已配 `Cache-Control: no-store`（vite.config.ts），真实 reload 不会被 WKWebView 缓存喂旧模块，且 vite 自身重启会让存活 webview 整体 reload 自愈。
 
@@ -305,7 +350,7 @@ Back/Close 返回 Welcome，不自动重启。
 - error → Load/Retry；
 - 全屏 action 的菜单、快捷键与按钮入口；
 - 窗口 fade 状态机；
-- 投影窗口：内容状态机（快照序列）、窗口生命周期（单例/聚焦/落屏/桥）、⌘W 分派；
+- 投影窗口：内容状态机（快照序列）、窗口生命周期（单例/聚焦/落屏/桥）、⌘W 分派、缩放作用域与记忆（`projectionZoom`）、封面页（标题适配数学、边距镜像不变量、投影侧覆写）；
 - 更新检查 check-only 三态（boot 静默、available 状态持久、手动反馈与 Releases 动作）；
 - 日志轮转；
 - 子进程关闭与 orphan cleanup。

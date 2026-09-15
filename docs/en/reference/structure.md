@@ -60,7 +60,7 @@ Rules:
 
 ## Project README.md (optional)
 
-The `README.md` at a Project's root is the self-description written for **people at the performance venue**. The App reads and renders it in its main area when the Project's card is selected (since v1.5.0); a Project without one simply shows an empty state — **preflight never checks it**: it is documentation, not a compliance condition.
+The `README.md` at a Project's root is the self-description written for **people at the performance venue** — and it has two audiences: the **preparer at the sidebar** (the App renders it in the README panel whenever the Project's card is selected, since v1.5.0) and the **audience on the venue screen** (the projection window shows the very same file as its intro before the projection start). The audience side adds a writing constraint: the first section goes up on the big screen, so it must **not spoil the score's visuals, structure, or key interactions**; length and bilingual-section advice, with an example, lives in "Writing a Project README" in Help. A Project without one simply shows an empty state — **preflight never checks it**: it is documentation, not a compliance condition.
 
 Conventions:
 

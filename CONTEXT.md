@@ -85,7 +85,7 @@ PNDS Template 仓库中描述模板示例工程的文档（`docs/implementation.
 _Avoid_: creator-guide（旧名）、handoff（已并入 Template 的 AGENTS.md）
 
 **投影窗口 / projection window**:
-面向场地屏幕的演出显示窗口：原生标题栏、单实例、跨工程保持原位与全屏，由侧栏按钮打开；内容经「投影开演」门控，主窗口 monitor 显示不受影响。
+面向场地屏幕的演出显示窗口：原生标题栏、单实例、跨工程保持原位与全屏，由侧栏按钮打开；内容经「投影开演」门控，主窗口 monitor 显示不受影响。设计决策见 ADR-0006。
 _Avoid_: monitor 窗口、外部窗口、镜像窗口、浏览器 monitor
 
 **投影开演 / projection start**:

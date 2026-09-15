@@ -7,7 +7,7 @@ Look up by question: what you want to know → which file to read.
 - **What is the difference between the three audio modes (internal / external / none)?** → [audio-modes.md](./audio-modes.md)
 - **How the App runs a Project: environment variables, health, the audio bus, monitor page requirements, theme/locale push, shutdown** → [runtime-contract.md](./runtime-contract.md)
 - **A PNDS Project's directory layout and compliance requirements** → [structure.md](./structure.md)
-- **The project README.md: optional convention and recommended outline** → [structure.md](./structure.md)
+- **The project README.md: optional convention and recommended outline (venue-screen audience included)** → [structure.md](./structure.md)
 - **manifest.json: field rules, port selection, path safety** → [manifest.md](./manifest.md)
 - **The .pnds bundle: format, packing, installation, versioning, distribution** → [pnds-bundle.md](./pnds-bundle.md)
 - **The SynthDef compilation contract and SuperCollider** → [supercollider.md](./supercollider.md)
