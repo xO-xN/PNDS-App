@@ -194,7 +194,10 @@ export function ProjectCoverPage({
         return false
       }
       // Back to the class values first (base size, 0.37em tracking),
-      // then measure.
+      // then measure. The overflow of the PREVIOUS apply is read BEFORE
+      // the reset — by now it is settled layout, the one honest moment
+      // the real box ever offers this engine.
+      const settledOverflow = title.scrollWidth - title.clientWidth
       title.style.letterSpacing = ''
       title.style.fontSize = ''
       title.style.transform = ''
@@ -251,21 +254,21 @@ export function ProjectCoverPage({
       const widthAt = (spacing: string, fontSize?: string) =>
         probeRect(spacing, fontSize)?.width ?? 0
       {
-        // em, two ways: the computed font-size (px on healthy engines),
-        // else the probe's own line-box height over the unitless
-        // leading (1.05) — a cq-unit font-size that serializes as its
-        // min() expression parses to NaN and used to abort EVERY fit.
+        // em comes from the PROBE's line-box height (leading-[1.05]),
+        // never from getComputedStyle on the real title: Safari 18.6
+        // (Intel report round six: a verify beat logged em=16 while the
+        // probes kept measuring the class cq size) serves a STALE
+        // computed font-size after the fit's own reset cleared the
+        // inline size — the same synchronous-mutation blindness as the
+        // intrinsic-width cache. A fresh probe lays out once, honestly.
+        // The computed string is kept for the diagnostics only.
         const computedFontSize = getComputedStyle(title).fontSize
-        let em = Number.parseFloat(computedFontSize)
-        let emFromProbeHeight = false
-        if (!(em > 0)) {
-          const rect = probeRect('0px')
-          em = (rect?.height ?? 0) / 1.05
-          emFromProbeHeight = true
-        }
+        const probeBox = probeRect('0px')
+        const em = (probeBox?.height ?? 0) / 1.05
+        const emFromProbeHeight = true
         if (!(em > 0)) {
           diag(
-            `fit bail: em computed="${computedFontSize}" probeH=${em * 1.05}`
+            `fit bail: em probeH=${(probeBox?.height ?? 0).toFixed(1)} computed="${computedFontSize}"`
           )
           return false
         }
@@ -339,61 +342,39 @@ export function ProjectCoverPage({
             Math.abs(clamped) > 1 ? `translateX(${clamped}px)` : ''
         }
         apply(plan)
-        // Measured-truth convergence, THREE instruments, whichever
-        // reports the most overflow wins — each covers the others'
-        // blind spots, and the third is the most literal one possible:
-        //   1. the probe's width (the model's own arithmetic,
-        //      engine-stable) plus one trailing spacing unit (the
-        //      rendered line carries the spacing after the last glyph;
-        //      whether the probe's shrink-to-fit box bills it is engine
-        //      dialect);
-        //   2. the real line's Range rect against the column's edges;
-        //   3. the title's OWN scrollable overflow — scrollWidth −
-        //      clientWidth on the rendered box (Intel report round
-        //      four: the line painted START-aligned and running off
-        //      the right edge, the exact shape scroll overflow
-        //      reports, while the other two instruments somehow agreed
-        //      it fit; no rect semantics, no container units — just
-        //      "does this very box, as laid out right now, overflow").
+        // Convergence is PROBE-ONLY: this engine cannot re-measure the
+        // real box in the same tick the fit just mutated it (round six,
+        // from the strip: a stale scrollWidth of 973px right after the
+        // apply drove the hard fallback into a 36px title). The probes
+        // are fresh clones AT the plan's spacing and size, so the loop
+        // still converges on measured widths — honest ones. The REAL
+        // box's verdict arrives a frame+ later: the verify beats
+        // re-run this whole fit against the then-settled layout (and
+        // runs are idempotent — same probes, same plan, no drift).
         let settled = false
         for (let pass = 0; pass < 3 && !settled; pass += 1) {
           const probeOverflow =
             widthAt(plan.letterSpacing, plan.fontSize) +
             appliedSpacing() -
             available
-          const rect = textRect()
-          const zoneRect = zone.getBoundingClientRect()
-          const columnLeft = zoneRect.left + padLeft
-          const columnRight = zoneRect.right - padRight
-          const overflow = Math.max(
-            probeOverflow,
-            rect.right - columnRight,
-            columnLeft - rect.left,
-            title.scrollWidth - title.clientWidth
-          )
-          if (overflow > 0.5) {
+          if (probeOverflow > 0.5) {
             apply(
               refineTitleFit({
                 plan,
-                overflow,
-                em: Number.parseFloat(getComputedStyle(title).fontSize) || em,
+                overflow: probeOverflow,
+                em,
                 unitSlope,
               })
             )
             continue
           }
-          settleCentering()
           settled = true
         }
         // The hard fallback: bounded refinement did not converge, so
         // the model's vocabulary (slope, em) is suspect on this engine —
         // drop to zero tracking and scale the type by the measured
-        // width RATIO until the line fits. The needed width is the max
-        // of the two direct instruments (the probe at zero tracking,
-        // and the title's own scrollWidth — at zero tracking the line
-        // has no trailing-spacing ambiguity at all). Pure proportions;
-        // the floor keeps a pathological measurement from collapsing
-        // the type.
+        // width RATIO until the line fits. Probe-measured; the floor
+        // keeps a pathological measurement from collapsing the type.
         if (!settled) {
           const keptSize = plan.fontSize
           apply(
@@ -402,18 +383,16 @@ export function ProjectCoverPage({
               : { letterSpacing: '0px' }
           )
           for (let pass = 0; pass < 3; pass += 1) {
-            const width = Math.max(
-              widthAt('0px', title.style.fontSize || undefined),
-              title.scrollWidth
-            )
+            const width = widthAt('0px', title.style.fontSize || undefined)
             if (width - available <= 0.5) break
             const current =
-              Number.parseFloat(getComputedStyle(title).fontSize) || em
+              Number.parseFloat(title.style.fontSize) ||
+              Number.parseFloat(getComputedStyle(title).fontSize) ||
+              em
             const next = Math.max(em * 0.25, current * (available / width))
             title.style.fontSize = `${next}px`
             plan = { ...plan, fontSize: `${next}px` }
           }
-          settleCentering()
           logger.info('Cover title fit: hard fallback engaged', {
             title: page.title,
             available,
@@ -421,6 +400,14 @@ export function ProjectCoverPage({
             fontSize: plan.fontSize,
           })
         }
+        // Centering needs the SETTLED line: measured on the NEXT frame,
+        // after this engine has actually re-laid the title out (a
+        // same-tick Range reads the pre-apply line — round six's
+        // left-shifted titles). Clamped, idempotent, re-settled by
+        // every later fit (the verify beats).
+        requestAnimationFrame(() => {
+          if (titleRef.current === title) settleCentering()
+        })
         if (!loggedFit) {
           loggedFit = true
           logger.info('Cover title fit committed', {
@@ -431,7 +418,7 @@ export function ProjectCoverPage({
             designWidth,
             zeroWidth,
             unitSlope,
-            scrollOverflow: title.scrollWidth - title.clientWidth,
+            settledOverflow,
             letterSpacing: plan.letterSpacing,
             fontSize: plan.fontSize ?? null,
             hardFallback: !settled,
@@ -439,9 +426,10 @@ export function ProjectCoverPage({
         }
         // The strip's verdict line — the WHOLE scene in one photograph:
         // the inputs, the instruments, the plan it landed on, and the
-        // residual overflow of the very box as finally styled.
+        // overflow the PREVIOUS apply left behind (the settled truth —
+        // the fresh apply's own overflow lands on the next beat).
         diag(
-          `fit: avail=${Math.round(available)} em=${Math.round(em)}${emFromProbeHeight ? '(probeH)' : ''} dW=${Math.round(designWidth)} zW=${Math.round(zeroWidth)} slope=${unitSlope.toFixed(1)} → ls=${plan.letterSpacing}${plan.fontSize !== undefined ? ` fs=${plan.fontSize}` : ''} scrollOv=${title.scrollWidth - title.clientWidth}${!settled ? ' HARDFALL' : ''}`
+          `fit: avail=${Math.round(available)} em=${Math.round(em)}${emFromProbeHeight ? '(probeH)' : ''} dW=${Math.round(designWidth)} zW=${Math.round(zeroWidth)} slope=${unitSlope.toFixed(1)} → ls=${plan.letterSpacing}${plan.fontSize !== undefined ? ` fs=${plan.fontSize}` : ''} preOv=${settledOverflow}${!settled ? ' HARDFALL' : ''}`
         )
         return true
       }
