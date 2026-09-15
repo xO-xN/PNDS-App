@@ -271,9 +271,11 @@ pub fn run() {
                     if was != is_fs {
                         let handle = app_handle.clone();
                         std::thread::spawn(move || {
-                            // The native transition takes ~400ms; wait it
-                            // out plus a settle margin before jogging.
-                            std::thread::sleep(std::time::Duration::from_millis(600));
+                            // The native transition takes ~400ms but the
+                            // strip shows up as it SETTLES — wait a full
+                            // second before jogging (window.rs), else the
+                            // jog lands before the lag does.
+                            std::thread::sleep(std::time::Duration::from_millis(1000));
                             if let Some(window) = handle.get_webview_window("projection") {
                                 // The inner Webview (bounds are the
                                 // webview's, not the window's).

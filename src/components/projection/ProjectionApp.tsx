@@ -332,6 +332,14 @@ function ProjectionIntro({
       >
         <div
           data-testid="projection-cover-stage"
+          // Keyed by zoom (Intel / macOS 13 report: zooming resized the
+          // stage box but old WebKit never RE-RESOLVED the cq units of
+          // its descendants — the composition sat at its boot scale on
+          // Intel while Apple Silicon's WebKit scaled fine). A key
+          // change remounts the box: every zoom step is a FRESH layout
+          // with the cq sizes resolved against the new frame from
+          // scratch — engine-independent by construction.
+          key={`utility-stage:${zoom}`}
           className="absolute top-1/2 left-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col [container-type:size]"
           style={{
             width: `${(85 * zoom) / 100}%`,
@@ -391,6 +399,11 @@ function ProjectionIntro({
       >
         <div
           data-testid="projection-cover-stage"
+          // Same zoom key as the utility stage above: the remount is the
+          // Intel zoom fix — a fresh layout per zoom step re-resolves
+          // every cq size against the resized frame (old WebKit leaves
+          // descendant cq units stale when only the container resizes).
+          key={`cover-stage:${zoom}`}
           className="absolute top-1/2 left-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col [container-type:size]"
           style={{
             width: `${(85 * zoom) / 100}%`,

@@ -217,12 +217,17 @@ describe('ProjectionApp (#130 gate)', () => {
     expect(stage.className).toContain('[container-type:size]')
     expect(stage.style.width).toBe('85%')
     expect(stage.style.height).toBe('80%')
-    // ⌘+ grows the poster frame — 110% zoom → 93.5% × 88%.
+    // ⌘+ grows the poster frame — 110% zoom → 93.5% × 88%. The stage
+    // is KEYED by zoom (Intel / macOS 13: old WebKit leaves descendant
+    // cq units stale when only the container resizes — a remount is a
+    // fresh layout), so the zoom REPLACES the element: re-query it.
     act(() => {
       listeners.get('pnds:projection-action')?.({ kind: 'zoom-in' })
     })
-    expect(stage.style.width).toBe('93.5%')
-    expect(stage.style.height).toBe('88%')
+    const zoomedStage = screen.getByTestId('projection-cover-stage')
+    expect(zoomedStage).not.toBe(stage)
+    expect(zoomedStage.style.width).toBe('93.5%')
+    expect(zoomedStage.style.height).toBe('88%')
   })
 
   it('renders a cover-format README band text-only when the project ships no cover image', async () => {

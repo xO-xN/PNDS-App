@@ -245,6 +245,12 @@
     min-width: 100vw;
     overflow: hidden;
     position: relative;
+    /* The themed canvas under every root (Intel/macOS 13 report: a
+       fullscreen projection window lagged its WKWebView layout and the
+       area below the 100vh root showed the UA-default WHITE strip —
+       with the body painted in the live theme token the same lag is a
+       seamless continuation of the page instead of a foreign bar). */
+    background: var(--pnds-bg);
   }
 
   svg {

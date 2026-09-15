@@ -202,40 +202,51 @@ pub async fn toggle_fullscreen(app: AppHandle) -> Result<WindowStateSnapshot, St
 
 /// v1.5.0 polish (Intel / macOS 13 venue-screen report: the projection
 /// window showed an unpainted white strip at the bottom after entering
-/// fullscreen): Tauri issue #14264 — WKWebView's layout intermittently
-/// lags the native fullscreen transition, so the webview stops painting
-/// short of the window's bottom edge (the issue's own remedy: "resizing
-/// the window again triggers a redraw"). This jog performs exactly that
-/// redraw without touching the WINDOW: the webview's bounds grow 1px
-/// and snap back ~80ms later — two real setFrame passes on the WKWebView
-/// that force the relayout the transition lost. The extra pixel is
-/// clipped by the window, so nothing visible moves; called from lib.rs
-/// after the fullscreen edge settles on the projection window.
+/// fullscreen; the retest showed it still intermittent): Tauri issue
+/// #14264 — WKWebView's layout intermittently lags the native
+/// fullscreen transition, so the webview stops painting short of the
+/// window's bottom edge (the issue's own remedy: "resizing the window
+/// again triggers a redraw"). This jog performs exactly that redraw
+/// without touching the WINDOW: the webview's bounds grow 2px and snap
+/// back — real setFrame passes on the WKWebView that force the
+/// relayout the transition lost. The retest shaped it: one early 1px
+/// nudge wasn't enough, so it now runs TWO passes with a 150ms hold
+/// each (a too-quick restore can land before the lost relayout even
+/// sees the growth), and the caller waits a full second after the edge
+/// (the strip appears as the transition SETTLES). The extra pixels are
+/// clipped by the window, so nothing visible moves.
 pub fn jog_webview_layout<R: Runtime>(webview: &Webview<R>) {
-    let Ok(bounds) = webview.bounds() else {
-        return;
-    };
-    let grown = match bounds {
-        Rect {
-            position,
-            size: Size::Physical(size),
-        } => Rect {
-            position,
-            size: Size::Physical(PhysicalSize::new(size.width, size.height + 1)),
-        },
-        Rect {
-            position,
-            size: Size::Logical(size),
-        } => Rect {
-            position,
-            size: Size::Logical(LogicalSize::new(size.width, size.height + 1.0)),
-        },
-    };
-    if webview.set_bounds(grown).is_err() {
-        return;
+    for pass in 0..2 {
+        let Ok(bounds) = webview.bounds() else {
+            return;
+        };
+        let grown = match bounds {
+            Rect {
+                position,
+                size: Size::Physical(size),
+            } => Rect {
+                position,
+                size: Size::Physical(PhysicalSize::new(size.width, size.height + 2)),
+            },
+            Rect {
+                position,
+                size: Size::Logical(size),
+            } => Rect {
+                position,
+                size: Size::Logical(LogicalSize::new(size.width, size.height + 2.0)),
+            },
+        };
+        if webview.set_bounds(grown).is_err() {
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(150));
+        let _ = webview.set_bounds(bounds);
+        // Pace the two passes apart; after the last one there is
+        // nothing more to wait for.
+        if pass == 0 {
+            std::thread::sleep(Duration::from_millis(120));
+        }
     }
-    std::thread::sleep(Duration::from_millis(80));
-    let _ = webview.set_bounds(bounds);
 }
 
 /// Fade-out then hide (red light / Close Window). Interruptible:

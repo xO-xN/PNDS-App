@@ -382,6 +382,20 @@ export function ProjectCoverPage({
       }, 300)
     }
     if (!fit()) scheduleRetry()
+    // Post-commit verification beats (Intel report round three: the
+    // title rendered LEFT-shifted at full design tracking — a verdict
+    // measured against metrics that the engine re-resolved LATER (cq
+    // font sizes and webfonts can settle after the fit ran, and none of
+    // it changes a BOX, so the ResizeObserver stays silent forever and
+    // the stale verdict sticks). Each beat re-runs the whole fit against
+    // the by-then-settled layout: it confirms a healthy plan (and
+    // leaves it) or repairs a stale one. Three beats, cleared on
+    // unmount — no spin.
+    const verifyTimers = [600, 2000, 5000].map(delay =>
+      window.setTimeout(() => {
+        if (titleRef.current === title) fit()
+      }, delay)
+    )
     const refit = () => {
       if (titleRef.current === title) fit()
     }
@@ -416,6 +430,7 @@ export function ProjectCoverPage({
     observer?.observe(title.parentElement ?? title)
     return () => {
       if (retryTimer !== undefined) window.clearTimeout(retryTimer)
+      verifyTimers.forEach(timer => window.clearTimeout(timer))
       observer?.disconnect()
       document.removeEventListener('visibilitychange', onVisibility)
       if (typeof document !== 'undefined' && document.fonts) {
