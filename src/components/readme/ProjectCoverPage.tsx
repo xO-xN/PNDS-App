@@ -120,9 +120,9 @@ export function ProjectCoverPage({
     // proportion (a false "fits at 0.37em" rendered with huge tracking
     // and real overflow). Honest measurements instead: available comes
     // from the ZONE's content box (never shaped by the title's own
-    // styles), and the rendered text width from a Range — immune to the
-    // box feedback (min-width:auto) and scrollWidth clamping. The branch
-    // math lives in planTitleFit (pure, unit-tested).
+    // styles), and the rendered text width from an instrument immune to
+    // the box feedback (min-width:auto) and scrollWidth clamping. The
+    // branch math lives in planTitleFit (pure, unit-tested).
     //
     // v1.5.0 polish (projection report round two: title 不居中、字距大且
     // 右溢): the model's inputs are still measurements taken before the
@@ -136,9 +136,26 @@ export function ProjectCoverPage({
     // from measured geometry — the exact offset between the glyph run's
     // center and the column's center, which absorbs every engine
     // trailing-space semantic instead of guessing an indent model.
-    const fit = () => {
+    //
+    // v1.5.0 polish (Intel / macOS 13 report: EVERY work's title kept
+    // the huge 0.37em tracking and overflowed the window's right edge
+    // in the app panel): a Range is an engine-computed text rect, and
+    // its letter-spacing semantics are not stable across WebKit
+    // generations — when the Range ignores the spacing, the measured
+    // slope collapses toward 0, the degenerate guard below declines to
+    // commit anything, and the 0.37em class default renders verbatim
+    // (huge tracking, real overflow) with no later event ever
+    // correcting it. The width instrument is therefore no longer the
+    // Range but a PROBE: an absolutely-positioned, hidden, shrink-to-
+    // fit (`width: max-content`) clone of the title appended INSIDE the
+    // zone (same container-query context), whose border-box width is
+    // plain layout arithmetic on every engine — no rect semantics, no
+    // clamping by the flex column. The Range stays as a SECOND
+    // instrument (its verdict is taken when it reports MORE overflow)
+    // and remains the centering measurement on the real rendered line.
+    const fit = (): boolean => {
       const zone = title.parentElement
-      if (zone === null) return
+      if (zone === null) return false
       // Back to the class values first (base size, 0.37em tracking),
       // then measure.
       title.style.letterSpacing = ''
@@ -149,90 +166,135 @@ export function ProjectCoverPage({
       const padLeft = Number.parseFloat(zoneStyle.paddingLeft)
       const padRight = Number.parseFloat(zoneStyle.paddingRight)
       const available = zone.clientWidth - padLeft - padRight
-      if (Number.isNaN(available) || available <= 0) return
+      if (Number.isNaN(available) || available <= 0) return false
       const em = Number.parseFloat(getComputedStyle(title).fontSize)
-      if (Number.isNaN(em) || em === 0) return
+      if (Number.isNaN(em) || em === 0) return false
       const textRect = () => {
         const range = document.createRange()
         range.selectNodeContents(title)
         return range.getBoundingClientRect()
       }
-      // The rendered width per 1px of letter-spacing is MEASURED, not
-      // counted: the ripple wraps each glyph in a span and the spacing
-      // lands inside the span AND after its box (a spanned "Splash Ink"
-      // bills 19 units, not its 10 characters — counting glyphs made
-      // every squeeze underfill and overflow by the difference).
-      const widthAt = (spacing: string) => {
-        title.style.letterSpacing = spacing
-        return textRect().width
-      }
-      const designWidth = widthAt('')
-      const zeroWidth = widthAt('0px')
-      const unitSlope = (widthAt('100px') - zeroWidth) / 100
-      // Degenerate inputs (all-zero rects before the webview ever laid
-      // out — jsdom, a hidden boot): commit NOTHING (the class baseline
-      // stands) and let the next trigger refit, instead of freezing a
-      // garbage verdict no later event would correct.
-      if (
-        !(designWidth > 0) ||
-        !(zeroWidth > 0) ||
-        !(unitSlope > 0) ||
-        zeroWidth > designWidth
-      ) {
-        return
-      }
-      let plan = planTitleFit({
-        available,
-        em,
-        designWidth,
-        zeroWidth,
-        unitSlope,
-      })
-      const apply = (next: typeof plan) => {
-        plan = next
-        title.style.letterSpacing = next.letterSpacing
-        if (next.fontSize !== undefined) title.style.fontSize = next.fontSize
-        title.style.textIndent = next.textIndent
-      }
-      apply(plan)
-      // Measured-truth convergence: the rendered rect against the
-      // column's edges (both visual coordinates — transform-safe on the
-      // projection's stage). Width first, then the centering offset.
-      for (let pass = 0; pass < 3; pass += 1) {
-        const rect = textRect()
-        const zoneRect = zone.getBoundingClientRect()
-        const columnLeft = zoneRect.left + padLeft
-        const columnRight = zoneRect.right - padRight
-        const overflow = Math.max(
-          rect.right - columnRight,
-          columnLeft - rect.left
-        )
-        if (overflow > 0.5) {
-          apply(
-            refineTitleFit({
-              plan,
-              overflow,
-              em: Number.parseFloat(getComputedStyle(title).fontSize) || em,
-              unitSlope,
-            })
+      // The probe: out of the flex flow (no min-width clamp), shrink-
+      // to-fit (its box IS the text width, spacing included), hidden
+      // and never painted (removed synchronously before this task can
+      // render). Same classes as the title, so the cq font size and
+      // the ripple spans resolve identically.
+      const probe = title.cloneNode(true) as HTMLElement
+      probe.style.position = 'absolute'
+      probe.style.visibility = 'hidden'
+      probe.style.pointerEvents = 'none'
+      probe.style.margin = '0'
+      probe.style.left = '0'
+      probe.style.top = '0'
+      probe.style.width = 'max-content'
+      zone.appendChild(probe)
+      try {
+        // The rendered width per 1px of letter-spacing is MEASURED, not
+        // counted: the ripple wraps each glyph in a span and the spacing
+        // lands inside the span AND after its box (a spanned "Splash
+        // Ink" bills 19 units, not its 10 characters — counting glyphs
+        // made every squeeze underfill and overflow by the difference).
+        const widthAt = (spacing: string) => {
+          probe.style.letterSpacing = spacing
+          return probe.getBoundingClientRect().width
+        }
+        const designWidth = widthAt('')
+        const zeroWidth = widthAt('0px')
+        const unitSlope = (widthAt('100px') - zeroWidth) / 100
+        // Degenerate inputs (all-zero rects before the webview ever laid
+        // out — jsdom, a hidden boot): commit NOTHING (the class baseline
+        // stands) and let the caller retry, instead of freezing a
+        // garbage verdict no later event would correct.
+        if (
+          !(designWidth > 0) ||
+          !(zeroWidth > 0) ||
+          !(unitSlope > 0) ||
+          zeroWidth > designWidth
+        ) {
+          return false
+        }
+        let plan = planTitleFit({
+          available,
+          em,
+          designWidth,
+          zeroWidth,
+          unitSlope,
+        })
+        const apply = (next: typeof plan) => {
+          plan = next
+          title.style.letterSpacing = next.letterSpacing
+          if (next.fontSize !== undefined) title.style.fontSize = next.fontSize
+          title.style.textIndent = next.textIndent
+        }
+        apply(plan)
+        // Measured-truth convergence: the probe's width (the model's
+        // own arithmetic, engine-stable) AND the real line's Range rect
+        // against the column's edges — whichever reports more overflow
+        // wins, so each instrument covers the other's blind spots
+        // (trailing-space semantics on one side, spacing-blind Ranges
+        // on the other). Width first, then the centering offset.
+        for (let pass = 0; pass < 3; pass += 1) {
+          probe.style.letterSpacing = plan.letterSpacing
+          probe.style.fontSize = plan.fontSize ?? ''
+          const probeOverflow = probe.getBoundingClientRect().width - available
+          const rect = textRect()
+          const zoneRect = zone.getBoundingClientRect()
+          const columnLeft = zoneRect.left + padLeft
+          const columnRight = zoneRect.right - padRight
+          const overflow = Math.max(
+            probeOverflow,
+            rect.right - columnRight,
+            columnLeft - rect.left
           )
-          continue
+          if (overflow > 0.5) {
+            apply(
+              refineTitleFit({
+                plan,
+                overflow,
+                em: Number.parseFloat(getComputedStyle(title).fontSize) || em,
+                unitSlope,
+              })
+            )
+            continue
+          }
+          const centerError =
+            (columnLeft + columnRight) / 2 - (rect.left + rect.right) / 2
+          if (Math.abs(centerError) > 1) {
+            // NOT via text-indent: on a centered line an indent shifts
+            // the glyphs by only HALF its value (the line recenters in
+            // the remaining space — CSS22 §16.1), so an indent-based
+            // correction would leave half the error standing, glaring at
+            // the projection's font scale. translateX is 1:1 in visual
+            // coordinates — exactly the space the error was measured in.
+            title.style.transform = `translateX(${centerError}px)`
+          }
+          break
         }
-        const centerError =
-          (columnLeft + columnRight) / 2 - (rect.left + rect.right) / 2
-        if (Math.abs(centerError) > 1) {
-          // NOT via text-indent: on a centered line an indent shifts
-          // the glyphs by only HALF its value (the line recenters in
-          // the remaining space — CSS22 §16.1), so an indent-based
-          // correction would leave half the error standing, glaring at
-          // the projection's font scale. translateX is 1:1 in visual
-          // coordinates — exactly the space the error was measured in.
-          title.style.transform = `translateX(${centerError}px)`
-        }
-        break
+        return true
+      } finally {
+        probe.remove()
       }
     }
-    fit()
+    // The degenerate bail above must not leave the 0.37em class default
+    // standing for good: the scheduled triggers (fonts, reveal, resize)
+    // cover their own causes, but a machine whose first layout answers
+    // late would keep the overflow until one of them happens to fire —
+    // so a degenerate fit retries itself on a short interval, bounded
+    // so a permanently hostile engine never spins.
+    let retries = 0
+    let retryTimer: number | undefined
+    const scheduleRetry = () => {
+      if (retries >= 16) return
+      retries += 1
+      retryTimer = window.setTimeout(() => {
+        retryTimer = undefined
+        if (titleRef.current === title && !fit()) scheduleRetry()
+      }, 300)
+    }
+    if (!fit()) scheduleRetry()
+    const refit = () => {
+      if (titleRef.current === title) fit()
+    }
     // Webfonts swap in AFTER first paint and nothing about the BOX
     // changes with the swap (the font-size is cq-based, the line-height
     // unitless) — the ResizeObserver stays silent while the metrics
@@ -240,9 +302,6 @@ export function ProjectCoverPage({
     // (projection report: 某比例下 0.37em 决定 + 真字体溢出). Refit on
     // EVERY font-load batch; fonts.ready alone is racy (it can resolve
     // before a late webfont request even starts).
-    const refit = () => {
-      if (titleRef.current === title) fit()
-    }
     if (typeof document !== 'undefined' && document.fonts) {
       document.fonts.addEventListener('loadingdone', refit)
       void document.fonts.ready.then(refit).catch(() => undefined)
@@ -266,6 +325,7 @@ export function ProjectCoverPage({
     // width's squeeze value while the window kept resizing).
     observer?.observe(title.parentElement ?? title)
     return () => {
+      if (retryTimer !== undefined) window.clearTimeout(retryTimer)
       observer?.disconnect()
       document.removeEventListener('visibilitychange', onVisibility)
       if (typeof document !== 'undefined' && document.fonts) {
