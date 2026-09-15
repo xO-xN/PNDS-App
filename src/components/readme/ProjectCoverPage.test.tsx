@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import type { ReadmeCoverPage } from '@/lib/readme-cover-page'
 import { ProjectCoverPage } from './ProjectCoverPage'
-import { planTitleFit } from './title-fit'
+import { planTitleFit, refineTitleFit } from './title-fit'
 
 vi.mock('@tauri-apps/plugin-opener', () => ({
   openUrl: vi.fn().mockResolvedValue(undefined),
@@ -302,5 +302,63 @@ describe('planTitleFit', () => {
       unitSlope,
     })
     expect(parseFloat(plan.letterSpacing)).toBeLessThanOrEqual(0.37 * em)
+  })
+})
+
+// v1.5.0 polish (projection report round two: title 不居中、字距大且右溢):
+// the fit no longer trusts its first verdict — after applying the plan
+// it re-measures the RENDERED line and refines until the truth fits.
+// The refinement math is pure and pinned here.
+describe('refineTitleFit', () => {
+  it('is a no-op when the rendered line already fits', () => {
+    const plan = { letterSpacing: '37px', textIndent: '37px' }
+    expect(refineTitleFit({ plan, overflow: 0, em: 100, unitSlope: 19 })).toBe(
+      plan
+    )
+    expect(refineTitleFit({ plan, overflow: -5, em: 100, unitSlope: 19 })).toBe(
+      plan
+    )
+  })
+
+  it('pulls the tracking in by exactly the measured overflow, via the slope', () => {
+    const plan = { letterSpacing: '60px', textIndent: '60px' }
+    // 38px of real overflow at 19px-width per 1px spacing — the
+    // tracking must give back 2px, and the indent follows it.
+    expect(
+      refineTitleFit({ plan, overflow: 38, em: 100, unitSlope: 19 })
+    ).toEqual({ letterSpacing: '58px', textIndent: '58px' })
+  })
+
+  it('drops to zero tracking when the overflow eats it all', () => {
+    const plan = { letterSpacing: '10px', textIndent: '10px' }
+    const refined = refineTitleFit({
+      plan,
+      overflow: 500,
+      em: 100,
+      unitSlope: 19,
+    })
+    expect(refined.letterSpacing).toBe('0px')
+    expect(refined.textIndent).toBe('0px')
+    // Already at zero tracking, the type itself shrinks (bounded).
+    expect(parseFloat(refined.fontSize ?? '0')).toBeGreaterThan(0)
+    expect(parseFloat(refined.fontSize ?? '0')).toBeLessThan(100)
+  })
+
+  it('shrinks the type when the plan already sits at zero tracking', () => {
+    const plan = {
+      letterSpacing: '0px',
+      fontSize: '100px',
+      textIndent: '0px',
+    }
+    const refined = refineTitleFit({
+      plan,
+      overflow: 100,
+      em: 100,
+      unitSlope: 19,
+    })
+    expect(refined.letterSpacing).toBe('0px')
+    expect(parseFloat(refined.fontSize ?? '0')).toBeLessThan(100)
+    // Bounded: a pathological overflow never collapses the type to 0.
+    expect(parseFloat(refined.fontSize ?? '0')).toBeGreaterThanOrEqual(25)
   })
 })

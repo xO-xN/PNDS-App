@@ -24,3 +24,16 @@ export const BUILTIN_UTILITY_DISPLAY_NAMES: Record<string, string> = {
 export function builtinUtilityId(path: string): string {
   return path.split('/utilities/').pop() ?? path
 }
+
+/**
+ * v1.5.0 polish: the registry id of a path that REALLY is a staged
+ * utility — the path shape alone (`…/utilities/<something>`) only says
+ * "staged layout"; only a known registry id says "built-in utility".
+ * Null for every author project (a user folder that merely contains
+ * the word included), so the README routing can pick the utility info
+ * page without false positives.
+ */
+export function utilityIdFromPath(path: string): string | null {
+  const id = builtinUtilityId(path)
+  return BUILTIN_UTILITY_DISPLAY_NAMES[id] !== undefined ? id : null
+}

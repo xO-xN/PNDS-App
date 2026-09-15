@@ -76,26 +76,17 @@ export function FolderReadme({ folderId }: { folderId: string }) {
   return (
     <div
       data-testid="folder-readme"
-      className="relative flex min-h-full flex-col bg-(--pnds-bg) p-8 animate-[fade-in_0.8s_ease-in]"
+      className="@container relative flex min-h-full flex-col bg-(--pnds-bg) p-8 animate-[fade-in_0.8s_ease-in]"
     >
-      <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col">
-        <header className="flex items-start justify-between gap-4">
+      {editing ? (
+        // The edit form keeps its working shape from #124 (both fields,
+        // the rename guards, the refusal reason) — only the display mode
+        // below took the cover-page styling (v1.5.0 polish, user
+        // request: 参考工程的信息介绍，只要 title 与其下侧的描述).
+        <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col">
           <h1 className="text-[32px] font-light leading-tight tracking-wide text-(--pnds-text)">
             {folder.name}
           </h1>
-          {editable && !editing && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="shrink-0"
-              onClick={startEditing}
-            >
-              {t('folderReadme.edit')}
-            </Button>
-          )}
-        </header>
-
-        {editing ? (
           <form
             data-testid="folder-readme-form"
             className="mt-6 flex flex-col gap-5"
@@ -154,18 +145,48 @@ export function FolderReadme({ folderId }: { folderId: string }) {
               <Button type="submit">{t('folderReadme.save')}</Button>
             </div>
           </form>
-        ) : folder.intro ? (
-          <p className="font-manrope mt-6 whitespace-pre-wrap text-start text-[15px] leading-7 text-(--pnds-text)/80">
-            {folder.intro}
-          </p>
-        ) : (
-          <p className="mt-6 text-[15px] text-(--pnds-text)/50">
-            {editable
-              ? t('folderReadme.empty')
-              : t('folderReadme.emptyProtected')}
-          </p>
-        )}
-      </div>
+        </div>
+      ) : (
+        // The display mode borrows the cover page's composition minus
+        // everything the folder does not have (user spec): no PNDS /
+        // composer header, no band rectangle, no cover image — just the
+        // folder's name as the big centered title and its description
+        // below. The name wraps (folders are not one-word titles), so
+        // it takes a moderate tracking and a fitting clamp instead of
+        // the cover title's nowrap fit machinery.
+        <div className="flex flex-1 flex-col items-center justify-center px-8 pb-16">
+          <h1
+            dir="auto"
+            className="w-full text-center text-[clamp(36px,7cqw,76px)] font-bold leading-[1.15] tracking-[0.12em] break-words text-(--pnds-text)"
+          >
+            {folder.name}
+          </h1>
+          {editable && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-10 shrink-0"
+              onClick={startEditing}
+            >
+              {t('folderReadme.edit')}
+            </Button>
+          )}
+          {folder.intro ? (
+            <p
+              dir="auto"
+              className="font-manrope mt-10 max-w-xl whitespace-pre-wrap text-start text-[15px] leading-7 text-(--pnds-text)/80"
+            >
+              {folder.intro}
+            </p>
+          ) : (
+            <p className="mt-10 text-[15px] text-(--pnds-text)/50">
+              {editable
+                ? t('folderReadme.empty')
+                : t('folderReadme.emptyProtected')}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Same bottom-docked preflight feedback as the starting page —
           drilled into a folder, a check's Checking…/error stays visible. */}

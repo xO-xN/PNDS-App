@@ -3,7 +3,7 @@ import { openUrl } from '@tauri-apps/plugin-opener'
 import { HelpMarkdown } from '@/components/help/HelpMarkdown'
 import { logger } from '@/lib/logger'
 import type { ReadmeCoverPage } from '@/lib/readme-cover-page'
-import { planTitleFit } from './title-fit'
+import { planTitleFit, refineTitleFit } from './title-fit'
 
 /**
  * v1.5.0 (README cover page): the creator-designed title page the main
@@ -52,6 +52,7 @@ export function ProjectCoverPage({
   cover,
   bandHeight,
   edgeInset,
+  headerNote,
 }: {
   page: ReadmeCoverPage
   /** The cover image as a data URL; null renders the band text-only. */
@@ -69,14 +70,19 @@ export function ProjectCoverPage({
    *  header's top padding and the band's bottom offset) and feeds the
    *  title's bottom reserve. It is the honest lever for roomier title
    *  spacing: the title centers in its open field, so pt/pb overrides
-   *  cannot widen the visible gaps (symmetric growth is absorbed by
-   *  the centering slack; asymmetric growth merely shifts the
+   *  cannot widen the visible gaps (symmetric growth is absorbed by the
+   *  centering slack; asymmetric growth merely shifts the
    *  midpoint), while a SMALLER inset lifts the header and drops the
    *  band by the same amount — the field grows 2Δ and each visible
    *  title gap grows Δ with the title still dead-center. The
    *  projection screen (user request: title 与上下两部分的间距增大)
    *  passes a tighter inset; the app panel passes nothing. */
   edgeInset?: string
+  /** Plain text on the header's RIGHT for pill-less pages — the
+   *  utility intro's "PNDS Utility" tag (v1.5.0 polish). Renders only
+   *  when the page carries neither a composer pill nor a github
+   *  button. */
+  headerNote?: string
 }) {
   const titleRef = useRef<HTMLHeadingElement>(null)
   // Destructured so the null-guards below narrow inside the click
@@ -107,50 +113,116 @@ export function ProjectCoverPage({
     // and real overflow). Honest measurements instead: available comes
     // from the ZONE's content box (never shaped by the title's own
     // styles), and the rendered text width from a Range — immune to the
-    // box feedback (min-width:auto) and scrollWidth clamping. The
-    // branch math lives in planTitleFit (pure, unit-tested).
+    // box feedback (min-width:auto) and scrollWidth clamping. The branch
+    // math lives in planTitleFit (pure, unit-tested).
+    //
+    // v1.5.0 polish (projection report round two: title 不居中、字距大且
+    // 右溢): the model's inputs are still measurements taken before the
+    // plan applies, and any of them can lie in the wild — a fit that
+    // ran while the projection webview was still HIDDEN (anti-flash
+    // boot), a font swap between probes, the union rect's unaccounted
+    // trailing space. The fit therefore no longer trusts its own first
+    // verdict: after applying the plan it RE-MEASURES the rendered line
+    // against the column's real edges and refines (refineTitleFit,
+    // bounded passes) until the truth fits, then corrects the centering
+    // from measured geometry — the exact offset between the glyph run's
+    // center and the column's center, which absorbs every engine
+    // trailing-space semantic instead of guessing an indent model.
     const fit = () => {
+      const zone = title.parentElement
+      if (zone === null) return
       // Back to the class values first (base size, 0.37em tracking),
       // then measure.
       title.style.letterSpacing = ''
       title.style.fontSize = ''
       title.style.textIndent = ''
-      const zone = title.parentElement
-      if (zone === null) return
+      title.style.transform = ''
       const zoneStyle = getComputedStyle(zone)
-      const available =
-        zone.clientWidth -
-        Number.parseFloat(zoneStyle.paddingLeft) -
-        Number.parseFloat(zoneStyle.paddingRight)
+      const padLeft = Number.parseFloat(zoneStyle.paddingLeft)
+      const padRight = Number.parseFloat(zoneStyle.paddingRight)
+      const available = zone.clientWidth - padLeft - padRight
       if (Number.isNaN(available) || available <= 0) return
       const em = Number.parseFloat(getComputedStyle(title).fontSize)
       if (Number.isNaN(em) || em === 0) return
-      const textWidth = () => {
+      const textRect = () => {
         const range = document.createRange()
         range.selectNodeContents(title)
-        return range.getBoundingClientRect().width
+        return range.getBoundingClientRect()
       }
       // The rendered width per 1px of letter-spacing is MEASURED, not
       // counted: the ripple wraps each glyph in a span and the spacing
       // lands inside the span AND after its box (a spanned "Splash Ink"
       // bills 19 units, not its 10 characters — counting glyphs made
       // every squeeze underfill and overflow by the difference).
-      title.style.letterSpacing = ''
-      const designWidth = textWidth()
-      title.style.letterSpacing = '0px'
-      const zeroWidth = textWidth()
-      title.style.letterSpacing = '100px'
-      const unitSlope = (textWidth() - zeroWidth) / 100
-      const plan = planTitleFit({
+      const widthAt = (spacing: string) => {
+        title.style.letterSpacing = spacing
+        return textRect().width
+      }
+      const designWidth = widthAt('')
+      const zeroWidth = widthAt('0px')
+      const unitSlope = (widthAt('100px') - zeroWidth) / 100
+      // Degenerate inputs (all-zero rects before the webview ever laid
+      // out — jsdom, a hidden boot): commit NOTHING (the class baseline
+      // stands) and let the next trigger refit, instead of freezing a
+      // garbage verdict no later event would correct.
+      if (
+        !(designWidth > 0) ||
+        !(zeroWidth > 0) ||
+        !(unitSlope > 0) ||
+        zeroWidth > designWidth
+      ) {
+        return
+      }
+      let plan = planTitleFit({
         available,
         em,
         designWidth,
         zeroWidth,
         unitSlope,
       })
-      title.style.letterSpacing = plan.letterSpacing
-      if (plan.fontSize !== undefined) title.style.fontSize = plan.fontSize
-      title.style.textIndent = plan.textIndent
+      const apply = (next: typeof plan) => {
+        plan = next
+        title.style.letterSpacing = next.letterSpacing
+        if (next.fontSize !== undefined) title.style.fontSize = next.fontSize
+        title.style.textIndent = next.textIndent
+      }
+      apply(plan)
+      // Measured-truth convergence: the rendered rect against the
+      // column's edges (both visual coordinates — transform-safe on the
+      // projection's stage). Width first, then the centering offset.
+      for (let pass = 0; pass < 3; pass += 1) {
+        const rect = textRect()
+        const zoneRect = zone.getBoundingClientRect()
+        const columnLeft = zoneRect.left + padLeft
+        const columnRight = zoneRect.right - padRight
+        const overflow = Math.max(
+          rect.right - columnRight,
+          columnLeft - rect.left
+        )
+        if (overflow > 0.5) {
+          apply(
+            refineTitleFit({
+              plan,
+              overflow,
+              em: Number.parseFloat(getComputedStyle(title).fontSize) || em,
+              unitSlope,
+            })
+          )
+          continue
+        }
+        const centerError =
+          (columnLeft + columnRight) / 2 - (rect.left + rect.right) / 2
+        if (Math.abs(centerError) > 1) {
+          // NOT via text-indent: on a centered line an indent shifts
+          // the glyphs by only HALF its value (the line recenters in
+          // the remaining space — CSS22 §16.1), so an indent-based
+          // correction would leave half the error standing, glaring at
+          // the projection's font scale. translateX is 1:1 in visual
+          // coordinates — exactly the space the error was measured in.
+          title.style.transform = `translateX(${centerError}px)`
+        }
+        break
+      }
     }
     fit()
     // Webfonts swap in AFTER first paint and nothing about the BOX
@@ -167,6 +239,16 @@ export function ProjectCoverPage({
       document.fonts.addEventListener('loadingdone', refit)
       void document.fonts.ready.then(refit).catch(() => undefined)
     }
+    // The projection window boots HIDDEN (#51 anti-flash) and reveals
+    // after its first snapshot: a fit measured before the webview was
+    // ever on screen can land on pre-layout values, and nothing else
+    // fires afterwards (the box never changes size, the fonts were
+    // already settled) — the wrong verdict would stick for the whole
+    // session (projection report round two). Refit at reveal.
+    const onVisibility = () => {
+      if (!document.hidden) refit()
+    }
+    document.addEventListener('visibilitychange', onVisibility)
     const observer =
       typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(fit)
     // Observe the ZONE, never the title itself: once the nowrap text's
@@ -177,6 +259,7 @@ export function ProjectCoverPage({
     observer?.observe(title.parentElement ?? title)
     return () => {
       observer?.disconnect()
+      document.removeEventListener('visibilitychange', onVisibility)
       if (typeof document !== 'undefined' && document.fonts) {
         document.fonts.removeEventListener('loadingdone', refit)
       }
@@ -329,6 +412,18 @@ export function ProjectCoverPage({
               github
             </button>
           )}
+          {page.composer === null &&
+            githubUrl === null &&
+            headerNote !== undefined && (
+              // The pill-less corner's plain tag — the utility intro's
+              // "PNDS Utility" (brand label, verbatim like the wordmark).
+              <span
+                data-testid="cover-header-note"
+                className="font-hans text-[1.8cqw] tracking-[0.1em] text-(--pnds-text)/60"
+              >
+                {headerNote}
+              </span>
+            )}
         </div>
       </div>
       <div className="mx-[8cqw] mt-[4.4cqh] shrink-0 border-t border-(--pnds-text)/40" />
@@ -394,12 +489,14 @@ export function ProjectCoverPage({
           className="cover-band-text min-w-0 flex-1 overflow-y-auto py-[3.2cqh] pe-[5.5cqw]"
         >
           <div ref={rollInnerRef} className="will-change-transform">
-            <p
-              data-testid="cover-label"
-              className="font-hans text-[1.92cqw] font-[250] leading-[1.45] text-(--pnds-text)"
-            >
-              {page.sectionLabel}
-            </p>
+            {page.sectionLabel !== '' && (
+              <p
+                data-testid="cover-label"
+                className="font-hans text-[1.92cqw] font-[250] leading-[1.45] text-(--pnds-text)"
+              >
+                {page.sectionLabel}
+              </p>
+            )}
             <HelpMarkdown
               markdown={page.sectionMarkdown}
               className="text-[1.92cqw] leading-[1.45] text-(--pnds-text) [&_li]:my-[0.5cqw] [&_p]:my-0 [&_ul]:my-[1cqw]"

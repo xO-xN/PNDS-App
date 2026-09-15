@@ -48,3 +48,52 @@ export function planTitleFit({
     textIndent: '0px',
   }
 }
+
+/**
+ * v1.5.0 polish (projection report: title 字间距大且右溢、不居中): the
+ * model above decides from measurements taken BEFORE the plan applies —
+ * and any one of them can be off in the wild (a fit that ran while the
+ * projection webview was still hidden, a font swap between probes, the
+ * union-rect's unaccounted trailing space). This refinement takes the
+ * RENDERED truth — the applied plan's actual rect, still wider than the
+ * column by `overflow` — and pulls the plan in by exactly that much:
+ * the tracking shrinks by overflow/slope while any tracking remains,
+ * else the type scales to the column. Bounded passes in the component
+ * converge; `overflow <= 0` is a no-op so the loop can call it freely.
+ */
+export function refineTitleFit({
+  plan,
+  overflow,
+  em,
+  unitSlope,
+}: {
+  plan: { letterSpacing: string; fontSize?: string; textIndent: string }
+  /** How much the rendered line still exceeds the column (px, ≥ 0). */
+  overflow: number
+  em: number
+  unitSlope: number
+}): { letterSpacing: string; fontSize?: string; textIndent: string } {
+  if (overflow <= 0) return plan
+  const spacing = Number.parseFloat(plan.letterSpacing)
+  const next = spacing > 0 ? Math.max(0, spacing - overflow / unitSlope) : 0
+  if (next > 0 && unitSlope > 0) {
+    // Keep any font-size the plan carried: a refinement may run after
+    // an earlier pass already shrank the type.
+    return {
+      ...plan,
+      letterSpacing: `${next}px`,
+      textIndent: `${next}px`,
+    }
+  }
+  // The tracking is spent (or was already zero) — the type itself must
+  // shrink to the column; scale by the overflow against a nominal
+  // title-width estimate, bounded so a pathological input never
+  // collapses the type to nothing.
+  const scale = Math.max(0.25, 1 - overflow / Math.max(1, em * 16))
+  return {
+    ...plan,
+    letterSpacing: '0px',
+    fontSize: `${em * scale}px`,
+    textIndent: '0px',
+  }
+}

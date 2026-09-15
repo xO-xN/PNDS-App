@@ -6,7 +6,7 @@ import { ReadmePanel } from './ReadmePanel'
 
 /**
  * v1.5.0 (#125): the main area's README display routing — the spec's
- * three selection states plus its two empty states, five routes total:
+ * three selection states plus its two empty states, six routes total:
  *
  * 1. home, nothing selected → starting page
  * 2. a drilled-in folder, nothing selected → the folder's 自述
@@ -15,6 +15,8 @@ import { ReadmePanel } from './ReadmePanel'
  * 4. a selected project card → the project's README.md (the selection
  *    wins over the drilled-in folder)
  * 5. a selected card with no README.md → the project empty state
+ * 6. a selected built-in utility → its info page (v1.5.0 polish), not
+ *    the README panel
  *
  * Every route keeps the bottom-docked preflight feedback.
  */
@@ -125,6 +127,30 @@ describe('ReadmePanel (#125 display routing)', () => {
       await screen.findByRole('heading', { name: 'Night Sky' })
     ).toBeInTheDocument()
     expect(screen.queryByTestId('folder-readme')).not.toBeInTheDocument()
+  })
+
+  it('route 6: a selected built-in utility shows its info page, not the README panel (v1.5.0 polish)', () => {
+    // The staged path shape `…/utilities/<id>` is the registry identity
+    // (dev and release roots differ; the id does not).
+    useProjectStore.setState({
+      pendingPreflightPath:
+        '/var/folders/tmp/AppSupport/utilities/multichannel-signal-generator',
+    })
+
+    render(<ReadmePanel />)
+
+    expect(screen.getByTestId('utility-intro')).toBeInTheDocument()
+    // The title rides the ripple spans — query the heading's name.
+    expect(
+      screen.getByRole('heading', { name: 'Multichannel Gen' })
+    ).toBeInTheDocument()
+    expect(screen.getByText('PNDS Utility')).toBeInTheDocument()
+    // Never the README panel's empty state — utilities are app content,
+    // its writing-rules pointer does not apply.
+    expect(screen.queryByTestId('project-readme')).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('This project has no README.md yet.')
+    ).not.toBeInTheDocument()
   })
 
   it('route 5: a selected card without README.md lands on the project empty state', async () => {
