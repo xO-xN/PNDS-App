@@ -93,9 +93,7 @@ describe('ReadmePanel (#125 display routing)', () => {
       screen.queryByRole('button', { name: 'Edit' })
     ).not.toBeInTheDocument()
     expect(
-      screen.getByText(
-        'Check tools that ship with the App, ready to run — a pre-show health check for the network and the audio chain.'
-      )
+      screen.getByText('Check tools that ship with the App.')
     ).toBeInTheDocument()
     expect(
       screen.queryByRole('heading', { name: 'Hi! Welcome to PNDS' })

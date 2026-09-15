@@ -256,8 +256,8 @@
   "webkit.detailsLabel": "检测到的版本",
   "webkit.updateAction": "打开更新指引",
   "webkit.dismiss": "关闭",
-  "utilities.intro.multichannel-signal-generator": "演出前验证音频通道、bus 与出声路由的信号发生器。",
+  "utilities.intro.multichannel-signal-generator": "演出前验证音频路由的 16 通道信号发生器。",
   "utilities.intro.local-network-diagnostics": "检查演出场地局域网连接质量的诊断工具。",
-  "utilities.intro.telematic-network-diagnostics": "检查跨互联网两地演奏连接质量的诊断工具。",
-  "folderReadme.utilitiesIntro": "App 自带、即装即用的演出检查工具——出场前给网络与音频做一次体检。"
+  "utilities.intro.telematic-network-diagnostics": "检查多地跨互联网共奏连接质量的诊断工具。",
+  "folderReadme.utilitiesIntro": "App 自带的演出检查工具。"
 }

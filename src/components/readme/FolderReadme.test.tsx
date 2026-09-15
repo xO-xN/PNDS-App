@@ -78,9 +78,7 @@ describe('FolderReadme', () => {
     // v1.5.0 polish: the protected folder carries the App's fixed
     // one-line description instead of an empty hint.
     expect(
-      screen.getByText(
-        'Check tools that ship with the App, ready to run — a pre-show health check for the network and the audio chain.'
-      )
+      screen.getByText('Check tools that ship with the App.')
     ).toBeInTheDocument()
   })
 

@@ -45,7 +45,9 @@ describe('UtilityIntro', () => {
     // The intro copy comes from the locale for the App's language (the
     // test i18n runs English): the one-sentence "what is this for".
     expect(
-      screen.getByText(/^A diagnostic for the two-site/u)
+      screen.getByText(
+        /^A diagnostic for the connection quality of a multi-site/u
+      )
     ).toBeInTheDocument()
   })
 

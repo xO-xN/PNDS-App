@@ -256,8 +256,8 @@
   "webkit.detailsLabel": "Detected versions",
   "webkit.updateAction": "Open Update Guide",
   "webkit.dismiss": "Close",
-  "utilities.intro.multichannel-signal-generator": "A signal generator for verifying audio channels, buses and output routing before a show.",
+  "utilities.intro.multichannel-signal-generator": "A 16-channel signal generator for verifying audio routing before a show.",
   "utilities.intro.local-network-diagnostics": "A diagnostic for the venue LAN’s connection quality.",
-  "utilities.intro.telematic-network-diagnostics": "A diagnostic for the two-site internet connection behind a telematic performance.",
-  "folderReadme.utilitiesIntro": "Check tools that ship with the App, ready to run — a pre-show health check for the network and the audio chain."
+  "utilities.intro.telematic-network-diagnostics": "A diagnostic for the connection quality of a multi-site performance over the internet.",
+  "folderReadme.utilitiesIntro": "Check tools that ship with the App."
 }
