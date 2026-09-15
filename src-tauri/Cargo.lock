@@ -3450,7 +3450,7 @@ dependencies = [
 
 [[package]]
 name = "pnds-app"
-version = "1.4.3"
+version = "1.5.0"
 dependencies = [
  "base64 0.22.1",
  "cpal",
