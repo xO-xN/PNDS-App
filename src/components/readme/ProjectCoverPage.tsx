@@ -489,8 +489,21 @@ export function ProjectCoverPage({
     // title. jsdom cannot observe resizes (this file's existing
     // environment signal) and cannot paint: it skips the hidden state
     // entirely and the tests keep their synchronous headings.
-    const canSettle = typeof ResizeObserver !== 'undefined'
-    let revealed = !canSettle
+    //
+    // Round nine follow-up (user report: 偏好关闭时 title 晚于构图出现、
+    // 不连贯): the gate rides the SAME preference the fade does — the
+    // two masks are complements, never both needed at once. With the
+    // preference OFF the fade already covers every post-mount change,
+    // so the hold is pure visible delay: the title reveals
+    // synchronously pre-paint (round eight's warm-boot behavior;
+    // fonts-loading boots still wait out the swap — that step is real
+    // even under a fade). With the preference ON the fade is clamped
+    // away and the settle gate is the only mask left.
+    const reduceMotion =
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const canSettle = typeof ResizeObserver !== 'undefined' && reduceMotion
+    let revealed = !canSettle && document.fonts?.status !== 'loading'
     let revealTimer: number | undefined
     let settleTimer: number | undefined
     const reveal = () => {
@@ -523,13 +536,24 @@ export function ProjectCoverPage({
         Math.max(90, 150 - (performance.now() - mountedAt))
       )
     }
-    if (canSettle) title.style.visibility = 'hidden'
+    if (!revealed) title.style.visibility = 'hidden'
     if (!fit()) scheduleRetry()
-    scheduleSettle()
-    revealTimer = window.setTimeout(() => {
-      revealTimer = undefined
-      reveal()
-    }, 800)
+    if (canSettle) {
+      scheduleSettle()
+      revealTimer = window.setTimeout(() => {
+        revealTimer = undefined
+        reveal()
+      }, 800)
+    } else if (!revealed) {
+      // Motion allowed, fonts still swapping: round eight's fonts gate
+      // is the only hide left on this path (a fit decided on fallback
+      // metrics would flash even near the fade's tail).
+      revealTimer = window.setTimeout(() => {
+        revealTimer = undefined
+        reveal()
+      }, 400)
+      document.fonts.ready.then(reveal).catch(() => reveal())
+    }
     // Post-commit verification beats (Intel report round three: the
     // title rendered LEFT-shifted at full design tracking — a verdict
     // measured against metrics that the engine re-resolved LATER (cq

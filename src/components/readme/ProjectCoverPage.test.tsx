@@ -179,13 +179,14 @@ describe('ProjectCoverPage', () => {
 
   // Round nine (reduce-motion report: the one post-paint plan change the
   // container fade normally masks shows as a hard jump without it): a
-  // REAL engine (ResizeObserver present) never paints the title until
-  // the world has been quiet — hidden at mount behind the hold, fitted
-  // and revealed after it expires, and restored if it unmounts still
-  // hidden. jsdom (no ResizeObserver) skips the hidden state entirely.
+  // reduce-motion engine (ResizeObserver present, preference ON) never
+  // paints the title until the world has been quiet — hidden at mount
+  // behind the hold, fitted and revealed after it expires, and restored
+  // if it unmounts still hidden.
   it('holds the title hidden behind the settle window and reveals it once quiet', () => {
     vi.useFakeTimers()
     vi.stubGlobal('ResizeObserver', ResizeObserverStub)
+    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: true }))
     try {
       const view = render(<ProjectCoverPage page={PAGE} cover={null} />)
       const title = screen.getByTestId('cover-title')
@@ -206,6 +207,7 @@ describe('ProjectCoverPage', () => {
   it('restores the title if it unmounts while still behind the settle window', () => {
     vi.useFakeTimers()
     vi.stubGlobal('ResizeObserver', ResizeObserverStub)
+    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: true }))
     try {
       const view = render(<ProjectCoverPage page={PAGE} cover={null} />)
       const title = screen.getByTestId('cover-title')
@@ -216,6 +218,21 @@ describe('ProjectCoverPage', () => {
     } finally {
       vi.unstubAllGlobals()
       vi.useRealTimers()
+    }
+  })
+
+  // Round nine follow-up (user report: 偏好关闭时 title 晚于构图出现):
+  // with motion ALLOWED the entrance fade is itself the mask, so the
+  // settle hold would be pure visible delay — the title must appear
+  // synchronously, pre-paint, with no hold at all.
+  it('reveals the title synchronously when motion is allowed — the fade masks late refits', () => {
+    vi.stubGlobal('ResizeObserver', ResizeObserverStub)
+    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: false }))
+    try {
+      render(<ProjectCoverPage page={PAGE} cover={null} />)
+      expect(screen.getByTestId('cover-title').style.visibility).toBe('')
+    } finally {
+      vi.unstubAllGlobals()
     }
   })
 
