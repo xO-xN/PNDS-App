@@ -138,7 +138,6 @@
   "folderReadme.introLabel": "简介",
   "folderReadme.introPlaceholder": "这个文件夹用于什么？节目安排、曲目备注、人员编制……",
   "folderReadme.empty": "还没有简介。点「编辑」写一段吧。",
-  "folderReadme.emptyProtected": "此文件夹由 App 维护，没有可编辑的简介。",
   "folderReadme.save": "保存",
   "folderReadme.cancel": "取消",
   "projectReadme.empty": "该工程还没有 README.md。",
@@ -257,7 +256,8 @@
   "webkit.detailsLabel": "检测到的版本",
   "webkit.updateAction": "打开更新指引",
   "webkit.dismiss": "关闭",
-  "utilities.intro.multichannel-signal-generator": "验证 manifest、音频 bus 与 1–64 路离散输出的内置工具：16 路正弦信号发生器，monitor 提供推子与扫码入口，用于通道路由、master 增益与 BlackHole/DAW 链路的演出前检查。",
-  "utilities.intro.local-network-diagnostics": "局域网演出诊断工具：检查乐手手机与 Host 之间的连接质量、稳定性与延迟——演出前确认场地网络就绪。",
-  "utilities.intro.telematic-network-diagnostics": "跨互联网演奏诊断工具：经 hub 中继测量两地机器之间的连接质量与事件流——跨场地演出前的网络体检。"
+  "utilities.intro.multichannel-signal-generator": "演出前验证音频通道、bus 与出声路由的信号发生器。",
+  "utilities.intro.local-network-diagnostics": "检查演出场地局域网连接质量的诊断工具。",
+  "utilities.intro.telematic-network-diagnostics": "检查跨互联网两地演奏连接质量的诊断工具。",
+  "folderReadme.utilitiesIntro": "App 自带、即装即用的演出检查工具——出场前给网络与音频做一次体检。"
 }

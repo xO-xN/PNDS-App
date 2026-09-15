@@ -94,7 +94,7 @@ describe('ReadmePanel (#125 display routing)', () => {
     ).not.toBeInTheDocument()
     expect(
       screen.getByText(
-        'This folder is maintained by the App — there is no intro to edit.'
+        'Check tools that ship with the App, ready to run — a pre-show health check for the network and the audio chain.'
       )
     ).toBeInTheDocument()
     expect(

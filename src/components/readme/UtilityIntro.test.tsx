@@ -43,8 +43,10 @@ describe('UtilityIntro', () => {
     ).toBeInTheDocument()
     expect(screen.getByText('PNDS Utility')).toBeInTheDocument()
     // The intro copy comes from the locale for the App's language (the
-    // test i18n runs English): a non-empty sentence mentioning the hub.
-    expect(screen.getByText(/hub relay/i)).toBeInTheDocument()
+    // test i18n runs English): the one-sentence "what is this for".
+    expect(
+      screen.getByText(/^A diagnostic for the two-site/u)
+    ).toBeInTheDocument()
   })
 
   it('renders no cover image, no link pills, and no section label', () => {

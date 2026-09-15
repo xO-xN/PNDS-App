@@ -267,7 +267,7 @@ v1.3.0（#56）帮助中心窗口——第二个 webview 窗口（label `help`�
 
 ### 主区信息页路由（v1.5.0）
 
-主区（README 面板位）按选中态分六路（`ReadmePanel`）：无选中回 Welcome；选中工程卡渲染其根 README（封面格式→封面页，否则文档视图/空态）；钻入文件夹显示**文件夹自述**；选中**内置工具**（路径 `…/utilities/<registry id>`，注册表成员才算——防用户同名目录误判）渲染**工具信息页**：封面页的最简形——别名为大标题、横带文字列只有一句双轴居中的简介（左侧无 cover）、右上角 `PNDS Utility` 药丸角标（同工程药丸底）、四点钻石取主题墨色单色（工具是 App 内容，品牌四色留给作者工程）、无 composer/github 药丸（`UtilityIntro`；简介文案进 locales `utilities.intro.<id>` 双语，测试钉注册表↔双词表对齐）。文件夹自述展示态用封面式排版（大标题居中 + 其下描述，面板为容器查询单位），无 PNDS/composer 头部、无横带与 cover；编辑流（名称走 renameFolder 同守卫、简介走 setFolderIntro）不变。内置工具不走 README 空态——工具是 App 内容，无作者 README，写作指引对它不适用。
+主区（README 面板位）按选中态分六路（`ReadmePanel`）：无选中回 Welcome；选中工程卡渲染其根 README（封面格式→封面页，否则文档视图/空态）；钻入文件夹显示**文件夹自述**；选中**内置工具**（路径 `…/utilities/<registry id>`，注册表成员才算——防用户同名目录误判）渲染**工具信息页**：封面页的最简形——别名为大标题、横带文字列只有一句双轴居中的简介（左侧无 cover）、右上角 `PNDS Utility` 药丸角标（同工程药丸底）、四点钻石取主题墨色单色（工具是 App 内容，品牌四色留给作者工程）、无 composer/github 药丸（`UtilityIntro`；简介文案进 locales `utilities.intro.<id>` 双语，测试钉注册表↔双词表对齐）。文件夹自述展示态用封面式排版（大标题居中 + 其下描述，面板为容器查询单位），无 PNDS/composer 头部、无横带与 cover；编辑流（名称走 renameFolder 同守卫、简介走 setFolderIntro）不变；受保护的 Utilities 文件夹不可编辑，展示 App 固定的一句话描述（locales `folderReadme.utilitiesIntro` 双语）而非空态提示。内置工具不走 README 空态——工具是 App 内容，无作者 README，写作指引对它不适用。
 
 ### 桥接与 dev 排障
 

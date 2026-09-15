@@ -138,7 +138,6 @@
   "folderReadme.introLabel": "Intro",
   "folderReadme.introPlaceholder": "What is this folder for? Programme, set list notes, line-up…",
   "folderReadme.empty": "No intro yet. Choose Edit to write one.",
-  "folderReadme.emptyProtected": "This folder is maintained by the App — there is no intro to edit.",
   "folderReadme.save": "Save",
   "folderReadme.cancel": "Cancel",
   "projectReadme.empty": "This project has no README.md yet.",
@@ -257,7 +256,8 @@
   "webkit.detailsLabel": "Detected versions",
   "webkit.updateAction": "Open Update Guide",
   "webkit.dismiss": "Close",
-  "utilities.intro.multichannel-signal-generator": "The built-in check for manifest, audio-bus and 1–64-channel discrete output: a 16-channel sine generator whose monitor carries faders and a scan-to-join QR — verify channel routing, master gain and the BlackHole/DAW chain before a show.",
-  "utilities.intro.local-network-diagnostics": "LAN performance diagnostics: check connection quality, stability and latency between the performers’ phones and the Host — confirm the venue network is ready before the show.",
-  "utilities.intro.telematic-network-diagnostics": "Telematic diagnostics: measure connection quality and event flow between machines at two sites through the hub relay — the network check before a cross-venue performance."
+  "utilities.intro.multichannel-signal-generator": "A signal generator for verifying audio channels, buses and output routing before a show.",
+  "utilities.intro.local-network-diagnostics": "A diagnostic for the venue LAN’s connection quality.",
+  "utilities.intro.telematic-network-diagnostics": "A diagnostic for the two-site internet connection behind a telematic performance.",
+  "folderReadme.utilitiesIntro": "Check tools that ship with the App, ready to run — a pre-show health check for the network and the audio chain."
 }

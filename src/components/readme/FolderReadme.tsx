@@ -14,8 +14,9 @@ import { PreflightDock } from '@/components/shell/PreflightDock'
  * a vanished folder (deleted while drilled in — the store exits the view
  * anyway) renders nothing. Since #125 the README routing mounts this
  * for EVERY drilled-in folder, protected ones included — protected
- * folders (Utilities) render no edit entry (the store guard behind it
- * refuses writes all the same).
+ * folders (Utilities) render no edit entry and carry the App's fixed
+ * one-line description instead of the empty hint (the store guard
+ * behind the form refuses writes all the same).
  *
  * The form edits both fields (user report after #124: the name box was
  * read-only and read as broken): the name commits through the same
@@ -179,10 +180,13 @@ export function FolderReadme({ folderId }: { folderId: string }) {
               {folder.intro}
             </p>
           ) : (
-            <p className="mt-10 text-[15px] text-(--pnds-text)/50">
-              {editable
-                ? t('folderReadme.empty')
-                : t('folderReadme.emptyProtected')}
+            <p className="mt-10 max-w-xl text-center text-[15px] leading-7 text-(--pnds-text)/80">
+              {/* The protected Utilities folder carries a fixed App
+                  description (not the editable empty hint) — one line
+                  saying what lives here (v1.5.0 polish, user copy). */}
+              {!editable
+                ? t('folderReadme.utilitiesIntro')
+                : t('folderReadme.empty')}
             </p>
           )}
         </div>

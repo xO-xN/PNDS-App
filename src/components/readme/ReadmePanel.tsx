@@ -18,7 +18,7 @@ import { UtilityIntro } from './UtilityIntro'
  *   project) shows that project's root README.md, from whatever view the
  *   card sits in;
  * - otherwise a drilled-in folder (ANY folder — Utilities included, whose
- *   自述 is the app-maintained empty state) shows its self-description,
+ *   自述 is the App's fixed one-line description) shows its self-description,
  *   never falling back to the starting page;
  * - otherwise (home, nothing selected) the starting page stays.
  *

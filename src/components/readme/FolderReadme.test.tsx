@@ -75,10 +75,11 @@ describe('FolderReadme', () => {
     expect(
       screen.queryByRole('button', { name: 'Edit' })
     ).not.toBeInTheDocument()
-    // #125: the protected empty state is guidance, not a bare "none".
+    // v1.5.0 polish: the protected folder carries the App's fixed
+    // one-line description instead of an empty hint.
     expect(
       screen.getByText(
-        'This folder is maintained by the App — there is no intro to edit.'
+        'Check tools that ship with the App, ready to run — a pre-show health check for the network and the audio chain.'
       )
     ).toBeInTheDocument()
   })
