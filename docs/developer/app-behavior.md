@@ -213,6 +213,7 @@ v1.3.0（#56）帮助中心窗口——第二个 webview 窗口（label `help`�
 
 - 入口是侧栏右上角的「打开投影窗口」按钮（原「用默认浏览器打开」位置，浏览器入口与 `sidebar.share`/`shareHint` 文案已彻底移除）；按钮不随会话状态禁用——无演出时窗口自己进入待机。
 - 单实例：已开再点 = 聚焦（或卡隐藏态时重跑揭示）；不重建。**切换工程窗口不重建、全屏与位置保持**（窗口生命周期与 session 完全解耦），内容随快照过渡。
+- **全屏落定后的 webview 重排抖动（Intel / macOS 13 实测报告）**：WKWebView 的布局间歇性跟不上原生全屏过渡，窗口底部留一条未绘制白条（上游 [tauri#14264](https://github.com/tauri-apps/tauri/issues/14264)，open；issue 自述对策即「再 resize 一次」）。App 侧对策：Rust 观察投影窗口的 `Resized` 事件做全屏**边沿检测**，过渡落定（~600ms）后把 **webview**（非窗口——全屏画面永不动）边界 +1px 再弹回（`window.rs::jog_webview_layout`），两次真实 setFrame 强制重排；绿钮/⌃⌘F/菜单所有入口都汇到同一事件，全覆盖。
 - 打开时落在 **App 当前所在显示器**（`currentMonitor()` 居中落位，查询失败回退系统居中）；window-state 插件 denylist 掉 `projection`——跨启动几何持久化不在 v1.5 范围（spec #128），恢复的旧位置会与落位规则打架（帮助窗口仍被跟踪）。
 - 窗口标题「PNDS 投影 — <工程名>」（简介或 monitor 在台时）/ 无演出时「PNDS 投影」，随界面语言实时更新（页面 `setTitle`；capabilities 需 `core:window:allow-set-title`）。
 - **⌘W 按聚焦窗口分发**：投影窗口在前台时只关它（普通销毁），演出与主窗口不受影响；红灯关闭即销毁，退出 App 随之关闭。
@@ -228,7 +229,7 @@ v1.3.0（#56）帮助中心窗口——第二个 webview 窗口（label `help`�
 | ready                   | 开     | 缺地址                       | **简介**（兜底） |
 | idle / stopping / error | 任意   | ——                           | **投影待机**     |
 
-- **简介** = 工程根 README.md，经 #125 读取/渲染通道，与主窗口 README 面板**同组合**：封面格式渲染 ProjectCoverPage（PNDS 字标 + composer/github 药丸、大标题、含 cover 图的封面带；行为见「封面页」节），其余 README 仍为 HelpMarkdown 文档视图（v1.5 只渲染文字——图片隐藏、链接一律无操作）；无 README/读取失败回落工程名卡片；starting 快照已带 projectPath，加载期即显示。门开但缺地址事实也落简介——会话在台，「无演出」会是谎言，拼畸形 monitor URL 更糟。
+- **简介** = 选中内容的 信息页，经 #125 读取/渲染通道，与主窗口 README 面板**同组合**：**内置工具**（注册表 id 判定）直接渲染**工具信息页**——与主区 `UtilityIntro` 同一 `utilityCoverPage` 页面模型（builtin-utilities.ts，双窗口同款是构造保证）、同一封面画框装裱，且**不发 README 读取**（工具无作者 README）、不带 PreflightDock（投影是显示面非操作面）；工程则读根 README.md：封面格式渲染 ProjectCoverPage（PNDS 字标 + composer/github 药丸、大标题、含 cover 图的封面带；行为见「封面页」节），其余 README 仍为 HelpMarkdown 文档视图（v1.5 只渲染文字——图片隐藏、链接一律无操作）；无 README/读取失败回落工程名卡片；starting 快照已带 projectPath，加载期即显示。门开但缺地址事实也落简介——会话在台，「无演出」会是谎言，拼畸形 monitor URL 更糟。
 - **投影待机** = 主题底色 + PNDS 字标 + 「无演出」，双语、随主题（错误态同此——后端恢复失败也是待机屏，不是空窗口）。
 - monitor 组装复用主窗口契约：地址快照语义（`hostAddress` 优先）、`?theme=`/`?lang=` 首帧参数按导航快照、iframe load 事件 + 10 秒超时的 reveal 防闪盖层、theme/locale 桥推送；**唯一投影专属差异（#134）**：地址**无条件**多带 `?surface=venue` 首帧参数——venue 副本标识，工程可选按它分支渲染观众画面（契约 §14、模块手册「投影面」篇），主窗口 monitor 地址永不携带。session 事实经广播 `SessionSnapshotEvent` + `getSessionState` 恢复（visibility/focus 重拉，occlusion 丢事件先例同主窗口）。
 - 内容切换全部渐变（400ms 主题色盖层，`data-reveal-motion` 豁免 Brutal 即时规则）：待机↔简介↔monitor、切换工程的地址/工程变化都走同一盖层（简介按 projectPath 键控，A→B 切换也渐变）；快照序列中途变卦时收敛到最新内容；**首个落定内容直接呈现**（开演后重开直接落 monitor，无简介/待机闪帧）。
@@ -256,7 +257,7 @@ v1.3.0（#56）帮助中心窗口——第二个 webview 窗口（label `help`�
 
 主窗口 README 面板与投影简介渲染同一 `ProjectCoverPage`；以下是 v1.5 定稿的共享行为（测试锁定）：
 
-- **标题自适应「诚实测量」**（两窗口共用）：可用宽取自**标题区**内容盒（不受标题自身样式的 min-width 反馈影响）、文字真实宽度用 **Range** 量（居中 nowrap 弹性子的 scrollWidth 会被钳到盒宽——曾致某比例下"放得下 0.37em"误判、字距暴大溢出）、每 px 字距的渲染增量**实测斜率**（不数字符——波纹 span 会双计费）、`fonts.loadingdone` 后补测（cq 字号+无单位行高下字体交换不触发 RO）、ResizeObserver 观察**区域**而非标题（min-content 钉住盒宽后标题自身的 RO 会哑）；分支数学纯函数化于 `title-fit.ts` 并钉测试。
+- **标题自适应「诚实测量」**（两窗口共用）：可用宽取自**标题区**内容盒（不受标题自身样式的 min-width 反馈影响）、文字真实宽度用**探针**量——绝对定位 + `width: max-content` 的隐藏克隆 append 进同一标题区（同容器查询单位上下文；块盒收缩宽度=文字宽**含字距**，纯布局算术、无 Range 语义、无 flex/scrollWidth 钳制，测量同步完成即移除、从不绘制），每 px 字距的渲染增量**实测斜率**（不数字符——波纹 span 会双计费）、`fonts.loadingdone` 后补测（cq 字号+无单位行高下字体交换不触发 RO）、ResizeObserver 观察**区域**而非标题（min-content 钳住盒宽后标题自身的 RO 会哑）；分支数学纯函数化于 `title-fit.ts` 并钉测试。宽度仪表**第三轮迭代**（Intel / macOS 13 报告：每个工程的标题都保 0.37em 溢出右缘）——旧仪表 Range 的字距语义跨 WebKit 代际不稳：Range 对字距失明时斜率塌向 0，退化守卫弃权、类默认 0.37em 原样上屏且无后续事件纠正；故宽度真相改探针、**Range 降级第二仪表**（真实渲染行）——溢出取两仪表**较大者**，互盖盲区（探针的尾部空格语义 ↔ Range 的字距失明），Range 仍是居中测量（translateX 1:1 修正的几何来源）；退化弃权后 300ms **重试链**（上限 16 次）兜住「首答来晚的机器」。
 - **标题适配的「实测收敛」兜底**（打磨轮，投影报告二连：不居中、字距大右溢）：首版判定仍可能吃进谎报的输入——投影窗口**隐藏创建**（#51 防闪），首测可能跑在上屏前的退化布局上，且之后无任何事件再触发（尺寸未变、字体已就绪），错判挂整个 session。三重自愈：① 退化输入守卫（全零/倒挂的测量一律不落样式，保持类默认等下一触发）；② 应用方案后**重测渲染结果**，对列的真实边缘做有界收敛（`refineTitleFit` 纯函数：超宽按实测斜率收字距、字距耗尽缩字号），宽度收完再**实测居中偏差**——glyph 团中心 vs 列中心的差值经 `translateX` 1:1 修正（**不能走 text-indent**：居中行上 indent 只产生一半位移，投影字号下半误差仍肉眼可见）；③ `visibilitychange` 转 visible 即重算，兜住隐藏启动。
 - **边距镜像不变量**：头部行的顶距与封面带的底距解析**同一个 `--cover-edge-inset` token**（默认 5cqh）——上沿间隙 = 下沿间隙由构造保证而非配对常数（`ProjectCoverPage.test.tsx` 钉死）；改 token 只在根上改，永不单改一侧。标题区的底部预留同样读该 token（+ 带高），嵌入侧的加宽覆写（投影侧 2cqh）经同一变量再平衡整个构图。
 - **标题逐字波纹**：标题按字素切分（`Intl.Segmenter` grapheme——组合记号随基字进同一 span），每字素一个 span、错相负延迟，一道缓浪横穿标题（5.2s 循环、0.045em 幅度，幅度用 em 单位随适配算法的字号缩放）；**延迟步进按字数归一**（打磨轮：固定 0.16s/字在长标题上把相位摊满半个周期，浪散成乱跳——工具别名触发报告；总铺散封顶 0.8s，短标题保持原节奏）；**波纹 span 的 key 掺入标题**（打磨轮二：按下标复用的 span 在换选中工程时不重建、CSS 动画沿用创建时刻的起点，新增下标的 span 才从当下起跑——多选几次工程后各字素时间轴任意偏斜、浪散成乱跳；换标题即整组重建，所有字素共享同一动画起点）；**连字脚本（阿拉伯等）绝不逐字拆分**——字母会被拆散；全局 `prefers-reduced-motion` 块把波纹钳停为静止。
@@ -267,7 +268,7 @@ v1.3.0（#56）帮助中心窗口——第二个 webview 窗口（label `help`�
 
 ### 主区信息页路由（v1.5.0）
 
-主区（README 面板位）按选中态分六路（`ReadmePanel`）：无选中回 Welcome；选中工程卡渲染其根 README（封面格式→封面页，否则文档视图/空态）；钻入文件夹显示**文件夹自述**；选中**内置工具**（路径 `…/utilities/<registry id>`，注册表成员才算——防用户同名目录误判）渲染**工具信息页**：封面页的最简形——别名为大标题、横带文字列只有一句双轴居中的简介（左侧无 cover）、右上角 `PNDS Utility` 药丸角标（同工程药丸底）、四点钻石取主题墨色单色（工具是 App 内容，品牌四色留给作者工程）、无 composer/github 药丸（`UtilityIntro`；简介文案进 locales `utilities.intro.<id>` 双语，测试钉注册表↔双词表对齐）。文件夹自述展示态用封面式排版（大标题居中 + 其下描述，面板为容器查询单位），无 PNDS/composer 头部、无横带与 cover；编辑流（名称走 renameFolder 同守卫、简介走 setFolderIntro）不变；受保护的 Utilities 文件夹不可编辑，展示 App 固定的一句话描述（locales `folderReadme.utilitiesIntro` 双语）而非空态提示。内置工具不走 README 空态——工具是 App 内容，无作者 README，写作指引对它不适用。
+主区（README 面板位）按选中态分六路（`ReadmePanel`）：无选中回 Welcome；选中工程卡渲染其根 README（封面格式→封面页，否则文档视图/空态）；钻入文件夹显示**文件夹自述**；选中**内置工具**（路径 `…/utilities/<registry id>`，注册表成员才算——防用户同名目录误判）渲染**工具信息页**：封面页的最简形——别名为大标题、横带文字列只有一句双轴居中的简介（左侧无 cover）、右上角 `PNDS Utility` 药丸角标（同工程药丸底）、四点钻石取主题墨色单色（工具是 App 内容，品牌四色留给作者工程）、无 composer/github 药丸（`UtilityIntro`；页面模型 `utilityCoverPage`（builtin-utilities.ts）由主区与投影简介**共享**——双窗口同款是构造保证而非配对常数；简介文案进 locales `utilities.intro.<id>` 双语，测试钉注册表↔双词表对齐）。文件夹自述展示态用封面式排版（大标题居中 + 其下描述，面板为容器查询单位），无 PNDS/composer 头部、无横带与 cover；编辑流（名称走 renameFolder 同守卫、简介走 setFolderIntro）不变；受保护的 Utilities 文件夹不可编辑，展示 App 固定的一句话描述（locales `folderReadme.utilitiesIntro` 双语）而非空态提示。内置工具不走 README 空态——工具是 App 内容，无作者 README，写作指引对它不适用。
 
 ### 桥接与 dev 排障
 
