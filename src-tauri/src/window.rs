@@ -27,7 +27,9 @@ use specta::Type;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-use tauri::{AppHandle, Manager, Runtime, WebviewWindow};
+use tauri::{
+    AppHandle, LogicalSize, Manager, PhysicalSize, Rect, Runtime, Size, Webview, WebviewWindow,
+};
 use tauri_specta::Event as _;
 
 /// Fade duration per the contract: 150–180 ms.
@@ -98,6 +100,13 @@ pub struct WindowManager {
     pub fade_gen: Arc<FadeGen>,
     /// Cached fullscreen flag for synchronous reads.
     pub fullscreen: AtomicBool,
+    /// v1.5.0 polish (Intel / macOS 13 venue-screen report): the
+    /// PROJECTION window's cached fullscreen flag — edge-detected from
+    /// its Resized events in lib.rs so a fullscreen transition can
+    /// schedule the webview-layout jog below (Tauri #14264 workaround).
+    /// Kept separate from `fullscreen` (main's own): the projection
+    /// window keeps its native titlebar and has no chrome sync.
+    pub projection_fullscreen: AtomicBool,
     /// Suppresses the fade-out when the app is quitting (⌘Q): the exit
     /// path runs its own cleanup without waiting for an animation.
     pub quitting: AtomicBool,
@@ -113,6 +122,7 @@ impl Default for WindowManager {
         Self {
             fade_gen: Arc::new(FadeGen::default()),
             fullscreen: AtomicBool::new(false),
+            projection_fullscreen: AtomicBool::new(false),
             quitting: AtomicBool::new(false),
             square_corners: AtomicBool::new(false),
         }
@@ -188,6 +198,44 @@ pub async fn toggle_fullscreen(app: AppHandle) -> Result<WindowStateSnapshot, St
     });
 
     Ok(snapshot)
+}
+
+/// v1.5.0 polish (Intel / macOS 13 venue-screen report: the projection
+/// window showed an unpainted white strip at the bottom after entering
+/// fullscreen): Tauri issue #14264 — WKWebView's layout intermittently
+/// lags the native fullscreen transition, so the webview stops painting
+/// short of the window's bottom edge (the issue's own remedy: "resizing
+/// the window again triggers a redraw"). This jog performs exactly that
+/// redraw without touching the WINDOW: the webview's bounds grow 1px
+/// and snap back ~80ms later — two real setFrame passes on the WKWebView
+/// that force the relayout the transition lost. The extra pixel is
+/// clipped by the window, so nothing visible moves; called from lib.rs
+/// after the fullscreen edge settles on the projection window.
+pub fn jog_webview_layout<R: Runtime>(webview: &Webview<R>) {
+    let Ok(bounds) = webview.bounds() else {
+        return;
+    };
+    let grown = match bounds {
+        Rect {
+            position,
+            size: Size::Physical(size),
+        } => Rect {
+            position,
+            size: Size::Physical(PhysicalSize::new(size.width, size.height + 1)),
+        },
+        Rect {
+            position,
+            size: Size::Logical(size),
+        } => Rect {
+            position,
+            size: Size::Logical(LogicalSize::new(size.width, size.height + 1.0)),
+        },
+    };
+    if webview.set_bounds(grown).is_err() {
+        return;
+    }
+    std::thread::sleep(Duration::from_millis(80));
+    let _ = webview.set_bounds(bounds);
 }
 
 /// Fade-out then hide (red light / Close Window). Interruptible:

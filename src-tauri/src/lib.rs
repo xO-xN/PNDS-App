@@ -248,6 +248,42 @@ pub fn run() {
                 }
             }
 
+            // v1.5.0 polish (Intel / macOS 13 venue-screen report: the
+            // projection window fullscreened with an unpainted white
+            // strip at the bottom): the projection window's fullscreen
+            // EDGE — after the native transition settles, jog the
+            // webview's bounds 1px and back to force the WKWebView
+            // relayout it intermittently loses (Tauri #14264; the
+            // window itself is untouched). Covers every entry point
+            // (green button, ⌃⌘F, the sidebar command) because they all
+            // end in this Resized event.
+            RunEvent::WindowEvent {
+                label,
+                event: WindowEvent::Resized(_),
+                ..
+            } if label == "projection" => {
+                if let Some(window) = app_handle.get_webview_window("projection") {
+                    let state = app_handle.state::<crate::window::WindowManager>();
+                    let is_fs = window.is_fullscreen().unwrap_or(false);
+                    let was = state
+                        .projection_fullscreen
+                        .swap(is_fs, std::sync::atomic::Ordering::SeqCst);
+                    if was != is_fs {
+                        let handle = app_handle.clone();
+                        std::thread::spawn(move || {
+                            // The native transition takes ~400ms; wait it
+                            // out plus a settle margin before jogging.
+                            std::thread::sleep(std::time::Duration::from_millis(600));
+                            if let Some(window) = handle.get_webview_window("projection") {
+                                // The inner Webview (bounds are the
+                                // webview's, not the window's).
+                                crate::window::jog_webview_layout(window.as_ref());
+                            }
+                        });
+                    }
+                }
+            }
+
             // Coming back from another desktop/space (the window becomes
             // key again): the webview's JS was suspended while occluded,
             // so its queued `pnds:session` events lag the backend, and
