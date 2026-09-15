@@ -28,6 +28,7 @@ title: 失语 III
 composer: @肖翔
 composer_url: https://…
 github_url: https://github.com/…
+website_url: https://…
 color_palette: [#000000, #C9D8B6, #F1ECC3, #57837B]
 
 ## 作品简介：
@@ -49,9 +50,10 @@ color_palette: [#000000, #C9D8B6, #F1ECC3, #57837B]
 | `composer`      | 右上角作者胶囊（如 `@肖翔`）               | 不显示胶囊                                     |
 | `composer_url`  | 作者胶囊变按钮，点击用默认浏览器打开       | 胶囊照常显示但不可点                           |
 | `github_url`    | 头部新增 `github` 按钮，打开仓库           | 不显示按钮                                     |
+| `website_url`   | 头部新增 `website` 按钮，打开作品/项目页   | 不显示按钮                                     |
 | `color_palette` | 四点菱形 logo 的配色，顺序＝左、上、右、下 | 合法 `#hex` 色值不足 4 个时，回退 App 品牌四色 |
 
-两个 URL 键只接受 `http(s)://` 地址——其他写法（`ftp:`、随手敲的字符串）一律按缺失处理，不会交给浏览器。
+URL 键（`composer_url` / `github_url` / `website_url`）只接受 `http(s)://` 地址——其他写法（`ftp:`、随手敲的字符串）一律按缺失处理，不会交给浏览器。
 
 规则：
 

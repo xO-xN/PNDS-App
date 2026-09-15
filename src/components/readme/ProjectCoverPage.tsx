@@ -24,9 +24,10 @@ import { planTitleFit, refineTitleFit } from './title-fit'
  * and the header's top padding resolve the SAME --cover-edge-inset
  * token, so the band's gap to the window bottom equals the PNDS row's
  * gap to the window top by construction, not by matched constants.
- * The composer and github pills are buttons when their README URL
- * metadata (composer_url / github_url, http(s) only) parsed — a click
- * hands off to the system browser, never the webview.
+ * The composer and link pills (github / website) are buttons when
+ * their README URL metadata (composer_url / github_url / website_url,
+ * http(s) only) parsed — a click hands off to the system browser,
+ * never the webview.
  *
  * The cq reference frames are split per axis, deliberately: the root
  * is an inline-size container (Tailwind `@container`) so every cqw
@@ -83,7 +84,7 @@ export function ProjectCoverPage({
    *  utility intro's "PNDS Utility" tag (v1.5.0 polish; same pill
    *  background as the project cover's pills per the follow-up
    *  report). Renders only when the page carries neither a composer
-   *  pill nor a github button. */
+   *  pill nor a link button (github / website). */
   headerNote?: string
   /** Centers the band's text column (both axes) instead of the
    *  document-flow start alignment — the utility intro's one-liner
@@ -94,7 +95,7 @@ export function ProjectCoverPage({
   const titleRef = useRef<HTMLHeadingElement>(null)
   // Destructured so the null-guards below narrow inside the click
   // closures too (property narrowing doesn't survive into callbacks).
-  const { composerUrl, githubUrl } = page
+  const { composerUrl, githubUrl, websiteUrl } = page
 
   // The header's link pills share one shape; a pill only becomes a
   // button when the README gave it an http(s) URL.
@@ -419,8 +420,19 @@ export function ProjectCoverPage({
               github
             </button>
           )}
+          {websiteUrl !== null && (
+            <button
+              type="button"
+              data-testid="cover-website"
+              className={`cursor-pointer ${pillClass}`}
+              onClick={() => openExternal(websiteUrl)}
+            >
+              website
+            </button>
+          )}
           {page.composer === null &&
             githubUrl === null &&
+            websiteUrl === null &&
             headerNote !== undefined && (
               // The pill-less corner's tag (v1.5.0 polish + follow-up:
               // the user asked for the SAME pill background the project

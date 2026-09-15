@@ -14,6 +14,7 @@ const PAGE: ReadmeCoverPage = {
   composer: '@肖翔',
   composerUrl: null,
   githubUrl: null,
+  websiteUrl: null,
   palette: ['#000000', '#c9d8b6', '#f1ecc3', '#57837b'],
   sectionLabel: '作品简介：',
   sectionMarkdown: '失语III 是为三个手机演奏者而作的数字乐谱作品。',

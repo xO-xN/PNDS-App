@@ -69,7 +69,7 @@ Inarticulate III/
 - 它随 `.pnds` 原样旅行（打包排除清单从不清除它），接收方装包后在 App 里看到的就是它。
 - 可选语言变体：`README.<locale>.md`（如 `README.zh-CN.md`）——App 按界面语言自适应优先打开对应变体，没有则回落到 `README.md`；
 - 可选封面图 `cover.png`：README 面板横带的工程截图（依序探测 `.png` → `.jpg` → `.jpeg` → `.webp`，语言无关，建议 1:1）；与 README.md 一样随 `.pnds` 原样旅行，preflight 同样不检查；
-- 封面页格式：README 顶部可携带元数据块（`title` / `composer` / `composer_url` / `github_url` / `color_palette`），App 据此把首个 `##` 小节渲染成设计好的封面页（面板内容止于首个 `---`）；无元数据块的 README 按普通文档渲染，旧工程不受影响。细则见帮助中心《给工程写 README》；
+- 封面页格式：README 顶部可携带元数据块（`title` / `composer` / `composer_url` / `github_url` / `website_url` / `color_palette`），App 据此把首个 `##` 小节渲染成设计好的封面页（面板内容止于首个 `---`）；无元数据块的 README 按普通文档渲染，旧工程不受影响。细则见帮助中心《给工程写 README》；
 
 推荐大纲（作品名称、作者、简介、演奏方式，可选技术需求）：
 

@@ -31,6 +31,7 @@ export function UtilityIntro({ id }: { id: string }) {
     composer: null,
     composerUrl: null,
     githubUrl: null,
+    websiteUrl: null,
     // The theme's ink as a CSS var — the mark recolors with every
     // theme instead of shipping a fixed palette.
     palette: [

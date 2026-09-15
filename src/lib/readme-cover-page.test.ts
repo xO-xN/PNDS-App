@@ -15,6 +15,7 @@ const CANONICAL = [
   'composer: @肖翔',
   'composer_url: https://arthur.example',
   'github_url: https://github.com/user/repo',
+  'website_url: https://works.example/5387',
   'color_palette: [#000000, #C9D8B6, #F1ECC3, #57837B]',
   '',
   '## 作品简介：',
@@ -50,6 +51,7 @@ describe('parseReadmeCoverPage', () => {
     expect(page.composer).toBe('@肖翔')
     expect(page.composerUrl).toBe('https://arthur.example')
     expect(page.githubUrl).toBe('https://github.com/user/repo')
+    expect(page.websiteUrl).toBe('https://works.example/5387')
     expect(page.palette).toEqual(['#000000', '#c9d8b6', '#f1ecc3', '#57837b'])
     expect(page.sectionLabel).toBe('作品简介：')
     // The wrapped lines stay one markdown paragraph; the --- and the
@@ -123,22 +125,28 @@ describe('parseReadmeCoverPage', () => {
       CANONICAL.replace(
         'composer_url: https://arthur.example',
         'composer_url: javascript:alert(1)'
-      ).replace(
-        'github_url: https://github.com/user/repo',
-        'github_url: ftp://nope.example'
       )
+        .replace(
+          'github_url: https://github.com/user/repo',
+          'github_url: ftp://nope.example'
+        )
+        .replace(
+          'website_url: https://works.example/5387',
+          'website_url: not-a-url'
+        )
     )
     expect(hostile.composerUrl).toBeNull()
     expect(hostile.githubUrl).toBeNull()
+    expect(hostile.websiteUrl).toBeNull()
 
     const absent = parseOrThrow(
-      CANONICAL.replace('composer_url: https://arthur.example\n', '').replace(
-        'github_url: https://github.com/user/repo\n',
-        ''
-      )
+      CANONICAL.replace('composer_url: https://arthur.example\n', '')
+        .replace('github_url: https://github.com/user/repo\n', '')
+        .replace('website_url: https://works.example/5387\n', '')
     )
     expect(absent.composerUrl).toBeNull()
     expect(absent.githubUrl).toBeNull()
+    expect(absent.websiteUrl).toBeNull()
   })
 
   it('keeps the first four valid hexes, lowercased', () => {

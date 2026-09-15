@@ -28,6 +28,7 @@ title: Inarticulate III
 composer: @XiaoXiang
 composer_url: https://…
 github_url: https://github.com/…
+website_url: https://…
 color_palette: [#000000, #C9D8B6, #F1ECC3, #57837B]
 
 ## Description:
@@ -49,9 +50,10 @@ The metadata lines sit at the top, before any prose — they are not markdown sy
 | `composer`      | the composer pill top-right (e.g. `@XiaoXiang`)                       | the pill is not shown                                                    |
 | `composer_url`  | the pill becomes a button opening it in the default browser           | the pill shows but is not clickable                                      |
 | `github_url`    | a `github` button joins the header, opening the repository            | the button is not shown                                                  |
+| `website_url`   | a `website` button joins the header, opening the work/project page    | the button is not shown                                                  |
 | `color_palette` | the four-dot diamond mark's colors, in order left, top, right, bottom | fewer than four valid `#hex` values falls back to the App's brand colors |
 
-Both URL keys accept `http(s)://` addresses only — anything else (`ftp:`, a mistyped string) is treated as missing and never handed to the browser.
+The URL keys (`composer_url` / `github_url` / `website_url`) accept `http(s)://` addresses only — anything else (`ftp:`, a mistyped string) is treated as missing and never handed to the browser.
 
 Rules:
 

@@ -13,6 +13,7 @@
  * composer: @肖翔
  * composer_url: https://…
  * github_url: https://github.com/…
+ * website_url: https://…
  * color_palette: [#000000, #C9D8B6, #F1ECC3, #57837B]
  *
  * ## 作品简介：
@@ -49,6 +50,9 @@ export interface ReadmeCoverPage {
   /** Metadata `github_url:` — when an http(s) URL, a `github` button
    * joins the header; null hides it. */
   githubUrl: string | null
+  /** Metadata `website_url:` — when an http(s) URL, a `website` button
+   * joins the header beside github; null hides it. */
+  websiteUrl: string | null
   /** Four sanitized hex colors for the diamond mark, in panel order
    * (left, top, right, bottom). */
   palette: readonly [string, string, string, string]
@@ -69,6 +73,7 @@ type MetadataKey =
   | 'composer'
   | 'composerUrl'
   | 'githubUrl'
+  | 'websiteUrl'
   | 'colorPalette'
 
 const METADATA_KEYS: Record<string, MetadataKey> = {
@@ -76,6 +81,7 @@ const METADATA_KEYS: Record<string, MetadataKey> = {
   composer: 'composer',
   composer_url: 'composerUrl',
   github_url: 'githubUrl',
+  website_url: 'websiteUrl',
   color_palette: 'colorPalette',
 }
 
@@ -182,6 +188,7 @@ export function parseReadmeCoverPage(markdown: string): ReadmeCoverPage | null {
     composer: (metadata.composer ?? '').trim() || null,
     composerUrl: sanitizeUrl(metadata.composerUrl),
     githubUrl: sanitizeUrl(metadata.githubUrl),
+    websiteUrl: sanitizeUrl(metadata.websiteUrl),
     palette: sanitizePalette(metadata.colorPalette),
     sectionLabel: firstLabel ?? '',
     sectionMarkdown: bodyLines.join('\n').trim(),

@@ -205,6 +205,7 @@ const COVER_FIXTURE = [
   '',
   'title: 失语 III',
   'composer: @肖翔',
+  'website_url: https://works.example/5387',
   'color_palette: [#000000, #C9D8B6, #F1ECC3, #57837B]',
   '',
   '## 作品简介：',
@@ -243,6 +244,9 @@ describe('ProjectReadme cover format', () => {
       screen.getByRole('heading', { name: '失语 III' })
     ).toBeInTheDocument()
     expect(screen.getByTestId('cover-composer')).toHaveTextContent('@肖翔')
+    // The website_url metadata renders its link button in the header.
+    expect(screen.getByTestId('cover-website')).toHaveTextContent('website')
+    expect(screen.queryByTestId('cover-github')).not.toBeInTheDocument()
     expect(screen.getByTestId('cover-label')).toHaveTextContent('作品简介：')
     // The band body is the FIRST section only.
     expect(
