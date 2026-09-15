@@ -53,6 +53,7 @@ const FIXTURES: RawHelpDocument[] = [
     'modules-players',
     'modules-theme-follow',
     'modules-locale-follow',
+    'modules-projection-surface',
     'modules-monitor-state',
     'modules-audio',
   ].map(id => ({
@@ -82,7 +83,7 @@ describe('help-corpus (#53)', () => {
   it('builds the corpus in manifest order with books, titles and sections', () => {
     const corpus = buildHelpCorpus(FIXTURES)
 
-    expect(corpus).toHaveLength(22)
+    expect(corpus).toHaveLength(23)
     expect(
       corpus.slice(0, 4).map(doc => [doc.id, doc.book, doc.title])
     ).toEqual([
@@ -93,6 +94,7 @@ describe('help-corpus (#53)', () => {
     ])
     expect(corpus.slice(19).map(doc => [doc.id, doc.book, doc.title])).toEqual([
       ['modules-locale-follow', 'modules', 'modules-locale-follow'],
+      ['modules-projection-surface', 'modules', 'modules-projection-surface'],
       ['modules-monitor-state', 'modules', 'modules-monitor-state'],
       ['modules-audio', 'modules', 'modules-audio'],
     ])
@@ -157,6 +159,7 @@ describe('help-corpus (#53)', () => {
         'modules-players',
         'modules-theme-follow',
         'modules-locale-follow',
+        'modules-projection-surface',
         'modules-monitor-state',
         'modules-audio',
       ],

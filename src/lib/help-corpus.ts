@@ -97,6 +97,7 @@ export const HELP_BOOKS: readonly {
       'modules-players',
       'modules-theme-follow',
       'modules-locale-follow',
+      'modules-projection-surface',
       'modules-monitor-state',
       'modules-audio',
     ],

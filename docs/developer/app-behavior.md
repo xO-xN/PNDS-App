@@ -230,7 +230,7 @@ v1.3.0（#56）帮助中心窗口——第二个 webview 窗口（label `help`�
 
 - **简介** = 工程根 README.md，经 #125 读取/渲染通道，与主窗口 README 面板**同组合**：封面格式渲染 ProjectCoverPage（PNDS 字标 + composer/github 药丸、大标题、含 cover 图的封面带；行为见「封面页」节），其余 README 仍为 HelpMarkdown 文档视图（v1.5 只渲染文字——图片隐藏、链接一律无操作）；无 README/读取失败回落工程名卡片；starting 快照已带 projectPath，加载期即显示。门开但缺地址事实也落简介——会话在台，「无演出」会是谎言，拼畸形 monitor URL 更糟。
 - **投影待机** = 主题底色 + PNDS 字标 + 「无演出」，双语、随主题（错误态同此——后端恢复失败也是待机屏，不是空窗口）。
-- monitor 组装复用主窗口契约：地址快照语义（`hostAddress` 优先）、`?theme=`/`?lang=` 首帧参数按导航快照、iframe load 事件 + 10 秒超时的 reveal 防闪盖层、theme/locale 桥推送。session 事实经广播 `SessionSnapshotEvent` + `getSessionState` 恢复（visibility/focus 重拉，occlusion 丢事件先例同主窗口）。
+- monitor 组装复用主窗口契约：地址快照语义（`hostAddress` 优先）、`?theme=`/`?lang=` 首帧参数按导航快照、iframe load 事件 + 10 秒超时的 reveal 防闪盖层、theme/locale 桥推送；**唯一投影专属差异（#134）**：地址**无条件**多带 `?surface=venue` 首帧参数——venue 副本标识，工程可选按它分支渲染观众画面（契约 §14、模块手册「投影面」篇），主窗口 monitor 地址永不携带。session 事实经广播 `SessionSnapshotEvent` + `getSessionState` 恢复（visibility/focus 重拉，occlusion 丢事件先例同主窗口）。
 - 内容切换全部渐变（400ms 主题色盖层，`data-reveal-motion` 豁免 Brutal 即时规则）：待机↔简介↔monitor、切换工程的地址/工程变化都走同一盖层（简介按 projectPath 键控，A→B 切换也渐变）；快照序列中途变卦时收敛到最新内容；**首个落定内容直接呈现**（开演后重开直接落 monitor，无简介/待机闪帧）。
 
 ### 投影开演门（#130，session 级）

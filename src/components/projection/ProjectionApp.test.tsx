@@ -267,7 +267,9 @@ describe('ProjectionApp (#130 gate)', () => {
     await settleSwap()
 
     const iframe = screen.getByTitle('Project monitor') as HTMLIFrameElement
-    expect(iframe.src).toBe('http://192.168.1.10:6869/?theme=pond&lang=en')
+    expect(iframe.src).toBe(
+      'http://192.168.1.10:6869/?theme=pond&lang=en&surface=venue'
+    )
     // 撤回 — the same action reverses through the same fade.
     publish(snapshot({ projectionStarted: false }))
     await settleSwap()
@@ -285,7 +287,9 @@ describe('ProjectionApp (#130 gate)', () => {
     await flush()
 
     const iframe = screen.getByTitle('Project monitor') as HTMLIFrameElement
-    expect(iframe.src).toBe('http://192.168.1.10:6869/?theme=pond&lang=en')
+    expect(iframe.src).toBe(
+      'http://192.168.1.10:6869/?theme=pond&lang=en&surface=venue'
+    )
     expect(screen.queryByTestId('projection-intro')).not.toBeInTheDocument()
     expect(screen.getByTestId('projection-swap-cover').className).toContain(
       'opacity-0'
@@ -540,14 +544,43 @@ describe('ProjectionApp (#130 gate)', () => {
     dispatchAction('reload-monitor')
     const reloaded = screen.getByTitle('Project monitor') as HTMLIFrameElement
     // The nonce rides the URL as the cache-buster (`_r`) — the same
-    // cold-fetch semantics as the main window's reload.
+    // cold-fetch semantics as the main window's reload, stacked AFTER
+    // the first-frame family (surface included, #134).
     expect(reloaded.src).toBe(
-      'http://192.168.1.10:6869/?theme=pond&lang=en&_r=1'
+      'http://192.168.1.10:6869/?theme=pond&lang=en&surface=venue&_r=1'
     )
     // The remounted navigation holds its reveal gate until the load.
     expect(
       screen.getByTestId('projection-reveal-cover').className
     ).not.toContain('opacity-0')
+  })
+
+  it('loads the venue copy — surface=venue rides every monitor navigation (#134)', async () => {
+    vi.mocked(commands.getSessionState).mockResolvedValue({
+      status: 'ok',
+      data: snapshot({ projectionStarted: true }),
+    })
+    render(<ProjectionApp />)
+    await flush()
+
+    // The venue copy identifies itself to the project (contract §14) —
+    // the conductor's main-window copy never sends it (pinned by
+    // MonitorView's own src assertions, which stay surface-less).
+    const iframe = screen.getByTitle('Project monitor') as HTMLIFrameElement
+    expect(iframe.src).toBe(
+      'http://192.168.1.10:6869/?theme=pond&lang=en&surface=venue'
+    )
+
+    // A live theme switch pushes the bridge and never retargets the
+    // src — surface rides the same per-navigation snapshot as theme
+    // and lang, stable for the whole session.
+    act(() => {
+      listeners.get('pnds:projection-theme')?.({ colorTheme: 'brutal' })
+    })
+    const after = screen.getByTitle('Project monitor') as HTMLIFrameElement
+    expect(after.src).toBe(
+      'http://192.168.1.10:6869/?theme=pond&lang=en&surface=venue'
+    )
   })
 
   it('leaves Esc to the page — no app dialog ever opens from the projection', async () => {

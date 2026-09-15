@@ -98,12 +98,16 @@ function ProjectionMonitor({
   // instead. Both are therefore read from their live sources inside the
   // memo, never from the render-time values above. #131: the reload
   // nonce rides the URL as the `_r` cache-buster (only an explicit ⌘⇧R
-  // bumps it — same semantics as the main window's).
+  // bumps it — same semantics as the main window's). #134: this copy
+  // loads onto the venue screen, so the navigation ALWAYS carries
+  // `surface=venue` — the project may branch on it (contract §14);
+  // the main window's monitor view never sends it.
   const iframeSrc = useMemo(
     () =>
       buildMonitorUrl(content.host, content.port, {
         theme: currentColorThemeSetting(),
         lang: currentResolvedLanguage(),
+        surface: 'venue',
         reload: reloadNonce,
       }),
     [content.host, content.port, reloadNonce]

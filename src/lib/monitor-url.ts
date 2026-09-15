@@ -8,6 +8,11 @@
  * - `?theme=<name>` — the App ALWAYS sends it on load and reload (#49);
  * - `?lang=<code>` — same first-frame semantics, from the locale
  *   bridge (#54);
+ * - `?surface=venue` — the projection window's monitor navigation
+ *   always carries it (v1.5.0 #134): the page copy loading onto the
+ *   venue screen can branch to an audience view. The main window's
+ *   monitor never sends it — the conductor's copy must never be
+ *   mistaken for the venue's. Contract: §14.
  * - `?_r=<n>` — the reload cache-buster: WKWebView keeps an on-disk
  *   NetworkCache keyed by the FULL URL (query included) that survives
  *   app restarts, so a project server sending no Cache-Control gets
@@ -16,8 +21,9 @@
  *   one, so the refresh button is a true cold fetch.
  *
  * Contract: docs/zh-CN/reference/runtime-contract.md §11 (theme and
- * locale push). Pages must still tolerate all parameters being
- * absent, and must ignore unknown query parameters.
+ * locale push) and §14 (the surface parameter). Pages must still
+ * tolerate all parameters being absent, and must ignore unknown query
+ * parameters — including unknown `surface` values.
  */
 
 /** First-frame URL parameters. Empty-string values are treated as absent. */
@@ -26,6 +32,9 @@ export interface MonitorUrlParams {
   theme?: string
   /** Resolved language code (e.g. "zh-CN") pushed by the locale bridge. */
   lang?: string
+  /** Which window's surface the page copy loads onto ("venue" = the
+   *  projection window); absent = the main window's ordinary monitor. */
+  surface?: string
   /** Reload nonce (0/absent = ordinary navigation; >0 = cache-busted). */
   reload?: number
 }
@@ -38,6 +47,7 @@ export function buildMonitorUrl(
   const search = new URLSearchParams()
   if (params.theme) search.set('theme', params.theme)
   if (params.lang) search.set('lang', params.lang)
+  if (params.surface) search.set('surface', params.surface)
   // Falsy (0/undefined) reads as "no reload yet" — the first navigation
   // keeps the plain address and normal HTTP semantics.
   if (params.reload) search.set('_r', String(params.reload))

@@ -12,6 +12,7 @@
 | [乐手身份与座位](./players.md)         | `lib/players.js`、`lib/seats-store.js`、`lib/protocol.js`、`public/client.js` | claim token、座位、Socket.IO 协议 |
 | [主题跟随](./theme-follow.md)          | `lib/theme-follow.js`                                                         | monitor 页跟随 App 主题换色       |
 | [语言跟随](./locale-follow.md)         | `lib/locale-follow.js`                                                        | monitor 页跟随 App 界面语言       |
+| [投影面](./projection-surface.md)      | 页面入口（如 `public/monitor.js`）                                            | monitor 页为场地屏分支渲染        |
 | [monitor 视图状态](./monitor-state.md) | `lib/monitor-state.js`、`public/client.js`（monitor 侧）                      | monitor 页多副本视图一致          |
 | [音频：三模式与作品层](./audio.md)     | `audio/controller.js`                                                         | 创作者改得最多的文件              |
 

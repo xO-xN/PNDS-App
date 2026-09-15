@@ -37,8 +37,51 @@ describe('buildMonitorUrl', () => {
   })
 
   it('treats empty-string values as absent instead of sending bare keys', () => {
-    expect(buildMonitorUrl('192.168.1.10', 6869, { theme: '', lang: '' })).toBe(
-      'http://192.168.1.10:6869/'
+    expect(
+      buildMonitorUrl('192.168.1.10', 6869, {
+        theme: '',
+        lang: '',
+        surface: '',
+      })
+    ).toBe('http://192.168.1.10:6869/')
+  })
+})
+
+/**
+ * v1.5.0 (#134): the surface parameter — the projection window's
+ * monitor copy says which surface it loads onto (`venue`); the main
+ * window's never sends it. Same first-frame family as theme/lang:
+ * snapshotted per navigation, absent when empty, `_r` still last.
+ */
+describe('buildMonitorUrl surface parameter (#134)', () => {
+  it('sends surface after theme and lang in the stable family order', () => {
+    expect(
+      buildMonitorUrl('192.168.1.10', 6869, {
+        theme: 'stage',
+        lang: 'en',
+        surface: 'venue',
+      })
+    ).toBe('http://192.168.1.10:6869/?theme=stage&lang=en&surface=venue')
+  })
+
+  it('sends surface alone when no theme or lang is given', () => {
+    expect(buildMonitorUrl('192.168.1.10', 6869, { surface: 'venue' })).toBe(
+      'http://192.168.1.10:6869/?surface=venue'
+    )
+  })
+
+  it('stacks _r after surface on a reload — the cache-buster stays last', () => {
+    expect(
+      buildMonitorUrl('192.168.1.10', 6869, {
+        surface: 'venue',
+        reload: 1,
+      })
+    ).toBe('http://192.168.1.10:6869/?surface=venue&_r=1')
+  })
+
+  it('omits surface entirely when the caller passes nothing', () => {
+    expect(buildMonitorUrl('192.168.1.10', 6869, { theme: 'stage' })).toBe(
+      'http://192.168.1.10:6869/?theme=stage'
     )
   })
 })

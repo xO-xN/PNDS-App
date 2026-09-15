@@ -465,3 +465,16 @@ Verify at minimum:
 - master group gain updates and release;
 - monitor resize without iframe reload or Socket.IO reconnect;
 - full startup of official Projects under the fixed bundled Node (`24.18.1`).
+
+## 14. The surface parameter (?surface=venue)
+
+Since v1.5.0, whenever the App's **projection window** loads or reloads the monitor it carries the first-frame parameter `?surface=venue` on the iframe address **unconditionally** — the same mechanism and snapshot semantics as `?theme=`/`?lang=` (§11). The main window's (the conductor's operating surface) monitor address **never** carries it. For usage-level branching examples see the Module Manual's [Projection Surface](../modules/projection-surface.md) — this section is the protocol's normative home.
+
+Conventions:
+
+- The value `venue` says this copy is being loaded onto the venue screen by the projection window. It is the only value in this version, and the value set keeps room to grow — the App does not interpret the parameter's semantics, and future values stay non-breaking provided Projects honour the next item.
+- Responding is **optional**: a Project that does not read the parameter (the contract already requires ignoring unknown query parameters) shows exactly what the main window shows on the projection window — "unadapted = a mirrored monitor", identical to before the parameter existed.
+- A Project that does read it **must tolerate unknown values** (full ignorance included — treat an unrecognized value as if the parameter were absent); it must never error or fail to render over a value outside its known set.
+- The value is snapshotted at iframe navigation: carried again on load, an address change, or an explicit ⌘⇧R reload, never re-navigated mid-session over window state; the `?_r=` reload nonce stacks as usual. The parameter may also be absent altogether (opened directly in a browser, an older App) — pages must tolerate that.
+- Zoom, the theme/locale bridges (§11), the reveal gate and the reload semantics all apply to the venue copy unchanged — the origin is the same, the page needs no special cooperation.
+- The intro and the projection-standby phases load no monitor page, so the parameter never appears there — `surface=venue` only ever applies to the monitor phase.
