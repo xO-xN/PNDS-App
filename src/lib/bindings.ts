@@ -63,6 +63,10 @@ async closeWindowWithFade() : Promise<Result<null, string>> {
  * (the help center), created hidden on the frontend side and revealed
  * by their own page once ready; omitted, it stays the main window's
  * reveal.
+ * 
+ * #135 follow-up (venue-screen report): for the projection window the
+ * reveal also ACTIVATES the webview — see the webview-level focus
+ * below.
  */
 async fadeInWindow(label: string | null) : Promise<Result<null, string>> {
     try {

@@ -255,6 +255,8 @@ v1.3.0（#56）帮助中心窗口——第二个 webview 窗口（label `help`�
 
 **缩放归属让位（#135，契约 §14 握手）**：两地联测报告投影窗口 ⌘= 时缩放「有时生效、有时不生效、有时卡」——根因是 App 框架缩放与适配工程页面自己的缩放（venue surface）绑同一颗键，焦点/菜单路由决定谁吃到键、双发即叠加。定案方案 A：页面加载后可 `postMessage({type:"pnds-projection", zoom:"page"})` 声明自拥缩放（工程侧参考实现 ASBS a513c6e）；App 侧实现三件事——**只认本 iframe 自己窗口发出的精确形状消息**（其余一律静默忽略，页面内容是不可信输入；guest-focus gate 同款规则）；**让位只对 monitor 舞台**——该导航内 zoom 类投影动作无操作、缩放帧回落 100%（页面自己的缩放从 1× 起算、永不叠加； remembered 值原地等待、不报告不改写，未声明导航照常生效）；**归属随导航重建**——声明状态由按导航重挂的 MonitorNavigation 子树持有（地址变化 / ⌘⇧R 重载 / 内容切走即复位，页面重新声明后再次让位），简介与工具/封面分支无声明通道、App 缩放照常。
 
+**首开 webview 激活（#135 落地后的场地报告补丁）**：报告「投影首开不点一下画面就卡顿＋⌘= 无效」——`fade_in_window` 的窗口级 `set_focus`（makeKeyAndOrderFront）**不会**把 WKWebView 变成窗口的 first responder：页面收不到 DOM 键事件（让位后 App 侧本就无操作，两头全死），且从未激活的 webview 处于 WebKit 降级活动状态、rAF 被扣发（ASBS 的纯 rAF 渲染循环因而卡顿）；首次点击正是补上 first responder。修法：reveal 对 `projection` 补一次 **webview 级** `set_focus`（wry: `makeFirstResponder`，等效那一次点击；窗口内 first responder 跨后续 key/resign 持久，激活一次即可）。只作用于投影——主窗/帮助中心的 reveal 无此报告，主窗首响应者还与 guest-focus gate 纠缠，不动。
+
 ### 封面页（README cover page，两窗口共享）
 
 主窗口 README 面板与投影简介渲染同一 `ProjectCoverPage`；以下是 v1.5 定稿的共享行为（测试锁定）：

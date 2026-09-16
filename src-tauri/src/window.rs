@@ -311,6 +311,10 @@ fn reveal_generation(state: &WindowManager, label: &str) -> Arc<FadeGen> {
 /// (the help center), created hidden on the frontend side and revealed
 /// by their own page once ready; omitted, it stays the main window's
 /// reveal.
+///
+/// #135 follow-up (venue-screen report): for the projection window the
+/// reveal also ACTIVATES the webview — see the webview-level focus
+/// below.
 #[tauri::command]
 #[specta::specta]
 pub async fn fade_in_window(app: AppHandle, label: Option<String>) -> Result<(), String> {
@@ -334,6 +338,25 @@ pub async fn fade_in_window(app: AppHandle, label: Option<String>) -> Result<(),
         .show()
         .map_err(|e| format!("Failed to show the hidden window: {e}"))?;
     let _ = window.set_focus();
+    // #135 follow-up (venue-screen report): window focus
+    // (makeKeyAndOrderFront) does NOT make the WKWebView the window's
+    // first responder — until something does, the webview receives no
+    // DOM key events (the §14-leased venue copy's own ⌘= zoom never
+    // fires; the App side is a no-op by design) and sits in WebKit's
+    // never-activated low-activity state (rAF withheld — ASBS's
+    // rAF-only renderer crawls), so the projection was un-zoomable and
+    // choppy until the operator clicked it once. The webview-level
+    // focus lands the first responder (wry: makeFirstResponder) — the
+    // same activation that click performs, durable across later
+    // key/resign of the window. Scoped to the projection label: the
+    // main/help reveals have no reported gap, and main's initial
+    // first-responder setup is entangled with its guest-focus gate.
+    // (`AsRef<Webview>` — the `Manager::get_webview` lookup needs the
+    // unstable feature; this wrapper owns its webview directly.)
+    if label == "projection" {
+        let webview: &Webview<_> = window.as_ref();
+        let _ = webview.set_focus();
+    }
     spawn_ramp(window, gen, generation, 1.0);
     log::info!("Cold-start reveal: {label} window shown and fading in");
     Ok(())
