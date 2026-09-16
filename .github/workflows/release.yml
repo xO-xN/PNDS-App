@@ -34,7 +34,7 @@ jobs:
       # a lane mismatch there would create two releases instead of one
       # merged draft. (RELEASE_BODY below repeats the expression inline;
       # job-level env values cannot reference each other.)
-      RELEASE_TAG: ${{ github.ref_name || inputs.version }}
+      RELEASE_TAG: ${{ inputs.version || github.ref_name }}
       # Shared by both lanes' tauri-action steps; whichever lane creates the
       # draft release writes it (the other finds the existing draft by tag).
       # NOTE: the body's chars count against GitHub's 21000-char max
@@ -42,7 +42,7 @@ jobs:
       # expression) — keep at most the last two versions' notes in it and
       # point older ones at the releases page (learned shipping v1.5.0).
       RELEASE_BODY: |
-        ## PNDS ${{ github.ref_name || inputs.version }}
+        ## PNDS ${{ inputs.version || github.ref_name }}
 
         **One baseline for every Mac — Apple Silicon and Intel alike, macOS 13.5+**
         - This release ships two installers — the `_aarch64.dmg` for Apple Silicon Macs (M-series) and the `_x64.dmg` for Intel Macs — both requiring macOS 13.5 (Ventura) or newer. Pick the one that matches your Mac; the auto-updater already picks its lane on its own.
@@ -86,7 +86,7 @@ jobs:
         ### Auto-Updates
         Existing users receive update notices (the starting page's one-line notice and the manual check's toast); since V1.4.3 the App itself no longer installs updates — grab the dmg from the Releases page it points you to.
 
-        **Full Changelog**: https://github.com/${{ github.repository }}/commits/${{ github.ref_name || inputs.version }}
+        **Full Changelog**: https://github.com/${{ github.repository }}/commits/${{ inputs.version || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
 
