@@ -633,3 +633,191 @@ describe('ProjectionApp (#130 gate)', () => {
     expect(screen.getByTestId('projection-intro')).toBeInTheDocument()
   })
 })
+
+/**
+ * v1.5.0 (#135, contract §14 handshake): a monitor page that declares
+ * `zoom:"page"` takes the projection copy's zoom — the App's own ⌘=
+ * actions (the menu dispatch path included) go inert for that
+ * navigation, the monitor stage steps its scale frame back to 100%
+ * (the page's own zoom starts from an unscaled viewport; a stale
+ * remembered scale would compound), and the remembered VALUE waits
+ * untouched for App-owned navigations. The ownership is
+ * per-navigation (reload / address change / leaving the monitor
+ * resets it) and only the exact payload from THIS iframe's window
+ * counts — anything else flying by is ignored, never an error.
+ */
+describe('ProjectionApp (#135 §14 zoom ownership)', () => {
+  const dispatchAction = (kind: string) => {
+    act(() => {
+      listeners.get('pnds:projection-action')?.({ kind })
+    })
+  }
+
+  /** A postMessage arriving at the projection host window. */
+  const postToHost = (
+    data: unknown,
+    source: MessageEventSource | null
+  ): void => {
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', { data, source }))
+    })
+  }
+
+  const monitorIframe = () =>
+    screen.getByTitle('Project monitor') as HTMLIFrameElement
+
+  const monitorScale = () =>
+    screen.getByTestId('monitor-scale-frame').style.transform
+
+  const renderOnMonitor = async (initialZoom?: number) => {
+    vi.mocked(commands.getSessionState).mockResolvedValue({
+      status: 'ok',
+      data: snapshot({ projectionStarted: true }),
+    })
+    render(<ProjectionApp initialZoom={initialZoom} />)
+    await flush()
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    listeners.clear()
+    vi.mocked(commands.getSessionState).mockResolvedValue({
+      status: 'ok',
+      data: snapshot(),
+    })
+    vi.mocked(commands.readProjectReadme).mockResolvedValue({
+      status: 'ok',
+      data: null,
+    })
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('yields on the declaration — actions inert, stage at 100%, nothing reported', async () => {
+    await renderOnMonitor(130)
+    expect(monitorScale()).toBe('scale(1.3)')
+
+    postToHost(
+      { type: 'pnds-projection', zoom: 'page' },
+      monitorIframe().contentWindow
+    )
+    expect(monitorScale()).toBe('scale(1)')
+
+    // The dispatched ⌘= family (menu path included — it ends in the
+    // same action listener) no longer applies: no stage move, no
+    // persistence report.
+    vi.mocked(emitTo).mockClear()
+    dispatchAction('zoom-in')
+    dispatchAction('zoom-out')
+    dispatchAction('zoom-reset')
+    expect(monitorScale()).toBe('scale(1)')
+    expect(emitTo).not.toHaveBeenCalled()
+  })
+
+  it('keeps the App zoom for undeclared copies', async () => {
+    await renderOnMonitor()
+    expect(monitorScale()).toBe('scale(1)')
+
+    dispatchAction('zoom-in')
+    expect(monitorScale()).toBe('scale(1.1)')
+    expect(emitTo).toHaveBeenLastCalledWith('main', 'pnds:projection-zoom', {
+      zoom: 110,
+    })
+  })
+
+  it('ignores malformed or foreign declarations — no throw, no console error, App still owns', async () => {
+    const errorSpy = vi.spyOn(console, 'error')
+    await renderOnMonitor()
+
+    // Wrong `zoom` value (the set is reserved — unknown means ignore),
+    // wrong type, non-object payloads…
+    const frame = monitorIframe().contentWindow
+    postToHost({ type: 'pnds-projection', zoom: 'app' }, frame)
+    postToHost({ type: 'pnds-projection' }, frame)
+    postToHost({ type: 'other-projection', zoom: 'page' }, frame)
+    postToHost('pnds-projection', frame)
+    postToHost(null, frame)
+    // …and the exact payload from a window that is NOT this iframe —
+    // only the embedded page itself may move the ownership.
+    postToHost({ type: 'pnds-projection', zoom: 'page' }, window)
+
+    dispatchAction('zoom-in')
+    expect(monitorScale()).toBe('scale(1.1)')
+    expect(errorSpy).not.toHaveBeenCalled()
+    errorSpy.mockRestore()
+  })
+
+  it('resets the ownership on ⌘⇧R — the remembered value waits, re-declaration re-yields', async () => {
+    await renderOnMonitor(130)
+    postToHost(
+      { type: 'pnds-projection', zoom: 'page' },
+      monitorIframe().contentWindow
+    )
+    expect(monitorScale()).toBe('scale(1)')
+
+    // Reload: a fresh navigation (new `_r` src) remounts the
+    // ownership holder — it falls back to the App default and the
+    // untouched remembered zoom (130) applies again.
+    dispatchAction('reload-monitor')
+    expect(monitorIframe().src).toContain('_r=1')
+    expect(monitorScale()).toBe('scale(1.3)')
+    dispatchAction('zoom-in')
+    expect(monitorScale()).toBe('scale(1.4)')
+
+    // The reloaded page re-declares — the ownership moves again.
+    postToHost(
+      { type: 'pnds-projection', zoom: 'page' },
+      monitorIframe().contentWindow
+    )
+    expect(monitorScale()).toBe('scale(1)')
+  })
+
+  it('resets the ownership on an address change', async () => {
+    vi.useFakeTimers()
+    await renderOnMonitor(150)
+    postToHost(
+      { type: 'pnds-projection', zoom: 'page' },
+      monitorIframe().contentWindow
+    )
+    expect(monitorScale()).toBe('scale(1)')
+
+    // A different monitor address (project switch with the gate open)
+    // is a new navigation: App-owned again until it re-declares.
+    publish(
+      snapshot({
+        projectionStarted: true,
+        health: {
+          status: 'ready',
+          scoreServer: { performerPort: 6868, monitorPort: 6870, error: null },
+        },
+      })
+    )
+    await settleSwap()
+    expect(monitorIframe().src).toContain('6870')
+    expect(monitorScale()).toBe('scale(1.5)')
+    postToHost(
+      { type: 'pnds-projection', zoom: 'page' },
+      monitorIframe().contentWindow
+    )
+    expect(monitorScale()).toBe('scale(1)')
+  })
+
+  it('dies with the navigation — the 简介 zooms again after 撤回', async () => {
+    vi.useFakeTimers()
+    await renderOnMonitor(130)
+    postToHost(
+      { type: 'pnds-projection', zoom: 'page' },
+      monitorIframe().contentWindow
+    )
+    expect(monitorScale()).toBe('scale(1)')
+
+    // 撤回: the monitor (and the ownership holder inside it) unmounts
+    // through the content swap — the 简介 is App content and zooms by
+    // the App.
+    publish(snapshot({ projectionStarted: false }))
+    await settleSwap()
+    dispatchAction('zoom-in')
+    expect(intro().style.zoom).toBe('1.4')
+  })
+})

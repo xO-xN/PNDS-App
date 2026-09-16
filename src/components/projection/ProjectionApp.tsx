@@ -28,6 +28,7 @@ import {
   MONITOR_REVEAL_FADE_MS,
   MONITOR_REVEAL_FADE_TRANSITION,
 } from '@/lib/monitor-reveal'
+import { isPageZoomDeclaration } from '@/lib/projection-handshake'
 import {
   projectionContent,
   projectionContentKey,
@@ -79,12 +80,18 @@ function ProjectionMonitor({
   content,
   zoom,
   reloadNonce,
+  onZoomOwnership,
 }: {
   content: Extract<ProjectionContent, { kind: 'monitor' }>
-  /** #131: the projection window's OWN zoom (page-local; see below). */
+  /**
+   * The monitor branch's EFFECTIVE zoom — the window's own #131
+   * value, or 100 while the page holds the §14 zoom ownership (#135).
+   */
   zoom: number
   /** #131: ⌘⇧R's cache-buster — rides the URL only when > 0. */
   reloadNonce: number
+  /** #135 (§14): reports the navigation's zoom ownership to the App. */
+  onZoomOwnership: (ownedByPage: boolean) => void
 }) {
   // v1.2.3 (#44)/v1.3.0 (#54): the bridges keep a LIVE session recolored
   // and re-localized; the URL below carries the same values only as
@@ -121,6 +128,7 @@ function ProjectionMonitor({
       colorTheme={colorTheme}
       locale={locale}
       zoom={zoom}
+      onZoomOwnership={onZoomOwnership}
     />
   )
 }
@@ -136,12 +144,15 @@ function MonitorNavigation({
   colorTheme,
   locale,
   zoom,
+  onZoomOwnership,
 }: {
   src: string
   origin: string
   colorTheme: string
   locale: string
   zoom: number
+  /** #135 (§14): reports the navigation's zoom ownership upward. */
+  onZoomOwnership: (ownedByPage: boolean) => void
 }) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
   // #50: the reveal gate — released by the iframe's own load event or
@@ -160,6 +171,34 @@ function MonitorNavigation({
     pushThemeToFrame(iframeRef.current, origin, colorTheme)
     pushLocaleToFrame(iframeRef.current, origin, locale)
   }, [colorTheme, locale, origin])
+
+  // #135 (§14 handshake): the embedded page declares at load that IT
+  // owns the zoom — postMessage up to this host. Only THIS iframe's
+  // own window is trusted (the same rule as the guest-focus gate:
+  // anything else flying by — another window, the page's own
+  // postMessage traffic — must not move the ownership), and only the
+  // exact declaration grants it; every other message is silently
+  // ignored, never an error.
+  useEffect(() => {
+    const handleHandshake = (event: MessageEvent) => {
+      if (event.source !== iframeRef.current?.contentWindow) return
+      if (!isPageZoomDeclaration(event.data)) return
+      onZoomOwnership(true)
+    }
+    window.addEventListener('message', handleHandshake)
+    return () => window.removeEventListener('message', handleHandshake)
+  }, [onZoomOwnership])
+
+  // The ownership is PER-NAVIGATION (the issue's lifecycle rule):
+  // every fresh navigation — the src key above remounts this subtree
+  // on an address change or ⌘⇧R reload — and this navigation's END
+  // (the content swap away from the monitor unmounts it) return
+  // ownership to the App default; the page re-declares after each
+  // load.
+  useEffect(() => {
+    onZoomOwnership(false)
+    return () => onZoomOwnership(false)
+  }, [onZoomOwnership])
 
   return (
     <div className="relative h-full w-full overflow-hidden bg-black">
@@ -467,12 +506,23 @@ function ProjectionStage({
   latest,
   projectName,
   zoom,
+  monitorZoom,
+  onZoomOwnership,
   reloadNonce,
 }: {
   latest: ProjectionContent
   projectName: string | null
   /** #131: owned by ProjectionApp so it survives content swaps. */
   zoom: number
+  /**
+   * #135 (§14): what the MONITOR branch renders with — the App's
+   * value, or DEFAULT while the page owns the zoom (the intro always
+   * keeps `zoom`: it is App content and ownership never leaves the
+   * App there).
+   */
+  monitorZoom: number
+  /** #135 (§14): the monitor navigation's zoom-ownership reports. */
+  onZoomOwnership: (ownedByPage: boolean) => void
   reloadNonce: number
 }) {
   const { t, i18n } = useTranslation()
@@ -509,8 +559,9 @@ function ProjectionStage({
       {displayed.kind === 'monitor' ? (
         <ProjectionMonitor
           content={displayed}
-          zoom={zoom}
+          zoom={monitorZoom}
           reloadNonce={reloadNonce}
+          onZoomOwnership={onZoomOwnership}
         />
       ) : displayed.kind === 'intro' ? (
         /* The 简介 zooms by its OWN mechanisms (see ProjectionIntro) —
@@ -621,12 +672,33 @@ export function ProjectionApp({
   // dispatch; the step math is the shared applyZoomAction (§v1.1.1).
   const [zoom, setZoom] = useState(initialZoom)
   const [reloadNonce, setReloadNonce] = useState(0)
+
+  // #135 (§14 handshake): does the CURRENT monitor navigation's page
+  // own the zoom? Two shapes on purpose — state (the monitor stage
+  // re-renders at 100% when ownership moves to the page) and a ref
+  // (the action handler below is []-bound and reads the CURRENT
+  // ownership without resubscribing). The remembered `zoom` value
+  // itself is never touched by the yield: it waits unchanged for
+  // App-owned navigations, and nothing is reported while the page
+  // owns the zoom (nothing changes).
+  const [pageOwnsZoom, setPageOwnsZoom] = useState(false)
+  const pageOwnsZoomRef = useRef(false)
+  useEffect(() => {
+    pageOwnsZoomRef.current = pageOwnsZoom
+  }, [pageOwnsZoom])
+
   useEffect(() => {
     return onProjectionAction(action => {
       if (action.kind === 'reload-monitor') {
         setReloadNonce(nonce => nonce + 1)
         return
       }
+      // #135 (§14): the page declared it owns the zoom for THIS
+      // navigation — the dispatched ⌘= family (menu dispatch path
+      // included; the menu stays enabled and still fires) is inert
+      // for the copy: no value change, no report. The keys belong to
+      // the page.
+      if (pageOwnsZoomRef.current) return
       setZoom(current => {
         const next = applyZoomAction(current, action.kind)
         if (next !== current) {
@@ -661,6 +733,13 @@ export function ProjectionApp({
           latest={latest}
           projectName={snapshot?.projectName ?? null}
           zoom={zoom}
+          // #135 (§14): a page-owned monitor steps the App's frame
+          // aside — the page's own zoom starts from an unscaled
+          // viewport (a stale remembered scale would compound and
+          // corrupt the page's density math); the intro and standby
+          // keep `zoom`.
+          monitorZoom={pageOwnsZoom ? DEFAULT_MONITOR_ZOOM : zoom}
+          onZoomOwnership={setPageOwnsZoom}
           reloadNonce={reloadNonce}
         />
       )}

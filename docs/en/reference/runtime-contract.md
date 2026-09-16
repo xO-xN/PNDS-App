@@ -466,9 +466,13 @@ Verify at minimum:
 - monitor resize without iframe reload or Socket.IO reconnect;
 - full startup of official Projects under the fixed bundled Node (`24.18.1`).
 
-## 14. The surface parameter (?surface=venue)
+## 14. The projection-surface protocol (?surface=venue and the zoom-ownership handshake)
 
-Since v1.5.0, whenever the App's **projection window** loads or reloads the monitor it carries the first-frame parameter `?surface=venue` on the iframe address **unconditionally** — the same mechanism and snapshot semantics as `?theme=`/`?lang=` (§11). The main window's (the conductor's operating surface) monitor address **never** carries it. For usage-level branching examples see the Module Manual's [Projection Surface](../modules/projection-surface.md) — this section is the protocol's normative home.
+Since v1.5.0, two protocol legs connect the App's **projection window** and the monitor copy it loads: the URL first-frame parameter `?surface=venue` (host → page, copy identity) and the zoom-ownership handshake (page → host, capability declaration, since #135). The main window (the conductor's operating surface) **never participates** in either — it carries no parameter and the App always owns its zoom. For usage-level branching and declaration examples see the Module Manual's [Projection Surface](../modules/projection-surface.md) — this section is the protocol's normative home.
+
+### The surface parameter (?surface=venue)
+
+Whenever the projection window loads or reloads the monitor it carries the first-frame parameter `?surface=venue` on the iframe address **unconditionally** — the same mechanism and snapshot semantics as `?theme=`/`?lang=` (§11).
 
 Conventions:
 
@@ -478,3 +482,22 @@ Conventions:
 - The value is snapshotted at iframe navigation: carried again on load, an address change, or an explicit ⌘⇧R reload, never re-navigated mid-session over window state; the `?_r=` reload nonce stacks as usual. The parameter may also be absent altogether (opened directly in a browser, an older App) — pages must tolerate that.
 - Zoom, the theme/locale bridges (§11), the reveal gate and the reload semantics all apply to the venue copy unchanged — the origin is the same, the page needs no special cooperation.
 - The intro and the projection-standby phases load no monitor page, so the parameter never appears there — `surface=venue` only ever applies to the monitor phase.
+
+### The zoom-ownership handshake ({type:"pnds-projection", zoom:"page"})
+
+The first page → host message (since #135): an adapted Project's monitor page may declare at load that **it owns the zoom**:
+
+```js
+window.parent.postMessage({ type: 'pnds-projection', zoom: 'page' }, '*')
+```
+
+Background: the projection window's own ⌘= zoom (the MonitorScaleFrame layout zoom) and the page's own zoom share one key — focus/menu routing decided who got it, and both firing compounded. The declaration makes the ownership deterministic. `'*'` as targetOrigin is part of the contract: the payload is a capability string, nothing sensitive, and the page cannot know its host's origin.
+
+Conventions:
+
+- `type` is fixed at `pnds-projection`; `zoom` takes only `'page'` in this version (declaring the zoom belongs to the page). The value set keeps room to grow; the host matches the exact `type` and `zoom` values (extra fields in the payload are ignored).
+- On receipt, the App stops applying its own ⌘=/⌘-/⌘0 zoom actions to **that navigation's** monitor stage: the menu's Zoom In/Out/Reset behave as **no-ops** for the window (the menu stays enabled and still dispatches; the window simply does not apply) — the keys belong to the page, whose own zoom (cursor anchoring, density following, …) is preserved wholesale. The stage also steps the App's standing zoom aside (the scale frame falls back to 100%): the page's own zoom starts from 1× and the two systems never compound.
+- **The ownership's lifetime is one navigation**: a load, an address change, or an explicit ⌘⇧R reload resets it to the default (the App owns); a re-declaration yields again — nothing carries across navigations, no configuration, no migration.
+- **The default is App-owned**: an undeclared copy (an unadapted Project) behaves byte-for-byte as before the handshake existed. The intro, built-in utilities and cover phases load no monitor page and have no declaration channel — App zoom applies as ever.
+- **Message validation**: the host honours only messages from **this iframe's own window** whose `type` and `zoom` match exactly; mismatched types, unknown `zoom` values, wrong sources and malformed payloads are all ignored — page content is untrusted input, and no message may make the host throw.
+- The App's zoom value and its persistence (the window memory) are untouched by the yield: the remembered value waits as-is and applies again on undeclared navigations (or a reload's default period).
