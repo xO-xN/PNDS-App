@@ -13,7 +13,7 @@ PNDS 池谱（Platform for Networked Digital Score），寓意「多池相连」
 
 演出现场只需要一台 Mac 和一个路由器：App 打开工程，就地搭起本地多人演奏系统，演奏者使用手机、平板电脑等设备接入。PNDS 也支持跨网络远程演奏：多台 Mac 各自运行 PNDS、加载同一个支持互联网演奏的工程，搭配 JackTrip 等方案即可实现实时演奏。
 
-![PNDS App - 欢迎界面](./assets/readme_img/pndsapp_starting.png)
+![PNDS App - 全景展示](./assets/readme_img/pnds_showcase.png)
 
 ## 下载
 

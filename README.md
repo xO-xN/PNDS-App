@@ -13,7 +13,7 @@ The name PNDS (Platform for Networked Digital Score) evokes "many ponds, connect
 
 A performance needs just one Mac and a router: the App opens a project and sets up a local multi-player performance system on the spot; performers join from their own phones, tablets, or other devices. PNDS also extends to network music performance: multiple Macs at different sites each run PNDS with the same internet-capable project, and with an audio transport such as JackTrip, the dispersed sites perform as one telematic ensemble.
 
-![PNDS App - Welcome](./assets/readme_img/pndsapp_starting.png)
+![PNDS App - Showcase](./assets/readme_img/pnds_showcase.png)
 
 ## Download
 
