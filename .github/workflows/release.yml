@@ -60,9 +60,11 @@ jobs:
 
         **Keyboard and zoom, scoped per window**
         - Zoom (⌘=/⌘-/⌘0) and fullscreen (⌃⌘F) now act on the FOCUSED window — the projection keeps its own zoom, remembered across works, window reopens and App launches, independent of the main window's. ⌘⇧R reloads both windows' monitors in one chord; ⌘W closes the front window only; Esc always belongs to the page in both windows.
+        - A work's own zoom now wins on the venue screen: an adapted project that declares zoom ownership as it loads gets the keys — the App's zoom steps aside for that copy, so the venue screen zooms one predictable way, never two systems stacked. The venue page also receives the keys the moment it loads (no click needed to arm them) and renders full-rate even while the conductor works in the main window.
 
         **For authors: a venue-surface channel**
         - The projection window loads the monitor with `?surface=venue` on the address — the one channel a work has to render an audience view on the venue screen (every performer's score, bigger type, no console). Works that ignore it show exactly what the conductor sees; reading it is entirely optional (runtime contract §14, plus a new Module Manual chapter with a branch example).
+        - A work that zooms itself can now declare it: one postMessage at load (`{type:"pnds-projection", zoom:"page"}`) and the App yields the zoom keys for that navigation — cursor-anchored, density-following zooms ride through untouched (runtime contract §14 handshake, with the declaration snippet in the Module Manual chapter).
 
         ### What's New in V1.4.3 — one runtime baseline for every Mac, quieter update checks & welcome-page fixes
 
