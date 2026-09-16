@@ -48,3 +48,4 @@ Notes:
 - **The ownership lasts one navigation**: a ⌘⇧R reload or an address change resets it, so declare on every load — putting the declaration in the entry point does that naturally.
 - **No declaration = App zoom as ever**: unadapted Projects, and the intro/utility/cover phases, are unaffected.
 - `'*'` as targetOrigin (the page cannot know its host's origin); the payload is a capability string, nothing sensitive.
+- **The venue copy holds DOM focus from load** (an App-side guarantee, no click needed): while the projection window is frontmost, the page's keyboard listeners (⌘±/⌘0 …) are armed as soon as it loads. The keys still follow the App's menu-accelerator table (page-interaction.md) — only under the declaration does the App leave ⌘= alone so the page's own listener receives it.

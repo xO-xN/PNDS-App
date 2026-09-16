@@ -213,6 +213,16 @@ function MonitorNavigation({
           className="block h-full w-full border-0"
           onLoad={() => {
             setLoaded(true)
+            // #135 follow-up (venue report): hand the page DOM focus.
+            // Keyboard events dispatch to the DOM-focused FRAME, and
+            // the venue page lives in this cross-origin iframe — until
+            // now only a click into the content focused it, so its ⌘±
+            // zoom listeners never armed (the window-key and
+            // first-responder halves the reveal's focus already
+            // provide). Parent-side element.focus() crosses origins;
+            // nothing in this thin root ever steals it back (the
+            // covers are pointer-events-none once transparent).
+            iframeRef.current?.focus()
             pushThemeToFrame(iframeRef.current, origin, colorTheme)
             pushLocaleToFrame(iframeRef.current, origin, locale)
           }}

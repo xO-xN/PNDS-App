@@ -28,6 +28,10 @@ import {
 export { PROJECTION_WINDOW_LABEL } from '@/lib/events'
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { currentMonitor } from '@tauri-apps/api/window'
+// The JS API ships this one as a TYPE-ONLY enum (`export type` in
+// window.d.ts — no runtime export); the wire value is the plain
+// string, so the option is written as a cast literal.
+import type { BackgroundThrottlingPolicy } from '@tauri-apps/api/window'
 import i18n, { currentResolvedLanguage } from '@/i18n/config'
 import { logger } from '@/lib/logger'
 import { notifications } from '@/lib/notifications'
@@ -121,6 +125,16 @@ export async function openProjectionWindow(): Promise<void> {
     resizable: true,
     // #51 hidden-create: the page calls the reveal itself once ready.
     visible: false,
+    // #135 follow-up (venue lag report): WebKit throttles a webview in
+    // an INACTIVE window (macOS 14+ WKPreferences.inactiveSchedulingPolicy
+    // — rAF withheld), so the venue copy — a rAF-driven renderer —
+    // crawled whenever the conductor held the MAIN window's focus,
+    // which is the normal performance posture. wry maps Disabled to
+    // inactiveSchedulingPolicy=None: the venue screen renders full-rate
+    // unfocused. macOS 14+ only — older systems keep the system default
+    // (the option is silently dropped there, no regression). Scoped to
+    // the projection window; the main/help windows keep the default.
+    backgroundThrottling: 'disabled' as BackgroundThrottlingPolicy,
   })
   projectionWindow.once('tauri://error', error => {
     logger.error('Failed to create the projection window', { error })

@@ -255,7 +255,12 @@ v1.3.0（#56）帮助中心窗口——第二个 webview 窗口（label `help`�
 
 **缩放归属让位（#135，契约 §14 握手）**：两地联测报告投影窗口 ⌘= 时缩放「有时生效、有时不生效、有时卡」——根因是 App 框架缩放与适配工程页面自己的缩放（venue surface）绑同一颗键，焦点/菜单路由决定谁吃到键、双发即叠加。定案方案 A：页面加载后可 `postMessage({type:"pnds-projection", zoom:"page"})` 声明自拥缩放（工程侧参考实现 ASBS a513c6e）；App 侧实现三件事——**只认本 iframe 自己窗口发出的精确形状消息**（其余一律静默忽略，页面内容是不可信输入；guest-focus gate 同款规则）；**让位只对 monitor 舞台**——该导航内 zoom 类投影动作无操作、缩放帧回落 100%（页面自己的缩放从 1× 起算、永不叠加； remembered 值原地等待、不报告不改写，未声明导航照常生效）；**归属随导航重建**——声明状态由按导航重挂的 MonitorNavigation 子树持有（地址变化 / ⌘⇧R 重载 / 内容切走即复位，页面重新声明后再次让位），简介与工具/封面分支无声明通道、App 缩放照常。
 
-**首开 webview 激活（#135 落地后的场地报告补丁）**：报告「投影首开不点一下画面就卡顿＋⌘= 无效」——`fade_in_window` 的窗口级 `set_focus`（makeKeyAndOrderFront）**不会**把 WKWebView 变成窗口的 first responder：页面收不到 DOM 键事件（让位后 App 侧本就无操作，两头全死），且从未激活的 webview 处于 WebKit 降级活动状态、rAF 被扣发（ASBS 的纯 rAF 渲染循环因而卡顿）；首次点击正是补上 first responder。修法：reveal 对 `projection` 补一次 **webview 级** `set_focus`（wry: `makeFirstResponder`，等效那一次点击；窗口内 first responder 跨后续 key/resign 持久，激活一次即可）。只作用于投影——主窗/帮助中心的 reveal 无此报告，主窗首响应者还与 guest-focus gate 纠缠，不动。
+**首开激活与失焦全速（#135 落地后的场地报告补丁，两轮收口）**：报告「投影不点一下画面就卡顿＋⌘= 无效，点击后恢复」。两个根因、两处修法——
+
+- **卡顿 = WebKit 对非活动窗口的调度降级**（macOS 14+ `WKPreferences.inactiveSchedulingPolicy`：窗口非 key 即扣发 rAF；ASBS 纯 rAF 渲染循环因而爬行）。这不是「首开未激活」的一次性问题——指挥持主窗焦点是**常态**，场地屏永远非 key。修法：创建投影窗口时 `backgroundThrottling: 'disabled'`（tauri/wry 落到 `inactiveSchedulingPolicy=None`），场地屏失焦也全速渲染；仅 macOS 14+ 生效（更老系统该 API 不存在、保持系统默认），仅投影窗口启用（主窗/帮助中心不动，测试钉住该创建选项防回归）。
+- **缩放 = 焦点的三层缺一**：①窗口 key（reveal 的 `makeKeyAndOrderFront`）、②WKWebView first responder（reveal 补的 webview 级 `set_focus`，wry: `makeFirstResponder`；跨后续 key/resign 持久）、③**iframe 的 DOM 焦点**——键盘事件只派发给持有 DOM 焦点的 frame，venue 页在跨域 iframe 里、此前只有点击内容才会聚焦。修法：投影页在 iframe load 时 `iframeRef.focus()` 交给页面（主窗 guest-focus-gate 的镜像操作——那边「从 iframe 抢回」，这边「交给 iframe」；瘦根内无他物会再抢走）。**残留边界**：三层齐备后键盘缩放仍只在投影窗口持焦时可用——人在主窗按 ⌘=，键按 OS 规则属于主窗；「主窗操作、场地屏缩放」需 §14 反向转发动词（方案 B，需工程侧配合与键位归属决策）。
+
+主窗/帮助中心的 reveal 无此报告，主窗首响应者还与 guest-focus gate 纠缠，一并不动。
 
 ### 封面页（README cover page，两窗口共享）
 
@@ -360,7 +365,7 @@ Back/Close 返回 Welcome，不自动重启。
 - error → Load/Retry；
 - 全屏 action 的菜单、快捷键与按钮入口；
 - 窗口 fade 状态机；
-- 投影窗口：内容状态机（快照序列）、窗口生命周期（单例/聚焦/落屏/桥）、⌘W 分派、缩放作用域与记忆（`projectionZoom`）、缩放归属让位（#135 §14 握手：声明后动作无操作、舞台回落 100%、畸形消息忽略、随导航复位）、封面页（标题适配数学、边距镜像不变量、投影侧覆写）；
+- 投影窗口：内容状态机（快照序列）、窗口生命周期（单例/聚焦/落屏/桥）、⌘W 分派、缩放作用域与记忆（`projectionZoom`）、缩放归属让位（#135 §14 握手：声明后动作无操作、舞台回落 100%、畸形消息忽略、随导航复位）、首开激活与失焦全速（webview 级 focus、iframe DOM focus、`backgroundThrottling: 'disabled'` 创建选项）、封面页（标题适配数学、边距镜像不变量、投影侧覆写）；
 - 更新检查 check-only 三态（boot 静默、available 状态持久、手动反馈与 Releases 动作）；
 - 日志轮转；
 - 子进程关闭与 orphan cleanup。

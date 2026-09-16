@@ -103,6 +103,18 @@ describe('projection-window (#129)', () => {
     expect('center' in (options ?? {})).toBe(false)
   })
 
+  // #135 follow-up (venue lag report): the venue copy renders
+  // full-rate while UNFOCUSED — WebKit's inactive-window throttling
+  // (rAF withheld) made it crawl whenever the conductor held the main
+  // window. Pinned as a creation option so it can never silently
+  // regress to the system default.
+  it('creates the venue webview with background throttling disabled', async () => {
+    await openProjectionWindow()
+
+    const [, options] = vi.mocked(WebviewWindow).mock.calls[0] ?? []
+    expect(options).toMatchObject({ backgroundThrottling: 'disabled' })
+  })
+
   it('still opens (system-centered) when the monitor query fails', async () => {
     vi.mocked(currentMonitor).mockResolvedValue(null)
 

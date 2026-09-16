@@ -694,6 +694,21 @@ describe('ProjectionApp (#135 §14 zoom ownership)', () => {
     vi.useRealTimers()
   })
 
+  it('hands the monitor iframe DOM focus on load — the venue page keys arm without a click', async () => {
+    await renderOnMonitor()
+    const iframe = monitorIframe()
+    expect(document.activeElement).not.toBe(iframe)
+
+    // Keyboard events dispatch to the DOM-focused FRAME; the venue
+    // page (and its ⌘± zoom listeners) lives in this cross-origin
+    // iframe. Before the fix only a click into the content focused
+    // it — the load handler now hands it over (#135 follow-up).
+    act(() => {
+      fireEvent.load(iframe)
+    })
+    expect(document.activeElement).toBe(iframe)
+  })
+
   it('yields on the declaration — actions inert, stage at 100%, nothing reported', async () => {
     await renderOnMonitor(130)
     expect(monitorScale()).toBe('scale(1.3)')
