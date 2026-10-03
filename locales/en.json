@@ -218,6 +218,7 @@
   "sidebar.entryStatus.preparing": "Entry preparing…",
   "sidebar.entryStatus.ready": "Entry ready",
   "sidebar.entryStatus.error": "Entry fault",
+  "sidebar.entryRecovery": "Recovery: stop and restart this performance (local audio is unaffected; domain, port or certificate changes made while playing apply at the next start).",
   "sidebar.entryCompat": "Trusted HTTPS is on, but this project has not declared adaptation to the full entry URL — its runs use the legacy HTTP entry, and phones may lose secure-context sensors.",
   "httpsCompat.title": "Start with the legacy HTTP entry?",
   "httpsCompat.message": "This project does not declare scoreServer.supportsPerformerUrl. The trusted-HTTPS entry will not apply to it; this performance would run over plain HTTP — phones get no secure context, so motion / camera / microphone capabilities may be unavailable.",

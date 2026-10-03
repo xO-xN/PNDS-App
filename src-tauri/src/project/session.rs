@@ -360,12 +360,14 @@ pub fn performer_entry_url(domain: &str, port: u16) -> String {
     format!("https://{domain}:{port}/")
 }
 
-/// #140: the bound entry between `start_gateway` and the state
-/// publication — the handle plus the facts the supervisor probe needs.
+/// #140/#141: the entry facts `start_generation` still needs after the
+/// gateway handle is installed — the handle itself goes into the session
+/// the moment it binds (see `start_generation`), so no failure window can
+/// ever hold a bound listener outside `teardown_children`'s reach.
 struct LiveEntry {
-    handle: crate::gateway::GatewayHandle,
     url: String,
     domain: String,
+    probe_addr: std::net::SocketAddr,
 }
 
 /// #140: everything a start needs to open the entry gateway — URL,
@@ -950,16 +952,31 @@ impl SessionManager {
             )
             .map_err(|e| format!("The HTTPS entry could not start: {e}"))?;
             let upstream_port = manifest.score_server.performer_port;
+            let probe_addr = handle.local_addr();
             log::info!(
-                "HTTPS entry bound: {} on {} → 127.0.0.1:{upstream_port}",
+                "HTTPS entry bound: {} on {probe_addr} → 127.0.0.1:{upstream_port}",
                 launch.url,
-                handle.local_addr()
             );
             request.performer_url = Some(launch.url.clone());
+            // #141: the handle is installed the moment it binds. Every
+            // synchronous failure below (internal-mode audio resolution,
+            // spawn) funnels through `fail_start` → `teardown_children`,
+            // which closes the listener — a handle parked in a local
+            // until the publication point would leak the bound port past
+            // the failure and block the Retry with its own corpse.
+            {
+                let mut inner = self.lock();
+                inner.gateway = Some(handle);
+                inner.https_entry = HttpsEntryState {
+                    status: HttpsEntryStatus::Preparing,
+                    url: Some(launch.url.clone()),
+                    error: None,
+                };
+            }
             live_entry = Some(LiveEntry {
-                handle,
                 url: launch.url,
                 domain: launch.domain,
+                probe_addr,
             });
         }
 
@@ -1082,33 +1099,26 @@ impl SessionManager {
             // their output readers key off this to persist.
             inner.logger_generation = Some(generation);
         }
-        // #140: publish the entry state (URL fixed, probing) and hand the
-        // gateway to the session — every path from here runs through
-        // `teardown_children`, which closes it.
+        // #140: publish the entry state (URL fixed, probing) and start the
+        // probe/mapping supervision — every path from here runs through
+        // `teardown_children`, which closes the gateway. (#141: the handle
+        // itself already sits in `inner.gateway` since the bind; this block
+        // only starts the supervisors and publishes.)
         if let Some(live) = live_entry {
-            let probe_addr = live.handle.local_addr();
             let url = live.url;
             let upstream_port = manifest.score_server.performer_port;
             Self::write_session_log_line(
                 &self.inner,
                 Some(generation),
                 &format!(
-                    "HTTPS entry: {url} on {probe_addr} → 127.0.0.1:{upstream_port} (probing)"
+                    "HTTPS entry: {url} on {} → 127.0.0.1:{upstream_port} (probing)",
+                    live.probe_addr
                 ),
             );
-            {
-                let mut inner = self.lock();
-                inner.gateway = Some(live.handle);
-                inner.https_entry = HttpsEntryState {
-                    status: HttpsEntryStatus::Preparing,
-                    url: Some(url),
-                    error: None,
-                };
-            }
             self.spawn_entry_supervisor(
                 app.clone(),
                 generation,
-                probe_addr,
+                live.probe_addr,
                 live.domain.clone(),
                 crate::gateway::public_root_store().clone(),
             );
@@ -1547,6 +1557,14 @@ impl SessionManager {
         message: String,
     ) {
         log::warn!("HTTPS entry failure (generation {generation}): {message}");
+        // #141: the fault lands in the session log too — the operator's
+        // post-mortem (why did the phones lose the entry mid-show) must not
+        // depend on the App log. Generation-gated like every other line.
+        Self::write_session_log_line(
+            inner,
+            Some(generation),
+            &format!("HTTPS entry failure: {message}"),
+        );
         Self::mark_entry_state(app, inner, generation, |entry| {
             if matches!(
                 entry.status,
@@ -3662,6 +3680,8 @@ mod tests {
 
     #[test]
     fn env_carries_performer_url_only_when_the_entry_is_active() {
+        // The entry rides every audio mode identically (#141: the mode
+        // choice never gates the entry); `None` is the bare shape.
         let mut request = StartRequest::new(
             "/p".to_string(),
             AudioMode::None,
@@ -3672,18 +3692,51 @@ mod tests {
         assert!(!env.iter().any(|(k, _)| k == "PNDS_PERFORMER_URL"));
 
         request.performer_url = Some("https://show.example.org:8443/".to_string());
-        let env = build_score_server_env(&request);
-        let get = |k: &str| {
-            env.iter()
-                .find(|(key, _)| key == k)
-                .map(|(_, v)| v.as_str())
+        let get = |request: &StartRequest| {
+            build_score_server_env(request)
+                .into_iter()
+                .find(|(key, _)| key == "PNDS_PERFORMER_URL")
+                .map(|(_, v)| v)
         };
         assert_eq!(
-            get("PNDS_PERFORMER_URL"),
-            Some("https://show.example.org:8443/")
+            get(&request),
+            Some("https://show.example.org:8443/".to_string())
         );
         // §3: the host variables are untouched by the entry.
-        assert_eq!(get("PNDS_HOST_IP"), Some("192.168.1.10"));
+        assert_eq!(
+            build_score_server_env(&request)
+                .iter()
+                .find(|(key, _)| key == "PNDS_HOST_IP")
+                .map(|(_, v)| v.as_str()),
+            Some("192.168.1.10")
+        );
+
+        let mut internal = StartRequest::new(
+            "/p".to_string(),
+            AudioMode::Internal,
+            "192.168.1.10".to_string(),
+            None,
+        );
+        internal.resolved_osc_target = Some("127.0.0.1:49328".to_string());
+        internal.channel_plan = Some(crate::project::audio::channel_plan(2, 2));
+        internal.performer_url = Some("https://show.example.org:8443/".to_string());
+        assert_eq!(
+            get(&internal),
+            Some("https://show.example.org:8443/".to_string())
+        );
+
+        let mut external = StartRequest::new(
+            "/p".to_string(),
+            AudioMode::External,
+            "192.168.1.10".to_string(),
+            Some("127.0.0.1:3333".to_string()),
+        );
+        external.resolved_osc_target = Some("127.0.0.1:3333".to_string());
+        external.performer_url = Some("https://show.example.org:8443/".to_string());
+        assert_eq!(
+            get(&external),
+            Some("https://show.example.org:8443/".to_string())
+        );
     }
 
     #[test]
@@ -3888,8 +3941,11 @@ mod tests {
 
     /// The launch-shaped gateway the lifecycle tests install into a
     /// session: real listener, real TLS, test CA (trusted only by the
-    /// probe's injected root store).
-    fn launch_test_gateway(
+    /// probe's injected root store). #141: `bind_port` 0 asks the OS for
+    /// an ephemeral port; the restart/isolation tests pass a FIXED port
+    /// so two sequential runs share one origin, exactly like a Retry.
+    fn launch_test_gateway_on(
+        bind_port: u16,
         upstream_port: u16,
     ) -> (crate::gateway::GatewayHandle, rustls::RootCertStore) {
         let ca_key = rcgen::KeyPair::generate().unwrap();
@@ -3910,7 +3966,7 @@ mod tests {
         roots.add(ca.der().clone()).unwrap();
         let handle = crate::gateway::start_gateway(
             crate::gateway::GatewayConfig {
-                bind_addr: "127.0.0.1:0".parse().unwrap(),
+                bind_addr: format!("127.0.0.1:{bind_port}").parse().unwrap(),
                 upstream: format!("127.0.0.1:{upstream_port}").parse().unwrap(),
                 chain: vec![leaf.der().clone()],
                 key: webpki::types::PrivateKeyDer::Pkcs8(leaf_key.serialize_der().into()),
@@ -3920,6 +3976,12 @@ mod tests {
         )
         .unwrap();
         (handle, roots)
+    }
+
+    fn launch_test_gateway(
+        upstream_port: u16,
+    ) -> (crate::gateway::GatewayHandle, rustls::RootCertStore) {
+        launch_test_gateway_on(0, upstream_port)
     }
 
     #[test]
@@ -4179,5 +4241,429 @@ mod tests {
             manager.snapshot().https_entry.error.as_deref(),
             Some("The HTTPS entry did not become reachable")
         );
+    }
+
+    // ------------------------------------------------------------------
+    // #141: failure recovery & project-switch isolation
+    // ------------------------------------------------------------------
+
+    /// A /__pnds/health responder that COUNTS the requests it served —
+    /// the isolation tests read the counter to prove which upstream a
+    /// connection actually reached (and that a torn-down one received
+    /// nothing after its performance ended).
+    fn spawn_counting_health_responder(
+        project_id: &'static str,
+    ) -> (u16, Arc<std::sync::atomic::AtomicUsize>) {
+        let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let counter = Arc::clone(&count);
+        std::thread::spawn(move || {
+            let body = format!(r#"{{"status":"ready","projectId":"{project_id}"}}"#);
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\nContent-Length: {}\r\n\r\n{body}",
+                body.len()
+            );
+            for conn in listener.incoming() {
+                let Ok(mut stream) = conn else { break };
+                let mut buf = [0u8; 512];
+                let _ = std::io::Read::read(&mut stream, &mut buf);
+                counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                let _ = std::io::Write::write_all(&mut stream, response.as_bytes());
+            }
+        });
+        (port, count)
+    }
+
+    /// Installs one performance's worth of entry state the way
+    /// `start_generation` leaves it after the bind: the gateway held by
+    /// the session, the entry `preparing` with its fixed URL, the session
+    /// `ready` so the probe supervisor starts immediately.
+    fn install_entry_run(
+        manager: &SessionManager,
+        gateway: crate::gateway::GatewayHandle,
+        url: &str,
+    ) -> (u64, std::net::SocketAddr) {
+        let probe_addr = gateway.local_addr();
+        let mut inner = manager.lock();
+        inner.generation += 1;
+        inner.status = SessionStatus::Ready;
+        inner.gateway = Some(gateway);
+        inner.https_entry = HttpsEntryState {
+            status: HttpsEntryStatus::Preparing,
+            url: Some(url.to_string()),
+            error: None,
+        };
+        (inner.generation, probe_addr)
+    }
+
+    fn wait_entry_ready(manager: &SessionManager) {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            let status = manager.lock().https_entry.status;
+            if status == HttpsEntryStatus::Ready {
+                return;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "entry never became ready (status: {status:?})"
+            );
+            std::thread::sleep(Duration::from_millis(100));
+        }
+    }
+
+    /// Waits until TCP connects to `addr` are refused — the listener (and
+    /// every active connection) is really gone.
+    fn wait_port_refused(addr: std::net::SocketAddr) {
+        let mut refused = false;
+        for _ in 0..30 {
+            if std::net::TcpStream::connect_timeout(&addr, Duration::from_millis(200)).is_err() {
+                refused = true;
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        assert!(refused, "the entry port must be released ({addr})");
+    }
+
+    /// #141 AC2/AC5: a runtime entry fault is reported on the entry (the
+    /// session and its origin live on), and recovery is the operator's
+    /// EXPLICIT restart — stop releases the port, the next start rebinds
+    /// the SAME origin and re-probes to ready. No hot recovery, no HTTP
+    /// fallback anywhere in the loop.
+    #[test]
+    fn entry_fault_recovery_is_an_explicit_restart_on_a_stable_origin() {
+        let app = tauri::test::mock_app().handle().clone();
+        crate::events::events_builder().mount_events(&app);
+        let manager = SessionManager::default();
+
+        let (upstream_port, _count) = spawn_counting_health_responder("fixture");
+        let port = {
+            let l = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+            let p = l.local_addr().unwrap().port();
+            drop(l);
+            p
+        };
+        let url = format!("https://entry.test:{port}/");
+
+        // Run 1: the entry binds, probes and reaches ready.
+        let (gateway, roots) = launch_test_gateway_on(port, upstream_port);
+        let (generation, probe_addr) = install_entry_run(&manager, gateway, &url);
+        manager.spawn_entry_supervisor(
+            app.clone(),
+            generation,
+            probe_addr,
+            "entry.test".to_string(),
+            roots.clone(),
+        );
+        wait_entry_ready(&manager);
+
+        // A runtime fault (e.g. the interface vanished): entry error, the
+        // session keeps running, the origin (URL) survives the fault.
+        let inner = Arc::clone(&manager.inner);
+        SessionManager::mark_entry_failure(
+            &app,
+            &inner,
+            generation,
+            "HTTPS entry stopped accepting connections".to_string(),
+        );
+        let snapshot = manager.snapshot();
+        assert_eq!(snapshot.status, SessionStatus::Ready);
+        assert_eq!(snapshot.https_entry.status, HttpsEntryStatus::Error);
+        assert_eq!(snapshot.https_entry.url.as_deref(), Some(url.as_str()));
+
+        // The explicit restart: stop tears the entry down and releases
+        // the port — the Retry's precondition.
+        manager.stop(&app).unwrap();
+        assert_eq!(manager.snapshot().status, SessionStatus::Idle);
+        assert_eq!(manager.snapshot().https_entry.status, HttpsEntryStatus::Off);
+        wait_port_refused(probe_addr);
+
+        // Run 2: the same port, the same URL — one stable origin across
+        // the restart (§15: a Retry is not an origin change; claim tokens
+        // keep their recovery semantics) — and the probe reaches ready
+        // again through the fresh listener.
+        let (gateway, roots) = launch_test_gateway_on(port, upstream_port);
+        let (generation, probe_addr) = install_entry_run(&manager, gateway, &url);
+        manager.spawn_entry_supervisor(
+            app.clone(),
+            generation,
+            probe_addr,
+            "entry.test".to_string(),
+            roots,
+        );
+        wait_entry_ready(&manager);
+        let snapshot = manager.snapshot();
+        assert_eq!(snapshot.https_entry.url.as_deref(), Some(url.as_str()));
+
+        manager.stop(&app).unwrap();
+        wait_port_refused(probe_addr);
+    }
+
+    /// #141 AC1: a start that fails AFTER the gateway binds must leave no
+    /// listener behind — the handle sits in the session from the bind on,
+    /// so `fail_generation`'s teardown closes it and the very next Retry
+    /// is not blocked by its own corpse.
+    #[test]
+    fn failed_start_after_bind_releases_the_listener() {
+        let app = tauri::test::mock_app().handle().clone();
+        crate::events::events_builder().mount_events(&app);
+        let manager = SessionManager::default();
+        let (upstream_port, _count) = spawn_counting_health_responder("fixture");
+
+        let (gateway, _roots) = launch_test_gateway(upstream_port);
+        let probe_addr = gateway.local_addr();
+        let (generation, inner) = {
+            let mut guard = manager.lock();
+            guard.generation += 1;
+            guard.status = SessionStatus::Starting;
+            guard.gateway = Some(gateway);
+            guard.https_entry = HttpsEntryState {
+                status: HttpsEntryStatus::Preparing,
+                url: Some("https://entry.test:8443/".to_string()),
+                error: None,
+            };
+            (guard.generation, Arc::clone(&manager.inner))
+        };
+
+        // The failure the window can produce (internal-mode audio
+        // resolution, a spawn error): cleanup first, error snapshot
+        // second — and the listener is closed by that same teardown.
+        SessionManager::fail_generation(
+            &app,
+            &inner,
+            generation,
+            "Audio device resolution failed".to_string(),
+        );
+        let snapshot = manager.snapshot();
+        assert_eq!(snapshot.status, SessionStatus::Error);
+        assert_eq!(snapshot.https_entry.status, HttpsEntryStatus::Off);
+        assert!(snapshot.https_entry.url.is_none());
+        wait_port_refused(probe_addr);
+    }
+
+    /// #141 AC4/AC6: replacing the performance closes the old entry (and
+    /// its upstream) before the new one opens — an old QR's gateway no
+    /// longer exists, nothing routes into the replaced project, and the
+    /// new run probes ready on the same origin while late reports from
+    /// the old generation change nothing.
+    #[test]
+    fn replacement_isolates_the_old_entry_and_its_upstream() {
+        use std::sync::atomic::Ordering;
+        let app = tauri::test::mock_app().handle().clone();
+        crate::events::events_builder().mount_events(&app);
+        let manager = SessionManager::default();
+
+        let (upstream_a, count_a) = spawn_counting_health_responder("work-a");
+        let (upstream_b, count_b) = spawn_counting_health_responder("work-b");
+        let port = {
+            let l = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+            let p = l.local_addr().unwrap().port();
+            drop(l);
+            p
+        };
+        let url = format!("https://entry.test:{port}/");
+
+        // Performance A reaches entry ready through ITS gateway/upstream.
+        let (gateway_a, roots_a) = launch_test_gateway_on(port, upstream_a);
+        let (generation_a, probe_addr) = install_entry_run(&manager, gateway_a, &url);
+        manager.spawn_entry_supervisor(
+            app.clone(),
+            generation_a,
+            probe_addr,
+            "entry.test".to_string(),
+            roots_a,
+        );
+        wait_entry_ready(&manager);
+        let a_served = count_a.load(Ordering::SeqCst);
+        assert!(a_served > 0, "the probe reached upstream A");
+
+        // The replace: the old performance ends FIRST — its listener and
+        // active connections are gone before anything new opens.
+        manager.stop(&app).unwrap();
+        wait_port_refused(probe_addr);
+
+        // Performance B opens its own entry on the same origin, routed at
+        // ITS upstream — and upstream A never hears from the new run.
+        let (gateway_b, roots_b) = launch_test_gateway_on(port, upstream_b);
+        let (generation_b, probe_addr) = install_entry_run(&manager, gateway_b, &url);
+        manager.spawn_entry_supervisor(
+            app.clone(),
+            generation_b,
+            probe_addr,
+            "entry.test".to_string(),
+            roots_b,
+        );
+        wait_entry_ready(&manager);
+        assert!(
+            count_b.load(Ordering::SeqCst) > 0,
+            "the new run's probe reached upstream B"
+        );
+        assert_eq!(
+            count_a.load(Ordering::SeqCst),
+            a_served,
+            "the replaced project's upstream must not receive the new run's traffic"
+        );
+
+        // Late async results from generation A cannot touch B's run.
+        let inner = Arc::clone(&manager.inner);
+        SessionManager::mark_entry_failure(&app, &inner, generation_a, "late".to_string());
+        let snapshot = manager.snapshot();
+        assert_eq!(snapshot.https_entry.status, HttpsEntryStatus::Ready);
+        assert_eq!(snapshot.https_entry.url.as_deref(), Some(url.as_str()));
+
+        manager.stop(&app).unwrap();
+        wait_port_refused(probe_addr);
+    }
+
+    /// #141 AC4: a probe thread whose run was replaced mid-flight exits on
+    /// the generation check — its late success can never publish readiness
+    /// for the new performance or overwrite the new origin.
+    #[test]
+    fn superseded_probe_cannot_flip_the_new_runs_entry() {
+        let app = tauri::test::mock_app().handle().clone();
+        crate::events::events_builder().mount_events(&app);
+        let manager = SessionManager::default();
+        let (upstream_port, _count) = spawn_counting_health_responder("fixture");
+
+        // Generation N's supervisor starts against a HEALTHY gateway…
+        let (gateway, roots) = launch_test_gateway(upstream_port);
+        let (generation, probe_addr) =
+            install_entry_run(&manager, gateway, "https://entry.test:8443/");
+        manager.spawn_entry_supervisor(
+            app.clone(),
+            generation,
+            probe_addr,
+            "entry.test".to_string(),
+            roots,
+        );
+
+        // …but the run is replaced before its probe lands: a NEW
+        // generation with a fresh preparing entry on the next origin.
+        let next_url = "https://next.test:9443/".to_string();
+        {
+            let mut inner = manager.lock();
+            inner.generation += 1;
+            inner.https_entry = HttpsEntryState {
+                status: HttpsEntryStatus::Preparing,
+                url: Some(next_url.clone()),
+                error: None,
+            };
+        }
+
+        // Past a probe interval (500 ms) the old thread has had every
+        // chance to publish — it must have exited on the generation check.
+        std::thread::sleep(Duration::from_millis(1500));
+        let snapshot = manager.snapshot();
+        assert_eq!(
+            snapshot.https_entry.status,
+            HttpsEntryStatus::Preparing,
+            "the replaced run's probe must not publish readiness"
+        );
+        assert_eq!(
+            snapshot.https_entry.url.as_deref(),
+            Some(next_url.as_str()),
+            "the new run's origin must be untouched"
+        );
+
+        manager.stop(&app).unwrap();
+    }
+
+    /// #141 AC4: a stale lease report cannot flip a NEWER run's live
+    /// mapping — the DNS mapping never crosses generations on the App
+    /// side (the daemon's holder rules are the wire-side twin).
+    #[test]
+    fn late_dns_failure_cannot_touch_a_newer_mapping() {
+        let app = tauri::test::mock_app().handle().clone();
+        crate::events::events_builder().mount_events(&app);
+        let manager = SessionManager::default();
+        let (stale_generation, inner) = {
+            let mut guard = manager.lock();
+            guard.generation += 1;
+            guard.dns_mapping = DnsMappingState {
+                status: DnsMappingStatus::Ready,
+                domain: Some("show.example.org".to_string()),
+                ip: Some("192.168.11.31".to_string()),
+                error: None,
+            };
+            (guard.generation, Arc::clone(&manager.inner))
+        };
+        // The performance is replaced; the new run installs its own
+        // mapping (a different address, a fresh generation).
+        {
+            let mut guard = manager.lock();
+            guard.generation += 1;
+            guard.dns_mapping = DnsMappingState {
+                status: DnsMappingStatus::Ready,
+                domain: Some("show.example.org".to_string()),
+                ip: Some("192.168.11.99".to_string()),
+                error: None,
+            };
+        }
+        SessionManager::mark_dns_mapping_failure(
+            &app,
+            &inner,
+            stale_generation,
+            "stale lease report".to_string(),
+        );
+        let snapshot = manager.snapshot();
+        assert_eq!(snapshot.dns_mapping.status, DnsMappingStatus::Ready);
+        assert_eq!(snapshot.dns_mapping.ip.as_deref(), Some("192.168.11.99"));
+        assert!(snapshot.dns_mapping.error.is_none());
+    }
+
+    /// #141 AC6: the entry is a LOCAL fact — hub configuration (and by
+    /// extension a hub outage) plays no part in its launch resolution or
+    /// its env injection; the four hub variables and the performer URL
+    /// ride the same env without interacting.
+    #[test]
+    fn entry_launch_and_env_are_independent_of_hub_config() {
+        let dir = tempfile::tempdir().unwrap();
+        let test_anchors = import_entry_material(dir.path(), "show.example.org");
+        let declared = entry_manifest(true);
+        let now = std::time::SystemTime::now();
+
+        let mut hubbed = entry_prefs(Some(true), Some("show.example.org"), Some(8443));
+        hubbed.node_name = Some("violin-1".to_string());
+        hubbed.hub_url = Some("https://hub.example.org".to_string());
+        hubbed.hub_token = Some("secret".to_string());
+        let plain = entry_prefs(Some(true), Some("show.example.org"), Some(8443));
+
+        let without_hub = resolve_entry_launch(dir.path(), &plain, &declared, &test_anchors, now)
+            .unwrap()
+            .expect("launches without hub config");
+        let with_hub = resolve_entry_launch(dir.path(), &hubbed, &declared, &test_anchors, now)
+            .unwrap()
+            .expect("launches with hub config");
+        assert_eq!(without_hub.url, with_hub.url);
+        assert_eq!(without_hub.domain, with_hub.domain);
+        assert_eq!(without_hub.port, with_hub.port);
+
+        // And the env carries both variable families side by side.
+        let mut request = StartRequest::new(
+            "/p".to_string(),
+            AudioMode::None,
+            "192.168.1.10".to_string(),
+            None,
+        );
+        request.hub = Some(HubInjection {
+            node_id: "violin-1".to_string(),
+            url: "https://hub.example.org".to_string(),
+            token: "secret".to_string(),
+            room: "work_1".to_string(),
+        });
+        request.performer_url = Some("https://show.example.org:8443/".to_string());
+        let env = build_score_server_env(&request);
+        let keys: Vec<&str> = env.iter().map(|(k, _)| k.as_str()).collect();
+        for expected in [
+            "PNDS_HOST_IP",
+            "PNDS_NODE_ID",
+            "PNDS_HUB_URL",
+            "PNDS_HUB_TOKEN",
+            "PNDS_HUB_ROOM",
+            "PNDS_PERFORMER_URL",
+        ] {
+            assert!(keys.contains(&expected), "env misses {expected}: {keys:?}");
+        }
     }
 }

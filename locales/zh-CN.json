@@ -217,6 +217,7 @@
   "sidebar.entryStatus.preparing": "入口准备中…",
   "sidebar.entryStatus.ready": "入口就绪",
   "sidebar.entryStatus.error": "入口故障",
+  "sidebar.entryRecovery": "恢复方式：停止并重新启动本演出（本地音频不受影响；演奏中改动的域名 / 端口 / 证书在下次启动时生效）。",
   "sidebar.entryCompat": "可信 HTTPS 已开启，但此工程未声明适配完整入口 URL——本次启动使用原 HTTP 入口，手机可能无法使用需要安全上下文的传感器。",
   "httpsCompat.title": "使用原 HTTP 入口启动？",
   "httpsCompat.message": "此工程未声明 scoreServer.supportsPerformerUrl。可信 HTTPS 入口不会对它生效，本次演出将使用原 HTTP 入口——手机浏览器没有安全上下文，运动 / 摄像头 / 麦克风等能力可能不可用。",

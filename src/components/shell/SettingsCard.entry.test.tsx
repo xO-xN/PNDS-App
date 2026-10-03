@@ -114,6 +114,44 @@ describe('SettingsCard HTTPS entry surfaces (#140)', () => {
     )
   })
 
+  /** #141: the fault is actionable — the recovery instruction names the
+   * operator's move (an explicit restart of this performance), and the
+   * URL stays the entry's origin (no HTTP swap anywhere). */
+  it('an entry fault carries the explicit-restart recovery instruction', () => {
+    seedRunning(declaredManifest)
+    useSessionStore.setState({
+      httpsEntry: {
+        status: 'error',
+        url: 'https://show.example.org:8443/',
+        error: 'The HTTPS entry did not become reachable',
+      },
+    })
+    render(<SettingsCard />)
+
+    expect(screen.getByTestId('session-entry-recovery')).toHaveTextContent(
+      /restart this performance/i
+    )
+    // The origin survives the fault — the row still shows the entry URL.
+    const row = screen.getByTestId('session-entry-row')
+    expect(row).toHaveTextContent('show.example.org:8443/')
+  })
+
+  it('no recovery instruction without a fault (ready entries stay quiet)', () => {
+    seedRunning(declaredManifest)
+    useSessionStore.setState({
+      httpsEntry: {
+        status: 'ready',
+        url: 'https://show.example.org:8443/',
+        error: null,
+      },
+    })
+    render(<SettingsCard />)
+
+    expect(
+      screen.queryByTestId('session-entry-recovery')
+    ).not.toBeInTheDocument()
+  })
+
   it('hides the entry row while another card is selected over the live session', () => {
     seedRunning(declaredManifest)
     useSessionStore.setState({

@@ -352,13 +352,25 @@ export function SettingsCard({ onPopupOpenChange }: SettingsCardProps) {
           )}
         </div>
       )}
+      {/* #141: the fault carries its recovery instruction — an explicit
+          restart of THIS performance. Never a hot recovery, never a
+          silent HTTP-QR fallback; the URL above stays the entry's
+          origin through the fault. */}
       {httpsEntry.status === 'error' && entryRowVisible && httpsEntry.error && (
-        <p
-          className="text-(--pnds-danger) ps-14 text-[11px] leading-snug"
-          data-testid="session-entry-error"
-        >
-          {httpsEntry.error}
-        </p>
+        <>
+          <p
+            className="text-(--pnds-danger) ps-14 text-[11px] leading-snug"
+            data-testid="session-entry-error"
+          >
+            {httpsEntry.error}
+          </p>
+          <p
+            className="text-(--pnds-text)/60 ps-14 text-[11px] leading-snug"
+            data-testid="session-entry-recovery"
+          >
+            {t('sidebar.entryRecovery')}
+          </p>
+        </>
       )}
 
       {/* OSC target (§6.6) — a sub-setting of external mode, so it follows

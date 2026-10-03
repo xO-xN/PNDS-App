@@ -671,14 +671,14 @@ mod tests {
         )
     }
 
-    /// A synchronous TLS client speaking to the gateway: writes the
-    /// raw request, reads everything to EOF (Connection: close).
-    fn tls_round_trip(
+    /// A connected, timeout-configured synchronous TLS client trusting
+    /// only `roots` — the shared first half of every hand-rolled test
+    /// client (round trips, WebSocket holders, upgrade flows).
+    fn tls_client(
         addr: SocketAddr,
         server_name: &str,
         roots: &rustls::RootCertStore,
-        request: &str,
-    ) -> String {
+    ) -> rustls::StreamOwned<rustls::ClientConnection, TcpStream> {
         let provider = Arc::new(rustls::crypto::ring::default_provider());
         let config = rustls::ClientConfig::builder_with_provider(provider)
             .with_safe_default_protocol_versions()
@@ -688,10 +688,34 @@ mod tests {
         let name = rustls::pki_types::ServerName::try_from(server_name.to_string()).unwrap();
         let stream = TcpStream::connect(addr).expect("gateway reachable");
         stream.set_read_timeout(Some(PROBE_TIMEOUT)).unwrap();
-        let mut tls = rustls::StreamOwned::new(
+        rustls::StreamOwned::new(
             rustls::ClientConnection::new(Arc::new(config), name).unwrap(),
             stream,
-        );
+        )
+    }
+
+    /// Reads one HTTP response's headers (through the terminating blank
+    /// line) byte by byte — the 101 handshake read every WebSocket test
+    /// performs before the tunnel turns opaque.
+    fn read_headers<IO: std::io::Read>(io: &mut IO) -> String {
+        let mut header_buf = Vec::new();
+        let mut byte = [0u8; 1];
+        while !header_buf.ends_with(b"\r\n\r\n") {
+            io.read_exact(&mut byte).expect("response header byte");
+            header_buf.push(byte[0]);
+        }
+        String::from_utf8_lossy(&header_buf).into_owned()
+    }
+
+    /// A synchronous TLS client speaking to the gateway: writes the
+    /// raw request, reads everything to EOF (Connection: close).
+    fn tls_round_trip(
+        addr: SocketAddr,
+        server_name: &str,
+        roots: &rustls::RootCertStore,
+        request: &str,
+    ) -> String {
+        let mut tls = tls_client(addr, server_name, roots);
         tls.write_all(request.as_bytes()).expect("request sent");
         let mut response = String::new();
         tls.read_to_string(&mut response).expect("response read");
@@ -751,20 +775,7 @@ mod tests {
         let upstream = spawn_upstream();
         let (gateway, roots) = test_gateway(upstream, MAX_CONNECTIONS);
         let addr = gateway.local_addr();
-
-        let provider = Arc::new(rustls::crypto::ring::default_provider());
-        let config = rustls::ClientConfig::builder_with_provider(provider)
-            .with_safe_default_protocol_versions()
-            .unwrap()
-            .with_root_certificates(roots)
-            .with_no_client_auth();
-        let name = rustls::pki_types::ServerName::try_from(TEST_DOMAIN.to_string()).unwrap();
-        let stream = TcpStream::connect(addr).expect("gateway reachable");
-        stream.set_read_timeout(Some(PROBE_TIMEOUT)).unwrap();
-        let mut tls = rustls::StreamOwned::new(
-            rustls::ClientConnection::new(Arc::new(config), name).unwrap(),
-            stream,
-        );
+        let mut tls = tls_client(addr, TEST_DOMAIN, &roots);
 
         let handshake = format!(
             "GET /socket.io/?EIO=4&transport=websocket HTTP/1.1\r\nHost: {TEST_DOMAIN}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n"
@@ -772,13 +783,7 @@ mod tests {
         tls.write_all(handshake.as_bytes()).expect("handshake sent");
 
         // Read the 101 + headers.
-        let mut header_buf = Vec::new();
-        let mut byte = [0u8; 1];
-        while !header_buf.ends_with(b"\r\n\r\n") {
-            tls.read_exact(&mut byte).expect("101 header byte");
-            header_buf.push(byte[0]);
-        }
-        let headers = String::from_utf8_lossy(&header_buf);
+        let headers = read_headers(&mut tls);
         assert!(headers.starts_with("HTTP/1.1 101"), "got: {headers}");
         assert!(headers.to_lowercase().contains("upgrade: websocket"));
 
@@ -802,29 +807,13 @@ mod tests {
         let holder_roots = roots.clone();
         let (ws_ready_tx, ws_ready_rx) = std::sync::mpsc::channel::<()>();
         let open_ws = std::thread::spawn(move || {
-            let provider = Arc::new(rustls::crypto::ring::default_provider());
-            let config = rustls::ClientConfig::builder_with_provider(provider)
-                .with_safe_default_protocol_versions()
-                .unwrap()
-                .with_root_certificates(holder_roots)
-                .with_no_client_auth();
-            let name = rustls::pki_types::ServerName::try_from(TEST_DOMAIN.to_string()).unwrap();
-            let stream = TcpStream::connect(addr).expect("ws client connects");
-            stream.set_read_timeout(Some(PROBE_TIMEOUT)).unwrap();
-            let mut tls = rustls::StreamOwned::new(
-                rustls::ClientConnection::new(Arc::new(config), name).unwrap(),
-                stream,
-            );
+            let mut tls = tls_client(addr, TEST_DOMAIN, &holder_roots);
             let handshake = format!(
                 "GET /socket.io/ HTTP/1.1\r\nHost: {TEST_DOMAIN}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n"
             );
-            tls.write_all(handshake.as_bytes()).unwrap();
-            let mut header_buf = Vec::new();
-            let mut byte = [0u8; 1];
-            while !header_buf.ends_with(b"\r\n\r\n") {
-                tls.read_exact(&mut byte).expect("101 header byte");
-                header_buf.push(byte[0]);
-            }
+            tls.write_all(handshake.as_bytes()).expect("handshake sent");
+            let headers = read_headers(&mut tls);
+            assert!(headers.starts_with("HTTP/1.1 101"), "got: {headers}");
             // The permit is held now — tell the probing side.
             ws_ready_tx.send(()).expect("ws-ready channel open");
             // Hold the upgraded connection open for the probe window.
@@ -869,6 +858,136 @@ mod tests {
         );
         assert!(response.starts_with("HTTP/1.1 503"));
         gateway.shutdown();
+    }
+
+    /// #141: an occupied port is a definite, synchronous start failure —
+    /// the error names the address, nothing is left running, and the port
+    /// is bindable again the moment the occupier leaves (the Retry flow's
+    /// precondition).
+    #[test]
+    fn port_conflict_is_a_definite_start_failure_and_rebinds_once_free() {
+        let upstream = spawn_upstream();
+        let (chain, key, _roots) = test_material();
+        let bind_addr: SocketAddr = "127.0.0.1:0".parse().unwrap();
+        // Probe a free port, then hold it as the foreign occupier.
+        let probe = std::net::TcpListener::bind(bind_addr).unwrap();
+        let occupied = probe.local_addr().unwrap();
+
+        let err = start_gateway(
+            GatewayConfig {
+                bind_addr: occupied,
+                upstream,
+                chain: chain.clone(),
+                key: key.clone_key(),
+                max_connections: MAX_CONNECTIONS,
+            },
+            Arc::new(|_| {}),
+        )
+        .map(|handle| handle.shutdown())
+        .expect_err("the occupied port must fail the start");
+        assert!(
+            err.to_lowercase().contains("listen"),
+            "the error should name the listen failure: {err}"
+        );
+
+        // The occupier leaves; the very same address binds now.
+        drop(probe);
+        let gateway = start_gateway(
+            GatewayConfig {
+                bind_addr: occupied,
+                upstream,
+                chain,
+                key,
+                max_connections: MAX_CONNECTIONS,
+            },
+            Arc::new(|_| {}),
+        )
+        .expect("the freed port binds again");
+        assert_eq!(gateway.local_addr().port(), occupied.port());
+        gateway.shutdown();
+    }
+
+    /// #141: the Socket.IO client shape — one polling round trip, then a
+    /// SEPARATE connection forcing the WebSocket upgrade — survives the
+    /// gateway end to end (the messages and their naming are the
+    /// upstream's; the gateway changes nothing).
+    #[test]
+    fn socketio_polling_then_forced_websocket_flow_survives() {
+        let upstream = spawn_upstream();
+        let (gateway, roots) = test_gateway(upstream, MAX_CONNECTIONS);
+        let addr = gateway.local_addr();
+
+        // Handshake poll: the engine.io polling request.
+        let poll = tls_round_trip(
+            addr,
+            TEST_DOMAIN,
+            &roots,
+            &get_request("/socket.io/?EIO=4&transport=polling", &[]),
+        );
+        assert!(poll.starts_with("HTTP/1.1 200"), "got: {poll}");
+        let facts = json_of(&poll);
+        assert_eq!(facts["uri"], "/socket.io/?EIO=4&transport=polling");
+
+        // The upgrade: a fresh TLS connection forcing the websocket
+        // transport (exactly what the engine.io client does).
+        let mut tls = tls_client(addr, TEST_DOMAIN, &roots);
+        let upgrade = format!(
+            "GET /socket.io/?EIO=4&transport=websocket HTTP/1.1\r\nHost: {TEST_DOMAIN}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n"
+        );
+        tls.write_all(upgrade.as_bytes()).expect("upgrade sent");
+        let headers = read_headers(&mut tls);
+        assert!(headers.starts_with("HTTP/1.1 101"), "got: {headers}");
+        let frame = b"42[\"band\",\"ready\"]";
+        tls.write_all(frame).expect("control frame sent");
+        let mut echoed = vec![0u8; frame.len()];
+        tls.read_exact(&mut echoed).expect("control frame echoed");
+        assert_eq!(&echoed, frame);
+
+        gateway.shutdown();
+    }
+
+    /// #141: Stop closes ACTIVE tunnels, not just the listener — an open
+    /// WebSocket through the entry observes the shutdown as an EOF within
+    /// a bounded window (phones see a clean disconnect, never a wedged
+    /// socket into the next performance's entry).
+    #[test]
+    fn shutdown_closes_active_websocket_tunnels() {
+        let upstream = spawn_upstream();
+        let (gateway, roots) = test_gateway(upstream, MAX_CONNECTIONS);
+        let addr = gateway.local_addr();
+
+        let mut tls = tls_client(addr, TEST_DOMAIN, &roots);
+        let handshake = format!(
+            "GET /socket.io/ HTTP/1.1\r\nHost: {TEST_DOMAIN}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n"
+        );
+        tls.write_all(handshake.as_bytes()).expect("handshake sent");
+        let headers = read_headers(&mut tls);
+        assert!(headers.starts_with("HTTP/1.1 101"), "got: {headers}");
+        // The tunnel is up and echoing.
+        tls.write_all(b"still-here").expect("payload sent");
+        let mut echoed = [0u8; 10];
+        tls.read_exact(&mut echoed).expect("payload echoed");
+        assert_eq!(&echoed, b"still-here");
+
+        gateway.shutdown();
+        // The next read observes the closure — EOF (0 bytes) or a TLS/TCP
+        // error, but never silence past the window.
+        let mut saw_closure = false;
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        let mut buf = [0u8; 8];
+        while std::time::Instant::now() < deadline {
+            match tls.read(&mut buf) {
+                Ok(0) | Err(_) => {
+                    saw_closure = true;
+                    break;
+                }
+                Ok(_n) => continue,
+            }
+        }
+        assert!(
+            saw_closure,
+            "an active tunnel must be closed by shutdown, not left hanging"
+        );
     }
 
     #[test]

@@ -174,6 +174,17 @@ Rust session manager 是运行状态真源。React 不得用本地 reset 伪造�
 - **边界**：网关是传输转发（hyper 1 + rustls，不解析 Socket.IO 协议），monitor / 投影 / 本机 health / hub 路径不经入口；资源有界（连接上限 64、流式 body、固定转发缓冲）；测试中测试 CA 只进测试客户端信任库，绝不改系统信任；
 - 测试锚点：Rust `gateway.rs`（转发保真 / WS 隧道 / 容量 503 / 关停释放 / 探测四态）、`session.rs`（入口解析矩阵 / 真实网关 + 探测发布 ready / fail 返回 off / 运行期故障不断会话 / 旧 generation 不越权）；前端 `session-flow`（兼容门）、`SettingsCard.entry`、`menu` 地址段、`HttpsSection` 开关。
 
+## HTTPS 故障恢复与切换隔离（#141）
+
+#141 收口故障与切换两条线，契约冻结在运行契约 §15「故障、重试与隔离」；操作者侧说明见参考手册 https.md「故障恢复与切换隔离」。
+
+- **移交即持有**（`start_generation`）：网关 handle 在 bind 成功那一刻就装进 `inner.gateway`——此后任何同步失败（internal 模式音频设备解析、spawn）都走既有 fail-start 清理（先 teardown 再发错误快照），**不存在持有 listener 的局部变量窗口**；Retry 不会撞上自己上次的端口残留，也不重复创建入口 / 映射资源；
+- **端口冲突与探测失败**：bind 失败是同步的启动失败（错误点名监听地址，`gateway.rs` 有占用→失败→释放→重绑测试）；探测限期（工程 ready 后 10s）未过 → 入口 error、URL 保留，session 与本地音频不动、二维码不回退 HTTP；入口无热恢复、无自动重试——唯一恢复路径是操作者显式重启，重启沿用同域名同端口（origin 不变，claim token 恢复语义不受影响）；
+- **恢复说明进 UI**：设置卡入口行 error 时，错误文案下方追加 `sidebar.entryRecovery`（zh/en）恢复说明行——「停止并重新启动本演出；本地音频不受影响；演奏中改动下次启动生效」；入口故障同时写入 session log（`mark_entry_failure`，generation 门控）；
+- **切换隔离**：Stop / Restart / 替换 / 确认退出 / 模式切换 / 失败清理 / 退出全部经 `teardown_children`（入口先关、DNS 映射紧跟撤销、普通转发不受影响）；旧 generation 的迟到探测 / 故障 / 租约报告被 generation 检查拒绝；替换工程 = 旧 listener 先关、新 listener 后开（同 origin 下旧 QR 经由的网关已不存在，测试用双计数 upstream 证明流量不串工程）；
+- **hub 与音频独立**：hub 配置不参与 `resolve_entry_launch`，hub 故障不影响本地入口；internal 音频启动失败结束整个演出（入口随清理关闭）——那是演出失败，不是入口故障；入口故障从不反向结束音频；
+- 测试锚点新增：`session.rs`（bind 后失败释放端口 / 显式重启回绑同 origin 再探测 ready / 替换隔离 + 双 upstream 计数 / 被替换探测线程不改新演出 / 迟到租约报告不改新映射 / 入口与 hub 配置无关）、`gateway.rs`（端口占用→释放→重绑 / Socket.IO polling→upgrade 全流程 / 关停关闭活动 WS 隧道）、前端 `SettingsCard.entry`（故障恢复说明行）。
+
 ## 演出 DNS 行为（#174）
 
 设置「演出 DNS」区是后台 LAN DNS 守护进程（dnsd）的操作面：开关即注册/注销 SMAppService LaunchDaemon（首次启用弹系统一次性授权），状态块展示注册状态、控制面在线、监听器（UDP/TCP）、上游与**演出映射**——映射行只在守护进程当前持有时出现，显示域名与 LAN 地址。转发上游为 App 内置默认（公共 DNS，双上游故障切换），无编辑 UI（#174 打磨轮次收掉）；启用与每次 App 启动都会把默认推给守护进程，状态块显示守护进程实际使用的值。停用即注销：守护进程停止、53 端口释放、授权一并撤销；帮助按钮打开参考手册 dns.md（含路由器 DHCP 与恢复步骤）。

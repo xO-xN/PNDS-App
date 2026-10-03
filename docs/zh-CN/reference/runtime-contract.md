@@ -562,6 +562,13 @@ window.parent.postMessage({ type: 'pnds-projection', zoom: 'page' }, '*')
 - claim token 存放在浏览器 localStorage，**按 origin 隔离**：同一 HTTPS origin 的断线重连照常复用 token、恢复原座位——工程既有逻辑零改动；
 - 协议、域名或端口任一变化即不同 origin：App 与工程都**不承诺跨 origin 迁移**旧 token。设备在新 origin 下按新加入处理（拿新 token、新座位）；服务端旧座位记录仍在，操作者可用 monitor 的重配入口清理。普通 HTTP → HTTPS 切换同样改变 origin——入口的准备说明必须把这一点明确告知操作者。
 
+### 故障、重试与隔离（#141 冻结）
+
+- **启动失败即失败**：入口无法绑定（端口被占用，错误点名监听地址）、材料当下校验不过或网关无法创建时，本次 start 失败，不静默退回 HTTP。清理与启动同代：listener 自绑定起即归该 session 所有，其后任何步骤失败都先经同一关停序列清理（listener、活动连接、受管资源、演出 DNS 映射）再发布错误快照——Retry 不继承残留 listener、连接或映射，也不重复创建资源；
+- **运行中故障是入口自己的事实**：listener 失效或探测限期（工程 ready 后 10 秒）未过，只把入口置为 error 并保留 URL；本地音频、工程服务与 hub 注入不受影响，入口的对外地址不回退 HTTP。恢复是操作者显式重启本演出——Host 不实现入口热恢复，也不自动重试探测；
+- **重启保 origin**：普通重启沿用启动时固定的域名与端口，origin 不变，claim token 的既有恢复语义不受影响；运行中改动的域名 / 端口 / 证书只在下次 start 生效；
+- **隔离**：结束演出的一切路径（Stop / Restart / 替换工程 / 确认退出 / 模式切换 / 启动失败清理 / App 退出）都经同一关停序列；旧 generation 的迟到结果（探测成功 / 失败、故障与租约报告）一律被 generation 检查拒绝，不得改变新演出的任何状态——旧 QR 经由的入口已随旧演出关闭，不路由进替换后的工程（§16 的后台普通转发不受演出清理影响）。
+
 ## 16. 演出 DNS 与后台守护进程（#174）
 
 后台 LAN DNS 服务（守护进程 `dnsd`）随 App bundle 分发，经 SMAppService 以 LaunchDaemon 形式由系统管理：操作者在设置里一次性授权后随登录/重启自启，普通域名持续转发到独立上游，**不依赖 App 存活**。演出域名映射由当前 session 以租约持有。本节冻结映射的激活条件、生命周期与两侧义务；操作者流程见 [dns.md](./dns.md)。
