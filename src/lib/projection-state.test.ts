@@ -35,6 +35,7 @@ const snapshot = (
   channelPlan: null,
   outputDevice: 'System default',
   projectionStarted: false,
+  httpsEntry: { status: 'off', url: null, error: null },
   ...overrides,
 })
 
@@ -95,6 +96,7 @@ describe('projectionContent (#130 gate)', () => {
         projectPath: '/Users/test/Other',
         projectName: 'Other Work',
         projectionStarted: false,
+        httpsEntry: { status: 'off', url: null, error: null },
       })
     )
     expect(monitorA.kind).toBe('monitor')
@@ -112,6 +114,7 @@ describe('projectionContent (#130 gate)', () => {
         projectPath: '/Users/test/Other',
         projectName: 'Other Work',
         projectionStarted: false,
+        httpsEntry: { status: 'off', url: null, error: null },
       })
     )
     expect(projectionContentKey(readyB)).toBe(projectionContentKey(introB))

@@ -160,6 +160,18 @@ Rust session manager 是运行状态真源。React 不得用本地 reset 伪造�
 - 任何改动（域名 / 端口 / 材料）都在下次启动工程时生效——栏内 hint 在首次改动后出现，明确进行中演出沿用当前入口与证书；
 - 操作者准备说明（域名 / 公有证书 / 路由器本地 DNS）→ 参考手册 [https.md](../zh-CN/reference/https.md)（帮助中心可搜，设置区有入口按钮）；工程侧契约 → 运行契约 §15。
 
+## 可信 HTTPS 入口行为（#140）
+
+#139 交付准备面之后，#140 交付入口本体：设置「可信 HTTPS」顶部新增**启用开关**（普通偏好，下次启动生效）；入口与 session 生命周期绑定，状态经既有 session snapshot 承载（新增 `httpsEntry`：off / preparing / ready / error + 固定 URL + 错误文案）。
+
+- **激活条件**（后端 `resolve_entry_launch` 是权威）：开关开 × 工程 `scoreServer.supportsPerformerUrl: true` × 域名端口已配置 × 材料按公有信任**当下重校验通过**。任一不满足而非全部满足 → 不开入口（原 HTTP 流程，字节级不变）；「开关开 × 已声明 × 配置不全」→ **启动失败**并给出可行动错误（绝不静默退回 HTTP）；
+- **启动顺序**：端口 preflight 后、子进程 spawn 前绑定 listener（端口冲突 / 材料失败走既有 fail-start 清理）；URL 在此固定并注入 `PNDS_PERFORMER_URL`（§3）；session ready 后独立探测线程经入口做 TLS/HTTP 探测（连绑定地址、SNI=域名、Mozilla 根校验、经隧道要求 health 200），成功才发布 entry ready——**工程 health ready 与入口 ready 是两项事实**；
+- **UI 面**：设置卡（运行卡选中时）「入口」行四态着色 + URL（点击复制）；窗口菜单 Performer 地址项在入口生效时复制入口 URL（Conductor 项保持内部 HTTP origin）；运行期入口故障在入口行报告，**不**结束本地音频 / 服务、**不**自动改发 HTTP 二维码；
+- **兼容确认**（开关开 × 工程未声明）：设置卡醒目提示 + 启动确认对话框（「使用 HTTP 启动」/取消；restart 与切换工程同受此门；取消则不停止任何运行中的会话）；
+- **停止**：teardown 第一步关入口（listener + 活动连接 + 受管资源），先于 Node/scsynth；Stop / Restart / 替换 / 确认退出 / 启动失败清理全部覆盖；入口生命周期 = session 生命周期（§15：替换后旧 QR 不路由到新工程）；
+- **边界**：网关是传输转发（hyper 1 + rustls，不解析 Socket.IO 协议），monitor / 投影 / 本机 health / hub 路径不经入口；资源有界（连接上限 64、流式 body、固定转发缓冲）；测试中测试 CA 只进测试客户端信任库，绝不改系统信任；
+- 测试锚点：Rust `gateway.rs`（转发保真 / WS 隧道 / 容量 503 / 关停释放 / 探测四态）、`session.rs`（入口解析矩阵 / 真实网关 + 探测发布 ready / fail 返回 off / 运行期故障不断会话 / 旧 generation 不越权）；前端 `session-flow`（兼容门）、`SettingsCard.entry`、`menu` 地址段、`HttpsSection` 开关。
+
 ## 音频 Host 行为
 
 - UI 只能显示 manifest 声明的模式；三模式的 Host 行为表 → 运行契约 §6（模式说明见 [`audio-modes.md`](../zh-CN/reference/audio-modes.md)）；

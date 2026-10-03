@@ -1540,6 +1540,9 @@ mod tests {
     }
 
     #[test]
+    // The bounds below are deliberately against constants (documentation
+    // the compiler cannot check); newer clippy denies that by default.
+    #[allow(clippy::assertions_on_constants, clippy::absurd_extreme_comparisons)]
     fn master_node_ids_stay_inside_the_reserved_range() {
         assert!(RESERVED_NODE_ID_MIN >= 2_147_480_000);
         assert!(MASTER_GROUP_ID == RESERVED_NODE_ID_MIN);
@@ -1741,11 +1744,11 @@ mod tests {
         });
         // Any panic above must not leak scsynth: force-quit it before the
         // panic propagates, then surface the original failure.
-        if outcome.is_err() {
+        if let Err(failure) = outcome {
             let pid = child.id();
             let _ = Command::new("/bin/kill").arg(pid.to_string()).status();
             let _ = child.wait();
-            std::panic::resume_unwind(outcome.unwrap_err());
+            std::panic::resume_unwind(failure);
         }
 
         // §12: quit politely, then verify the process is actually gone.

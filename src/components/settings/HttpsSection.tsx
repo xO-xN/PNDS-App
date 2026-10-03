@@ -20,6 +20,7 @@ import { useSettingsStore, type SettingsSection } from '@/store/settings-store'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
 
 import { SectionTitle } from './SectionTitle'
 
@@ -71,6 +72,9 @@ export function HttpsSection({ section }: { section: SettingsSection }) {
   const { t } = useTranslation()
   const httpsDomainSetting = useSettingsStore(state => state.httpsDomainSetting)
   const httpsPortSetting = useSettingsStore(state => state.httpsPortSetting)
+  const httpsEnabledSetting = useSettingsStore(
+    state => state.httpsEnabledSetting
+  )
   const lanIp = useSessionStore(state => state.lanIp)
   const [modified, setModified] = useState(false)
   const [domainError, setDomainError] = useState(false)
@@ -221,6 +225,28 @@ export function HttpsSection({ section }: { section: SettingsSection }) {
       <SectionTitle id={`settings-${section}-title`}>
         {t('settings.https')}
       </SectionTitle>
+      {/* #140: the entry switch — plain operator intent. Domain, port
+          and material are validated here and again at start, so this
+          only decides whether starts of declared projects open the
+          gateway at all. Applies at the next start (the hint below). */}
+      <div className="flex items-center justify-between gap-4">
+        <Label htmlFor="settings-https-enabled" className="shrink-0">
+          {t('settings.https.enabled')}
+        </Label>
+        <Switch
+          id="settings-https-enabled"
+          checked={httpsEnabledSetting}
+          onCheckedChange={checked => {
+            useSettingsStore.getState().setHttpsEnabledSetting(checked)
+            void updatePreferences({ httpsEnabled: checked })
+            setModified(true)
+          }}
+          data-testid="https-enabled-switch"
+        />
+      </div>
+      <p className="text-muted-foreground text-xs">
+        {t('settings.https.enabledNote')}
+      </p>
       <div className="flex items-center justify-between gap-4">
         <Label htmlFor="settings-https-domain" className="shrink-0">
           {t('settings.https.domain')}

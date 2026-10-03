@@ -1,5 +1,9 @@
 import { useTranslation } from 'react-i18next'
 import { Volume2, VolumeX } from 'lucide-react'
+import { writeText } from '@tauri-apps/plugin-clipboard-manager'
+import i18n from '@/i18n/config'
+import { notifications } from '@/lib/notifications'
+import { logger } from '@/lib/logger'
 import { useProjectStore } from '@/store/project-store'
 import type { AudioMode } from '@/lib/tauri-bindings'
 import { isSessionLive, useSessionStore } from '@/store/session-store'
@@ -10,6 +14,7 @@ import {
   updateOscTarget,
   updatePreferences,
 } from '@/lib/preferences'
+import { httpsCompatBlocked } from '@/lib/session-flow'
 import {
   fixedGainFrom,
   setMasterVolumeTo,
@@ -68,6 +73,11 @@ export function SettingsCard({ onPopupOpenChange }: SettingsCardProps) {
   const audioMode = useSessionStore(state => state.audioMode)
   const oscTargetInput = useSessionStore(state => state.oscTargetInput)
   const hubRooms = useSettingsStore(state => state.hubRooms)
+  // #140: the entry switch + the running session's entry state.
+  const httpsEnabledSetting = useSettingsStore(
+    state => state.httpsEnabledSetting
+  )
+  const httpsEntry = useSessionStore(state => state.httpsEntry)
 
   // v1.2.3 (#39/T4): the settings rows follow the SELECTION. While a
   // different card is selected over a live session, the deferred rows hold
@@ -87,6 +97,30 @@ export function SettingsCard({ onPopupOpenChange }: SettingsCardProps) {
 
   // §3.3: outputChannels defaults to 2 when the manifest omits it.
   const projectChannels = currentProject?.manifest.audio.outputChannels ?? 2
+
+  // #140: the entry row shows the RUNNING session's entry (never the
+  // selection's — a roaming card has no entry); the compat notice shows
+  // whenever the switch is on and the SELECTED project is undeclared
+  // (pre-start warning + in-run truth: that run uses plain HTTP).
+  const entryRowVisible =
+    selectionOnRunningCard &&
+    isSessionLive(sessionStatus) &&
+    httpsEntry.status !== 'off'
+  const entryCompatNotice =
+    currentProject !== null &&
+    httpsCompatBlocked(
+      currentProject.manifest.scoreServer.supportsPerformerUrl,
+      httpsEnabledSetting
+    )
+
+  const copyEntryUrl = async (url: string) => {
+    try {
+      await writeText(url)
+      notifications.success(i18n.t('menu.addressCopied', { url }))
+    } catch (error) {
+      logger.warn('Failed to copy the entry URL', { error, url })
+    }
+  }
 
   // #58: Room appears only for works that declare telematic capability.
   // The group reads this project's persisted choice — absent = 1 — and a
@@ -229,6 +263,18 @@ export function SettingsCard({ onPopupOpenChange }: SettingsCardProps) {
         </span>
       </div>
 
+      {/* #140: compat notice — the switch is on but the selected
+          project has not declared adaptation; its starts run over plain
+          HTTP (the start dialog asks for the explicit choice). */}
+      {entryCompatNotice && (
+        <p
+          className="text-(--pnds-danger) text-[11px] leading-snug"
+          data-testid="entry-compat-notice"
+        >
+          {t('sidebar.entryCompat')}
+        </p>
+      )}
+
       {/* Everything below is deferred until the footer button (§8.3). */}
       <hr className="my-0.5 border-(--pnds-text)/10" />
 
@@ -266,6 +312,52 @@ export function SettingsCard({ onPopupOpenChange }: SettingsCardProps) {
           </Select>
         </div>
       </div>
+
+      {/* #140: the running session's trusted-HTTPS entry — status dot +
+          the fixed URL (click to copy; same string the QR encodes and
+          the Window menu copies). Runtime entry faults report here
+          without disturbing the session itself. */}
+      {entryRowVisible && (
+        <div
+          className="flex items-center gap-2"
+          data-testid="session-entry-row"
+        >
+          <span className={labelClass}>{t('sidebar.entry')}</span>
+          <span
+            data-testid="session-entry-status"
+            className={cn(
+              'shrink-0 text-[11px]',
+              httpsEntry.status === 'ready' && 'text-(--pnds-accent-text)',
+              httpsEntry.status === 'preparing' && 'text-(--pnds-text)/60',
+              httpsEntry.status === 'error' && 'text-(--pnds-danger)'
+            )}
+          >
+            {t(`sidebar.entryStatus.${httpsEntry.status}`)}
+          </span>
+          {httpsEntry.url && (
+            <button
+              type="button"
+              onClick={() => {
+                const url = httpsEntry.url
+                if (url) void copyEntryUrl(url)
+              }}
+              title={httpsEntry.url}
+              dir="ltr"
+              className="pnds-focus-ring font-manrope truncate text-end text-[11px] text-(--pnds-text)/70 underline-offset-2 hover:underline"
+            >
+              {httpsEntry.url.replace(/^https:\/\//, '')}
+            </button>
+          )}
+        </div>
+      )}
+      {httpsEntry.status === 'error' && entryRowVisible && httpsEntry.error && (
+        <p
+          className="text-(--pnds-danger) ps-14 text-[11px] leading-snug"
+          data-testid="session-entry-error"
+        >
+          {httpsEntry.error}
+        </p>
+      )}
 
       {/* OSC target (§6.6) — a sub-setting of external mode, so it follows
           the mode row rather than leading the card. */}

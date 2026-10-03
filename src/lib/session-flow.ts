@@ -1,3 +1,4 @@
+import { create } from 'zustand'
 import {
   commands,
   type AudioMode,
@@ -128,6 +129,65 @@ export function nodeGateBlocksStart(): boolean {
   return nodeGateBlocked(readStartGateInputs())
 }
 
+/**
+ * #140: the explicit legacy-HTTP choice. When the entry switch is on
+ * but the selected project has not declared `supportsPerformerUrl`, a
+ * start must never silently downgrade to HTTP — the operator confirms
+ * the HTTP flow per start click through the App-styled dialog
+ * (`HttpsCompatDialog`), which resolves the pending choice here. Pure
+ * module plumbing: session-flow is the non-React authority, the dialog
+ * is just its UI.
+ */
+const useHttpsCompatDialogInternal = create<{
+  open: boolean
+  setHttpsCompatOpen: (open: boolean) => void
+}>(set => ({
+  open: false,
+  setHttpsCompatOpen: open => set({ open }),
+}))
+
+/** The dialog's open state, for the component (and tests). */
+export const useHttpsCompatDialog = useHttpsCompatDialogInternal
+
+let httpsCompatResolver: ((proceed: boolean) => void) | null = null
+
+/** The one landing point for the dialog's buttons and dismissals. */
+export function resolveHttpsCompatChoice(proceed: boolean): void {
+  useHttpsCompatDialogInternal.getState().setHttpsCompatOpen(false)
+  httpsCompatResolver?.(proceed)
+  httpsCompatResolver = null
+}
+
+/** The #140 compat rule as a pure derivation — switch on × project
+ * undeclared. One home for the rule so the start gate (imperative)
+ * and the settings card's notice (reactive) can never drift. */
+export function httpsCompatBlocked(
+  supportsPerformerUrl: boolean | null | undefined,
+  httpsEnabled: boolean
+): boolean {
+  return httpsEnabled && supportsPerformerUrl !== true
+}
+
+/** True when starting the current selection needs the explicit HTTP
+ * choice (switch on × project undeclared — #140's compat rule). */
+export function httpsCompatChoiceNeeded(): boolean {
+  const { currentProject } = useProjectStore.getState()
+  return httpsCompatBlocked(
+    currentProject?.manifest.scoreServer.supportsPerformerUrl,
+    useSettingsStore.getState().httpsEnabledSetting
+  )
+}
+
+/** Opens the choice dialog and resolves with the operator's answer.
+ * Call only when `httpsCompatChoiceNeeded()` — the common start path
+ * keeps its synchronous-submit shape and never awaits this. */
+function openHttpsCompatChoice(): Promise<boolean> {
+  return new Promise(resolve => {
+    httpsCompatResolver = resolve
+    useHttpsCompatDialogInternal.getState().setHttpsCompatOpen(true)
+  })
+}
+
 /** What a start submits to the backend — §8.1's inputs, narrowed. */
 interface StartPlan {
   path: string
@@ -248,13 +308,21 @@ export async function start(): Promise<void> {
   const plan = resolveStartPlan('plain')
   if (!plan) return
 
-  logger.info('Starting project', {
-    path: plan.path,
-    mode: plan.audioMode,
-    lanIp: plan.lanIp,
-  })
   startInFlight = true
   try {
+    // #140: the compat choice resolves BEFORE anything is submitted —
+    // cancel aborts the whole start (the latch releases in `finally`).
+    // The ternary keeps the no-choice path synchronous up to the
+    // submit call (its tests release the mock synchronously).
+    const proceed = httpsCompatChoiceNeeded()
+      ? await openHttpsCompatChoice()
+      : true
+    if (!proceed) return
+    logger.info('Starting project', {
+      path: plan.path,
+      mode: plan.audioMode,
+      lanIp: plan.lanIp,
+    })
     const result = await commands.startProject(
       plan.path,
       plan.audioMode,
@@ -284,6 +352,13 @@ async function stopThenStart(
 ): Promise<void> {
   startInFlight = true
   try {
+    // #140: same explicit choice on restart/replace — a canceled dialog
+    // aborts before the running session is stopped. Same synchronous
+    // shape as `start` when no choice is needed.
+    const proceed = httpsCompatChoiceNeeded()
+      ? await openHttpsCompatChoice()
+      : true
+    if (!proceed) return
     await commands.stopProject()
     const result = await commands.startProject(
       path,

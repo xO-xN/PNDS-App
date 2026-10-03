@@ -7,6 +7,7 @@ import {
   isSessionLive,
   isSessionRunning,
   DEFAULT_SESSION_VOLUME,
+  ENTRY_OFF,
   useSessionStore,
 } from './session-store'
 import { useProjectStore } from './project-store'
@@ -20,6 +21,7 @@ const snapshot = (overrides: Partial<SessionSnapshot>): SessionSnapshot => ({
   lanIp: null,
   hostAddress: null,
   projectionStarted: false,
+  httpsEntry: { status: 'off', url: null, error: null },
   oscTarget: null,
   health: null,
   error: null,
@@ -44,6 +46,43 @@ describe('session-store', () => {
   it('starts idle', () => {
     expect(useSessionStore.getState().sessionStatus).toBe('idle')
     expect(useSessionStore.getState().health).toBeNull()
+  })
+
+  it('mirrors the trusted-HTTPS entry state and resets it with the run (#140)', () => {
+    useSessionStore.getState().applySnapshot(
+      snapshot({
+        status: 'ready',
+        httpsEntry: {
+          status: 'ready',
+          url: 'https://show.example.org:8443/',
+          error: null,
+        },
+      })
+    )
+    expect(useSessionStore.getState().httpsEntry).toEqual({
+      status: 'ready',
+      url: 'https://show.example.org:8443/',
+      error: null,
+    })
+
+    // Entry faults ride the same channel — the session status is a
+    // separate fact.
+    useSessionStore.getState().applySnapshot(
+      snapshot({
+        status: 'ready',
+        httpsEntry: {
+          status: 'error',
+          url: 'https://show.example.org:8443/',
+          error: 'The HTTPS entry did not become reachable',
+        },
+      })
+    )
+    expect(useSessionStore.getState().httpsEntry.status).toBe('error')
+    expect(useSessionStore.getState().sessionStatus).toBe('ready')
+
+    // The end-of-run reset returns the resting state.
+    useSessionStore.getState().resetSession()
+    expect(useSessionStore.getState().httpsEntry).toEqual(ENTRY_OFF)
   })
 
   it('mirrors the injected host address alongside the LAN selection (#62)', () => {

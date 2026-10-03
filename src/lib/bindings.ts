@@ -759,10 +759,21 @@ projectionZoom?: number | null;
 httpsDomain?: string | null; 
 /**
  * #139: the entry's non-privileged listen port (1024..=65535,
- * validated at the save boundary by `validate_https_port`).
+ * validated at the save boundary by `validate_https_port_field`).
  * `None` = not configured.
  */
-httpsPort?: number | null }
+httpsPort?: number | null; 
+/**
+ * #140: the operator's entry switch — `Some(true)` activates the
+ * trusted-HTTPS gateway for starts of projects that declare
+ * `scoreServer.supportsPerformerUrl`. Plain intent: domain, port
+ * and material are validated at START (and in the settings
+ * section), so switching on with incomplete config surfaces there,
+ * never as a mid-start surprise. `None`/`Some(false)` = off, the
+ * legacy HTTP flow. Like every entry setting: next start, never a
+ * running session.
+ */
+httpsEnabled?: boolean | null }
 export type AudioConfig = { 
 /**
  * The raw-JSON validation below has already rejected unknown mode
@@ -920,6 +931,40 @@ daysRemaining: number;
  * operator-visible identity of the stored material.
  */
 fingerprint: string; status: HttpsCertificateStatus }
+/**
+ * #140: the entry facts a snapshot carries (existing session snapshot
+ * / typed event — no new channel).
+ */
+export type HttpsEntryState = { status: HttpsEntryStatus; 
+/**
+ * The complete performer root URL fixed for this performance
+ * (`https://domain:port/`) — present from `preparing` on, so the
+ * QR (project-rendered), the menu copy items and this field all
+ * read one value.
+ */
+url: string | null; error: string | null }
+/**
+ * #140: the entry's four states (spec: at least 关闭/准备/就绪/错误).
+ */
+export type HttpsEntryStatus = 
+/**
+ * No entry this session — the legacy HTTP flow is in effect.
+ */
+"off" | 
+/**
+ * Launched and probing; the URL is already fixed and injected.
+ */
+"preparing" | 
+/**
+ * The local TLS/HTTP probe succeeded — the URL is served end to
+ * end. This proves the Host-side tunnel only; it never claims
+ * phones' DNS/trust (final device acceptance owns that, §15).
+ */
+"ready" | 
+/**
+ * Launch or runtime entry failure — `error` says which step.
+ */
+"error"
 export type HttpsProblem = { code: HttpsProblemCode; detail: string }
 /**
  * Why imported material (or stored material at reload) is not usable.
@@ -1089,7 +1134,14 @@ outputDevice: string | null;
  * drift. Survives the projection window closing (the gate is a
  * session fact, not a window fact).
  */
-projectionStarted: boolean }
+projectionStarted: boolean; 
+/**
+ * #140: the trusted-HTTPS entry's own state — independent from the
+ * session status because a healthy local server and a usable entry
+ * are two facts (§15). `off` for every pre-#140-shaped start
+ * (switch off, project undeclared, no session).
+ */
+httpsEntry: HttpsEntryState }
 /**
  * Session state publication — every snapshot the state machine emits
  * (formerly `pnds:session`); statuses per runtime-contract §8/§9.

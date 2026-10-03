@@ -46,6 +46,7 @@ import {
   CloseConfirmDialog,
   QuitConfirmDialog,
   UpdaterFailureDialog,
+  HttpsCompatDialog,
   WebKitBaselineDialog,
 } from './components/shell'
 import { SettingsPanel } from './components/settings'
@@ -158,6 +159,11 @@ function App() {
             .setHttpsPortSetting(
               result.data.httpsPort != null ? String(result.data.httpsPort) : ''
             )
+          // #140: the entry switch seeds with the same read — starts of
+          // declared projects open the gateway only when this is on.
+          useSettingsStore
+            .getState()
+            .setHttpsEnabledSetting(result.data.httpsEnabled === true)
         }
         // #58: the node-name input's placeholder hints this machine's
         // hostname — operators name nodes after machines. Best-effort.
@@ -259,6 +265,9 @@ function App() {
         {/* v1.4.2 (#110): system WebKit below the Safari 16.4 baseline —
             same rule, mounted outside AppShell. */}
         <WebKitBaselineDialog />
+        {/* #140: the explicit legacy-HTTP choice (entry switch on ×
+            undeclared project) — same rule, reachable in every state. */}
+        <HttpsCompatDialog />
         {/* v1.2.0 (issue #13): the settings panel — reachable in every
             window state, like the confirm dialogs above. */}
         <SettingsPanel />

@@ -72,6 +72,17 @@ Notes:
 | The certificate is not publicly trusted              | Self-signed or issued by a private CA. Phones will not trust it; use a public-CA certificate.                                       |
 | The private key does not match                       | The key was not issued with this certificate. Check that you picked the right files.                                                |
 
+## Entry lifecycle (since #140)
+
+Once the material is ready, flip the **enable switch** at the top of the settings「可信 HTTPS」section and the entry rides the performance lifecycle:
+
+- **Start**: a work declaring `supportsPerformerUrl: true` gets, at its next start, a TLS gateway on the selected LAN interface and the configured port that forwards phone requests verbatim to the local performer server (pages, static assets, Socket.IO polling and WebSocket all ride the one entry); the full URL (`https://domain:port/`) is fixed at start and injected as `PNDS_PERFORMER_URL` — the project's QR, the menu's copy item and the sidebar entry row all read the same string.
+- **Readiness**: after the project health is ready, the App probes the entry itself over TLS/HTTP (validating the certificate for the domain and fetching health through the tunnel) and marks the entry **ready** only on success. That proves the Host-side tunnel only — phones' DNS and trust remain the final device acceptance's business.
+- **Status surfaces**: the「Entry」row of the sidebar settings card (running card selected) shows preparing / ready / fault plus the URL (click to copy); the Window menu's Performer address item copies the entry URL while it is in effect.
+- **Runtime faults**: an entry fault (e.g. the interface vanished under the listener) is reported as an entry fault only — local audio and servers keep running, no automatic HTTP QR swap; recovery is the operator's explicit restart.
+- **Stop**: Stop, Restart, project switching and app exit all close the entry (listener and active connections released); the next performance opens it fresh. Switch / domain / port / certificate changes made during a performance apply at the next start.
+- **Undeclared works**: with the switch on but the project undeclared, the settings card carries a prominent notice and Start opens a confirm dialog — proceeding requires explicitly choosing「Start with HTTP」; canceling changes nothing. No silent downgrade.
+
 ## Relationship to projects
 
-A project declares via `scoreServer.supportsPerformerUrl: true` that it reads the Host-provided full performer URL and connects same-origin ([manifest.md](./manifest.md)); undeclared legacy projects are unaffected and keep the HTTP flow. This version delivers the Host-side configuration, import, validation and protected storage; the TLS entry that serves traffic arrives in a later version — once the material is ready, no further preparation is needed for the entry itself.
+A project declares via `scoreServer.supportsPerformerUrl: true` that it reads the Host-provided full performer URL and connects same-origin ([manifest.md](./manifest.md)); undeclared legacy projects are unaffected and keep the HTTP flow. The Host-side configuration, import, validation and protected storage shipped with #139, and the TLS entry gateway with #140 — once the material is ready, no further preparation is needed for the entry itself.

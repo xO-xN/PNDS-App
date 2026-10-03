@@ -30,6 +30,7 @@ describe('HttpsSection (#139)', () => {
     useSettingsStore.setState({
       httpsDomainSetting: '',
       httpsPortSetting: '',
+      httpsEnabledSetting: false,
     })
     useSessionStore.getState().resetSession()
     vi.mocked(commands.loadHttpsCertificate).mockResolvedValue({
@@ -279,5 +280,27 @@ describe('HttpsSection (#139)', () => {
     render(<HttpsSection section="https" />)
 
     expect(screen.getByText(/192\.168\.1\.10/)).toBeInTheDocument()
+  })
+
+  it('seeds the enable switch from the store (#140)', () => {
+    useSettingsStore.setState({ httpsEnabledSetting: true })
+    render(<HttpsSection section="https" />)
+    expect(screen.getByTestId('https-enabled-switch')).toHaveProperty(
+      'dataset.state',
+      'checked'
+    )
+  })
+
+  it('the enable switch commits httpsEnabled and reveals the next-start hint (#140)', async () => {
+    const user = userEvent.setup()
+    render(<HttpsSection section="https" />)
+
+    await user.click(screen.getByTestId('https-enabled-switch'))
+    await waitFor(() => {
+      expect(commands.savePreferences).toHaveBeenCalledWith(
+        expect.objectContaining({ httpsEnabled: true })
+      )
+    })
+    expect(screen.getByTestId('https-hint')).toBeInTheDocument()
   })
 })

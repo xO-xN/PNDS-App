@@ -188,6 +188,16 @@ pub struct AppPreferences {
     /// `None` = not configured.
     #[serde(default)]
     pub https_port: Option<u16>,
+    /// #140: the operator's entry switch — `Some(true)` activates the
+    /// trusted-HTTPS gateway for starts of projects that declare
+    /// `scoreServer.supportsPerformerUrl`. Plain intent: domain, port
+    /// and material are validated at START (and in the settings
+    /// section), so switching on with incomplete config surfaces there,
+    /// never as a mid-start surprise. `None`/`Some(false)` = off, the
+    /// legacy HTTP flow. Like every entry setting: next start, never a
+    /// running session.
+    #[serde(default)]
+    pub https_enabled: Option<bool>,
 }
 
 /// A named one-level group of project paths (spec issue #4).
@@ -228,6 +238,7 @@ impl Default for AppPreferences {
             projection_zoom: None,
             https_domain: None,
             https_port: None,
+            https_enabled: None,
         }
     }
 }
@@ -655,7 +666,7 @@ mod tests {
         assert!(reserialized.contains("\"hubToken\":\"secret-token\""));
         assert!(reserialized.contains("\"hubRooms\""));
         // The token stays its own field — it never leaks into the URL.
-        assert_eq!(prefs.hub_url.unwrap().contains("secret-token"), false);
+        assert!(!prefs.hub_url.unwrap().contains("secret-token"));
     }
 
     /// v1.4.0 (#58): the save boundary rejects room groups outside the

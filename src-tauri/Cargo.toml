@@ -55,6 +55,16 @@ webpki-roots = "0.26"
 ring = "0.17"
 sec1 = "0.7"
 time = { version = "0.3", features = ["formatting"] }
+# #140: the trusted-HTTPS entry gateway — mature TLS forwarding on the
+# hyper 1 / tokio / rustls stack (ring provider, matching the #139
+# validation pipeline's crypto). Pure Rust: no system runtime
+# dependency, macOS 13.5 baseline, both architectures.
+tokio = { version = "1", features = ["rt-multi-thread", "net", "time", "sync", "io-util", "macros"] }
+hyper = { version = "1", features = ["http1", "server", "client"] }
+hyper-util = { version = "0.1", features = ["tokio", "http1", "server", "client", "client-legacy"] }
+http-body-util = "0.1"
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "logging"] }
 
 # Type-safe Tauri command bindings
 specta = { version = "=2.0.0-rc.22", features = ["derive", "serde_json"] }

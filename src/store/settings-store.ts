@@ -68,6 +68,11 @@ interface SettingsState {
   /** #139: the entry's port, in-edit as text ('' = never set). Commits
    * on blur; invalid values are held back from the save queue. */
   httpsPortSetting: string
+  /** #140: the operator's entry switch — activates the trusted-HTTPS
+   * gateway for starts of projects declaring supportsPerformerUrl.
+   * Seeded from preferences like the domain/port; applies at the next
+   * start, never a running session. */
+  httpsEnabledSetting: boolean
   openSettings: (section?: SettingsSection) => void
   closeSettings: () => void
   toggleSettings: () => void
@@ -81,6 +86,7 @@ interface SettingsState {
   setHostnameHint: (hostname: string) => void
   setHttpsDomainSetting: (domain: string) => void
   setHttpsPortSetting: (port: string) => void
+  setHttpsEnabledSetting: (enabled: boolean) => void
 }
 
 export const useSettingsStore = create<SettingsState>()(set => ({
@@ -97,6 +103,7 @@ export const useSettingsStore = create<SettingsState>()(set => ({
   hostnameHint: '',
   httpsDomainSetting: '',
   httpsPortSetting: '',
+  httpsEnabledSetting: false,
 
   openSettings: section =>
     set({ settingsOpen: true, focusSection: section ?? null }),
@@ -129,6 +136,8 @@ export const useSettingsStore = create<SettingsState>()(set => ({
   setHttpsDomainSetting: httpsDomainSetting => set({ httpsDomainSetting }),
 
   setHttpsPortSetting: httpsPortSetting => set({ httpsPortSetting }),
+
+  setHttpsEnabledSetting: httpsEnabledSetting => set({ httpsEnabledSetting }),
 }))
 
 /**

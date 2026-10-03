@@ -34,6 +34,11 @@ pub const EXPIRY_REMINDER_DAYS: i64 = 30;
 pub const MATERIAL_DIR_NAME: &str = "https";
 pub const MATERIAL_FILE_NAME: &str = "material.pem";
 
+/// The project health route both the session's health polling and the
+/// #140 entry probe speak (runtime-contract §5) — one constant so the
+/// tunnel and the internal check can never drift onto different paths.
+pub const HEALTH_PATH: &str = "/__pnds/health";
+
 /// The production anchor set (Mozilla roots via webpki-roots). Tests
 /// inject rcgen-generated anchors instead.
 pub fn public_trust_anchors() -> &'static [TrustAnchor<'static>] {
@@ -919,6 +924,35 @@ pub fn clear_stored_material(app_data: &Path) -> Result<bool, String> {
         log::info!("HTTPS certificate material removed by the operator");
     }
     Ok(removed)
+}
+
+/// #140: the entry gateway's launch material — the stored chain + key,
+/// revalidated against `domain` at `now` under the SAME rules as the
+/// import (public trust, SAN coverage, validity window, key match).
+/// Success hands back the parsed pieces the TLS listener serves with;
+/// any problem is a launch failure the start surfaces as its error —
+/// an adapted project with the entry enabled never silently falls back
+/// to HTTP. The material itself still never leaves this crate.
+pub fn launch_material(
+    app_data: &Path,
+    domain: &str,
+    anchors: &[TrustAnchor<'_>],
+    now: SystemTime,
+) -> Result<(Vec<CertificateDer<'static>>, PrivateKeyDer<'static>), HttpsProblem> {
+    let pem = load_material_pem(app_data).ok_or_else(|| {
+        HttpsProblem::new(
+            HttpsProblemCode::Storage,
+            "No certificate material is stored — import the full chain + key in 设置 → 可信 HTTPS before starting with the HTTPS entry enabled.",
+        )
+    })?;
+    validate_material(Some(domain), &pem, anchors, now)?;
+    let split = split_material(&pem)?;
+    let chain = split
+        .chain_der
+        .into_iter()
+        .map(CertificateDer::from)
+        .collect();
+    Ok((chain, split.key))
 }
 
 #[cfg(test)]

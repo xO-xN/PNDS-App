@@ -9,6 +9,9 @@ import {
   start,
   restart,
   startReplacing,
+  httpsCompatChoiceNeeded,
+  resolveHttpsCompatChoice,
+  useHttpsCompatDialog,
 } from './session-flow'
 import type { Manifest, SessionSnapshot } from '@/lib/tauri-bindings'
 
@@ -44,6 +47,7 @@ function snapshot(over: Partial<SessionSnapshot> = {}): SessionSnapshot {
     hostAddress: null,
     oscTarget: null,
     projectionStarted: false,
+    httpsEntry: { status: 'off', url: null, error: null },
     health: null,
     error: null,
     outputTail: [],
@@ -460,5 +464,104 @@ describe('「设置节点」gate (#58)', () => {
     seedNodeConfig('Node', 'wss://hub.example.org:3000', 'token')
     await start()
     expect(commands.startProject).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('HTTPS compat choice (#140)', () => {
+  /** The fixture manifest with the adaptation declaration toggled. */
+  const declaredManifest = (declared: boolean): Manifest => ({
+    ...manifest,
+    scoreServer: {
+      ...manifest.scoreServer,
+      supportsPerformerUrl: declared,
+    },
+  })
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useProjectStore.setState({
+      currentProject: { path: '/p', manifest: declaredManifest(false) },
+      recentProjectPaths: ['/p'],
+      preflightStatus: 'ready',
+      preflightError: null,
+    })
+    useSessionStore.getState().resetSession()
+    useSessionStore.setState({
+      lanIp: '192.168.1.10',
+      lanAddresses: ['192.168.1.10'],
+      audioMode: 'none',
+    })
+    useSettingsStore.setState({ httpsEnabledSetting: true })
+    useHttpsCompatDialog.setState({ open: false })
+    vi.mocked(commands.startProject).mockResolvedValue({
+      status: 'ok',
+      data: null,
+    })
+  })
+
+  it('is needed exactly when the switch is on and the project is undeclared', () => {
+    expect(httpsCompatChoiceNeeded()).toBe(true)
+    useSettingsStore.setState({ httpsEnabledSetting: false })
+    expect(httpsCompatChoiceNeeded()).toBe(false)
+    useSettingsStore.setState({ httpsEnabledSetting: true })
+    useProjectStore.setState({
+      currentProject: { path: '/p', manifest: declaredManifest(true) },
+    })
+    expect(httpsCompatChoiceNeeded()).toBe(false)
+  })
+
+  it('start() waits for the explicit choice — nothing is submitted until resolved', async () => {
+    const pending = start()
+    await Promise.resolve()
+    expect(commands.startProject).not.toHaveBeenCalled()
+    expect(useHttpsCompatDialog.getState().open).toBe(true)
+
+    resolveHttpsCompatChoice(true)
+    await pending
+    expect(commands.startProject).toHaveBeenCalledWith(
+      '/p',
+      'none',
+      '192.168.1.10',
+      null
+    )
+    expect(useHttpsCompatDialog.getState().open).toBe(false)
+  })
+
+  it('canceling the choice aborts the start untouched', async () => {
+    const pending = start()
+    await Promise.resolve()
+    resolveHttpsCompatChoice(false)
+    await pending
+    expect(commands.startProject).not.toHaveBeenCalled()
+    // The latch released — a later start goes through (its own choice
+    // resolved here too).
+    const again = start()
+    await Promise.resolve()
+    resolveHttpsCompatChoice(true)
+    await again
+    expect(commands.startProject).toHaveBeenCalledTimes(1)
+  })
+
+  it('a declared project starts without any dialog', async () => {
+    useProjectStore.setState({
+      currentProject: { path: '/p', manifest: declaredManifest(true) },
+    })
+    await start()
+    expect(commands.startProject).toHaveBeenCalledTimes(1)
+    expect(useHttpsCompatDialog.getState().open).toBe(false)
+  })
+
+  it('restart asks the same choice and canceling keeps the session running', async () => {
+    useSessionStore.setState({
+      sessionStatus: 'ready',
+      sessionProjectPath: '/p',
+    })
+    const pending = restart()
+    await Promise.resolve()
+    expect(commands.stopProject).not.toHaveBeenCalled()
+    resolveHttpsCompatChoice(false)
+    await pending
+    expect(commands.startProject).not.toHaveBeenCalled()
+    expect(commands.stopProject).not.toHaveBeenCalled()
   })
 })

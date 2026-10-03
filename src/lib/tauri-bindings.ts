@@ -34,6 +34,8 @@ export type {
   HelpCorpusDocument,
   HttpsCertificateStatus,
   HttpsCertificateSummary,
+  HttpsEntryState,
+  HttpsEntryStatus,
   HttpsProblem,
   HttpsProblemCode,
   HttpsValidationOutcome,

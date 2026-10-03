@@ -1126,10 +1126,9 @@ mod tests {
                 (METADATA_ENTRY, &valid_metadata_json(), false),
                 (
                     "p/manifest.json",
-                    &r#"{ "schemaVersion": 1, "id": "a/b", "name": "P", "version": "1.0.0",
+                    r#"{ "schemaVersion": 1, "id": "a/b", "name": "P", "version": "1.0.0",
                         "scoreServer": { "entry": "s.js", "workingDirectory": ".", "performerPort": 1, "monitorPort": 2 },
-                        "audio": { "defaultMode": "none", "supportedModes": ["none"] } }"#
-                        .to_string(),
+                        "audio": { "defaultMode": "none", "supportedModes": ["none"] } }"#,
                     false,
                 ),
             ],
@@ -1148,10 +1147,9 @@ mod tests {
                 (METADATA_ENTRY, &valid_metadata_json(), false),
                 (
                     "p/manifest.json",
-                    &r#"{ "schemaVersion": 1, "id": "p", "name": "P", "version": "1.0.0",
+                    r#"{ "schemaVersion": 1, "id": "p", "name": "P", "version": "1.0.0",
                         "scoreServer": { "entry": "missing.js", "workingDirectory": ".", "performerPort": 1, "monitorPort": 2 },
-                        "audio": { "defaultMode": "none", "supportedModes": ["none"] } }"#
-                        .to_string(),
+                        "audio": { "defaultMode": "none", "supportedModes": ["none"] } }"#,
                     false,
                 ),
             ],

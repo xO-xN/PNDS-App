@@ -85,6 +85,7 @@ const idleSnapshot: SessionSnapshot = {
   channelPlan: null,
   outputDevice: null,
   projectionStarted: false,
+  httpsEntry: { status: 'off', url: null, error: null },
 }
 
 function seedLoadedProject() {

@@ -165,6 +165,7 @@ vi.mock('@/lib/tauri-bindings', async () => {
           outputTail: [],
           volume: 80,
           projectionStarted: false,
+          httpsEntry: { status: 'off', url: null, error: null },
         },
       }),
       // v1.5.0 (#130): the projection start gate — default: no-op ok.

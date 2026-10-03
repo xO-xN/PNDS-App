@@ -80,6 +80,7 @@ export type PreferencesPatch = Partial<
     | 'projectionZoom'
     | 'httpsDomain'
     | 'httpsPort'
+    | 'httpsEnabled'
   >
 >
 

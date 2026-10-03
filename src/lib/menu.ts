@@ -364,6 +364,7 @@ export async function buildAppMenu(): Promise<Menu> {
       sessionProjectPath,
       sessionStatus,
       projectionStarted,
+      httpsEntry,
     } = useSessionStore.getState()
     // v1.5.0 (#130): the ⌘⏎ projection-gate entry's label and
     // enablement read the same mirrors the ▶ button renders from.
@@ -376,10 +377,22 @@ export async function buildAppMenu(): Promise<Menu> {
     const address =
       (sessionOwnsSelection ? sessionHostAddress : null) ??
       effectiveHostAddress(manifest?.performerAddress, lanIp)
+    // #140: while the running session's own project is described AND
+    // its trusted-HTTPS entry is active, the performer address IS the
+    // fixed entry URL (what the QR encodes and PNDS_PERFORMER_URL
+    // injected). The conductor item stays the internal HTTP monitor
+    // origin — the monitor never rides the entry (§15).
+    const entryUrl =
+      sessionOwnsSelection &&
+      httpsEntry.url !== null &&
+      httpsEntry.status !== 'off'
+        ? httpsEntry.url
+        : null
     const addressUrls =
       address !== null && scoreServer
         ? {
-            performer: buildMonitorUrl(address, scoreServer.performerPort),
+            performer:
+              entryUrl ?? buildMonitorUrl(address, scoreServer.performerPort),
             conductor: buildMonitorUrl(address, scoreServer.monitorPort),
           }
         : null

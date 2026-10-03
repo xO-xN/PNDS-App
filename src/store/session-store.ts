@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type {
   AudioMode,
   HealthPayload,
+  HttpsEntryState,
   SessionSnapshot,
   SessionStatus,
 } from '@/lib/tauri-bindings'
@@ -93,6 +94,16 @@ export const sessionConnectionAddress = (state: SessionState): string | null =>
 /** §6.4: every new session's master starts at 80%. */
 export const DEFAULT_SESSION_VOLUME = 80
 
+/** #140: the trusted-HTTPS entry's resting state — no entry, no URL.
+ * The backend snapshot always carries the field; this is the pre-boot
+ * and post-reset mirror value (and the defensive default for
+ * hand-written test snapshots that predate the field). */
+export const ENTRY_OFF: HttpsEntryState = {
+  status: 'off',
+  url: null,
+  error: null,
+}
+
 /** Entering the mute: remember what to restore — the volume being silenced
  * if it's non-zero, else whatever an earlier mute already recorded. */
 const volumeToRestore = (current: number, recorded: number): number =>
@@ -140,6 +151,14 @@ interface SessionState {
    * Load/switch resets it to false (简介).
    */
   projectionStarted: boolean
+  /**
+   * #140: the trusted-HTTPS entry's own state, mirrored from the
+   * backend snapshot (off/preparing/ready/error + the fixed URL). The
+   * session status and the entry state are two facts — a healthy local
+   * server never claims a usable entry and an entry fault never fails
+   * the session.
+   */
+  httpsEntry: HttpsEntryState
   /** OSC target reported by the backend (internal: dynamic; external: §6.6). */
   oscTarget: string | null
   /** Master volume percent (§6.4; every new session starts at 80). */
@@ -240,6 +259,7 @@ export const useSessionStore = create<SessionState>()(set => ({
   sessionLanIp: null,
   sessionHostAddress: null,
   projectionStarted: false,
+  httpsEntry: ENTRY_OFF,
   oscTarget: null,
   volume: DEFAULT_SESSION_VOLUME,
   muted: false,
@@ -317,6 +337,7 @@ export const useSessionStore = create<SessionState>()(set => ({
         sessionLanIp: snapshot.lanIp,
         sessionHostAddress: snapshot.hostAddress,
         projectionStarted: snapshot.projectionStarted,
+        httpsEntry: snapshot.httpsEntry ?? ENTRY_OFF,
         oscTarget: snapshot.oscTarget,
         volume: snapshot.volume,
         // v1.2.2 (#30): mute is session-only — every new run returns to
@@ -410,6 +431,7 @@ export const useSessionStore = create<SessionState>()(set => ({
       sessionLanIp: null,
       sessionHostAddress: null,
       projectionStarted: false,
+      httpsEntry: ENTRY_OFF,
       volume: DEFAULT_SESSION_VOLUME,
       muted: false,
       prevVolume: 0,

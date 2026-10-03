@@ -97,13 +97,13 @@ Rules:
 - the token travels only in `PNDS_HUB_TOKEN` itself — never concatenated into `PNDS_HUB_URL`, never logged;
 - node configuration and group-number changes take effect on the next start; a running session's env never changes.
 
-The full performer URL (#138 frozen contract; the entry implementation belongs to a later patch — this block freezes the variable, its semantics and its priority only):
+The full performer URL (#138 frozen contract; since #140 the App's local trusted-HTTPS entry gateway actually injects it):
 
 ```text
 PNDS_PERFORMER_URL=<full performer root URL, e.g. https://show.example.org:8443/>
 ```
 
-- the App injects it only while the local trusted HTTPS entry is in effect for the current performance; the entry is on by default only for works declaring `scoreServer.supportsPerformerUrl: true` (field semantics: [manifest.md](./manifest.md)). No entry exists in the current version, so the variable is never injected — a Project that cannot read it simply keeps running the original HTTP flow;
+- the App injects it only while the local trusted HTTPS entry is in effect for the current performance; the entry applies only to works declaring `scoreServer.supportsPerformerUrl: true` (field semantics: [manifest.md](./manifest.md)) AND requires the settings「可信 HTTPS」enable switch to be on, the domain/port configured, and the certificate material to revalidate at that moment. When it is not injected (switch off, work undeclared, config incomplete) a Project that cannot read it simply keeps running the original HTTP flow — for a work that DID declare adaptation, incomplete config fails the start with an actionable error instead of silently falling back to HTTP;
 - it is the **full root URL** the Host determined for this performance: protocol, domain and the actual port. Every address the Project exposes outward (QR code, copied address, browser connection config) uses it, taking priority over any address assembled from `PNDS_HOST_IP`;
 - it is not a new value for `PNDS_HOST_IP` and not a hub URL: `PNDS_HOST_IP` (and the node variables above) keep their semantics and are injected as usual;
 - the full contract (project identity, entry access context, the claim-token origin semantics) is §15.
@@ -345,6 +345,8 @@ PNDS guarantees discrete signal output only; it takes no responsibility for chan
 
 A master-stage creation failure must fail the whole session and clean up the started children. An Internal session may enter `ready` only after health is ready, the monitor can be shown, the SynthDef is loaded, and all K instances of the master group are confirmed created.
 
+A start with the trusted HTTPS entry in effect (#140) slots into the same order: after step 2's port preflight passes and before step 3, the App revalidates the certificate material and BOUNDS the entry listener on the configured port of the selected LAN interface (a conflict or material failure fails the start through the existing cleanup path); the full performer URL is fixed there and rides step 5's environment; once the session is ready the App probes the entry locally over TLS/HTTP (connecting to the bound address, validating the certificate for the domain, requiring health 200 through the tunnel) and publishes entry `ready` only after that succeeds — an independent fact from session `ready`. A failed entry probe reports an entry fault only; it never ends the local audio or servers.
+
 ## 9. External and None
 
 External:
@@ -465,12 +467,15 @@ The Project must respond to `SIGINT` and `SIGTERM`:
 The App's stop order:
 
 ```text
+0. close the trusted HTTPS entry (when this performance ran one): stop the listener, disconnect active connections, release managed resources (#140)
 1. send SIGTERM to Node and wait for graceful shutdown
 2. force-kill Node on timeout
 3. release the App master group
 4. quit/kill the App scsynth
 5. clean the child registry and session state
 ```
+
+The entry closes FIRST on every stop path (Stop, Restart, project replacement, confirmed quit, and failed-start cleanup): phones see a clean disconnect instead of being routed into whatever comes next. The entry's lifecycle IS the session's — after a project replacement an old QR's gateway no longer exists, so it cannot route to the new work.
 
 After the App exits, none of its Node or scsynth processes may remain. After a crash or force quit, the next App start must confirm ownership from recorded PIDs and command lines before best-effort orphan cleanup.
 
@@ -531,17 +536,17 @@ Conventions:
 
 ## 15. The full performer URL and the external entry (#138 frozen contract)
 
-This section freezes the public contract between the local trusted HTTPS entry and the Project. The entry itself (TLS gateway, entry state and lifecycle) belongs to a later patch; the certificate material's configuration, import, validation and protected storage shipped with #139 (operator preparation: [https.md](./https.md) — the domain and port are ordinary preference fields, while the certificate chain and private key live only in a backend file with restricted permissions, never in the preferences round-trip, the project, the manifest, the `.pnds` bundle or the logs). What is frozen here is the naming, tolerance, priority and the obligations on both sides. The PNDS Template is already adapted to this contract (see its docs/implementation.md, section「完整 performer URL」); unadapted works are unaffected.
+This section freezes the public contract between the local trusted HTTPS entry and the Project. The certificate material's configuration, import, validation and protected storage shipped with #139, and the entry itself (TLS gateway, entry state and lifecycle) shipped with #140 (operator preparation: [https.md](./https.md) — the domain and port are ordinary preference fields, while the certificate chain and private key live only in a backend file with restricted permissions, never in the preferences round-trip, the project, the manifest, the `.pnds` bundle or the logs). What is frozen here is the naming, tolerance, priority and the obligations on both sides. The PNDS Template is already adapted to this contract (see its docs/implementation.md, section「完整 performer URL」); unadapted works are unaffected.
 
 ### The variable and the capability declaration
 
 - the startup variable `PNDS_PERFORMER_URL` (§3): the full performer root URL injected while the entry is in effect — protocol, domain and actual port included;
-- the capability declaration `scoreServer.supportsPerformerUrl: true` ([manifest.md](./manifest.md)): the work promises to read that full URL, to build its QR and connection config from it, and to load page scripts and real-time connections under that origin; absent = an unadapted legacy work, and the entry must not silently apply to it (the later entry patch must offer a clear compatibility notice and an explicit choice of the original HTTP flow);
+- the capability declaration `scoreServer.supportsPerformerUrl: true` ([manifest.md](./manifest.md)): the work promises to read that full URL, to build its QR and connection config from it, and to load page scripts and real-time connections under that origin; absent = an unadapted legacy work, and the entry must not silently apply to it (#140's shipped behavior: a prominent notice in the settings card plus a confirm dialog before start — the operator explicitly chooses「Start with HTTP」to proceed, and canceling touches nothing);
 - priority: when `PNDS_PERFORMER_URL` is provided, every outward-facing address of the Project uses that full URL; when it is absent, `http://<PNDS_HOST_IP>:<performerPort>/` continues to apply (today's behavior) — no forced migration of old manifests.
 
 ### Project identity and the entry access context
 
-- the external entry is bound to the **current performance's project identity**: the `manifest.id` plus that session. The URL the entry publishes and its access context (the page the entry serves, the `projectId` / `performerUrl` / page role injected via `__config.js`) all derive from the current project — the later gateway implementation uses this to **reject old entries that do not match the current project**: after a project replacement, an old QR must never route to the new work;
+- the external entry is bound to the **current performance's project identity**: the `manifest.id` plus that session. The URL the entry publishes and its access context (the page the entry serves, the `projectId` / `performerUrl` / page role injected via `__config.js`) all derive from the current project — the App's gateway uses this to **reject old entries that do not match the current project** — the outcome requirement is frozen: after a replacement, an old QR must never route to the new work. #140 implements it structurally: the entry's lifecycle IS the session's — a replacement closes the old listener before opening the new one, so an old QR's gateway no longer exists;
 - project identity is **not** seat identity: claim tokens, seats and restoration semantics remain entirely the Project's (module manual: [Performer identity and seats](../modules/players.md)); this contract redefines none of them and interprets no artistic events;
 - the page role is injected by the server (`__config.js`'s `role` field) and **must not be inferred from the shared external port**: the entry's port is unrelated to the manifest ports, so a browser-side port comparison is unreliable under the entry;
 - the monitor page keeps its **internal connection**: it reaches the performer service cross-port via the original internal address, never through the external entry, and no public management entry is added.

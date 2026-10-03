@@ -97,13 +97,13 @@ PNDS_HUB_ROOM={manifest.id}_{分组号}
 - token 只走 `PNDS_HUB_TOKEN` 自身，永不拼入 `PNDS_HUB_URL`，永不出现在日志；
 - 节点配置与分组号的修改在下次启动生效，运行中会话的 env 不变。
 
-完整 performer URL（#138 契约冻结；入口实现属后续 patch，本条只冻结变量、语义与优先级）：
+完整 performer URL（#138 契约冻结；#140 起由 App 的本地可信 HTTPS 入口网关实际注入）：
 
 ```text
 PNDS_PERFORMER_URL=<完整 performer 根 URL，如 https://show.example.org:8443/>
 ```
 
-- App 仅在本地可信 HTTPS 入口对当前演出生效时注入；入口默认只对声明了 `scoreServer.supportsPerformerUrl: true` 的工程开启（字段语义见 [manifest.md](./manifest.md)）。当前版本没有入口，不注入该变量——工程读不到它即按原 HTTP 流程运行；
+- App 仅在本地可信 HTTPS 入口对当前演出生效时注入；入口只对声明了 `scoreServer.supportsPerformerUrl: true` 的工程开启（字段语义见 [manifest.md](./manifest.md)），且要求设置「可信 HTTPS」的启用开关打开、域名 / 端口已配置、证书材料当下重校验通过。未注入（开关关闭、工程未声明或配置不全）时工程读不到该变量，按原 HTTP 流程运行——对声明了适配的工程，配置不全会使启动失败并给出可行动的错误，绝不静默退回 HTTP；
 - 它是 Host 为本次演出确定的**完整根 URL**：协议、域名与实际端口齐备。工程一切对外地址（二维码、复制地址、浏览器连接配置）以它为准，优先于任何由 `PNDS_HOST_IP` 拼出的地址；
 - 它不是 `PNDS_HOST_IP` 的新取值，也不是 hub URL：`PNDS_HOST_IP`（连同上面的节点变量）语义与注入行为不变，照常注入；
 - 完整契约（工程身份、入口接入上下文、claim token 的 origin 语义）见 §15。
@@ -345,6 +345,8 @@ PNDS 只保证离散信号输出，不负责声道到扬声器的空间布局。
 
 Master stage 创建失败必须使整个 session 失败并清理已启动的子进程。Internal session 只有在 health ready、monitor 可显示、SynthDef 已加载且 master group 的 K 个实例全部确认创建后才能进入 `ready`。
 
+可信 HTTPS 入口生效的启动（#140）插在同一次顺序里：步骤 2 的端口 preflight 通过后、步骤 3 之前，App 重校验证书材料并在所选 LAN 接口的配置端口上**绑定**入口 listener（冲突 / 材料失败 = 本次启动失败，沿既有清理路径）；完整 performer URL 在此固定，随步骤 5 的环境变量注入；session ready 后 App 经入口发起本地 TLS/HTTP 探测（连绑定地址、以域名校验证书、经隧道要求 health 200），探测成功才发布入口 `ready`——它与 session `ready` 是两项独立事实，入口探测失败只报告入口故障，不结束本地音频或服务。
+
 ## 9. External 与 None
 
 External：
@@ -470,12 +472,15 @@ v1.3.0 起，App 以与主题桥相同的机制向 monitor 页面推送当前**�
 App 停止顺序：
 
 ```text
+0. 关闭可信 HTTPS 入口（若本次演出启用）：停 listener、断开活动连接、释放受管资源（#140）
 1. 向 Node 发送 SIGTERM 并等待 graceful shutdown
 2. 超时则强制终止 Node
 3. 释放 App master group
 4. 请求/终止 App scsynth
 5. 清理 child registry 与 session state
 ```
+
+入口在一切停止路径（Stop、Restart、工程替换、确认退出、启动失败的清理）中都最先关闭：手机立即看到断连而非被路由进后续内容；入口生命周期 = session 生命周期，替换工程后旧 QR 不会路由到新工程。
 
 App 退出后不得遗留其拥有的 Node 或 scsynth。崩溃或 force quit 后，下一次 App 启动必须使用记录的 PID 和命令行确认归属，再进行 best-effort orphan cleanup。
 
@@ -536,17 +541,17 @@ window.parent.postMessage({ type: 'pnds-projection', zoom: 'page' }, '*')
 
 ## 15. 完整 performer URL 与外部入口（#138 冻结契约）
 
-本节冻结本地可信 HTTPS 入口与工程之间的公开契约。入口本身（TLS 网关、入口状态与生命周期）属后续 patch；证书材料的配置、导入、校验与受保护存储已随 #139 交付（操作者准备见[https.md](./https.md)：域名与端口是普通偏好字段，证书链与私钥只存在后端受限权限文件中，不进偏好回传 / 工程 / manifest / `.pnds` / 日志）。本节冻结的是命名、容错、优先级与两侧义务。PNDS Template 已按此契约适配（见其 docs/implementation.md「完整 performer URL」）；未适配工程不受任何影响。
+本节冻结本地可信 HTTPS 入口与工程之间的公开契约。证书材料的配置、导入、校验与受保护存储随 #139 交付，入口本身（TLS 网关、入口状态与生命周期）随 #140 交付（操作者准备见[https.md](./https.md)：域名与端口是普通偏好字段，证书链与私钥只存在后端受限权限文件中，不进偏好回传 / 工程 / manifest / `.pnds` / 日志）。本节冻结的是命名、容错、优先级与两侧义务。PNDS Template 已按此契约适配（见其 docs/implementation.md「完整 performer URL」）；未适配工程不受任何影响。
 
 ### 变量与能力声明
 
 - 启动变量 `PNDS_PERFORMER_URL`（§3）：入口生效时注入的完整 performer 根 URL，含协议、域名与实际端口；
-- 能力声明 `scoreServer.supportsPerformerUrl: true`（[manifest.md](./manifest.md)）：工程承诺读取该完整 URL、据它生成二维码与连接配置，并能在该 origin 下加载页面脚本与建立实时连接；缺省 = 未适配的旧工程，入口不得静默对其生效（后续入口 patch 须给出明确兼容提示与显式选择原有 HTTP 方式的入口）；
+- 能力声明 `scoreServer.supportsPerformerUrl: true`（[manifest.md](./manifest.md)）：工程承诺读取该完整 URL、据它生成二维码与连接配置，并能在该 origin 下加载页面脚本与建立实时连接；缺省 = 未适配的旧工程，入口不得静默对其生效（#140 交付的兼容行为：设置卡显示醒目提示，启动前弹确认对话框，操作者显式选择「使用 HTTP 启动」才继续，取消则不动任何东西）；
 - 优先级：提供 `PNDS_PERFORMER_URL` 时，工程一切对外地址使用该完整 URL；未提供时沿用 `http://<PNDS_HOST_IP>:<performerPort>/`（现行为），不强制迁移旧 manifest。
 
 ### 工程身份与入口接入上下文
 
-- 外部入口绑定**当前演出的工程身份**：`manifest.id` 加上该次 session。入口发布的 URL 与其接入上下文（入口服务的页面、`__config.js` 注入的 `projectId` / `performerUrl` / 页面角色）都派生自当前工程——后续网关实现据此**拒绝与当前工程不匹配的旧入口**：替换工程后，旧 QR 不得路由到新工程；
+- 外部入口绑定**当前演出的工程身份**：`manifest.id` 加上该次 session。入口发布的 URL 与其接入上下文（入口服务的页面、`__config.js` 注入的 `projectId` / `performerUrl` / 页面角色）都派生自当前工程——App 的网关据此**拒绝与当前工程不匹配的旧入口**——结果要求是冻结的：替换工程后，旧 QR 不得路由到新工程。#140 以结构方式落实：入口生命周期 = session 生命周期，替换工程时旧 listener 先关闭再开新的——旧 QR 经由的网关已不存在；
 - 工程身份**不是**座位身份：claim token、座位与恢复语义仍完全归工程（模块手册[乐手身份与座位](../modules/players.md)），本契约不重定义它们，也不解释任何艺术事件；
 - 页面角色由服务端注入（`__config.js` 的 `role` 字段），**不得凭共享外部端口推断**：入口端口与 manifest 端口无关，浏览器端的端口比较在入口之下不可靠；
 - monitor 页保持**内部连接**：经原内部地址跨端口连接 performer 服务，不经外部入口，也不新增公网管理入口。

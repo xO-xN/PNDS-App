@@ -100,6 +100,7 @@ function seedRunningSession(currentPath: string) {
       channelPlan: null,
       outputDevice: null,
       projectionStarted: false,
+      httpsEntry: { status: 'off', url: null, error: null },
     },
   })
 }

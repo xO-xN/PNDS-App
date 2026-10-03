@@ -52,6 +52,7 @@ const readySnapshot: SessionSnapshot = {
   channelPlan: null,
   outputDevice: null,
   projectionStarted: false,
+  httpsEntry: { status: 'off', url: null, error: null },
 }
 
 /** Captured handler for the shell-level session snapshot subscription. */

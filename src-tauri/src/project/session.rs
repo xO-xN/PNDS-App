@@ -125,6 +125,51 @@ pub struct SessionSnapshot {
     /// drift. Survives the projection window closing (the gate is a
     /// session fact, not a window fact).
     pub projection_started: bool,
+    /// #140: the trusted-HTTPS entry's own state — independent from the
+    /// session status because a healthy local server and a usable entry
+    /// are two facts (§15). `off` for every pre-#140-shaped start
+    /// (switch off, project undeclared, no session).
+    pub https_entry: HttpsEntryState,
+}
+
+/// #140: the entry's four states (spec: at least 关闭/准备/就绪/错误).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub enum HttpsEntryStatus {
+    /// No entry this session — the legacy HTTP flow is in effect.
+    Off,
+    /// Launched and probing; the URL is already fixed and injected.
+    Preparing,
+    /// The local TLS/HTTP probe succeeded — the URL is served end to
+    /// end. This proves the Host-side tunnel only; it never claims
+    /// phones' DNS/trust (final device acceptance owns that, §15).
+    Ready,
+    /// Launch or runtime entry failure — `error` says which step.
+    Error,
+}
+
+/// #140: the entry facts a snapshot carries (existing session snapshot
+/// / typed event — no new channel).
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct HttpsEntryState {
+    pub status: HttpsEntryStatus,
+    /// The complete performer root URL fixed for this performance
+    /// (`https://domain:port/`) — present from `preparing` on, so the
+    /// QR (project-rendered), the menu copy items and this field all
+    /// read one value.
+    pub url: Option<String>,
+    pub error: Option<String>,
+}
+
+impl Default for HttpsEntryState {
+    fn default() -> Self {
+        Self {
+            status: HttpsEntryStatus::Off,
+            url: None,
+            error: None,
+        }
+    }
 }
 
 // ============================================================================
@@ -181,6 +226,12 @@ pub struct StartRequest {
     /// behavior; the snapshot's `host_address` and every URL the App
     /// derives (monitor origin, shareable addresses) follow this value.
     pub performer_address: Option<String>,
+    /// Resolved during start (#140): the complete performer root URL
+    /// injected as `PNDS_PERFORMER_URL` when the trusted-HTTPS entry is
+    /// live for this performance (§3/§15). `None` (entry off / project
+    /// undeclared / start not launched it) injects nothing — the
+    /// project reads the variable's absence and stays on the HTTP flow.
+    pub performer_url: Option<String>,
 }
 
 /// #58: the four telematic hub variables one start may inject (TND's
@@ -210,6 +261,7 @@ impl StartRequest {
             resolved_osc_target: None,
             hub: None,
             performer_address: None,
+            performer_url: None,
         }
     }
 
@@ -253,6 +305,93 @@ pub fn resolve_hub_injection(
         token,
         room: format!("{id}_{group}"),
     })
+}
+
+/// #140: the complete performer root URL fixed at start — protocol,
+/// domain and the ACTUAL port, trailing slash root. One constructor so
+/// the injected env var, the snapshot field and every display read the
+/// same spelling.
+pub fn performer_entry_url(domain: &str, port: u16) -> String {
+    format!("https://{domain}:{port}/")
+}
+
+/// #140: the bound entry between `start_gateway` and the state
+/// publication — the handle plus the facts the supervisor probe needs.
+struct LiveEntry {
+    handle: crate::gateway::GatewayHandle,
+    url: String,
+    domain: String,
+}
+
+/// #140: everything a start needs to open the entry gateway — URL,
+/// domain/port and the revalidated chain/key. Computed before any
+/// child spawns; consumed by `start_generation`.
+#[derive(Debug)]
+pub struct EntryLaunch {
+    pub url: String,
+    pub domain: String,
+    pub port: u16,
+    pub chain: Vec<rustls::pki_types::CertificateDer<'static>>,
+    pub key: rustls::pki_types::PrivateKeyDer<'static>,
+}
+
+/// #140: resolves whether this start opens the trusted-HTTPS entry.
+///
+/// Activation is operator switch × project declaration × valid
+/// material: `httpsEnabled == true` AND
+/// `scoreServer.supportsPerformerUrl == true` AND the stored chain/key
+/// revalidates for the configured domain right now (public anchors,
+/// same rules as the import). Everything else → `Ok(None)` — the
+/// legacy HTTP flow, byte-identical to pre-#140.
+///
+/// Switch on × declaration on × configuration broken → `Err`: the
+/// start itself fails with the actionable message. An adapted project
+/// must never silently fall back to HTTP (spec #140); the operator
+/// fixes the material or turns the switch off.
+pub fn resolve_entry_launch(
+    app_data: &Path,
+    prefs: &crate::types::AppPreferences,
+    manifest: &Manifest,
+    anchors: &[webpki::types::TrustAnchor<'_>],
+    now: std::time::SystemTime,
+) -> Result<Option<EntryLaunch>, String> {
+    if prefs.https_enabled != Some(true) {
+        return Ok(None);
+    }
+    if manifest.score_server.supports_performer_url != Some(true) {
+        return Ok(None);
+    }
+    let domain = prefs
+        .https_domain
+        .as_deref()
+        .map(str::trim)
+        .filter(|d| !d.is_empty())
+        .ok_or_else(|| {
+            "The HTTPS entry is enabled but no domain is configured — set it in 设置 → 可信 HTTPS."
+                .to_string()
+        })?;
+    let domain = crate::https::validate_https_domain(domain)
+        .map_err(|e| format!("The HTTPS entry domain is not usable: {e}"))?;
+    let port = prefs.https_port.ok_or_else(|| {
+        "The HTTPS entry is enabled but no port is configured — set it in 设置 → 可信 HTTPS."
+            .to_string()
+    })?;
+    crate::https::validate_https_port(port)
+        .map_err(|e| format!("The HTTPS entry port is not usable: {e}"))?;
+    let (chain, key) =
+        crate::https::launch_material(app_data, &domain, anchors, now).map_err(|problem| {
+            format!(
+                "The HTTPS entry certificate is not launch-ready ({:?}): {}",
+                problem.code, problem.detail
+            )
+        })?;
+    Ok(Some(EntryLaunch {
+        url: performer_entry_url(&domain, port),
+        domain,
+        port,
+        chain,
+        key,
+    }))
 }
 
 /// Environment variables injected into the score server (§3, §6, §7),
@@ -313,6 +452,13 @@ pub fn build_score_server_env(request: &StartRequest) -> Vec<(String, String)> {
         env.push(("PNDS_HUB_TOKEN".to_string(), hub.token.clone()));
         env.push(("PNDS_HUB_ROOM".to_string(), hub.room.clone()));
     }
+    // #140 (§3/§15): the complete performer root URL — injected only
+    // when the trusted-HTTPS entry is live for this performance. The
+    // project's external addresses prefer it over anything derived
+    // from PNDS_HOST_IP; absence = the legacy HTTP flow.
+    if let Some(url) = &request.performer_url {
+        env.push(("PNDS_PERFORMER_URL".to_string(), url.clone()));
+    }
     env
 }
 
@@ -345,7 +491,10 @@ pub fn list_lan_addresses() -> Result<Vec<String>, String> {
 /// One health GET against the performer port. Errors (connection refused,
 /// timeout, bad JSON) all mean "not ready yet" to the polling loop.
 fn fetch_health(performer_port: u16) -> Result<HealthPayload, String> {
-    let url = format!("http://127.0.0.1:{performer_port}/__pnds/health");
+    let url = format!(
+        "http://127.0.0.1:{performer_port}{}",
+        crate::https::HEALTH_PATH
+    );
     let agent: ureq::Agent = ureq::Agent::config_builder()
         .timeout_global(Some(HEALTH_REQUEST_TIMEOUT))
         .build()
@@ -394,6 +543,12 @@ struct SessionInner {
     output_device: Option<String>,
     /// #130: the projection start gate — see `SessionSnapshot`.
     projection_started: bool,
+    /// #140: the running entry gateway, owned exactly as long as the
+    /// session (bound before the children spawn; closed by
+    /// `teardown_children` on every exit path).
+    gateway: Option<crate::gateway::GatewayHandle>,
+    /// #140: the entry state — see `SessionSnapshot`.
+    https_entry: HttpsEntryState,
     /// Incremented on every start/stop so stale supervisor threads exit.
     generation: u64,
     /// §12: per-session log file.
@@ -430,6 +585,8 @@ impl Default for SessionInner {
             channel_plan: None,
             output_device: None,
             projection_started: false,
+            gateway: None,
+            https_entry: HttpsEntryState::default(),
             generation: 0,
             logger: None,
             logger_generation: None,
@@ -456,6 +613,7 @@ impl SessionInner {
             channel_plan: self.channel_plan.clone(),
             output_device: self.output_device.clone(),
             projection_started: self.projection_started,
+            https_entry: self.https_entry.clone(),
         }
     }
 
@@ -481,6 +639,10 @@ impl SessionInner {
         // next work's monitor is never revealed by the previous one's
         // 开演.
         self.projection_started = false;
+        // #140: the entry resets with the run (the gateway itself is
+        // closed by `teardown_children` — this only clears the reported
+        // state for whatever comes next).
+        self.https_entry = HttpsEntryState::default();
     }
 }
 
@@ -652,6 +814,61 @@ impl SessionManager {
             &HashSet::new(),
         )?;
 
+        // #140: resolve and BIND the trusted-HTTPS entry before any child
+        // spawns — an unusable entry (broken material, occupied port)
+        // fails the start through `fail_start` with nothing running yet.
+        // `Ok(None)` = the legacy HTTP flow, unchanged.
+        let entry_launch = {
+            let prefs = crate::commands::preferences::load_preferences_sync(app)?;
+            resolve_entry_launch(
+                app_data_dir,
+                &prefs,
+                &manifest,
+                crate::https::public_trust_anchors(),
+                std::time::SystemTime::now(),
+            )?
+        };
+        let mut live_entry: Option<LiveEntry> = None;
+        if let Some(launch) = entry_launch {
+            let bind_ip: std::net::IpAddr = request
+                .lan_ip
+                .parse()
+                .map_err(|_| format!("Invalid LAN IPv4 address: \"{}\"", request.lan_ip))?;
+            // Runtime entry failures (listener death) report through the
+            // entry state — the session itself keeps running (spec #140).
+            let failure_inner = Arc::clone(&self.inner);
+            let failure_app = app.clone();
+            let sink: crate::gateway::FailureSink = Arc::new(move |message| {
+                Self::mark_entry_failure(&failure_app, &failure_inner, generation, message);
+            });
+            let handle = crate::gateway::start_gateway(
+                crate::gateway::GatewayConfig {
+                    bind_addr: std::net::SocketAddr::new(bind_ip, launch.port),
+                    upstream: std::net::SocketAddr::new(
+                        std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
+                        manifest.score_server.performer_port,
+                    ),
+                    chain: launch.chain,
+                    key: launch.key,
+                    max_connections: crate::gateway::MAX_CONNECTIONS,
+                },
+                sink,
+            )
+            .map_err(|e| format!("The HTTPS entry could not start: {e}"))?;
+            let upstream_port = manifest.score_server.performer_port;
+            log::info!(
+                "HTTPS entry bound: {} on {} → 127.0.0.1:{upstream_port}",
+                launch.url,
+                handle.local_addr()
+            );
+            request.performer_url = Some(launch.url.clone());
+            live_entry = Some(LiveEntry {
+                handle,
+                url: launch.url,
+                domain: launch.domain,
+            });
+        }
+
         // §7.1/§7.6: for internal sessions resolve the output device and
         // its capability at the effective sample rate, then compute
         // N/H/K/B. Unreadable capability or H = 0 fails before anything is
@@ -770,6 +987,38 @@ impl SessionManager {
             // Issue #93: the log belongs to this generation's children —
             // their output readers key off this to persist.
             inner.logger_generation = Some(generation);
+        }
+        // #140: publish the entry state (URL fixed, probing) and hand the
+        // gateway to the session — every path from here runs through
+        // `teardown_children`, which closes it.
+        if let Some(live) = live_entry {
+            let probe_addr = live.handle.local_addr();
+            let url = live.url;
+            let upstream_port = manifest.score_server.performer_port;
+            Self::write_session_log_line(
+                &self.inner,
+                Some(generation),
+                &format!(
+                    "HTTPS entry: {url} on {probe_addr} → 127.0.0.1:{upstream_port} (probing)"
+                ),
+            );
+            {
+                let mut inner = self.lock();
+                inner.gateway = Some(live.handle);
+                inner.https_entry = HttpsEntryState {
+                    status: HttpsEntryStatus::Preparing,
+                    url: Some(url),
+                    error: None,
+                };
+            }
+            self.spawn_entry_supervisor(
+                app.clone(),
+                generation,
+                probe_addr,
+                live.domain,
+                crate::gateway::public_root_store().clone(),
+            );
+            self.emit(app);
         }
 
         // §8: internal mode boots scsynth first (and waits for /status)
@@ -948,6 +1197,12 @@ impl SessionManager {
         Self::transition(app, inner, generation, SessionStatus::Error, |guard| {
             guard.error = Some(message);
             guard.startup_stage = 0;
+            // #140: the session died wholesale — its entry (already
+            // closed by the teardown above) stops claiming a URL. The
+            // session error carries the reason; entry-specific
+            // failures while the session lives go through
+            // `mark_entry_failure` instead.
+            guard.https_entry = HttpsEntryState::default();
         });
     }
 
@@ -992,6 +1247,122 @@ impl SessionManager {
                 }
             }
         })
+    }
+
+    /// #140: the entry readiness probe — a dedicated thread per
+    /// generation. Waits for the session to reach `ready` (the project
+    /// server serving health is the precondition for a meaningful
+    /// probe), then probes the entry itself (TLS + HTTP 200 through the
+    /// tunnel) with a short deadline: entry `ready` publishes only
+    /// after that succeeds, and a probe that never succeeds publishes
+    /// entry `error` WITHOUT failing the session (the local audio and
+    /// server keep running — spec #140: an entry fault is reported, not
+    /// escalated).
+    fn spawn_entry_supervisor<R: tauri::Runtime>(
+        &self,
+        app: AppHandle<R>,
+        generation: u64,
+        probe_addr: std::net::SocketAddr,
+        domain: String,
+        probe_roots: rustls::RootCertStore,
+    ) {
+        const ENTRY_PROBE_INTERVAL: Duration = Duration::from_millis(500);
+        const ENTRY_PROBE_DEADLINE: Duration = Duration::from_secs(10);
+        let inner = Arc::clone(&self.inner);
+        std::thread::Builder::new()
+            .name("pnds-https-entry-probe".to_string())
+            .spawn(move || {
+                let mut deadline: Option<Instant> = None;
+                loop {
+                    std::thread::sleep(ENTRY_PROBE_INTERVAL);
+                    let live = {
+                        let guard = inner.lock().unwrap_or_else(|e| e.into_inner());
+                        if guard.generation != generation {
+                            return; // replaced/stopped — the gateway is gone
+                        }
+                        match guard.status {
+                            SessionStatus::Starting | SessionStatus::Ready => {}
+                            _ => return, // failed or stopped: entry follows the teardown
+                        }
+                        guard.status == SessionStatus::Ready
+                    };
+                    if !live {
+                        continue; // the project server is not serving yet
+                    }
+                    let deadline =
+                        *deadline.get_or_insert_with(|| Instant::now() + ENTRY_PROBE_DEADLINE);
+                    match crate::gateway::probe_tls_http(
+                        probe_addr,
+                        &domain,
+                        &probe_roots,
+                        HEALTH_REQUEST_TIMEOUT,
+                    ) {
+                        Ok(()) => {
+                            Self::mark_entry_state(&app, &inner, generation, |entry| {
+                                if entry.status == HttpsEntryStatus::Preparing {
+                                    entry.status = HttpsEntryStatus::Ready;
+                                }
+                            });
+                            return;
+                        }
+                        Err(e) => {
+                            if Instant::now() >= deadline {
+                                Self::mark_entry_failure(
+                                    &app,
+                                    &inner,
+                                    generation,
+                                    format!("The HTTPS entry did not become reachable: {e}"),
+                                );
+                                return;
+                            }
+                        }
+                    }
+                }
+            })
+            .expect("entry probe thread spawns");
+    }
+
+    /// The single writer for entry-state updates outside the start path:
+    /// generation-guarded (a replaced session's probe/failure can never
+    /// touch the new run's entry), then published through the normal
+    /// snapshot funnel.
+    fn mark_entry_state<R: tauri::Runtime>(
+        app: &AppHandle<R>,
+        inner: &Arc<Mutex<SessionInner>>,
+        generation: u64,
+        mutate: impl FnOnce(&mut HttpsEntryState),
+    ) {
+        {
+            let mut guard = inner.lock().unwrap_or_else(|e| e.into_inner());
+            if guard.generation != generation {
+                return;
+            }
+            mutate(&mut guard.https_entry);
+        }
+        Self::emit_static(app, inner);
+    }
+
+    /// #140: a runtime entry failure (probe deadline passed, listener
+    /// died) — the entry goes to `error` with the message; the session
+    /// itself is untouched. Only a still-launching or already-published
+    /// entry can fail this way; a superseded generation's late report
+    /// is dropped.
+    fn mark_entry_failure<R: tauri::Runtime>(
+        app: &AppHandle<R>,
+        inner: &Arc<Mutex<SessionInner>>,
+        generation: u64,
+        message: String,
+    ) {
+        log::warn!("HTTPS entry failure (generation {generation}): {message}");
+        Self::mark_entry_state(app, inner, generation, |entry| {
+            if matches!(
+                entry.status,
+                HttpsEntryStatus::Preparing | HttpsEntryStatus::Ready
+            ) {
+                entry.status = HttpsEntryStatus::Error;
+                entry.error = Some(message);
+            }
+        });
     }
 
     fn spawn_supervisor<R: tauri::Runtime>(
@@ -1424,13 +1795,17 @@ impl SessionManager {
     /// rules live in `SupervisedChild::shutdown` — teardown only sequences
     /// the two children and mirrors the outcomes into the logs.
     fn teardown_children(inner: &Arc<Mutex<SessionInner>>) {
-        let (node_child, sc_child, sc_port, master_ready, log_generation) = {
+        let (node_child, sc_child, sc_port, master_ready, gateway, log_generation) = {
             let mut guard = inner.lock().unwrap_or_else(|e| e.into_inner());
             (
                 guard.child.take(),
                 guard.scsynth.take(),
                 guard.scsynth_port.take(),
                 std::mem::take(&mut guard.master_synth_ready),
+                // #140: the entry closes FIRST — phones see a clean
+                // disconnect instead of routing into whatever comes
+                // next, and no stale entry outlives the session.
+                guard.gateway.take(),
                 // Issue #93: teardown may only touch the log of the session
                 // it is tearing down. A start() that interleaves during the
                 // kill windows installs the NEXT session's log — every write
@@ -1442,6 +1817,12 @@ impl SessionManager {
         };
         let had_children = node_child.is_some() || sc_child.is_some();
         Self::write_session_log_line(inner, log_generation, "Session ending — stopping processes");
+
+        if let Some(gateway) = gateway {
+            Self::write_session_log_line(inner, log_generation, "Closing the HTTPS entry");
+            gateway.shutdown();
+            Self::write_session_log_line(inner, log_generation, "HTTPS entry closed");
+        }
 
         if let Some(mut node) = node_child {
             Self::stop_child_and_log(
@@ -2949,7 +3330,7 @@ mod tests {
 
         let deadline = Instant::now() + Duration::from_secs(10);
         loop {
-            let status = manager.lock().status.clone();
+            let status = manager.lock().status;
             if status == SessionStatus::Ready {
                 break;
             }
@@ -3034,5 +3415,410 @@ mod tests {
             Duration::from_secs(2)
         ));
         assert!(child.try_wait().unwrap().is_some());
+    }
+
+    // ------------------------------------------------------------------
+    // #140: the trusted-HTTPS entry
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn env_carries_performer_url_only_when_the_entry_is_active() {
+        let mut request = StartRequest::new(
+            "/p".to_string(),
+            AudioMode::None,
+            "192.168.1.10".to_string(),
+            None,
+        );
+        let env = build_score_server_env(&request);
+        assert!(!env.iter().any(|(k, _)| k == "PNDS_PERFORMER_URL"));
+
+        request.performer_url = Some("https://show.example.org:8443/".to_string());
+        let env = build_score_server_env(&request);
+        let get = |k: &str| {
+            env.iter()
+                .find(|(key, _)| key == k)
+                .map(|(_, v)| v.as_str())
+        };
+        assert_eq!(
+            get("PNDS_PERFORMER_URL"),
+            Some("https://show.example.org:8443/")
+        );
+        // §3: the host variables are untouched by the entry.
+        assert_eq!(get("PNDS_HOST_IP"), Some("192.168.1.10"));
+    }
+
+    #[test]
+    fn performer_entry_url_spells_the_full_root() {
+        assert_eq!(
+            performer_entry_url("show.example.org", 8443),
+            "https://show.example.org:8443/"
+        );
+    }
+
+    /// A minimal manifest with an optional `supportsPerformerUrl`
+    /// declaration (the #138 lenient boolean).
+    fn entry_manifest(declared: bool) -> Manifest {
+        let declaration = if declared {
+            ", \"supportsPerformerUrl\": true"
+        } else {
+            ""
+        };
+        serde_json::from_str(&format!(
+            r#"{{ "schemaVersion": 1, "id": "my-work", "name": "X", "version": "0.1.0",
+                "scoreServer": {{ "entry": "s.js", "workingDirectory": ".", "performerPort": 1, "monitorPort": 2{declaration} }},
+                "audio": {{ "defaultMode": "none", "supportedModes": ["none"] }} }}"#
+        ))
+        .unwrap()
+    }
+
+    fn entry_prefs(
+        enabled: Option<bool>,
+        domain: Option<&str>,
+        port: Option<u16>,
+    ) -> crate::types::AppPreferences {
+        crate::types::AppPreferences {
+            https_enabled: enabled,
+            https_domain: domain.map(str::to_string),
+            https_port: port,
+            ..Default::default()
+        }
+    }
+
+    /// Imports real rcgen certificate material into the tempdir's
+    /// protected storage through the #139 pipeline, returning the test
+    /// anchors it installed (the resolution call sites trust exactly
+    /// these — never the system, never Mozilla).
+    fn import_entry_material(dir: &Path, domain: &str) -> Vec<webpki::types::TrustAnchor<'static>> {
+        let ca_key = rcgen::KeyPair::generate().unwrap();
+        let mut ca_params = rcgen::CertificateParams::new(Vec::<String>::new()).unwrap();
+        ca_params.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
+        ca_params
+            .distinguished_name
+            .push(rcgen::DnType::CommonName, "PNDS Entry Test CA");
+        let ca = ca_params.self_signed(&ca_key).unwrap();
+        let leaf_key = rcgen::KeyPair::generate().unwrap();
+        let mut leaf_params = rcgen::CertificateParams::new(vec![domain.to_string()]).unwrap();
+        leaf_params
+            .distinguished_name
+            .push(rcgen::DnType::CommonName, domain);
+        let leaf = leaf_params.signed_by(&leaf_key, &ca, &ca_key).unwrap();
+
+        let cert_path = dir.join("fullchain.pem");
+        let key_path = dir.join("privkey.pem");
+        std::fs::write(&cert_path, format!("{}{}", leaf.pem(), ca.pem())).unwrap();
+        std::fs::write(&key_path, leaf_key.serialize_pem()).unwrap();
+
+        let ca_der: &'static webpki::types::CertificateDer = Box::leak(Box::new(ca.der().clone()));
+        let anchors = vec![webpki::anchor_from_trusted_cert(ca_der).unwrap()];
+        crate::https::import_material(
+            dir,
+            domain,
+            &cert_path,
+            &key_path,
+            &anchors,
+            std::time::SystemTime::now(),
+        )
+        .unwrap();
+        anchors
+    }
+
+    #[test]
+    fn entry_resolution_requires_switch_declaration_and_valid_config() {
+        let dir = tempfile::tempdir().unwrap();
+        let test_anchors = import_entry_material(dir.path(), "show.example.org");
+        let declared = entry_manifest(true);
+        let undeclared = entry_manifest(false);
+        let now = std::time::SystemTime::now();
+
+        // Switch off or project undeclared → None (the legacy flow), no
+        // matter what else is configured.
+        assert!(resolve_entry_launch(
+            dir.path(),
+            &entry_prefs(None, Some("show.example.org"), Some(8443)),
+            &declared,
+            &test_anchors,
+            now
+        )
+        .unwrap()
+        .is_none());
+        assert!(resolve_entry_launch(
+            dir.path(),
+            &entry_prefs(Some(false), Some("show.example.org"), Some(8443)),
+            &declared,
+            &test_anchors,
+            now
+        )
+        .unwrap()
+        .is_none());
+        assert!(resolve_entry_launch(
+            dir.path(),
+            &entry_prefs(Some(true), Some("show.example.org"), Some(8443)),
+            &undeclared,
+            &test_anchors,
+            now
+        )
+        .unwrap()
+        .is_none());
+
+        // Switch on × declared × config missing → the start fails with
+        // the actionable message (never a silent HTTP fallback).
+        let err = resolve_entry_launch(
+            dir.path(),
+            &entry_prefs(Some(true), None, None),
+            &declared,
+            &test_anchors,
+            now,
+        )
+        .unwrap_err();
+        assert!(err.contains("domain"), "{err}");
+        let err = resolve_entry_launch(
+            dir.path(),
+            &entry_prefs(Some(true), Some("show.example.org"), None),
+            &declared,
+            &test_anchors,
+            now,
+        )
+        .unwrap_err();
+        assert!(err.contains("port"), "{err}");
+
+        // Fully configured → the launch facts (URL + material).
+        let launch = resolve_entry_launch(
+            dir.path(),
+            &entry_prefs(Some(true), Some("show.example.org"), Some(8443)),
+            &declared,
+            &test_anchors,
+            now,
+        )
+        .unwrap()
+        .expect("activated");
+        assert_eq!(launch.url, "https://show.example.org:8443/");
+        assert_eq!(launch.domain, "show.example.org");
+        assert_eq!(launch.port, 8443);
+        assert!(!launch.chain.is_empty());
+
+        // Material valid for ANOTHER domain (operator changed the
+        // domain preference since import) → launch refuses.
+        let err = resolve_entry_launch(
+            dir.path(),
+            &entry_prefs(Some(true), Some("other.example.org"), Some(8443)),
+            &declared,
+            &test_anchors,
+            now,
+        )
+        .unwrap_err();
+        assert!(err.to_lowercase().contains("domain"), "{err}");
+    }
+
+    #[test]
+    fn entry_resolution_fails_when_no_material_is_stored() {
+        let dir = tempfile::tempdir().unwrap();
+        let err = resolve_entry_launch(
+            dir.path(),
+            &entry_prefs(Some(true), Some("show.example.org"), Some(8443)),
+            &entry_manifest(true),
+            crate::https::public_trust_anchors(),
+            std::time::SystemTime::now(),
+        )
+        .unwrap_err();
+        assert!(
+            err.to_lowercase().contains("certificate"),
+            "the error should point at the missing material: {err}"
+        );
+    }
+
+    /// A raw TCP /__pnds/health responder — the same stand-in the
+    /// supervisor tests use, now standing behind the real gateway.
+    fn spawn_health_responder() -> u16 {
+        let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            let body = r#"{"status":"ready","projectId":"fixture"}"#;
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\nContent-Length: {}\r\n\r\n{body}",
+                body.len()
+            );
+            for conn in listener.incoming() {
+                let Ok(mut stream) = conn else { break };
+                let mut buf = [0u8; 512];
+                let _ = std::io::Read::read(&mut stream, &mut buf);
+                let _ = std::io::Write::write_all(&mut stream, response.as_bytes());
+            }
+        });
+        port
+    }
+
+    /// The launch-shaped gateway the lifecycle tests install into a
+    /// session: real listener, real TLS, test CA (trusted only by the
+    /// probe's injected root store).
+    fn launch_test_gateway(
+        upstream_port: u16,
+    ) -> (crate::gateway::GatewayHandle, rustls::RootCertStore) {
+        let ca_key = rcgen::KeyPair::generate().unwrap();
+        let mut ca_params = rcgen::CertificateParams::new(Vec::<String>::new()).unwrap();
+        ca_params.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
+        ca_params
+            .distinguished_name
+            .push(rcgen::DnType::CommonName, "PNDS Entry Test CA");
+        let ca = ca_params.self_signed(&ca_key).unwrap();
+        let leaf_key = rcgen::KeyPair::generate().unwrap();
+        let mut leaf_params =
+            rcgen::CertificateParams::new(vec!["entry.test".to_string()]).unwrap();
+        leaf_params
+            .distinguished_name
+            .push(rcgen::DnType::CommonName, "entry.test");
+        let leaf = leaf_params.signed_by(&leaf_key, &ca, &ca_key).unwrap();
+        let mut roots = rustls::RootCertStore::empty();
+        roots.add(ca.der().clone()).unwrap();
+        let handle = crate::gateway::start_gateway(
+            crate::gateway::GatewayConfig {
+                bind_addr: "127.0.0.1:0".parse().unwrap(),
+                upstream: format!("127.0.0.1:{upstream_port}").parse().unwrap(),
+                chain: vec![leaf.der().clone()],
+                key: webpki::types::PrivateKeyDer::Pkcs8(leaf_key.serialize_der().into()),
+                max_connections: crate::gateway::MAX_CONNECTIONS,
+            },
+            Arc::new(|_| {}),
+        )
+        .unwrap();
+        (handle, roots)
+    }
+
+    #[test]
+    fn entry_supervisor_publishes_ready_through_a_real_gateway() {
+        let app = tauri::test::mock_app().handle().clone();
+        crate::events::events_builder().mount_events(&app);
+        let manager = SessionManager::default();
+
+        let upstream_port = spawn_health_responder();
+        let (gateway, probe_roots) = launch_test_gateway(upstream_port);
+        let probe_addr = gateway.local_addr();
+
+        let generation = {
+            let mut inner = manager.lock();
+            inner.generation += 1;
+            inner.status = SessionStatus::Ready;
+            inner.gateway = Some(gateway);
+            inner.https_entry = HttpsEntryState {
+                status: HttpsEntryStatus::Preparing,
+                url: Some("https://entry.test:8443/".to_string()),
+                error: None,
+            };
+            inner.generation
+        };
+        manager.spawn_entry_supervisor(
+            app.clone(),
+            generation,
+            probe_addr,
+            "entry.test".to_string(),
+            probe_roots,
+        );
+
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            let status = manager.lock().https_entry.status;
+            if status == HttpsEntryStatus::Ready {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "entry never became ready (status: {status:?})"
+            );
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        let snapshot = manager.snapshot();
+        assert_eq!(snapshot.https_entry.status, HttpsEntryStatus::Ready);
+        assert_eq!(
+            snapshot.https_entry.url.as_deref(),
+            Some("https://entry.test:8443/")
+        );
+
+        manager.stop(&app).unwrap();
+        let snapshot = manager.snapshot();
+        assert_eq!(snapshot.https_entry.status, HttpsEntryStatus::Off);
+        assert!(snapshot.https_entry.url.is_none());
+        // The listener really is gone.
+        let mut refused = false;
+        for _ in 0..20 {
+            if std::net::TcpStream::connect_timeout(&probe_addr, Duration::from_millis(200))
+                .is_err()
+            {
+                refused = true;
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        assert!(refused, "stop must release the entry port");
+    }
+
+    #[test]
+    fn fail_generation_returns_the_entry_to_off() {
+        let app = tauri::test::mock_app().handle().clone();
+        crate::events::events_builder().mount_events(&app);
+        let manager = SessionManager::default();
+        let inner = {
+            let mut guard = manager.lock();
+            guard.generation += 1;
+            guard.status = SessionStatus::Starting;
+            guard.https_entry = HttpsEntryState {
+                status: HttpsEntryStatus::Preparing,
+                url: Some("https://entry.test:8443/".to_string()),
+                error: None,
+            };
+            Arc::clone(&manager.inner)
+        };
+        let generation = {
+            let guard = manager.lock();
+            guard.generation
+        };
+        SessionManager::fail_generation(&app, &inner, generation, "boom".to_string());
+        let snapshot = manager.snapshot();
+        assert_eq!(snapshot.status, SessionStatus::Error);
+        assert_eq!(snapshot.https_entry.status, HttpsEntryStatus::Off);
+        assert!(snapshot.https_entry.url.is_none());
+    }
+
+    #[test]
+    fn runtime_entry_failure_is_reported_without_failing_the_session() {
+        let app = tauri::test::mock_app().handle().clone();
+        crate::events::events_builder().mount_events(&app);
+        let manager = SessionManager::default();
+        let (generation, inner) = {
+            let mut guard = manager.lock();
+            guard.generation += 1;
+            guard.status = SessionStatus::Ready;
+            guard.https_entry = HttpsEntryState {
+                status: HttpsEntryStatus::Preparing,
+                url: Some("https://entry.test:8443/".to_string()),
+                error: None,
+            };
+            (guard.generation, Arc::clone(&manager.inner))
+        };
+        SessionManager::mark_entry_failure(
+            &app,
+            &inner,
+            generation,
+            "The HTTPS entry did not become reachable".to_string(),
+        );
+        let snapshot = manager.snapshot();
+        // The session lives on; only the entry reports the fault.
+        assert_eq!(snapshot.status, SessionStatus::Ready);
+        assert_eq!(snapshot.https_entry.status, HttpsEntryStatus::Error);
+        assert_eq!(
+            snapshot.https_entry.error.as_deref(),
+            Some("The HTTPS entry did not become reachable")
+        );
+        // The URL survives the fault — it is still the entry's origin
+        // (the operator decides how to recover; no silent HTTP swap).
+        assert_eq!(
+            snapshot.https_entry.url.as_deref(),
+            Some("https://entry.test:8443/")
+        );
+
+        // A stale generation's late report changes nothing.
+        SessionManager::mark_entry_failure(&app, &inner, generation + 5, "late".to_string());
+        assert_eq!(
+            manager.snapshot().https_entry.error.as_deref(),
+            Some("The HTTPS entry did not become reachable")
+        );
     }
 }

@@ -251,10 +251,10 @@ mod tests {
                 !files.is_empty(),
                 "the {tree} tree carries no markdown files at all"
             );
-            for unregistered in files.difference(&registered) {
+            if let Some(unregistered) = files.difference(&registered).next() {
                 panic!("{tree} tree carries an unregistered document: {unregistered}");
             }
-            for missing in registered.difference(&files) {
+            if let Some(missing) = registered.difference(&files).next() {
                 panic!("{tree} tree is missing a registered document: {missing}");
             }
         }

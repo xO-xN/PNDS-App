@@ -347,6 +347,50 @@ describe('buildAppMenu address segment (v1.3.0, #52)', () => {
     )
   })
 
+  it("the performer item is the entry URL while the session's entry is active (#140)", async () => {
+    selectProject()
+    // The running session is the selected project and its entry is live.
+    useSessionStore.setState({
+      sessionHostAddress: '192.168.1.42',
+      sessionProjectPath: '/tmp/demo',
+      sessionStatus: 'ready',
+      httpsEntry: {
+        status: 'ready',
+        url: 'https://show.example.org:8443/',
+        error: null,
+      },
+    })
+    await buildAppMenu()
+
+    const performer = item('performer-address')
+    const conductor = item('conductor-address')
+    expect(performer.text).toBe('Performer — https://show.example.org:8443/')
+    // The conductor item stays the internal HTTP monitor origin.
+    expect(conductor.text).toBe('Conductor — http://192.168.1.42:7001/')
+    performer.action?.()
+    await vi.waitFor(() =>
+      expect(writeText).toHaveBeenCalledWith('https://show.example.org:8443/')
+    )
+  })
+
+  it('a roaming selection over a live entry keeps its own HTTP derivation (#140)', async () => {
+    selectProject()
+    useSessionStore.setState({
+      sessionHostAddress: '192.168.1.42',
+      sessionProjectPath: '/elsewhere',
+      sessionStatus: 'ready',
+      httpsEntry: {
+        status: 'ready',
+        url: 'https://show.example.org:8443/',
+        error: null,
+      },
+    })
+    await buildAppMenu()
+
+    const performer = item('performer-address')
+    expect(performer.text).toBe('Performer — http://192.168.1.42:7000/')
+  })
+
   it('disables the items to bare labels with no selected project', async () => {
     useProjectStore.setState({ currentProject: null })
     useSessionStore.setState({ lanIp: null })

@@ -59,6 +59,7 @@ const snapshot = (
   channelPlan: null,
   outputDevice: 'System default',
   projectionStarted: false,
+  httpsEntry: { status: 'off', url: null, error: null },
   ...overrides,
 })
 
@@ -306,7 +307,12 @@ describe('ProjectionApp (#130 gate)', () => {
       'http://192.168.1.10:6869/?theme=pond&lang=en&surface=venue'
     )
     // 撤回 — the same action reverses through the same fade.
-    publish(snapshot({ projectionStarted: false }))
+    publish(
+      snapshot({
+        projectionStarted: false,
+        httpsEntry: { status: 'off', url: null, error: null },
+      })
+    )
     await settleSwap()
     expect(intro()).toBeInTheDocument()
   })
@@ -348,6 +354,7 @@ describe('ProjectionApp (#130 gate)', () => {
         projectPath: '/Users/test/Other',
         projectName: 'Other Work',
         projectionStarted: false,
+        httpsEntry: { status: 'off', url: null, error: null },
       })
     )
     await settleSwap()
@@ -513,6 +520,7 @@ describe('ProjectionApp (#130 gate)', () => {
         status: 'starting',
         projectPath: '/Users/test/Other',
         projectionStarted: false,
+        httpsEntry: { status: 'off', url: null, error: null },
       })
     )
     await settleSwap()
@@ -830,7 +838,12 @@ describe('ProjectionApp (#135 §14 zoom ownership)', () => {
     // 撤回: the monitor (and the ownership holder inside it) unmounts
     // through the content swap — the 简介 is App content and zooms by
     // the App.
-    publish(snapshot({ projectionStarted: false }))
+    publish(
+      snapshot({
+        projectionStarted: false,
+        httpsEntry: { status: 'off', url: null, error: null },
+      })
+    )
     await settleSwap()
     dispatchAction('zoom-in')
     expect(intro().style.zoom).toBe('1.4')
