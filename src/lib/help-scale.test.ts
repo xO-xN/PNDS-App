@@ -21,6 +21,7 @@ import referenceReadme from '../../docs/zh-CN/reference/README.md?raw'
 import referenceDigitalScore from '../../docs/zh-CN/reference/digital-score.md?raw'
 import referenceNetwork from '../../docs/zh-CN/reference/network.md?raw'
 import referenceHttps from '../../docs/zh-CN/reference/https.md?raw'
+import referenceDns from '../../docs/zh-CN/reference/dns.md?raw'
 import referenceAudioModes from '../../docs/zh-CN/reference/audio-modes.md?raw'
 import referenceRuntimeContract from '../../docs/zh-CN/reference/runtime-contract.md?raw'
 import referenceStructure from '../../docs/zh-CN/reference/structure.md?raw'
@@ -58,6 +59,7 @@ const RAW_CORPUS: Record<string, string> = {
   'reference-digital-score': referenceDigitalScore,
   'reference-network': referenceNetwork,
   'reference-https': referenceHttps,
+  'reference-dns': referenceDns,
   'reference-audio-modes': referenceAudioModes,
   'reference-runtime-contract': referenceRuntimeContract,
   'reference-structure': referenceStructure,
@@ -86,6 +88,7 @@ const DOC_PATHS: Record<string, string> = {
   'reference-digital-score': 'reference/digital-score.md',
   'reference-network': 'reference/network.md',
   'reference-https': 'reference/https.md',
+  'reference-dns': 'reference/dns.md',
   'reference-audio-modes': 'reference/audio-modes.md',
   'reference-runtime-contract': 'reference/runtime-contract.md',
   'reference-structure': 'reference/structure.md',
@@ -113,12 +116,13 @@ describe('help corpus at real scale (#53)', () => {
   const index = buildHelpIndex(corpus)
 
   it('places every shipped document and derives its own title', () => {
-    expect(corpus).toHaveLength(24)
+    expect(corpus).toHaveLength(25)
     expect(corpus[0]?.title).toBe('PNDS App 使用教程')
     expect(corpus[1]?.title).toBe('PNDS Template 创作指南')
     expect(corpus[2]?.title).toBe('给工程写 README')
     expect(corpus[3]?.title).toBe('PNDS 参考手册')
-    expect(corpus[16]?.title).toBe('模块手册')
+    expect(corpus[7]?.title).toBe('演出 DNS：手机零配置入网')
+    expect(corpus[17]?.title).toBe('模块手册')
     for (const document of corpus) {
       expect(document.title).not.toBe(document.id)
       expect(document.sections.length).toBeGreaterThan(0)

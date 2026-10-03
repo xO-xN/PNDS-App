@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type {
   AudioMode,
   HealthPayload,
+  DnsMappingState,
   HttpsEntryState,
   SessionSnapshot,
   SessionStatus,
@@ -104,6 +105,15 @@ export const ENTRY_OFF: HttpsEntryState = {
   error: null,
 }
 
+/** #174: the performance DNS mapping's resting state — no mapping, no
+ * facts. Same defensive default story as `ENTRY_OFF`. */
+export const DNS_MAPPING_OFF: DnsMappingState = {
+  status: 'off',
+  domain: null,
+  ip: null,
+  error: null,
+}
+
 /** Entering the mute: remember what to restore — the volume being silenced
  * if it's non-zero, else whatever an earlier mute already recorded. */
 const volumeToRestore = (current: number, recorded: number): number =>
@@ -159,6 +169,12 @@ interface SessionState {
    * the session.
    */
   httpsEntry: HttpsEntryState
+  /** #174: the performance DNS mapping's own state, mirrored from the
+   * backend snapshot. Independent from `httpsEntry` (DNS reachable ≠
+   * HTTPS serving) and from the session status — a mapping fault never
+   * fails the session; the settings「演出 DNS」section surfaces the
+   * daemon's own (authoritative) view. */
+  dnsMapping: DnsMappingState
   /** OSC target reported by the backend (internal: dynamic; external: §6.6). */
   oscTarget: string | null
   /** Master volume percent (§6.4; every new session starts at 80). */
@@ -197,9 +213,12 @@ interface SessionState {
    * Typed as the generated AudioMode union — the Rust enum is the single
    * vocabulary and a typo here stops compiling. */
   audioMode: AudioMode
-  /** Selected LAN IPv4 (§7); null until the user chooses when multiple exist. */
+  /** Machine-wide next-start LAN choice; survives project/session resets.
+   * Null until the user chooses when multiple usable addresses exist. */
   lanIp: string | null
   lanAddresses: string[]
+  /** Distinguishes a cold restore from a refresh that found no LAN. */
+  lanAddressesLoaded: boolean
   /** §6.5: chosen output device name, or "System default". */
   outputDevice: string
   /** §7.1: internal channel plan (N/H/K/B) of the running session, or null. */
@@ -260,6 +279,7 @@ export const useSessionStore = create<SessionState>()(set => ({
   sessionHostAddress: null,
   projectionStarted: false,
   httpsEntry: ENTRY_OFF,
+  dnsMapping: DNS_MAPPING_OFF,
   oscTarget: null,
   volume: DEFAULT_SESSION_VOLUME,
   muted: false,
@@ -271,6 +291,7 @@ export const useSessionStore = create<SessionState>()(set => ({
   audioMode: 'internal',
   lanIp: null,
   lanAddresses: [],
+  lanAddressesLoaded: false,
   outputDevice: 'System default',
   channelPlan: null,
   oscTargetInput: '127.0.0.1:3333',
@@ -281,7 +302,19 @@ export const useSessionStore = create<SessionState>()(set => ({
 
   setAudioMode: audioMode => set({ audioMode }),
   setLanIp: lanIp => set({ lanIp }),
-  setLanAddresses: lanAddresses => set({ lanAddresses }),
+  setLanAddresses: lanAddresses =>
+    set(state => ({
+      lanAddresses,
+      lanAddressesLoaded: true,
+      // A refresh keeps a still-available choice. Never choose the first
+      // of several interfaces: their order cannot identify the venue LAN.
+      lanIp:
+        state.lanIp !== null && lanAddresses.includes(state.lanIp)
+          ? state.lanIp
+          : lanAddresses.length === 1
+            ? lanAddresses[0]
+            : null,
+    })),
   setVolume: volume =>
     set(state => ({
       volume,
@@ -338,6 +371,7 @@ export const useSessionStore = create<SessionState>()(set => ({
         sessionHostAddress: snapshot.hostAddress,
         projectionStarted: snapshot.projectionStarted,
         httpsEntry: snapshot.httpsEntry ?? ENTRY_OFF,
+        dnsMapping: snapshot.dnsMapping ?? DNS_MAPPING_OFF,
         oscTarget: snapshot.oscTarget,
         volume: snapshot.volume,
         // v1.2.2 (#30): mute is session-only — every new run returns to
@@ -352,9 +386,14 @@ export const useSessionStore = create<SessionState>()(set => ({
           : state.outputDevice,
         // Backend-owned session facts; when absent (idle snapshots), keep the
         // user's pre-start selection so Welcome controls don't reset.
-        lanIp: configOwnedBySession
-          ? (snapshot.lanIp ?? state.lanIp)
-          : state.lanIp,
+        // Session facts live in sessionLanIp. An old health/stop snapshot
+        // must not undo the operator's next-start network choice. Only a
+        // cold restore without an enumerated list seeds from the session.
+        lanIp:
+          state.lanIp ??
+          (configOwnedBySession && !state.lanAddressesLoaded
+            ? snapshot.lanIp
+            : null),
         audioMode: configOwnedBySession
           ? (snapshot.audioMode ?? state.audioMode)
           : state.audioMode,
@@ -432,6 +471,7 @@ export const useSessionStore = create<SessionState>()(set => ({
       sessionHostAddress: null,
       projectionStarted: false,
       httpsEntry: ENTRY_OFF,
+      dnsMapping: DNS_MAPPING_OFF,
       volume: DEFAULT_SESSION_VOLUME,
       muted: false,
       prevVolume: 0,
@@ -440,8 +480,6 @@ export const useSessionStore = create<SessionState>()(set => ({
       monitorLoadTimedOut: false,
       stopUncoverPending: false,
       audioMode: 'internal',
-      lanIp: null,
-      lanAddresses: [],
       channelPlan: null,
       pendingChanges: false,
       // §v1.1.1: zoom is session-only — reset on any project switch.

@@ -51,6 +51,7 @@ description
 telematic
 performerAddress
 scoreServer.supportsPerformerUrl
+scoreServer.needsHttps
 audio.outputChannels
 audio.standaloneTarget
 ```
@@ -75,6 +76,12 @@ audio.standaloneTarget
 - absent, `null`, `false` and non-boolean values all read as **undeclared**, without error (preflight tolerance, same as `telematic`) — only an explicit `"supportsPerformerUrl": true` declares;
 - a capability declaration only, carrying no configuration: certificates, domain and entry lifecycle belong entirely to the App side — the manifest never sees them;
 - undeclared works are unaffected: the App does not inject `PNDS_PERFORMER_URL` and the Project keeps running its original HTTP flow (the later entry patch uses this declaration to tell "adapted" from "needs an explicit HTTP fallback").
+
+`scoreServer.needsHttps`:
+
+- a boolean declaring that this work **needs the HTTPS entry to perform** (phone QR joining, secure-context sensors and the like) — **opt-in: only an explicit `"needsHttps": true` declares the need**; absent, `null`, `false` and non-boolean values all read as **not needing it** (preflight tolerance, same lenient shape as `supportsPerformerUrl`) — **every legacy project is exempt automatically**;
+- it decides the notices and nothing else: "declared × `supportsPerformerUrl` undeclared × entry switch on" → the settings card shows the "not adapted" notice and start asks the HTTP-fallback question; works without the declaration get neither and run their original HTTP flow silently — **previously created projects never see the sidebar notice again**;
+- never a behavior switch: whether the entry opens stays with `resolve_entry_launch` (`supportsPerformerUrl: true` remains the entry's hard condition); this field only raises or waives the notices.
 
 `audio.outputChannels`:
 

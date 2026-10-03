@@ -2,7 +2,7 @@ use tauri_specta::{collect_commands, Builder};
 
 pub fn generate_bindings() -> Builder<tauri::Wry> {
     use crate::commands::{
-        bundle, help, https, notifications, preferences, project, synthdef, system, tools,
+        bundle, dns, help, https, notifications, preferences, project, synthdef, system, tools,
     };
 
     crate::events::events_builder::<tauri::Wry>().commands(collect_commands![
@@ -19,6 +19,11 @@ pub fn generate_bindings() -> Builder<tauri::Wry> {
         https::load_https_certificate,
         https::import_https_certificate,
         https::clear_https_certificate,
+        dns::dns_service_status,
+        dns::dns_service_enable,
+        dns::dns_service_apply_config,
+        dns::dns_service_disable,
+        dns::dns_service_open_system_settings,
         notifications::send_native_notification,
         project::preflight_project,
         project::read_project_readme,

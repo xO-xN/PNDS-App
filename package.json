@@ -30,9 +30,9 @@
     "test:coverage": "vitest run --coverage",
     "rust:fmt": "source ~/.cargo/env && cd src-tauri && cargo fmt",
     "rust:fmt:check": "source ~/.cargo/env && cd src-tauri && cargo fmt --check",
-    "rust:clippy": "source ~/.cargo/env && cd src-tauri && cargo clippy -- -D warnings",
-    "rust:clippy:fix": "source ~/.cargo/env && cd src-tauri && cargo clippy --fix --allow-dirty",
-    "rust:test": "source ~/.cargo/env && cd src-tauri && cargo test",
+    "rust:clippy": "source ~/.cargo/env && cd src-tauri && cargo clippy --workspace -- -D warnings",
+    "rust:clippy:fix": "source ~/.cargo/env && cd src-tauri && cargo clippy --workspace --fix --allow-dirty",
+    "rust:test": "source ~/.cargo/env && cd src-tauri && cargo test --workspace",
     "rust:bindings": "source ~/.cargo/env && cd src-tauri && cargo test export_bindings -- --ignored --nocapture",
     "synthdefs:build": "bash scripts/build-synthdefs.sh",
     "node:fetch": "bash scripts/fetch-node.sh",
@@ -51,7 +51,9 @@
     "jscpd": "jscpd",
     "ast:lint": "ast-grep scan",
     "ast:fix": "ast-grep scan --fix",
-    "utilities:fetch": "node scripts/fetch-utilities.mjs"
+    "utilities:fetch": "node scripts/fetch-utilities.mjs",
+    "dnsd:build": "bash scripts/build-dnsd.sh",
+    "dnsd:build:all": "bash scripts/build-dnsd.sh --all"
   },
   "dependencies": {
     "@radix-ui/react-alert-dialog": "^1.1.15",

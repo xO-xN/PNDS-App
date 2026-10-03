@@ -86,6 +86,7 @@ const idleSnapshot: SessionSnapshot = {
   outputDevice: null,
   projectionStarted: false,
   httpsEntry: { status: 'off', url: null, error: null },
+  dnsMapping: { status: 'off', domain: null, ip: null, error: null },
 }
 
 function seedLoadedProject() {

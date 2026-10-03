@@ -24,6 +24,11 @@ describe('NodeSection (#58)', () => {
       hostnameHint: 'Concert-MacBook.local',
     })
     useSessionStore.getState().resetSession()
+    useSessionStore.setState({
+      lanIp: null,
+      lanAddresses: [],
+      lanAddressesLoaded: false,
+    })
   })
 
   it('renders the three identity fields plus the LAN row, with the hostname placeholder', () => {
@@ -127,6 +132,18 @@ describe('NodeSection (#58)', () => {
     expect(screen.queryByTestId('node-hint')).not.toBeInTheDocument()
   })
 
+  it('shows Select until the operator chooses between multiple networks', async () => {
+    vi.mocked(commands.listLanAddresses).mockResolvedValueOnce({
+      status: 'ok',
+      data: ['192.168.11.31', '192.168.31.193'],
+    })
+    render(<NodeSection section="node" />)
+    const lan = screen.getByRole('combobox', { name: /network address/i })
+    await waitFor(() => expect(lan).toBeEnabled())
+    expect(lan).toHaveDisplayValue('Select…')
+    expect(useSessionStore.getState().lanIp).toBeNull()
+  })
+
   it('reveals the next-start note only after a row is modified', async () => {
     const user = userEvent.setup()
     useSessionStore.setState({ lanAddresses: ['192.168.1.10'] })
@@ -160,7 +177,7 @@ describe('NodeSection (#58)', () => {
     expect(screen.getByTestId('node-hint')).toBeInTheDocument()
   })
 
-  it('refreshes the LAN list when the panel opens — no project needed, first address auto-picked', async () => {
+  it('refreshes the LAN list when the panel opens — no project needed, sole address auto-picked', async () => {
     // First launch, no project opened: preflight never seeded the list,
     // and the row must not sit on the "Select…" placeholder.
     vi.mocked(commands.listLanAddresses).mockResolvedValue({
@@ -173,18 +190,14 @@ describe('NodeSection (#58)', () => {
     await waitFor(() => {
       expect(useSessionStore.getState().lanAddresses).toEqual(['192.168.1.10'])
     })
-    // Preflight's auto-pick policy: a yet-unpicked selection takes the
-    // first address.
+    // The sole address is unambiguous and can be picked automatically.
     expect(useSessionStore.getState().lanIp).toBe('192.168.1.10')
     expect(
       screen.getByRole('combobox', { name: /network address/i })
     ).toHaveDisplayValue('192.168.1.10')
   })
 
-  it('keeps the selected address visible when a refresh shrinks the list', async () => {
-    // The network changed under the selection: the refresh drops
-    // 10.0.0.5, but the row must still show what is selected instead of
-    // blanking.
+  it('selects the sole available address when the previous network disappears', async () => {
     vi.mocked(commands.listLanAddresses).mockResolvedValueOnce({
       status: 'ok',
       data: ['192.168.1.10'],
@@ -199,7 +212,7 @@ describe('NodeSection (#58)', () => {
     await waitFor(() => {
       expect(useSessionStore.getState().lanAddresses).toEqual(['192.168.1.10'])
     })
-    expect(lan).toHaveDisplayValue('10.0.0.5')
+    expect(lan).toHaveDisplayValue('192.168.1.10')
     expect(lan).toBeEnabled()
   })
 })

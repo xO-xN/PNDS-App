@@ -51,6 +51,7 @@ description
 telematic
 performerAddress
 scoreServer.supportsPerformerUrl
+scoreServer.needsHttps
 audio.outputChannels
 audio.standaloneTarget
 ```
@@ -75,6 +76,12 @@ audio.standaloneTarget
 - 缺省、`null`、`false` 与非布尔值一律视为**未声明**，不报错（preflight 容错，同 `telematic`）——只有显式 `"supportsPerformerUrl": true` 才算声明；
 - 只是能力声明，不携带任何配置：证书、域名与入口生命周期全部由 App 一侧拥有，manifest 永远拿不到它们；
 - 未声明的工程不受影响：App 不注入 `PNDS_PERFORMER_URL`，工程按原有 HTTP 方式运行（后续入口 patch 依据本声明区分「已适配」与「需显式回落 HTTP」）。
+
+`scoreServer.needsHttps`：
+
+- 布尔值，声明本作**需要 HTTPS 入口支持演出**（手机扫码加入、安全上下文传感器等）——**opt-in：只有显式 `"needsHttps": true` 算声明需要**；缺省、`null`、`false` 与非布尔值一律视为**不需要**（preflight 容错，同 `supportsPerformerUrl` 的宽容形状），**所有旧工程自动豁免**；
+- 决定且仅决定提示：「声明需要 × 未声明 `supportsPerformerUrl` × 入口开关开」→ 设置卡显示「未适配」提示、启动弹「回落 HTTP」确认；未声明需要的工程两者皆无，安静走原 HTTP 流程——之前的工程加载时**不会再出现侧栏提示**；
+- 不影响任何运行行为：入口是否开启仍由 `resolve_entry_launch` 权威决定（`supportsPerformerUrl: true` 仍是入口的硬条件），本字段只触发或免除提示与确认。
 
 `audio.outputChannels`：
 

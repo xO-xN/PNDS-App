@@ -73,6 +73,7 @@ const HELP_DOCUMENTS: &[(&str, &str)] = &[
     ("reference-digital-score", "reference/digital-score.md"),
     ("reference-network", "reference/network.md"),
     ("reference-https", "reference/https.md"),
+    ("reference-dns", "reference/dns.md"),
     ("reference-audio-modes", "reference/audio-modes.md"),
     (
         "reference-runtime-contract",

@@ -100,8 +100,9 @@ export function SettingsCard({ onPopupOpenChange }: SettingsCardProps) {
 
   // #140: the entry row shows the RUNNING session's entry (never the
   // selection's — a roaming card has no entry); the compat notice shows
-  // whenever the switch is on and the SELECTED project is undeclared
-  // (pre-start warning + in-run truth: that run uses plain HTTP).
+  // when the switch is on, the SELECTED project is undeclared AND
+  // declares `needsHttps: true` — works without the declaration (all
+  // legacy projects) perform over plain HTTP silently, no nagging.
   const entryRowVisible =
     selectionOnRunningCard &&
     isSessionLive(sessionStatus) &&
@@ -110,7 +111,8 @@ export function SettingsCard({ onPopupOpenChange }: SettingsCardProps) {
     currentProject !== null &&
     httpsCompatBlocked(
       currentProject.manifest.scoreServer.supportsPerformerUrl,
-      httpsEnabledSetting
+      httpsEnabledSetting,
+      currentProject.manifest.scoreServer.needsHttps
     )
 
   const copyEntryUrl = async (url: string) => {

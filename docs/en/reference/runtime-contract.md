@@ -129,8 +129,9 @@ The App confirms both ports are available before starting. On conflict it fails 
 
 LAN address rules:
 
-- the App enumerates usable non-loopback IPv4 addresses;
-- with several, the user picks one explicitly;
+- the App enumerates usable non-loopback IPv4 addresses, excluding recognized VPN tunnel interfaces (such as macOS `utun`); private IP ranges and the default route do not identify the venue network;
+- a still-available choice survives opening, switching and stopping Projects; running-session snapshots do not overwrite the next-start choice. A sole address is selected automatically; several addresses without a valid choice require the user to pick explicitly;
+- the choice lasts for the current App run and never changes macOS network settings, router DHCP or Project manifests;
 - `127.0.0.1` is used only for the App's own health checks and scsynth OSC;
 - phones/tablets and the monitor use the selected Host LAN IP.
 
@@ -555,3 +556,23 @@ This section freezes the public contract between the local trusted HTTPS entry a
 
 - the claim token lives in the browser's localStorage, **scoped per origin**: a reconnect on the same HTTPS origin reuses the token and restores the seat as always — zero changes to the Project's existing logic;
 - a change of protocol, domain or port means a different origin: neither the App nor the Project **promises cross-origin migration** of old tokens. The device joins anew under the new origin (fresh token, fresh seat); the server's old seat records remain and the operator can clear them via the monitor's reset control. A plain HTTP → HTTPS switch changes the origin the same way — the entry's preparation notes must tell operators this explicitly.
+
+## 16. Performance DNS and the background daemon (#174)
+
+The background LAN DNS service (daemon `dnsd`) ships inside the App bundle and is system-managed as a LaunchDaemon through SMAppService: the operator approves once in Settings, it relaunches on login/reboot, and ordinary domains keep forwarding to independent upstreams **without the App being alive**. The performance-domain mapping is held under lease by the current session. This section freezes the mapping's activation gate, lifecycle and both sides' obligations; the operator flow lives in [dns.md](./dns.md).
+
+### Mapping lifecycle
+
+- **Activation gate** (all three, or nothing is installed): the DNS service switch is on (App preference) × this start actually opened the trusted-HTTPS entry (§15 `resolve_entry_launch` = `Ok(Some)`, i.e. operator switch × project declaration × launch-ready material) × the entry domain resolves;
+- **Install and verify**: after the entry gateway binds and BEFORE the entry is published, the App hands the mapping (domain × this start's selected LAN address × session generation) to the daemon, which **verifies it against its own real query pipeline** (an A query for the domain must resolve to that address) before it counts. Install or verify failure surfaces only as `dnsMapping: error` on the snapshot and **never fails the session** (the entry is an independent fact; the mapping is an independent fact above it);
+- **Lease**: the mapping is held on a 60-second lease renewed every 20 seconds by the session's lease supervisor. Stop / Restart / replace / mode switch / normal exit revoke the mapping **right after the entry closes** in the shutdown order (holding run id + generation); an App crash leaves the lease to expire — no path leaves the old address to the next performance;
+- **Known domains never forward**: the daemon persists the set of domains ever installed as performance mappings. With no active mapping, queries for them are answered NXDOMAIN locally — never the stale LAN address, never forwarding to the public old entry (a phone between performances must not reach a public stale entry);
+- **Ordinary forwarding**: non-performance domains forward to the upstreams in order (the App's built-in default public resolvers, no editor UI; the control-plane `config.set` seam still accepts IP upstream lists), with a 2 s per-upstream timeout and a 6 s whole-query failover budget; the cache is hard-bounded (positive ≤300 s, negative ≤10 s, 512 entries) and performance switches never clear ordinary cache;
+- **Port and privilege**: the daemon binds UDP/TCP 53 as root on **the operator's chosen fixed physical LAN address** (falling back to all interfaces — stated in status — when unset or stale); a bind failure (an existing DNS service) does not kill the daemon — the control plane keeps answering and reports it in status `bindError`, which the App's enable flow turns into the definite "stop the occupant and retry" result. The App never preempts or kills existing services, and the main App never elevates;
+- **Control plane**: App ↔ daemon traffic is line-JSON over a fixed-path Unix socket with exactly seven verbs — `mapping.set / mapping.refresh / mapping.clear / config.set / verify / status / stop`; mutating ops authenticate the peer uid (root or console user). The daemon never executes project scripts, shells, or holds any credential.
+
+### Network boundary and scope of promises
+
+- Everyday forwarding is available only while **this Mac is on, awake, online and the service healthy**; venue DNS during Mac shutdown/sleep/offline is out of scope, and the router-DNS restore steps belong to the operator doc (dns.md);
+- DNS and HTTPS are two facts: a live mapping proves only "the domain resolves to this Mac", never that the entry is usable (§15's entry probe and the performers' device acceptance are their own checks);
+- Address selection follows §4: the mapping uses the address the operator explicitly picked in「Node」; VPN tunnel interfaces never participate, the App never guesses from the default route or the first address, and macOS network settings, router DHCP and project manifests are never modified.

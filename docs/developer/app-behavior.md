@@ -2,6 +2,8 @@
 
 PNDS App 的产品行为、测试覆盖与 Definition of Done 的权威文档（收编自原 `PNDS_APP_REQUIREMENTS.md`）。本页只写 App 侧行为；运行协议一律链接运行契约，不重复。
 
+本文下方描述现有发布行为。已批准的后续变更以 [v1.6.0 演出与创作模式规格](../plans/v1.6.0-creation-mode-spec.md) 和 [v1.7.0 创作助手规格](../plans/v1.7.0-creation-assistant-spec.md) 为开发验收基线，完成实现后再将行为合流到本文。模式接续遵守更新后的 [ADR-0007](../adr/0007-mode-switch-ends-performance.md)，交接边界遵守 [ADR-0008](../adr/0008-creator-handoff-as-agent-seam.md)；标准模块文件添加与接线交接归 v1.6.0，模块整理与外部 Skills 按 [v1.6.1 规格](../plans/v1.6.1-modules-skills-spec.md) 交付，Skills 安装自愿且由创作者在外部环境完成。
+
 规范分工与冲突裁决：
 
 - 工程静态格式（manifest / 目录 / 资产）→ [`manifest.md`](../zh-CN/reference/manifest.md)、[`structure.md`](../zh-CN/reference/structure.md)
@@ -167,10 +169,18 @@ Rust session manager 是运行状态真源。React 不得用本地 reset 伪造�
 - **激活条件**（后端 `resolve_entry_launch` 是权威）：开关开 × 工程 `scoreServer.supportsPerformerUrl: true` × 域名端口已配置 × 材料按公有信任**当下重校验通过**。任一不满足而非全部满足 → 不开入口（原 HTTP 流程，字节级不变）；「开关开 × 已声明 × 配置不全」→ **启动失败**并给出可行动错误（绝不静默退回 HTTP）；
 - **启动顺序**：端口 preflight 后、子进程 spawn 前绑定 listener（端口冲突 / 材料失败走既有 fail-start 清理）；URL 在此固定并注入 `PNDS_PERFORMER_URL`（§3）；session ready 后独立探测线程经入口做 TLS/HTTP 探测（连绑定地址、SNI=域名、Mozilla 根校验、经隧道要求 health 200），成功才发布 entry ready——**工程 health ready 与入口 ready 是两项事实**；
 - **UI 面**：设置卡（运行卡选中时）「入口」行四态着色 + URL（点击复制）；窗口菜单 Performer 地址项在入口生效时复制入口 URL（Conductor 项保持内部 HTTP origin）；运行期入口故障在入口行报告，**不**结束本地音频 / 服务、**不**自动改发 HTTP 二维码；
-- **兼容确认**（开关开 × 工程未声明）：设置卡醒目提示 + 启动确认对话框（「使用 HTTP 启动」/取消；restart 与切换工程同受此门；取消则不停止任何运行中的会话）；
+- **兼容确认**（开关开 × 工程声明了 `scoreServer.needsHttps: true` × 未声明 `supportsPerformerUrl`）：设置卡醒目提示 + 启动确认对话框（「使用 HTTP 启动」/取消；restart 与切换工程同受此门；取消则不停止任何运行中的会话）。`needsHttps` 是 opt-in 声明（#174 后用户调整）——缺省与 `false`（即所有旧工程）两者皆无，安静走原 HTTP 流程；纯函数 `httpsCompatBlocked` 单点裁决，启动门与设置卡永不漂移；
 - **停止**：teardown 第一步关入口（listener + 活动连接 + 受管资源），先于 Node/scsynth；Stop / Restart / 替换 / 确认退出 / 启动失败清理全部覆盖；入口生命周期 = session 生命周期（§15：替换后旧 QR 不路由到新工程）；
 - **边界**：网关是传输转发（hyper 1 + rustls，不解析 Socket.IO 协议），monitor / 投影 / 本机 health / hub 路径不经入口；资源有界（连接上限 64、流式 body、固定转发缓冲）；测试中测试 CA 只进测试客户端信任库，绝不改系统信任；
 - 测试锚点：Rust `gateway.rs`（转发保真 / WS 隧道 / 容量 503 / 关停释放 / 探测四态）、`session.rs`（入口解析矩阵 / 真实网关 + 探测发布 ready / fail 返回 off / 运行期故障不断会话 / 旧 generation 不越权）；前端 `session-flow`（兼容门）、`SettingsCard.entry`、`menu` 地址段、`HttpsSection` 开关。
+
+## 演出 DNS 行为（#174）
+
+设置「演出 DNS」区是后台 LAN DNS 守护进程（dnsd）的操作面：开关即注册/注销 SMAppService LaunchDaemon（首次启用弹系统一次性授权），状态块展示注册状态、控制面在线、监听器（UDP/TCP）、上游与**演出映射**——映射行只在守护进程当前持有时出现，显示域名与 LAN 地址。转发上游为 App 内置默认（公共 DNS，双上游故障切换），无编辑 UI（#174 打磨轮次收掉）；启用与每次 App 启动都会把默认推给守护进程，状态块显示守护进程实际使用的值。停用即注销：守护进程停止、53 端口释放、授权一并撤销；帮助按钮打开参考手册 dns.md（含路由器 DHCP 与恢复步骤）。
+
+映射随 session 生命周期：start 时（DNS 开 × HTTPS 入口实际打开）守护进程内安装**并验证**后才发布，快照 `dnsMapping` 字段镜像三态（off/ready/error）；映射故障永不使 session 失败。Stop/切换/退出在入口关闭后立即撤销；崩溃路径由 60s 租约兜底。普通转发与映射无关——停止工程、退出 App 后继续（服务存活期间）。
+
+测试覆盖新增：映射解析矩阵（开关 × 入口）、映射故障独立报告（session 不失败）、stop 清快照与持有记录、守护进程引擎（映射合成/AAAA 空应答/NXDOMAIN 不转发/缓存上限/租约到期/故障切换/TCP 回退）、控制面（协议往返、uid 鉴权、映射持有规则）、状态持久化、设置区行为（开关失败回弹、needsHttps 声明触发/豁免兼容提示、恢复路径按钮）。
 
 ## 音频 Host 行为
 

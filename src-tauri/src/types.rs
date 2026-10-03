@@ -198,6 +198,13 @@ pub struct AppPreferences {
     /// running session.
     #[serde(default)]
     pub https_enabled: Option<bool>,
+    /// #174: the operator's DNS-service switch — `Some(true)` means the
+    /// background LAN-DNS LaunchDaemon is registered (ordinary
+    /// forwarding + performance mappings). Plain intent, like
+    /// `https_enabled`: the service call itself may still fail and the
+    /// status section reports the real registration state.
+    #[serde(default)]
+    pub dns_enabled: Option<bool>,
 }
 
 /// A named one-level group of project paths (spec issue #4).
@@ -239,6 +246,7 @@ impl Default for AppPreferences {
             https_domain: None,
             https_port: None,
             https_enabled: None,
+            dns_enabled: None,
         }
     }
 }

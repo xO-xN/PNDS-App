@@ -49,7 +49,7 @@
         "rank": "Owner"
       }
     ],
-    "externalBin": ["binaries/node"],
+    "externalBin": ["binaries/node", "binaries/pnds-dnsd"],
     "resources": {
       "binaries/scsynth-aarch64-apple-darwin": "scsynth",
       "resources/synthdefs/pndsMaster.scsyndef": "synthdefs/pndsMaster.scsyndef",
@@ -105,7 +105,9 @@
       "../docs/en/reference/supercollider.md": "help/en/reference/supercollider.md",
       "../docs/en/reference/osc.md": "help/en/reference/osc.md",
       "../docs/en/reference/p5js.md": "help/en/reference/p5js.md",
-      "../docs/en/reference/page-interaction.md": "help/en/reference/page-interaction.md"
+      "../docs/en/reference/page-interaction.md": "help/en/reference/page-interaction.md",
+      "../docs/zh-CN/reference/dns.md": "help/zh-CN/reference/dns.md",
+      "../docs/en/reference/dns.md": "help/en/reference/dns.md"
     },
     "icon": [
       "icons/32x32.png",
@@ -125,7 +127,10 @@
       "signingIdentity": "-",
       "providerShortName": null,
       "entitlements": "entitlements.plist",
-      "exceptionDomain": ""
+      "exceptionDomain": "",
+      "files": {
+        "Library/LaunchDaemons/com.xo-xn.pnds-app.dnsd.plist": "launchd/com.xo-xn.pnds-app.dnsd.plist"
+      }
     }
   },
   "plugins": {

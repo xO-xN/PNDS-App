@@ -8,6 +8,7 @@ import {
   isSessionRunning,
   DEFAULT_SESSION_VOLUME,
   ENTRY_OFF,
+  DNS_MAPPING_OFF,
   useSessionStore,
 } from './session-store'
 import { useProjectStore } from './project-store'
@@ -22,6 +23,7 @@ const snapshot = (overrides: Partial<SessionSnapshot>): SessionSnapshot => ({
   hostAddress: null,
   projectionStarted: false,
   httpsEntry: { status: 'off', url: null, error: null },
+  dnsMapping: { status: 'off', domain: null, ip: null, error: null },
   oscTarget: null,
   health: null,
   error: null,
@@ -41,11 +43,55 @@ describe('session-store', () => {
       preflightError: null,
     })
     useSessionStore.getState().resetSession()
+    useSessionStore.setState({
+      lanIp: null,
+      lanAddresses: [],
+      lanAddressesLoaded: false,
+    })
   })
 
   it('starts idle', () => {
     expect(useSessionStore.getState().sessionStatus).toBe('idle')
     expect(useSessionStore.getState().health).toBeNull()
+  })
+
+  it('mirrors the performance DNS mapping and clears it with the run (#174)', () => {
+    useSessionStore.getState().applySnapshot(
+      snapshot({
+        status: 'ready',
+        dnsMapping: {
+          status: 'ready',
+          domain: 'show.example.org.',
+          ip: '192.168.11.31',
+          error: null,
+        },
+      })
+    )
+    expect(useSessionStore.getState().dnsMapping).toEqual({
+      status: 'ready',
+      domain: 'show.example.org.',
+      ip: '192.168.11.31',
+      error: null,
+    })
+
+    // A mapping fault is its own fact: the session stays untouched.
+    useSessionStore.getState().applySnapshot(
+      snapshot({
+        status: 'ready',
+        dnsMapping: {
+          status: 'error',
+          domain: 'show.example.org.',
+          ip: '192.168.11.31',
+          error: 'the DNS mapping did not verify',
+        },
+      })
+    )
+    expect(useSessionStore.getState().dnsMapping.status).toBe('error')
+    expect(useSessionStore.getState().sessionStatus).toBe('ready')
+
+    // The end-of-run reset returns the resting state.
+    useSessionStore.getState().resetSession()
+    expect(useSessionStore.getState().dnsMapping).toEqual(DNS_MAPPING_OFF)
   })
 
   it('mirrors the trusted-HTTPS entry state and resets it with the run (#140)', () => {
@@ -57,6 +103,7 @@ describe('session-store', () => {
           url: 'https://show.example.org:8443/',
           error: null,
         },
+        dnsMapping: { status: 'off', domain: null, ip: null, error: null },
       })
     )
     expect(useSessionStore.getState().httpsEntry).toEqual({
@@ -75,6 +122,7 @@ describe('session-store', () => {
           url: 'https://show.example.org:8443/',
           error: 'The HTTPS entry did not become reachable',
         },
+        dnsMapping: { status: 'off', domain: null, ip: null, error: null },
       })
     )
     expect(useSessionStore.getState().httpsEntry.status).toBe('error')
@@ -164,6 +212,51 @@ describe('session-store', () => {
     expect(useSessionStore.getState().sessionStatus).toBe('idle')
     expect(useSessionStore.getState().outputTail).toHaveLength(0)
   })
+
+  it('keeps the machine LAN selection across session resets', () => {
+    useSessionStore.setState({
+      lanIp: '192.168.11.31',
+      lanAddresses: ['192.168.11.31'],
+    })
+    useSessionStore.getState().resetSession()
+    expect(useSessionStore.getState().lanIp).toBe('192.168.11.31')
+    expect(useSessionStore.getState().lanAddresses).toEqual(['192.168.11.31'])
+  })
+
+  it('requires a choice for several addresses and keeps a valid choice on refresh', () => {
+    const store = useSessionStore.getState()
+    const addresses = ['192.168.11.31', '192.168.31.193']
+    store.setLanAddresses(addresses)
+    expect(useSessionStore.getState().lanIp).toBeNull()
+    store.setLanIp('192.168.31.193')
+    store.setLanAddresses(addresses)
+    expect(useSessionStore.getState().lanIp).toBe('192.168.31.193')
+    store.setLanAddresses(['192.168.11.31'])
+    expect(useSessionStore.getState().lanIp).toBe('192.168.11.31')
+    store.setLanAddresses([])
+    expect(useSessionStore.getState().lanIp).toBeNull()
+  })
+
+  it('keeps the next-start LAN choice when the running session publishes its old address', () => {
+    const store = useSessionStore.getState()
+    store.applySnapshot(snapshot({ status: 'ready', lanIp: '192.168.31.193' }))
+    store.setLanIp('192.168.11.31')
+    store.applySnapshot(snapshot({ status: 'ready', lanIp: '192.168.31.193' }))
+    expect(useSessionStore.getState().lanIp).toBe('192.168.11.31')
+    expect(useSessionStore.getState().sessionLanIp).toBe('192.168.31.193')
+  })
+
+  it.each([[], ['192.168.11.31', '192.168.31.193']])(
+    'does not seed a choice from a snapshot after an empty or ambiguous network refresh: %j',
+    (...addresses) => {
+      const store = useSessionStore.getState()
+      store.setLanAddresses(addresses)
+      store.applySnapshot(
+        snapshot({ status: 'ready', lanIp: '192.168.31.193' })
+      )
+      expect(useSessionStore.getState().lanIp).toBeNull()
+    }
+  )
 
   describe('monitor zoom (§v1.1.1)', () => {
     it('clampZoom steps by the delta and clamps at 50–200', () => {

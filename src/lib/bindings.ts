@@ -192,6 +192,65 @@ async clearHttpsCertificate() : Promise<Result<boolean, string>> {
 }
 },
 /**
+ * Full service status: registration, control-plane liveness, listeners,
+ * upstreams, mapping and counters. Never fails — a down daemon is a
+ * status fact (see `dns::daemon_status`).
+ */
+async dnsServiceStatus() : Promise<DnsServiceStatus> {
+    return await TAURI_INVOKE("dns_service_status");
+},
+/**
+ * Enables the background DNS service. `upstreams` is the operator's
+ * forwarding list (IP[:port] entries); blank entries fall back to the
+ * defaults. Blocks until the approval flow and readiness poll finish.
+ */
+async dnsServiceEnable(upstreams: string[] | null, listenIp: string | null) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("dns_service_enable", { upstreams, listenIp }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Pushes the operator's current config to a RUNNING daemon (settings
+ * commits and App launch call this; a down daemon simply reports so —
+ * the config applies on the next enable).
+ */
+async dnsServiceApplyConfig(upstreams: string[] | null, listenIp: string | null) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("dns_service_apply_config", { upstreams, listenIp }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Disables the background DNS service (unregisters the LaunchDaemon —
+ * the daemon stops, the port is freed, the authorization is removed).
+ */
+async dnsServiceDisable() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("dns_service_disable") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Opens System Settings → Login Items — the recovery path when the
+ * daemon registration awaits approval (the operator dismissed the
+ * approval dialog; the status row routes here).
+ */
+async dnsServiceOpenSystemSettings() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("dns_service_open_system_settings") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * Sends a native system notification.
  * On mobile platforms, returns an error as notifications are not yet supported.
  */
@@ -773,7 +832,15 @@ httpsPort?: number | null;
  * legacy HTTP flow. Like every entry setting: next start, never a
  * running session.
  */
-httpsEnabled?: boolean | null }
+httpsEnabled?: boolean | null; 
+/**
+ * #174: the operator's DNS-service switch — `Some(true)` means the
+ * background LAN-DNS LaunchDaemon is registered (ordinary
+ * forwarding + performance mappings). Plain intent, like
+ * `https_enabled`: the service call itself may still fail and the
+ * status section reports the real registration state.
+ */
+dnsEnabled?: boolean | null }
 export type AudioConfig = { 
 /**
  * The raw-JSON validation below has already rejected unknown mode
@@ -850,6 +917,79 @@ bridgedChannels: number;
  * B: first private project bus; equals K.
  */
 privateBusStart: number }
+/**
+ * Control-plane listener liveness as reported by the daemon.
+ */
+export type DnsListeners = { udp: boolean; tcp: boolean }
+/**
+ * The performance mapping facts the daemon currently holds.
+ */
+export type DnsMappingFacts = { domain: string; ip: string; runId: string; 
+/**
+ * u32, not u64: specta's TS export forbids BigInt, and neither the
+ * session generation nor a lease outlives 2^32.
+ */
+generation: number; leaseSecondsRemaining: number }
+/**
+ * #174: the mapping facts a snapshot carries (existing session
+ * snapshot — no new channel).
+ */
+export type DnsMappingState = { status: DnsMappingStatus; domain: string | null; ip: string | null; error: string | null }
+/**
+ * #174: the DNS mapping's three states. There is no `preparing`: the
+ * install + in-daemon verify complete synchronously on the local
+ * control socket (milliseconds), so a mapping is either live (`ready`,
+ * verified) or it failed (`error`, the session itself unaffected).
+ */
+export type DnsMappingStatus = 
+/**
+ * No mapping this session (switch off, entry off, daemon absent).
+ */
+"off" | 
+/**
+ * The daemon holds the mapping and its own verify resolved the
+ * domain to the session's LAN address.
+ */
+"ready" | 
+/**
+ * Install or verify failed — `error` says which. The performance
+ * keeps running; phones fall back to manual DNS or the router.
+ */
+"error"
+/**
+ * Registration facts from SMAppService (macOS 13+).
+ */
+export type DnsRegistrationStatus = 
+/**
+ * Not registered — the daemon is neither enabled nor pending.
+ */
+"notRegistered" | 
+/**
+ * Registered and approved — the daemon runs (and returns on boot).
+ */
+"enabled" | 
+/**
+ * Registered but awaiting the system's approval (the approval
+ * dialog was dismissed; System Settings → Login Items is the fix).
+ */
+"requiresApproval" | 
+/**
+ * Registered but the bundle has moved or been removed since.
+ */
+"notFound"
+/**
+ * The full status surface the settings section renders.
+ */
+export type DnsServiceStatus = { registration: DnsRegistrationStatus; 
+/**
+ * The control plane answered — the daemon process is up and serving.
+ */
+daemon: boolean; 
+/**
+ * The bundle ships the LaunchDaemon plist (false in dev builds —
+ * enabling requires the installed, bundled App).
+ */
+plistPresent: boolean; listeners: DnsListeners | null; bindError: string | null; upstreams: string[]; mapping: DnsMappingFacts | null; knownDomains: string[]; stats: JsonValue | null }
 export type HealthAudio = { 
 /**
  * `starting | ready | error | disabled` (disabled = none mode, §9)
@@ -1012,6 +1152,7 @@ export type HttpsProblemCode =
  * readable problems when validation refused the material.
  */
 export type HttpsValidationOutcome = { summary: HttpsCertificateSummary | null; problems: HttpsProblem[] }
+export type JsonValue = null | boolean | number | string | JsonValue[] | Partial<{ [key in string]: JsonValue }>
 export type Manifest = { schemaVersion: number; id: string; name: string; version: string; description: string | null; scoreServer: ScoreServer; audio: AudioConfig; 
 /**
  * v1.4.0 (issue #58): the work declares cross-internet (telematic)
@@ -1086,7 +1227,17 @@ export type ScoreServer = { entry: string; workingDirectory: string; performerPo
  * `false` and non-boolean values all read as undeclared and never
  * fail validation.
  */
-supportsPerformerUrl?: boolean | null }
+supportsPerformerUrl?: boolean | null; 
+/**
+ * User request after #174: does this work need the HTTPS entry to
+ * perform? Explicit `false` declares a purely local work (no web
+ * performer pages), so an on entry switch never shows the「not
+ * adapted」notice nor asks the HTTP-fallback question for it.
+ * Absent, `null`, `true` and non-boolean values all read as
+ * undeclared (= needs it) — legacy manifests keep today's
+ * behavior, same lenient shape as `supports_performer_url`.
+ */
+needsHttps?: boolean | null }
 export type ScsynthConfig = { 
 /**
  * Issue #20: legacy field, read and ignored. The App's global
@@ -1141,7 +1292,15 @@ projectionStarted: boolean;
  * are two facts (§15). `off` for every pre-#140-shaped start
  * (switch off, project undeclared, no session).
  */
-httpsEntry: HttpsEntryState }
+httpsEntry: HttpsEntryState; 
+/**
+ * #174: the performance DNS mapping's own state — a mapping the
+ * background daemon holds for THIS session, installed after the
+ * entry gateway binds and verified in-daemon before it counts.
+ * Independent from `https_entry` (DNS reachable ≠ HTTPS serving);
+ * `off` whenever no mapping was requested or the daemon is absent.
+ */
+dnsMapping: DnsMappingState }
 /**
  * Session state publication — every snapshot the state machine emits
  * (formerly `pnds:session`); statuses per runtime-contract §8/§9.

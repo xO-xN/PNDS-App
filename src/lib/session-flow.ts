@@ -159,22 +159,29 @@ export function resolveHttpsCompatChoice(proceed: boolean): void {
 }
 
 /** The #140 compat rule as a pure derivation — switch on × project
- * undeclared. One home for the rule so the start gate (imperative)
- * and the settings card's notice (reactive) can never drift. */
+ * undeclared × the work declares it needs the entry. One home for the
+ * rule so the start gate (imperative) and the settings card's notice
+ * (reactive) can never drift. `needsHttps` is opt-in (user adjustment
+ * after #174): only an explicit `true` declares the work performs
+ * through the HTTPS entry — absent, `false` and non-boolean (every
+ * legacy project) never see the notice nor the fallback question. */
 export function httpsCompatBlocked(
   supportsPerformerUrl: boolean | null | undefined,
-  httpsEnabled: boolean
+  httpsEnabled: boolean,
+  needsHttps?: boolean | null
 ): boolean {
-  return httpsEnabled && supportsPerformerUrl !== true
+  return httpsEnabled && supportsPerformerUrl !== true && needsHttps === true
 }
 
 /** True when starting the current selection needs the explicit HTTP
- * choice (switch on × project undeclared — #140's compat rule). */
+ * choice (switch on × project undeclared × work needs it — #140's
+ * compat rule). */
 export function httpsCompatChoiceNeeded(): boolean {
   const { currentProject } = useProjectStore.getState()
   return httpsCompatBlocked(
     currentProject?.manifest.scoreServer.supportsPerformerUrl,
-    useSettingsStore.getState().httpsEnabledSetting
+    useSettingsStore.getState().httpsEnabledSetting,
+    currentProject?.manifest.scoreServer.needsHttps
   )
 }
 

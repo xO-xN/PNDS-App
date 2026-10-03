@@ -1,3 +1,9 @@
+# #174: the workspace carries the App crate (this package, the default
+# member for plain `cargo build`/`test`) and the standalone LAN DNS daemon
+# crate (`dnsd`) that ships as the SMAppService LaunchDaemon's BundleProgram.
+[workspace]
+members = ["dnsd"]
+
 [package]
 name = "pnds-app"
 version = "1.5.0"
@@ -96,6 +102,9 @@ reqwest = { version = "0.13", default-features = false, features = ["system-prox
 objc2 = "0.6"
 objc2-app-kit = { version = "0.3", features = ["std", "NSWindow", "NSOpenPanel", "NSMenu", "NSMenuItem"] }
 objc2-foundation = { version = "0.3", features = ["std", "NSString", "NSProcessInfo", "NSBundle", "NSDictionary"] }
+# #174: SMAppService drives the bundled LAN-DNS LaunchDaemon's
+# registration lifecycle (register/unregister/status, macOS 13+).
+objc2-service-management = "0.3"
 
 [dev-dependencies]
 # #139: test certificate material (CA → intermediate → leaf) for the

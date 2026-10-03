@@ -131,6 +131,37 @@ vi.mock('@/lib/tauri-bindings', async () => {
       clearHttpsCertificate: vi
         .fn()
         .mockResolvedValue({ status: 'ok', data: false }),
+      // #174: DNS service — status defaults to "not registered and the
+      // daemon is down"; enable defaults to failure (a forgotten mock
+      // must not read as a successful registration).
+      dnsServiceStatus: vi.fn().mockResolvedValue({
+        status: 'ok',
+        data: {
+          registration: 'notRegistered',
+          daemon: false,
+          plistPresent: false,
+          listeners: null,
+          upstreams: [],
+          mapping: null,
+          knownDomains: [],
+          stats: null,
+        },
+      }),
+      dnsServiceEnable: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: 'dnsServiceEnable not mocked',
+      }),
+      dnsServiceDisable: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      // #174: pushing config to a running daemon — quiet ok by default
+      // (a down daemon is a normal, warn-logged fact in the component).
+      dnsServiceApplyConfig: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      dnsServiceOpenSystemSettings: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
       sendNativeNotification: vi
         .fn()
         .mockResolvedValue({ status: 'ok', data: null }),

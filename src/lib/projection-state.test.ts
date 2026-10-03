@@ -36,6 +36,7 @@ const snapshot = (
   outputDevice: 'System default',
   projectionStarted: false,
   httpsEntry: { status: 'off', url: null, error: null },
+  dnsMapping: { status: 'off', domain: null, ip: null, error: null },
   ...overrides,
 })
 
@@ -97,6 +98,7 @@ describe('projectionContent (#130 gate)', () => {
         projectName: 'Other Work',
         projectionStarted: false,
         httpsEntry: { status: 'off', url: null, error: null },
+        dnsMapping: { status: 'off', domain: null, ip: null, error: null },
       })
     )
     expect(monitorA.kind).toBe('monitor')
@@ -115,6 +117,7 @@ describe('projectionContent (#130 gate)', () => {
         projectName: 'Other Work',
         projectionStarted: false,
         httpsEntry: { status: 'off', url: null, error: null },
+        dnsMapping: { status: 'off', domain: null, ip: null, error: null },
       })
     )
     expect(projectionContentKey(readyB)).toBe(projectionContentKey(introB))

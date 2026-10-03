@@ -15,6 +15,7 @@ export type SettingsSection =
   | 'audio'
   | 'node'
   | 'https'
+  | 'dns'
   | 'ports'
   | 'developer'
   | 'about'
@@ -73,6 +74,11 @@ interface SettingsState {
    * Seeded from preferences like the domain/port; applies at the next
    * start, never a running session. */
   httpsEnabledSetting: boolean
+  /** #174: the operator's DNS-service switch — activates the background
+   * LAN-DNS daemon (ordinary forwarding + performance mappings). The
+   * settings section drives the real registration through the dns
+   * service commands; this flag mirrors the operator's intent. */
+  dnsEnabledSetting: boolean
   openSettings: (section?: SettingsSection) => void
   closeSettings: () => void
   toggleSettings: () => void
@@ -87,6 +93,7 @@ interface SettingsState {
   setHttpsDomainSetting: (domain: string) => void
   setHttpsPortSetting: (port: string) => void
   setHttpsEnabledSetting: (enabled: boolean) => void
+  setDnsEnabledSetting: (enabled: boolean) => void
 }
 
 export const useSettingsStore = create<SettingsState>()(set => ({
@@ -104,6 +111,7 @@ export const useSettingsStore = create<SettingsState>()(set => ({
   httpsDomainSetting: '',
   httpsPortSetting: '',
   httpsEnabledSetting: false,
+  dnsEnabledSetting: false,
 
   openSettings: section =>
     set({ settingsOpen: true, focusSection: section ?? null }),
@@ -138,6 +146,8 @@ export const useSettingsStore = create<SettingsState>()(set => ({
   setHttpsPortSetting: httpsPortSetting => set({ httpsPortSetting }),
 
   setHttpsEnabledSetting: httpsEnabledSetting => set({ httpsEnabledSetting }),
+
+  setDnsEnabledSetting: dnsEnabledSetting => set({ dnsEnabledSetting }),
 }))
 
 /**

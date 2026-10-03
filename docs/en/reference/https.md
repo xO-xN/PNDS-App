@@ -81,7 +81,7 @@ Once the material is ready, flip the **enable switch** at the top of the setting
 - **Status surfaces**: the「Entry」row of the sidebar settings card (running card selected) shows preparing / ready / fault plus the URL (click to copy); the Window menu's Performer address item copies the entry URL while it is in effect.
 - **Runtime faults**: an entry fault (e.g. the interface vanished under the listener) is reported as an entry fault only — local audio and servers keep running, no automatic HTTP QR swap; recovery is the operator's explicit restart.
 - **Stop**: Stop, Restart, project switching and app exit all close the entry (listener and active connections released); the next performance opens it fresh. Switch / domain / port / certificate changes made during a performance apply at the next start.
-- **Undeclared works**: with the switch on but the project undeclared, the settings card carries a prominent notice and Start opens a confirm dialog — proceeding requires explicitly choosing「Start with HTTP」; canceling changes nothing. No silent downgrade.
+- **Works declaring the need but not the adaptation** (`scoreServer.needsHttps: true` × `supportsPerformerUrl` undeclared): with the switch on, the settings card carries a prominent notice and Start opens a confirm dialog — proceeding requires explicitly choosing「Start with HTTP」; canceling changes nothing. No silent downgrade. Works without the `needsHttps` declaration (all legacy projects) raise neither the notice nor the dialog and keep the HTTP flow quietly.
 
 ## Relationship to projects
 

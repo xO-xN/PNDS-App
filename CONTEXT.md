@@ -31,6 +31,26 @@ _Avoid_: archive、zip、package file
 从加载工程到关停的一次运行，乐手视角的说法。内部技术生命周期叫 session；面向用户的文案只说「演出 / performance」。
 _Avoid_: show、gig、session（面向用户的文案）
 
+**演出模式 / Performance mode**:
+PNDS App 面向现场演出场景的界面模式。
+_Avoid_: 演奏者模式、Performer mode
+
+**创作模式 / Creation mode**:
+PNDS App 面向创作者开发和测试工程场景的界面模式。
+_Avoid_: Creator Persona
+
+**空白工程 / Blank project**:
+创作者通过 App 的「新建工程」在指定位置生成、具备 PNDS 基本运行结构而尚无作品内容的文件夹工程。
+_Avoid_: 简版模板、空白 Template
+
+**工程概况 / Project overview**:
+创作模式中概括当前工程身份、内容迹象与已知验证结果的事实摘要，供创作者与内置助手理解工程现状。
+_Avoid_: 完成度评分、作品是否完成的结论
+
+**创作交接单 / Creator handoff**:
+创作者在 PNDS App 中记录、供外部编程 agent 接续的工程待办与创作意图。
+_Avoid_: 实现手册、工程 README
+
 **performer / monitor**:
 工程内两种页面角色（performer 页与 monitor 页）。中英文均直接用英文。
 

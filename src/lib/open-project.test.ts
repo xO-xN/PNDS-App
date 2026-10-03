@@ -6,6 +6,7 @@ import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 import { openProject, promptOpenProject, stopAndReset } from './open-project'
 import { importSetlistDirectory } from '@/lib/setlist-import'
+import { start } from '@/lib/session-flow'
 
 vi.mock('@/lib/setlist-import', () => ({
   importSetlistDirectory: vi.fn().mockResolvedValue(false),
@@ -71,6 +72,11 @@ describe('openProject (no trust gate)', () => {
       preflightError: null,
     })
     useSessionStore.getState().resetSession()
+    useSessionStore.setState({
+      lanIp: null,
+      lanAddresses: [],
+      lanAddressesLoaded: false,
+    })
     folderId = createFolderOrFail('Set list')
     useProjectStore.getState().moveProjectToFolder(folderId, '/b')
     // The setup actions persist through the store's save queue — let those
@@ -162,6 +168,36 @@ describe('openProject (no trust gate)', () => {
     await openProject('/a')
 
     expect(commands.savePreferences).not.toHaveBeenCalled()
+  })
+
+  it('starts on the selected LAN address after opening a project with a VPN active', async () => {
+    const lanIp = '192.168.11.31'
+    useSessionStore.getState().setLanIp(lanIp)
+    vi.mocked(commands.listLanAddresses).mockResolvedValueOnce({
+      status: 'ok',
+      data: ['172.19.0.1', lanIp],
+    })
+
+    await openProject('/a')
+    await start()
+
+    expect(commands.startProject).toHaveBeenCalledWith(
+      '/a',
+      'internal',
+      lanIp,
+      null
+    )
+  })
+
+  it('does not start on an arbitrary interface when multiple networks are available', async () => {
+    vi.mocked(commands.listLanAddresses).mockResolvedValueOnce({
+      status: 'ok',
+      data: ['192.168.11.31', '192.168.31.193'],
+    })
+    await openProject('/a')
+    await start()
+    expect(useSessionStore.getState().lanIp).toBeNull()
+    expect(commands.startProject).not.toHaveBeenCalled()
   })
 })
 

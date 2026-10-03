@@ -53,6 +53,7 @@ const readySnapshot: SessionSnapshot = {
   outputDevice: null,
   projectionStarted: false,
   httpsEntry: { status: 'off', url: null, error: null },
+  dnsMapping: { status: 'off', domain: null, ip: null, error: null },
 }
 
 /** Captured handler for the shell-level session snapshot subscription. */

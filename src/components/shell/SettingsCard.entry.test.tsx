@@ -40,6 +40,14 @@ const declaredManifest: Manifest = {
   scoreServer: { ...baseManifest.scoreServer, supportsPerformerUrl: true },
 }
 
+/** A work that declares it NEEDS the HTTPS entry but is undeclared —
+ * the only shape that can show the compat notice (needsHttps is
+ * opt-in; legacy works are silent). */
+const needsHttpsWork: Manifest = {
+  ...baseManifest,
+  scoreServer: { ...baseManifest.scoreServer, needsHttps: true },
+}
+
 function seedRunning(
   manifest: Manifest = baseManifest,
   sessionStatus: SessionStatus = 'ready'
@@ -130,8 +138,8 @@ describe('SettingsCard HTTPS entry surfaces (#140)', () => {
     expect(screen.queryByTestId('session-entry-row')).not.toBeInTheDocument()
   })
 
-  it('shows the compat notice for a switch-on undeclared selection', () => {
-    seedRunning(baseManifest)
+  it('shows the compat notice for a switch-on undeclared work that declares the need', () => {
+    seedRunning(needsHttpsWork)
     useSettingsStore.setState({ httpsEnabledSetting: true })
     render(<SettingsCard />)
 
@@ -152,6 +160,29 @@ describe('SettingsCard HTTPS entry surfaces (#140)', () => {
       currentProject: {
         path: '/Users/test/Inarticulate III',
         manifest: baseManifest,
+      },
+    })
+    rerender(<SettingsCard />)
+    expect(screen.queryByTestId('entry-compat-notice')).not.toBeInTheDocument()
+  })
+
+  it('never shows the compat notice without the needs declaration (legacy and false)', () => {
+    // needsHttps is opt-in (user adjustment after #174): a switch-on
+    // undeclared selection without the declaration — every legacy
+    // project — stays silent, and an explicit `false` is the same
+    // silence. Only `true` (needsHttpsWork above) can show the notice.
+    seedRunning(baseManifest)
+    useSettingsStore.setState({ httpsEnabledSetting: true })
+    const { rerender } = render(<SettingsCard />)
+    expect(screen.queryByTestId('entry-compat-notice')).not.toBeInTheDocument()
+
+    useProjectStore.setState({
+      currentProject: {
+        path: '/Users/test/Inarticulate III',
+        manifest: {
+          ...baseManifest,
+          scoreServer: { ...baseManifest.scoreServer, needsHttps: false },
+        },
       },
     })
     rerender(<SettingsCard />)

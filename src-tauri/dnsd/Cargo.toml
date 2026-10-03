@@ -1,0 +1,33 @@
+# #174: the PNDS LAN DNS daemon — the SMAppService LaunchDaemon binary that
+# forwards ordinary DNS to an independent upstream and maps the performance
+# domain to this Mac's LAN address. A standalone crate (NOT part of the App
+# lib) so the root process never links it and the daemon links no App code.
+[package]
+name = "pnds-dnsd"
+version = "1.5.0"
+edition = "2021"
+rust-version = "1.88"
+description = "PNDS 后台 LAN DNS 守护进程：普通转发 + 演出域名映射"
+license = "MIT"
+
+[lib]
+name = "pnds_dnsd_lib"
+path = "src/lib.rs"
+
+[[bin]]
+name = "pnds-dnsd"
+path = "src/main.rs"
+
+[dependencies]
+# Mature DNS wire codec (MIT OR Apache-2.0) — the daemon never hand-parses
+# DNS messages; synthesis, forwarding validation and cache TTL handling all
+# go through this codec. See docs/adr/0009 for the selection rationale.
+hickory-proto = "0.26"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+log = "0.4"
+# Daemon-only logging backend (stderr, RUST_LOG-aware) — the App crate's
+# tauri-plugin-log backend does not exist in the LaunchDaemon context.
+env_logger = "0.11"
+libc = "0.2"
+if-addrs = "0.13"

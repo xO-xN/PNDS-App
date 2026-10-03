@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!--
+      #174: launchd plist for the PNDS background LAN-DNS daemon.
+
+      Embedded at:  PNDS.app/Contents/Library/LaunchDaemons/
+                    com.xo-xn.pnds-app.dnsd.plist
+      Registered by the App through SMAppService.daemon(plistName:) —
+      the operator's one-time system approval dialog. The plist ships
+      inside the bundle and references the daemon through BundleProgram
+      (bundle-relative), so the App can move and the registration holds.
+
+      The daemon runs as root to bind UDP/TCP 53; it serves DNS only —
+      no shell, no project scripts, no arbitrary exec (spec #174).
+    -->
+    <key>Label</key>
+    <string>com.xo-xn.pnds-app.dnsd</string>
+
+    <!-- Bundle-resolved executable path (survives the .app moving). -->
+    <key>BundleProgram</key>
+    <string>Contents/MacOS/pnds-dnsd</string>
+
+    <key>BundleProgramArgs</key>
+    <array>
+        <!-- Fixed state + control paths under /Library (root-owned
+             dir, created by the daemon). The control socket is how
+             the App installs/refreshes/revokes the performance
+             mapping and reports status. -->
+        <string>--state</string>
+        <string>/Library/Application Support/PNDS/dnsd/state.json</string>
+        <string>--control</string>
+        <string>/Library/Application Support/PNDS/dnsd/control.sock</string>
+    </array>
+
+    <!-- Run at boot and stay up: ordinary forwarding continues after
+         the PNDS window is closed and across reboots (spec #174). -->
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+
+    <!-- Pin the registration to this App's bundle id, so System
+         Settings shows "PNDS" as the owner of the daemon. -->
+    <key>AssociatedBundleIdentifiers</key>
+    <array>
+        <string>com.xo-xn.pnds-app</string>
+    </array>
+</dict>
+</plist>

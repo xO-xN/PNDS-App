@@ -13,9 +13,9 @@ import type { SettingsSection } from '@/store/settings-store'
 
 import { SectionTitle } from './SectionTitle'
 
-/** Refresh the machine's LAN address list in the session store, applying
- * preflight's auto-pick policy (a yet-unpicked selection takes the first
- * address). Failure keeps the current list — the row degrades to the
+/** Refresh the machine's LAN address list. The store keeps a valid choice
+ * and auto-picks only a sole address. Failure keeps the current list —
+ * the row degrades to the
  * "Select…" placeholder only when nothing was known before. */
 function refreshLanAddresses(): void {
   void commands.listLanAddresses().then(result => {
@@ -23,11 +23,7 @@ function refreshLanAddresses(): void {
       logger.warn('Failed to list LAN addresses', { error: result.error })
       return
     }
-    const session = useSessionStore.getState()
-    session.setLanAddresses(result.data)
-    if (session.lanIp === null && result.data[0]) {
-      session.setLanIp(result.data[0])
-    }
+    useSessionStore.getState().setLanAddresses(result.data)
   })
 }
 
@@ -194,7 +190,7 @@ export function NodeSection({ section }: { section: SettingsSection }) {
             }
           }}
         >
-          {lanOptions.length === 0 && (
+          {(lanIp === null || lanOptions.length === 0) && (
             <NativeSelectOption value="">
               {t('session.lanAddressHint')}
             </NativeSelectOption>

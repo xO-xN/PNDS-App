@@ -16,6 +16,7 @@ const snapshot = (overrides: Partial<SessionSnapshot>): SessionSnapshot => ({
   hostAddress: null,
   projectionStarted: false,
   httpsEntry: { status: 'off', url: null, error: null },
+  dnsMapping: { status: 'off', domain: null, ip: null, error: null },
   oscTarget: null,
   health: null,
   error: null,

@@ -74,6 +74,7 @@ export const HELP_BOOKS: readonly {
       'reference-digital-score',
       'reference-network',
       'reference-https',
+      'reference-dns',
       'reference-audio-modes',
       'reference-runtime-contract',
       'reference-structure',

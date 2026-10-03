@@ -33,6 +33,7 @@ import { SectionTitle } from './SectionTitle'
 import { DeveloperSection } from './DeveloperSection'
 import { PortsSection } from './PortsSection'
 import { AudioSection } from './AudioSection'
+import { DnsSection } from './DnsSection'
 import { HttpsSection } from './HttpsSection'
 import { NodeSection } from './NodeSection'
 
@@ -173,6 +174,8 @@ export function SettingsPanel() {
         <NodeSection section="node" />
         <Separator />
         <HttpsSection section="https" />
+        <Separator />
+        <DnsSection section="dns" />
         <Separator />
         <PortsSection section="ports" />
         <Separator />

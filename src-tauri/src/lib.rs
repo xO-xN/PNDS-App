@@ -5,6 +5,7 @@
 
 mod bindings;
 mod commands;
+mod dns;
 mod events;
 mod gateway;
 mod https;

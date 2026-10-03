@@ -48,6 +48,7 @@ function snapshot(over: Partial<SessionSnapshot> = {}): SessionSnapshot {
     oscTarget: null,
     projectionStarted: false,
     httpsEntry: { status: 'off', url: null, error: null },
+    dnsMapping: { status: 'off', domain: null, ip: null, error: null },
     health: null,
     error: null,
     outputTail: [],
@@ -468,12 +469,16 @@ describe('「设置节点」gate (#58)', () => {
 })
 
 describe('HTTPS compat choice (#140)', () => {
-  /** The fixture manifest with the adaptation declaration toggled. */
+  /** The fixture manifest of a work that NEEDS the HTTPS entry, with
+   * the adaptation declaration toggled — the only shape that can ever
+   * trigger the choice (needsHttps is opt-in since the post-#174
+   * adjustment). */
   const declaredManifest = (declared: boolean): Manifest => ({
     ...manifest,
     scoreServer: {
       ...manifest.scoreServer,
       supportsPerformerUrl: declared,
+      needsHttps: true,
     },
   })
 
@@ -506,6 +511,27 @@ describe('HTTPS compat choice (#140)', () => {
     useSettingsStore.setState({ httpsEnabledSetting: true })
     useProjectStore.setState({
       currentProject: { path: '/p', manifest: declaredManifest(true) },
+    })
+    expect(httpsCompatChoiceNeeded()).toBe(false)
+  })
+
+  it('a work without the needs declaration never sees the choice', () => {
+    // needsHttps is opt-in (user adjustment after #174): absent (every
+    // legacy project), explicit `false` and non-boolean all mean the
+    // work performs without the HTTPS entry — the fallback question
+    // never appears, even with the switch on and the work undeclared.
+    useProjectStore.setState({
+      currentProject: { path: '/p', manifest },
+    })
+    expect(httpsCompatChoiceNeeded()).toBe(false)
+    useProjectStore.setState({
+      currentProject: {
+        path: '/p',
+        manifest: {
+          ...manifest,
+          scoreServer: { ...manifest.scoreServer, needsHttps: false },
+        },
+      },
     })
     expect(httpsCompatChoiceNeeded()).toBe(false)
   })

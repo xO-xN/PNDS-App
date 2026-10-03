@@ -130,6 +130,12 @@ pub struct SessionSnapshot {
     /// are two facts (§15). `off` for every pre-#140-shaped start
     /// (switch off, project undeclared, no session).
     pub https_entry: HttpsEntryState,
+    /// #174: the performance DNS mapping's own state — a mapping the
+    /// background daemon holds for THIS session, installed after the
+    /// entry gateway binds and verified in-daemon before it counts.
+    /// Independent from `https_entry` (DNS reachable ≠ HTTPS serving);
+    /// `off` whenever no mapping was requested or the daemon is absent.
+    pub dns_mapping: DnsMappingState,
 }
 
 /// #140: the entry's four states (spec: at least 关闭/准备/就绪/错误).
@@ -167,6 +173,45 @@ impl Default for HttpsEntryState {
         Self {
             status: HttpsEntryStatus::Off,
             url: None,
+            error: None,
+        }
+    }
+}
+
+/// #174: the DNS mapping's three states. There is no `preparing`: the
+/// install + in-daemon verify complete synchronously on the local
+/// control socket (milliseconds), so a mapping is either live (`ready`,
+/// verified) or it failed (`error`, the session itself unaffected).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub enum DnsMappingStatus {
+    /// No mapping this session (switch off, entry off, daemon absent).
+    Off,
+    /// The daemon holds the mapping and its own verify resolved the
+    /// domain to the session's LAN address.
+    Ready,
+    /// Install or verify failed — `error` says which. The performance
+    /// keeps running; phones fall back to manual DNS or the router.
+    Error,
+}
+
+/// #174: the mapping facts a snapshot carries (existing session
+/// snapshot — no new channel).
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct DnsMappingState {
+    pub status: DnsMappingStatus,
+    pub domain: Option<String>,
+    pub ip: Option<String>,
+    pub error: Option<String>,
+}
+
+impl Default for DnsMappingState {
+    fn default() -> Self {
+        Self {
+            status: DnsMappingStatus::Off,
+            domain: None,
+            ip: None,
             error: None,
         }
     }
@@ -394,6 +439,23 @@ pub fn resolve_entry_launch(
     }))
 }
 
+/// #174: whether a start installs the performance DNS mapping. The
+/// activation gate is the operator's service switch × the HTTPS entry
+/// actually launching this start (`resolve_entry_launch` = `Ok(Some)`):
+/// the mapping serves the entry's domain, so an HTTP-flow start never
+/// maps. The daemon's own reachability is NOT part of this decision —
+/// an absent daemon surfaces as a mapping error on the snapshot
+/// (independent fact), never as a start failure.
+pub fn resolve_dns_mapping(
+    prefs: &crate::types::AppPreferences,
+    entry_launch: Option<&EntryLaunch>,
+) -> Option<String> {
+    if prefs.dns_enabled != Some(true) {
+        return None;
+    }
+    entry_launch.map(|launch| launch.domain.clone())
+}
+
 /// Environment variables injected into the score server (§3, §6, §7),
 /// read from the start record (issue #77). `none` mode receives only
 /// `PNDS_HOST_IP`. Internal receives the dynamic OSC target plus the
@@ -473,11 +535,24 @@ pub fn allocate_udp_port() -> Result<u16, String> {
         .map_err(|e| format!("Failed to read allocated UDP port: {e}"))
 }
 
-/// Enumerates usable LAN IPv4 addresses (§4). Loopback is never offered.
+/// Enumerates usable LAN IPv4 addresses (§4). Loopback and recognized
+/// VPN tunnel interfaces cannot serve as the venue's performer address.
 pub fn list_lan_addresses() -> Result<Vec<String>, String> {
     let addrs = if_addrs::get_if_addrs().map_err(|e| format!("Failed to list interfaces: {e}"))?;
+    Ok(lan_addresses_from_interfaces(addrs))
+}
+
+fn lan_addresses_from_interfaces(addrs: Vec<if_addrs::Interface>) -> Vec<String> {
     let mut ips: Vec<String> = addrs
         .into_iter()
+        .filter(|iface| {
+            // Classify the interface, not its private IP range: a venue
+            // may legitimately use 10/8 or 172.16/12. Mesl's macOS TUN
+            // adapter is utun, just like other NetworkExtension VPNs.
+            !["utun", "tun", "tap", "ppp", "ipsec", "wg", "tailscale"]
+                .iter()
+                .any(|prefix| iface.name.starts_with(prefix))
+        })
         .filter_map(|iface| match iface.addr {
             if_addrs::IfAddr::V4(v4) if !v4.ip.is_loopback() => Some(v4.ip.to_string()),
             _ => None,
@@ -485,7 +560,7 @@ pub fn list_lan_addresses() -> Result<Vec<String>, String> {
         .collect();
     ips.sort();
     ips.dedup();
-    Ok(ips)
+    ips
 }
 
 /// One health GET against the performer port. Errors (connection refused,
@@ -549,6 +624,12 @@ struct SessionInner {
     gateway: Option<crate::gateway::GatewayHandle>,
     /// #140: the entry state — see `SessionSnapshot`.
     https_entry: HttpsEntryState,
+    /// #174: the DNS mapping state — see `SessionSnapshot`.
+    dns_mapping: DnsMappingState,
+    /// #174: the generation that installed the current mapping — the
+    /// authority `teardown_children` uses to revoke it (`None` = no
+    /// mapping installed this session).
+    dns_mapping_generation: Option<u64>,
     /// Incremented on every start/stop so stale supervisor threads exit.
     generation: u64,
     /// §12: per-session log file.
@@ -587,6 +668,8 @@ impl Default for SessionInner {
             projection_started: false,
             gateway: None,
             https_entry: HttpsEntryState::default(),
+            dns_mapping: DnsMappingState::default(),
+            dns_mapping_generation: None,
             generation: 0,
             logger: None,
             logger_generation: None,
@@ -614,6 +697,7 @@ impl SessionInner {
             output_device: self.output_device.clone(),
             projection_started: self.projection_started,
             https_entry: self.https_entry.clone(),
+            dns_mapping: self.dns_mapping.clone(),
         }
     }
 
@@ -643,6 +727,11 @@ impl SessionInner {
         // closed by `teardown_children` — this only clears the reported
         // state for whatever comes next).
         self.https_entry = HttpsEntryState::default();
+        // #174: the mapping report clears with the run (the daemon-side
+        // revoke itself happens in `teardown_children` — this only
+        // clears the snapshot's view for whatever comes next).
+        self.dns_mapping = DnsMappingState::default();
+        self.dns_mapping_generation = None;
     }
 }
 
@@ -818,16 +907,21 @@ impl SessionManager {
         // spawns — an unusable entry (broken material, occupied port)
         // fails the start through `fail_start` with nothing running yet.
         // `Ok(None)` = the legacy HTTP flow, unchanged.
-        let entry_launch = {
+        let entry_decision = {
             let prefs = crate::commands::preferences::load_preferences_sync(app)?;
-            resolve_entry_launch(
+            let entry_launch = resolve_entry_launch(
                 app_data_dir,
                 &prefs,
                 &manifest,
                 crate::https::public_trust_anchors(),
                 std::time::SystemTime::now(),
-            )?
+            )?;
+            // #174: the DNS mapping decision rides the same gate — one
+            // prefs read decides both the entry and the mapping.
+            let dns_mapping_domain = resolve_dns_mapping(&prefs, entry_launch.as_ref());
+            (entry_launch, dns_mapping_domain)
         };
+        let (entry_launch, dns_mapping_domain) = entry_decision;
         let mut live_entry: Option<LiveEntry> = None;
         if let Some(launch) = entry_launch {
             let bind_ip: std::net::IpAddr = request
@@ -1015,9 +1109,53 @@ impl SessionManager {
                 app.clone(),
                 generation,
                 probe_addr,
-                live.domain,
+                live.domain.clone(),
                 crate::gateway::public_root_store().clone(),
             );
+            // #174: install the performance DNS mapping for this start
+            // (the gate was resolved with the entry launch above). The
+            // daemon installs AND verifies (its own A query through the
+            // real pipeline) before this counts. A mapping fault is an
+            // independent fact: the session keeps running and phones
+            // fall back to manual DNS / the router.
+            if let Some(mapping_domain) = &dns_mapping_domain {
+                match crate::dns::install_mapping(mapping_domain, &request.lan_ip, generation) {
+                    Ok(()) => {
+                        Self::write_session_log_line(
+                            &self.inner,
+                            Some(generation),
+                            &format!(
+                                "DNS mapping installed: {} → {} (lease supervisor running)",
+                                live.domain, request.lan_ip
+                            ),
+                        );
+                        let mut inner = self.lock();
+                        inner.dns_mapping = DnsMappingState {
+                            status: DnsMappingStatus::Ready,
+                            domain: Some(mapping_domain.clone()),
+                            ip: Some(request.lan_ip.clone()),
+                            error: None,
+                        };
+                        inner.dns_mapping_generation = Some(generation);
+                        self.spawn_dns_mapping_supervisor(app.clone(), generation);
+                    }
+                    Err(e) => {
+                        log::warn!("DNS mapping install failed: {e}");
+                        Self::write_session_log_line(
+                            &self.inner,
+                            Some(generation),
+                            &format!("DNS mapping failed: {e}"),
+                        );
+                        let mut inner = self.lock();
+                        inner.dns_mapping = DnsMappingState {
+                            status: DnsMappingStatus::Error,
+                            domain: Some(mapping_domain.clone()),
+                            ip: Some(request.lan_ip.clone()),
+                            error: Some(e),
+                        };
+                    }
+                }
+            }
             self.emit(app);
         }
 
@@ -1203,6 +1341,9 @@ impl SessionManager {
             // failures while the session lives go through
             // `mark_entry_failure` instead.
             guard.https_entry = HttpsEntryState::default();
+            // #174: the mapping is revoked (daemon-side) by the teardown
+            // above; the reported state clears with the failed run.
+            guard.dns_mapping = DnsMappingState::default();
         });
     }
 
@@ -1338,6 +1479,58 @@ impl SessionManager {
                 return;
             }
             mutate(&mut guard.https_entry);
+        }
+        Self::emit_static(app, inner);
+    }
+
+    /// #174: the mapping lease supervisor — one thread per generation,
+    /// renewing the daemon lease well inside its bound (20 s against a
+    /// 60 s lease). Losing the mapping (daemon restarted with state
+    /// gone, another run taking over) is logged and published on the
+    /// session's `dns_mapping` state — like every mapping fault, it
+    /// never fails the session itself.
+    fn spawn_dns_mapping_supervisor<R: tauri::Runtime>(&self, app: AppHandle<R>, generation: u64) {
+        const LEASE_RENEWAL_INTERVAL: Duration = Duration::from_secs(20);
+        let inner = Arc::clone(&self.inner);
+        std::thread::Builder::new()
+            .name("pnds-dns-mapping-supervisor".to_string())
+            .spawn(move || loop {
+                std::thread::sleep(LEASE_RENEWAL_INTERVAL);
+                {
+                    let guard = inner.lock().unwrap_or_else(|e| e.into_inner());
+                    if guard.generation != generation {
+                        return; // replaced/stopped — teardown owns the revoke
+                    }
+                    if guard.dns_mapping.status != DnsMappingStatus::Ready {
+                        return; // already failed/revoked — nothing to renew
+                    }
+                }
+                if let Err(e) = crate::dns::refresh_mapping(generation) {
+                    log::warn!("DNS lease renewal failed (generation {generation}): {e}");
+                    Self::mark_dns_mapping_failure(&app, &inner, generation, e);
+                    return;
+                }
+            })
+            .expect("dns lease supervisor spawns");
+    }
+
+    /// #174: generation-guarded mapping-failure publication — a replaced
+    /// session's late lease report must not touch the newer run.
+    fn mark_dns_mapping_failure<R: tauri::Runtime>(
+        app: &AppHandle<R>,
+        inner: &Arc<Mutex<SessionInner>>,
+        generation: u64,
+        message: String,
+    ) {
+        {
+            let mut guard = inner.lock().unwrap_or_else(|e| e.into_inner());
+            if guard.generation != generation {
+                return;
+            }
+            if guard.dns_mapping.status == DnsMappingStatus::Ready {
+                guard.dns_mapping.status = DnsMappingStatus::Error;
+                guard.dns_mapping.error = Some(message);
+            }
         }
         Self::emit_static(app, inner);
     }
@@ -1795,7 +1988,15 @@ impl SessionManager {
     /// rules live in `SupervisedChild::shutdown` — teardown only sequences
     /// the two children and mirrors the outcomes into the logs.
     fn teardown_children(inner: &Arc<Mutex<SessionInner>>) {
-        let (node_child, sc_child, sc_port, master_ready, gateway, log_generation) = {
+        let (
+            node_child,
+            sc_child,
+            sc_port,
+            master_ready,
+            gateway,
+            dns_mapping_generation,
+            log_generation,
+        ) = {
             let mut guard = inner.lock().unwrap_or_else(|e| e.into_inner());
             (
                 guard.child.take(),
@@ -1806,6 +2007,9 @@ impl SessionManager {
                 // disconnect instead of routing into whatever comes
                 // next, and no stale entry outlives the session.
                 guard.gateway.take(),
+                // #174: the generation that holds the daemon's DNS
+                // mapping — only that holder may revoke it.
+                guard.dns_mapping_generation.take(),
                 // Issue #93: teardown may only touch the log of the session
                 // it is tearing down. A start() that interleaves during the
                 // kill windows installs the NEXT session's log — every write
@@ -1822,6 +2026,16 @@ impl SessionManager {
             Self::write_session_log_line(inner, log_generation, "Closing the HTTPS entry");
             gateway.shutdown();
             Self::write_session_log_line(inner, log_generation, "HTTPS entry closed");
+        }
+
+        // #174: revoke the DNS mapping right after the entry closes — the
+        // daemon clears it, the domain turns NXDOMAIN (never the public
+        // address), and ordinary forwarding continues. Best-effort: the
+        // lease bounds any residue if the daemon is gone.
+        if let Some(mapping_generation) = dns_mapping_generation {
+            Self::write_session_log_line(inner, log_generation, "Revoking the DNS mapping");
+            crate::dns::remove_mapping(mapping_generation);
+            Self::write_session_log_line(inner, log_generation, "DNS mapping revoked");
         }
 
         if let Some(mut node) = node_child {
@@ -2403,6 +2617,31 @@ mod tests {
     fn lan_addresses_exclude_loopback() {
         let ips = list_lan_addresses().unwrap();
         assert!(ips.iter().all(|ip| !ip.starts_with("127.")));
+    }
+
+    #[test]
+    fn lan_addresses_exclude_vpn_tunnels_but_keep_physical_private_addresses() {
+        let interface = |name: &str, ip: &str| if_addrs::Interface {
+            name: name.to_string(),
+            addr: if_addrs::IfAddr::V4(if_addrs::Ifv4Addr {
+                ip: ip.parse().unwrap(),
+                netmask: "255.255.255.0".parse().unwrap(),
+                prefixlen: 24,
+                broadcast: None,
+            }),
+            index: None,
+            #[cfg(windows)]
+            adapter_name: name.to_string(),
+        };
+        let ips = lan_addresses_from_interfaces(vec![
+            interface("utun6", "172.19.0.1"),
+            interface("tun0", "10.8.0.1"),
+            interface("en0", "192.168.11.31"),
+            interface("en1", "10.0.0.5"),
+            interface("en0", "192.168.11.31"),
+            interface("lo0", "127.0.0.1"),
+        ]);
+        assert_eq!(ips, vec!["10.0.0.5", "192.168.11.31"]);
     }
 
     #[test]
@@ -3748,6 +3987,126 @@ mod tests {
             std::thread::sleep(Duration::from_millis(100));
         }
         assert!(refused, "stop must release the entry port");
+    }
+
+    #[test]
+    fn dns_mapping_resolution_matrix() {
+        // The gate: service switch × the entry actually launching this
+        // start. Domain/IP arrive from the entry launch; the daemon's
+        // reachability is checked at install time, not here.
+        let on = entry_prefs(Some(true), Some("show.example.org"), Some(8443));
+        let dns_on = crate::types::AppPreferences {
+            dns_enabled: Some(true),
+            ..Default::default()
+        };
+        let dns_off = crate::types::AppPreferences {
+            dns_enabled: Some(false),
+            ..Default::default()
+        };
+        let launch = EntryLaunch {
+            url: "https://show.example.org:8443/".to_string(),
+            domain: "show.example.org".to_string(),
+            port: 8443,
+            chain: Vec::new(),
+            key: webpki::types::PrivateKeyDer::Pkcs8(vec![].into()),
+        };
+        // Switch off (either knob) → no mapping, whatever else says.
+        assert!(resolve_dns_mapping(&dns_off, Some(&launch)).is_none());
+        assert!(resolve_dns_mapping(&on, None).is_none());
+        // Switch on × entry launching → the entry's domain.
+        assert_eq!(
+            resolve_dns_mapping(&dns_on, Some(&launch)).as_deref(),
+            Some("show.example.org")
+        );
+        // Switch unset (never touched) → off.
+        assert!(
+            resolve_dns_mapping(&crate::types::AppPreferences::default(), Some(&launch)).is_none()
+        );
+    }
+
+    #[test]
+    fn dns_mapping_failure_is_reported_without_failing_the_session() {
+        let app = tauri::test::mock_app().handle().clone();
+        crate::events::events_builder().mount_events(&app);
+        let manager = SessionManager::default();
+        let (generation, inner) = {
+            let mut guard = manager.lock();
+            guard.generation += 1;
+            guard.status = SessionStatus::Ready;
+            guard.dns_mapping = DnsMappingState {
+                status: DnsMappingStatus::Ready,
+                domain: Some("show.example.org".to_string()),
+                ip: Some("192.168.11.31".to_string()),
+                error: None,
+            };
+            (guard.generation, Arc::clone(&manager.inner))
+        };
+        // A lease-renewal fault flips ONLY the mapping state — the
+        // session stays exactly where it was.
+        SessionManager::mark_dns_mapping_failure(
+            &app,
+            &inner,
+            generation,
+            "lease refresh refused".to_string(),
+        );
+        let snapshot = manager.snapshot();
+        assert_eq!(snapshot.status, SessionStatus::Ready);
+        assert_eq!(snapshot.dns_mapping.status, DnsMappingStatus::Error);
+        assert_eq!(
+            snapshot.dns_mapping.error.as_deref(),
+            Some("lease refresh refused")
+        );
+        // A stale generation's late report must not touch the new run.
+        let (new_generation, inner) = {
+            let mut guard = manager.lock();
+            guard.generation += 1;
+            guard.dns_mapping = DnsMappingState::default();
+            (guard.generation, Arc::clone(&manager.inner))
+        };
+        SessionManager::mark_dns_mapping_failure(
+            &app,
+            &inner,
+            generation,
+            "stale report".to_string(),
+        );
+        let snapshot = manager.snapshot();
+        assert_eq!(snapshot.dns_mapping.status, DnsMappingStatus::Off);
+        let _ = new_generation;
+    }
+
+    #[test]
+    fn stop_clears_the_dns_mapping_snapshot_and_holders_record() {
+        let app = tauri::test::mock_app().handle().clone();
+        crate::events::events_builder().mount_events(&app);
+        let manager = SessionManager::default();
+        {
+            let mut guard = manager.lock();
+            guard.generation += 1;
+            guard.status = SessionStatus::Ready;
+            guard.dns_mapping = DnsMappingState {
+                status: DnsMappingStatus::Ready,
+                domain: Some("show.example.org".to_string()),
+                ip: Some("192.168.11.31".to_string()),
+                error: None,
+            };
+            guard.dns_mapping_generation = Some(guard.generation);
+        }
+        // Stop revokes daemon-side (the daemon is absent here — the lease
+        // bounds any residue) and clears the session's reported state.
+        manager.stop(&app).unwrap();
+        let snapshot = manager.snapshot();
+        assert_eq!(snapshot.status, SessionStatus::Idle);
+        assert_eq!(snapshot.dns_mapping.status, DnsMappingStatus::Off);
+        let guard = manager.lock();
+        assert!(guard.dns_mapping_generation.is_none());
+    }
+
+    #[test]
+    fn remove_mapping_without_a_daemon_is_quiet() {
+        // The daemon is absent in tests: revocation must be a quiet
+        // no-op (the lease bounds any residue) — never a panic, never a
+        // teardown failure.
+        crate::dns::remove_mapping(7);
     }
 
     #[test]

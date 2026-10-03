@@ -199,6 +199,24 @@ The real stores in `src/store/` and what belongs in each:
 
 Shared domain state goes in the matching store; anything component-local stays in `useState`.
 
+### LAN Choice and Running Session Facts
+
+`session-store.lanIp` is the machine's next-start network choice, not a
+running-session fact. It and `lanAddresses` survive `resetSession`;
+opening another project must not overwrite the operator's choice with the
+first enumerated address. `setLanAddresses` reconciles every refresh:
+keep an available choice, auto-pick a sole address, otherwise require an
+explicit choice. Only a cold restore with no known address list may seed
+the choice from a backend snapshot. The running address remains in
+`sessionLanIp` / `sessionHostAddress`, so health snapshots cannot undo a
+pending LAN change or retarget the running monitor.
+
+Rust filters recognized VPN tunnel interfaces when enumerating LAN
+addresses. Do not infer interface purpose from a private IP range or the
+default route: both physical LANs and VPNs can use private addresses, and
+a VPN can own the default route while the venue LAN remains available.
+The choice is in-memory; it does not configure macOS addresses or DHCP.
+
 ## Persisting Store State
 
 `src/lib/preferences.ts` is the only preferences writer: every field save

@@ -65,6 +65,7 @@ const FIXTURES: RawHelpDocument[] = [
     'reference-digital-score',
     'reference-network',
     'reference-https',
+    'reference-dns',
     'reference-audio-modes',
     'reference-runtime-contract',
     'reference-structure',
@@ -84,7 +85,7 @@ describe('help-corpus (#53)', () => {
   it('builds the corpus in manifest order with books, titles and sections', () => {
     const corpus = buildHelpCorpus(FIXTURES)
 
-    expect(corpus).toHaveLength(24)
+    expect(corpus).toHaveLength(25)
     expect(
       corpus.slice(0, 4).map(doc => [doc.id, doc.book, doc.title])
     ).toEqual([
@@ -93,7 +94,7 @@ describe('help-corpus (#53)', () => {
       ['readme-guide', 'creator-guide', '给工程写 README'],
       ['reference-readme', 'reference', 'PNDS 参考手册'],
     ])
-    expect(corpus.slice(20).map(doc => [doc.id, doc.book, doc.title])).toEqual([
+    expect(corpus.slice(21).map(doc => [doc.id, doc.book, doc.title])).toEqual([
       ['modules-locale-follow', 'modules', 'modules-locale-follow'],
       ['modules-projection-surface', 'modules', 'modules-projection-surface'],
       ['modules-monitor-state', 'modules', 'modules-monitor-state'],
@@ -144,6 +145,7 @@ describe('help-corpus (#53)', () => {
         'reference-digital-score',
         'reference-network',
         'reference-https',
+        'reference-dns',
         'reference-audio-modes',
         'reference-runtime-contract',
         'reference-structure',

@@ -164,6 +164,20 @@ function App() {
           useSettingsStore
             .getState()
             .setHttpsEnabledSetting(result.data.httpsEnabled === true)
+          // #174: the DNS-service switch seeds with the same read; the
+          // section itself drives the real service calls and reports
+          // the daemon's authoritative state.
+          useSettingsStore
+            .getState()
+            .setDnsEnabledSetting(result.data.dnsEnabled === true)
+          // #174: a daemon kept alive from a previous run must not keep
+          // a stale upstream list — re-push the App's defaults (null)
+          // once at launch. A down daemon answers with an error, which
+          // is fine here: the next enable applies the same config
+          // anyway. The listen address is not pushed (the session LAN
+          // choice may still be unresolved this early); the daemon
+          // keeps its persisted one.
+          void commands.dnsServiceApplyConfig(null, null).catch(() => undefined)
         }
         // #58: the node-name input's placeholder hints this machine's
         // hostname — operators name nodes after machines. Best-effort.

@@ -60,6 +60,7 @@ const snapshot = (
   outputDevice: 'System default',
   projectionStarted: false,
   httpsEntry: { status: 'off', url: null, error: null },
+  dnsMapping: { status: 'off', domain: null, ip: null, error: null },
   ...overrides,
 })
 
@@ -311,6 +312,7 @@ describe('ProjectionApp (#130 gate)', () => {
       snapshot({
         projectionStarted: false,
         httpsEntry: { status: 'off', url: null, error: null },
+        dnsMapping: { status: 'off', domain: null, ip: null, error: null },
       })
     )
     await settleSwap()
@@ -355,6 +357,7 @@ describe('ProjectionApp (#130 gate)', () => {
         projectName: 'Other Work',
         projectionStarted: false,
         httpsEntry: { status: 'off', url: null, error: null },
+        dnsMapping: { status: 'off', domain: null, ip: null, error: null },
       })
     )
     await settleSwap()
@@ -521,6 +524,7 @@ describe('ProjectionApp (#130 gate)', () => {
         projectPath: '/Users/test/Other',
         projectionStarted: false,
         httpsEntry: { status: 'off', url: null, error: null },
+        dnsMapping: { status: 'off', domain: null, ip: null, error: null },
       })
     )
     await settleSwap()
@@ -842,6 +846,7 @@ describe('ProjectionApp (#135 §14 zoom ownership)', () => {
       snapshot({
         projectionStarted: false,
         httpsEntry: { status: 'off', url: null, error: null },
+        dnsMapping: { status: 'off', domain: null, ip: null, error: null },
       })
     )
     await settleSwap()

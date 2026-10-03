@@ -1227,6 +1227,7 @@ mod tests {
                 performer_port: 1,
                 monitor_port: 2,
                 supports_performer_url: None,
+                needs_https: None,
             },
             audio: crate::project::manifest::AudioConfig {
                 default_mode: crate::types::AudioMode::None,

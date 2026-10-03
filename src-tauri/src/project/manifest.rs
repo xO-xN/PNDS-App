@@ -87,6 +87,15 @@ pub struct ScoreServer {
     /// fail validation.
     #[serde(default, deserialize_with = "lenient_optional_bool")]
     pub supports_performer_url: Option<bool>,
+    /// User request after #174: does this work need the HTTPS entry to
+    /// perform? Opt-in — only an explicit `true` declares the need;
+    /// absent, `null`, `false` and non-boolean values all mean the work
+    /// performs without the entry (every legacy project), so the「not
+    /// adapted」notice and the HTTP-fallback question never appear for
+    /// it. With `true`, an undeclared `supports_performer_url` work
+    /// gets the explicit fallback choice instead of a silent downgrade.
+    #[serde(default, deserialize_with = "lenient_optional_bool")]
+    pub needs_https: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
@@ -1027,5 +1036,54 @@ mod tests {
         assert_eq!(manifest.score_server.supports_performer_url, Some(true));
         let reserialized = serde_json::to_string(&manifest).unwrap();
         assert!(reserialized.contains("\"supportsPerformerUrl\":true"));
+    }
+
+    /// `needsHttps` (user request after #174) is lenient like its
+    /// sibling: only an explicit boolean reads as a declaration, and
+    /// only `Some(true)` changes behavior (raises the compat notice
+    /// for an undeclared work). Everything else — absent, null,
+    /// `"true"` as a string, `0`, `false` — means the work performs
+    /// without the entry: legacy manifests are silent by default.
+    #[test]
+    fn needs_https_is_lenient_optional_boolean() {
+        for (declared, expected) in [
+            (None, None),
+            (Some("null"), None),
+            (Some("\"true\""), None),
+            (Some("0"), None),
+            (Some("false"), Some(false)),
+            (Some("true"), Some(true)),
+        ] {
+            let dir = tempfile::tempdir().unwrap();
+            write_valid_project(dir.path());
+            let extra = declared
+                .map(|v| format!(", \"needsHttps\": {v}"))
+                .unwrap_or_default();
+            write_manifest_with_score_server_extra(dir.path(), &extra);
+            let manifest = load_manifest(dir.path())
+                .unwrap_or_else(|e| panic!("declared={declared:?} must validate: {e}"));
+            assert_eq!(
+                manifest.score_server.needs_https, expected,
+                "declared={declared:?}"
+            );
+            assert_eq!(
+                manifest.score_server.needs_https == Some(true),
+                expected == Some(true),
+                "declared={declared:?}"
+            );
+        }
+    }
+
+    /// `needsHttps: true` survives the parse→serialize round trip —
+    /// the one load-bearing value must not be lost to tooling.
+    #[test]
+    fn needs_https_roundtrips() {
+        let dir = tempfile::tempdir().unwrap();
+        write_valid_project(dir.path());
+        write_manifest_with_score_server_extra(dir.path(), ", \"needsHttps\": true");
+        let manifest = load_manifest(dir.path()).unwrap();
+        assert_eq!(manifest.score_server.needs_https, Some(true));
+        let reserialized = serde_json::to_string(&manifest).unwrap();
+        assert!(reserialized.contains("\"needsHttps\":true"));
     }
 }

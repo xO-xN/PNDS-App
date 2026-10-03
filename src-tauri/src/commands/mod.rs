@@ -4,6 +4,7 @@
 //! Import specific commands via their submodule (e.g. `commands::preferences::load_preferences`).
 
 pub mod bundle;
+pub mod dns;
 pub mod help;
 pub mod https;
 pub mod notifications;
