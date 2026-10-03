@@ -153,6 +153,45 @@ async savePreferences(preferences: AppPreferences) : Promise<Result<null, string
 }
 },
 /**
+ * Reads the stored material and re-derives its standing against the
+ * CURRENT saved domain preference and clock. `Ok(None)` = nothing
+ * imported yet.
+ */
+async loadHttpsCertificate() : Promise<Result<HttpsValidationOutcome | null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("load_https_certificate") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Validates the two picked files (full chain + matching key) against
+ * the given domain and, only on success, atomically replaces the
+ * stored material. Failure leaves the previous material untouched.
+ */
+async importHttpsCertificate(domain: string, certificatePemPath: string, privateKeyPemPath: string) : Promise<Result<HttpsValidationOutcome, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("import_https_certificate", { domain, certificatePemPath, privateKeyPemPath }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Removes the stored material (the settings「清除」button). Plain
+ * config fields survive in preferences — this only clears the
+ * certificate/key file.
+ */
+async clearHttpsCertificate() : Promise<Result<boolean, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("clear_https_certificate") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * Sends a native system notification.
  * On mobile platforms, returns an error as notifications are not yet supported.
  */
@@ -707,7 +746,23 @@ hubRooms?: Partial<{ [key in string]: number }>;
  * webviews whole-file-writing preferences would race each other.
  * `None` = never set → 100.
  */
-projectionZoom?: number | null }
+projectionZoom?: number | null; 
+/**
+ * #139: the trusted-HTTPS entry's DNS domain (normalized lowercase,
+ * validated at the save boundary by `validate_https_domain_field`).
+ * App-local normal config — it rides the preference round-trip like
+ * every other settings field; the certificate MATERIAL never does
+ * (backend-protected storage, see `https.rs`). `None`/blank = not
+ * configured; the entry takes effect only from the next project
+ * start (the gateway itself arrives with #140).
+ */
+httpsDomain?: string | null; 
+/**
+ * #139: the entry's non-privileged listen port (1024..=65535,
+ * validated at the save boundary by `validate_https_port`).
+ * `None` = not configured.
+ */
+httpsPort?: number | null }
 export type AudioConfig = { 
 /**
  * The raw-JSON validation below has already rejected unknown mode
@@ -813,6 +868,105 @@ export type HelpCorpusDocument = { id: string; path: string; markdown: string }
  * registered here so both windows share one generated name.
  */
 export type HelpReadyEvent = Record<string, never>
+/**
+ * The certificate's standing at the moment of the check. Reload maps
+ * revalidation failures into the matching variants; import only ever
+ * produces `Valid` / `ExpiringSoon` (anything else was refused).
+ */
+export type HttpsCertificateStatus = 
+/**
+ * Valid now, beyond the reminder window.
+ */
+"valid" | 
+/**
+ * Valid now but expiring within [`EXPIRY_REMINDER_DAYS`] — renew
+ * before the next performance.
+ */
+"expiringSoon" | "expired" | "notYetValid" | 
+/**
+ * The stored leaf no longer covers the currently configured domain
+ * (the operator changed the domain after import).
+ */
+"wrongDomain" | 
+/**
+ * The chain no longer validates against the public root set (e.g. a
+ * root was withdrawn), or was never publicly trusted.
+ */
+"distrusted"
+/**
+ * What the UI may show about the material. Public certificate facts
+ * only — the private key never appears here.
+ */
+export type HttpsCertificateSummary = { 
+/**
+ * Subject common name (full DN when no CN is present).
+ */
+subject: string; issuer: string; 
+/**
+ * DNS entries of the leaf's Subject Alternative Names.
+ */
+sans: string[]; 
+/**
+ * RFC 3339 UTC.
+ */
+notBefore: string; notAfter: string; 
+/**
+ * Whole days from `now` until `not_after` (negative once expired).
+ * i32 — days, and tauri-specta forbids i64 on the wire.
+ */
+daysRemaining: number; 
+/**
+ * `AA:BB:…` uppercase colon-hex SHA-256 of the leaf DER — the
+ * operator-visible identity of the stored material.
+ */
+fingerprint: string; status: HttpsCertificateStatus }
+export type HttpsProblem = { code: HttpsProblemCode; detail: string }
+/**
+ * Why imported material (or stored material at reload) is not usable.
+ * `code` keys the localized UI message; `detail` is the English
+ * specifics (dates, SANs, paths) shown alongside it.
+ */
+export type HttpsProblemCode = 
+/**
+ * A file is not PEM-decodable certificate / private-key material,
+ * or parts of the pair are missing.
+ */
+"parse" | 
+/**
+ * The leaf's validity window ended before `now`.
+ */
+"expired" | 
+/**
+ * The leaf's validity window starts after `now`.
+ */
+"notYetValid" | 
+/**
+ * The configured domain is not covered by the leaf's SANs.
+ */
+"domainMismatch" | 
+/**
+ * The chain cannot reach a trust anchor because an intermediate is
+ * missing from the imported material.
+ */
+"incompleteChain" | 
+/**
+ * The chain resolves structurally but its root is not a publicly
+ * trusted CA (self-signed or private CA — phones will not trust it).
+ */
+"notPubliclyTrusted" | 
+/**
+ * The private key does not match the leaf certificate's public key.
+ */
+"keyMismatch" | 
+/**
+ * Writing the protected storage failed.
+ */
+"storage"
+/**
+ * One command answer: the stored/imported summary on success, the
+ * readable problems when validation refused the material.
+ */
+export type HttpsValidationOutcome = { summary: HttpsCertificateSummary | null; problems: HttpsProblem[] }
 export type Manifest = { schemaVersion: number; id: string; name: string; version: string; description: string | null; scoreServer: ScoreServer; audio: AudioConfig; 
 /**
  * v1.4.0 (issue #58): the work declares cross-internet (telematic)

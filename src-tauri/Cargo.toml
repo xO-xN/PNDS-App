@@ -45,6 +45,16 @@ sha2 = "0.10"
 base64 = "0.22"
 # v1.2.0 (issue #16): staging dir for read-only .pnds packing (also used by tests).
 tempfile = "3"
+# #139: host-side trusted-HTTPS material — PEM sectioning, X.509 leaf
+# fields, chain/DNS-name validation against trust anchors, private-key
+# parse for the match check, RFC 3339 validity rendering.
+rustls-pemfile = "2"
+x509-parser = "0.16"
+rustls-webpki = "0.102"
+webpki-roots = "0.26"
+ring = "0.17"
+sec1 = "0.7"
+time = { version = "0.3", features = ["formatting"] }
 
 # Type-safe Tauri command bindings
 specta = { version = "=2.0.0-rc.22", features = ["derive", "serde_json"] }
@@ -78,6 +88,9 @@ objc2-app-kit = { version = "0.3", features = ["std", "NSWindow", "NSOpenPanel",
 objc2-foundation = { version = "0.3", features = ["std", "NSString", "NSProcessInfo", "NSBundle", "NSDictionary"] }
 
 [dev-dependencies]
+# #139: test certificate material (CA → intermediate → leaf) for the
+# validation pipeline tests; production anchors stay webpki-roots.
+rcgen = "0.13"
 
 # Optimize for smaller binary size in release builds
 [profile.release]

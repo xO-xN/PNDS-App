@@ -20,6 +20,7 @@ import modulesAudio from '../../docs/zh-CN/modules/audio.md?raw'
 import referenceReadme from '../../docs/zh-CN/reference/README.md?raw'
 import referenceDigitalScore from '../../docs/zh-CN/reference/digital-score.md?raw'
 import referenceNetwork from '../../docs/zh-CN/reference/network.md?raw'
+import referenceHttps from '../../docs/zh-CN/reference/https.md?raw'
 import referenceAudioModes from '../../docs/zh-CN/reference/audio-modes.md?raw'
 import referenceRuntimeContract from '../../docs/zh-CN/reference/runtime-contract.md?raw'
 import referenceStructure from '../../docs/zh-CN/reference/structure.md?raw'
@@ -56,6 +57,7 @@ const RAW_CORPUS: Record<string, string> = {
   'reference-readme': referenceReadme,
   'reference-digital-score': referenceDigitalScore,
   'reference-network': referenceNetwork,
+  'reference-https': referenceHttps,
   'reference-audio-modes': referenceAudioModes,
   'reference-runtime-contract': referenceRuntimeContract,
   'reference-structure': referenceStructure,
@@ -83,6 +85,7 @@ const DOC_PATHS: Record<string, string> = {
   'reference-readme': 'reference/README.md',
   'reference-digital-score': 'reference/digital-score.md',
   'reference-network': 'reference/network.md',
+  'reference-https': 'reference/https.md',
   'reference-audio-modes': 'reference/audio-modes.md',
   'reference-runtime-contract': 'reference/runtime-contract.md',
   'reference-structure': 'reference/structure.md',
@@ -110,12 +113,12 @@ describe('help corpus at real scale (#53)', () => {
   const index = buildHelpIndex(corpus)
 
   it('places every shipped document and derives its own title', () => {
-    expect(corpus).toHaveLength(23)
+    expect(corpus).toHaveLength(24)
     expect(corpus[0]?.title).toBe('PNDS App 使用教程')
     expect(corpus[1]?.title).toBe('PNDS Template 创作指南')
     expect(corpus[2]?.title).toBe('给工程写 README')
     expect(corpus[3]?.title).toBe('PNDS 参考手册')
-    expect(corpus[15]?.title).toBe('模块手册')
+    expect(corpus[16]?.title).toBe('模块手册')
     for (const document of corpus) {
       expect(document.title).not.toBe(document.id)
       expect(document.sections.length).toBeGreaterThan(0)

@@ -536,7 +536,7 @@ window.parent.postMessage({ type: 'pnds-projection', zoom: 'page' }, '*')
 
 ## 15. 完整 performer URL 与外部入口（#138 冻结契约）
 
-本节冻结本地可信 HTTPS 入口与工程之间的公开契约。入口本身（TLS 网关、证书导入、入口状态与生命周期）属后续 patch；本节冻结的是命名、容错、优先级与两侧义务。PNDS Template 已按此契约适配（见其 docs/implementation.md「完整 performer URL」）；未适配工程不受任何影响。
+本节冻结本地可信 HTTPS 入口与工程之间的公开契约。入口本身（TLS 网关、入口状态与生命周期）属后续 patch；证书材料的配置、导入、校验与受保护存储已随 #139 交付（操作者准备见[https.md](./https.md)：域名与端口是普通偏好字段，证书链与私钥只存在后端受限权限文件中，不进偏好回传 / 工程 / manifest / `.pnds` / 日志）。本节冻结的是命名、容错、优先级与两侧义务。PNDS Template 已按此契约适配（见其 docs/implementation.md「完整 performer URL」）；未适配工程不受任何影响。
 
 ### 变量与能力声明
 

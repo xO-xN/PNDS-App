@@ -14,6 +14,7 @@ export type SettingsSection =
   | 'general'
   | 'audio'
   | 'node'
+  | 'https'
   | 'ports'
   | 'developer'
   | 'about'
@@ -60,6 +61,13 @@ interface SettingsState {
    * hint (the operator names nodes after machines). Read once at startup
    * via the OS plugin; '' when unavailable. */
   hostnameHint: string
+  /** #139: the trusted-HTTPS entry's domain, in-edit ('' = never set).
+   * Seeded once at app startup from preferences like the node trio;
+   * commits on blur through the serialized preferences queue. */
+  httpsDomainSetting: string
+  /** #139: the entry's port, in-edit as text ('' = never set). Commits
+   * on blur; invalid values are held back from the save queue. */
+  httpsPortSetting: string
   openSettings: (section?: SettingsSection) => void
   closeSettings: () => void
   toggleSettings: () => void
@@ -71,6 +79,8 @@ interface SettingsState {
   setHubTokenSetting: (token: string) => void
   setHubRooms: (rooms: Record<string, number>) => void
   setHostnameHint: (hostname: string) => void
+  setHttpsDomainSetting: (domain: string) => void
+  setHttpsPortSetting: (port: string) => void
 }
 
 export const useSettingsStore = create<SettingsState>()(set => ({
@@ -85,6 +95,8 @@ export const useSettingsStore = create<SettingsState>()(set => ({
   hubTokenSetting: '',
   hubRooms: {},
   hostnameHint: '',
+  httpsDomainSetting: '',
+  httpsPortSetting: '',
 
   openSettings: section =>
     set({ settingsOpen: true, focusSection: section ?? null }),
@@ -113,6 +125,10 @@ export const useSettingsStore = create<SettingsState>()(set => ({
   setHubRooms: hubRooms => set({ hubRooms }),
 
   setHostnameHint: hostnameHint => set({ hostnameHint }),
+
+  setHttpsDomainSetting: httpsDomainSetting => set({ httpsDomainSetting }),
+
+  setHttpsPortSetting: httpsPortSetting => set({ httpsPortSetting }),
 }))
 
 /**

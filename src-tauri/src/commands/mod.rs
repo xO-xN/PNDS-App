@@ -5,6 +5,7 @@
 
 pub mod bundle;
 pub mod help;
+pub mod https;
 pub mod notifications;
 pub mod preferences;
 pub mod project;

@@ -78,6 +78,8 @@ export type PreferencesPatch = Partial<
     | 'hubToken'
     | 'hubRooms'
     | 'projectionZoom'
+    | 'httpsDomain'
+    | 'httpsPort'
   >
 >
 

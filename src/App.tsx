@@ -147,6 +147,17 @@ function App() {
             if (group) hubRooms[projectId] = group
           }
           useSettingsStore.getState().setHubRooms(hubRooms)
+          // #139: seed the trusted-HTTPS section's plain config from the
+          // same read — the certificate material is backend-held and is
+          // fetched by the section itself on open.
+          useSettingsStore
+            .getState()
+            .setHttpsDomainSetting(result.data.httpsDomain ?? '')
+          useSettingsStore
+            .getState()
+            .setHttpsPortSetting(
+              result.data.httpsPort != null ? String(result.data.httpsPort) : ''
+            )
         }
         // #58: the node-name input's placeholder hints this machine's
         // hostname — operators name nodes after machines. Best-effort.

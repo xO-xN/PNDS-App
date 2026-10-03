@@ -6,6 +6,7 @@
 mod bindings;
 mod commands;
 mod events;
+mod https;
 mod open_panel;
 mod process_activity;
 mod project;

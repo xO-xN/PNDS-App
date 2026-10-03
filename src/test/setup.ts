@@ -118,6 +118,19 @@ vi.mock('@/lib/tauri-bindings', async () => {
         .fn()
         .mockResolvedValue({ status: 'ok', data: { theme: 'system' } }),
       savePreferences: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
+      // #139: HTTPS certificate material — load/clear default to the
+      // quiet states (nothing stored); the import default fails loudly
+      // (a forgotten mock must not read as a successful import).
+      loadHttpsCertificate: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      importHttpsCertificate: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: 'importHttpsCertificate not mocked',
+      }),
+      clearHttpsCertificate: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: false }),
       sendNativeNotification: vi
         .fn()
         .mockResolvedValue({ status: 'ok', data: null }),

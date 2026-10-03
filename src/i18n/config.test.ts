@@ -33,10 +33,16 @@ describe('i18n config (v1.2.0 issue #13)', () => {
   it('keeps the zh-CN bundle at full parity with en (v1.2.0 issue #15)', async () => {
     // The device badge and the settings sections must never render English
     // on a Chinese UI: every en key carries a zh-CN entry, and vice versa.
+    // Plural-suffixed keys compare by their base key (i18n-patterns.md):
+    // zh has no plural forms, so its single `_other` covers every count
+    // an English `_one`/`_other` pair splits.
+    const baseKey = (key: string) => key.replace(/_(one|other)$/, '')
     const en = i18n.getResourceBundle('en', 'translation')
     const zh = i18n.getResourceBundle('zh-CN', 'translation')
-    expect(Object.keys(en).filter(key => !(key in zh))).toEqual([])
-    expect(Object.keys(zh).filter(key => !(key in en))).toEqual([])
+    const enBases = new Set(Object.keys(en).map(baseKey))
+    const zhBases = new Set(Object.keys(zh).map(baseKey))
+    expect([...enBases].filter(key => !zhBases.has(key))).toEqual([])
+    expect([...zhBases].filter(key => !enBases.has(key))).toEqual([])
     expect(
       i18n.t('sidebar.deviceInsufficient', {
         lng: 'zh-CN',

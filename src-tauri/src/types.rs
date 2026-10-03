@@ -174,6 +174,20 @@ pub struct AppPreferences {
     /// `None` = never set → 100.
     #[serde(default)]
     pub projection_zoom: Option<u8>,
+    /// #139: the trusted-HTTPS entry's DNS domain (normalized lowercase,
+    /// validated at the save boundary by `validate_https_domain_field`).
+    /// App-local normal config — it rides the preference round-trip like
+    /// every other settings field; the certificate MATERIAL never does
+    /// (backend-protected storage, see `https.rs`). `None`/blank = not
+    /// configured; the entry takes effect only from the next project
+    /// start (the gateway itself arrives with #140).
+    #[serde(default)]
+    pub https_domain: Option<String>,
+    /// #139: the entry's non-privileged listen port (1024..=65535,
+    /// validated at the save boundary by `validate_https_port_field`).
+    /// `None` = not configured.
+    #[serde(default)]
+    pub https_port: Option<u16>,
 }
 
 /// A named one-level group of project paths (spec issue #4).
@@ -212,6 +226,8 @@ impl Default for AppPreferences {
             hub_token: None,
             hub_rooms: HashMap::new(),
             projection_zoom: None,
+            https_domain: None,
+            https_port: None,
         }
     }
 }
@@ -290,6 +306,27 @@ pub fn validate_hub_rooms(rooms: &HashMap<String, u8>) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+/// #139: validates the HTTPS-domain preference at the save boundary.
+/// `None` and blank are the unset state; a set value must pass the
+/// domain rules (`validate_https_domain` in https.rs). The stored value
+/// is normalized (lowercased, trimmed) so revalidation and the entry
+/// URL never see variant spellings.
+pub fn validate_https_domain_field(domain: Option<&str>) -> Result<(), String> {
+    match domain.map(str::trim).filter(|d| !d.is_empty()) {
+        None => Ok(()),
+        Some(domain) => crate::https::validate_https_domain(domain).map(|_| ()),
+    }
+}
+
+/// #139: validates the HTTPS-port preference. `None` = unset; a set
+/// value must be non-privileged (the Host never installs a 443 helper).
+pub fn validate_https_port_field(port: Option<u16>) -> Result<(), String> {
+    match port {
+        None => Ok(()),
+        Some(port) => crate::https::validate_https_port(port),
+    }
 }
 
 #[cfg(test)]
@@ -643,5 +680,47 @@ mod tests {
 
         let bad = [("x".to_string(), 4u8)].into_iter().collect();
         assert!(validate_hub_rooms(&bad).is_err());
+    }
+
+    /// #139: preference files written before the HTTPS fields existed
+    /// load as the unset state (serde defaults), and the fields
+    /// round-trip camelCase like every other preference.
+    #[test]
+    fn deserializes_and_roundtrips_https_fields() {
+        let legacy = r#"{ "theme": "dark" }"#;
+        let prefs: AppPreferences = serde_json::from_str(legacy).expect("legacy prefs parse");
+        assert_eq!(prefs.https_domain, None);
+        assert_eq!(prefs.https_port, None);
+
+        let modern = r#"{ "theme": "dark", "httpsDomain": "show.example.org", "httpsPort": 8443 }"#;
+        let prefs: AppPreferences = serde_json::from_str(modern).expect("modern prefs parse");
+        assert_eq!(prefs.https_domain.as_deref(), Some("show.example.org"));
+        assert_eq!(prefs.https_port, Some(8443));
+        let written = serde_json::to_string(&prefs).expect("prefs serialize");
+        let reread: AppPreferences = serde_json::from_str(&written).expect("prefs reparse");
+        assert_eq!(reread.https_domain.as_deref(), Some("show.example.org"));
+        assert_eq!(reread.https_port, Some(8443));
+    }
+
+    /// #139: the save boundary validates the HTTPS fields — a real DNS
+    /// domain (blank = unset) and a non-privileged port. Readable errors
+    /// name the rejection.
+    #[test]
+    fn validates_https_preference_fields() {
+        assert!(validate_https_domain_field(None).is_ok());
+        assert!(validate_https_domain_field(Some("")).is_ok());
+        assert!(validate_https_domain_field(Some("  ")).is_ok());
+        assert!(validate_https_domain_field(Some("show.example.org")).is_ok());
+        let err = validate_https_domain_field(Some("https://show.example.org"))
+            .expect_err("URL spelling must be rejected");
+        assert!(err.contains("bare domain"), "got: {err}");
+        let err =
+            validate_https_domain_field(Some("192.168.1.10")).expect_err("IP must be rejected");
+        assert!(err.contains("IP address"), "got: {err}");
+
+        assert!(validate_https_port_field(None).is_ok());
+        assert!(validate_https_port_field(Some(8443)).is_ok());
+        let err = validate_https_port_field(Some(443)).expect_err("443 must be rejected");
+        assert!(err.contains("non-privileged"), "got: {err}");
     }
 }

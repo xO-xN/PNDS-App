@@ -4,6 +4,7 @@
 
 - **数字乐谱是什么？** → [digital-score.md](./digital-score.md)
 - **如何在本地网络 / 互联网上组网演奏？** → [network.md](./network.md)
+- **如何为演出准备可信 HTTPS 入口（域名、公有证书、路由器本地 DNS）？** → [https.md](./https.md)
 - **三种音频模式（internal / external / none）有什么区别？** → [audio-modes.md](./audio-modes.md)
 - **App 如何启动工程：环境变量、health、音频 bus、monitor 页面要求、主题/语言推送、关停行为** → [runtime-contract.md](./runtime-contract.md)
 - **PNDS 工程的目录结构与合规要求** → [structure.md](./structure.md)

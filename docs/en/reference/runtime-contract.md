@@ -531,7 +531,7 @@ Conventions:
 
 ## 15. The full performer URL and the external entry (#138 frozen contract)
 
-This section freezes the public contract between the local trusted HTTPS entry and the Project. The entry itself (TLS gateway, certificate import, entry state and lifecycle) belongs to a later patch; what is frozen here is the naming, tolerance, priority and the obligations on both sides. The PNDS Template is already adapted to this contract (see its docs/implementation.md, section「完整 performer URL」); unadapted works are unaffected.
+This section freezes the public contract between the local trusted HTTPS entry and the Project. The entry itself (TLS gateway, entry state and lifecycle) belongs to a later patch; the certificate material's configuration, import, validation and protected storage shipped with #139 (operator preparation: [https.md](./https.md) — the domain and port are ordinary preference fields, while the certificate chain and private key live only in a backend file with restricted permissions, never in the preferences round-trip, the project, the manifest, the `.pnds` bundle or the logs). What is frozen here is the naming, tolerance, priority and the obligations on both sides. The PNDS Template is already adapted to this contract (see its docs/implementation.md, section「完整 performer URL」); unadapted works are unaffected.
 
 ### The variable and the capability declaration
 

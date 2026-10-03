@@ -4,6 +4,7 @@ Look up by question: what you want to know → which file to read.
 
 - **What is a digital score?** → [digital-score.md](./digital-score.md)
 - **How do I set up a performance on a LAN or over the internet?** → [network.md](./network.md)
+- **How do I prepare the trusted HTTPS entry for a performance (domain, public certificate, router local DNS)?** → [https.md](./https.md)
 - **What is the difference between the three audio modes (internal / external / none)?** → [audio-modes.md](./audio-modes.md)
 - **How the App runs a Project: environment variables, health, the audio bus, monitor page requirements, theme/locale push, shutdown** → [runtime-contract.md](./runtime-contract.md)
 - **A PNDS Project's directory layout and compliance requirements** → [structure.md](./structure.md)
