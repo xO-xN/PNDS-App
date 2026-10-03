@@ -26,6 +26,8 @@ Operating discipline for custom `.local` addresses:
 
 Seats, reconnection and the work's data protocol are the Project's own implementation — PNDS prescribes no Socket.IO event names, client IDs, role counts or UI framework.
 
+A later patch will add the local trusted HTTPS entry (the full performer URL `PNDS_PERFORMER_URL`; the contract is already frozen — see [runtime-contract.md](./runtime-contract.md) §15). It is independent of this section's bare-host-name declaration: while the entry is in effect the full URL takes priority, and `PNDS_HOST_IP`'s injection semantics are unchanged.
+
 ## Internet / remote performance
 
 The name PNDS evokes "many ponds, connected": each pond (a local performance system) gathers the voices of a group of people, and PNDS connects these ponds into a unique field of expression (a cross-internet performance system).

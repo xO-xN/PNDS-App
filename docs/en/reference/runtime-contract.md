@@ -81,7 +81,34 @@ None:
 PNDS_OSC_TARGET absent
 ```
 
+Cross-internet performance (works declaring `telematic: true`, v1.4.0) — orthogonal to the audio mode: in all three modes either all four are injected or none are. The variable names and semantics follow the frozen TND contract:
+
+```text
+PNDS_NODE_ID=<App-global node name>
+PNDS_HUB_URL=<App-global hub address, full URL>
+PNDS_HUB_TOKEN=<App-global token>
+PNDS_HUB_ROOM={manifest.id}_{group number}
+```
+
 Rules:
+
+- injection requires a manifest declaring `telematic: true` **and** all three "Set Node" fields (node name / hub address / token) filled in the App's settings; if any is empty, none are injected (the front-end "Set Node" gate enforces completeness — the injection authority is the backend);
+- rooms are never hand-typed by users: the `group number` comes from the sidebar Room dropdown (1–3, persisted per work, default 1, never reset); same work + same group = same room, different works never see each other (ADR-0004);
+- the token travels only in `PNDS_HUB_TOKEN` itself — never concatenated into `PNDS_HUB_URL`, never logged;
+- node configuration and group-number changes take effect on the next start; a running session's env never changes.
+
+The full performer URL (#138 frozen contract; the entry implementation belongs to a later patch — this block freezes the variable, its semantics and its priority only):
+
+```text
+PNDS_PERFORMER_URL=<full performer root URL, e.g. https://show.example.org:8443/>
+```
+
+- the App injects it only while the local trusted HTTPS entry is in effect for the current performance; the entry is on by default only for works declaring `scoreServer.supportsPerformerUrl: true` (field semantics: [manifest.md](./manifest.md)). No entry exists in the current version, so the variable is never injected — a Project that cannot read it simply keeps running the original HTTP flow;
+- it is the **full root URL** the Host determined for this performance: protocol, domain and the actual port. Every address the Project exposes outward (QR code, copied address, browser connection config) uses it, taking priority over any address assembled from `PNDS_HOST_IP`;
+- it is not a new value for `PNDS_HOST_IP` and not a hub URL: `PNDS_HOST_IP` (and the node variables above) keep their semantics and are injected as usual;
+- the full contract (project identity, entry access context, the claim-token origin semantics) is §15.
+
+Rules (existing):
 
 - Internal's target is always allocated dynamically by the App;
 - the App must never use `audio.standaloneTarget`;
@@ -501,3 +528,25 @@ Conventions:
 - **The default is App-owned**: an undeclared copy (an unadapted Project) behaves byte-for-byte as before the handshake existed. The intro, built-in utilities and cover phases load no monitor page and have no declaration channel — App zoom applies as ever.
 - **Message validation**: the host honours only messages from **this iframe's own window** whose `type` and `zoom` match exactly; mismatched types, unknown `zoom` values, wrong sources and malformed payloads are all ignored — page content is untrusted input, and no message may make the host throw.
 - The App's zoom value and its persistence (the window memory) are untouched by the yield: the remembered value waits as-is and applies again on undeclared navigations (or a reload's default period).
+
+## 15. The full performer URL and the external entry (#138 frozen contract)
+
+This section freezes the public contract between the local trusted HTTPS entry and the Project. The entry itself (TLS gateway, certificate import, entry state and lifecycle) belongs to a later patch; what is frozen here is the naming, tolerance, priority and the obligations on both sides. The PNDS Template is already adapted to this contract (see its docs/implementation.md, section「完整 performer URL」); unadapted works are unaffected.
+
+### The variable and the capability declaration
+
+- the startup variable `PNDS_PERFORMER_URL` (§3): the full performer root URL injected while the entry is in effect — protocol, domain and actual port included;
+- the capability declaration `scoreServer.supportsPerformerUrl: true` ([manifest.md](./manifest.md)): the work promises to read that full URL, to build its QR and connection config from it, and to load page scripts and real-time connections under that origin; absent = an unadapted legacy work, and the entry must not silently apply to it (the later entry patch must offer a clear compatibility notice and an explicit choice of the original HTTP flow);
+- priority: when `PNDS_PERFORMER_URL` is provided, every outward-facing address of the Project uses that full URL; when it is absent, `http://<PNDS_HOST_IP>:<performerPort>/` continues to apply (today's behavior) — no forced migration of old manifests.
+
+### Project identity and the entry access context
+
+- the external entry is bound to the **current performance's project identity**: the `manifest.id` plus that session. The URL the entry publishes and its access context (the page the entry serves, the `projectId` / `performerUrl` / page role injected via `__config.js`) all derive from the current project — the later gateway implementation uses this to **reject old entries that do not match the current project**: after a project replacement, an old QR must never route to the new work;
+- project identity is **not** seat identity: claim tokens, seats and restoration semantics remain entirely the Project's (module manual: [Performer identity and seats](../modules/players.md)); this contract redefines none of them and interprets no artistic events;
+- the page role is injected by the server (`__config.js`'s `role` field) and **must not be inferred from the shared external port**: the entry's port is unrelated to the manifest ports, so a browser-side port comparison is unreliable under the entry;
+- the monitor page keeps its **internal connection**: it reaches the performer service cross-port via the original internal address, never through the external entry, and no public management entry is added.
+
+### Claim tokens and origins
+
+- the claim token lives in the browser's localStorage, **scoped per origin**: a reconnect on the same HTTPS origin reuses the token and restores the seat as always — zero changes to the Project's existing logic;
+- a change of protocol, domain or port means a different origin: neither the App nor the Project **promises cross-origin migration** of old tokens. The device joins anew under the new origin (fresh token, fresh seat); the server's old seat records remain and the operator can clear them via the monitor's reset control. A plain HTTP → HTTPS switch changes the origin the same way — the entry's preparation notes must tell operators this explicitly.

@@ -75,6 +75,18 @@ pub struct ScoreServer {
     pub working_directory: String,
     pub performer_port: u16,
     pub monitor_port: u16,
+    /// #138: the work reads the Host-provided full performer URL
+    /// (`PNDS_PERFORMER_URL`) — QR, copied address and browser config
+    /// from that one URL, page scripts and Socket.IO same-origin under
+    /// the external HTTPS entry, monitor on its internal connection.
+    /// Declaration-only (no gateway exists yet): it tells a future
+    /// HTTPS entry that this work adapts, so undeclared works can be
+    /// offered the explicit HTTP fallback instead of a silent
+    /// downgrade. Lenient by contract (manifest.md): absent, `null`,
+    /// `false` and non-boolean values all read as undeclared and never
+    /// fail validation.
+    #[serde(default, deserialize_with = "lenient_optional_bool")]
+    pub supports_performer_url: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
@@ -951,5 +963,69 @@ mod tests {
         assert_eq!(manifest.performer_address(), Some("mywork.local"));
         let reserialized = serde_json::to_string(&manifest).unwrap();
         assert!(reserialized.contains("\"performerAddress\":\"mywork.local\""));
+    }
+
+    /// Writes a none-mode manifest whose scoreServer carries an extra
+    /// JSON fragment (#138) after the required fields.
+    fn write_manifest_with_score_server_extra(dir: &Path, extra_json: &str) {
+        write_manifest(
+            dir,
+            &format!(
+                r#"{{
+                  "schemaVersion": 1, "id": "x", "name": "X", "version": "0.1.0",
+                  "scoreServer": {{ "entry": "server.js", "workingDirectory": ".", "performerPort": 6868, "monitorPort": 6869{extra_json} }},
+                  "audio": {{ "defaultMode": "none", "supportedModes": ["none"] }}
+                }}"#
+            ),
+        );
+    }
+
+    /// #138: `scoreServer.supportsPerformerUrl` is optional, lenient and
+    /// declaration-only — same shape as `telematic`: absent, null, false
+    /// and non-boolean all read as undeclared without erroring; only an
+    /// explicit `true` declares. (Parsed as the raw Option<bool> — the
+    /// `== Some(true)` gate gets its first real caller with the HTTPS
+    /// entry patch.)
+    #[test]
+    fn supports_performer_url_is_lenient_optional_boolean() {
+        for (declared, expected) in [
+            (None, None),
+            (Some("null"), None),
+            (Some("false"), Some(false)),
+            (Some("\"true\""), None),
+            (Some("1"), None),
+            (Some("true"), Some(true)),
+        ] {
+            let dir = tempfile::tempdir().unwrap();
+            write_valid_project(dir.path());
+            let extra = declared
+                .map(|v| format!(", \"supportsPerformerUrl\": {v}"))
+                .unwrap_or_default();
+            write_manifest_with_score_server_extra(dir.path(), &extra);
+            let manifest = load_manifest(dir.path())
+                .unwrap_or_else(|e| panic!("declared={declared:?} must validate: {e}"));
+            assert_eq!(
+                manifest.score_server.supports_performer_url, expected,
+                "declared={declared:?}"
+            );
+            assert_eq!(
+                manifest.score_server.supports_performer_url == Some(true),
+                expected == Some(true),
+                "declared={declared:?}"
+            );
+        }
+    }
+
+    /// #138: the declaration survives a parse→serialize round trip (the
+    /// struct must stay lossless for tooling, same as `telematic`).
+    #[test]
+    fn supports_performer_url_roundtrips() {
+        let dir = tempfile::tempdir().unwrap();
+        write_valid_project(dir.path());
+        write_manifest_with_score_server_extra(dir.path(), ", \"supportsPerformerUrl\": true");
+        let manifest = load_manifest(dir.path()).unwrap();
+        assert_eq!(manifest.score_server.supports_performer_url, Some(true));
+        let reserialized = serde_json::to_string(&manifest).unwrap();
+        assert!(reserialized.contains("\"supportsPerformerUrl\":true"));
     }
 }

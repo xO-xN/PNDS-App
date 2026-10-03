@@ -17,6 +17,7 @@ Every connection after that — reconnects included — the page re-joins carryi
 
 - ids get released and reused after a disconnect; tokens never do — every piece of persistent state is indexed by token, not id.
 - The valid shape is a string of 24–128 characters (`isClaimToken` in `lib/players.js`).
+- localStorage is **scoped per origin** ([runtime-contract.md](../reference/runtime-contract.md) §15): a reconnect on the same origin reuses the token as always; any change of protocol, domain or port (an HTTP → HTTPS switch included) leaves the device unable to present the old token under the new origin, so it joins anew — the server's old seat records remain and can be cleared via the monitor's reset control when needed. Neither the App nor the Project promises cross-origin migration of seat tokens.
 
 ## The id: 1..maxClients
 

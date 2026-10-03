@@ -17,6 +17,7 @@
 
 - id 会在断线后释放给别人复用，token 不会——一切持久状态都按 token 索引，而不是 id。
 - 合法形状是 24–128 个字符的字符串（`lib/players.js` 的 `isClaimToken`）。
+- localStorage **按 origin 隔离**（[runtime-contract.md](../reference/runtime-contract.md) §15）：同一 origin 的断线重连照常复用 token；协议、域名或端口任一变化（含 HTTP → HTTPS 切换）后，设备在新 origin 下读不到旧 token，按新加入处理——服务端的旧座位记录仍在，必要时用 monitor 的重配入口清理。App 与工程都不承诺跨 origin 迁移座位 token。
 
 ## id：1..maxClients
 

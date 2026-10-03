@@ -50,6 +50,7 @@ audio.supportedModes
 description
 telematic
 performerAddress
+scoreServer.supportsPerformerUrl
 audio.outputChannels
 audio.standaloneTarget
 ```
@@ -67,6 +68,13 @@ audio.standaloneTarget
 - the value is a bare host name: dot-separated labels of letters, digits and hyphens only (an IPv4 literal is also legal), carrying **no** scheme, port or path — `http://mywork.local` or `mywork.local:6868` fail preflight with a readable error;
 - absent, `null` and blank strings read as undeclared — the App injects the selected LAN IPv4 (today's behavior), never an error;
 - a declaration only, carrying no configuration: the Project needs zero changes (it keeps reading the same variable), and the address the App uses for the monitor stays identical to the injected value (see [runtime-contract.md](./runtime-contract.md) §3/§10).
+
+`scoreServer.supportsPerformerUrl`:
+
+- a boolean declaring that the work adapts to the Host-provided **full performer URL** (`PNDS_PERFORMER_URL`, see [runtime-contract.md](./runtime-contract.md) §3/§15): QR code, copied address and browser connection config all use that one full URL; page scripts and Socket.IO load and connect same-origin under it; the monitor keeps its internal connection;
+- absent, `null`, `false` and non-boolean values all read as **undeclared**, without error (preflight tolerance, same as `telematic`) — only an explicit `"supportsPerformerUrl": true` declares;
+- a capability declaration only, carrying no configuration: certificates, domain and entry lifecycle belong entirely to the App side — the manifest never sees them;
+- undeclared works are unaffected: the App does not inject `PNDS_PERFORMER_URL` and the Project keeps running its original HTTP flow (the later entry patch uses this declaration to tell "adapted" from "needs an explicit HTTP fallback").
 
 `audio.outputChannels`:
 

@@ -874,7 +874,20 @@ intro?: string | null }
  * only while a venue screen actually exists.
  */
 export type ProjectionWindowEvent = { exists: boolean }
-export type ScoreServer = { entry: string; workingDirectory: string; performerPort: number; monitorPort: number }
+export type ScoreServer = { entry: string; workingDirectory: string; performerPort: number; monitorPort: number; 
+/**
+ * #138: the work reads the Host-provided full performer URL
+ * (`PNDS_PERFORMER_URL`) — QR, copied address and browser config
+ * from that one URL, page scripts and Socket.IO same-origin under
+ * the external HTTPS entry, monitor on its internal connection.
+ * Declaration-only (no gateway exists yet): it tells a future
+ * HTTPS entry that this work adapts, so undeclared works can be
+ * offered the explicit HTTP fallback instead of a silent
+ * downgrade. Lenient by contract (manifest.md): absent, `null`,
+ * `false` and non-boolean values all read as undeclared and never
+ * fail validation.
+ */
+supportsPerformerUrl?: boolean | null }
 export type ScsynthConfig = { 
 /**
  * Issue #20: legacy field, read and ignored. The App's global

@@ -97,6 +97,17 @@ PNDS_HUB_ROOM={manifest.id}_{分组号}
 - token 只走 `PNDS_HUB_TOKEN` 自身，永不拼入 `PNDS_HUB_URL`，永不出现在日志；
 - 节点配置与分组号的修改在下次启动生效，运行中会话的 env 不变。
 
+完整 performer URL（#138 契约冻结；入口实现属后续 patch，本条只冻结变量、语义与优先级）：
+
+```text
+PNDS_PERFORMER_URL=<完整 performer 根 URL，如 https://show.example.org:8443/>
+```
+
+- App 仅在本地可信 HTTPS 入口对当前演出生效时注入；入口默认只对声明了 `scoreServer.supportsPerformerUrl: true` 的工程开启（字段语义见 [manifest.md](./manifest.md)）。当前版本没有入口，不注入该变量——工程读不到它即按原 HTTP 流程运行；
+- 它是 Host 为本次演出确定的**完整根 URL**：协议、域名与实际端口齐备。工程一切对外地址（二维码、复制地址、浏览器连接配置）以它为准，优先于任何由 `PNDS_HOST_IP` 拼出的地址；
+- 它不是 `PNDS_HOST_IP` 的新取值，也不是 hub URL：`PNDS_HOST_IP`（连同上面的节点变量）语义与注入行为不变，照常注入；
+- 完整契约（工程身份、入口接入上下文、claim token 的 origin 语义）见 §15。
+
 规则（既有）：
 
 - Internal 的 target 始终由 App 动态分配；
@@ -522,3 +533,25 @@ window.parent.postMessage({ type: 'pnds-projection', zoom: 'page' }, '*')
 - **默认 = App 拥有**：未声明的副本（未适配工程）行为与本握手引入之前逐字节一致。简介、内置工具、封面等非 monitor 阶段不加载 monitor 页、无声明通道，App 缩放照常。
 - **消息校验**：宿主只认**本 iframe 自己的窗口**发出的、`type` 与 `zoom` 取值精确匹配的消息；type 不匹配、`zoom` 取值未知、来源不对、载荷畸形的消息一律忽略——页面内容是不可信输入，任何消息都不得使宿主抛错。
 - App 侧的缩放值与持久化（窗口记忆）不因让位改变：让位期间记忆值原地等待，未声明导航（或重载后的默认期）照常生效。
+
+## 15. 完整 performer URL 与外部入口（#138 冻结契约）
+
+本节冻结本地可信 HTTPS 入口与工程之间的公开契约。入口本身（TLS 网关、证书导入、入口状态与生命周期）属后续 patch；本节冻结的是命名、容错、优先级与两侧义务。PNDS Template 已按此契约适配（见其 docs/implementation.md「完整 performer URL」）；未适配工程不受任何影响。
+
+### 变量与能力声明
+
+- 启动变量 `PNDS_PERFORMER_URL`（§3）：入口生效时注入的完整 performer 根 URL，含协议、域名与实际端口；
+- 能力声明 `scoreServer.supportsPerformerUrl: true`（[manifest.md](./manifest.md)）：工程承诺读取该完整 URL、据它生成二维码与连接配置，并能在该 origin 下加载页面脚本与建立实时连接；缺省 = 未适配的旧工程，入口不得静默对其生效（后续入口 patch 须给出明确兼容提示与显式选择原有 HTTP 方式的入口）；
+- 优先级：提供 `PNDS_PERFORMER_URL` 时，工程一切对外地址使用该完整 URL；未提供时沿用 `http://<PNDS_HOST_IP>:<performerPort>/`（现行为），不强制迁移旧 manifest。
+
+### 工程身份与入口接入上下文
+
+- 外部入口绑定**当前演出的工程身份**：`manifest.id` 加上该次 session。入口发布的 URL 与其接入上下文（入口服务的页面、`__config.js` 注入的 `projectId` / `performerUrl` / 页面角色）都派生自当前工程——后续网关实现据此**拒绝与当前工程不匹配的旧入口**：替换工程后，旧 QR 不得路由到新工程；
+- 工程身份**不是**座位身份：claim token、座位与恢复语义仍完全归工程（模块手册[乐手身份与座位](../modules/players.md)），本契约不重定义它们，也不解释任何艺术事件；
+- 页面角色由服务端注入（`__config.js` 的 `role` 字段），**不得凭共享外部端口推断**：入口端口与 manifest 端口无关，浏览器端的端口比较在入口之下不可靠；
+- monitor 页保持**内部连接**：经原内部地址跨端口连接 performer 服务，不经外部入口，也不新增公网管理入口。
+
+### claim token 与 origin
+
+- claim token 存放在浏览器 localStorage，**按 origin 隔离**：同一 HTTPS origin 的断线重连照常复用 token、恢复原座位——工程既有逻辑零改动；
+- 协议、域名或端口任一变化即不同 origin：App 与工程都**不承诺跨 origin 迁移**旧 token。设备在新 origin 下按新加入处理（拿新 token、新座位）；服务端旧座位记录仍在，操作者可用 monitor 的重配入口清理。普通 HTTP → HTTPS 切换同样改变 origin——入口的准备说明必须把这一点明确告知操作者。

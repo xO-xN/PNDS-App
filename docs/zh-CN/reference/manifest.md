@@ -50,6 +50,7 @@ audio.supportedModes
 description
 telematic
 performerAddress
+scoreServer.supportsPerformerUrl
 audio.outputChannels
 audio.standaloneTarget
 ```
@@ -67,6 +68,13 @@ audio.standaloneTarget
 - 值是裸主机名：点分标签只允许字母、数字与连字符（IPv4 字面量同样合法），**不带**协议、端口或路径——`http://mywork.local`、`mywork.local:6868` 会被 preflight 以可读错误拒绝；
 - 缺省、`null` 与空白字符串视为未声明，回落数字 IP 注入（现行为），不报错；
 - 只是声明，不携带任何配置：工程零改动（仍读它今天读的那个变量），App 用于 monitor 的地址与注入值保持一致（[runtime-contract.md](./runtime-contract.md) §3/§10）。
+
+`scoreServer.supportsPerformerUrl`：
+
+- 布尔值，声明工程适配 Host 提供的**完整 performer URL**（`PNDS_PERFORMER_URL`，[runtime-contract.md](./runtime-contract.md) §3/§15）：二维码、复制地址与浏览器连接配置使用同一完整 URL，页面脚本与 Socket.IO 在该 origin 下同源加载与连接，monitor 保持内部连接；
+- 缺省、`null`、`false` 与非布尔值一律视为**未声明**，不报错（preflight 容错，同 `telematic`）——只有显式 `"supportsPerformerUrl": true` 才算声明；
+- 只是能力声明，不携带任何配置：证书、域名与入口生命周期全部由 App 一侧拥有，manifest 永远拿不到它们；
+- 未声明的工程不受影响：App 不注入 `PNDS_PERFORMER_URL`，工程按原有 HTTP 方式运行（后续入口 patch 依据本声明区分「已适配」与「需显式回落 HTTP」）。
 
 `audio.outputChannels`：
 
