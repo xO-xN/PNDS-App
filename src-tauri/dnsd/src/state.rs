@@ -43,8 +43,15 @@ pub fn load(path: &Path) -> DaemonState {
 }
 
 /// Saves the state atomically: temp file + rename, so a crash mid-write
-/// never leaves a truncated state behind.
+/// never leaves a truncated state behind. Serialized process-wide: the
+/// housekeeping loop and `config.set` both write this file, and their
+/// load-modify-write cycles must not interleave (that interleave is
+/// exactly how a known-domains update was lost to a concurrent
+/// `config.set` in the field).
 pub fn save(path: &Path, state: &DaemonState) -> std::io::Result<()> {
+    static SAVE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _guard = SAVE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }

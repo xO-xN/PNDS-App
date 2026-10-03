@@ -67,7 +67,7 @@ pub fn run() -> ExitCode {
     let (state_path, control_path, port, arg_upstreams) =
         parse_args(std::env::args().skip(1).collect());
 
-    let persisted = state::load(&state_path);
+    let mut persisted = state::load(&state_path);
     let upstreams: Vec<SocketAddr> = arg_upstreams
         .iter()
         .copied()
@@ -164,15 +164,17 @@ pub fn run() -> ExitCode {
     }
 
     // 状态巡检：租约到期之外，把引擎的 upstreams/knownDomains 与磁盘
-    // 记录同步（config.set 与 mapping 安装都会改变引擎）。
+    // 记录同步（config.set 与 mapping 安装都会改变引擎）。保存成功后
+    // 刷新本地基准——否则一次变更会让条件永久为真，每 200ms 空转重写。
     while !stop.load(Ordering::SeqCst) && !restart.load(Ordering::SeqCst) {
         std::thread::sleep(std::time::Duration::from_millis(200));
         let persisted_now = state::from_engine(&state_engine);
         if persisted.upstreams != persisted_now.upstreams
             || persisted.known_domains != persisted_now.known_domains
         {
-            if let Err(e) = state::save(&state_path, &persisted_now) {
-                log::warn!("state save failed: {e}");
+            match state::save(&state_path, &persisted_now) {
+                Ok(()) => persisted = persisted_now,
+                Err(e) => log::warn!("state save failed: {e}"),
             }
         }
     }

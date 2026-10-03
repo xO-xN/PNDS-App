@@ -15,9 +15,10 @@
 //! message (mapping match, synthesis, cache TTLs, truncation, matching).
 
 use hickory_proto::op::{Message, MessageType, OpCode, Query, ResponseCode};
+use hickory_proto::rr::rdata::soa::SOA;
 use hickory_proto::rr::rdata::A;
 use hickory_proto::rr::RData;
-use hickory_proto::rr::{DNSClass, Record, RecordType};
+use hickory_proto::rr::{DNSClass, Name, Record, RecordType};
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::net::{Ipv4Addr, SocketAddr, TcpStream, UdpSocket};
@@ -30,6 +31,14 @@ use std::time::{Duration, Instant};
 /// performance's mapping is picked up without any client-side flush
 /// (spec #174: forward caches must not block a later start).
 pub const MAPPING_ANSWER_TTL: u32 = 10;
+/// The TTL our locally-synthesized negative answers advertise in their
+/// SOA (RFC 2308: a client's negative-cache lifetime comes from the SOA;
+/// a negative answer with NO SOA leaves the client to its own default —
+/// field-measured on iOS at minutes, which is how a normal revoke→
+/// install gap between two performances turned into "the phone never
+/// connects again"). Same value as the mapping TTL: a gap self-heals
+/// within seconds of the next performance's install.
+pub const NEGATIVE_SOA_TTL: u32 = MAPPING_ANSWER_TTL;
 /// Upper bound applied to any cached positive answer.
 pub const MAX_CACHE_TTL: u32 = 300;
 /// Upper bound for cached NEGATIVE outcomes (NXDOMAIN / no-answer). The
@@ -425,11 +434,27 @@ impl Engine {
             }
             let attempt_timeout = UPSTREAM_ATTEMPT_TIMEOUT.min(remaining);
             match udp_exchange(wire, *upstream, attempt_timeout) {
+                Ok(response) if fake_ip_poisoned(&response) => {
+                    // Not the configured upstream answering — a local
+                    // TUN proxy (fake-ip mode) intercepted the daemon's
+                    // query. Handing that on would route LAN phones into
+                    // a reserved range that only exists inside the
+                    // proxy; fail over instead (all poisoned → SERVFAIL).
+                    log::warn!(
+                        "upstream {upstream} answered from the RFC 2544 fake-ip range \
+                         (198.18.0.0/15) — a local TUN proxy is intercepting the \
+                         daemon's upstream traffic; excluding the daemon from the \
+                         proxy is the operator-side fix"
+                    );
+                }
                 Ok(response) if response_truncated(&response) => {
                     // Standard TC handling: retry the same upstream over
                     // TCP, which has no size limit.
                     match tcp_exchange(wire, *upstream, attempt_timeout) {
-                        Ok(bytes) => return self.finish_forwarded(&query, bytes, transport),
+                        Ok(bytes) if !fake_ip_poisoned(&bytes) => {
+                            return self.finish_forwarded(&query, bytes, transport)
+                        }
+                        Ok(_) => log::debug!("TCP retry to {upstream} poisoned/invalid"),
                         Err(e) => log::debug!("TCP retry to {upstream} failed: {e}"),
                     }
                 }
@@ -559,26 +584,48 @@ fn response_truncated(response: &[u8]) -> bool {
         .unwrap_or(false)
 }
 
+/// RFC 2544 benchmark space — no real public resolver ever returns it.
+/// Seeing it in an upstream answer means a local fake-ip TUN proxy
+/// answered instead of the configured upstream; those addresses route
+/// nowhere on the LAN (they only exist inside the proxy's tunnel), so
+/// the answer is poison, not data. Unparseable responses are not the
+/// poison check's business (the forwarder only uses parseable ones).
+fn fake_ip_poisoned(response: &[u8]) -> bool {
+    Message::from_vec(response)
+        .map(|message| {
+            message.answers.iter().any(|record| match &record.data {
+                RData::A(a) => a.0.octets()[0] == 198 && (a.0.octets()[1] & 0xFE) == 18,
+                _ => false,
+            })
+        })
+        .unwrap_or(false)
+}
+
 /// The authoritative local answer for a performance domain. `Some(ip)` →
 /// A queries get the LAN address (short TTL), every other type an empty
 /// NOERROR (an AAAA hole must not drag the valid A down). `None` (domain
 /// known, no active performance) → NXDOMAIN, also never forwarded.
+///
+/// Every negative-ish answer (NXDOMAIN, or an empty NOERROR for non-A
+/// types) carries a synthetic SOA with [`NEGATIVE_SOA_TTL`]: without it
+/// the client has no negative-cache guidance and applies its own
+/// default (iOS: minutes — see the constant's doc).
 fn synthesize_local(query: &Message, mapped: Option<Ipv4Addr>) -> Vec<u8> {
     let mut message = query.clone().into_response();
     message.metadata.authoritative = true;
     message.metadata.recursion_available = true;
+    let name = query.queries[0].name().clone();
     if query.queries[0].query_type() == RecordType::A {
         if let Some(ip) = mapped {
             message.metadata.response_code = ResponseCode::NoError;
-            let name = query.queries[0].name().clone();
             message.add_answer(Record::from_rdata(
                 name,
                 MAPPING_ANSWER_TTL,
                 RData::A(A(ip)),
             ));
-        } else {
-            message.metadata.response_code = ResponseCode::NXDomain;
+            return message.to_vec().unwrap_or_default();
         }
+        message.metadata.response_code = ResponseCode::NXDomain;
     } else {
         // Other types (AAAA, TXT, ...): empty NOERROR while mapped, so a
         // missing AAAA never fails the valid A; NXDOMAIN when unmapped.
@@ -588,7 +635,28 @@ fn synthesize_local(query: &Message, mapped: Option<Ipv4Addr>) -> Vec<u8> {
             ResponseCode::NXDomain
         };
     }
+    message.add_authority(Record::from_rdata(
+        name.clone(),
+        NEGATIVE_SOA_TTL,
+        RData::SOA(SOA::new(
+            name.clone(),
+            hostmaster_of(&name),
+            1,
+            3600,
+            1200,
+            86400,
+            NEGATIVE_SOA_TTL,
+        )),
+    ));
     message.to_vec().unwrap_or_default()
+}
+
+/// The SOA rname for a locally-answered domain: `hostmaster.<domain>` —
+/// syntactically valid, deliberately never deliverable (the daemon does
+/// not receive mail; the record exists for cache timing only).
+fn hostmaster_of(name: &Name) -> Name {
+    Name::parse(&format!("hostmaster.{name}"), None)
+        .unwrap_or_else(|_| Name::parse("hostmaster.invalid.", None).expect("static name parses"))
 }
 
 fn rewrite_ttls(message: &mut Message, decrement: u32) {
@@ -863,6 +931,147 @@ mod tests {
             }
         });
         (addr, stop)
+    }
+
+    /// A "poisoned" upstream: answers A queries from the RFC 2544
+    /// fake-ip range — exactly what a local fake-ip TUN proxy returns
+    /// when it intercepts the daemon's upstream traffic.
+    fn spawn_fake_ip_upstream() -> (SocketAddr, Arc<AtomicBool>) {
+        let socket = Arc::new(UdpSocket::bind(("127.0.0.1", 0)).unwrap());
+        let addr = socket.local_addr().unwrap();
+        let stop = Arc::new(AtomicBool::new(false));
+        let stop_flag = Arc::clone(&stop);
+        std::thread::spawn(move || {
+            let mut buffer = [0u8; 4096];
+            loop {
+                if stop_flag.load(Ordering::Relaxed) {
+                    return;
+                }
+                socket
+                    .set_read_timeout(Some(Duration::from_millis(100)))
+                    .ok();
+                let Ok((size, from)) = socket.recv_from(&mut buffer) else {
+                    continue;
+                };
+                let Ok(query) = Message::from_vec(&buffer[..size]) else {
+                    continue;
+                };
+                let mut response = query.clone().into_response();
+                response.metadata.response_code = ResponseCode::NoError;
+                let name = query.queries[0].name().clone();
+                if query.queries[0].query_type() == RecordType::A {
+                    response.add_answer(Record::from_rdata(
+                        name,
+                        120,
+                        RData::A(A("198.18.2.215".parse().unwrap())),
+                    ));
+                    socket.send_to(&response.to_vec().unwrap(), from).ok();
+                }
+            }
+        });
+        (addr, stop)
+    }
+
+    #[test]
+    fn nxdomain_for_known_domains_carries_a_short_soa() {
+        // RFC 2308: a client's negative-cache lifetime comes from the
+        // SOA. A negative answer with NO SOA leaves iOS to its own
+        // default (minutes) — field-measured as "the phone never
+        // connects again" across a normal revoke→install gap.
+        let (upstream, stop) = spawn_udp_upstream(None);
+        let engine = engine(vec![upstream]);
+        engine
+            .mapping_set(
+                "show.example.org",
+                "192.168.11.31".parse().unwrap(),
+                holder(1),
+                Duration::from_secs(60),
+            )
+            .unwrap();
+        engine.mapping_clear(&holder(1)).unwrap();
+
+        let answer = parse(&engine.handle_query(
+            &query_wire("show.example.org", RecordType::A, 21),
+            Transport::Udp,
+        ));
+
+        assert_eq!(answer.response_code, ResponseCode::NXDomain);
+        assert_eq!(answer.authorities.len(), 1);
+        let soa_record = &answer.authorities[0];
+        assert_eq!(soa_record.ttl, NEGATIVE_SOA_TTL);
+        match &soa_record.data {
+            RData::SOA(soa) => {
+                assert_eq!(soa.minimum, NEGATIVE_SOA_TTL);
+                // The query name (an FQDN — trailing dot) is the SOA's mname.
+                assert_eq!(soa.mname, Name::from_utf8("show.example.org.").unwrap());
+            }
+            other => panic!("expected SOA in authority, got {other:?}"),
+        }
+        stop.store(true, Ordering::Relaxed);
+    }
+
+    #[test]
+    fn empty_non_a_answers_carry_the_soa_too() {
+        // A mapped domain's empty AAAA answer is also negatively
+        // cacheable by the client — it must carry the same short SOA.
+        let (upstream, stop) = spawn_udp_upstream(None);
+        let engine = engine(vec![upstream]);
+        engine
+            .mapping_set(
+                "show.example.org",
+                "192.168.11.31".parse().unwrap(),
+                holder(1),
+                Duration::from_secs(60),
+            )
+            .unwrap();
+
+        let answer = parse(&engine.handle_query(
+            &query_wire("show.example.org", RecordType::AAAA, 22),
+            Transport::Udp,
+        ));
+
+        assert_eq!(answer.response_code, ResponseCode::NoError);
+        assert_eq!(answer.answers.len(), 0);
+        assert_eq!(answer.authorities.len(), 1);
+        assert_eq!(answer.authorities[0].ttl, NEGATIVE_SOA_TTL);
+        stop.store(true, Ordering::Relaxed);
+    }
+
+    #[test]
+    fn fake_ip_upstream_answers_are_rejected_not_relayed() {
+        // A single poisoned upstream (a local fake-ip TUN proxy
+        // answering instead of the real resolver): the daemon refuses
+        // to relay reserved-range addresses to the LAN and fails over;
+        // with nothing left, the honest answer is SERVFAIL.
+        let (poisoned, stop) = spawn_fake_ip_upstream();
+        let poisoned_engine = engine(vec![poisoned]);
+        let parsed = parse(&poisoned_engine.handle_query(
+            &query_wire("ordinary.example.org", RecordType::A, 23),
+            Transport::Udp,
+        ));
+        assert_eq!(parsed.response_code, ResponseCode::ServFail);
+        assert_eq!(parsed.answers.len(), 0);
+        stop.store(true, Ordering::Relaxed);
+
+        // Failover: a healthy upstream after the poisoned one answers.
+        let (poisoned2, stop2) = spawn_fake_ip_upstream();
+        let (healthy, stop3) = spawn_udp_upstream(None);
+        let failover_engine = engine(vec![poisoned2, healthy]);
+        let parsed = parse(&failover_engine.handle_query(
+            &query_wire("ordinary.example.org", RecordType::A, 24),
+            Transport::Udp,
+        ));
+        assert_eq!(parsed.response_code, ResponseCode::NoError);
+        assert_eq!(parsed.answers.len(), 1);
+        assert!(
+            failover_engine
+                .stats
+                .upstream_failovers
+                .load(Ordering::Relaxed)
+                >= 1
+        );
+        stop2.store(true, Ordering::Relaxed);
+        stop3.store(true, Ordering::Relaxed);
     }
 
     #[test]

@@ -303,8 +303,13 @@ fn config_set(
     // The fixed listen address takes effect on the next bind: persist it
     // and self-restart (launchd KeepAlive relaunches immediately). The
     // App's enable flow tolerates the short control-plane gap.
+    //
+    // The persisted record is built from the ENGINE's live state (the
+    // upstreams were just applied; known domains are engine-owned) —
+    // never from a disk load-modify-save, which raced the housekeeping
+    // loop and could overwrite fresher knowledge with a stale file.
     if listen_ip.is_some() {
-        let mut persisted = crate::state::load(state_path);
+        let mut persisted = crate::state::from_engine(engine);
         persisted.listen_ip = listen_ip;
         if let Err(e) = crate::state::save(state_path, &persisted) {
             return Some(error_response(
