@@ -119,3 +119,12 @@ opt-level = "s"          # Optimize for size over speed
 panic = "abort"          # Don't include panic unwinding code
 strip = true             # Remove debug symbols
 
+# Xcode 27's new linker (ld-27037) emits STRIPPED proc-macro dylibs whose
+# mis-aligned LINKEDIT string pool the dyld of macOS 27 refuses to load —
+# every local release build died in serde_derive & co. with "mis-aligned
+# LINKEDIT string pool" while the debug profile kept working off its
+# older cache. Host-only artifacts are never shipped, so keeping them
+# unstripped is free; the final app binary still strips via strip above.
+[profile.release.build-override]
+strip = false
+
