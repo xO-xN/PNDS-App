@@ -324,6 +324,7 @@
   "utilities.intro.multichannel-signal-generator": "演出前验证音频路由的 16 通道信号发生器。",
   "utilities.intro.local-network-diagnostics": "检查演出场地局域网连接质量的诊断工具。",
   "utilities.intro.telematic-network-diagnostics": "检查多地跨互联网共奏连接质量的诊断工具。",
+  "utilities.intro.mobile-sensor-meter": "手机传感器的实时读表：倾斜、运动、麦克风电平与本地手部姿态。",
   "folderReadme.utilitiesIntro": "App 自带的演出检查工具。",
   "settings.dns.upstreamsValue": " · 上游 {{upstreams}}",
   "settings.dns.bindError": "端口 53 绑定失败（被其他 DNS 服务占用？）——停用它后再启用。"

@@ -51,6 +51,19 @@ describe('UtilityIntro', () => {
     ).toBeInTheDocument()
   })
 
+  // Every registered tool renders the same page model with its own
+  // alias and locale copy.
+  it('renders Sensor Meter with its intro', () => {
+    render(<UtilityIntro id="mobile-sensor-meter" />)
+
+    expect(
+      screen.getByRole('heading', { name: 'Sensor Meter' })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/^A live meter for the phones/u)
+    ).toBeInTheDocument()
+  })
+
   it('renders no cover image, no link pills, and no section label', () => {
     render(<UtilityIntro id="local-network-diagnostics" />)
 

@@ -4,8 +4,10 @@ import { useProjectStore, UTILITIES_FOLDER_ID } from '@/store/project-store'
 import { ensureUtilitiesFolder } from './utilities-folder'
 
 const RESOURCES = '/Applications/PNDS.app/Contents/Resources/utilities'
-// The v1.3.3 registry order (#81): multichannel first, then local, then
-// telematic — the fixture mirrors the committed utilities.json.
+// The registry order (#81): multichannel first, then local, then
+// telematic — a three-tool slice of the committed utilities.json in
+// registry order (mobile-sensor-meter joined in #146; the offering and
+// indexing behavior under test is per-tool, so a slice exercises it).
 const TOOL_PATHS = [
   `${RESOURCES}/multichannel-signal-generator`,
   `${RESOURCES}/local-network-diagnostics`,

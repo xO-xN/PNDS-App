@@ -325,6 +325,7 @@
   "utilities.intro.multichannel-signal-generator": "A 16-channel signal generator for verifying audio routing before a show.",
   "utilities.intro.local-network-diagnostics": "A diagnostic for the venue LAN’s connection quality.",
   "utilities.intro.telematic-network-diagnostics": "A diagnostic for the connection quality of a multi-site performance over the internet.",
+  "utilities.intro.mobile-sensor-meter": "A live meter for the phones’ sensors: tilt, motion, mic level and on-device hand pose.",
   "folderReadme.utilitiesIntro": "Check tools that ship with the App.",
   "settings.dns.upstreamsValue": " · upstream {{upstreams}}",
   "settings.dns.bindError": "Port 53 could not be bound (another DNS service?) — stop it and enable again."

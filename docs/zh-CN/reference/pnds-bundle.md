@@ -139,7 +139,7 @@ shasum -a 256 <name>-<version>.pnds
 
 ## 内置工具的形态
 
-内置工具（Local Network Diagnostics、Multichannel Signal Generator、Telematic Network Diagnostics）的 release 与所有工程一样是 `.pnds`：各工具仓库的 CI 按文件格式布局组装并发布。随 App 分发则采用**解包后的文件夹形态**：App 构建期按注册表（`utilities.json`，随仓库提交）拉取，sha256 校验失败即构建失败；校验 bundle 布局（单一根目录 + 顶层 `pnds-bundle.json` + manifest id 与注册表一致）后，把工程目录解包到稳定路径 `Contents/Resources/utilities/<id>/`（路径不含版本号），App 原地运行该目录，不安装到数据目录 `bundles/`。
+内置工具（Local Network Diagnostics、Multichannel Signal Generator、Telematic Network Diagnostics、Mobile Sensor Meter）的 release 与所有工程一样是 `.pnds`：各工具仓库的 CI 按文件格式布局组装并发布。随 App 分发则采用**解包后的文件夹形态**：App 构建期按注册表（`utilities.json`，随仓库提交）拉取，sha256 校验失败即构建失败；校验 bundle 布局（单一根目录 + 顶层 `pnds-bundle.json` + manifest id 与注册表一致）后，把工程目录解包到稳定路径 `Contents/Resources/utilities/<id>/`（路径不含版本号），App 原地运行该目录，不安装到数据目录 `bundles/`。
 
 - 入口形态：Utilities 是受保护文件夹（固定底部、不可改名/删除）；内置工具以普通工程条目形式列出，点击走标准 preflight → spawn → health → monitor 流程，无独立启动器 UI；
 - 用户从 Utilities 移除某工具后，重启不会自动加回（文件夹仅在缺失时播种）；

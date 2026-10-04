@@ -20,6 +20,13 @@
       "tag": "v0.6.1",
       "artifact": "telematic-network-diagnostics-v0.6.1.pnds",
       "sha256": "7a7afa3ce94a38de7f00579f8f3835f7b1e3426410ba7f376bab16445e03f175"
+    },
+    {
+      "id": "mobile-sensor-meter",
+      "repo": "xO-xN/Mobile-Sensor-Meter",
+      "tag": "v0.3.1",
+      "artifact": "mobile-sensor-meter-v0.3.1.pnds",
+      "sha256": "26b69333d24f78c99165ea904fc01bb32f976d02e7ed1c392ac116aa71991144"
     }
   ]
 }

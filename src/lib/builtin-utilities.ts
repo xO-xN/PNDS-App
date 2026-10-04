@@ -20,6 +20,7 @@ export const BUILTIN_UTILITY_DISPLAY_NAMES: Record<string, string> = {
   'multichannel-signal-generator': 'Multichannel Gen',
   'local-network-diagnostics': 'Local Diagnostics',
   'telematic-network-diagnostics': 'Telematic Diagnostics',
+  'mobile-sensor-meter': 'Sensor Meter',
 }
 
 /** The registry id of a staged utility path (`…/utilities/<id>`). */
