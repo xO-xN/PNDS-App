@@ -189,15 +189,24 @@ describe('openProject (no trust gate)', () => {
     )
   })
 
-  it('does not start on an arbitrary interface when multiple networks are available', async () => {
+  it('starts on the first interface as the default when multiple networks are available (#147)', async () => {
+    // The pre-fix design refused to pick among several interfaces (a
+    // dead-gray Load with no hint on every multi-network Mac); #147's
+    // user report overruled it: the list's first entry is the default,
+    // the operator's hand choice persists and always wins.
     vi.mocked(commands.listLanAddresses).mockResolvedValueOnce({
       status: 'ok',
       data: ['192.168.11.31', '192.168.31.193'],
     })
     await openProject('/a')
     await start()
-    expect(useSessionStore.getState().lanIp).toBeNull()
-    expect(commands.startProject).not.toHaveBeenCalled()
+    expect(useSessionStore.getState().lanIp).toBe('192.168.11.31')
+    expect(commands.startProject).toHaveBeenCalledWith(
+      '/a',
+      'internal',
+      '192.168.11.31',
+      null
+    )
   })
 })
 

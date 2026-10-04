@@ -13,10 +13,11 @@ import type { SettingsSection } from '@/store/settings-store'
 
 import { SectionTitle } from './SectionTitle'
 
-/** Refresh the machine's LAN address list. The store keeps a valid choice
- * and auto-picks only a sole address. Failure keeps the current list —
- * the row degrades to the
- * "Select…" placeholder only when nothing was known before. */
+/** Refresh the machine's LAN address list. The store keeps a valid
+ * choice and otherwise auto-picks the list's first entry (#147 — the
+ * pre-fix "only a sole address" rule left every multi-network Mac on the
+ * gray Load gate). Failure keeps the current list — the row degrades to
+ * the "Select…" placeholder only when nothing was known before. */
 function refreshLanAddresses(): void {
   void commands.listLanAddresses().then(result => {
     if (result.status === 'error') {
@@ -64,9 +65,10 @@ export function NodeSection({ section }: { section: SettingsSection }) {
     refreshLanAddresses()
   }, [])
 
-  // A refresh can shrink the list past the current selection (the network
-  // changed under a running session) — keep the selected address visible
-  // rather than blanking the row.
+  // The union covers the instant between the boot's persisted seed and
+  // the first refresh (the store's refresh normalization replaces a
+  // gone address) — the selected address stays visible rather than
+  // blanking the row mid-read.
   const lanOptions =
     lanIp !== null && !lanAddresses.includes(lanIp)
       ? [lanIp, ...lanAddresses]
@@ -175,6 +177,10 @@ export function NodeSection({ section }: { section: SettingsSection }) {
           onChange={event => {
             setModified(true)
             useSessionStore.getState().setLanIp(event.target.value)
+            // #147: a hand choice persists — it must survive the next
+            // launch (the boot seed in AppShell reads it back). Only the
+            // operator decides; the first-address auto-pick never writes.
+            void updatePreferences({ lanIp: event.target.value })
             // Migration parity with the old sidebar row: a LAN change on
             // the running card flags Change — restart re-spawns with the
             // new PNDS_HOST_IP. On any other selection it is

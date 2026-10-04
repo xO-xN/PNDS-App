@@ -205,9 +205,14 @@ Shared domain state goes in the matching store; anything component-local stays i
 running-session fact. It and `lanAddresses` survive `resetSession`;
 opening another project must not overwrite the operator's choice with the
 first enumerated address. `setLanAddresses` reconciles every refresh:
-keep an available choice, auto-pick a sole address, otherwise require an
-explicit choice. Only a cold restore with no known address list may seed
-the choice from a backend snapshot. The running address remains in
+keep an available choice, otherwise auto-pick the list's first entry
+(#147 user report: the pre-fix "require an explicit choice" rule left
+every multi-network Mac on a dead-gray Load gate; the operator's
+PERSISTED hand choice — preferences `lanIp`, seeded at boot — always
+wins), and replace a no-longer-listed choice with the first current
+address so a session never starts bound to a dead interface. Only a cold
+restore with no known address list may seed the choice from a backend
+snapshot. The running address remains in
 `sessionLanIp` / `sessionHostAddress`, so health snapshots cannot undo a
 pending LAN change or retarget the running monitor.
 

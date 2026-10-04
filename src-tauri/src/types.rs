@@ -205,6 +205,20 @@ pub struct AppPreferences {
     /// status section reports the real registration state.
     #[serde(default)]
     pub dns_enabled: Option<bool>,
+    /// #147 (user report from the dual-machine acceptance): the
+    /// operator's chosen LAN address (the「节点」section's selector).
+    /// Persisted so the choice survives launches — before this field the
+    /// selection lived only in the session store, so every app start
+    /// began unselected and the Load button sat gated gray with no hint.
+    /// `None` = never chosen; the frontend then auto-picks the address
+    /// list's first entry (session-level, never persisted) until the
+    /// operator chooses one by hand. A persisted address the current
+    /// interfaces no longer list shows until the first address refresh,
+    /// which replaces it with the first current address — a session must
+    /// never start bound to a dead interface. App-local, never touches
+    /// project manifests.
+    #[serde(default)]
+    pub lan_ip: Option<String>,
 }
 
 /// A named one-level group of project paths (spec issue #4).
@@ -247,6 +261,7 @@ impl Default for AppPreferences {
             https_port: None,
             https_enabled: None,
             dns_enabled: None,
+            lan_ip: None,
         }
     }
 }
@@ -382,6 +397,27 @@ mod tests {
         let prefs: AppPreferences = serde_json::from_str(modern).expect("modern prefs parse");
         assert_eq!(prefs.project_folders.len(), 1);
         assert!(prefs.project_display_names.is_empty());
+    }
+
+    /// #147: preference files written before `lanIp` existed must load
+    /// losslessly (serde default), and a stored choice must round-trip.
+    #[test]
+    fn deserializes_preferences_without_lan_ip_and_round_trips_it() {
+        let legacy = r#"{
+            "theme": "system",
+            "language": null,
+            "recentProjects": ["/a"]
+        }"#;
+        let prefs: AppPreferences = serde_json::from_str(legacy).expect("legacy prefs parse");
+        assert_eq!(prefs.lan_ip, None);
+
+        let with_choice = serde_json::to_string(&AppPreferences {
+            lan_ip: Some("192.168.11.31".to_string()),
+            ..AppPreferences::default()
+        })
+        .expect("prefs serialize");
+        let restored: AppPreferences = serde_json::from_str(&with_choice).expect("prefs re-parse");
+        assert_eq!(restored.lan_ip.as_deref(), Some("192.168.11.31"));
     }
 
     /// v1.1.2 T6: preference files written before `projectDisplayNames`

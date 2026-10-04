@@ -95,7 +95,7 @@ describe('NodeSection (#58)', () => {
     })
   })
 
-  it('picking a LAN address updates the start config (no persistence — it is not a preference)', async () => {
+  it('picking a LAN address updates the start config and persists the hand choice (#147)', async () => {
     const user = userEvent.setup()
     const addresses = ['192.168.1.10', '10.0.0.5']
     // Every refresh (panel open AND the select's focus refresh, which
@@ -111,11 +111,22 @@ describe('NodeSection (#58)', () => {
     })
     render(<NodeSection section="node" />)
 
+    // The mount refresh lands with nothing chosen: the first address is
+    // auto-picked (session-level default, never written to preferences).
+    await waitFor(() => {
+      expect(useSessionStore.getState().lanIp).toBe('192.168.1.10')
+    })
+    expect(commands.savePreferences).not.toHaveBeenCalled()
+
     const lan = screen.getByRole('combobox', { name: /network address/i })
     await user.selectOptions(lan, '10.0.0.5')
 
     expect(useSessionStore.getState().lanIp).toBe('10.0.0.5')
-    expect(commands.savePreferences).not.toHaveBeenCalled()
+    await waitFor(() => {
+      expect(commands.savePreferences).toHaveBeenCalledWith(
+        expect.objectContaining({ lanIp: '10.0.0.5' })
+      )
+    })
   })
 
   it('disables the LAN row and shows the placeholder option when no address is known', () => {
@@ -132,7 +143,7 @@ describe('NodeSection (#58)', () => {
     expect(screen.queryByTestId('node-hint')).not.toBeInTheDocument()
   })
 
-  it('shows Select until the operator chooses between multiple networks', async () => {
+  it('preselects the first address when several networks are listed (#147)', async () => {
     vi.mocked(commands.listLanAddresses).mockResolvedValueOnce({
       status: 'ok',
       data: ['192.168.11.31', '192.168.31.193'],
@@ -140,8 +151,12 @@ describe('NodeSection (#58)', () => {
     render(<NodeSection section="node" />)
     const lan = screen.getByRole('combobox', { name: /network address/i })
     await waitFor(() => expect(lan).toBeEnabled())
-    expect(lan).toHaveDisplayValue('Select…')
-    expect(useSessionStore.getState().lanIp).toBeNull()
+    // The pre-fix behavior kept the "Select…" placeholder and a null
+    // choice — every multi-interface Mac opened to a gated-gray Load.
+    await waitFor(() =>
+      expect(useSessionStore.getState().lanIp).toBe('192.168.11.31')
+    )
+    expect(lan).toHaveDisplayValue('192.168.11.31')
   })
 
   it('reveals the next-start note only after a row is modified', async () => {

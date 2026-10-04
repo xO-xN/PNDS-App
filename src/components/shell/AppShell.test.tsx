@@ -425,6 +425,29 @@ describe('AppShell', () => {
     )
   })
 
+  // ── #147: persisted LAN choice restore (user report: every launch began
+  // unselected, gating the Load button gray with no hint) ──
+
+  it('seeds the session store from the persisted LAN choice at mount', async () => {
+    vi.mocked(commands.loadPreferences).mockResolvedValueOnce({
+      status: 'ok',
+      data: {
+        theme: 'system',
+        language: null,
+        outputDevice: null,
+        oscTargets: {},
+        recentProjects: [],
+        lanIp: '192.168.11.31',
+      },
+    })
+
+    render(<AppShell />)
+
+    await waitFor(() =>
+      expect(useSessionStore.getState().lanIp).toBe('192.168.11.31')
+    )
+  })
+
   it('re-fetches the session state when the webview becomes visible again', () => {
     render(<AppShell />)
 

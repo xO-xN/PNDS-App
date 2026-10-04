@@ -223,11 +223,13 @@ describe('session-store', () => {
     expect(useSessionStore.getState().lanAddresses).toEqual(['192.168.11.31'])
   })
 
-  it('requires a choice for several addresses and keeps a valid choice on refresh', () => {
+  it('auto-picks the first address and keeps a valid choice on refresh (#147)', () => {
     const store = useSessionStore.getState()
     const addresses = ['192.168.11.31', '192.168.31.193']
+    // A fresh session with nothing chosen (the pre-fix bug: stayed null
+    // and gated the Load button gray on every multi-interface Mac).
     store.setLanAddresses(addresses)
-    expect(useSessionStore.getState().lanIp).toBeNull()
+    expect(useSessionStore.getState().lanIp).toBe('192.168.11.31')
     store.setLanIp('192.168.31.193')
     store.setLanAddresses(addresses)
     expect(useSessionStore.getState().lanIp).toBe('192.168.31.193')
@@ -235,6 +237,16 @@ describe('session-store', () => {
     expect(useSessionStore.getState().lanIp).toBe('192.168.11.31')
     store.setLanAddresses([])
     expect(useSessionStore.getState().lanIp).toBeNull()
+  })
+
+  it('replaces a stale choice with the first current address at refresh (#147)', () => {
+    // The boot seed restores a persisted address the interfaces may no
+    // longer list — the first refresh must take over, never let a
+    // session start bound to a dead interface.
+    const store = useSessionStore.getState()
+    store.setLanIp('10.0.0.9')
+    store.setLanAddresses(['192.168.11.31', '192.168.31.193'])
+    expect(useSessionStore.getState().lanIp).toBe('192.168.11.31')
   })
 
   it('keeps the next-start LAN choice when the running session publishes its old address', () => {
@@ -246,15 +258,21 @@ describe('session-store', () => {
     expect(useSessionStore.getState().sessionLanIp).toBe('192.168.31.193')
   })
 
-  it.each([[], ['192.168.11.31', '192.168.31.193']])(
-    'does not seed a choice from a snapshot after an empty or ambiguous network refresh: %j',
-    (...addresses) => {
+  // A session snapshot's address must never become the machine's choice;
+  // the refresh's own resolution stands — empty stays null, several
+  // addresses auto-pick the first (#147).
+  it.each([
+    [[], null],
+    [['192.168.11.31', '192.168.31.193'], '192.168.11.31'],
+  ] as const)(
+    'does not seed a choice from a snapshot after a network refresh: %j',
+    (addresses, expected) => {
       const store = useSessionStore.getState()
-      store.setLanAddresses(addresses)
+      store.setLanAddresses([...addresses])
       store.applySnapshot(
         snapshot({ status: 'ready', lanIp: '192.168.31.193' })
       )
-      expect(useSessionStore.getState().lanIp).toBeNull()
+      expect(useSessionStore.getState().lanIp).toBe(expected)
     }
   )
 

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { stopAndReset } from '@/lib/open-project'
 import {
   canStartNowFrom,
+  lanAddressMissingFrom,
   nodeGateBlocked,
   restart,
   start,
@@ -105,6 +106,12 @@ export function SessionActionButton() {
         )
       : fallback
   const loadable = canStartNowFrom(gate)
+  // #147 (user report): a gray Load with no explanation reads as a dead
+  // button. When the LAN address is the missing gate input, say so under
+  // the button instead — the only reachable case post-fix is a machine
+  // with no usable address at all (the first-address auto-pick fills
+  // everything else). The busy transition keeps its own label.
+  const lanMissing = !busy && lanAddressMissingFrom(gate)
 
   /** Load/Enter submit: confirm-and-replace over a live session, plain
    * start otherwise (idle, or a dead `error` the Retry semantics cover). */
@@ -249,6 +256,14 @@ export function SessionActionButton() {
       >
         {label}
       </button>
+      {lanMissing && (
+        <p
+          className="text-muted-foreground px-3 pb-2 pt-1.5 text-center text-xs"
+          data-testid="lan-missing-hint"
+        >
+          {t('sidebar.lanMissingHint')}
+        </p>
+      )}
 
       {/* v1.2.3 (#39/T4): loading a different project over a live session
           is an explicit, named authorization — the running show stops. */}

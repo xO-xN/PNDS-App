@@ -840,7 +840,22 @@ httpsEnabled?: boolean | null;
  * `https_enabled`: the service call itself may still fail and the
  * status section reports the real registration state.
  */
-dnsEnabled?: boolean | null }
+dnsEnabled?: boolean | null; 
+/**
+ * #147 (user report from the dual-machine acceptance): the
+ * operator's chosen LAN address (the「节点」section's selector).
+ * Persisted so the choice survives launches — before this field the
+ * selection lived only in the session store, so every app start
+ * began unselected and the Load button sat gated gray with no hint.
+ * `None` = never chosen; the frontend then auto-picks the address
+ * list's first entry (session-level, never persisted) until the
+ * operator chooses one by hand. A persisted address the current
+ * interfaces no longer list shows until the first address refresh,
+ * which replaces it with the first current address — a session must
+ * never start bound to a dead interface. App-local, never touches
+ * project manifests.
+ */
+lanIp?: string | null }
 export type AudioConfig = { 
 /**
  * The raw-JSON validation below has already rejected unknown mode

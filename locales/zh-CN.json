@@ -234,6 +234,7 @@
   "sidebar.mute": "静音",
   "sidebar.unmute": "取消静音",
   "sidebar.loadProject": "加载",
+  "sidebar.lanMissingHint": "尚无可用网络地址——请先把本机接入网络，然后重新选择工程。",
   "sidebar.closeProject": "关闭",
   "sidebar.change": "更改",
   "sidebar.removeFromHistory": "从历史中移除",

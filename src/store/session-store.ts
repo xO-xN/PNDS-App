@@ -306,12 +306,19 @@ export const useSessionStore = create<SessionState>()(set => ({
     set(state => ({
       lanAddresses,
       lanAddressesLoaded: true,
-      // A refresh keeps a still-available choice. Never choose the first
-      // of several interfaces: their order cannot identify the venue LAN.
+      // A refresh keeps a still-available choice. #147 (user report from
+      // the dual-machine acceptance): when nothing is chosen yet, pick
+      // the first address rather than none — a dead-gray Load button with
+      // no hint (the pre-fix behavior on every multi-interface Mac) costs
+      // more than an occasional wrong-guess default does. The auto-pick
+      // is session-level only: the operator's hand choice persists
+      // (preferences `lanIp`) and always wins, and a choice the
+      // interfaces no longer list is REPLACED by the first current
+      // address — a session must never start bound to a dead interface.
       lanIp:
         state.lanIp !== null && lanAddresses.includes(state.lanIp)
           ? state.lanIp
-          : lanAddresses.length === 1
+          : lanAddresses.length > 0
             ? lanAddresses[0]
             : null,
     })),

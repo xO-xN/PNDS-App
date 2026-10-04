@@ -114,6 +114,15 @@ export function AppShell() {
       if (prefs?.outputDevice) {
         useSessionStore.getState().setOutputDevice(prefs.outputDevice)
       }
+      // #147: the persisted LAN choice seeds the session store BEFORE the
+      // first address-list refresh (preflight / the Node section) — that
+      // refresh keeps a still-valid choice and replaces a gone one with
+      // the first current address (never start bound to a dead
+      // interface), so the operator's pick survives launches instead of
+      // resetting to "nothing selected" (the pre-fix gray Load button).
+      if (prefs?.lanIp) {
+        useSessionStore.getState().setLanIp(prefs.lanIp)
+      }
       // v1.1.2: the project index — history master list + folder
       // structure. Old preference files simply lack the fields (Rust serde
       // defaults) and restore as an empty index. The bulk restore never

@@ -235,6 +235,7 @@
   "sidebar.mute": "Mute",
   "sidebar.unmute": "Unmute",
   "sidebar.loadProject": "Load",
+  "sidebar.lanMissingHint": "No usable network address yet — connect this Mac to the network, then re-select the project.",
   "sidebar.closeProject": "Close",
   "sidebar.change": "Change",
   "sidebar.removeFromHistory": "Remove from history",

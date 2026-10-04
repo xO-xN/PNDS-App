@@ -281,6 +281,23 @@ export function canStartNowFrom(inputs: StartGateInputs): boolean {
 }
 
 /**
+ * #147 (user report from the dual-machine acceptance): whether a missing
+ * LAN address is what keeps an otherwise-ready selection from starting —
+ * the one gate failure the footer can SAY something about (no project →
+ * no footer at all; not-ready → preflight's own surface; the node gate →
+ * the「设置节点」button). Lives beside the gate so a future gate input
+ * cannot strand the hint: both derive from the same inputs record.
+ */
+export function lanAddressMissingFrom(inputs: StartGateInputs): boolean {
+  return (
+    !nodeGateBlocked(inputs) &&
+    inputs.currentProject !== null &&
+    inputs.preflightStatus === 'ready' &&
+    inputs.lanIp === null
+  )
+}
+
+/**
  * Whether the session for the currently selected card can be started
  * right now — the event-handler form (Enter alias, tests). In render
  * paths use `canStartNowFrom(useStartGateInputs())` instead; see the

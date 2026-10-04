@@ -82,6 +82,7 @@ export type PreferencesPatch = Partial<
     | 'httpsPort'
     | 'httpsEnabled'
     | 'dnsEnabled'
+    | 'lanIp'
   >
 >
 

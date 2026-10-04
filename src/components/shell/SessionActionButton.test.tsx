@@ -87,6 +87,26 @@ describe('SessionActionButton', () => {
     expect(commands.stopProject).not.toHaveBeenCalled()
   })
 
+  it('#147: a Load gated only by a missing LAN address explains itself instead of sitting gray', async () => {
+    // Everything else ready, no usable address at all (the auto-pick has
+    // nothing to fill) — the pre-fix bug showed a dead-gray Load.
+    useSessionStore.setState({ lanIp: null, lanAddresses: [] })
+
+    render(<SessionActionButton />)
+
+    const load = screen.getByRole('button', { name: 'Load' })
+    expect(load).toBeDisabled()
+    expect(screen.getByTestId('lan-missing-hint')).toHaveTextContent(
+      /No usable network address/i
+    )
+
+    // Once an address exists (auto-picked or restored), the hint is gone
+    // and the button loads again.
+    useSessionStore.setState({ lanIp: '192.168.1.10' })
+    await waitFor(() => expect(load).toBeEnabled())
+    expect(screen.queryByTestId('lan-missing-hint')).not.toBeInTheDocument()
+  })
+
   it('#58: a gated telematic selection becomes「设置节点」routing to the Node section', () => {
     useProjectStore.setState({
       currentProject: { path: '/p', manifest: telematicManifest },
