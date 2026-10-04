@@ -135,7 +135,8 @@ published:
    `plutil -extract LSMinimumSystemVersion raw <PNDS.app/Contents/Info.plist>`;
    an installed copy's Check for Updates still resolves each lane to its
    own entry (`darwin-aarch64` on Apple Silicon, `darwin-x86_64` on Intel).
-2. **Local Network Diagnostics v0.6.0 is published** (no longer a draft)
+2. **The Local Network Diagnostics release pinned in `utilities.json` is
+   published** (no longer a draft)
    in `xO-xN/Local-Network-Diagnostics`. `utilities:fetch` runs inside
    `beforeBuildCommand` and draft-release assets are not publicly
    downloadable — while that release sits in draft, every `tauri build`
