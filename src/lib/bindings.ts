@@ -1230,12 +1230,12 @@ export type ScoreServer = { entry: string; workingDirectory: string; performerPo
 supportsPerformerUrl?: boolean | null; 
 /**
  * User request after #174: does this work need the HTTPS entry to
- * perform? Explicit `false` declares a purely local work (no web
- * performer pages), so an on entry switch never shows the「not
- * adapted」notice nor asks the HTTP-fallback question for it.
- * Absent, `null`, `true` and non-boolean values all read as
- * undeclared (= needs it) — legacy manifests keep today's
- * behavior, same lenient shape as `supports_performer_url`.
+ * perform? Opt-in — only an explicit `true` declares the need;
+ * absent, `null`, `false` and non-boolean values all mean the work
+ * performs without the entry (every legacy project), so the「not
+ * adapted」notice and the HTTP-fallback question never appear for
+ * it. With `true`, an undeclared `supports_performer_url` work
+ * gets the explicit fallback choice instead of a silent downgrade.
  */
 needsHttps?: boolean | null }
 export type ScsynthConfig = { 
