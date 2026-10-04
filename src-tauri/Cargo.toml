@@ -6,7 +6,7 @@ members = ["dnsd"]
 
 [package]
 name = "pnds-app"
-version = "1.5.0"
+version = "1.5.1"
 description = "在演出现场运行 PNDS 数字乐谱工程的 macOS 桌面 Host 应用"
 authors = ["xO-xN"]
 edition = "2021"

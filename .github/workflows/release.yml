@@ -47,6 +47,26 @@ jobs:
         **One baseline for every Mac — Apple Silicon and Intel alike, macOS 13.5+**
         - This release ships two installers — the `_aarch64.dmg` for Apple Silicon Macs (M-series) and the `_x64.dmg` for Intel Macs — both requiring macOS 13.5 (Ventura) or newer. Pick the one that matches your Mac; the auto-updater already picks its lane on its own.
 
+        ### What's New in V1.5.1 — the trusted stage: HTTPS entry, performance DNS, a fourth built-in tool
+
+        **A trusted HTTPS entry for the phones**
+        - Settings gains a certificate section for the host: configure the site's certificate and key, and a validation pipeline checks them into protected storage with readiness checks that run before the gateway ever starts — a misconfigured entry fails loudly at the desk, never as a certificate warning on a phone mid-show.
+        - Scanning the QR code now lands performers on the entry over trusted HTTPS — the join page and the conductor's real-time controls ride the same secure path, so strict browsers and venue networks no longer break the handshake with certificate warnings.
+        - The gateway recovers on its own terms: a certificate handover means ownership (a takeover never fights a stale holder), restarts are explicit, and every work switch is generation-isolated — loading another project cannot break the entry that is currently serving phones.
+
+        **Performance DNS — names, not bare addresses**
+        - An optional background DNS service (dnsd) maps the performance's domain names on the LAN: register it once from Settings (wired through macOS's SMAppService), and each session's mappings live and die with the work that declared them, while ordinary queries simply forward upstream.
+        - Hardened on real hardware: negative answers now carry a short SOA, fake-ip upstream answers are rejected, and a status-write race is closed.
+
+        **A frozen performer URL contract**
+        - Works may declare their own full performer URL — `supportsPerformerUrl`, a tolerant boolean, plus the `PNDS_PERFORMER_URL` environment variable — and the App's QR/entry URL contract is now frozen end to end.
+
+        **The Utilities shelf grows to four**
+        - Mobile Sensor Meter joins the built-in utilities (v0.3.1) — the phone-as-sensor instrument, its motion, camera and microphone pages riding the App's trusted entry. Local Network Diagnostics and Telematic Network Diagnostics move to v0.6.1, Multichannel Signal Generator to v1.2.1.
+
+        **The LAN address now behaves**
+        - The Node section's LAN address selector auto-picks the machine's first address when nothing is chosen and remembers your choice across launches; an address the current interfaces no longer list is replaced at the next refresh — a session never starts bound to a dead interface — and a Load button gated only by a missing address now says so right under the button instead of sitting gray and mute.
+
         ### What's New in V1.5.0 — the projection window: a venue screen for the audience, opened by the conductor
 
         **A second window for the venue screen**
@@ -66,22 +86,8 @@ jobs:
         - The projection window loads the monitor with `?surface=venue` on the address — the one channel a work has to render an audience view on the venue screen (every performer's score, bigger type, no console). Works that ignore it show exactly what the conductor sees; reading it is entirely optional (runtime contract §14, plus a new Module Manual chapter with a branch example).
         - A work that zooms itself can now declare it: one postMessage at load (`{type:"pnds-projection", zoom:"page"}`) and the App yields the zoom keys for that navigation — cursor-anchored, density-following zooms ride through untouched (runtime contract §14 handshake, with the declaration snippet in the Module Manual chapter).
 
-        ### What's New in V1.4.3 — one runtime baseline for every Mac, quieter update checks & welcome-page fixes
-
-        **The system floor is macOS 13.5 on every Mac — including Intel**
-        - v1.4.2 accepted Intel Macs down to macOS 12, but that promise never held: on macOS 12 the system WebKit cannot run the App's monitor pages, so the App was effectively unusable there. v1.4.3 raises the Intel lane to the same macOS 13.5 the Apple Silicon lane has always required, and both lanes now ship the exact same runtime — the bundled Node 24 sidecar is identical on both architectures, so a Project that runs on one Mac runs the same on the other. For authors this means a single official runtime baseline to test against, with no per-architecture footnotes.
-        - If your Mac stays on macOS 12: after this update the App will no longer open there — that is deliberate, and v1.4.2 was already unusable on that system (WebKit). Ventura supports MacBook Pro 2017+, iMac 2017+, Mac mini 2018+ and Mac Pro 2019+; upgrading brings the machine onto the single supported baseline.
-
-        **Update checks no longer install — they take you to the Releases page**
-        - The App no longer downloads and installs updates itself. The automatic check on launch is now completely silent when it cannot reach GitHub — a show environment must never be interrupted by an update error. When an update is available, the starting page shows a one-line notice with a button straight to the Releases page; if you are mid-session, the notice is waiting at your next return to the starting page.
-        - The manual Check for Updates keeps its full feedback — the up-to-date toast, the new-version toast (its button opens the Releases page), and on failure a dialog with the copyable error plus a Releases-page way out. Installers stay signed and the updater keeps picking your Mac's lane automatically; installing is now a plain dmg download.
-
-        **Welcome page: the logo stays in, the ripple rests properly**
-        - The welcome logo can no longer be dragged out of the App (it used to land on the desktop as an image file).
-        - With Reduce Motion enabled, the ripple animation now settles into the static halo instead of freezing mid-ring.
-
         ### Earlier releases
-        The V1.4.1–V1.1 notes live on the [releases page](https://github.com/xO-xN/PNDS-App/releases).
+        The V1.4.3–V1.1 notes live on the [releases page](https://github.com/xO-xN/PNDS-App/releases).
 
         ### Auto-Updates
         Existing users receive update notices (the starting page's one-line notice and the manual check's toast); since V1.4.3 the App itself no longer installs updates — grab the dmg from the Releases page it points you to.
