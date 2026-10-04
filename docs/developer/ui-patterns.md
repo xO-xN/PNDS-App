@@ -12,6 +12,75 @@ This app uses a modern CSS stack optimized for Tauri desktop applications:
   contrast-audited, so the space matters less than the single source)
 - **Desktop-specific defaults** for native app feel
 
+## Built-in utility instrument panels
+
+Multichannel Gen v1.2.1 establishes an instrument panel direction for the
+utilities: prominent channel numbers, tabular data, restrained surface
+separation, and explicit textual toggle states. The main control area owns
+the visual hierarchy; the phone QR lives in a native disclosure in the footer.
+The desktop channel matrix and master fader share one enclosure, adapting
+to four columns and a horizontal master fader on narrow screens.
+
+Local Diagnostics v0.6.1 extends the direction with a prominent network verdict,
+counts of online devices by status, and numbered device cards with measured
+RTT and jitter. Offline records remain available without affecting the online
+summary. Native card buttons keep their DOM identity across snapshots; the
+native details dialog keeps its close button stable and returns focus on close.
+The footer disclosure holds the join QR. The phone connection page uses the same
+surfaces and numbering while retaining its English, automatic join/probe flow.
+Its canonical source is the sibling `Local-Network-Diagnostics` repository
+(`public/monitor.js`, `public/performer.js`, `public/style.css`, and shared copy).
+
+Telematic Diagnostics v0.6.1 gives the hub/star topology the main visual role,
+with network verdict and fault attribution above it, connection settings beside
+it, and site readings below. Hub latency values remain neutral; link quality
+keeps its server-defined colors. Local performer cards retain their headers
+and removal controls across snapshots and locale changes. Hub history and the
+join QR use native disclosures; the phone's Rejoin cover is a native button.
+The existing theme bridge's `onTheme` hook handles Brutal geometry. Canonical
+source and UI notes are in the sibling `Telematic-Network-Diagnostics` repository
+(`public/`, `test/pages.test.js`, and `docs/ui-design.md`).
+
+Mobile Sensor Meter v0.3.1 uses a full-width panel per device with four sensor
+sections, adapting to two/one columns. Permission and sample freshness remain
+separate textual states, and missing fields remain words rather than zeros.
+The footer disclosure holds the QR and resolved performer URL. Monitor theme
+following uses the palette bridge; phones keep their device locale and default
+colors. Keypoint disclosures preserve open state/focus through shape or locale
+changes, while the existing frame loop continues smoothing only values. Capture
+buttons expose intent and reference permission/recovery notes. Canonical source
+and notes live in the sibling `Mobile-Sensor-Meter` repository (`public/` and
+`docs/ui-design.md`). Its publication in `utilities.json` is still pending the
+existing acceptance process; local staging and previews do not register a release.
+
+Utility pages continue to consume the App theme and locale bridges. Surface
+colors derive from the incoming palette; Brutal also applies square corners,
+a hard shadow and immediate transitions. Native buttons, range inputs and
+disclosures retain keyboard operation and visible focus. Channel indicators
+describe toggle selections, not measured output levels.
+
+The canonical implementation is in the sibling `Multichannel-Signal-Generator`
+repository (`public/index.html` and `public/copy.js`), with its own tests and
+handoff notes. `src-tauri/resources/utilities/` is ignored staging output;
+local copies are for development only and `npm run utilities:fetch` replaces
+them with the releases pinned in `utilities.json`. Shipping a revised utility
+requires its new release bundle and an updated registry checksum.
+
+## Score projects using the instrument direction
+
+All Sentient Being Sounds v2.0.1 applies the utility instrument language to a
+score project in the sibling `All-Sentient-Being-Sounds` repository. Its conductor
+console uses one enclosure for the measure, transport and A–D × 1–6 presence
+matrix. Full numbers, actual occupancy and finished x/N stay visible; native QR
+and hub disclosures retain state during signal and locale updates. Phone group /
+number selection retains sharing and explicitly moves keyboard focus between
+steps. The score canvas, artwork, sync and spectator projection remain unchanged;
+their readable stage overlays use independent light-on-dark tokens. App palette
+following recolors console surfaces, with Brutal geometry from `data-pnds-theme`.
+Source and interaction/bridge tests are in `src/`, `test/ui*.test.js` and
+`docs/ui-design.md`. It is distributed as an ordinary project, not in the utility
+registry or staging tree.
+
 ## Tailwind v4 Configuration
 
 Tailwind v4 uses CSS-based configuration instead of `tailwind.config.js`.
