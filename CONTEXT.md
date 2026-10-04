@@ -94,6 +94,14 @@ _Avoid_: 模块指南、模板模块（作册名）
 随 App 分发、即装即用的工具工程（如 Multichannel Signal Generator），固定收纳在侧栏 Utilities 文件夹；成员与顺序由 App 注册表决定，用户不可调整。
 _Avoid_: 插件、addon、实用工具（作统称）
 
+**App 共享包 / App shared package**:
+由 PNDS App 保存并供多个工程引用的依赖资源，可包含库与模型；工程也可选择携带自己的依赖资源。
+_Avoid_: 内置工具（指依赖资源时）、工程包（指共享依赖时）
+
+**加入共享包 / Add shared package**:
+在工程中建立对 App 共享包的使用引用，资源文件仍由 App 保存。
+_Avoid_: 移动包、复制包（指建立引用时）
+
 **帮助中心 / Help Center**:
 App 内的帮助窗口，浏览帮助语料四本书：教程、创作者指南、参考手册、模块手册。
 
