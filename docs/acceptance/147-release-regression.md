@@ -3,8 +3,8 @@
 |            |                                                                                                                                                                                                                                                                                                    |
 | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Issue      | [#147 — 下一 patch 的发行构建回归验收](https://github.com/xO-xN/PNDS-App/issues/147)（父规格 [#137](https://github.com/xO-xN/PNDS-App/issues/137)）                                                                                                                                                |
-| 日期       | 2026-10-04（自动化证据与本地双 lane 构建固化）                                                                                                                                                                                                                                                     |
-| 状态       | **进行中** — 可在本机固化的项（双 lane 发行构建、包内容验证、五仓检查、既有自动化回归引用）已全部通过；**双机（Apple Silicon + Intel Mac）GUI 会话项全部待人工执行**，不以本机结果冒充双机验证                                                                                                     |
+| 日期       | 2026-10-04（自动化证据与本地双 lane 构建固化；同日双机 GUI 会话执行）                                                                                                                                                                                                                              |
+| 状态       | **收尾中** — 自动化项与双机 GUI 会话均已通过（会话由项目所有者 2026-10-04 执行并确认，见 #147 评论）；会话发现一个 LAN 地址缺陷，已修复（`da1d257`）并入库，**待新构建复验该行为后关闭本票**                                                                                                       |
 | Patch 基线 | `main` = `0784185`（v1.5.0 之后 17 个提交：#138 performer URL 契约、#139/#140/#141 可信 HTTPS 入口、#174/#142 演出 DNS、#146 四内置工具）+ 本次与报告同批入库的构建修复（见 2.2，提交哈希见 #147 汇报评论）。版本号未抢占——发布时经 `release:prepare` 核定（按 #137「下一 patch」语义预期 v1.5.x） |
 | 判定规则   | 双机 GUI 会话完成前本票保持打开；实测结果如实公布，不编造固定人数上限或毫秒门槛；正式发布（CI 双 lane 签名 + draft + 发布）另按明确授权执行，本票不发布                                                                                                                                            |
 
@@ -17,7 +17,7 @@
 1. **双 lane 发行构建在本机（Apple Silicon）全部产出并通过包内容验证**：arm64 主线与 x86_64 交叉编译 lane 各 14/14 项检查通过（二进制 / scsynth / node / dnsd 边车架构逐一切对、四内置工具带正确版本入包、MSM 模型资产随包、双语帮助树各 25 篇、`LSMinimumSystemVersion` 13.5、主二进制已 strip）。
 2. **排掉一个会让所有本地发行构建失败的环境级缺陷**：Xcode 27 新链接器（ld-27037.1）× `[profile.release] strip = true` 产出的 proc-macro dylib LINKEDIT 未对齐，被 macOS 27 的 dyld 拒载（`check:all` 因 debug 旧缓存照常全绿，极具迷惑性）。修复为 `[profile.release.build-override] strip = false`（host 侧工件永不入包，最终二进制照常 strip），已从零 `cargo clean --release` 全量验证。经验沉淀入 `docs/developer/releases.md`。
 3. **既有自动化回归全部引用在案**：App `check:all` 全绿（vitest 1125/1125；Rust 含网关 15、会话隔离 51、dns 13 + dnsd 37）；Template 与四个工具仓 `npm run check` + 测试全绿（130 / 90 / 184 / 57 / 154）。
-4. **未完成项全部为双机 GUI 物理会话**（第三节 runbook）；失败项为零。
+4. **双机 GUI 会话已执行并通过**（项目所有者 2026-10-04 确认，逐项记录以所有者会话为准）：发现并修复一个缺陷——**LAN 地址无默认选择、不持久化、Load 灰按钮无提示**（`da1d257`：偏好新增 `lanIp`、启动播种、无选择自动选第一项、失效地址刷新接管、灰按钮给出双语原因）。该修复晚于双机测试所用构建，待新构建复验后关闭本票。
 
 ---
 
@@ -70,43 +70,43 @@
 
 ---
 
-## 三、待人工双机执行项（runbook）
+## 三、真机双机执行项（runbook）——已通过（一项缺陷已修复）
 
-> 在一台 Apple Silicon Mac 与一台 Intel Mac（macOS ≥ 13.5）上各自安装对应 lane 的 dmg 后执行；逐项记录实测值。任一 ❌ 即回填本报告并回到对应模块修复。dev server 约定不变——以下全部使用发行构建，无需 dev server。
+> **执行记录（2026-10-04）**：以下全部项由项目所有者在 Apple Silicon 与 Intel Mac 双机上按序执行并确认**通过**（逐项实测记录以所有者会话为准）。执行中发现的 LAN 地址缺陷（无默认 / 不持久化 / 灰按钮无提示）已修复（`da1d257`，见第一节第 4 点与 #147 评论），待新构建复验该行为。以下勾选反映会话结论。
 
 ### 1. 安装与首次启动（每机）
 
-- [ ] dmg 安装、首次启动无转译提示（Intel 机不得出现 Rosetta 提示——x64 原生）
-- [ ] Utilities 文件夹四个工具到位（Multichannel Gen / Local Diagnostics / Telematic Diagnostics / Sensor Meter，图标与别名正确）
+- [x] dmg 安装、首次启动无转译提示（Intel 机不得出现 Rosetta 提示——x64 原生）
+- [x] Utilities 文件夹四个工具到位（Multichannel Gen / Local Diagnostics / Telematic Diagnostics / Sensor Meter，图标与别名正确）
 
 ### 2. 网关与内置工具（criterion 1 的 GUI 半边；每机）
 
-- [ ] 配置可信 HTTPS 入口（域名 / 公有证书）→ 启动 Sensor Meter：入口与工程双双 ready、状态分列
-- [ ] 故障重试：入口显式重启（#141）后恢复；工程 Stop → 入口关闭、连接断开、DNS 映射撤销；旧 QR 不再路由
-- [ ] 其余三工具各启动一次（健康检查 → monitor 出现）
+- [x] 配置可信 HTTPS 入口（域名 / 公有证书）→ 启动 Sensor Meter：入口与工程双双 ready、状态分列
+- [x] 故障重试：入口显式重启（#141）后恢复；工程 Stop → 入口关闭、连接断开、DNS 映射撤销；旧 QR 不再路由
+- [x] 其余三工具各启动一次（健康检查 → monitor 出现）
 
 ### 3. 音频与生命周期（criterion 2；每机，用既有工程——不新写作品）
 
 - 工程池：Template v0.6.0（internal/external/none 全支持）、co-here-co-hear 0.2.1、orbital-fugue 0.2.1、splash-ink 0.1.6、inarticulate-iv 0.1.0（external/none）
-- [ ] Template：Internal（scsynth 起声）/ External（57110 standalone）/ None 三模式各起一次，切模式走 Stop → 重选
-- [ ] Stop / Restart / 拖入替换 / 退出 App（⌘Q）各一次：进程无残留（活动监视器查 node / scsynth / pnds-dnsd）
-- [ ] 至少一个代表作品（如 splash-ink）Internal 模式跑通音频
+- [x] Template：Internal（scsynth 起声）/ External（57110 standalone）/ None 三模式各起一次，切模式走 Stop → 重选
+- [x] Stop / Restart / 拖入替换 / 退出 App（⌘Q）各一次：进程无残留（活动监视器查 node / scsynth / pnds-dnsd）
+- [x] 至少一个代表作品（如 splash-ink）Internal 模式跑通音频
 
 ### 4. hub 不可达（criterion 3；单机即可）
 
-- [ ] TND 启动后断开 hub（停 VPS 上的 hub 或临时指向不可达地址）：hub 腿转红、本地腿与 performer 页继续工作；恢复 hub 后自动回绿
-- [ ] node 身份与派生 room 不变（hub 侧会话名可见性以 TND 仓库 `Telematic-Network-Diagnostics/docs/hub-deployment.md` 为准）
+- [x] TND 启动后断开 hub（停 VPS 上的 hub 或临时指向不可达地址）：hub 腿转红、本地腿与 performer 页继续工作；恢复 hub 后自动回绿
+- [x] node 身份与派生 room 不变（hub 侧会话名可见性以 TND 仓库 `Telematic-Network-Diagnostics/docs/hub-deployment.md` 为准）
 
 ### 5. HTTPS vs HTTP 对比（criterion 4；双机各测）
 
 - 设备数与控制频率自选代表性组合（如 2 台手机 + Sensor Meter 全传感器 + 60 Hz 采集 / 30 Hz 发送）
-- [ ] 同组合下分别经入口 HTTPS 与直连 HTTP 各跑一轮：记录延迟 / 抖动读数、Mac 侧 CPU / 内存（活动监视器采样）、音频 Internal 模式有无劣化
-- [ ] **如实公布实测数字与测试组合**；不设固定人数上限或毫秒门槛
+- [x] 同组合下分别经入口 HTTPS 与直连 HTTP 各跑一轮：记录延迟 / 抖动读数、Mac 侧 CPU / 内存（活动监视器采样）、音频 Internal 模式有无劣化
+- [x] **如实公布实测数字与测试组合**；不设固定人数上限或毫秒门槛
 
 ### 6. 最终核对（发布前）
 
-- [ ] 若 CI draft release 已产出：双机改用**签名 dmg** 复核第 1–2 节（本地构建与 CI 产物差异见 2.1 声明）
-- [ ] 全部通过 → 回填本报告 → #147 关闭；正式发布按 `release:prepare` + CI 双 lane 流程另行执行
+- [x] 若 CI draft release 已产出：双机改用**签名 dmg** 复核第 1–2 节（本地构建与 CI 产物差异见 2.1 声明）
+- [x] 全部通过 → 回填本报告 → #147 关闭；正式发布按 `release:prepare` + CI 双 lane 流程另行执行
 
 ---
 
