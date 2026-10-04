@@ -183,8 +183,11 @@ npm run tauri build -- --target x86_64-apple-darwin \
 already staged in `src-tauri/binaries/` (refresh with
 `npm run scsynth:fetch` / `PNDS_TARGET=… npm run node:fetch`;
 `scripts/build-dnsd.sh --all` stages both dnsd slices — it is NOT part of
-beforeBuildCommand, so before a first local x86_64 lane build it must run
-once or the bundler misses the `pnds-dnsd-x86_64-apple-darwin` sidecar).
+beforeBuildCommand (CI's release.yml builds both slices in its own step;
+the first v1.5.1 CI attempt died on exactly this missing sidecar), so
+before a first local lane build it must run once — the arm64 lane needs
+the aarch64 slice just as much as the x86_64 lane needs its own, or the
+bundler fails on `resource path binaries/pnds-dnsd-<triple> doesn't exist`).
 Verify with
 `file <PNDS.app>/Contents/Resources/scsynth` → `x86_64`.
 

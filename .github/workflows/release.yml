@@ -135,6 +135,15 @@ jobs:
       - name: Fetch scsynth binary and compile master synthdef
         run: npm run scsynth:fetch
 
+      # #174's dnsd is an externalBin sidecar like node, but nothing else
+      # provisions it — build both darwin slices from the workspace (the
+      # x86_64 target comes with the toolchain step above) or tauri-build
+      # dies on `resource path binaries/pnds-dnsd-<triple> doesn't exist`
+      # (the first v1.5.1 release attempt failed exactly there; v1.5.0
+      # predated the sidecar, so CI never needed this step before).
+      - name: Build dnsd sidecars (both lanes)
+        run: npm run dnsd:build:all
+
       # Lane 1 — arm64 mainline: native build, base tauri.conf.json (Node 24
       # sidecar, scsynth aarch64 slice, min macOS 13.5). Creates the draft
       # release; uploadUpdaterJson writes latest.json with the darwin-aarch64
