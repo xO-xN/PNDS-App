@@ -5,7 +5,8 @@
 | Issue    | [#145 — 真机、离线与 App 完整链路验收](https://github.com/xO-xN/PNDS-App/issues/145)（父规格 [#137](https://github.com/xO-xN/PNDS-App/issues/137)）                                                              |
 | 日期     | 2026-10-04（自动化证据固化）                                                                                                                                                                                     |
 | 状态     | **进行中** — 可在本机自动化的验收项已全部固化并通过；需真实硬件的项**全部未完成**，无一项以替代手段标记通过                                                                                                      |
-| 验收对象 | 独立诊断工程 `Mobile-Sensor-Meter` v0.3.0（App 仓库同级目录 `../Mobile-Sensor-Meter`；独立仓库按其 AGENTS.md 约定待真机验收后建立）+ App 的可信 HTTPS 入口 / 演出 DNS                                            |
+| 验收对象 | 独立诊断工程 `Mobile-Sensor-Meter` v0.3.1（App 仓库同级目录 `../Mobile-Sensor-Meter`；独立仓库按其 AGENTS.md 约定待真机验收后建立）+ App 的可信 HTTPS 入口 / 演出 DNS                                            |
+| 冻结基线 | `ce4cf65`（2026-10-04 仪器面板风格定稿，v0.3.1）。真机 runbook 测试此提交；证据数字亦对应此提交。基线再次移动须先更新本报告                                                                                      |
 | 判定规则 | 缺少真机 / 路由器 / 真实域名条件时，对应项**如实保持未完成**；不用测试 CA、自签、桌面浏览器或热缓存结果冒充通过。全部真机项通过前，[#146（纳入内置工具）](https://github.com/xO-xN/PNDS-App/issues/146) 保持阻塞 |
 
 状态标记：✅ 已通过（自动化，可复现） · 🧪 初步真机证据（开发期试验，非正式验收） · ⬜ 待真机执行 · ❌ 未通过（当前为零）
@@ -14,7 +15,7 @@
 
 ## 一、结论摘要
 
-1. **能离开真机固化的证据已全部固化**：独立工程 149 项行为/集成测试全绿（含本次新增的服务面零外部引用审计）；App 侧网关 15、HTTPS 材料 25、演出 DNS 37、会话生命周期 13 项测试全绿；`npm run check:all` 全绿（vitest 1124/1124，Rust 323 通过）。
+1. **能离开真机固化的证据已全部固化**：独立工程 154 项行为/集成测试全绿（含服务面零外部引用审计与仪器面板风格定稿新增的主题跟随测试）；App 侧网关 15、HTTPS 材料 25、演出 DNS 37、会话生命周期 13 项测试全绿；`npm run check:all` 全绿（vitest 1124/1124，Rust 323 通过）。
 2. **运行时零外部请求从「一次性 grep」升级为可重复测试门**：新增 `test/offline-surface.test.js`——`public/`（除 vendored 上游包）中任何绝对 `http(s)://` 引用除 localhost / `location.hostname` 动态同机构造外一律失败。断公网冷加入在**静态面**已有自动化保证；真机上的动态核验（清缓存 / 首访手机 + 网络日志）仍待执行。
 3. **开发期已有两轮真机试验**（#143/#144，桌面浏览器 + 手机）：全链路可用——同源资产经 App HTTPS 入口逐字节一致、模型权重零 CDN 拉取、双端实时关键点。这是**初步证据**，不满足 #145 的正式条件（≥2 台手机、路由器 DNS、断公网冷启动等），对应项仍为 ⬜。
 4. **失败项为零；未完成项全部为真机物理操作**，见第三节 runbook。
@@ -29,14 +30,14 @@
 
 命令：`npm run check && npm test`（Node 24，纯网络工程 audio none）。
 
-| 项                               | 结果 | 证据                                                                                                                                                             |
-| -------------------------------- | ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 语法门                           | ✅   | `npm run check`（18 个 JS 文件 `node --check`）通过                                                                                                              |
-| 行为 + 集成测试                  | ✅   | 149/149 通过（含真实 Socket.IO 集成：样本逐字送达 monitor、零/null 不合并、迟到结果拒收、seq 单调、重连恢复同一设备号、断线不重放、后台暂停、SIGTERM 干净退出）  |
-| **服务面零外部引用（本次新增）** | ✅   | `test/offline-surface.test.js`：`public/`（除 `vendor/`）无任何非同源绝对 URL；附「种入 CDN 引用必被拦」的反例测试。断公网冷加入在静态面的自动化门               |
-| 本地模型资产完整性               | ✅   | `npm run fetch:handpose` 按 `PINNED.json` sha256 逐文件校验；`GET /handpose/assets.json` 实测 `{"ok":true,"missing":[]}`（清单含每份 model.json 声明的全部分片） |
-| 模型 URL 走本站 origin           | ✅   | `test/handpose-logic.test.js` 钉死 `scriptSrc=/vendor/ml5.min.js`、`detector/landmarkModelUrl=/vendor/handpose/...`，无运行时 CDN 路径                           |
-| 入口契约                         | ✅   | `manifest.json` 声明 `scoreServer.supportsPerformerUrl: true`；`__config.js` / QR / 可复制地址同读 `PNDS_PERFORMER_URL` 单一来源（集成测试覆盖）                 |
+| 项                               | 结果 | 证据                                                                                                                                                                                                       |
+| -------------------------------- | ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 语法门                           | ✅   | `npm run check`（18 个 JS 文件 `node --check`）通过                                                                                                                                                        |
+| 行为 + 集成测试                  | ✅   | 154/154 通过（含真实 Socket.IO 集成：样本逐字送达 monitor、零/null 不合并、迟到结果拒收、seq 单调、重连恢复同一设备号、断线不重放、后台暂停、SIGTERM 干净退出；v0.3.1 风格定稿带入 theme.js 主题跟随测试） |
+| **服务面零外部引用（本次新增）** | ✅   | `test/offline-surface.test.js`：`public/`（除 `vendor/`）无任何非同源绝对 URL；附「种入 CDN 引用必被拦」的反例测试。断公网冷加入在静态面的自动化门                                                         |
+| 本地模型资产完整性               | ✅   | `npm run fetch:handpose` 按 `PINNED.json` sha256 逐文件校验；`GET /handpose/assets.json` 实测 `{"ok":true,"missing":[]}`（清单含每份 model.json 声明的全部分片）                                           |
+| 模型 URL 走本站 origin           | ✅   | `test/handpose-logic.test.js` 钉死 `scriptSrc=/vendor/ml5.min.js`、`detector/landmarkModelUrl=/vendor/handpose/...`，无运行时 CDN 路径                                                                     |
+| 入口契约                         | ✅   | `manifest.json` 声明 `scoreServer.supportsPerformerUrl: true`；`__config.js` / QR / 可复制地址同读 `PNDS_PERFORMER_URL` 单一来源（集成测试覆盖）                                                           |
 
 **模型资源体积**（#145 要求记录；就绪时间 / 更新率 / 发热耗电待真机实测填入第三节模板）：
 
