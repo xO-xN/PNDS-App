@@ -502,6 +502,10 @@ describe('HTTPS compat choice (#140)', () => {
       status: 'ok',
       data: null,
     })
+    vi.mocked(commands.stopProject).mockResolvedValue({
+      status: 'ok',
+      data: null,
+    })
   })
 
   it('is needed exactly when the switch is on and the project is undeclared', () => {
@@ -577,17 +581,104 @@ describe('HTTPS compat choice (#140)', () => {
     expect(useHttpsCompatDialog.getState().open).toBe(false)
   })
 
-  it('restart asks the same choice and canceling keeps the session running', async () => {
-    useSessionStore.setState({
-      sessionStatus: 'ready',
-      sessionProjectPath: '/p',
-    })
-    const pending = restart()
-    await Promise.resolve()
-    expect(commands.stopProject).not.toHaveBeenCalled()
-    resolveHttpsCompatChoice(false)
-    await pending
-    expect(commands.startProject).not.toHaveBeenCalled()
-    expect(commands.stopProject).not.toHaveBeenCalled()
-  })
+  it.each([
+    ['restart', restart, '/p'],
+    ['replace', startReplacing, '/running'],
+  ] as const)(
+    '%s preserves pending settings while waiting and after cancel',
+    async (_, action, runningPath) => {
+      const unchanged = {
+        sessionStatus: 'ready' as const,
+        sessionProjectPath: runningPath,
+        audioMode: 'external' as const,
+        lanIp: '192.168.1.20',
+        oscTargetInput: '127.0.0.1:4444',
+        pendingChanges: true,
+      }
+      useSessionStore.setState(unchanged)
+      const pending = action()
+      try {
+        expect(useHttpsCompatDialog.getState().open).toBe(true)
+        expect(useSessionStore.getState()).toMatchObject(unchanged)
+        // A duplicate submit must not replace the dialog's resolver or clear drafts.
+        await action()
+        expect(useSessionStore.getState()).toMatchObject(unchanged)
+      } finally {
+        resolveHttpsCompatChoice(false)
+        await pending
+      }
+      expect(useSessionStore.getState()).toMatchObject(unchanged)
+      expect(useProjectStore.getState().currentProject?.path).toBe('/p')
+      expect(commands.stopProject).not.toHaveBeenCalled()
+      expect(commands.startProject).not.toHaveBeenCalled()
+
+      // The cancelled attempt released the latch: apply the preserved draft next time.
+      const again = action()
+      resolveHttpsCompatChoice(true)
+      await again
+      expect(commands.stopProject).toHaveBeenCalledTimes(1)
+      expect(commands.startProject).toHaveBeenCalledWith(
+        '/p',
+        'external',
+        '192.168.1.20',
+        '127.0.0.1:4444'
+      )
+      expect(useSessionStore.getState().pendingChanges).toBe(false)
+    }
+  )
+
+  it.each([
+    ['restart', restart, '/p'],
+    ['replace', startReplacing, '/running'],
+  ] as const)(
+    '%s commits only after consent and retains the captured plan across stop snapshots',
+    async (_, action, runningPath) => {
+      useSessionStore.setState({
+        sessionStatus: 'ready',
+        sessionProjectPath: runningPath,
+        audioMode: 'external',
+        lanIp: '192.168.1.20',
+        oscTargetInput: '127.0.0.1:4444',
+        pendingChanges: true,
+      })
+      const order: string[] = []
+      vi.mocked(commands.stopProject).mockImplementation(async () => {
+        expect(useSessionStore.getState().pendingChanges).toBe(false)
+        order.push('stop')
+        // Backend facts refer to the outgoing session, not the submitted draft.
+        useSessionStore.getState().applySnapshot(
+          snapshot({
+            status: 'stopping',
+            projectPath: runningPath,
+            audioMode: 'internal',
+          })
+        )
+        useSessionStore
+          .getState()
+          .applySnapshot(
+            snapshot({ status: 'idle', projectPath: null, audioMode: null })
+          )
+        return { status: 'ok', data: null }
+      })
+      vi.mocked(commands.startProject).mockImplementation(async () => {
+        order.push('start')
+        return { status: 'ok', data: null }
+      })
+      const pending = action()
+      try {
+        expect(useSessionStore.getState().pendingChanges).toBe(true)
+        expect(commands.stopProject).not.toHaveBeenCalled()
+      } finally {
+        resolveHttpsCompatChoice(true)
+        await pending
+      }
+      expect(order).toEqual(['stop', 'start'])
+      expect(commands.startProject).toHaveBeenCalledWith(
+        '/p',
+        'external',
+        '192.168.1.20',
+        '127.0.0.1:4444'
+      )
+    }
+  )
 })

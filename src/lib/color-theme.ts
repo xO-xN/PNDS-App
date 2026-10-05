@@ -101,8 +101,9 @@ export async function applyColorThemeSetting(theme: ColorTheme): Promise<void> {
     await syncWindowCorners(theme)
     setColorThemeAttribute(theme)
     useSettingsStore.getState().setColorThemeSetting(theme)
-    await updatePreferences({ colorTheme: theme })
-    logger.info('Color theme applied', { theme })
+    if (await updatePreferences({ colorTheme: theme })) {
+      logger.info('Color theme applied', { theme })
+    }
   } catch (error) {
     logger.error('Failed to apply color theme', { error, theme })
   }

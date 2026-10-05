@@ -21,8 +21,10 @@ import type { ProjectFolder } from '@/lib/tauri-bindings'
 export function selectProject(path: string): void {
   const project = useProjectStore.getState()
 
-  if (path === project.currentProject?.path) {
-    if (project.pendingPreflightPath === path) return
+  if (
+    path === project.currentProject?.path &&
+    project.pendingPreflightPath === null
+  ) {
     const status = useSessionStore.getState().sessionStatus
     if (status === 'idle') {
       project.clearProject()
@@ -32,12 +34,7 @@ export function selectProject(path: string): void {
 
   if (project.pendingPreflightPath === path) return
 
-  project.setPendingPreflight(path)
-  void openProject(path).finally(() => {
-    if (useProjectStore.getState().pendingPreflightPath === path) {
-      useProjectStore.getState().setPendingPreflight(null)
-    }
-  })
+  void openProject(path)
 }
 
 /**
@@ -52,11 +49,7 @@ export function selectProject(path: string): void {
 export function setActiveFolderView(folderId: string | null): void {
   const project = useProjectStore.getState()
   const status = useSessionStore.getState().sessionStatus
-  if (
-    status !== 'ready' &&
-    status !== 'stopping' &&
-    project.currentProject !== null
-  ) {
+  if (status !== 'ready' && status !== 'stopping') {
     project.clearProject()
   }
   project.setActiveFolderId(folderId)

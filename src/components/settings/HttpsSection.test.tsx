@@ -1,10 +1,21 @@
-import { render, screen, waitFor } from '@/test/test-utils'
+import { act, fireEvent, render, screen, waitFor } from '@/test/test-utils'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { commands } from '@/lib/tauri-bindings'
+import type { AppPreferences } from '@/lib/tauri-bindings'
 import { useSessionStore } from '@/store/session-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { HttpsSection } from './HttpsSection'
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason: unknown) => void
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+  return { promise, resolve, reject }
+}
 
 /** A stored-certificate fixture the assertions can read. */
 const storedSummary = {
@@ -27,6 +38,16 @@ const storedSummary = {
 describe('HttpsSection (#139)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    let preferences: AppPreferences = { theme: 'system', language: null }
+    vi.mocked(commands.loadPreferences)
+      .mockReset()
+      .mockImplementation(async () => ({ status: 'ok', data: preferences }))
+    vi.mocked(commands.savePreferences)
+      .mockReset()
+      .mockImplementation(async updated => {
+        preferences = updated
+        return { status: 'ok', data: null }
+      })
     useSettingsStore.setState({
       httpsDomainSetting: '',
       httpsPortSetting: '',
@@ -302,5 +323,213 @@ describe('HttpsSection (#139)', () => {
       )
     })
     expect(screen.getByTestId('https-hint')).toBeInTheDocument()
+  })
+})
+
+describe('HTTPS preparation ordering and recovery', () => {
+  beforeEach(async () => {
+    await new Promise(resolve => setTimeout(resolve, 0))
+    vi.clearAllMocks()
+    useSettingsStore.setState({
+      httpsDomainSetting: 'show.example.org',
+      httpsPortSetting: '',
+      httpsEnabledSetting: false,
+    })
+    vi.mocked(commands.loadPreferences)
+      .mockReset()
+      .mockResolvedValue({
+        status: 'ok',
+        data: {
+          theme: 'system',
+          language: null,
+          httpsDomain: 'show.example.org',
+        },
+      })
+    vi.mocked(commands.savePreferences)
+      .mockReset()
+      .mockResolvedValue({ status: 'ok', data: null })
+    vi.mocked(commands.loadHttpsCertificate)
+      .mockReset()
+      .mockResolvedValue({
+        status: 'ok',
+        data: { summary: storedSummary, problems: [] },
+      })
+    vi.mocked(commands.importHttpsCertificate)
+      .mockReset()
+      .mockResolvedValue({
+        status: 'ok',
+        data: {
+          summary: { ...storedSummary, fingerprint: 'NEW:CERT' },
+          problems: [],
+        },
+      })
+    vi.mocked(commands.clearHttpsCertificate)
+      .mockReset()
+      .mockResolvedValue({ status: 'ok', data: true })
+    const { open } = await import('@tauri-apps/plugin-dialog')
+    vi.mocked(open)
+      .mockReset()
+      .mockResolvedValueOnce('/certs/fullchain.pem')
+      .mockResolvedValueOnce('/certs/privkey.pem')
+  })
+
+  it('keeps the imported certificate when the initial read returns late', async () => {
+    const late =
+      deferred<Awaited<ReturnType<typeof commands.loadHttpsCertificate>>>()
+    vi.mocked(commands.loadHttpsCertificate).mockReturnValueOnce(late.promise)
+    render(<HttpsSection section="https" />)
+    await waitFor(() =>
+      expect(commands.loadHttpsCertificate).toHaveBeenCalledOnce()
+    )
+    fireEvent.click(screen.getByRole('button', { name: /^import$/i }))
+    expect(await screen.findByText('NEW:CERT')).toBeInTheDocument()
+    await act(async () =>
+      late.resolve({
+        status: 'ok',
+        data: { summary: storedSummary, problems: [] },
+      })
+    )
+    expect(screen.getByText('NEW:CERT')).toBeInTheDocument()
+    expect(screen.queryByText('AA:BB:CC')).not.toBeInTheDocument()
+  })
+
+  it('locks import and clear from the first picker, and unlocks on cancellation', async () => {
+    const { open } = await import('@tauri-apps/plugin-dialog')
+    const picker = deferred<string | null>()
+    vi.mocked(open).mockReset().mockReturnValueOnce(picker.promise)
+    render(<HttpsSection section="https" />)
+    await screen.findByTestId('https-status')
+    fireEvent.click(screen.getByRole('button', { name: /^import$/i }))
+    expect(screen.getByRole('button', { name: /validating/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /clear/i })).toBeDisabled()
+    expect(screen.getByLabelText(/domain/i)).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: /validating/i }))
+    await act(async () => picker.resolve(null))
+    expect(open).toHaveBeenCalledOnce()
+    expect(screen.getByRole('button', { name: /^import$/i })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /clear/i })).toBeEnabled()
+    expect(commands.importHttpsCertificate).not.toHaveBeenCalled()
+  })
+
+  it.each(['first picker', 'second picker', 'import'] as const)(
+    'recovers after a rejected %s and preserves the stored facts',
+    async stage => {
+      const { open } = await import('@tauri-apps/plugin-dialog')
+      if (stage === 'first picker')
+        vi.mocked(open)
+          .mockReset()
+          .mockRejectedValueOnce(new Error('picker unavailable'))
+      else if (stage === 'second picker')
+        vi.mocked(open)
+          .mockReset()
+          .mockResolvedValueOnce('/certs/fullchain.pem')
+          .mockRejectedValueOnce(new Error('picker unavailable'))
+      else
+        vi.mocked(commands.importHttpsCertificate).mockRejectedValueOnce(
+          new Error('IPC unavailable')
+        )
+      render(<HttpsSection section="https" />)
+      await screen.findByTestId('https-status')
+      fireEvent.click(screen.getByRole('button', { name: /^import$/i }))
+      expect(await screen.findByText(/could not import/i)).toBeInTheDocument()
+      expect(screen.getByText('AA:BB:CC')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /^import$/i })).toBeEnabled()
+      expect(screen.getByRole('button', { name: /clear/i })).toBeEnabled()
+    }
+  )
+
+  it('recovers after a rejected clear without claiming the certificate was removed', async () => {
+    vi.mocked(commands.clearHttpsCertificate).mockRejectedValueOnce(
+      new Error('IPC unavailable')
+    )
+    render(<HttpsSection section="https" />)
+    await screen.findByTestId('https-status')
+    fireEvent.click(screen.getByRole('button', { name: /clear/i }))
+    expect(await screen.findByText(/could not clear/i)).toBeInTheDocument()
+    expect(screen.getByText('AA:BB:CC')).toBeInTheDocument()
+    expect(screen.queryByTestId('https-hint')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /clear/i })).toBeEnabled()
+  })
+
+  it('waits for a successful domain save before revalidating the summary in the open panel', async () => {
+    const save =
+      deferred<Awaited<ReturnType<typeof commands.savePreferences>>>()
+    render(<HttpsSection section="https" />)
+    await screen.findByTestId('https-status')
+    vi.mocked(commands.savePreferences).mockReturnValueOnce(save.promise)
+    fireEvent.change(screen.getByLabelText(/domain/i), {
+      target: { value: 'other.example.org' },
+    })
+    fireEvent.blur(screen.getByLabelText(/domain/i))
+    await waitFor(() => expect(commands.savePreferences).toHaveBeenCalledOnce())
+    expect(commands.loadHttpsCertificate).toHaveBeenCalledOnce()
+    expect(screen.queryByText(/^certificate ready$/i)).not.toBeInTheDocument()
+    vi.mocked(commands.loadPreferences).mockResolvedValue({
+      status: 'ok',
+      data: {
+        theme: 'system',
+        language: null,
+        httpsDomain: 'other.example.org',
+      },
+    })
+    vi.mocked(commands.loadHttpsCertificate).mockResolvedValue({
+      status: 'ok',
+      data: {
+        summary: { ...storedSummary, status: 'wrongDomain' },
+        problems: [
+          {
+            code: 'domainMismatch',
+            detail: 'other.example.org is not covered',
+          },
+        ],
+      },
+    })
+    await act(async () => save.resolve({ status: 'ok', data: null }))
+    await waitFor(() =>
+      expect(screen.getByTestId('https-status')).toHaveTextContent(
+        /does not cover the configured domain/i
+      )
+    )
+    expect(commands.loadHttpsCertificate).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not revalidate or display readiness for a domain whose save failed', async () => {
+    render(<HttpsSection section="https" />)
+    await screen.findByTestId('https-status')
+    vi.mocked(commands.savePreferences).mockResolvedValueOnce({
+      status: 'error',
+      error: 'disk full',
+    })
+    fireEvent.change(screen.getByLabelText(/domain/i), {
+      target: { value: 'other.example.org' },
+    })
+    fireEvent.blur(screen.getByLabelText(/domain/i))
+    expect(await screen.findByText(/could not save/i)).toBeInTheDocument()
+    expect(commands.loadHttpsCertificate).toHaveBeenCalledOnce()
+    expect(screen.getByText('AA:BB:CC')).toBeInTheDocument()
+    expect(screen.queryByText(/^certificate ready$/i)).not.toBeInTheDocument()
+  })
+
+  it('stops the picker chain after the panel unmounts', async () => {
+    const { open } = await import('@tauri-apps/plugin-dialog')
+    const picker = deferred<string | null>()
+    vi.mocked(open).mockReset().mockReturnValueOnce(picker.promise)
+    const view = render(<HttpsSection section="https" />)
+    await screen.findByTestId('https-status')
+    fireEvent.click(screen.getByRole('button', { name: /^import$/i }))
+    await waitFor(() => expect(open).toHaveBeenCalledOnce())
+    view.unmount()
+    await act(async () => picker.resolve('/certs/fullchain.pem'))
+    expect(open).toHaveBeenCalledOnce()
+    expect(commands.importHttpsCertificate).not.toHaveBeenCalled()
+  })
+
+  it('settles a rejected initial read with a visible retryable error', async () => {
+    vi.mocked(commands.loadHttpsCertificate).mockRejectedValueOnce(
+      new Error('IPC unavailable')
+    )
+    render(<HttpsSection section="https" />)
+    expect(await screen.findByText(/could not read/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^import$/i })).toBeEnabled()
   })
 })

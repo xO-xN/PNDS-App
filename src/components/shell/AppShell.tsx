@@ -1,7 +1,6 @@
-import { useEffect, useState } from 'react'
-import { onSessionSnapshot, onWindowFocus, onWindowState } from '@/lib/events'
+import { useEffect, useRef, useState } from 'react'
+import { onWindowState } from '@/lib/events'
 import { Toaster } from 'sonner'
-import { commands } from '@/lib/tauri-bindings'
 import { useSessionStore } from '@/store/session-store'
 import { useProjectStore } from '@/store/project-store'
 import { useWindowStore } from '@/store/window-store'
@@ -17,18 +16,10 @@ import { ResizeGrip } from './ResizeGrip'
 import { LoadingScreen } from './LoadingScreen'
 import { ErrorScreen } from './ErrorScreen'
 import { StopCover } from './StopCover'
-
-/** Pulls the authoritative session state from Rust into the store — the
- * mount restore, the visibility/focus catch-ups and the loading poll all
- * share this one path (v1.2.2, user reports on #29: occluded-webview
- * event loss). */
-function restoreSessionState(): void {
-  void commands.getSessionState().then(result => {
-    if (result.status === 'ok') {
-      useSessionStore.getState().applySnapshot(result.data)
-    }
-  })
-}
+import {
+  attachSessionSnapshotMirror,
+  type SessionSnapshotMirror,
+} from '@/lib/session-snapshot-mirror'
 
 /**
  * Application shell (§10.1): routes between the four window states.
@@ -45,6 +36,7 @@ function restoreSessionState(): void {
  * iframe can flash between the two layers.
  */
 export function AppShell() {
+  const sessionMirror = useRef<SessionSnapshotMirror | null>(null)
   const sessionStatus = useSessionStore(state => state.sessionStatus)
   // §9.3: identifies the current loading session; a Retry bumps it so the
   // logo canvas remounts and replays from its first stage.
@@ -71,29 +63,18 @@ export function AppShell() {
   // peek) — registered once, active in every window state (spec issue #4).
   useCommandKeyboard()
 
-  // Mirror the Rust session state: live events + initial restore on mount.
+  // The main window applies runtime facts through the store, preserving
+  // its next-start settings and animation gates. The shared mirror owns
+  // mount/focus/visibility catch-up and asynchronous response ordering.
   useEffect(() => {
-    const offSession = onSessionSnapshot(snapshot =>
-      useSessionStore.getState().applySnapshot(snapshot)
-    )
-    restoreSessionState()
-    // v1.2.2 (user report on #29): an occluded WKWebView suspends its JS,
-    // so `pnds:session` events queue behind the suspension — coming back
-    // from another desktop showed the loading screen's last stage until
-    // the queued events caught up. Re-fetching on regain makes the shell
-    // current the moment the view is visible again.
-    const handleVisibility = () => {
-      if (!document.hidden) restoreSessionState()
-    }
-    document.addEventListener('visibilitychange', handleVisibility)
-    // The Rust-side regain signal (NSWindowDidBecomeKey) — WKWebView
-    // does not reliably surface DOM focus/visibility events for desktop
-    // switches, so lib.rs emits this on Focused(true) instead.
-    const offWindowFocus = onWindowFocus(restoreSessionState)
+    const mirror = attachSessionSnapshotMirror({
+      onSnapshot: snapshot =>
+        useSessionStore.getState().applySnapshot(snapshot),
+    })
+    sessionMirror.current = mirror
     return () => {
-      offSession()
-      offWindowFocus()
-      document.removeEventListener('visibilitychange', handleVisibility)
+      mirror.dispose()
+      sessionMirror.current = null
     }
   }, [])
 
@@ -180,7 +161,7 @@ export function AppShell() {
   // after the switch back.
   useEffect(() => {
     if (sessionStatus !== 'starting') return
-    const id = setInterval(restoreSessionState, 1000)
+    const id = setInterval(() => sessionMirror.current?.restore(), 1000)
     return () => clearInterval(id)
   }, [sessionStatus])
 

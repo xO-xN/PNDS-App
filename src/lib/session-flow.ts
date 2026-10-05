@@ -383,6 +383,9 @@ async function stopThenStart(
       ? await openHttpsCompatChoice()
       : true
     if (!proceed) return
+    // All choices passed: commit the transition immediately before dispatch.
+    // Waiting/canceling must leave the Change action and its draft intact.
+    useSessionStore.getState().setPendingChanges(false)
     await commands.stopProject()
     const result = await commands.startProject(
       path,
@@ -408,11 +411,10 @@ export async function restart(): Promise<void> {
   // never restarts into an unconfigured node (no hub variables injected).
   if (nodeGateBlocksStart()) return
 
-  logger.info('Restarting session', {
+  logger.info('Session restart requested', {
     path: currentProject.path,
     mode: audioMode,
   })
-  useSessionStore.getState().setPendingChanges(false)
   await stopThenStart(currentProject.path, audioMode, lanIp, resolveOscTarget())
 }
 
@@ -430,10 +432,9 @@ export async function startReplacing(): Promise<void> {
   const plan = resolveStartPlan('replace')
   if (!plan) return
 
-  logger.info('Switching session', {
+  logger.info('Session switch requested', {
     path: plan.path,
     mode: plan.audioMode,
   })
-  useSessionStore.getState().setPendingChanges(false)
   await stopThenStart(plan.path, plan.audioMode, plan.lanIp, plan.oscTarget)
 }

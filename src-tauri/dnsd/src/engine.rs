@@ -150,6 +150,11 @@ impl EngineStats {
 
 struct EngineState {
     mapping: Option<ActiveMapping>,
+    /// Keep the most recent holder after revocation/expiry. A delayed
+    /// mapping.set must not resurrect a retired generation when there
+    /// is no active mapping left to compare against. One record only;
+    /// an App restart can still take over with its new run identity.
+    mapping_holder: Option<MappingHolder>,
     /// Domains ever configured as performance mappings (persisted by the
     /// daemon). While a domain is known but NOT mapped, it is answered
     /// NXDOMAIN locally — never forwarded, so a phone between performances
@@ -178,6 +183,7 @@ impl Engine {
             upstreams: Mutex::new(upstreams),
             state: Mutex::new(EngineState {
                 mapping: None,
+                mapping_holder: None,
                 known_domains,
                 cache: HashMap::new(),
             }),
@@ -232,15 +238,17 @@ impl Engine {
         }
         let expires_at = self.now() + lease;
         let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some(current) = &state.mapping {
-            if current.holder.run_id == holder.run_id
-                && holder.generation < current.holder.generation
+        if let Some(current) = &state.mapping_holder {
+            if current.run_id == holder.run_id
+                && (holder.generation < current.generation
+                    || (holder.generation == current.generation && state.mapping.is_none()))
             {
-                // Same App run, older generation: a stale supervisor tried
-                // to install over its replacement — refused.
+                // Same App run, older or retired generation: a delayed
+                // install cannot replace or resurrect an ended mapping.
                 return Err(MappingError::StaleGeneration);
             }
         }
+        state.mapping_holder = Some(holder.clone());
         state.mapping = Some(ActiveMapping {
             domain: domain.clone(),
             ip,
@@ -282,7 +290,17 @@ impl Engine {
     pub fn mapping_clear(&self, holder: &MappingHolder) -> Result<bool, NotHolder> {
         let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         match &state.mapping {
-            None => Ok(false),
+            None => {
+                // Clear may beat a set whose response was lost. Retire
+                // its holder even if nothing has been installed yet,
+                // without lowering a newer generation's watermark.
+                if state.mapping_holder.as_ref().is_none_or(|current| {
+                    current.run_id == holder.run_id && current.generation < holder.generation
+                }) {
+                    state.mapping_holder = Some(holder.clone());
+                }
+                Ok(false)
+            }
             Some(current) if current.holder == *holder => {
                 let domain = current.domain.clone();
                 state.mapping = None;
@@ -1171,6 +1189,50 @@ mod tests {
     }
 
     #[test]
+    fn revoked_generation_cannot_reinstall_after_clear() {
+        let engine = engine(vec![]);
+        let ip = "192.168.11.31".parse().unwrap();
+        engine
+            .mapping_set("show.example.org", ip, holder(2), MAX_LEASE)
+            .unwrap();
+        engine.mapping_clear(&holder(2)).unwrap();
+        for generation in [1, 2] {
+            assert_eq!(
+                engine.mapping_set("show.example.org", ip, holder(generation), MAX_LEASE),
+                Err(MappingError::StaleGeneration)
+            );
+        }
+        engine
+            .mapping_set("show.example.org", ip, holder(3), MAX_LEASE)
+            .unwrap();
+        assert!(engine.mapping_clear(&holder(2)).is_err());
+        assert_eq!(engine.mapping_snapshot().unwrap().3, 3);
+    }
+
+    #[test]
+    fn clear_before_install_retires_only_that_generation() {
+        let engine = engine(vec![]);
+        let ip = "192.168.11.31".parse().unwrap();
+        assert_eq!(engine.mapping_clear(&holder(3)), Ok(false));
+        assert_eq!(engine.mapping_clear(&holder(2)), Ok(false));
+        assert_eq!(
+            engine.mapping_set("show.example.org", ip, holder(3), MAX_LEASE),
+            Err(MappingError::StaleGeneration)
+        );
+        engine
+            .mapping_set("show.example.org", ip, holder(4), MAX_LEASE)
+            .unwrap();
+        engine.mapping_clear(&holder(4)).unwrap();
+        let restarted = MappingHolder {
+            run_id: "new-app-run".to_string(),
+            generation: 1,
+        };
+        engine
+            .mapping_set("show.example.org", ip, restarted, MAX_LEASE)
+            .unwrap();
+    }
+
+    #[test]
     fn mapping_holder_rules_guard_the_lifecycle() {
         let engine = engine(vec![]);
         let ip = "192.168.11.31".parse().unwrap();
@@ -1217,7 +1279,12 @@ mod tests {
         // The new holder clears cleanly (second clear is a false no-op).
         assert!(engine.mapping_clear(&restarted).unwrap());
         assert!(!engine.mapping_clear(&restarted).unwrap());
+        // A new performance after revocation uses a new generation.
         // Operator-level clear works regardless of holders.
+        let restarted = MappingHolder {
+            generation: 2,
+            ..restarted
+        };
         engine
             .mapping_set("show.example.org", ip, restarted, Duration::from_secs(60))
             .unwrap();

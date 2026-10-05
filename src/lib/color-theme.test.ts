@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { commands } from '@/lib/tauri-bindings'
+import { logger } from '@/lib/logger'
+import { useSettingsStore } from '@/store/settings-store'
 import {
   colorThemeFromPrefs,
   setColorThemeAttribute,
@@ -8,6 +10,11 @@ import {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.mocked(commands.savePreferences)
+    .mockReset()
+    .mockResolvedValue({ status: 'ok', data: null })
+  vi.spyOn(logger, 'info').mockImplementation(() => undefined)
+  vi.spyOn(logger, 'warn').mockImplementation(() => undefined)
   vi.mocked(commands.loadPreferences).mockResolvedValue({
     status: 'ok',
     data: { theme: 'system', language: null },
@@ -16,6 +23,7 @@ beforeEach(() => {
 
 afterEach(() => {
   delete document.documentElement.dataset.colorTheme
+  vi.restoreAllMocks()
 })
 
 describe('colorThemeFromPrefs (issue #38: persisted value → renderable theme)', () => {
@@ -61,18 +69,36 @@ describe('applyColorThemeSetting (issue #38: apply + persist)', () => {
     expect(commands.savePreferences).toHaveBeenCalledWith(
       expect.objectContaining({ colorTheme: 'sand' })
     )
-  })
-
-  it('keeps the applied attribute when the persist fails', async () => {
-    vi.mocked(commands.savePreferences).mockResolvedValue({
-      status: 'error',
-      error: 'disk full',
+    expect(logger.info).toHaveBeenCalledWith('Color theme applied', {
+      theme: 'sand',
     })
-
-    await applyColorThemeSetting('sand')
-
-    expect(document.documentElement.dataset.colorTheme).toBe('sand')
   })
+
+  it.each(['returned error', 'rejected invoke'])(
+    'keeps the live theme without a success log after a save %s',
+    async failure => {
+      if (failure === 'returned error') {
+        vi.mocked(commands.savePreferences).mockResolvedValueOnce({
+          status: 'error',
+          error: 'disk full',
+        })
+      } else {
+        vi.mocked(commands.savePreferences).mockRejectedValueOnce(
+          new Error('disk full')
+        )
+      }
+
+      await applyColorThemeSetting('sand')
+
+      expect(document.documentElement.dataset.colorTheme).toBe('sand')
+      expect(useSettingsStore.getState().colorThemeSetting).toBe('sand')
+      expect(logger.info).not.toHaveBeenCalled()
+      expect(logger.warn).toHaveBeenCalledExactlyOnceWith(
+        'Failed to save preferences',
+        { error: 'disk full' }
+      )
+    }
+  )
 
   // #41: Brutal squares the native window corners; every other theme
   // keeps the 16px mask. The sync runs before the attribute so the

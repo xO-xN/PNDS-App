@@ -31,6 +31,20 @@ const manifest: Manifest = {
   },
 }
 
+function passPreflight(path: string, data: Manifest) {
+  const store = useProjectStore.getState()
+  const request = store.startPreflight(path)
+  store.preflightSucceeded(request, data)
+  store.finishPreflight(request)
+}
+
+function failPreflight(path: string, message: string) {
+  const store = useProjectStore.getState()
+  const request = store.startPreflight(path)
+  store.preflightFailed(request, message)
+  store.finishPreflight(request)
+}
+
 describe('project-store', () => {
   beforeEach(() => {
     useProjectStore.setState({
@@ -64,10 +78,11 @@ describe('project-store', () => {
 
   it('tracks the preflight lifecycle', () => {
     useProjectStore.getState().addRecentProject('/p')
-    useProjectStore.getState().startPreflight()
+    const request = useProjectStore.getState().startPreflight('/p')
     expect(useProjectStore.getState().preflightStatus).toBe('checking')
 
-    useProjectStore.getState().preflightSucceeded('/p', manifest)
+    useProjectStore.getState().preflightSucceeded(request, manifest)
+    useProjectStore.getState().finishPreflight(request)
     const state = useProjectStore.getState()
     expect(state.preflightStatus).toBe('ready')
     expect(state.currentProject?.manifest.name).toBe('Inarticulate III')
@@ -79,11 +94,9 @@ describe('project-store', () => {
       .getState()
       .addRecentProject('/bundles/inarticulate-iii-0.1.0')
     useProjectStore.getState().addRecentProject('/other')
-    useProjectStore
-      .getState()
-      .preflightSucceeded('/bundles/inarticulate-iii-0.1.0', manifest)
+    passPreflight('/bundles/inarticulate-iii-0.1.0', manifest)
     // A later preflight of another project keeps the first entry.
-    useProjectStore.getState().preflightSucceeded('/other', {
+    passPreflight('/other', {
       ...manifest,
       name: 'Other Score',
     })
@@ -106,10 +119,8 @@ describe('project-store', () => {
 
   it('records a readable error and clears the project on failure', () => {
     useProjectStore.getState().addRecentProject('/p')
-    useProjectStore.getState().preflightSucceeded('/p', manifest)
-    useProjectStore
-      .getState()
-      .preflightFailed('/p', 'manifest.json missing required field')
+    passPreflight('/p', manifest)
+    failPreflight('/p', 'manifest.json missing required field')
     const state = useProjectStore.getState()
     expect(state.preflightStatus).toBe('error')
     expect(state.preflightError).toContain('missing required field')
@@ -121,28 +132,27 @@ describe('project-store', () => {
   it('keeps the failed selection and records the per-card error (#39)', () => {
     useProjectStore.getState().addRecentProject('/p')
     useProjectStore.getState().addRecentProject('/q')
-    useProjectStore.getState().startPreflight()
-    useProjectStore.getState().preflightFailed('/p', 'Port 6868 is busy')
+    failPreflight('/p', 'Port 6868 is busy')
 
     let state = useProjectStore.getState()
     expect(state.failedPreflightPath).toBe('/p')
     expect(state.preflightErrors['/p']).toBe('Port 6868 is busy')
 
     // The next successful preflight clears the card's error again.
-    useProjectStore.getState().preflightSucceeded('/p', manifest)
+    passPreflight('/p', manifest)
     state = useProjectStore.getState()
     expect(state.failedPreflightPath).toBeNull()
     expect(state.preflightErrors['/p']).toBeUndefined()
 
     // startPreflight (a new check) also drops the stale failed selection.
-    useProjectStore.getState().preflightFailed('/q', 'broken')
-    useProjectStore.getState().startPreflight()
+    failPreflight('/q', 'broken')
+    useProjectStore.getState().startPreflight('/p')
     expect(useProjectStore.getState().failedPreflightPath).toBeNull()
   })
 
   it('clearProject resets the session state but keeps the history', () => {
     useProjectStore.getState().addRecentProject('/p')
-    useProjectStore.getState().preflightSucceeded('/p', manifest)
+    passPreflight('/p', manifest)
     useProjectStore.getState().clearProject()
     const state = useProjectStore.getState()
     expect(state.currentProject).toBeNull()
@@ -153,7 +163,7 @@ describe('project-store', () => {
   it('removeRecentProject drops a path and clears it if it was current', () => {
     useProjectStore.getState().addRecentProject('/a')
     useProjectStore.getState().addRecentProject('/b')
-    useProjectStore.getState().preflightSucceeded('/a', manifest)
+    passPreflight('/a', manifest)
 
     useProjectStore.getState().removeRecentProject('/a')
     const state = useProjectStore.getState()
@@ -165,7 +175,7 @@ describe('project-store', () => {
   it('clearRecentProjects empties the history, memberships and selection (v1.2.0)', () => {
     useProjectStore.getState().addRecentProject('/a')
     useProjectStore.getState().addRecentProject('/b')
-    useProjectStore.getState().preflightSucceeded('/a', manifest)
+    passPreflight('/a', manifest)
     const folderId = createFolderOrFail('Set list')
     useProjectStore.getState().moveProjectToFolder(folderId, '/b')
 
@@ -762,7 +772,7 @@ describe('project-store persistence (structural actions commit + save)', () => {
 
   it('preflightSucceeded persists the manifest name only when it is new', async () => {
     useProjectStore.getState().addRecentProject('/a')
-    useProjectStore.getState().preflightSucceeded('/a', manifest)
+    passPreflight('/a', manifest)
     await vi.waitFor(() => {
       expect(commands.savePreferences).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -772,7 +782,7 @@ describe('project-store persistence (structural actions commit + save)', () => {
     })
 
     vi.mocked(commands.savePreferences).mockClear()
-    useProjectStore.getState().preflightSucceeded('/a', manifest)
+    passPreflight('/a', manifest)
     await settle()
     expect(commands.savePreferences).not.toHaveBeenCalled()
   })
@@ -1079,7 +1089,7 @@ describe('replaceProjectIndex (v1.3.2, issue #76 — setlist import seam)', () =
   })
 
   it('closes the open project when the replace drops it, keeps it when it stays', () => {
-    useProjectStore.getState().preflightSucceeded('/old', manifest)
+    passPreflight('/old', manifest)
     useProjectStore.getState().replaceProjectIndex(['/p1'], [])
 
     // Same semantics as removeRecentProject: no project open but
@@ -1089,7 +1099,7 @@ describe('replaceProjectIndex (v1.3.2, issue #76 — setlist import seam)', () =
     expect(state.preflightStatus).toBe('idle')
 
     // A project the new index still lists stays open through the replace.
-    useProjectStore.getState().preflightSucceeded('/p1', manifest)
+    passPreflight('/p1', manifest)
     useProjectStore.getState().replaceProjectIndex(['/p1'], [])
     state = useProjectStore.getState()
     expect(state.currentProject?.path).toBe('/p1')

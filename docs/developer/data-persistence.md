@@ -82,7 +82,7 @@ impl Default for AppPreferences {
 
 ### React Side
 
-Every preference read and write goes through `src/lib/preferences.ts`. Loads degrade to `null` on error; saves are load-modify-write cycles serialized through one queue so overlapping patches cannot clobber each other:
+Every preference read and write goes through `src/lib/preferences.ts`. Loads degrade to `null` on error; saves are load-modify-write cycles serialized through one queue so overlapping patches cannot clobber each other. The queue owns the complete read/merge/save operation for both field patches and OSC targets:
 
 ```typescript
 // src/lib/preferences.ts (excerpt)
@@ -97,12 +97,8 @@ export async function loadPreferences(): Promise<AppPreferences | null> {
 
 export async function updatePreferences(
   patch: PreferencesPatch
-): Promise<void> {
-  return enqueueSave(async () => {
-    const prefs = await loadPreferences()
-    if (!prefs) return
-    await commands.savePreferences({ ...prefs, ...patch })
-  })
+): Promise<boolean> {
+  return enqueueSave(prefs => ({ ...prefs, ...patch }))
 }
 ```
 
@@ -116,6 +112,26 @@ useEffect(() => {
   })
 }, [])
 ```
+
+### Save Outcomes
+
+`updatePreferences` and `updateOscTarget` resolve `true` only when Rust returns a
+successful save. They resolve `false` on a failed load, a returned save error,
+or a rejected IPC promise. Operation failures never escape as an unhandled
+rejection from a `void` call. A failed load does not write fallback defaults.
+
+The module logs each failure once: load failures through `loadPreferences`,
+save failures through the shared queue. Save logs include the error message,
+never the patch, full preferences or OSC target; preferences carry the hub token.
+The next queued operation reloads the persisted state and continues normally,
+without implicitly replaying the failed patch. There is no automatic retry or
+rollback of the in-memory setting.
+
+Callers that need to distinguish saved from merely applied must inspect the
+boolean; awaiting completion alone does not prove persistence. Theme and language
+remain immediately applied, but their completion logs run only after a successful
+save. Structural store commits may continue to fire-and-forget: failure is
+reported centrally and does not undo their live state.
 
 ## Adding New Persistent Data
 

@@ -8,8 +8,12 @@
 //! daemon's holder rules key on.
 
 pub mod client;
+mod mapping;
+pub(crate) use mapping::MappingLease;
 #[cfg(target_os = "macos")]
 pub mod service;
+#[cfg(test)]
+pub(crate) mod test_support;
 
 use serde::{Deserialize, Serialize};
 use specta::Type;
@@ -278,88 +282,6 @@ pub fn apply_config(upstreams: Vec<String>, listen_ip: Option<String>) -> Result
 /// the help article covers both steps.)
 pub fn disable() -> Result<(), String> {
     service::unregister()
-}
-
-// ============================================================================
-// Session mapping lifecycle (called from session.rs)
-// ============================================================================
-
-/// Installs the performance mapping for one start. `domain`/`ip` are the
-/// entry's facts; `generation` is the session generation that owns them.
-/// Verifies end-to-end INSIDE the daemon — its own A query through the
-/// real pipeline must resolve to the LAN address before the App treats
-/// the mapping as live (spec #174: 安装并验证后才发布入口).
-pub fn install_mapping(domain: &str, ip: &str, generation: u64) -> Result<(), String> {
-    if ip.parse::<std::net::Ipv4Addr>().is_err() {
-        return Err(format!("the DNS mapping IP is not an IPv4 address: {ip}"));
-    }
-    client::call(
-        "mapping.set",
-        serde_json::json!({
-            "domain": domain,
-            "ip": ip,
-            "runId": run_id(),
-            "generation": generation,
-            "leaseSeconds": MAPPING_LEASE.as_secs(),
-        }),
-        Duration::from_secs(3),
-    )?;
-    let verify = client::call(
-        "verify",
-        serde_json::json!({ "domain": domain }),
-        Duration::from_secs(3),
-    )?;
-    let resolved = verify.get("resolved").and_then(serde_json::Value::as_str);
-    match resolved {
-        Some(resolved) if resolved == ip => Ok(()),
-        other => Err(format!(
-            "the DNS mapping did not verify (resolved {other:?}, expected {ip})"
-        )),
-    }
-}
-
-/// Refreshes the mapping lease (the session's lease supervisor, about
-/// once per 20 s). Fails when this generation no longer holds the
-/// mapping — the supervisor treats that as the mapping being lost.
-pub fn refresh_mapping(generation: u64) -> Result<(), String> {
-    client::call(
-        "mapping.refresh",
-        serde_json::json!({
-            "runId": run_id(),
-            "generation": generation,
-            "leaseSeconds": MAPPING_LEASE.as_secs(),
-        }),
-        Duration::from_secs(3),
-    )
-    .map(|_| ())
-}
-
-/// Removes the mapping on teardown (Stop/Restart/replace/exit — every
-/// path funnels here through `teardown_children`). Best-effort: a
-/// not-holder refusal means a newer generation owns the mapping; a
-/// connection failure means the daemon is gone (its state dies with it).
-/// Either way the lease bounds any residue, so errors are logged, never
-/// escalated.
-pub fn remove_mapping(generation: u64) {
-    let result = client::request(
-        "mapping.clear",
-        serde_json::json!({
-            "runId": run_id(),
-            "generation": generation,
-        }),
-        Duration::from_secs(3),
-    );
-    match result {
-        Ok(response) if response.get("ok").and_then(serde_json::Value::as_bool) == Some(true) => {}
-        Ok(response) => log::warn!(
-            "DNS mapping clear refused ({}); the lease will expire it",
-            response
-                .get("code")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or("unknown")
-        ),
-        Err(e) => log::info!("DNS daemon unreachable on mapping clear ({e}); nothing to revoke"),
-    }
 }
 
 #[cfg(test)]

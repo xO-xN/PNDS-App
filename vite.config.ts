@@ -61,8 +61,10 @@ export default defineConfig(async () => ({
         }
       : undefined,
     watch: {
-      // 3. tell vite to ignore watching `src-tauri`
-      ignored: ['**/src-tauri/**'],
+      // Backend files and standalone docs/prototypes are not App modules.
+      // HTML edits under docs otherwise emit full-reload notifications mid-show.
+      // Help content is read by Rust on demand; it does not depend on Vite HMR.
+      ignored: ['**/src-tauri/**', '**/docs/**'],
     },
   },
 }))

@@ -9,7 +9,7 @@
   - `control.rs` 控制面（Unix socket line-JSON）：七动词 `status / mapping.set / mapping.refresh / mapping.clear / config.set / verify / stop`；写操作按对端 uid 鉴权（root 或 /dev/console 属主）；`verify` 在守护进程内走真实管线自证映射；
   - `state.rs` 持久化（固定监听地址 + 上游 + 已知演出域名；tmp+rename 原子写；**活跃映射不持久化**——属运行中 App；写入由 `run()` 的 200ms 巡检对比快照触发，`config.set` 的监听地址变更经持久化 + 自重启生效）；
   - `server.rs` UDP/TCP 监听循环 + 租约巡检（并发上限 128，超限丢弃）；
-- **`src-tauri/src/dns/`** —— App 侧接缝：`service.rs` SMAppService 封装（objc2-service-management，register/unregister/status/openSystemSettings）；`client.rs` 控制 socket 客户端（每请求一连接，纯 JSON，无 shell）；`mod.rs` 编排（enable 轮询就绪、install_mapping 含守护进程内验证、refresh_mapping、remove_mapping 尽力而为）；
+- **`src-tauri/src/dns/`** —— App 侧接缝：`service.rs` SMAppService 封装（objc2-service-management，register/unregister/status/openSystemSettings）；`client.rs` 控制 socket 客户端（每请求一连接，纯 JSON，无 shell）；`mod.rs` 编排注册与状态；`mapping.rs` 的 `MappingLease` 集中演出映射的安装、验证、续租、失败回滚与撤销；
 - **plist**：`src-tauri/launchd/com.xo-xn.pnds-app.dnsd.plist`，经 `bundle.macOS.files` 放进 `Contents/Library/LaunchDaemons/`；二进制经 `externalBin`（`binaries/pnds-dnsd`）进 `Contents/MacOS/`；plist 用 `BundleProgram`（bundle 相对路径）——App 移动不断链。
 
 ## 接线约定
@@ -18,6 +18,15 @@
 - **快照**：映射事实经既有 `pnds:session` 快照承载（`dnsMapping`：off/ready/error，**无 preparing**——安装+验证同步完成）；映射故障永不使 session 失败（与入口同纪律）；
 - **偏好**：`dnsEnabled` 走既有序列化保存队列；上游为 App 内置默认（`dns::DEFAULT_UPSTREAMS`），启用与每次 App 启动推给守护进程，不再有编辑 UI（#174 打磨轮次收掉——控制面 `config.set` 缝隙仍接受 IP 列表）；活跃映射不持久化；
 - **设置区**：`DnsSection` 挂载在「可信 HTTPS」之后；mount 拉一次守护进程真实状态（`dns_service_status` 裸返回——守护进程下线是状态事实不是命令错误）；开关失败自动回弹且不持久化；`requiresApproval` 提供打开系统设置的直达按钮。
+
+## 演出映射的持有与失败清理
+
+- session 在发送第一条 `mapping.set` 前持有 `MappingLease`，不能等验证成功才登记资源。丢失应答只说明结果未确认，不能证明守护进程没有安装映射。
+- 安装或验证失败立即按同一 run id + generation 尝试撤销；撤销未确认时，handle 保留清理责任供关停再次尝试，停止续租，最后由 60 秒租约兜底。`notHolder` 表示旧映射已不属于本演出，清理结束，绝不撤销新持有者。
+- `MappingLease` 用自己的操作锁串行化安装、续租与撤销，不在 socket I/O 期间持有 session 锁。撤销后不再允许此 handle 安装或续租；daemon 在映射清除后仍保留最近持有者记录，拒绝同 run 已退役 generation 的迟到安装（记录不持久化，App 新 run 仍可接管）。
+- `reset_run_state` 只复位 DNS 快照，清理 handle 由 `teardown_children` 取走；尚未 spawn Node/scsynth 的 Stop 同样撤销映射。安装结果发布前检查 generation 与 starting 状态，旧演出的迟到结果只能清理自己的映射，不能修改替换后演出的快照或 handle。
+
+测试通过 `client::call_on` / `request_on` 的既有 socket seam 连接临时 Unix listener，并执行真实 dnsd 控制与查询 implementation；注入 set 应答丢失、verify 失败、首次撤销拒绝和关停期间的迟到结果。断言既检查 App 状态，也检查 daemon 映射和真实 NXDOMAIN。测试不接触系统控制 socket、不监听 53、不提权；App 仅在 dev-dependencies 引用 dnsd，发行 App 与 daemon 的链接关系不变。
 
 ## 发行与验证边界
 

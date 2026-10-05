@@ -83,65 +83,88 @@ export async function openProject(path: string): Promise<void> {
   await runPreflight(path)
 }
 
-/** Runs preflight and, on success, seeds session defaults (§6.1, §7). */
+/** Owns the whole selection flow, including asynchronous settings reads.
+ * Callers do not manage pending highlights or compare paths after awaits. */
 export async function runPreflight(path: string): Promise<void> {
-  useProjectStore.getState().startPreflight()
-  // v1.2.3 (#39/T4): with a live session preflight is select-only — no
-  // reset (that would drop the monitor view and forge a frontend stop;
-  // the backend preflight already spares the running session, issue
-  // #37). The seeding below still runs so the settings card follows the
-  // SELECTION's pending start config (v1.2.3 T4), except when the
-  // running card itself was re-selected — the backend snapshot owns the
-  // live config there (applySnapshot keeps it in sync).
-  const live = isSessionLive(useSessionStore.getState().sessionStatus)
+  const request = useProjectStore.getState().startPreflight(path)
+  const ownsRequest = () => {
+    const project = useProjectStore.getState()
+    return (
+      project.activePreflight === request &&
+      project.recentProjectPaths.includes(path)
+    )
+  }
+  // A live session stays running underneath free project selection (#39).
+  const session = useSessionStore.getState()
+  const live = isSessionLive(session.sessionStatus)
+  const reselectedRunningCard = live && session.sessionProjectPath === path
   if (!live) {
-    useSessionStore.getState().resetSession()
+    session.resetSession()
+    // Keep the last prepared mode until the new request commits. If its
+    // card is removed meanwhile, the previous selection remains usable.
+    useSessionStore.getState().setAudioMode(session.audioMode)
   }
-  const reselectedRunningCard =
-    live && useSessionStore.getState().sessionProjectPath === path
   logger.info('Running project preflight', { path })
-  const result = await commands.preflightProject(path)
-  if (result.status === 'error') {
-    useProjectStore.getState().preflightFailed(path, result.error)
-    logger.warn('Preflight failed', { path, error: result.error })
-    return
-  }
-  // v1.2.0 (issue #16): preflightSucceeded learns the manifest-declared
-  // name and persists it when it is actually new — a reopen of an
-  // already-known name saves nothing.
-  useProjectStore.getState().preflightSucceeded(path, result.data)
-  logger.info('Preflight passed', { project: result.data.name })
 
-  if (reselectedRunningCard) {
-    // The running card's rows must come back as they were before another
-    // card's seeding overwrote them: a fresh snapshot restores the
-    // backend-owned facts (mode / LAN / device), the OSC input restores
-    // from this project's saved preference.
-    const state = await commands.getSessionState()
-    if (state.status === 'ok') {
-      useSessionStore.getState().applySnapshot(state.data)
+  try {
+    let result
+    try {
+      result = await commands.preflightProject(path)
+    } catch (error) {
+      if (!ownsRequest()) return
+      const message = error instanceof Error ? error.message : String(error)
+      useProjectStore.getState().preflightFailed(request, message)
+      logger.warn('Preflight failed', { path, error: message })
+      return
     }
+    if (!ownsRequest()) return
+    if (result.status === 'error') {
+      useProjectStore.getState().preflightFailed(request, result.error)
+      logger.warn('Preflight failed', { path, error: result.error })
+      return
+    }
+
+    // Read before committing: readiness and settings belong to the same
+    // request, so Load cannot use a new manifest with an old OSC target.
     const prefs = await loadPreferences()
+    if (!ownsRequest()) return
+    if (reselectedRunningCard) {
+      // Fetch last so preference I/O cannot delay an already-read snapshot.
+      const state = await commands.getSessionState().catch(error => {
+        if (ownsRequest())
+          logger.warn('Failed to restore running project state', {
+            path,
+            error,
+          })
+        return null
+      })
+      if (!ownsRequest()) return
+      if (!useProjectStore.getState().preflightSucceeded(request, result.data))
+        return
+      if (state?.status === 'ok')
+        useSessionStore.getState().applySnapshot(state.data)
+    } else {
+      const addrs = await commands.listLanAddresses().catch(error => {
+        if (ownsRequest())
+          logger.warn('Failed to list LAN addresses', { path, error })
+        return null
+      })
+      if (!ownsRequest()) return
+      if (!useProjectStore.getState().preflightSucceeded(request, result.data))
+        return
+      useSessionStore.getState().setAudioMode(result.data.audio.defaultMode)
+      if (addrs?.status === 'ok')
+        useSessionStore.getState().setLanAddresses(addrs.data)
+    }
     useSessionStore
       .getState()
       .setOscTargetInput(
         prefs?.oscTargets?.[result.data.id] ?? DEFAULT_OSC_TARGET
       )
-    return
-  }
-
-  useSessionStore.getState().setAudioMode(result.data.audio.defaultMode)
-
-  // §6.6: restore this project's last valid OSC target (app-local pref).
-  const prefs = await loadPreferences()
-  const savedTarget = prefs?.oscTargets?.[result.data.id]
-  useSessionStore
-    .getState()
-    .setOscTargetInput(savedTarget ?? DEFAULT_OSC_TARGET)
-
-  const addrs = await commands.listLanAddresses()
-  if (addrs.status === 'ok') {
-    useSessionStore.getState().setLanAddresses(addrs.data)
+    logger.info('Preflight passed', { project: result.data.name })
+  } finally {
+    // Identity, not path: an A → B → A sequence has three owners.
+    useProjectStore.getState().finishPreflight(request)
   }
 }
 

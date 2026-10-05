@@ -461,6 +461,83 @@ describe('AppShell', () => {
     )
   })
 
+  it('keeps the live monitor when an older mount restore arrives after ready', async () => {
+    let resolveRestore!: (
+      result: Awaited<ReturnType<typeof commands.getSessionState>>
+    ) => void
+    vi.mocked(commands.getSessionState)
+      .mockResolvedValue({ status: 'ok', data: readySnapshot })
+      .mockReturnValueOnce(
+        new Promise(resolve => {
+          resolveRestore = resolve
+        })
+      )
+    render(<AppShell />)
+    act(() => sessionHandler?.({ payload: readySnapshot }))
+    const monitor = screen.getByTitle('Project monitor')
+
+    await act(async () => {
+      resolveRestore({
+        status: 'ok',
+        data: { ...readySnapshot, status: 'idle', health: null },
+      })
+    })
+
+    expect(screen.getByTitle('Project monitor')).toBe(monitor)
+    expect(useSessionStore.getState().sessionStatus).toBe('ready')
+  })
+
+  it('does not update the store from a restore that finishes after unmount', async () => {
+    let resolveRestore!: (
+      result: Awaited<ReturnType<typeof commands.getSessionState>>
+    ) => void
+    vi.mocked(commands.getSessionState).mockReturnValueOnce(
+      new Promise(resolve => {
+        resolveRestore = resolve
+      })
+    )
+    const { unmount } = render(<AppShell />)
+    unmount()
+    await act(async () => {
+      resolveRestore({ status: 'ok', data: readySnapshot })
+    })
+
+    expect(useSessionStore.getState().sessionStatus).toBe('idle')
+  })
+
+  it('polls once a second while starting and stops polling after ready', async () => {
+    vi.useFakeTimers()
+    try {
+      vi.mocked(commands.getSessionState)
+        .mockResolvedValueOnce({
+          status: 'ok',
+          data: { ...readySnapshot, status: 'starting', health: null },
+        })
+        .mockResolvedValue({ status: 'ok', data: readySnapshot })
+      const { unmount } = render(<AppShell />)
+      await act(async () => {
+        await Promise.resolve()
+      })
+      expect(useSessionStore.getState().sessionStatus).toBe('starting')
+      await act(async () => {
+        vi.advanceTimersByTime(999)
+      })
+      expect(commands.getSessionState).toHaveBeenCalledTimes(1)
+      await act(async () => {
+        vi.advanceTimersByTime(1)
+      })
+      expect(commands.getSessionState).toHaveBeenCalledTimes(2)
+      expect(useSessionStore.getState().sessionStatus).toBe('ready')
+      await act(async () => {
+        vi.advanceTimersByTime(3000)
+      })
+      expect(commands.getSessionState).toHaveBeenCalledTimes(2)
+      unmount()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('loads a legacy preferences file (no projectFolders) without error', async () => {
     vi.mocked(commands.loadPreferences).mockResolvedValueOnce({
       status: 'ok',
@@ -639,11 +716,8 @@ describe('AppShell', () => {
         textBaseline: '',
       }) as unknown as CanvasRenderingContext2D
 
-    /** Drives the faked clock one raf frame at a time. Each step is an
-     * AWAITED act: the logo canvas advances its phases through a
-     * queueMicrotask setState, which must land INSIDE act or React 18's
-     * act environment defers the update and the animation never
-     * restarts. */
+    /** Drive rAF one frame at a time, flushing the ready snapshot and
+     * closure callback's React updates before advancing the next frame. */
     const driveFrames = async (frames: number) => {
       for (let i = 0; i < frames; i++) {
         await act(async () => {
@@ -653,6 +727,14 @@ describe('AppShell', () => {
     }
 
     beforeEach(() => {
+      // These scenarios inject their snapshots through sessionHandler.
+      // Pin the short entrance they assert and prevent another test's
+      // command mock from asynchronously restoring a different lifecycle.
+      // Leave it pending: these tests exercise events, not restore failures.
+      useSessionStore.setState({ audioMode: 'none' })
+      vi.mocked(commands.getSessionState).mockReturnValue(
+        new Promise(() => undefined)
+      )
       vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(
         canvasCtxStub()
       )

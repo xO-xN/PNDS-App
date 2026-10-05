@@ -7,11 +7,10 @@ import {
   onProjectionAction,
   onProjectionLocale,
   onProjectionTheme,
-  onSessionSnapshot,
-  onWindowFocus,
   PROJECTION_WINDOW_LABEL,
 } from '@/lib/events'
 import { commands } from '@/lib/tauri-bindings'
+import { attachSessionSnapshotMirror } from '@/lib/session-snapshot-mirror'
 import type { SessionSnapshot } from '@/lib/tauri-bindings'
 import { applyZoomAction, DEFAULT_MONITOR_ZOOM } from '@/store/session-store'
 import {
@@ -613,20 +612,14 @@ export function ProjectionApp({
   const [restoreFailed, setRestoreFailed] = useState(false)
   const revealRef = useRef(false)
 
-  // The session mirror: live broadcast events, the mount restore, and
-  // the occlusion catch-ups (visibility + the Rust regain signal) all
-  // funnel through one re-fetch — same shape as AppShell's. The FIRST
-  // restore also drives the #51 reveal (settled snapshot or failed
-  // restore — either way the window must appear).
+  // Snapshot transport is shared; local state and the first settled
+  // restore's #51 reveal belong to this window. A failed restore must
+  // still reveal the themed standby, including a rejected IPC promise.
   useEffect(() => {
-    const offSession = onSessionSnapshot(setSnapshot)
-    const restore = () => {
-      void commands.getSessionState().then(result => {
-        if (result.status === 'ok') {
-          setSnapshot(result.data)
-        } else {
-          setRestoreFailed(true)
-        }
+    const mirror = attachSessionSnapshotMirror({
+      onSnapshot: setSnapshot,
+      onRestoreSettled: failed => {
+        if (failed) setRestoreFailed(true)
         if (revealRef.current) return
         revealRef.current = true
         commands
@@ -641,19 +634,9 @@ export function ProjectionApp({
           .catch(error => {
             logger.warn('The projection window reveal failed', { error })
           })
-      })
-    }
-    restore()
-    const handleVisibility = () => {
-      if (!document.hidden) restore()
-    }
-    document.addEventListener('visibilitychange', handleVisibility)
-    const offFocus = onWindowFocus(restore)
-    return () => {
-      offSession()
-      document.removeEventListener('visibilitychange', handleVisibility)
-      offFocus()
-    }
+      },
+    })
+    return () => mirror.dispose()
   }, [])
 
   // Live-follow the main window's language and Appearance theme —

@@ -133,7 +133,8 @@ export async function openProjectionWindow(): Promise<void> {
     // inactiveSchedulingPolicy=None: the venue screen renders full-rate
     // unfocused. macOS 14+ only — older systems keep the system default
     // (the option is silently dropped there, no regression). Scoped to
-    // the projection window; the main/help windows keep the default.
+    // the projection window; main has the same policy in tauri.conf.json
+    // (#34), while the help window keeps the default.
     backgroundThrottling: 'disabled' as BackgroundThrottlingPolicy,
   })
   projectionWindow.once('tauri://error', error => {

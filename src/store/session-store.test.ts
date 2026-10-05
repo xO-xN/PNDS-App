@@ -164,6 +164,7 @@ describe('session-store', () => {
       snapshot({
         status: 'ready',
         projectName: 'Inarticulate III',
+        audioMode: 'none',
         health: {
           status: 'ready',
           projectId: 'inarticulate-iii',
@@ -175,8 +176,102 @@ describe('session-store', () => {
     )
     const state = useSessionStore.getState()
     expect(state.sessionStatus).toBe('ready')
+    expect(state.audioMode).toBe('none')
     expect(state.health?.audio?.status).toBe('disabled')
     expect(state.projectName).toBe('Inarticulate III')
+  })
+
+  it('keeps pending audio/LAN/OSC settings across ordinary ready snapshots of the same run', () => {
+    useProjectStore.setState({
+      currentProject: { path: '/p', manifest: { name: 'P' } as Manifest },
+    })
+    const ready = snapshot({
+      status: 'ready',
+      projectPath: '/p',
+      audioMode: 'internal',
+      lanIp: '192.168.1.10',
+    })
+    useSessionStore.getState().applySnapshot(ready)
+    useSessionStore.setState({
+      pendingChanges: true,
+      audioMode: 'external',
+      lanIp: '192.168.1.20',
+      oscTargetInput: '127.0.0.1:4444',
+    })
+    // Focus restore, projection and entry updates all carry the same session snapshot.
+    useSessionStore.getState().applySnapshot({
+      ...ready,
+      volume: 42,
+      projectionStarted: true,
+      httpsEntry: {
+        status: 'error',
+        url: 'https://show.example.org:8443/',
+        error: 'probe failed',
+      },
+    })
+    useSessionStore
+      .getState()
+      .applySnapshot({ ...ready, volume: 42, projectionStarted: true })
+    expect(useSessionStore.getState()).toMatchObject({
+      pendingChanges: true,
+      audioMode: 'external',
+      lanIp: '192.168.1.20',
+      oscTargetInput: '127.0.0.1:4444',
+      sessionStatus: 'ready',
+      sessionProjectPath: '/p',
+      sessionLanIp: '192.168.1.10',
+      volume: 42,
+      projectionStarted: true,
+    })
+  })
+
+  it.each(['starting', 'stopping', 'idle', 'error'] as const)(
+    'clears pending settings on a real lifecycle transition to %s',
+    status => {
+      useProjectStore.setState({
+        currentProject: { path: '/p', manifest: { name: 'P' } as Manifest },
+      })
+      useSessionStore.setState({
+        sessionStatus: 'ready',
+        sessionProjectPath: '/p',
+        audioMode: 'external',
+        pendingChanges: true,
+      })
+      useSessionStore.getState().applySnapshot(
+        snapshot({
+          status,
+          projectPath: status === 'idle' ? null : '/p',
+          audioMode: status === 'idle' ? null : 'internal',
+        })
+      )
+      expect(useSessionStore.getState().pendingChanges).toBe(false)
+      if (status !== 'idle')
+        expect(useSessionStore.getState().audioMode).toBe('internal')
+    }
+  )
+
+  it('adopts the committed mode when a ready snapshot belongs to a different project', () => {
+    useProjectStore.setState({
+      currentProject: { path: '/new', manifest: { name: 'New' } as Manifest },
+    })
+    useSessionStore.setState({
+      sessionStatus: 'ready',
+      sessionProjectPath: '/old',
+      audioMode: 'external',
+      pendingChanges: true,
+    })
+    useSessionStore.getState().applySnapshot(
+      snapshot({
+        status: 'ready',
+        projectPath: '/new',
+        audioMode: 'internal',
+      })
+    )
+    expect(useSessionStore.getState()).toMatchObject({
+      pendingChanges: false,
+      audioMode: 'internal',
+      sessionProjectPath: '/new',
+    })
   })
 
   it('keeps the selected project across an idle snapshot for restart flows', () => {

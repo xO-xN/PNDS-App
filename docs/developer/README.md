@@ -16,6 +16,8 @@ App 开发的规则层：既定模式与系统做法，按问题检索——查�
 - **App 的心智模型、分层与系统总览** → [architecture-guide.md](./architecture-guide.md)
 - **Rust 侧模块组织与约定** → [rust-architecture.md](./rust-architecture.md)
 - **useState / Zustand / 持久化怎么选，selector 语法与 getState** → [state-management.md](./state-management.md)
+- **两窗口快照恢复、请求交错与卸载清理** → [state-management.md](./state-management.md#session-snapshot-mirrors)
+- **工程预检归属、迟到结果与配置准备** → [state-management.md](./state-management.md#project-preflight-ownership)
 - **错误如何传播、用户反馈与重试模式** → [error-handling.md](./error-handling.md)
 
 ## 命令与系统桥
@@ -28,13 +30,16 @@ App 开发的规则层：既定模式与系统做法，按问题检索——查�
 ## UI 与文案
 
 - **CSS 架构、颜色 token、shadcn/ui 用法** → [ui-patterns.md](./ui-patterns.md)
+- **封面标题拟合的测量、揭示与清理** → [ui-patterns.md](./ui-patterns.md#cover-title-fitting)
 - **翻译系统、语言切换、RTL 支持** → [i18n-patterns.md](./i18n-patterns.md)
 - **toast 与原生通知** → [notifications.md](./notifications.md)
 
 ## 数据与外部交互
 
 - **文件存储模式与原子写入** → [data-persistence.md](./data-persistence.md)
+- **偏好保存结果、失败日志与队列续行** → [data-persistence.md](./data-persistence.md#save-outcomes)
 - **可信 HTTPS 证书材料：校验管线、受保护存储与设置区接线（#139）** → [https-material.md](./https-material.md)
+- **HTTPS 准备操作时序、异常收尾与域名保存后的摘要重验** → [https-material.md](./https-material.md#前端准备流程)
 - **可信 HTTPS 入口网关：hyper/rustls 转发、生命周期接线与探测（#140）** → [https-gateway.md](./https-gateway.md)
 - **HTTP 请求与外部 API 调用** → [external-apis.md](./external-apis.md)
 - **帮助语料装载、运行时渲染与离线搜索** → [help-center.md](./help-center.md)

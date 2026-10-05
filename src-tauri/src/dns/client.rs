@@ -72,7 +72,18 @@ pub fn call(
     payload: serde_json::Value,
     timeout: Duration,
 ) -> Result<serde_json::Value, String> {
-    let response = request(op, payload, timeout)?;
+    call_on(&control_socket_path(), op, payload, timeout)
+}
+
+/// The same control exchange on a mapping's socket, including daemon
+/// refusals. Tests use a temporary socket rather than the live service.
+pub fn call_on(
+    socket: &std::path::Path,
+    op: &str,
+    payload: serde_json::Value,
+    timeout: Duration,
+) -> Result<serde_json::Value, String> {
+    let response = request_on(socket, op, payload, timeout)?;
     if response.get("ok").and_then(serde_json::Value::as_bool) == Some(true) {
         Ok(response
             .get("data")

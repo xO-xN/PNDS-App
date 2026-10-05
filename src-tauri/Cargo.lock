@@ -3815,10 +3815,11 @@ dependencies = [
 
 [[package]]
 name = "pnds-app"
-version = "1.5.1"
+version = "1.5.2"
 dependencies = [
  "base64 0.22.1",
  "cpal",
+ "hickory-proto",
  "http-body-util",
  "hyper",
  "hyper-util",
@@ -3828,6 +3829,7 @@ dependencies = [
  "objc2-app-kit",
  "objc2-foundation",
  "objc2-service-management",
+ "pnds-dnsd",
  "rcgen",
  "reqwest",
  "ring",

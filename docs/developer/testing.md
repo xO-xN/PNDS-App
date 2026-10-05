@@ -151,6 +151,17 @@ jsdom has no layout and no hit-testing, so pointer dragging cannot be simulated 
 
 The pill engine (`src/hooks/use-indicator-pill.ts`, v1.3.2 issue #78) is scheduling-only: its tests inject spy configs, fire `resize` on `window`, and drive a stubbed `document.fonts.ready`. The shared geometry writes read `offsetLeft`/`offsetTop`/`offsetWidth`/`offsetHeight`, which the test DOM leaves at 0 — pin them with `mockOffsets` (`src/test/test-utils.tsx`), which covers both axis pairs. End-to-end pill behavior (slide, snap, hide) stays covered by the Sidebar tests asserting the `folder-pill` / `card-selection-pill` testids.
 
+### Testing Development Watch Isolation
+
+`src/lib/dev-watch.test.mjs` loads the repository's Vite watch configuration and
+replays the captured `docs/prototypes/pnds-ui-prototype.html` edit in a temporary
+fixture. It uses Vite's actual watcher and HTML HMR path in middleware mode,
+with HTTP/WebSocket listeners disabled and dependency discovery disabled. It
+asserts that documentation is not watched and produces no extra full-reload
+notification. Edits to all three real app entries provide positive controls;
+disabling all hot updates cannot satisfy the test. The fixture contains no real
+project, Node score server or audio process.
+
 ## Rust Testing
 
 ### Unit Tests

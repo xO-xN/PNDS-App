@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { logger } from '@/lib/logger'
 import { isNodeConfigComplete, ROOM_GROUPS } from './preferences'
 import { commands, type AppPreferences } from '@/lib/tauri-bindings'
 import {
@@ -32,7 +33,10 @@ function mockDisk(initial: Disk) {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.spyOn(logger, 'warn').mockImplementation(() => undefined)
 })
+
+afterEach(() => vi.restoreAllMocks())
 
 describe('updatePreferences — serialized save queue', () => {
   it('overlapping field patches never clobber each other', async () => {
@@ -42,7 +46,7 @@ describe('updatePreferences — serialized save queue', () => {
     // two load-modify-write cycles would race and one field would win.
     const first = updatePreferences({ sampleRate: 96000 })
     const second = updatePreferences({ language: 'zh-CN' })
-    await Promise.all([first, second])
+    await expect(Promise.all([first, second])).resolves.toEqual([true, true])
 
     expect(disk.read().sampleRate).toBe(96000)
     expect(disk.read().language).toBe('zh-CN')
@@ -54,7 +58,9 @@ describe('updatePreferences — serialized save queue', () => {
       oscTargets: { 'a-score': '127.0.0.1:3333' },
     })
 
-    await updateOscTarget('b-score', '192.168.1.20:57120')
+    await expect(
+      updateOscTarget('b-score', '192.168.1.20:57120')
+    ).resolves.toBe(true)
 
     expect(disk.read().oscTargets).toEqual({
       'a-score': '127.0.0.1:3333',
@@ -72,34 +78,80 @@ describe('updatePreferences — serialized save queue', () => {
     expect(disk.read().colorTheme).toBe('sand')
     expect(disk.read().theme).toBe('system')
   })
+})
 
-  it('a failed save hands the queue to the next save instead of stalling it', async () => {
-    mockDisk({ theme: 'system' })
-    vi.mocked(commands.savePreferences)
-      .mockRejectedValueOnce(new Error('disk full'))
-      .mockResolvedValue({ status: 'ok', data: null })
+describe.each([
+  { name: 'field patch', save: () => updatePreferences({ language: 'zh-CN' }) },
+  {
+    name: 'OSC target',
+    save: () => updateOscTarget('b-score', '192.168.1.20:57120'),
+  },
+])('$name save outcome', ({ save }) => {
+  it.each(['returned error', 'rejected invoke'])(
+    'reports %s as false, logs once without preference values, and continues the queue',
+    async failure => {
+      const disk = mockDisk({
+        theme: 'system',
+        language: 'en',
+        hubToken: 'private-test-token',
+        oscTargets: { 'a-score': '127.0.0.1:3333' },
+      })
+      if (failure === 'returned error') {
+        vi.mocked(commands.savePreferences).mockResolvedValueOnce({
+          status: 'error',
+          error: 'disk full',
+        })
+      } else {
+        vi.mocked(commands.savePreferences).mockRejectedValueOnce(
+          new Error('disk full')
+        )
+      }
+      // Both issued before completion: the second must load the old,
+      // unmodified disk, not carry the failed patch into its successful save.
+      const failed = save()
+      const next = updatePreferences({ sampleRate: 44100 })
+      await expect(Promise.all([failed, next])).resolves.toEqual([false, true])
 
-    // The first save rejects; the second must still run to completion.
-    await expect(updatePreferences({ language: 'en' })).rejects.toThrow(
-      'disk full'
-    )
-    await updatePreferences({ sampleRate: 44100 })
+      expect(disk.read()).toEqual({
+        theme: 'system',
+        language: 'en',
+        hubToken: 'private-test-token',
+        oscTargets: { 'a-score': '127.0.0.1:3333' },
+        sampleRate: 44100,
+      })
+      expect(commands.savePreferences).toHaveBeenCalledTimes(2)
+      expect(logger.warn).toHaveBeenCalledExactlyOnceWith(
+        'Failed to save preferences',
+        { error: 'disk full' }
+      )
+    }
+  )
 
-    expect(commands.savePreferences).toHaveBeenCalledTimes(2)
-    const lastCall = vi.mocked(commands.savePreferences).mock.calls[1]
-    expect(lastCall?.[0]).toMatchObject({ sampleRate: 44100 })
-  })
-
-  it('writes nothing when the preferences file cannot be loaded', async () => {
-    vi.mocked(commands.loadPreferences).mockResolvedValue({
-      status: 'error',
-      error: 'preferences unreadable',
-    })
-
-    await updatePreferences({ language: 'en' })
-
-    expect(commands.savePreferences).not.toHaveBeenCalled()
-  })
+  it.each(['returned error', 'rejected invoke'])(
+    'does not write or claim success after a load %s, and permits a later save',
+    async failure => {
+      const disk = mockDisk({ theme: 'system', language: 'en', oscTargets: {} })
+      if (failure === 'returned error') {
+        vi.mocked(commands.loadPreferences).mockResolvedValueOnce({
+          status: 'error',
+          error: 'preferences unreadable',
+        })
+      } else {
+        vi.mocked(commands.loadPreferences).mockRejectedValueOnce(
+          new Error('IPC unavailable')
+        )
+      }
+      await expect(save()).resolves.toBe(false)
+      expect(commands.savePreferences).not.toHaveBeenCalled()
+      // loadPreferences owns this warning; saving must not log a duplicate.
+      expect(logger.warn).toHaveBeenCalledTimes(1)
+      expect(vi.mocked(logger.warn).mock.calls[0]?.[0]).toBe(
+        'Failed to load preferences'
+      )
+      await expect(updatePreferences({ sampleRate: 96000 })).resolves.toBe(true)
+      expect(disk.read()).toMatchObject({ language: 'en', sampleRate: 96000 })
+    }
+  )
 })
 
 /** #51: the load wrapper's contract is "null on ANY failure" — a

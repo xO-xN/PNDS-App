@@ -12,6 +12,11 @@ export interface CurrentProject {
 
 export type PreflightStatus = 'idle' | 'checking' | 'ready' | 'error'
 
+/** Identity is per request, even when successive checks use the same path. */
+export interface PreflightRequest {
+  readonly path: string
+}
+
 /**
  * v1.1.2 T7 (spec issue #11): reserved id of the default Utilities folder
  * seeded from the bundled example projects. Its membership can be edited,
@@ -79,6 +84,8 @@ interface ProjectState {
   projectFolders: ProjectFolder[]
   /** Path whose preflight is in flight (drives the entry highlight). */
   pendingPreflightPath: string | null
+  /** Owns selection and settings seeding until the whole flow settles. */
+  activePreflight: PreflightRequest | null
   /**
    * v1.2.3 (#39): the last path whose preflight FAILED. The selection
    * (white pill) stays on the failed card — the error shows on the card —
@@ -141,7 +148,6 @@ interface ProjectState {
   removeRecentProject: (path: string) => void
   /** Empties the history; folder memberships go with it (folders stay). */
   clearRecentProjects: () => void
-  setPendingPreflight: (path: string | null) => void
   setConfirmCloseProjectOpen: (open: boolean) => void
   /** Drills the sidebar into a folder, or back to the top level (null). */
   setActiveFolderId: (id: string | null) => void
@@ -244,10 +250,27 @@ interface ProjectState {
    * new order). An id set that is not the current folder set is ignored.
    */
   applyFolderReorder: (orderedFolderIds: string[]) => void
-  startPreflight: () => void
-  preflightSucceeded: (path: string, manifest: Manifest) => void
-  preflightFailed: (path: string, message: string) => void
+  startPreflight: (path: string) => PreflightRequest
+  preflightSucceeded: (request: PreflightRequest, manifest: Manifest) => boolean
+  preflightFailed: (request: PreflightRequest, message: string) => void
+  finishPreflight: (request: PreflightRequest) => void
   clearProject: () => void
+}
+
+/** Cancel pending work without discarding a previously prepared selection. */
+function cancelledPreflightState(state: ProjectState) {
+  return {
+    activePreflight: null,
+    pendingPreflightPath: null,
+    ...(state.preflightStatus === 'checking'
+      ? {
+          preflightStatus: state.currentProject
+            ? ('ready' as const)
+            : ('idle' as const),
+          preflightError: null,
+        }
+      : {}),
+  }
 }
 
 /** Drops `path` from every folder's membership list. Empty folders stay. */
@@ -436,6 +459,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
   recentProjectPaths: [],
   projectFolders: [],
   pendingPreflightPath: null,
+  activePreflight: null,
   failedPreflightPath: null,
   preflightErrors: {},
   confirmCloseProjectOpen: false,
@@ -485,6 +509,9 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
     // root copies are exempt: they are not this launch's tool paths).
     if (before.utilityPaths.includes(path)) return
     set(state => ({
+      ...(state.activePreflight?.path === path
+        ? cancelledPreflightState(state)
+        : {}),
       recentProjectPaths: state.recentProjectPaths.filter(p => p !== path),
       // Removing the app-side index also drops folder membership — the
       // on-disk project is untouched (spec issue #4: 删除语义).
@@ -520,6 +547,10 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
   clearRecentProjects: () => {
     const before = get()
     set(state => ({
+      ...(state.activePreflight &&
+      !state.utilityPaths.includes(state.activePreflight.path)
+        ? cancelledPreflightState(state)
+        : {}),
       // User data clears; the bundled utility tools are app content and
       // stay listed (and members of Utilities) through a clear-all.
       recentProjectPaths: state.recentProjectPaths.filter(path =>
@@ -544,12 +575,15 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
     persistIndexIfChanged(before, get())
   },
 
-  setPendingPreflight: path => set({ pendingPreflightPath: path }),
-
   setConfirmCloseProjectOpen: confirmCloseProjectOpen =>
     set({ confirmCloseProjectOpen }),
 
-  setActiveFolderId: id => set({ activeFolderId: id }),
+  setActiveFolderId: id =>
+    set(state =>
+      state.activeFolderId === id
+        ? {}
+        : { activeFolderId: id, ...cancelledPreflightState(state) }
+    ),
 
   setProjectDisplayNames: names => set({ projectDisplayNames: names }),
 
@@ -610,6 +644,10 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
             )
           )
     set({
+      ...(before.activePreflight &&
+      !nextPaths.includes(before.activePreflight.path)
+        ? cancelledPreflightState(before)
+        : {}),
       recentProjectPaths: nextPaths,
       projectFolders: utilities ? [...incoming, utilities] : incoming,
       // The open project closes with its index entry — the same semantics
@@ -815,20 +853,26 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
     persistIndexIfChanged(before, get())
   },
 
-  startPreflight: () =>
+  startPreflight: path => {
+    const request = { path }
     set({
+      activePreflight: request,
+      pendingPreflightPath: path,
       preflightStatus: 'checking',
       preflightError: null,
       failedPreflightPath: null,
-    }),
+    })
+    return request
+  },
 
-  preflightSucceeded: (path, manifest) => {
+  preflightSucceeded: (request, manifest) => {
     const before = get()
-    // v1.4.0 (user report after #63): a check that resolves after its
-    // card was removed mid-flight must not resurrect the project as a
-    // de-indexed "current" selection — the removal already settled the
-    // state.
-    if (!before.recentProjectPaths.includes(path)) return
+    const { path } = request
+    if (
+      before.activePreflight !== request ||
+      !before.recentProjectPaths.includes(path)
+    )
+      return false
     // v1.2.3 (#39): a pass clears the card's error state.
     const { [path]: _, ...clearedPreflightErrors } = before.preflightErrors
     set(state => ({
@@ -848,13 +892,17 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       ),
     }))
     persistNameMapIfChanged(before, get(), 'manifestProjectNames')
+    return true
   },
 
-  preflightFailed: (path, message) =>
+  preflightFailed: (request, message) =>
     set(state => {
-      // v1.4.0 (user report after #63): same mid-flight guard — a removed
-      // card takes no failed-selection state back.
-      if (!state.recentProjectPaths.includes(path)) return {}
+      const { path } = request
+      if (
+        state.activePreflight !== request ||
+        !state.recentProjectPaths.includes(path)
+      )
+        return {}
       return {
         preflightStatus: 'error',
         preflightError: message,
@@ -866,8 +914,15 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       }
     }),
 
+  finishPreflight: request =>
+    set(state =>
+      state.activePreflight === request ? cancelledPreflightState(state) : {}
+    ),
+
   clearProject: () =>
     set({
+      activePreflight: null,
+      pendingPreflightPath: null,
       currentProject: null,
       preflightStatus: 'idle',
       preflightError: null,

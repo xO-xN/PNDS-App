@@ -628,10 +628,9 @@ struct SessionInner {
     https_entry: HttpsEntryState,
     /// #174: the DNS mapping state — see `SessionSnapshot`.
     dns_mapping: DnsMappingState,
-    /// #174: the generation that installed the current mapping — the
-    /// authority `teardown_children` uses to revoke it (`None` = no
-    /// mapping installed this session).
-    dns_mapping_generation: Option<u64>,
+    /// Owns even an uncertain or still-installing mapping. Report reset
+    /// never discards this handle; only teardown takes and revokes it.
+    dns_mapping_lease: Option<Arc<crate::dns::MappingLease>>,
     /// Incremented on every start/stop so stale supervisor threads exit.
     generation: u64,
     /// §12: per-session log file.
@@ -671,7 +670,7 @@ impl Default for SessionInner {
             gateway: None,
             https_entry: HttpsEntryState::default(),
             dns_mapping: DnsMappingState::default(),
-            dns_mapping_generation: None,
+            dns_mapping_lease: None,
             generation: 0,
             logger: None,
             logger_generation: None,
@@ -733,7 +732,6 @@ impl SessionInner {
         // revoke itself happens in `teardown_children` — this only
         // clears the snapshot's view for whatever comes next).
         self.dns_mapping = DnsMappingState::default();
-        self.dns_mapping_generation = None;
     }
 }
 
@@ -1129,41 +1127,18 @@ impl SessionManager {
             // independent fact: the session keeps running and phones
             // fall back to manual DNS / the router.
             if let Some(mapping_domain) = &dns_mapping_domain {
-                match crate::dns::install_mapping(mapping_domain, &request.lan_ip, generation) {
-                    Ok(()) => {
-                        Self::write_session_log_line(
-                            &self.inner,
-                            Some(generation),
-                            &format!(
-                                "DNS mapping installed: {} → {} (lease supervisor running)",
-                                live.domain, request.lan_ip
-                            ),
-                        );
-                        let mut inner = self.lock();
-                        inner.dns_mapping = DnsMappingState {
-                            status: DnsMappingStatus::Ready,
-                            domain: Some(mapping_domain.clone()),
-                            ip: Some(request.lan_ip.clone()),
-                            error: None,
-                        };
-                        inner.dns_mapping_generation = Some(generation);
-                        self.spawn_dns_mapping_supervisor(app.clone(), generation);
-                    }
-                    Err(e) => {
-                        log::warn!("DNS mapping install failed: {e}");
-                        Self::write_session_log_line(
-                            &self.inner,
-                            Some(generation),
-                            &format!("DNS mapping failed: {e}"),
-                        );
-                        let mut inner = self.lock();
-                        inner.dns_mapping = DnsMappingState {
-                            status: DnsMappingStatus::Error,
-                            domain: Some(mapping_domain.clone()),
-                            ip: Some(request.lan_ip.clone()),
-                            error: Some(e),
-                        };
-                    }
+                let lease = Arc::new(crate::dns::MappingLease::new(generation));
+                if !self.install_dns_mapping(
+                    app,
+                    generation,
+                    mapping_domain,
+                    &request.lan_ip,
+                    lease,
+                ) {
+                    // Stop/replace owns the current state. Finish this
+                    // retired start without spawning or returning a late
+                    // command error that React could apply to the new run.
+                    return Ok(());
                 }
             }
             self.emit(app);
@@ -1493,13 +1468,70 @@ impl SessionManager {
         Self::emit_static(app, inner);
     }
 
+    /// Own the mapping BEFORE sending mapping.set. Stop can retire this
+    /// handle during I/O; late results then revoke only their own holder
+    /// and cannot publish into a replacement session.
+    fn install_dns_mapping<R: tauri::Runtime>(
+        &self,
+        app: &AppHandle<R>,
+        generation: u64,
+        domain: &str,
+        ip: &str,
+        lease: Arc<crate::dns::MappingLease>,
+    ) -> bool {
+        let previous = {
+            let mut inner = self.lock();
+            if inner.generation != generation || inner.status != SessionStatus::Starting {
+                return false;
+            }
+            inner.dns_mapping_lease.replace(Arc::clone(&lease))
+        };
+        if let Some(previous) = previous {
+            previous.revoke();
+        }
+        let result = lease.install(domain, ip);
+        let ready = result.is_ok();
+        let message = match &result {
+            Ok(()) => format!("DNS mapping installed: {domain} → {ip} (lease supervisor running)"),
+            Err(error) => format!("DNS mapping failed: {error}"),
+        };
+        {
+            let mut inner = self.lock();
+            if inner.generation != generation || inner.status != SessionStatus::Starting {
+                drop(inner);
+                lease.revoke();
+                return false;
+            }
+            inner.dns_mapping = DnsMappingState {
+                status: if ready {
+                    DnsMappingStatus::Ready
+                } else {
+                    DnsMappingStatus::Error
+                },
+                domain: Some(domain.to_string()),
+                ip: Some(ip.to_string()),
+                error: result.err(),
+            };
+        }
+        Self::write_session_log_line(&self.inner, Some(generation), &message);
+        if ready {
+            self.spawn_dns_mapping_supervisor(app.clone(), generation, lease);
+        }
+        true
+    }
+
     /// #174: the mapping lease supervisor — one thread per generation,
     /// renewing the daemon lease well inside its bound (20 s against a
     /// 60 s lease). Losing the mapping (daemon restarted with state
     /// gone, another run taking over) is logged and published on the
     /// session's `dns_mapping` state — like every mapping fault, it
     /// never fails the session itself.
-    fn spawn_dns_mapping_supervisor<R: tauri::Runtime>(&self, app: AppHandle<R>, generation: u64) {
+    fn spawn_dns_mapping_supervisor<R: tauri::Runtime>(
+        &self,
+        app: AppHandle<R>,
+        generation: u64,
+        lease: Arc<crate::dns::MappingLease>,
+    ) {
         const LEASE_RENEWAL_INTERVAL: Duration = Duration::from_secs(20);
         let inner = Arc::clone(&self.inner);
         std::thread::Builder::new()
@@ -1515,7 +1547,7 @@ impl SessionManager {
                         return; // already failed/revoked — nothing to renew
                     }
                 }
-                if let Err(e) = crate::dns::refresh_mapping(generation) {
+                if let Err(e) = lease.refresh() {
                     log::warn!("DNS lease renewal failed (generation {generation}): {e}");
                     Self::mark_dns_mapping_failure(&app, &inner, generation, e);
                     return;
@@ -2012,7 +2044,7 @@ impl SessionManager {
             sc_port,
             master_ready,
             gateway,
-            dns_mapping_generation,
+            dns_mapping_lease,
             log_generation,
         ) = {
             let mut guard = inner.lock().unwrap_or_else(|e| e.into_inner());
@@ -2027,7 +2059,7 @@ impl SessionManager {
                 guard.gateway.take(),
                 // #174: the generation that holds the daemon's DNS
                 // mapping — only that holder may revoke it.
-                guard.dns_mapping_generation.take(),
+                guard.dns_mapping_lease.take(),
                 // Issue #93: teardown may only touch the log of the session
                 // it is tearing down. A start() that interleaves during the
                 // kill windows installs the NEXT session's log — every write
@@ -2050,10 +2082,10 @@ impl SessionManager {
         // daemon clears it, the domain turns NXDOMAIN (never the public
         // address), and ordinary forwarding continues. Best-effort: the
         // lease bounds any residue if the daemon is gone.
-        if let Some(mapping_generation) = dns_mapping_generation {
+        if let Some(lease) = dns_mapping_lease {
             Self::write_session_log_line(inner, log_generation, "Revoking the DNS mapping");
-            crate::dns::remove_mapping(mapping_generation);
-            Self::write_session_log_line(inner, log_generation, "DNS mapping revoked");
+            lease.revoke();
+            Self::write_session_log_line(inner, log_generation, "DNS mapping revocation attempted");
         }
 
         if let Some(mut node) = node_child {
@@ -2157,19 +2189,23 @@ impl SessionManager {
     /// NOTE: never call `emit` while holding the inner lock — `emit` takes a
     /// snapshot, which locks again (std Mutex is not reentrant → deadlock).
     pub fn stop<R: tauri::Runtime>(&self, app: &AppHandle<R>) -> Result<(), String> {
-        let (generation, had_children) = {
+        let (generation, had_resources) = {
             let guard = self.lock();
             (
                 guard.generation + 1,
-                guard.child.is_some() || guard.scsynth.is_some(),
+                guard.child.is_some()
+                    || guard.scsynth.is_some()
+                    || guard.gateway.is_some()
+                    || guard.dns_mapping_lease.is_some(),
             )
         };
-        // The opening move: `any → Stopping` while child handles are still
-        // held (clearing mode/ip so the frontend's ??-guard preserves the
-        // user's pending selection across the stop barrier), or the direct
+        // The opening move: `any → Stopping` while runtime resources are
+        // held (including an entry/mapping acquired before children spawn).
+        // Clearing mode/ip lets the frontend's ??-guard preserve the
+        // user's pending selection across the stop barrier. The direct
         // `any → Idle` of an idempotent stop. Either way a new generation
         // opens, retiring every supervisor of the old one.
-        if had_children {
+        if had_resources {
             Self::transition(
                 app,
                 &self.inner,
@@ -2195,7 +2231,7 @@ impl SessionManager {
         // generation has moved and this is rejected — a dying stop must
         // never overwrite the retry that replaced it (the same §12 rule
         // `fail_generation` upholds for dying supervisors).
-        if had_children {
+        if had_resources {
             Self::transition(app, &self.inner, generation, SessionStatus::Idle, |inner| {
                 inner.reset_run_state();
             });
@@ -4137,38 +4173,181 @@ mod tests {
     }
 
     #[test]
-    fn stop_clears_the_dns_mapping_snapshot_and_holders_record() {
-        let app = tauri::test::mock_app().handle().clone();
-        crate::events::events_builder().mount_events(&app);
+    fn stop_before_children_spawn_revokes_the_real_dns_mapping() {
+        use crate::dns::test_support::{ControlFixture, Reply};
+        let fixture = ControlFixture::new(|_| Reply::Normal);
+        let (app, snapshots) = app_with_snapshot_recorder();
         let manager = SessionManager::default();
+        let lease = Arc::new(crate::dns::MappingLease::new_on(1, fixture.socket.clone()));
+        lease.install("show.example.org", "192.168.11.31").unwrap();
         {
             let mut guard = manager.lock();
-            guard.generation += 1;
-            guard.status = SessionStatus::Ready;
+            guard.generation = 1;
+            guard.status = SessionStatus::Starting;
             guard.dns_mapping = DnsMappingState {
                 status: DnsMappingStatus::Ready,
                 domain: Some("show.example.org".to_string()),
                 ip: Some("192.168.11.31".to_string()),
                 error: None,
             };
-            guard.dns_mapping_generation = Some(guard.generation);
+            guard.dns_mapping_lease = Some(lease);
         }
-        // Stop revokes daemon-side (the daemon is absent here — the lease
-        // bounds any residue) and clears the session's reported state.
         manager.stop(&app).unwrap();
-        let snapshot = manager.snapshot();
-        assert_eq!(snapshot.status, SessionStatus::Idle);
-        assert_eq!(snapshot.dns_mapping.status, DnsMappingStatus::Off);
-        let guard = manager.lock();
-        assert!(guard.dns_mapping_generation.is_none());
+        assert_eq!(manager.snapshot().status, SessionStatus::Idle);
+        assert_eq!(manager.snapshot().dns_mapping.status, DnsMappingStatus::Off);
+        assert!(manager.lock().dns_mapping_lease.is_none());
+        assert_eq!(
+            snapshots
+                .lock()
+                .unwrap()
+                .iter()
+                .map(|snapshot| snapshot.status)
+                .collect::<Vec<_>>(),
+            [SessionStatus::Stopping, SessionStatus::Idle]
+        );
+        assert_eq!(
+            fixture.operations(),
+            ["mapping.set", "verify", "mapping.clear"]
+        );
+        assert_eq!(
+            fixture.response_code("show.example.org"),
+            hickory_proto::op::ResponseCode::NXDomain
+        );
     }
 
     #[test]
-    fn remove_mapping_without_a_daemon_is_quiet() {
-        // The daemon is absent in tests: revocation must be a quiet
-        // no-op (the lease bounds any residue) — never a panic, never a
-        // teardown failure.
-        crate::dns::remove_mapping(7);
+    fn failed_dns_install_preserves_the_session_and_stop_retries_failed_rollback() {
+        use crate::dns::test_support::{ControlFixture, Reply};
+        let mut clears = 0;
+        let fixture = ControlFixture::new(move |request| {
+            if request["op"] == "verify" {
+                Reply::Drop
+            } else if request["op"] == "mapping.clear" {
+                clears += 1;
+                if clears == 1 {
+                    Reply::Respond(serde_json::json!({ "ok": false, "code": "injectedRefusal" }))
+                } else {
+                    Reply::Normal
+                }
+            } else {
+                Reply::Normal
+            }
+        });
+        let (app, _) = app_with_snapshot_recorder();
+        let manager = SessionManager::default();
+        {
+            let mut inner = manager.lock();
+            inner.generation = 1;
+            inner.status = SessionStatus::Starting;
+        }
+        let lease = Arc::new(crate::dns::MappingLease::new_on(1, fixture.socket.clone()));
+        assert!(manager.install_dns_mapping(&app, 1, "show.example.org", "192.168.11.31", lease));
+        let snapshot = manager.snapshot();
+        assert_eq!(snapshot.status, SessionStatus::Starting);
+        assert_eq!(snapshot.error, None);
+        assert_eq!(snapshot.dns_mapping.status, DnsMappingStatus::Error);
+        assert!(fixture.engine.mapping_snapshot().is_some());
+        manager.stop(&app).unwrap();
+        assert_eq!(
+            fixture.operations(),
+            ["mapping.set", "verify", "mapping.clear", "mapping.clear"]
+        );
+        assert_eq!(
+            fixture.response_code("show.example.org"),
+            hickory_proto::op::ResponseCode::NXDomain
+        );
+    }
+
+    #[test]
+    fn stopping_during_dns_install_revokes_it_and_rejects_late_publication() {
+        assert_late_dns_install_is_isolated(false);
+    }
+
+    #[test]
+    fn stopping_during_failed_dns_install_rejects_the_late_error() {
+        assert_late_dns_install_is_isolated(true);
+    }
+
+    fn assert_late_dns_install_is_isolated(fail_verification: bool) {
+        use crate::dns::test_support::{ControlFixture, Reply};
+        let (arrived_tx, arrived_rx) = std::sync::mpsc::channel();
+        let (resume_tx, resume_rx) = std::sync::mpsc::channel();
+        let fixture = ControlFixture::new(move |request| {
+            if request["op"] == "verify" {
+                arrived_tx.send(()).unwrap();
+                resume_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+                if fail_verification {
+                    return Reply::Drop;
+                }
+            }
+            Reply::Normal
+        });
+        let (app, _) = app_with_snapshot_recorder();
+        let manager = Arc::new(SessionManager::default());
+        {
+            let mut inner = manager.lock();
+            inner.generation = 1;
+            inner.status = SessionStatus::Starting;
+        }
+        let lease = Arc::new(crate::dns::MappingLease::new_on(1, fixture.socket.clone()));
+        let install_manager = Arc::clone(&manager);
+        let install_app = app.clone();
+        let install = std::thread::spawn(move || {
+            install_manager.install_dns_mapping(
+                &install_app,
+                1,
+                "show.example.org",
+                "192.168.11.31",
+                lease,
+            )
+        });
+        arrived_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+        let stop_manager = Arc::clone(&manager);
+        let stop = std::thread::spawn(move || stop_manager.stop(&app));
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while {
+            let inner = manager.lock();
+            inner.generation == 1 || inner.dns_mapping_lease.is_some()
+        } {
+            assert!(
+                Instant::now() < deadline,
+                "Stop did not retire the generation"
+            );
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        // A replacement starts while the old mapping exchange returns.
+        // Its state and cleanup handle must not be overwritten by either
+        // the old install result or the old stop's final state.
+        let replacement = Arc::new(crate::dns::MappingLease::new_on(3, fixture.socket.clone()));
+        {
+            let mut inner = manager.lock();
+            inner.generation = 3;
+            inner.status = SessionStatus::Starting;
+            inner.dns_mapping = DnsMappingState {
+                status: DnsMappingStatus::Ready,
+                domain: Some("next.example.org".to_string()),
+                ip: Some("192.168.11.32".to_string()),
+                error: None,
+            };
+            inner.dns_mapping_lease = Some(Arc::clone(&replacement));
+        }
+        resume_tx.send(()).unwrap();
+        assert!(!install.join().unwrap());
+        stop.join().unwrap().unwrap();
+        assert_eq!(
+            fixture.response_code("show.example.org"),
+            hickory_proto::op::ResponseCode::NXDomain
+        );
+        let snapshot = manager.snapshot();
+        assert_eq!(snapshot.status, SessionStatus::Starting);
+        assert_eq!(
+            snapshot.dns_mapping.domain.as_deref(),
+            Some("next.example.org")
+        );
+        assert!(Arc::ptr_eq(
+            manager.lock().dns_mapping_lease.as_ref().unwrap(),
+            &replacement
+        ));
     }
 
     #[test]

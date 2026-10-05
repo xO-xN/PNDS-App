@@ -1,18 +1,17 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { FileUp, Trash2 } from 'lucide-react'
-import { open } from '@tauri-apps/plugin-dialog'
-import i18n from '@/i18n/config'
-import { commands, type HttpsValidationOutcome } from '@/lib/tauri-bindings'
-import { logger } from '@/lib/logger'
 import {
   HTTPS_PORT_PLACEHOLDER,
-  isHttpsDomainSet,
-  isValidHttpsDomain,
   isValidHttpsPort,
   normalizeHttpsDomain,
   parseHttpsPort,
 } from '@/lib/https-settings'
+import {
+  attachHttpsPreparation,
+  INITIAL_HTTPS_PREPARATION,
+  type HttpsPreparation,
+} from '@/lib/https-preparation'
 import { updatePreferences } from '@/lib/preferences'
 import { openHelpWindow } from '@/lib/help-window'
 import { useSessionStore } from '@/store/session-store'
@@ -23,10 +22,6 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 
 import { SectionTitle } from './SectionTitle'
-
-/** The problems the section itself can raise before the backend sees
- * anything (they use the same rendering as backend problem codes). */
-type LocalProblemCode = 'domainRequired' | 'domainInvalid' | 'portInvalid'
 
 function formatValidity(iso: string): string {
   const date = new Date(iso)
@@ -77,49 +72,26 @@ export function HttpsSection({ section }: { section: SettingsSection }) {
   )
   const lanIp = useSessionStore(state => state.lanIp)
   const [modified, setModified] = useState(false)
-  const [domainError, setDomainError] = useState(false)
   const [portError, setPortError] = useState(false)
-  const [material, setMaterial] = useState<HttpsValidationOutcome | null>(null)
-  const [materialLoaded, setMaterialLoaded] = useState(false)
-  const [importing, setImporting] = useState(false)
-  const [localProblem, setLocalProblem] = useState<LocalProblemCode | null>(
-    null
-  )
+  const [preparation, setPreparation] = useState(INITIAL_HTTPS_PREPARATION)
+  const flow = useRef<HttpsPreparation | null>(null)
+  const {
+    material,
+    loaded: materialLoaded,
+    operation,
+    localProblem,
+    domainError,
+  } = preparation
 
-  const refreshMaterial = () => {
-    void commands.loadHttpsCertificate().then(result => {
-      if (result.status === 'error') {
-        logger.warn('Failed to load HTTPS certificate state', {
-          error: result.error,
-        })
-        setMaterial(null)
-      } else {
-        setMaterial(result.data)
-      }
-      setMaterialLoaded(true)
-    })
-  }
-
-  // The panel unmounts closed sections — mount == open, so one fetch per
-  // visit re-derives expiry/warnings against the current clock.
+  // Mount == open. Each visit revalidates expiry and the saved domain.
   useEffect(() => {
-    refreshMaterial()
-  }, [])
-
-  const commitDomain = () => {
-    const raw = useSettingsStore.getState().httpsDomainSetting
-    const normalized = normalizeHttpsDomain(raw)
-    if (normalized === '' || isValidHttpsDomain(raw)) {
-      setDomainError(false)
-      void updatePreferences({
-        httpsDomain: normalized === '' ? null : normalized,
-      })
-    } else {
-      // Keep the row's value for the operator to fix, but keep it OUT of
-      // the save queue — the backend would reject the whole file write.
-      setDomainError(true)
+    const attached = attachHttpsPreparation(setPreparation)
+    flow.current = attached
+    return () => {
+      flow.current = null
+      attached.dispose()
     }
-  }
+  }, [])
 
   const commitPort = () => {
     const raw = useSettingsStore.getState().httpsPortSetting
@@ -131,86 +103,11 @@ export function HttpsSection({ section }: { section: SettingsSection }) {
     }
   }
 
-  const handleImport = async () => {
-    if (importing) return
-    setLocalProblem(null)
-    const domain = normalizeHttpsDomain(
-      useSettingsStore.getState().httpsDomainSetting
-    )
-    // The certificate's SAN coverage is checked against what the operator
-    // sees in the row — demand a valid domain before picking files.
-    if (!isHttpsDomainSet(domain)) {
-      setLocalProblem('domainRequired')
-      return
-    }
-    if (!isValidHttpsDomain(domain)) {
-      setLocalProblem('domainInvalid')
-      return
-    }
-    const certificatePemPath = await open({
-      multiple: false,
-      title: i18n.t('settings.https.pickCertTitle'),
-      filters: [
-        {
-          name: i18n.t('settings.https.pickCertFilter'),
-          extensions: ['pem', 'crt', 'cer', 'txt'],
-        },
-      ],
-    })
-    if (!certificatePemPath) return
-    const privateKeyPemPath = await open({
-      multiple: false,
-      title: i18n.t('settings.https.pickKeyTitle'),
-      filters: [
-        {
-          name: i18n.t('settings.https.pickKeyFilter'),
-          extensions: ['pem', 'key', 'txt'],
-        },
-      ],
-    })
-    if (!privateKeyPemPath) return
-
-    setImporting(true)
-    const result = await commands.importHttpsCertificate(
-      domain,
-      certificatePemPath,
-      privateKeyPemPath
-    )
-    setImporting(false)
-    if (result.status === 'error') {
-      logger.error('HTTPS material import failed', {
-        error: result.error,
-      })
-      return
-    }
-    if (result.data.summary) {
-      setMaterial(result.data)
-      setModified(true)
-      return
-    }
-    // Refused: the stored material is untouched on disk, so keep its
-    // summary on screen and attach the refusal problems to it — the
-    // section must not visually "lose" a certificate it still holds.
-    const stored = await commands.loadHttpsCertificate()
-    setMaterial({
-      summary: stored.status === 'ok' ? (stored.data?.summary ?? null) : null,
-      problems: result.data.problems,
-    })
-  }
-
-  const handleClear = async () => {
-    const result = await commands.clearHttpsCertificate()
-    if (result.status === 'error') {
-      logger.error('HTTPS material clear failed', { error: result.error })
-      return
-    }
-    setMaterial(null)
-    setModified(true)
-  }
-
   const summary = material?.summary ?? null
+  const summaryCurrent =
+    preparation.checkedDomain === normalizeHttpsDomain(httpsDomainSetting)
   const statusTone =
-    summary == null
+    summary == null || !summaryCurrent
       ? ''
       : summary.status === 'valid' || summary.status === 'expiringSoon'
         ? 'text-(--pnds-accent-text)'
@@ -253,19 +150,17 @@ export function HttpsSection({ section }: { section: SettingsSection }) {
         </Label>
         <Input
           id="settings-https-domain"
+          disabled={operation !== null}
           value={httpsDomainSetting}
           placeholder="show.example.org"
           autoComplete="off"
           spellCheck={false}
           dir="ltr"
           onChange={event => {
-            useSettingsStore
-              .getState()
-              .setHttpsDomainSetting(event.target.value)
-            setDomainError(false)
+            flow.current?.editDomain(event.target.value)
             setModified(true)
           }}
-          onBlur={commitDomain}
+          onBlur={() => void flow.current?.commitDomain()}
           className="w-56"
         />
       </div>
@@ -322,7 +217,8 @@ export function HttpsSection({ section }: { section: SettingsSection }) {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => void handleClear()}
+                disabled={operation !== null}
+                onClick={() => void flow.current?.clearMaterial()}
               >
                 <Trash2 data-slot="icon" />
                 {t('settings.https.clear')}
@@ -331,17 +227,17 @@ export function HttpsSection({ section }: { section: SettingsSection }) {
             <Button
               variant="outline"
               size="sm"
-              disabled={importing}
-              onClick={() => void handleImport()}
+              disabled={operation !== null}
+              onClick={() => void flow.current?.importMaterial()}
             >
               <FileUp data-slot="icon" />
-              {importing
+              {operation === 'import'
                 ? t('settings.https.importing')
                 : t('settings.https.import')}
             </Button>
           </div>
         </div>
-        {materialLoaded && !summary && (
+        {materialLoaded && !summary && localProblem !== 'loadFailed' && (
           <p className="text-muted-foreground text-xs">
             {t('settings.https.noneStored')}
           </p>
@@ -349,8 +245,11 @@ export function HttpsSection({ section }: { section: SettingsSection }) {
         {summary && (
           <div className="flex flex-col gap-1">
             <p className={`text-xs ${statusTone}`} data-testid="https-status">
-              {t(`settings.https.status.${summary.status}`)}
-              {summary.status === 'expiringSoon' &&
+              {summaryCurrent
+                ? t(`settings.https.status.${summary.status}`)
+                : t('settings.https.revalidate')}
+              {summaryCurrent &&
+                summary.status === 'expiringSoon' &&
                 t('settings.https.expiresIn', {
                   count: summary.daysRemaining,
                 })}
@@ -410,7 +309,7 @@ export function HttpsSection({ section }: { section: SettingsSection }) {
         </Button>
       </div>
 
-      {modified && (
+      {(modified || preparation.materialChanged) && (
         <p className="text-muted-foreground text-xs" data-testid="https-hint">
           {t('settings.https.hint')}
         </p>

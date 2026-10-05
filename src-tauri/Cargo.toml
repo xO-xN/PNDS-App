@@ -6,7 +6,7 @@ members = ["dnsd"]
 
 [package]
 name = "pnds-app"
-version = "1.5.1"
+version = "1.5.2"
 description = "在演出现场运行 PNDS 数字乐谱工程的 macOS 桌面 Host 应用"
 authors = ["xO-xN"]
 edition = "2021"
@@ -107,6 +107,10 @@ objc2-foundation = { version = "0.3", features = ["std", "NSString", "NSProcessI
 objc2-service-management = "0.3"
 
 [dev-dependencies]
+# Exercise App mapping ownership against the real daemon control/query
+# implementation on temporary sockets; never linked into the shipped App.
+pnds-dnsd = { path = "dnsd" }
+hickory-proto = "0.26"
 # #139: test certificate material (CA → intermediate → leaf) for the
 # validation pipeline tests; production anchors stay webpki-roots.
 rcgen = "0.13"
@@ -127,4 +131,3 @@ strip = true             # Remove debug symbols
 # unstripped is free; the final app binary still strips via strip above.
 [profile.release.build-override]
 strip = false
-

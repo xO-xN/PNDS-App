@@ -112,8 +112,13 @@ export async function applyLanguageSetting(
       await i18n.changeLanguage(setting)
     }
     useSettingsStore.getState().setLanguageSetting(setting)
-    await updatePreferences({ language: setting === 'system' ? null : setting })
-    logger.info('Language setting applied', { setting })
+    if (
+      await updatePreferences({
+        language: setting === 'system' ? null : setting,
+      })
+    ) {
+      logger.info('Language setting applied', { setting })
+    }
   } catch (error) {
     logger.error('Failed to apply language setting', { error, setting })
   }

@@ -199,6 +199,40 @@ The real stores in `src/store/` and what belongs in each:
 
 Shared domain state goes in the matching store; anything component-local stays in `useState`.
 
+### Project Preflight Ownership
+
+`open-project.runPreflight` owns the complete selection flow for card clicks,
+keyboard selection, directory opens and installed bundles. `project-store` issues
+a fresh `PreflightRequest` object in `startPreflight(path)`; object identity, not
+path equality, decides which request may commit. An A → B → A sequence therefore
+has three owners. `pendingPreflightPath` is only the UI highlight; callers must
+not set or clear it themselves.
+
+Every asynchronous preflight, preference, LAN and running-session snapshot read
+checks ownership before proceeding. The current request stays `checking` until
+all applicable configuration reads settle, then commits the manifest selection,
+audio mode and OSC input without further awaits. The Load gate cannot observe a
+ready new project with the previous project's target. Only an accepted success
+learns/persists its manifest name; stale success and failure cannot change the
+selection, card errors, configuration or another request's pending highlight.
+
+The store guards `preflightSucceeded` / `preflightFailed` too, and
+`finishPreflight(request)` only settles its own request. Clearing selection,
+changing folder view, or removing the pending path (including clear-history and
+index replacement) invalidates it immediately. Re-adding a removed path cannot
+revive the old request. Removing a pending card may keep a previously prepared
+selection; its mode is retained during the idle session reset until the new
+configuration commits. Folder navigation keeps its existing idle/live selection
+policy. Outstanding IPC is allowed to finish; it has no permission to write.
+
+Current preflight Result errors and rejected invokes both become readable card
+errors and release the pending state. Preference-load failures keep the existing
+default OSC fallback; LAN/snapshot read failures remain best-effort. A live
+performance is never stopped or reset by selection. Reselecting its card reads
+preferences first, then the running snapshot, and only the current request may
+restore them. Tests in `src/lib/preflight-ownership.test.ts` defer each read to
+exercise the actual shared flow, including same-path reuse and cancellation.
+
 ### LAN Choice and Running Session Facts
 
 `session-store.lanIp` is the machine's next-start network choice, not a
@@ -222,12 +256,72 @@ default route: both physical LANs and VPNs can use private addresses, and
 a VPN can own the default route while the venue LAN remains available.
 The choice is in-memory; it does not configure macOS addresses or DHCP.
 
+### Pending Session Changes
+
+`session-store.pendingChanges` means the selected running project's next-start
+settings need a Change/restart. In `session-flow`, restart and replacement capture
+their submitted settings before any await, then resolve HTTPS consent under the
+shared submit latch. Waiting/cancellation leaves both the draft and marker intact.
+Once consent passes, the shared stop→start path clears the marker immediately
+before dispatching Stop. Request logs describe intent, not a completed restart.
+
+A ready→ready snapshot for the same non-null `sessionProjectPath` is a runtime
+update, not a settings commit. While changes are pending it preserves both the
+marker and draft `audioMode`; LAN selection and `oscTargetInput` already have
+separate next-start ownership. Volume, entry/DNS state, health and projection
+facts continue to follow Rust. Lifecycle changes and snapshots for a different
+project clear the old marker and follow the existing config ownership rules.
+Do not clear pending changes on every snapshot: focus/visibility catch-up can
+arrive during a confirmation dialog and discard the operator's settings.
+
+### Session Snapshot Mirrors
+
+`src/lib/session-snapshot-mirror.ts` owns the session snapshot transport for both
+window roots. Each mount calls `attachSessionSnapshotMirror` with an `onSnapshot`
+adapter and disposes its own instance on cleanup. The module subscribes through
+`events.ts`, restores on mount, and catches up on visible `visibilitychange` and
+the Rust native-focus signal (WKWebView does not reliably emit DOM focus when
+returning from another desktop).
+
+Only the latest requested restore may apply a response or report settlement.
+If a live event arrived while that request was pending, keep the event snapshot,
+discard the response, and perform a fresh read to confirm Rust's current state
+after queued events. These are frontend request/event ordering guards, not a
+backend snapshot revision protocol. Returned command errors and rejected promises
+both log a warning and report failure; neither clears the existing mirror or
+automatically retries. The next focus/visibility/poll request can recover.
+Disposal is idempotent and suppresses pending responses and queued event/focus
+callbacks, including before asynchronous unlisten completes.
+
+The shared interface is `onSnapshot`, optional `onRestoreSettled(failed)`, and the
+returned `restore` / `dispose`. Keep window policy outside the module:
+
+- Main applies snapshots through `session-store.applySnapshot`, including its
+  pending settings and animation gates, and calls `restore` every second only
+  while starting. Failures retain the current store state.
+- Projection keeps local read-only state, has no loading poll, and reveals once
+  its first current restore settles. Both error forms reveal themed standby when
+  no snapshot is available; a live snapshot received during the restore stays
+  visible. Theme, locale, zoom and content transitions remain projection-owned.
+
+Tests at this interface cover overlapping restores, event interruption and
+follow-up reads, both error forms, disposal and independent instances. Root
+integration tests additionally protect monitor identity through late responses,
+projection failure/reveal behavior and the main loading poll.
+
 ## Persisting Store State
 
 `src/lib/preferences.ts` is the only preferences writer: every field save
 goes through `updatePreferences(patch)` (or `updateOscTarget` for the
 per-project map), each a load-modify-write cycle inside one serialized
 queue so overlapping updates never clobber each other.
+
+Both writes resolve `true` only after Rust confirms the save, or `false` on
+load/save failure. The queue logs failures and continues; returned errors and
+IPC rejections never escape from fire-and-forget structural commits. Live state
+is retained, and the failed patch is not automatically retried or merged into
+the next save. Awaited callers must check the boolean before claiming persistence
+(theme/language success logs do). See [Save Outcomes](./data-persistence.md#save-outcomes).
 
 In `project-store.ts`, persistence is part of the commit — **structural
 actions save the project index themselves** (`addRecentProject`,

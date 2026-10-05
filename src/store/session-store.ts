@@ -367,6 +367,15 @@ export const useSessionStore = create<SessionState>()(set => ({
       const configOwnedBySession =
         snapshot.projectPath === null ||
         snapshot.projectPath === useProjectStore.getState().currentProject?.path
+      // A same-run ready update reports runtime facts, not acceptance of the
+      // operator's next-start settings. Focus/entry/projection updates must not
+      // undo a pending Change, including while HTTPS consent is outstanding.
+      const keepPendingChanges =
+        state.pendingChanges &&
+        state.sessionStatus === 'ready' &&
+        snapshot.status === 'ready' &&
+        state.sessionProjectPath !== null &&
+        snapshot.projectPath === state.sessionProjectPath
       return {
         sessionStatus: snapshot.status,
         sessionError: snapshot.error,
@@ -401,9 +410,10 @@ export const useSessionStore = create<SessionState>()(set => ({
           (configOwnedBySession && !state.lanAddressesLoaded
             ? snapshot.lanIp
             : null),
-        audioMode: configOwnedBySession
-          ? (snapshot.audioMode ?? state.audioMode)
-          : state.audioMode,
+        audioMode:
+          configOwnedBySession && !keepPendingChanges
+            ? (snapshot.audioMode ?? state.audioMode)
+            : state.audioMode,
         startupStage: snapshot.startupStage,
         runId: newRun ? state.runId + 1 : state.runId,
         // #50: every new run mounts a fresh monitor iframe — its reveal
@@ -418,8 +428,9 @@ export const useSessionStore = create<SessionState>()(set => ({
           snapshot.status === 'idle'
             ? state.sessionStatus === 'stopping' || state.stopUncoverPending
             : false,
-        // After a committed session event, any pending is resolved.
-        pendingChanges: false,
+        // A lifecycle transition/new project resolves the old draft; a routine
+        // ready snapshot leaves the pending settings under operator ownership.
+        pendingChanges: keepPendingChanges,
       }
     }),
 

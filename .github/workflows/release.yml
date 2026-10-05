@@ -47,6 +47,26 @@ jobs:
         **One baseline for every Mac — Apple Silicon and Intel alike, macOS 13.5+**
         - This release ships two installers — the `_aarch64.dmg` for Apple Silicon Macs (M-series) and the `_x64.dmg` for Intel Macs — both requiring macOS 13.5 (Ventura) or newer. Pick the one that matches your Mac; the auto-updater already picks its lane on its own.
 
+        ### What's New in V1.5.2 — performance stability and preparation fixes
+
+        **Loading and window recovery**
+        - Returning from another desktop no longer replays an expired loading animation. The App still waits for the current performance and monitor page to be ready before revealing the score.
+        - Main and projection windows share guarded state recovery: late responses cannot rewind a newer restore or live update. A failed projection restore shows standby instead of leaving a hidden window.
+        - Cover-title fitting now has one lifecycle for measurement, reveal and cleanup, preserving the existing layout while discarding obsolete work after navigation.
+
+        **Project selection and pending settings**
+        - Rapidly selecting projects, including A → B → A, keeps the latest selection's audio mode and OSC configuration. Late preflight results cannot replace it, and Load waits until its configuration is prepared.
+        - Cancelling the HTTPS compatibility confirmation preserves pending settings and the Change action. Runtime state refreshes keep pending audio changes until a confirmed restart begins.
+        - Preference saves report actual failures while allowing later saves to proceed; theme and language still apply immediately.
+
+        **HTTPS and performance DNS preparation**
+        - Saving a domain revalidates the certificate summary in the open Settings panel. Unsaved or failed settings no longer display a misleading certificate-ready status.
+        - Certificate import and clear operations are mutually exclusive from the first file picker through validation. Cancellation and errors release the controls, preserve known certificate facts, and support retry; reopening Settings waits for dispatched writes to finish.
+        - A failed DNS mapping verification immediately attempts revocation. Failed cleanup remains owned for later Stop/teardown retries, and retired mappings cannot be installed again by late requests. Mapping faults keep the performance running.
+
+        **Development workflow**
+        - Editing documentation or standalone prototypes no longer reloads the App's development monitor; App source files retain normal hot updates.
+
         ### What's New in V1.5.1 — the trusted stage: HTTPS entry, performance DNS, a fourth built-in tool
 
         **A trusted HTTPS entry for the phones**
@@ -67,27 +87,8 @@ jobs:
         **The LAN address now behaves**
         - The Node section's LAN address selector auto-picks the machine's first address when nothing is chosen and remembers your choice across launches; an address the current interfaces no longer list is replaced at the next refresh — a session never starts bound to a dead interface — and a Load button gated only by a missing address now says so right under the button instead of sitting gray and mute.
 
-        ### What's New in V1.5.0 — the projection window: a venue screen for the audience, opened by the conductor
-
-        **A second window for the venue screen**
-        - The sidebar's old "open in browser" is now a projection window — a second window of the same App, landing centered on the display you opened it from. It is a single instance that keeps its position and fullscreen across works for the whole evening; the browser entry is gone. The button never disables: with nothing running the venue screen holds a themed standby screen (the PNDS mark and 「无演出」), never a blank or a leaked score.
-        - What the audience sees is the conductor's call, not the machine's: once a work loads, the venue screen holds the work's 简介 — its README, rendered as a designed cover page (see below). One action — the ▶ button beside the monitor title, or ⌘⏎ — cross-fades the venue screen from the intro to the monitor page. The action reverses the same way, and every Load or work switch resets it: the score is never on the wall before the conductor says so.
-
-        **READMEs: written for the venue, read everywhere**
-        - A project may now carry a root `README.md` written for the people at the performance venue. Selecting its card renders it in the App's main area as a cover page — the huge title, the composer pill with its optional link, github and website buttons, a four-dot mark in the work's own palette, and the band with the cover image and the first section's text — all composed by the App from a small metadata block (the Help center's new "Writing a Project README" guide covers the format, the bilingual variants, and what belongs on a big screen).
-        - The same file is what the venue screen shows before the show, so the guide asks for the one discipline that matters: write what the work is — instrumentation, duration, character — and keep the score's visuals, structure and key interactions for the performance itself.
-        - Performance-folder intros (the ones written through the in-App form) now travel inside setlist exports as `README.md` and round-trip back on import; the old `README.txt` is retired. The folder's own view takes the cover-page composition too — the name as the big centered title, the intro below it, editable in place — and the built-in utilities (which ship no README of their own) each get a one-line info page with a "PNDS Utility" tag, plus a one-line description on the Utilities folder itself.
-
-        **Keyboard and zoom, scoped per window**
-        - Zoom (⌘=/⌘-/⌘0) and fullscreen (⌃⌘F) now act on the FOCUSED window — the projection keeps its own zoom, remembered across works, window reopens and App launches, independent of the main window's. ⌘⇧R reloads both windows' monitors in one chord; ⌘W closes the front window only; Esc always belongs to the page in both windows.
-        - A work's own zoom now wins on the venue screen: an adapted project that declares zoom ownership as it loads gets the keys — the App's zoom steps aside for that copy, so the venue screen zooms one predictable way, never two systems stacked. The venue page also receives the keys the moment it loads (no click needed to arm them) and renders full-rate even while the conductor works in the main window.
-
-        **For authors: a venue-surface channel**
-        - The projection window loads the monitor with `?surface=venue` on the address — the one channel a work has to render an audience view on the venue screen (every performer's score, bigger type, no console). Works that ignore it show exactly what the conductor sees; reading it is entirely optional (runtime contract §14, plus a new Module Manual chapter with a branch example).
-        - A work that zooms itself can now declare it: one postMessage at load (`{type:"pnds-projection", zoom:"page"}`) and the App yields the zoom keys for that navigation — cursor-anchored, density-following zooms ride through untouched (runtime contract §14 handshake, with the declaration snippet in the Module Manual chapter).
-
         ### Earlier releases
-        The V1.4.3–V1.1 notes live on the [releases page](https://github.com/xO-xN/PNDS-App/releases).
+        The V1.5.0–V1.1 notes live on the [releases page](https://github.com/xO-xN/PNDS-App/releases).
 
         ### Auto-Updates
         Existing users receive update notices (the starting page's one-line notice and the manual check's toast); since V1.4.3 the App itself no longer installs updates — grab the dmg from the Releases page it points you to.

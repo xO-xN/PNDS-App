@@ -82,6 +82,10 @@ _Avoid_: hub IP、服务器地址
 manifest 可选字段 `performerAddress` 声明的连接地址字符串（如 `mywork.local`）：存在时替换 App 注入的 `PNDS_HOST_IP` 与 monitor 地址，二维码显示它；未声明回落所选 LAN IPv4。裸主机名（不带协议/端口），工程零改动。
 _Avoid_: 自定义域名、连接 URL、host IP（作声明名）
 
+**演出映射 / performance mapping**:
+演出域名与本次演出机器所选局域网地址的临时对应关系，由当前演出持有，供乐手通过域名加入。
+_Avoid_: 域名配置（指临时演出映射时）、普通 DNS 转发
+
 **参考手册 / Reference Manual**:
 帮助语料中的 reference 分册：面向工程的契约文档（manifest、runtime、bundle、network 等）。
 _Avoid_: specification、wiki

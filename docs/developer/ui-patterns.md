@@ -509,6 +509,26 @@ A pill that slides over targets (the folder segment track, the selected project 
 
 To add a third pill: render an absolutely positioned element with a class-owned transition, resolve the target in a policy function in `selection-pills.ts`, and schedule it with the hook.
 
+### Loading Animation and Webview Suspension
+
+The loading logo (`PndsLogoCanvas`) advances by monotonic elapsed time,
+not by delivered frame counts. Keep its clock alive across readiness,
+callback and audio-mode changes; restarting an effect on every snapshot
+loses the elapsed background interval. Its waiting phase observes rAF
+delivery without repainting or advancing the animation.
+
+If a frame gap exceeds the full entrance + closure duration, the unseen
+choreography is retired: wait for backend readiness, paint the final
+closure frame, then let `LoadingScreen` release through the existing
+monitor-load/timeout gate. Late ready messages must retain this recovery
+decision. Never release an unready backend or bypass the iframe gate.
+The main webview disables background throttling on macOS 14+; elapsed-time
+recovery also applies on macOS 13.5, where that option is unavailable.
+
+For suspension tests, advance `performance.now()` independently of rAF
+callback delivery (`LoadingScreen.test.tsx`). Advancing fake rAF timers
+normally delivers every missing frame and cannot reproduce issue #34.
+
 ## Best Practices
 
 ### Do
@@ -529,3 +549,35 @@ To add a third pill: render an absolutely positioned element with a class-owned 
 - Hand-roll `focus-visible:outline-*` variants — use the shared
   `pnds-focus-ring` class
 - Use viewport-based responsive design (this is a fixed-size desktop app)
+
+## Cover title fitting
+
+`ProjectCoverPage` attaches `attachCoverTitleFit(title)` from
+`src/components/readme/title-fit.ts` in a layout effect keyed by `page.title`.
+The returned disposer owns the entire lifetime: synchronous DOM probing and
+plan application, bounded refinement/fallback, reveal gating, retry/verification
+timers, fonts, document visibility and zone observation. The component owns the
+title's markup, glyph animation and embedding tokens; the fitting module owns
+only its inline spacing, size, transform and temporary visibility.
+
+Keep the WebKit invariants inside that module: measure the zone's content width;
+style a fresh hidden clone before inserting it in the same cq context; derive
+em from its line height; converge only from probes; center by half the trailing
+spacing (reverse for RTL). Computed title font size and settled scroll overflow
+are diagnostics. Never replace these with live-title or Range geometry without
+real-machine evidence. Main-panel and projection cq frames stay distinct.
+
+Motion allowed reveals synchronously unless fonts are loading (ready or 400ms
+cap). Reduced motion with ResizeObserver uses a 150ms mount hold and 90ms quiet
+window; font loading and hidden documents block quiet reveal. Verification at
+600ms also reveals a stuck title; the independent cap is 800ms. Further checks
+at 2s/5s handle silent cq/font drift. Failed geometry has one outstanding 300ms
+retry, with at most 16 retries per lifetime; a successful fit cancels it.
+
+Dispose before reusing the h1 for another title. An explicit disposed flag guards
+font Promise continuations and queued observer callbacks, which removing listeners
+cannot cancel. Cleanup restores visibility and removes all owned timers/listeners.
+Tests exercise this single interface using frozen probe geometry and a controlled
+clock/font/visibility/resize environment; pure branch math stays private. Real
+WebKit painting, fonts, zoom and full-screen transitions remain manual acceptance
+(see [app-behavior.md](./app-behavior.md), cover page section).

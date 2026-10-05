@@ -377,6 +377,86 @@ describe('ProjectionApp (#130 gate)', () => {
     expect(screen.getByTestId('projection-standby')).toBeInTheDocument()
   })
 
+  it('reveals standby when the restore rejects with an Error', async () => {
+    vi.mocked(commands.getSessionState).mockRejectedValueOnce(
+      new Error('IPC unavailable')
+    )
+    render(<ProjectionApp />)
+    await flush()
+
+    expect(commands.fadeInWindow).toHaveBeenCalledWith('projection')
+    expect(screen.getByTestId('projection-standby')).toBeInTheDocument()
+  })
+
+  it('does not reveal a destroyed window when its restore finishes late', async () => {
+    let resolveRestore!: (
+      result: Awaited<ReturnType<typeof commands.getSessionState>>
+    ) => void
+    vi.mocked(commands.getSessionState).mockReturnValueOnce(
+      new Promise(resolve => {
+        resolveRestore = resolve
+      })
+    )
+    const { unmount } = render(<ProjectionApp />)
+    unmount()
+    await act(async () => {
+      resolveRestore({ status: 'ok', data: snapshot() })
+    })
+
+    expect(commands.fadeInWindow).not.toHaveBeenCalled()
+  })
+
+  it('keeps the live monitor through a late mount restore and subsequent catch-up', async () => {
+    let resolveRestore!: (
+      result: Awaited<ReturnType<typeof commands.getSessionState>>
+    ) => void
+    const live = snapshot({ projectionStarted: true })
+    vi.mocked(commands.getSessionState)
+      .mockResolvedValue({ status: 'ok', data: live })
+      .mockReturnValueOnce(
+        new Promise(resolve => {
+          resolveRestore = resolve
+        })
+      )
+    render(<ProjectionApp />)
+    publish(live)
+    const monitor = screen.getByTitle('Project monitor')
+    expect(commands.fadeInWindow).not.toHaveBeenCalled()
+    await act(async () => {
+      resolveRestore({
+        status: 'ok',
+        data: snapshot({ status: 'idle', projectPath: null, health: null }),
+      })
+    })
+
+    expect(screen.getByTitle('Project monitor')).toBe(monitor)
+    expect(commands.getSessionState).toHaveBeenCalledTimes(2)
+    expect(commands.fadeInWindow).toHaveBeenCalledTimes(1)
+    expect(commands.fadeInWindow).toHaveBeenCalledWith('projection')
+    expect(screen.queryByTestId('projection-standby')).not.toBeInTheDocument()
+  })
+
+  it('catches up on native focus and visibility while retaining its local state', async () => {
+    vi.useFakeTimers()
+    render(<ProjectionApp />)
+    await flush()
+    expect(intro()).toBeInTheDocument()
+    vi.mocked(commands.getSessionState).mockResolvedValue({
+      status: 'ok',
+      data: snapshot({ projectionStarted: true }),
+    })
+    act(() => listeners.get('window-focus-event')?.(undefined))
+    await flush()
+    await settleSwap()
+    const monitor = screen.getByTitle('Project monitor')
+    fireEvent(document, new Event('visibilitychange'))
+    await flush()
+
+    expect(screen.getByTitle('Project monitor')).toBe(monitor)
+    expect(commands.getSessionState).toHaveBeenCalledTimes(3)
+    expect(commands.fadeInWindow).toHaveBeenCalledTimes(1)
+  })
+
   it('stands by (themed, bilingual) with no session', async () => {
     vi.mocked(commands.getSessionState).mockResolvedValue({
       status: 'ok',

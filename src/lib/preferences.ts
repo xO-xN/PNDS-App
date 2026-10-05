@@ -1,4 +1,4 @@
-import { commands, type AppPreferences } from '@/lib/tauri-bindings'
+import { commands, expectOk, type AppPreferences } from '@/lib/tauri-bindings'
 import { logger } from '@/lib/logger'
 
 /**
@@ -34,11 +34,30 @@ export const FALLBACK_SAMPLE_RATES: readonly number[] = [
  */
 let saveQueue: Promise<unknown> = Promise.resolve()
 
-function enqueueSave(save: () => Promise<void>): Promise<void> {
-  // `save` runs as both fulfill and rejection handler: a failed save must
-  // still hand the queue to the next one instead of stalling it.
+function enqueueSave(
+  update: (prefs: AppPreferences) => AppPreferences
+): Promise<boolean> {
+  const save = async (): Promise<boolean> => {
+    try {
+      const prefs = await loadPreferences()
+      // The load wrapper already logs this failure. Never build a save
+      // from fallback defaults or claim that the patch was persisted.
+      if (!prefs) return false
+      expectOk(await commands.savePreferences(update(prefs)))
+      return true
+    } catch (error) {
+      // Both backend Result errors and rejected invokes land here.
+      // Do not log the patch or preferences: they contain the hub token.
+      logger.warn('Failed to save preferences', {
+        error: error instanceof Error ? error.message : String(error),
+      })
+      return false
+    }
+  }
+  // Operation failures resolve false; either settlement of the previous
+  // task still hands the queue to the next load-modify-write cycle.
   const run = saveQueue.then(save, save)
-  saveQueue = run.catch(() => undefined)
+  saveQueue = run
   return run
 }
 
@@ -107,34 +126,28 @@ export function isNodeConfigComplete(
  * (`projectDisplayNames`, `projectManifestNames`, `projectFolders`) are
  * whole-value commits: the project store holds the live maps and passes
  * the state it just committed, so a whole-map write cannot lose an update.
+ * Resolves true only after a successful save; false on any load/save
+ * failure (logged here). Safe to fire-and-forget; no automatic rollback.
  */
 export async function updatePreferences(
   patch: PreferencesPatch
-): Promise<void> {
-  return enqueueSave(async () => {
-    const prefs = await loadPreferences()
-    if (!prefs) return
-    await commands.savePreferences({ ...prefs, ...patch })
-  })
+): Promise<boolean> {
+  return enqueueSave(prefs => ({ ...prefs, ...patch }))
 }
 
 /**
  * §6.6: per-project OSC targets merge key-by-key inside the queue — no
  * store mirrors this map, so a whole-map write could clobber a concurrent
- * project's target.
+ * project's target. Same true/false completion contract as field patches.
  */
 export async function updateOscTarget(
   projectId: string,
   target: string
-): Promise<void> {
-  return enqueueSave(async () => {
-    const prefs = await loadPreferences()
-    if (!prefs) return
-    await commands.savePreferences({
-      ...prefs,
-      oscTargets: { ...prefs.oscTargets, [projectId]: target },
-    })
-  })
+): Promise<boolean> {
+  return enqueueSave(prefs => ({
+    ...prefs,
+    oscTargets: { ...prefs.oscTargets, [projectId]: target },
+  }))
 }
 
 /** §6.6 validation, mirroring the Rust rule: `host:port`, port 1-65535. */

@@ -1,47 +1,16 @@
-/**
- * v1.5.0 (README cover page): the title fit's branch decision, pure —
- * ProjectCoverPage's effect gathers honest measurements (zone-based
- * available width, probe-based text width, a MEASURED width-per-spacing
- * slope) and applies the returned plan verbatim. Kept out of the
- * component file so Fast Refresh stays component-only and the math is
- * unit-testable.
- *
- * The projection user report that drove this shape (某比例下 title 字
- * 距离突然过大且溢出) traced to the old fit reading
- * `title.scrollWidth/clientWidth`, which a centered nowrap flex child
- * clamps to its own box — every branch decision was made against
- * garbage-equal numbers, so at some proportions the "fits at 0.37em"
- * branch fired on a title that physically overflowed.
- *
- * v1.5.0 polish (Intel / macOS 13, round two): the plan carries NO
- * text-indent anymore. The old indent=tracking paired with the
- * trailing letter-space to re-center the line — but on a CENTERED line
- * an indent shifts the glyphs by only half its value (CSS22 §16.1),
- * an engine-variable half-measure that compounded with the measured
- * translateX correction differently per WebKit generation (the Intel
- * report's persistent right-heavy overflow). Optical centering now has
- * ONE source of truth: the measured translateX in the component, which
- * lands on the measured glyph-run center on every engine.
- */
-export function planTitleFit({
+import { logger } from '@/lib/logger'
+
+function planTitleFit({
   available,
   em,
   designWidth,
   zeroWidth,
   unitSlope,
 }: {
-  /** The column the title may occupy, from the zone's content box. */
   available: number
-  /** The title's computed font size (px) — the em the design tracking
-   *  and the shrink branch scale against. */
   em: number
-  /** Rendered width at the design tracking (0.37em). */
   designWidth: number
-  /** Rendered width at zero tracking. */
   zeroWidth: number
-  /** MEASURED rendered-width gain per 1px of letter-spacing. Counting
-   *  characters instead is wrong the day the DOM wraps glyphs (the
-   *  ripple spans) — measure the slope, never count. */
   unitSlope: number
 }): { letterSpacing: string; fontSize?: string } {
   if (designWidth <= available) {
@@ -58,27 +27,13 @@ export function planTitleFit({
   }
 }
 
-/**
- * v1.5.0 polish (projection report: title 字间距大且右溢、不居中): the
- * model above decides from measurements taken BEFORE the plan applies —
- * and any one of them can be off in the wild (a fit that ran while the
- * projection webview was still hidden, a font swap between probes, the
- * probe's engine-dependent trailing-space semantics). This refinement
- * takes the RENDERED truth — the applied plan's actual line, still
- * wider than the column by `overflow` — and pulls the plan in by
- * exactly that much: the tracking shrinks by overflow/slope while any
- * tracking remains, else the type scales to the column. Bounded passes
- * in the component converge; `overflow <= 0` is a no-op so the loop
- * can call it freely.
- */
-export function refineTitleFit({
+function refineTitleFit({
   plan,
   overflow,
   em,
   unitSlope,
 }: {
   plan: { letterSpacing: string; fontSize?: string }
-  /** How much the rendered line still exceeds the column (px, ≥ 0). */
   overflow: number
   em: number
   unitSlope: number
@@ -87,21 +42,273 @@ export function refineTitleFit({
   const spacing = Number.parseFloat(plan.letterSpacing)
   const next = spacing > 0 ? Math.max(0, spacing - overflow / unitSlope) : 0
   if (next > 0 && unitSlope > 0) {
-    // Keep any font-size the plan carried: a refinement may run after
-    // an earlier pass already shrank the type.
     return {
       ...plan,
       letterSpacing: `${next}px`,
     }
   }
-  // The tracking is spent (or was already zero) — the type itself must
-  // shrink to the column; scale by the overflow against a nominal
-  // title-width estimate, bounded so a pathological input never
-  // collapses the type to nothing.
   const scale = Math.max(0.25, 1 - overflow / Math.max(1, em * 16))
   return {
     ...plan,
     letterSpacing: '0px',
     fontSize: `${em * scale}px`,
+  }
+}
+
+/**
+ * Own one cover title's fit and reveal lifetime. Attach in a layout effect;
+ * dispose before changing its text, even when React reuses the same h1.
+ * Styles are the state: fitting never causes a React render.
+ */
+export function attachCoverTitleFit(title: HTMLHeadingElement): () => void {
+  const label = title.textContent ?? ''
+  const mountedAt = performance.now()
+  const fonts = document.fonts
+  let disposed = false
+  let loggedFit = false
+  const fit = (): boolean => {
+    if (disposed) return false
+    const zone = title.parentElement
+    if (zone === null) {
+      return false
+    }
+    // The real box may report stale widths after style writes; read it only for logs.
+    const settledOverflow = title.scrollWidth - title.clientWidth
+    title.style.letterSpacing = ''
+    title.style.fontSize = ''
+    title.style.transform = ''
+    const zoneStyle = getComputedStyle(zone)
+    const padLeft = Number.parseFloat(zoneStyle.paddingLeft) || 0
+    const padRight = Number.parseFloat(zoneStyle.paddingRight) || 0
+    const available = zone.clientWidth - padLeft - padRight
+    if (!(available > 0)) {
+      return false
+    }
+    // Fresh clones, styled BEFORE insertion, avoid Safari 18.6 intrinsic-width caches.
+    // Keep the same cq context and glyph spans; never measure the centered flex child.
+    const probeRect = (spacing: string, fontSize?: string): DOMRect | null => {
+      const probe = title.cloneNode(true) as HTMLElement
+      probe.style.position = 'absolute'
+      probe.style.visibility = 'hidden'
+      probe.style.pointerEvents = 'none'
+      probe.style.margin = '0'
+      probe.style.left = '0'
+      probe.style.top = '0'
+      probe.style.width = 'max-content'
+      probe.style.letterSpacing = spacing
+      if (fontSize !== undefined) probe.style.fontSize = fontSize
+      zone.appendChild(probe)
+      try {
+        const rect = probe.getBoundingClientRect()
+        return rect.width === 0 && rect.height === 0 ? null : rect
+      } finally {
+        probe.remove()
+      }
+    }
+    const widthAt = (spacing: string, fontSize?: string) =>
+      probeRect(spacing, fontSize)?.width ?? 0
+    const computedFontSize = getComputedStyle(title).fontSize
+    const probeBox = probeRect('0px')
+    // Computed cq font-size can be stale. The fresh line box carries the actual em.
+    const em = (probeBox?.height ?? 0) / 1.05
+    if (!(em > 0)) {
+      return false
+    }
+    const designWidth = widthAt('')
+    const zeroWidth = widthAt('0px')
+    const unitSlope = (widthAt('100px') - zeroWidth) / 100
+    if (
+      !(designWidth > 0) ||
+      !(zeroWidth > 0) ||
+      !(unitSlope > 0) ||
+      zeroWidth > designWidth
+    ) {
+      logger.info('Cover title fit: degenerate measurements', {
+        title: label,
+        available,
+        computedFontSize,
+        designWidth,
+        zeroWidth,
+        unitSlope,
+      })
+      return false
+    }
+    let plan = planTitleFit({
+      available,
+      em,
+      designWidth,
+      zeroWidth,
+      unitSlope,
+    })
+    const appliedSpacing = () => Number.parseFloat(plan.letterSpacing) || 0
+    const apply = (next: typeof plan) => {
+      plan = next
+      title.style.letterSpacing = next.letterSpacing
+      if (next.fontSize !== undefined) title.style.fontSize = next.fontSize
+      const spacing = Number.parseFloat(next.letterSpacing) || 0
+      // Center from half the trailing spacing; Range rects lag transforms in WebKit.
+      const rtl = getComputedStyle(title).direction === 'rtl' ? -1 : 1
+      title.style.transform =
+        spacing > 0 ? `translateX(${(rtl * spacing) / 2}px)` : ''
+    }
+    apply(plan)
+    // Bounded, probe-only convergence, including one possible trailing spacing unit.
+    let settled = false
+    for (let pass = 0; pass < 3 && !settled; pass += 1) {
+      const probeOverflow =
+        widthAt(plan.letterSpacing, plan.fontSize) +
+        appliedSpacing() -
+        available
+      if (probeOverflow > 0.5) {
+        apply(
+          refineTitleFit({
+            plan,
+            overflow: probeOverflow,
+            em,
+            unitSlope,
+          })
+        )
+        continue
+      }
+      settled = true
+    }
+    // Hostile geometry falls back to zero tracking and measured width ratios.
+    if (!settled) {
+      const keptSize = plan.fontSize
+      apply(
+        keptSize !== undefined
+          ? { letterSpacing: '0px', fontSize: keptSize }
+          : { letterSpacing: '0px' }
+      )
+      for (let pass = 0; pass < 3; pass += 1) {
+        const width = widthAt('0px', title.style.fontSize || undefined)
+        if (width - available <= 0.5) break
+        const current =
+          Number.parseFloat(title.style.fontSize) ||
+          Number.parseFloat(getComputedStyle(title).fontSize) ||
+          em
+        const next = Math.max(em * 0.25, current * (available / width))
+        title.style.fontSize = `${next}px`
+        plan = { ...plan, fontSize: `${next}px` }
+      }
+      logger.info('Cover title fit: hard fallback engaged', {
+        title: label,
+        available,
+        letterSpacing: plan.letterSpacing,
+        fontSize: plan.fontSize,
+      })
+    }
+    if (!loggedFit) {
+      loggedFit = true
+      logger.info('Cover title fit committed', {
+        title: label,
+        available,
+        em,
+        computedFontSize,
+        designWidth,
+        zeroWidth,
+        unitSlope,
+        settledOverflow,
+        letterSpacing: plan.letterSpacing,
+        fontSize: plan.fontSize ?? null,
+        hardFallback: !settled,
+      })
+    }
+    return true
+  }
+
+  let retries = 0
+  let retryTimer: number | undefined
+  const scheduleRetry = () => {
+    if (disposed || retryTimer !== undefined || retries >= 16) return
+    retries += 1
+    retryTimer = window.setTimeout(() => {
+      retryTimer = undefined
+      refit()
+    }, 300)
+  }
+  const reduceMotion =
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  const canSettle = typeof ResizeObserver !== 'undefined' && reduceMotion
+  let revealed = !canSettle && fonts?.status !== 'loading'
+  let revealTimer: number | undefined
+  let settleTimer: number | undefined
+
+  const fitOrRetry = () => {
+    if (fit()) {
+      if (retryTimer !== undefined) window.clearTimeout(retryTimer)
+      retryTimer = undefined
+    } else scheduleRetry()
+  }
+  const reveal = () => {
+    if (disposed || revealed) return
+    revealed = true
+    if (settleTimer !== undefined) window.clearTimeout(settleTimer)
+    if (revealTimer !== undefined) window.clearTimeout(revealTimer)
+    settleTimer = undefined
+    revealTimer = undefined
+    fitOrRetry()
+    title.style.visibility = ''
+  }
+  const scheduleSettle = () => {
+    if (disposed || revealed) return
+    if (settleTimer !== undefined) window.clearTimeout(settleTimer)
+    // Reduced motion removes the entrance fade. Wait for both the mount hold
+    // and a quiet window before painting; every external trigger restarts it.
+    settleTimer = window.setTimeout(
+      () => {
+        settleTimer = undefined
+        if (fonts?.status !== 'loading' && !document.hidden) reveal()
+      },
+      Math.max(90, 150 - (performance.now() - mountedAt))
+    )
+  }
+  const refit = () => {
+    if (disposed) return
+    fitOrRetry()
+    scheduleSettle()
+  }
+
+  if (!revealed) title.style.visibility = 'hidden'
+  refit()
+  if (canSettle) {
+    revealTimer = window.setTimeout(reveal, 800)
+  } else if (!revealed) {
+    // With motion allowed the fade masks late layout, but not a font swap.
+    revealTimer = window.setTimeout(reveal, 400)
+    void fonts.ready.then(reveal).catch(reveal)
+  }
+  // cq/font metrics can settle without changing the zone's box. Finite late
+  // checks repair that silent drift; the first also caps a stuck hidden title.
+  const verifyTimers = [600, 2000, 5000].map(delay =>
+    window.setTimeout(() => {
+      if (disposed) return
+      if (delay === 600 && !revealed) reveal()
+      else refit()
+    }, delay)
+  )
+  fonts?.addEventListener('loadingdone', refit)
+  void fonts?.ready.then(refit).catch(() => undefined)
+  const onVisibility = () => {
+    if (!document.hidden) refit()
+  }
+  document.addEventListener('visibilitychange', onVisibility)
+  const observer =
+    typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(refit)
+  // The nowrap title's own box can stop tracking a shrinking column.
+  observer?.observe(title.parentElement ?? title)
+
+  return () => {
+    if (disposed) return
+    disposed = true // Promise continuations and queued observer callbacks cannot be cancelled.
+    if (retryTimer !== undefined) window.clearTimeout(retryTimer)
+    if (settleTimer !== undefined) window.clearTimeout(settleTimer)
+    if (revealTimer !== undefined) window.clearTimeout(revealTimer)
+    verifyTimers.forEach(timer => window.clearTimeout(timer))
+    title.style.visibility = ''
+    observer?.disconnect()
+    document.removeEventListener('visibilitychange', onVisibility)
+    fonts?.removeEventListener('loadingdone', refit)
   }
 }

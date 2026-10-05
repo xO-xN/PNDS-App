@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 
 // ── p5 visual constants ────────────────────────────────────────────────
 const W = 600,
@@ -24,7 +24,7 @@ const DARK_CIRCLE_START = 36
 const CIRCLE_REVEAL_DURATION = 20
 const TEXT_START_OFFSET = CLOSURE_FRAMES / 2 // 45 frames into closure
 const TEXT_FADE_FRAMES = 24
-const MAX_FRAME_DELTA = 2
+const FRAME_MS = 1000 / 60
 
 // Spring physics
 const STIFFNESS = 200,
@@ -32,7 +32,7 @@ const STIFFNESS = 200,
 
 const PALETTE = ['#ffbe0b', '#fb5607', '#ff006e', '#8338ec', '#3a86ff']
 
-type Phase = 'entrance' | 'wait' | 'closure' | 'done'
+type Phase = 'entrance' | 'wait' | 'closure'
 
 interface Props {
   /** Size (px) — canvas is always 600px internal, scaled via CSS. */
@@ -284,89 +284,85 @@ export function PndsLogoCanvas({
   onClosureEnd,
   entranceFrames = ENTRANCE_FRAMES,
 }: Props) {
-  const [phase, setPhase] = useState<Phase>('entrance')
-  const frameRef = useRef(0)
+  const readinessRef = useRef({ ready: false, since: 0 })
+  const entranceFramesRef = useRef(entranceFrames)
   const closureEndRef = useRef(onClosureEnd)
   const colsRef = useRef(pickSessionColors())
   const bgRef = useRef(randomBgPositions())
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
-  // Keep the latest parent callback without restarting the animation loop when
-  // AppShell re-renders for intermediate session snapshots.
+  // Snapshot changes must not restart the animation clock. Readiness time
+  // starts the closure after a genuine foreground wait; an early ready
+  // still lets the complete entrance play.
+  useEffect(() => {
+    readinessRef.current = { ready, since: performance.now() }
+  }, [ready])
   useEffect(() => {
     closureEndRef.current = onClosureEnd
   }, [onClosureEnd])
-
-  // Reset on mount (state already defaults to 'entrance' / false).
   useEffect(() => {
-    frameRef.current = 0
-    colsRef.current = pickSessionColors()
-    bgRef.current = randomBgPositions()
-  }, [])
+    entranceFramesRef.current = entranceFrames
+  }, [entranceFrames])
 
-  // Advance to closure when ready
   useEffect(() => {
-    if (ready && phase === 'wait') {
-      frameRef.current = 0
-      queueMicrotask(() => setPhase('closure'))
-    }
-    // If already ready before entrance finishes, let entrance complete first
-  }, [ready, phase])
-
-  // Animation loop
-  useEffect(() => {
-    // The wait phase must be a true pause: its frame counter must not
-    // advance toward the closure limit before the real ready signal arrives.
-    if (phase === 'wait' || phase === 'done') return
     const canvas = canvasRef.current
     if (!canvas) return
     const ctx = canvas.getContext('2d')
     if (!ctx) return
     const cols = colsRef.current,
       bg = bgRef.current
-
+    const closureMs = (CLOSURE_FRAMES * 1000) / 60
+    const startedAt = performance.now()
+    let lastFrameAt = startedAt
+    let closureStartedAt = 0
+    let phase: Phase = 'entrance'
+    let skipClosure = false
     let raf = 0
-    let last = performance.now()
+
     const tick = (now: number) => {
-      const dt = Math.min((now - last) / (1000 / 60), MAX_FRAME_DELTA) // normalised to 60 fps; cap stalls so phases remain visible
-      last = now
-      frameRef.current += dt
+      const entranceFrames = entranceFramesRef.current
+      const entranceMs = (entranceFrames * 1000) / 60
+      // #34: rAF is withheld by an occluded WKWebView (including macOS
+      // 13, where backgroundThrottling is unavailable). A gap longer than
+      // the complete choreography retires it, even if the ready snapshot
+      // only arrives AFTER rendering resumes. Readiness remains required.
+      if (now - lastFrameAt >= entranceMs + closureMs) skipClosure = true
+      lastFrameAt = now
 
-      const f = frameRef.current
-      const maxFrames = phase === 'entrance' ? entranceFrames : CLOSURE_FRAMES
-
-      if (f >= maxFrames) {
-        if (phase === 'entrance') {
-          // Entrance complete. The internal-mode entrance is an explicit
-          // 2s hold (scsynth/CoreAudio boot window): ready must NOT cut
-          // it short — the full entrance always plays, then closure.
-          if (ready) {
-            drawFrame(ctx, entranceFrames, 'wait', cols, bg, entranceFrames)
-            frameRef.current = 0
-            queueMicrotask(() => setPhase('closure'))
-            return
-          } else {
-            // Paint the completed entrance frame once more, then pause
-            drawFrame(ctx, entranceFrames, 'wait', cols, bg, entranceFrames)
-            queueMicrotask(() => setPhase('wait'))
-            return
-          }
+      if (phase === 'entrance') {
+        const frame = (now - startedAt) / FRAME_MS
+        if (now - startedAt < entranceMs) {
+          drawFrame(ctx, frame, phase, cols, bg, entranceFrames)
         } else {
-          // closure complete → hold the final frame (#50: the parent
-          // cross-fades the whole splash once the reveal gate releases)
-          drawFrame(ctx, maxFrames, 'closure', cols, bg, entranceFrames)
-          setPhase('done')
+          drawFrame(ctx, entranceFrames, 'wait', cols, bg, entranceFrames)
+          phase = 'wait'
+        }
+      }
+      if (phase === 'wait' && readinessRef.current.ready) {
+        phase = 'closure'
+        closureStartedAt = skipClosure
+          ? now - closureMs
+          : Math.max(startedAt + entranceMs, readinessRef.current.since)
+      }
+      if (phase === 'closure') {
+        const frame = Math.min(
+          (now - closureStartedAt) / FRAME_MS,
+          CLOSURE_FRAMES
+        )
+        drawFrame(ctx, frame, phase, cols, bg, entranceFrames)
+        if (now - closureStartedAt >= closureMs) {
           closureEndRef.current?.()
           return
         }
       }
 
-      drawFrame(ctx, f, phase, cols, bg, entranceFrames)
+      // Waiting never advances the animation or repaints. Keep observing
+      // frame delivery so suspension is detectable while ready events lag.
       raf = requestAnimationFrame(tick)
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
-  }, [phase, ready, entranceFrames])
+  }, [])
 
   return (
     <canvas

@@ -79,6 +79,15 @@ describe('build baseline invariants (#117)', () => {
     expect(valuesUnderKey(overlay, 'minimumSystemVersion')).toEqual([])
   })
 
+  it('both macOS lanes keep the main webview running in the background (#34)', () => {
+    const base = JSON.parse(readFileSync(BASE_CONF, 'utf8'))
+    const overlay = JSON.parse(readFileSync(X64_CONF, 'utf8'))
+    for (const config of [base, { ...base, ...overlay }]) {
+      const main = config.app.windows.find(window => window.label === 'main')
+      expect(main.backgroundThrottling).toBe('disabled')
+    }
+  })
+
   it('the system floor is defined exactly once, in the base config', () => {
     const base = JSON.parse(readFileSync(BASE_CONF, 'utf8'))
     const floors = valuesUnderKey(base, 'minimumSystemVersion')
