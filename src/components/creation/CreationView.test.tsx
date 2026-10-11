@@ -29,6 +29,12 @@ describe('creation reading workspace', () => {
     vi.clearAllMocks()
     useSessionStore.setState({ sessionStatus: 'idle' })
     useCreationStore.setState({
+      modePhase: 'idle',
+      modePlan: null,
+      modeError: null,
+      hoverPaused: false,
+      modePointerInside: false,
+      restoreModeFocus: false,
       active: true,
       workspace: null,
       recentPaths: ['/draft'],
@@ -40,7 +46,7 @@ describe('creation reading workspace', () => {
 
   it('opens a real directory selection, reads and finds text, and opens Finder through the trusted identity', async () => {
     vi.mocked(open).mockResolvedValueOnce('/draft')
-    vi.mocked(commands.openCreationProject).mockResolvedValueOnce({
+    vi.mocked(commands.prepareCreationProject).mockResolvedValueOnce({
       status: 'ok',
       data: first,
     })
@@ -91,7 +97,7 @@ describe('creation reading workspace', () => {
     await screen.findByText('Read-only · installed .pnds bundle')
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(useCreationStore.getState().workspace).toEqual(first)
-    expect(commands.openCreationProject).not.toHaveBeenCalled()
+    expect(commands.prepareCreationProject).not.toHaveBeenCalled()
   })
 
   it('isolates late reads and clears file search and errors when the project changes', async () => {

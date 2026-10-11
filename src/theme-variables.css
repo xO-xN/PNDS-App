@@ -155,6 +155,11 @@
   --pnds-font-text: 'Manrope', -apple-system, 'Segoe UI', sans-serif;
 
   --pnds-bg: #eef0f8;
+  /* Creation file categories from the approved UI prototype. */
+  --pnds-file-system: #437768;
+  --pnds-file-pages: #4d60b6;
+  --pnds-file-audio: #996413;
+  --pnds-file-modules: #7a4baa;
   --pnds-sidebar-bg: #e2e5f3;
   --pnds-card: #ffffff;
   /* Controls are recessed fields inside the white card, so the pill is a
@@ -240,6 +245,10 @@
      the LIGHTER amber (#fbbf24), ≥4.5:1 on every surface. Ladder keeps
      bg < sidebar < pill < card. Text 7.2-9.7:1, secondary 5.6-7.5:1. */
   --pnds-bg: #474036;
+  --pnds-file-system: #b1dec6;
+  --pnds-file-pages: #bdcaff;
+  --pnds-file-audio: #ffdb8a;
+  --pnds-file-modules: #e4c4fa;
   --pnds-sidebar-bg: #4e463b;
   --pnds-card: #5c5344;
   --pnds-pill: #544a3e;
@@ -312,6 +321,10 @@
      the surface ladder inverts with the palette: bg < sidebar < pill <
      card. */
   --pnds-bg: #0b0c10;
+  --pnds-file-system: #8bcdb7;
+  --pnds-file-pages: #a9baff;
+  --pnds-file-audio: #f4cc80;
+  --pnds-file-modules: #d6b1ee;
   --pnds-sidebar-bg: #101218;
   --pnds-card: #16181f;
   --pnds-pill: #12151d;
@@ -402,6 +415,10 @@
   --pnds-font-text: 'Archivo', -apple-system, 'Segoe UI', 'Roboto', sans-serif;
 
   --pnds-bg: #fff1c9;
+  --pnds-file-system: #8bcdb7;
+  --pnds-file-pages: #a9baff;
+  --pnds-file-audio: #f4cc80;
+  --pnds-file-modules: #d6b1ee;
   /* Amber — the third attempt at the shadowless panel: white clashed
      with the white cards/audio surfaces below it, pale cream with the
      bg. Amber is the theme's own yellow at panel strength: same warm

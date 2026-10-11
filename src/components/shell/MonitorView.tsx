@@ -7,6 +7,7 @@ import {
 } from '@/store/session-store'
 import { useProjectStore } from '@/store/project-store'
 import { useProjectionStore } from '@/store/projection-store'
+import { useCreationStore } from '@/store/creation-store'
 import {
   useSettingsStore,
   currentColorThemeSetting,
@@ -39,6 +40,7 @@ import { MonitorScaleFrame } from './MonitorScaleFrame'
  * slide + fade) and slides back out when the pointer leaves.
  */
 export function MonitorView() {
+  const creationActive = useCreationStore(state => state.active)
   const hostRef = useRef<HTMLDivElement>(null)
   const health = useSessionStore(state => state.health)
   const projectName = useSessionStore(state => state.projectName)
@@ -200,7 +202,12 @@ export function MonitorView() {
       ref={hostRef}
       tabIndex={-1}
       data-testid="monitor-host"
-      className="relative h-screen w-screen overflow-hidden bg-black outline-none"
+      className={cn(
+        'overflow-hidden bg-black outline-none',
+        creationActive
+          ? 'relative min-h-0 min-w-0 h-full w-full'
+          : 'relative h-screen w-screen'
+      )}
     >
       {/* §v1.1.1: browser-style zoom — the shared MonitorScaleFrame
           (transform + inverse size; #131: the projection window's
@@ -256,9 +263,15 @@ export function MonitorView() {
           page, so light themes keep the dark value. */}
       <div
         data-tauri-drag-region
-        className="absolute left-1/2 top-0 z-40 flex -translate-x-1/2 cursor-default select-none items-center rounded-b-xl bg-(--pnds-monitor-bar) px-5 py-1.5 text-xs font-medium tracking-wide text-(--pnds-monitor-bar-text) backdrop-blur-md"
+        className={cn(
+          'absolute top-0 z-40 flex cursor-default select-none items-center bg-(--pnds-monitor-bar) px-5 py-1.5 text-xs font-medium tracking-wide text-(--pnds-monitor-bar-text) backdrop-blur-md',
+          creationActive
+            ? 'inset-x-0'
+            : 'left-1/2 -translate-x-1/2 rounded-b-xl'
+        )}
       >
-        PNDS - {displayOverride ?? projectName}
+        {creationActive ? t('creation.title') : 'PNDS'} -{' '}
+        {displayOverride ?? projectName}
         {/* v1.5.0 (#130): the ▶ projection gate — textless, rendered only
             while the projection window exists (windowExists store). Not
             started: a continuous blink asking for 开演 (static highlight
@@ -268,7 +281,7 @@ export function MonitorView() {
             Rust-authoritative gate; the state lands back through the
             session snapshot. The wrapper opts out of the drag region —
             the strip is one, the button must stay clickable. */}
-        {projectionStart.visible && (
+        {!creationActive && projectionStart.visible && (
           <span data-tauri-drag-region="false" className="ms-2 inline-flex">
             <button
               type="button"
@@ -290,7 +303,7 @@ export function MonitorView() {
         )}
       </div>
 
-      <HoverSidebar />
+      {!creationActive && <HoverSidebar />}
     </div>
   )
 }

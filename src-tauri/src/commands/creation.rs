@@ -5,9 +5,11 @@ use crate::project::creation::{
     CreationAccess, CreationContent, CreationError, CreationErrorCode, CreationFile,
     CreationProject, CreationWorkspace, Protection,
 };
+use crate::project::session::{CreationRuntime, SessionManager};
+use crate::types::SessionStatus;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 use tauri_plugin_opener::OpenerExt;
 
 #[derive(Default)]
@@ -61,6 +63,72 @@ pub async fn open_creation_project(
 ) -> Result<CreationWorkspace, CreationError> {
     state
         .run(move |access| access.open(Path::new(&path), &protection(&app)?))
+        .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn prepare_creation_project(
+    app: AppHandle,
+    state: State<'_, CreationState>,
+    path: String,
+) -> Result<CreationWorkspace, CreationError> {
+    state
+        .run(move |access| access.prepare(Path::new(&path), &protection(&app)?))
+        .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn get_creation_runtime(app: AppHandle) -> Result<CreationRuntime, CreationError> {
+    run_blocking(move || Ok(app.state::<SessionManager>().creation_runtime())).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn close_creation_projection(app: AppHandle) -> Result<(), CreationError> {
+    if let Some(window) = app.get_webview_window("projection") {
+        window
+            .destroy()
+            .map_err(|e| CreationError::new(CreationErrorCode::Io, e.to_string()))?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn commit_creation_project(
+    app: AppHandle,
+    state: State<'_, CreationState>,
+    identity: Option<String>,
+    generation: String,
+) -> Result<CreationRuntime, CreationError> {
+    state
+        .run(move |access| {
+            let protection = protection(&app)?;
+            let project = identity
+                .as_deref()
+                .map(|identity| access.prepared_project(identity, &protection))
+                .transpose()?;
+            app.state::<SessionManager>()
+                .with_creation_generation(&generation, |runtime| {
+                    if runtime.snapshot.status == SessionStatus::Ready
+                        && !project.as_ref().is_some_and(|project| {
+                            project.source == crate::project::creation::CreationSource::Folder
+                                && Some(&project.root) == runtime.project_root.as_ref()
+                        })
+                    {
+                        return Err(
+                            "End the current runtime before changing the creation project".into(),
+                        );
+                    }
+                    if let Some(identity) = &identity {
+                        access.activate_prepared(identity).map_err(|e| e.detail)?;
+                    }
+                    Ok(runtime)
+                })
+                .map_err(|e| CreationError::new(CreationErrorCode::InvalidIdentity, e))
+        })
         .await
 }
 

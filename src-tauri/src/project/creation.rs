@@ -156,11 +156,22 @@ struct OpenProject {
 #[derive(Default)]
 pub struct CreationAccess {
     project: Option<OpenProject>,
+    prepared: Option<OpenProject>,
     generation: u64,
 }
 
 impl CreationAccess {
     pub fn open(
+        &mut self,
+        path: &Path,
+        protection: &Protection,
+    ) -> Result<CreationWorkspace, CreationError> {
+        let workspace = self.prepare(path, protection)?;
+        self.commit(&workspace.project.identity, protection)?;
+        Ok(workspace)
+    }
+
+    pub fn prepare(
         &mut self,
         path: &Path,
         protection: &Protection,
@@ -216,14 +227,62 @@ impl CreationAccess {
         files.sort_by(|a, b| a.path.cmp(&b.path));
         self.generation += 1;
         let descriptor = candidate.descriptor.clone();
-        self.project = Some(candidate);
+        self.prepared = Some(candidate);
         Ok(CreationWorkspace {
             project: descriptor,
             files,
         })
     }
 
+    pub fn prepared_project(
+        &self,
+        identity: &str,
+        protection: &Protection,
+    ) -> Result<CreationProject, CreationError> {
+        let candidate = self
+            .prepared
+            .as_ref()
+            .filter(|p| p.descriptor.identity == identity)
+            .ok_or_else(|| {
+                CreationError::new(
+                    CreationErrorCode::InvalidIdentity,
+                    "The prepared project expired",
+                )
+            })?;
+        validate_identity(candidate, protection)?;
+        Ok(candidate.descriptor.clone())
+    }
+
+    pub fn commit(&mut self, identity: &str, protection: &Protection) -> Result<(), CreationError> {
+        self.prepared_project(identity, protection)?;
+        self.activate_prepared(identity)
+    }
+
+    /// Called only after validation under the creation access lock. No disk
+    /// I/O belongs inside the runtime-generation critical section.
+    pub(crate) fn activate_prepared(&mut self, identity: &str) -> Result<(), CreationError> {
+        if !self
+            .prepared
+            .as_ref()
+            .is_some_and(|project| project.descriptor.identity == identity)
+        {
+            return Err(CreationError::new(
+                CreationErrorCode::InvalidIdentity,
+                "The prepared project expired",
+            ));
+        }
+        self.project = self.prepared.take();
+        Ok(())
+    }
+
     pub fn close(&mut self, identity: &str) {
+        if self
+            .prepared
+            .as_ref()
+            .is_some_and(|p| p.descriptor.identity == identity)
+        {
+            self.prepared = None;
+        }
         if self
             .project
             .as_ref()
@@ -249,14 +308,7 @@ impl CreationAccess {
             .as_ref()
             .filter(|p| p.descriptor.identity == identity)
             .ok_or_else(invalid)?;
-        let disk = fs::metadata(&project.root).map_err(|_| invalid())?;
-        let held = project.directory.metadata().map_err(io_error)?;
-        if disk.dev() != held.dev()
-            || disk.ino() != held.ino()
-            || protection.source(&project.root) != project.descriptor.source
-        {
-            return Err(invalid());
-        }
+        validate_identity(project, protection)?;
         Ok(project)
     }
 
@@ -317,6 +369,24 @@ impl CreationAccess {
         project.file(path)?;
         project.resolve(path)
     }
+}
+
+fn validate_identity(project: &OpenProject, protection: &Protection) -> Result<(), CreationError> {
+    let invalid = || {
+        CreationError::new(
+            CreationErrorCode::InvalidIdentity,
+            "Reopen the project folder",
+        )
+    };
+    let disk = fs::metadata(&project.root).map_err(|_| invalid())?;
+    let held = project.directory.metadata().map_err(io_error)?;
+    if disk.dev() != held.dev()
+        || disk.ino() != held.ino()
+        || protection.source(&project.root) != project.descriptor.source
+    {
+        return Err(invalid());
+    }
+    Ok(())
 }
 
 impl OpenProject {

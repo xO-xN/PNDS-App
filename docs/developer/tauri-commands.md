@@ -11,6 +11,12 @@ This app uses tauri-specta to generate TypeScript bindings from Rust commands, p
 - **IDE autocomplete** - Full IntelliSense for command names, parameters, and return types
 - **Safe refactoring** - Rename commands safely across the stack
 
+Mode handoff uses `getCreationRuntime`, `prepareCreationProject` and
+`commitCreationProject`: preparation keeps the active file identity valid,
+commit checks the runtime generation, and `closeCreationProjection` closes only
+the fixed projection label. See [creation-workspace.md](./creation-workspace.md)
+for confirmation, cancellation and registered cleanup.
+
 ## Usage
 
 Creation commands (`openCreationProject`, `describeCreationProjects`,

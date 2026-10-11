@@ -2,6 +2,13 @@
 
 Two-layer "onion" architecture for state management.
 
+Mode handoff captures a backend runtime generation and prepares a separate file
+identity. Its final commit checks that generation under the lifecycle lock.
+`latestSnapshot` and `snapshotRevision` preserve incoming runtime facts: a late
+command response must defer to newer events. Presentation/config resets leave
+these facts and the command owner's `commandPending` latch intact. Handoff keeps
+the monitor at one child/key and seeds applied configuration from runtime facts.
+
 ## The Two Layers
 
 Creation reading follows this same split: the workspace and recent paths live

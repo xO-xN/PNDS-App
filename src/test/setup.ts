@@ -103,6 +103,25 @@ vi.mock('@/lib/tauri-bindings', async () => {
       listen(name, cb as never),
     emit: (payload?: unknown) => emit(name, payload),
   })
+  const idleSnapshot = {
+    status: 'idle',
+    projectName: null,
+    projectPath: null,
+    audioMode: null,
+    lanIp: null,
+    oscTarget: null,
+    health: null,
+    error: null,
+    outputTail: [],
+    volume: 80,
+    projectionStarted: false,
+    httpsEntry: { status: 'off', url: null, error: null },
+  }
+  const idleRuntime = {
+    generation: '0',
+    projectRoot: null,
+    snapshot: idleSnapshot,
+  }
   return {
     events: {
       helpReadyEvent: makeEvent('help-ready-event'),
@@ -114,6 +133,22 @@ vi.mock('@/lib/tauri-bindings', async () => {
       projectionWindowEvent: makeEvent('projection-window-event'),
     },
     commands: {
+      closeCreationProjection: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      getCreationRuntime: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: idleRuntime }),
+      commitCreationProject: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: idleRuntime }),
+      prepareCreationProject: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: {
+          code: 'invalidProject',
+          detail: 'prepareCreationProject not mocked',
+        },
+      }),
       openCreationProject: vi.fn().mockResolvedValue({
         status: 'error',
         error: {
@@ -203,23 +238,9 @@ vi.mock('@/lib/tauri-bindings', async () => {
         .mockResolvedValue({ status: 'ok', data: 0 }),
       startProject: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
       stopProject: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
-      getSessionState: vi.fn().mockResolvedValue({
-        status: 'ok',
-        data: {
-          status: 'idle',
-          projectName: null,
-          projectPath: null,
-          audioMode: null,
-          lanIp: null,
-          oscTarget: null,
-          health: null,
-          error: null,
-          outputTail: [],
-          volume: 80,
-          projectionStarted: false,
-          httpsEntry: { status: 'off', url: null, error: null },
-        },
-      }),
+      getSessionState: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: idleSnapshot }),
       // v1.5.0 (#130): the projection start gate — default: no-op ok.
       toggleProjectionStart: vi
         .fn()

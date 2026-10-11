@@ -359,10 +359,10 @@
   "creation.openFinder": "Open project folder in Finder",
   "creation.revealFile": "Reveal file in Finder",
   "creation.category.audio": "Audio",
-  "creation.category.pages": "Pages",
+  "creation.category.pages": "Animation and pages",
   "creation.category.modules": "Modules",
   "creation.category.assets": "Assets",
-  "creation.category.system": "Project and system",
+  "creation.category.system": "System",
   "creation.noFiles": "No matching files.",
   "creation.selectFile": "Select a file to read.",
   "creation.readOnly": "File reading · edits continue externally",
@@ -381,5 +381,14 @@
   "creation.error.invalidProject": "The folder does not meet the creation opening requirements.",
   "creation.error.io": "The operation could not be completed.",
   "creation.settings": "Settings",
-  "creation.source.readOnlyFolder": "Read-only · no permission to edit this folder"
+  "creation.source.readOnlyFolder": "Read-only · no permission to edit this folder",
+  "creation.keepRunningHint": "The current project keeps running as you enter creation.",
+  "creation.selectedHint": "Create with the selected project without starting it.",
+  "creation.stopToHomeHint": "End the current runtime and enter the creation home.",
+  "creation.discardHint": "End testing and confirm discarding unsaved changes.",
+  "creation.switching": "Switching to {{mode}}",
+  "creation.switchBusy": "Wait for the current startup or shutdown to finish.",
+  "creation.switchStale": "The runtime changed while preparing the switch. Try again.",
+  "creation.workspace": "Creation workspace",
+  "creation.projectContent": "Project"
 }

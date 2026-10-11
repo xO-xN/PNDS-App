@@ -120,6 +120,10 @@ const volumeToRestore = (current: number, recorded: number): number =>
   current > 0 ? current : recorded
 
 interface SessionState {
+  /** Last authoritative fact record and arrival revision; UI resets do not retire it. */
+  latestSnapshot: SessionSnapshot | null
+  snapshotRevision: number
+  commandPending: boolean
   /** Mirrors the Rust SessionManager via `pnds:session` events (§8, §9). */
   sessionStatus: SessionStatus
   sessionError: string | null
@@ -275,6 +279,9 @@ export const useSessionStore = create<SessionState>()(set => ({
   outputTail: [],
   projectName: null,
   sessionProjectPath: null,
+  latestSnapshot: null,
+  snapshotRevision: 0,
+  commandPending: false,
   sessionLanIp: null,
   sessionHostAddress: null,
   projectionStarted: false,
@@ -377,6 +384,8 @@ export const useSessionStore = create<SessionState>()(set => ({
         state.sessionProjectPath !== null &&
         snapshot.projectPath === state.sessionProjectPath
       return {
+        latestSnapshot: snapshot,
+        snapshotRevision: state.snapshotRevision + 1,
         sessionStatus: snapshot.status,
         sessionError: snapshot.error,
         health: snapshot.health,

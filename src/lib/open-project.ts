@@ -187,6 +187,20 @@ export async function runPreflight(path: string): Promise<void> {
  * its settings card turns into a ready-to-Load card (spec #35 story 11).
  */
 export async function stopAndReset(): Promise<void> {
+  if (
+    useSessionStore.getState().commandPending ||
+    useCreationStore.getState().modePhase !== 'idle'
+  )
+    return
+  useSessionStore.setState({ commandPending: true })
+  try {
+    await stopAndResetSelection()
+  } finally {
+    useSessionStore.setState({ commandPending: false })
+  }
+}
+
+async function stopAndResetSelection(): Promise<void> {
   // Read BEFORE the stop — the final idle snapshot clears sessionProjectPath.
   const stoppedSessionPath = useSessionStore.getState().sessionProjectPath
   const result = await commands.stopProject()

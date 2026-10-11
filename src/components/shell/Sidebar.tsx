@@ -55,7 +55,7 @@ import {
 import { FolderSwitch } from './FolderSwitch'
 import { InlineNameInput } from './InlineNameInput'
 import { SettingsCard } from './SettingsCard'
-import { CreationModeButton } from '@/components/creation/CreationModeButton'
+import { CreationModeButton } from '@/components/creation'
 import { SessionActionButton } from './SessionActionButton'
 import { TrafficLights } from './TrafficLights'
 import { cn } from '@/lib/utils'
@@ -882,7 +882,7 @@ export function Sidebar({
           stays outside the project scroller. The art keeps the column's
           reserved zone clear (#71 v2); this wrapper is its containing
           block. */}
-      <div data-testid="settings-footer" className="relative px-5 pb-5 pt-6">
+      <div data-testid="settings-footer" className="relative px-5 pb-2 pt-6">
         {brutal && (
           /* A stretching div, not the img: a replaced element ignores the
              inset stretch (it would render at intrinsic size), while this
@@ -902,8 +902,8 @@ export function Sidebar({
           <SettingsCard onPopupOpenChange={onPopupOpenChange} />
           <SessionActionButton />
         </div>
-        {sessionStatus === 'idle' && <CreationModeButton />}
       </div>
+      <CreationModeButton />
 
       {/* v1.1.2 T4/T5: the dragged card's semi-transparent floating clone
           (spec issues #8, #9) — a project card or a folder segment.

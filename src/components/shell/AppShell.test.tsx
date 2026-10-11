@@ -64,6 +64,12 @@ describe('AppShell', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     useCreationStore.setState({
+      modePhase: 'idle',
+      modePlan: null,
+      modeError: null,
+      hoverPaused: false,
+      modePointerInside: false,
+      restoreModeFocus: false,
       active: false,
       workspace: null,
       recentPaths: [],
@@ -112,12 +118,21 @@ describe('AppShell', () => {
       name: 'Switch to creation mode',
     })
     fireEvent.click(entry)
+    await waitFor(() =>
+      expect(useCreationStore.getState().modePhase).toBe('armed')
+    )
     expect(useCreationStore.getState().active).toBe(false)
     fireEvent.keyDown(window, { key: 'Escape' })
     fireEvent.click(entry)
+    await waitFor(() =>
+      expect(useCreationStore.getState().modePhase).toBe('armed')
+    )
     expect(useCreationStore.getState().active).toBe(false)
     fireEvent.pointerDown(window)
     fireEvent.click(entry)
+    await waitFor(() =>
+      expect(useCreationStore.getState().modePhase).toBe('armed')
+    )
     expect(useCreationStore.getState().active).toBe(false)
     fireEvent.click(entry)
     await screen.findByRole('heading', { name: 'Creation mode' })
@@ -128,11 +143,70 @@ describe('AppShell', () => {
       name: 'Return to performance mode',
     })
     fireEvent.click(back)
+    await waitFor(() =>
+      expect(useCreationStore.getState().modePhase).toBe('armed')
+    )
     fireEvent.click(back)
+    await waitFor(() =>
+      expect(useCreationStore.getState().modePhase).toBe('idle')
+    )
     expect(useCreationStore.getState().active).toBe(false)
     expect(useCreationStore.getState().workspace).toBeNull()
     expect(commands.startProject).not.toHaveBeenCalled()
     expect(commands.stopProject).not.toHaveBeenCalled()
+  })
+
+  it('keeps the live monitor document mounted when a different selected card enters creation', async () => {
+    const runtime = {
+      generation: '7',
+      projectRoot: '/p',
+      snapshot: readySnapshot,
+    }
+    vi.mocked(commands.getSessionState).mockResolvedValue({
+      status: 'ok',
+      data: readySnapshot,
+    })
+    vi.mocked(commands.getCreationRuntime).mockResolvedValue({
+      status: 'ok',
+      data: runtime,
+    })
+    vi.mocked(commands.commitCreationProject).mockResolvedValue({
+      status: 'ok',
+      data: runtime,
+    })
+    vi.mocked(commands.prepareCreationProject).mockResolvedValue({
+      status: 'ok',
+      data: {
+        project: {
+          identity: 'running',
+          root: '/p',
+          source: 'folder',
+          name: 'Inarticulate III',
+        },
+        files: [],
+      },
+    })
+    useSessionStore.getState().applySnapshot(readySnapshot)
+    useProjectStore.setState({
+      currentProject: { path: '/other', manifest: readyManifest },
+    })
+    render(<AppShell />)
+    const monitor = await screen.findByTitle('Project monitor')
+    const src = monitor.getAttribute('src')
+    expect(
+      screen.getByRole('button', { name: 'Switch to creation mode' })
+    ).toBeInTheDocument()
+    await act(async () => {
+      await useCreationStore.getState().enter()
+    })
+    expect(
+      screen.getByRole('heading', { name: 'Creation workspace' })
+    ).toBeInTheDocument()
+    expect(screen.getByTitle('Project monitor')).toBe(monitor)
+    expect(monitor.getAttribute('src')).toBe(src)
+    expect(commands.prepareCreationProject).toHaveBeenCalledWith('/p')
+    expect(commands.stopProject).not.toHaveBeenCalled()
+    expect(commands.startProject).not.toHaveBeenCalled()
   })
 
   it('shows Welcome with an always-open sidebar when idle (§10.4)', () => {

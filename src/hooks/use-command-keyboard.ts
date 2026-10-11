@@ -119,7 +119,10 @@ export function useCommandKeyboard(): void {
         return
       }
       // ⌘R must never fall through to the webview's page reload.
-      if (useCreationStore.getState().active) {
+      if (
+        useCreationStore.getState().active ||
+        useCreationStore.getState().modePhase !== 'idle'
+      ) {
         if (event.code === 'KeyR') event.preventDefault()
         return
       }

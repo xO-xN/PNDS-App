@@ -1,6 +1,7 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @import './theme-variables.css';
+@import './components/creation/creation.css';
 
 /* PNDS brand fonts (bundled locally; the app must work offline) */
 @font-face {

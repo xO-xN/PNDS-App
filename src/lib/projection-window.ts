@@ -159,7 +159,14 @@ export async function openProjectionWindow(): Promise<void> {
  * window — the running session and the main window are untouched). No-op
  * when none exists.
  */
-export async function closeProjectionWindow(): Promise<void> {
+export async function closeProjectionWindow(options?: {
+  requireCompletion: boolean
+}): Promise<void> {
+  if (options?.requireCompletion) {
+    const result = await commands.closeCreationProjection()
+    if (result.status === 'error') throw new Error(result.error.detail)
+    return
+  }
   const existing = await WebviewWindow.getByLabel(PROJECTION_WINDOW_LABEL)
   if (!existing) return
   try {

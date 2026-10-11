@@ -358,10 +358,10 @@
   "creation.openFinder": "在 Finder 中打开工程文件夹",
   "creation.revealFile": "在 Finder 中定位文件",
   "creation.category.audio": "音频",
-  "creation.category.pages": "页面",
+  "creation.category.pages": "动画与页面",
   "creation.category.modules": "模块",
   "creation.category.assets": "素材",
-  "creation.category.system": "工程与系统",
+  "creation.category.system": "系统",
   "creation.noFiles": "没有匹配文件。",
   "creation.selectFile": "选择文件以阅读。",
   "creation.readOnly": "文件阅读 · 在外部继续编辑",
@@ -380,5 +380,14 @@
   "creation.error.invalidProject": "文件夹不符合创作打开要求。",
   "creation.error.io": "无法完成操作。",
   "creation.settings": "设置",
-  "creation.source.readOnlyFolder": "只读 · 没有编辑此文件夹的权限"
+  "creation.source.readOnlyFolder": "只读 · 没有编辑此文件夹的权限",
+  "creation.keepRunningHint": "当前工程继续运行，直接进入创作。",
+  "creation.selectedHint": "直接创作所选工程，不启动测试。",
+  "creation.stopToHomeHint": "结束当前运行，进入创作首页。",
+  "creation.discardHint": "结束测试，并确认放弃未保存修改。",
+  "creation.switching": "正在切换到{{mode}}",
+  "creation.switchBusy": "请等待当前启动或关停完成。",
+  "creation.switchStale": "准备切换期间运行已改变，请重试。",
+  "creation.workspace": "创作工作台",
+  "creation.projectContent": "作品"
 }

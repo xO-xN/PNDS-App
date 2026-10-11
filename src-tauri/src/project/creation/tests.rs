@@ -1,6 +1,54 @@
 use super::*;
 use std::fs;
 
+#[test]
+fn runtime_generation_change_rejects_a_prepared_mode_commit() {
+    let manager = crate::project::session::SessionManager::default();
+    let initial = manager.creation_runtime();
+    let app = tauri::test::mock_app();
+    crate::events::events_builder::<tauri::test::MockRuntime>().mount_events(app.handle());
+    manager.stop(app.handle()).unwrap();
+    assert!(manager
+        .with_creation_generation(&initial.generation, |_| Ok(()))
+        .is_err());
+    let current = manager.creation_runtime();
+    assert_ne!(initial.generation, current.generation);
+    manager
+        .with_creation_generation(&current.generation, |_| Ok(()))
+        .unwrap();
+}
+
+#[test]
+fn preparing_then_cancelling_keeps_the_active_project_readable() {
+    let temp = tempfile::tempdir().unwrap();
+    let first = project(temp.path(), "first");
+    let second = project(temp.path(), "second");
+    let protection = Protection::default();
+    let mut access = CreationAccess::default();
+    let original = access.open(&first, &protection).unwrap().project;
+    let pending = access.prepare(&second, &protection).unwrap().project;
+    access
+        .read(&original.identity, "server.js", &protection)
+        .unwrap();
+    access.close(&pending.identity);
+    access
+        .read(&original.identity, "server.js", &protection)
+        .unwrap();
+    assert!(access.commit(&pending.identity, &protection).is_err());
+    let pending = access.prepare(&second, &protection).unwrap().project;
+    access.commit(&pending.identity, &protection).unwrap();
+    access
+        .read(&pending.identity, "server.js", &protection)
+        .unwrap();
+    assert_eq!(
+        access
+            .read(&original.identity, "server.js", &protection)
+            .unwrap_err()
+            .code,
+        CreationErrorCode::InvalidIdentity
+    );
+}
+
 fn project(parent: &std::path::Path, name: &str) -> std::path::PathBuf {
     let root = parent.join(name);
     fs::create_dir_all(&root).unwrap();

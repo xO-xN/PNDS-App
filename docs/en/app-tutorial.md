@@ -81,7 +81,7 @@ During a performance or rehearsal, when you need to switch the audio output devi
 
 ## 8. Creation reading workspace
 
-On the idle home, hover or focus the mode button at the bottom of the sidebar
+Hover or focus the mode button at the bottom of the performance sidebar
 to discover creation mode. Click once to see the consequence, then again to
 enter. Esc, clicking elsewhere or losing window focus cancels confirmation.
 Choose **Open folder project** or continue from **Recent creations**. In creation
@@ -107,6 +107,16 @@ distinct feedback. Refresh the file list when needed. Creation opening checks
 basic declarations and entry structure, so an initial draft can be read before
 dependencies or sound artifacts are built. Running and packing keep their own
 checks.
+
+The capsule uses a fixed slanted fill and 300ms name transition. It holds the
+new mode's resting appearance until the pointer leaves and returns; Brutal and
+reduced motion complete directly. Startup or shutdown disables switching. A
+running editable folder takes precedence over another selected card and enters
+creation without restarting or reloading its monitor. A selected idle folder
+opens without starting. Installed bundles, tools and noneditable targets end the
+old runtime and enter the creation home. Entering creation closes the projection.
+Returning to performance ends testing, clears selection and temporary state, and
+returns to the idle home without auto-loading.
 
 This step provides file reading. Continue editing, file organization and asset
 processing in your external editor or Finder. Returning to performance mode

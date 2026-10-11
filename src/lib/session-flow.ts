@@ -12,6 +12,7 @@ import {
   type PreflightStatus,
 } from '@/store/project-store'
 import { useSettingsStore } from '@/store/settings-store'
+import { useCreationStore } from '@/store/creation-store'
 import { isNodeConfigComplete, isValidOscTarget } from '@/lib/preferences'
 
 /**
@@ -43,6 +44,8 @@ import { isNodeConfigComplete, isValidOscTarget } from '@/lib/preferences'
  * subscription again.
  */
 export interface StartGateInputs {
+  modeSwitchBlocked?: boolean
+  commandPending?: boolean
   currentProject: CurrentProject | null
   preflightStatus: PreflightStatus
   sessionStatus: SessionStatus
@@ -57,6 +60,10 @@ export interface StartGateInputs {
 
 /** The gate inputs as live subscriptions — for render paths. */
 export function useStartGateInputs(): StartGateInputs {
+  const modeSwitchBlocked = useCreationStore(
+    state => state.modePhase !== 'idle'
+  )
+  const commandPending = useSessionStore(state => state.commandPending)
   const currentProject = useProjectStore(state => state.currentProject)
   const preflightStatus = useProjectStore(state => state.preflightStatus)
   const sessionStatus = useSessionStore(state => state.sessionStatus)
@@ -68,6 +75,8 @@ export function useStartGateInputs(): StartGateInputs {
   const hubUrlSetting = useSettingsStore(state => state.hubUrlSetting)
   const hubTokenSetting = useSettingsStore(state => state.hubTokenSetting)
   return {
+    modeSwitchBlocked,
+    commandPending,
     currentProject,
     preflightStatus,
     sessionStatus,
@@ -94,6 +103,8 @@ function readStartGateInputs(): StartGateInputs {
   const { nodeNameSetting, hubUrlSetting, hubTokenSetting } =
     useSettingsStore.getState()
   return {
+    modeSwitchBlocked: useCreationStore.getState().modePhase !== 'idle',
+    commandPending: useSessionStore.getState().commandPending,
     currentProject,
     preflightStatus,
     sessionStatus,
@@ -219,6 +230,7 @@ function resolveStartPlanFrom(
   gate: 'plain' | 'replace',
   inputs: StartGateInputs
 ): StartPlan | null {
+  if (inputs.modeSwitchBlocked || inputs.commandPending) return null
   if (nodeGateBlocked(inputs)) return null
   if (
     !inputs.currentProject ||
@@ -328,11 +340,12 @@ let startInFlight = false
 /** §8.1: explicitly start the selected project. Also the §9.3 Retry path:
  *  `error` is a legal starting point and no stop is issued first. */
 export async function start(): Promise<void> {
-  if (startInFlight) return
+  if (startInFlight || useCreationStore.getState().modePhase !== 'idle') return
   const plan = resolveStartPlan('plain')
   if (!plan) return
 
   startInFlight = true
+  useSessionStore.setState({ commandPending: true })
   try {
     // #140: the compat choice resolves BEFORE anything is submitted —
     // cancel aborts the whole start (the latch releases in `finally`).
@@ -341,7 +354,7 @@ export async function start(): Promise<void> {
     const proceed = httpsCompatChoiceNeeded()
       ? await openHttpsCompatChoice()
       : true
-    if (!proceed) return
+    if (!proceed || useCreationStore.getState().modePhase !== 'idle') return
     logger.info('Starting project', {
       path: plan.path,
       mode: plan.audioMode,
@@ -358,6 +371,7 @@ export async function start(): Promise<void> {
     }
   } finally {
     startInFlight = false
+    useSessionStore.setState({ commandPending: false })
   }
 }
 
@@ -374,7 +388,13 @@ async function stopThenStart(
   lanIp: string,
   oscTarget: string | null
 ): Promise<void> {
+  if (
+    useCreationStore.getState().modePhase !== 'idle' ||
+    useSessionStore.getState().commandPending
+  )
+    return
   startInFlight = true
+  useSessionStore.setState({ commandPending: true })
   try {
     // #140: same explicit choice on restart/replace — a canceled dialog
     // aborts before the running session is stopped. Same synchronous
@@ -382,7 +402,7 @@ async function stopThenStart(
     const proceed = httpsCompatChoiceNeeded()
       ? await openHttpsCompatChoice()
       : true
-    if (!proceed) return
+    if (!proceed || useCreationStore.getState().modePhase !== 'idle') return
     // All choices passed: commit the transition immediately before dispatch.
     // Waiting/canceling must leave the Change action and its draft intact.
     useSessionStore.getState().setPendingChanges(false)
@@ -398,6 +418,7 @@ async function stopThenStart(
     }
   } finally {
     startInFlight = false
+    useSessionStore.setState({ commandPending: false })
   }
 }
 

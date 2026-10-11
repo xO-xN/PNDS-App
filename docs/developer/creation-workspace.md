@@ -1,10 +1,51 @@
 # Creation reading workspace
 
-Issue #150 adds the idle creation entry and a file reader. Runtime mode handoff,
-editing, new projects, console logs and module addition remain separate tasks.
-Opening here never calls performance preflight, starts a process or installs a
-bundle. The idle mode button confirms with two clicks; Esc, an outside pointer
-press and window blur cancel its confirmation.
+Issues #150 and #151 provide file reading plus the confirmed mode handoff.
+The visual baseline is the A layout and eighth interaction review in
+[the UI prototype](../prototypes/pnds-ui-prototype.html). Creation sidebars
+share the existing App's 320px container, margins and window controls; file
+categories, title switching and the bottom mode control follow that prototype.
+The PNDS file badge identifies known contract configuration files, not module
+provenance. Unimplemented editing/new-project/module/console controls stay absent.
+
+## Confirmed mode handoff
+
+The first click prepares a target from the authoritative runtime. A running
+project takes precedence over another selected card. Without a live runtime,
+the selected folder is used without starting it. Backend-prepared workspace
+identities leave the current identity valid until explicit commit; cancellation
+releases only the preparation. Folder, bundle and utility origins still come
+from backend protection, not frontend classification.
+
+The mode control copies the prototype's fixed 56px slant and 300ms fill/name
+transition. A shared phase prevents duplicate submissions; startup/shutdown
+also disable it. Esc, an outside pointer press and window blur cancel preparation
+or confirmation. The performance overlay remains visible during confirmation.
+After completion, hover is paused until pointer exit/re-entry; keyboard focus
+is restored to the new control. Brutal and reduced motion complete directly.
+
+Confirmation checks the runtime generation/status again before effects. An
+editable live folder is adopted without stop/start, preserving the monitor's
+component, iframe, navigation nonce and session generation. The existing
+`MonitorView` stays at the same child position/key; only its grid placement and
+chrome change. Ready/stopping creation frames retain the same grid placement.
+The applied audio/LAN/External target and device come from runtime facts, rather
+than the selected card's pending settings.
+
+Bundle/tool/noneditable targets end the old runtime and enter the creation home.
+Returning to performance ends testing and clears selection/temporary creation
+state, with no auto-load. Both directions close only the projection through the
+fixed-label `closeCreationProjection` backend command. It needs no broad frontend
+window-destroy permission. `creation-lifecycle.ts` is the registration seam for
+editors' unsaved confirmation and performer-window cleanup; a cancelled discard
+happens before stop or window cleanup.
+
+Before committing, Rust checks the runtime generation under the lifecycle lock;
+only the already-validated in-memory identity activation happens inside that
+critical section. Filesystem work stays outside it. Frontend command adoption
+captures `snapshotRevision`; newer authoritative `latestSnapshot` facts win over
+a late response, including a runtime error or volume change. Session/UI resets
+do not erase that fact record. Start/replace actions share the mode-phase gate.
 
 ## Opening and trusted scope
 
@@ -58,8 +99,10 @@ stored through the existing serialized preferences queue, independently of
 performance selection. Recent paths are revalidated on every open; selector
 descriptions use temporary backend access and do not revoke the active identity.
 
-Only one open is accepted at a time. A queue also orders old open calls across
-leave/re-entry, and request ownership discards stale results. Native selection
+Only one file-workspace open is accepted at a time. Mode preparation is blocked
+until that open completes, including its backend identity commit. A queue and
+request ownership preserve open ordering. Idle window blur or outside clicks do
+not change the mode epoch. Native selection
 captures the mode epoch, so a late picker cannot reopen a folder in a new visit.
 The reading workspace is keyed by project identity and the reader by identity
 plus path. Effect cleanup ignores both late content and late failures. Switching

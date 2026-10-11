@@ -5,7 +5,7 @@ import { useSessionStore } from '@/store/session-store'
 import { useProjectStore } from '@/store/project-store'
 import { useWindowStore } from '@/store/window-store'
 import { useCreationStore } from '@/store/creation-store'
-import { CreationView } from '@/components/creation/CreationView'
+import { CreationView } from '@/components/creation'
 import { useCommandKeyboard } from '@/hooks/use-command-keyboard'
 import { loadPreferences } from '@/lib/preferences'
 import { ensureUtilitiesFolder } from '@/lib/utilities-folder'
@@ -180,6 +180,7 @@ export function AppShell() {
   //    session keeps the just-live monitor mounted so the StopCover
   //    dissolves the outgoing page instead of cutting it. ──
   if (
+    creationActive ||
     sessionStatus === 'starting' ||
     sessionStatus === 'ready' ||
     sessionStatus === 'stopping'
@@ -190,6 +191,10 @@ export function AppShell() {
           data-app-frame=""
           className={cn(
             'relative h-screen w-screen overflow-hidden bg-(--pnds-bg)',
+            creationActive &&
+              (sessionStatus === 'ready' ||
+                (sessionStatus === 'stopping' && health !== null)) &&
+              'creation-runtime-frame',
             !fullscreen && 'rounded-[var(--app-corner-radius)]'
           )}
         >
@@ -207,6 +212,7 @@ export function AppShell() {
             (sessionStatus === 'stopping' && health !== null)) && (
             <MonitorView key={fullscreen ? 'fullscreen' : 'windowed'} />
           )}
+          {creationActive && <CreationView />}
           {/* #50: the splash sits over the already-mounting monitor and
               cross-fades away (LoadingScreen owns the release gating)
               once the iframe beneath is ready — the monitor's first
@@ -219,7 +225,7 @@ export function AppShell() {
               from under it keeps it — no monitor swap mid-splash); the
               StopCover only takes over when the outgoing monitor is
               actually showing. */}
-          {!loadingDone ? (
+          {!creationActive && !loadingDone ? (
             <div className="absolute inset-0 z-50">
               <LoadingScreen
                 key={runId}
@@ -227,13 +233,14 @@ export function AppShell() {
               />
             </div>
           ) : (
+            !creationActive &&
             sessionStatus === 'stopping' &&
             health !== null && <StopCover phase="in" />
           )}
           {/* §10.1: hover-revealed sidebar stays reachable during
               loading, including fullscreen. Ready frames drop it here —
               MonitorView brings its own; stopping keeps MonitorView's. */}
-          {sessionStatus === 'starting' && <HoverSidebar />}
+          {!creationActive && sessionStatus === 'starting' && <HoverSidebar />}
           {/* #80: the rounded-corner resize grip — windowed frames only
               (fullscreen has square corners and no resize affordance). */}
           {!fullscreen && <ResizeGrip />}
@@ -268,24 +275,6 @@ export function AppShell() {
   }
 
   // ── Welcome (sidebar always open, full height) ──
-  if (creationActive) {
-    return (
-      <>
-        <div
-          data-app-frame=""
-          className={cn(
-            'relative h-screen w-screen overflow-hidden bg-(--pnds-bg)',
-            !fullscreen && 'rounded-[var(--app-corner-radius)]'
-          )}
-        >
-          <CreationView />
-          {!fullscreen && <ResizeGrip />}
-        </div>
-        <Toaster position="bottom-right" />
-      </>
-    )
-  }
-
   return (
     <>
       <div

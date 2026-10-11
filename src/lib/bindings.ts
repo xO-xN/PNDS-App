@@ -160,6 +160,38 @@ async openCreationProject(path: string) : Promise<Result<CreationWorkspace, Crea
     else return { status: "error", error: e  as any };
 }
 },
+async prepareCreationProject(path: string) : Promise<Result<CreationWorkspace, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("prepare_creation_project", { path }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async getCreationRuntime() : Promise<Result<CreationRuntime, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_creation_runtime") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async closeCreationProjection() : Promise<Result<null, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("close_creation_projection") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async commitCreationProject(identity: string | null, generation: string) : Promise<Result<CreationRuntime, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("commit_creation_project", { identity, generation }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async describeCreationProjects(paths: string[]) : Promise<Result<CreationOption[], CreationError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("describe_creation_projects", { paths }) };
@@ -992,6 +1024,7 @@ export type CreationFile = { path: string; size: number; kind: CreationFileKind;
 export type CreationFileKind = "text" | "image" | "binary"
 export type CreationOption = { path: string; project: CreationProject | null; error: CreationError | null }
 export type CreationProject = { identity: string; root: string; name: string; source: CreationSource }
+export type CreationRuntime = { generation: string; snapshot: SessionSnapshot; projectRoot: string | null }
 export type CreationSource = "folder" | "bundle" | "utility" | "readOnlyFolder"
 export type CreationWorkspace = { project: CreationProject; files: CreationFile[] }
 /**

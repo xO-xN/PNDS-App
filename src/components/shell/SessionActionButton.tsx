@@ -76,7 +76,10 @@ export function SessionActionButton() {
   const [confirmSwitchOpen, setConfirmSwitchOpen] = useState(false)
 
   const running = sessionStatus === 'ready'
-  const busy = isSessionBusy(sessionStatus)
+  const busy =
+    isSessionBusy(sessionStatus) ||
+    gate.modeSwitchBlocked === true ||
+    gate.commandPending === true
   const live = isSessionLive(sessionStatus)
   // #58: the「设置节点」gate — a telematic-declared selection whose
   // App-global node config is incomplete. Replaces the Load/Change forms

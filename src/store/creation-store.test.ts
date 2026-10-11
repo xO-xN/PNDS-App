@@ -19,6 +19,12 @@ describe('creation workflow', () => {
     vi.clearAllMocks()
     useSessionStore.setState({ sessionStatus: 'idle' })
     useCreationStore.setState({
+      modePhase: 'idle',
+      modePlan: null,
+      modeError: null,
+      hoverPaused: false,
+      modePointerInside: false,
+      restoreModeFocus: false,
       active: false,
       workspace: null,
       request: null,
@@ -36,19 +42,19 @@ describe('creation workflow', () => {
           resolvePicker = resolve
         })
     )
-    useCreationStore.getState().enter()
+    await useCreationStore.getState().enter()
     const picking = useCreationStore.getState().pick()
-    useCreationStore.getState().leave()
-    useCreationStore.getState().enter()
+    await useCreationStore.getState().leave()
+    await useCreationStore.getState().enter()
     resolvePicker('/old-selection')
     await picking
-    expect(commands.openCreationProject).not.toHaveBeenCalled()
+    expect(commands.prepareCreationProject).not.toHaveBeenCalled()
     expect(useCreationStore.getState().workspace).toBeNull()
   })
 
   it('opens through the creation boundary and preserves the current project on cancel or failure', async () => {
-    useCreationStore.getState().enter()
-    vi.mocked(commands.openCreationProject).mockResolvedValueOnce({
+    await useCreationStore.getState().enter()
+    vi.mocked(commands.prepareCreationProject).mockResolvedValueOnce({
       status: 'ok',
       data: workspace,
     })
@@ -58,7 +64,7 @@ describe('creation workflow', () => {
     expect(commands.startProject).not.toHaveBeenCalled()
     await useCreationStore.getState().pick()
     expect(useCreationStore.getState().workspace).toEqual(workspace)
-    vi.mocked(commands.openCreationProject).mockResolvedValueOnce({
+    vi.mocked(commands.prepareCreationProject).mockResolvedValueOnce({
       status: 'error',
       error: { code: 'missing', detail: 'gone' },
     })
@@ -68,7 +74,7 @@ describe('creation workflow', () => {
   })
 
   it('persists creation recents without changing the performance index', async () => {
-    useCreationStore.getState().enter()
+    await useCreationStore.getState().enter()
     useCreationStore.setState({ recentPaths: ['/older'] })
     vi.mocked(commands.loadPreferences).mockResolvedValue({
       status: 'ok',
@@ -79,7 +85,7 @@ describe('creation workflow', () => {
         sampleRate: 48000,
       },
     })
-    vi.mocked(commands.openCreationProject).mockResolvedValueOnce({
+    vi.mocked(commands.prepareCreationProject).mockResolvedValueOnce({
       status: 'ok',
       data: workspace,
     })
@@ -95,37 +101,33 @@ describe('creation workflow', () => {
     )
   })
 
-  it('discards an open response after leaving and keeps the next visit usable', async () => {
-    let resolveOpen!: (result: {
-      status: 'ok'
-      data: CreationWorkspace
-    }) => void
-    vi.mocked(commands.openCreationProject).mockImplementationOnce(
-      () =>
-        new Promise(resolve => {
-          resolveOpen = resolve
-        })
-    )
-    useCreationStore.getState().enter()
-    const opening = useCreationStore.getState().open('/old')
-    await vi.waitFor(() =>
-      expect(commands.openCreationProject).toHaveBeenCalled()
-    )
-    useCreationStore.getState().leave()
-    useCreationStore.getState().enter()
-    vi.mocked(commands.openCreationProject).mockResolvedValueOnce({
+  it('keeps a submitted file switch owned until it completes before allowing a mode switch', async () => {
+    await useCreationStore.getState().enter()
+    useCreationStore.setState({ workspace })
+    vi.mocked(commands.prepareCreationProject).mockResolvedValueOnce({
       status: 'ok',
       data: {
         ...workspace,
         project: { ...workspace.project, identity: 'next' },
       },
     })
-    const next = useCreationStore.getState().open('/next')
-    resolveOpen({ status: 'ok', data: workspace })
-    await opening
-    await next
-    expect(commands.closeCreationProject).toHaveBeenCalledWith('first')
+    const idle = await commands.getCreationRuntime()
+    let resolveCommit!: (result: typeof idle) => void
+    vi.mocked(commands.commitCreationProject).mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          resolveCommit = resolve
+        })
+    )
+    const opening = useCreationStore.getState().open('/next')
+    await vi.waitFor(() => expect(resolveCommit).toBeDefined())
+    await useCreationStore.getState().prepareModeSwitch()
+    expect(useCreationStore.getState().modePhase).toBe('idle')
+    expect(useCreationStore.getState().opening).toBe(true)
+    resolveCommit(idle)
+    expect(await opening).toBe(true)
     expect(useCreationStore.getState().workspace?.project.identity).toBe('next')
+    expect(commands.closeCreationProject).not.toHaveBeenCalledWith('next')
     expect(useCreationStore.getState().opening).toBe(false)
   })
 })

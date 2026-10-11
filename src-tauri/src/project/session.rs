@@ -735,6 +735,29 @@ impl SessionInner {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CreationRuntime {
+    pub generation: String,
+    pub snapshot: SessionSnapshot,
+    pub project_root: Option<String>,
+}
+
+impl CreationRuntime {
+    fn new(generation: u64, snapshot: SessionSnapshot) -> Self {
+        let project_root = snapshot
+            .project_path
+            .as_deref()
+            .and_then(|path| std::fs::canonicalize(path).ok())
+            .map(|root| root.to_string_lossy().into_owned());
+        Self {
+            generation: generation.to_string(),
+            snapshot,
+            project_root,
+        }
+    }
+}
+
 /// Tauri-managed session state. One running project at a time (app-behavior「状态与 Session」).
 pub struct SessionManager {
     inner: Arc<Mutex<SessionInner>>,
@@ -759,6 +782,38 @@ impl SessionManager {
 
     pub fn snapshot(&self) -> SessionSnapshot {
         self.lock().snapshot()
+    }
+
+    pub fn creation_runtime(&self) -> CreationRuntime {
+        let (generation, snapshot) = {
+            let guard = self.lock();
+            (guard.generation, guard.snapshot())
+        };
+        CreationRuntime::new(generation, snapshot)
+    }
+
+    /// Bounded creation commit shares the lifecycle lock: a preparation
+    /// from an older start/stop generation cannot take ownership.
+    pub fn with_creation_generation<T>(
+        &self,
+        expected: &str,
+        commit: impl FnOnce(CreationRuntime) -> Result<T, String>,
+    ) -> Result<T, String> {
+        let runtime = self.creation_runtime();
+        let guard = self.lock();
+        if runtime.generation != expected
+            || guard.generation.to_string() != expected
+            || matches!(
+                guard.status,
+                SessionStatus::Starting | SessionStatus::Stopping
+            )
+        {
+            return Err("The runtime changed while preparing the mode switch; try again".into());
+        }
+        commit(CreationRuntime {
+            snapshot: guard.snapshot(),
+            ..runtime
+        })
     }
 
     /// Publishes the current snapshot — the `emit` funnel, opened up for

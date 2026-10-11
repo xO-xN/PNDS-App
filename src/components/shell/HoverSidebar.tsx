@@ -3,6 +3,7 @@ import { Sidebar } from './Sidebar'
 import { useSessionStore } from '@/store/session-store'
 import { useKeyboardStore } from '@/store/keyboard-store'
 import { useProjectStore } from '@/store/project-store'
+import { useCreationStore } from '@/store/creation-store'
 import { cn } from '@/lib/utils'
 
 /**
@@ -29,10 +30,16 @@ export function HoverSidebar() {
   // the edit must outlast the Cmd key / hover that summoned it (spec
   // issue #10: 编辑聚焦期间侧栏保持显现).
   const renaming = useProjectStore(state => state.renameTarget !== null)
+  const modeConfirmation = useCreationStore(state => state.modePhase !== 'idle')
 
   const peeking = commandKeyPressed && running
   const sidebarVisible =
-    hoverVisible || popupOpen || dialogOpen || peeking || renaming
+    hoverVisible ||
+    popupOpen ||
+    dialogOpen ||
+    peeking ||
+    renaming ||
+    modeConfirmation
 
   return (
     <>

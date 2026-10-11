@@ -295,6 +295,7 @@ export async function buildAppMenu(): Promise<Menu> {
           action: () => {
             if (
               useCreationStore.getState().active ||
+              useCreationStore.getState().modePhase !== 'idle' ||
               hasOpenOverlay() ||
               isEditableTarget(document.activeElement)
             )
