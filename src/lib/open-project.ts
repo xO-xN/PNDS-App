@@ -7,6 +7,7 @@ import {
   useProjectStore,
 } from '@/store/project-store'
 import { useSessionStore, isSessionLive } from '@/store/session-store'
+import { useCreationStore } from '@/store/creation-store'
 import { installAndOpenBundle, isBundlePath } from '@/lib/bundle-project'
 import { importSetlistDirectory } from '@/lib/setlist-import'
 import { DEFAULT_OSC_TARGET, loadPreferences } from '@/lib/preferences'
@@ -29,6 +30,10 @@ import { DEFAULT_OSC_TARGET, loadPreferences } from '@/lib/preferences'
  * the exact same open path as a directory project.
  */
 export async function promptOpenProject(): Promise<void> {
+  if (useCreationStore.getState().active) {
+    await useCreationStore.getState().pick()
+    return
+  }
   const result = await commands.pickProjectOrBundle(
     i18n.t('sidebar.addProject')
   )
@@ -54,6 +59,10 @@ export async function promptOpenProject(): Promise<void> {
  * Starting is always an explicit user action via the Load button
  * (SessionActionButton). */
 export async function openProject(path: string): Promise<void> {
+  if (useCreationStore.getState().active) {
+    await useCreationStore.getState().open(path)
+    return
+  }
   const store = useProjectStore.getState()
   if (!store.recentProjectPaths.includes(path)) {
     // v1.1.2 T3: a newly imported project lands by the current view (spec

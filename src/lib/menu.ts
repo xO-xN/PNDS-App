@@ -49,6 +49,7 @@ import {
 import { emitProjectionAction } from '@/lib/events'
 import { commands } from '@/lib/tauri-bindings'
 import { useProjectStore } from '@/store/project-store'
+import { useCreationStore } from '@/store/creation-store'
 import { useProjectionStore } from '@/store/projection-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { useSessionStore } from '@/store/session-store'
@@ -292,7 +293,11 @@ export async function buildAppMenu(): Promise<Menu> {
           text: t('menu.renameProject'),
           accelerator: 'Cmd+R',
           action: () => {
-            if (hasOpenOverlay() || isEditableTarget(document.activeElement))
+            if (
+              useCreationStore.getState().active ||
+              hasOpenOverlay() ||
+              isEditableTarget(document.activeElement)
+            )
               return
             startRename()
           },

@@ -3824,6 +3824,7 @@ dependencies = [
  "hyper",
  "hyper-util",
  "if-addrs",
+ "libc",
  "log",
  "objc2",
  "objc2-app-kit",

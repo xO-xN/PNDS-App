@@ -152,6 +152,54 @@ async savePreferences(preferences: AppPreferences) : Promise<Result<null, string
     else return { status: "error", error: e  as any };
 }
 },
+async openCreationProject(path: string) : Promise<Result<CreationWorkspace, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("open_creation_project", { path }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async describeCreationProjects(paths: string[]) : Promise<Result<CreationOption[], CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("describe_creation_projects", { paths }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async listCreationFiles(identity: string) : Promise<Result<CreationFile[], CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("list_creation_files", { identity }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async readCreationFile(identity: string, path: string) : Promise<Result<CreationContent, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("read_creation_file", { identity, path }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async revealCreationPath(identity: string, path: string | null) : Promise<Result<null, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("reveal_creation_path", { identity, path }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async closeCreationProject(identity: string) : Promise<Result<null, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("close_creation_project", { identity }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 /**
  * Reads the stored material and re-derives its standing against the
  * CURRENT saved domain preference and clock. `Ok(None)` = nothing
@@ -739,6 +787,10 @@ oscTargets?: Partial<{ [key in string]: string }>;
  */
 recentProjects?: string[]; 
 /**
+ * Creation folder history, independent of performance selection.
+ */
+recentCreationProjects?: string[]; 
+/**
  * v1.1.2: one-level performance folders (set lists). Membership only —
  * the trusted list above stays the master list, so deleting a folder
  * merely returns its projects to the ungrouped section.
@@ -932,6 +984,16 @@ bridgedChannels: number;
  * B: first private project bus; equals K.
  */
 privateBusStart: number }
+export type CreationCategory = "audio" | "pages" | "modules" | "assets" | "system"
+export type CreationContent = { kind: "text"; text: string } | { kind: "image"; url: string } | { kind: "binary" }
+export type CreationError = { code: CreationErrorCode; detail: string }
+export type CreationErrorCode = "missing" | "permission" | "invalidUtf8" | "tooLarge" | "invalidIdentity" | "pathEscape" | "invalidProject" | "io"
+export type CreationFile = { path: string; size: number; kind: CreationFileKind; category: CreationCategory }
+export type CreationFileKind = "text" | "image" | "binary"
+export type CreationOption = { path: string; project: CreationProject | null; error: CreationError | null }
+export type CreationProject = { identity: string; root: string; name: string; source: CreationSource }
+export type CreationSource = "folder" | "bundle" | "utility" | "readOnlyFolder"
+export type CreationWorkspace = { project: CreationProject; files: CreationFile[] }
 /**
  * Control-plane listener liveness as reported by the daemon.
  */

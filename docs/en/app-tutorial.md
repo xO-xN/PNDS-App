@@ -79,6 +79,41 @@ During a performance or rehearsal, when you need to switch the audio output devi
 
 ---
 
+## 8. Creation reading workspace
+
+On the idle home, hover or focus the mode button at the bottom of the sidebar
+to discover creation mode. Click once to see the consequence, then again to
+enter. Esc, clicking elsewhere or losing window focus cancels confirmation.
+Choose **Open folder project** or continue from **Recent creations**. In creation
+mode, `⌘ O` also selects a folder. Opening never starts the project.
+
+Hover or focus the project title to **Switch to another project**. The selector
+explains why your folder can be edited externally and why installed `.pnds`
+bundles and built-in utilities retain a read-only source. Cancelling either
+selector preserves your current project. Reopening an installed directory or
+accessing it through a symbolic link does not make it an editable source project.
+
+Files are grouped by purpose; search and file buttons retain actual relative
+paths. Select text to read and find within the current file. PNG, JPEG, WebP and
+GIF preview only when selected; decoding failure leaves information and Finder
+access available. Audio and other binaries show name, type and size for use in
+an external application. The file column's single Finder button opens the
+project folder; the reader can reveal the selected file.
+
+Text is limited to 1 MiB, images to 4 MiB, and the file list to 4,096 entries and
+32 levels. `.git` and `node_modules` are omitted. Missing files, permissions,
+invalid UTF-8, size limits, invalid project identity and escaping paths have
+distinct feedback. Refresh the file list when needed. Creation opening checks
+basic declarations and entry structure, so an initial draft can be read before
+dependencies or sound artifacts are built. Running and packing keep their own
+checks.
+
+This step provides file reading. Continue editing, file organization and asset
+processing in your external editor or Finder. Returning to performance mode
+closes the reader and returns to the idle home.
+
+---
+
 ## Appendix: shortcut quick reference
 
 The shortcuts an App user reaches for (creators asking "which keys can my pages get?" — see [page interaction](../reference/page-interaction.md)):

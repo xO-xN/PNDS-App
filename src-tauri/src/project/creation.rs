@@ -1,0 +1,595 @@
+//! Trusted project identities and bounded file reading for the creation workspace.
+
+use base64::Engine as _;
+use serde::Serialize;
+use specta::Type;
+use std::ffi::{CStr, CString, OsString};
+use std::fs::{self, File, Metadata};
+use std::io::{self, Read};
+use std::os::fd::{AsRawFd, FromRawFd, IntoRawFd};
+use std::os::unix::ffi::OsStrExt;
+use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
+use std::path::{Component, Path, PathBuf};
+
+pub const TEXT_MAX_BYTES: u64 = 1024 * 1024;
+pub const IMAGE_MAX_BYTES: u64 = 4 * 1024 * 1024;
+const MAX_ENTRIES: usize = 4096;
+const MAX_DEPTH: usize = 32;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub enum CreationErrorCode {
+    Missing,
+    Permission,
+    InvalidUtf8,
+    TooLarge,
+    InvalidIdentity,
+    PathEscape,
+    InvalidProject,
+    Io,
+}
+
+#[derive(Debug, Clone, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CreationError {
+    pub code: CreationErrorCode,
+    pub detail: String,
+}
+
+impl CreationError {
+    pub fn new(code: CreationErrorCode, detail: impl Into<String>) -> Self {
+        Self {
+            code,
+            detail: detail.into(),
+        }
+    }
+}
+
+fn io_error(error: io::Error) -> CreationError {
+    let code = match error.kind() {
+        io::ErrorKind::NotFound => CreationErrorCode::Missing,
+        io::ErrorKind::PermissionDenied => CreationErrorCode::Permission,
+        _ => CreationErrorCode::Io,
+    };
+    CreationError::new(code, error.to_string())
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub enum CreationSource {
+    Folder,
+    Bundle,
+    Utility,
+    ReadOnlyFolder,
+}
+
+#[derive(Debug, Clone, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CreationProject {
+    pub identity: String,
+    pub root: String,
+    pub name: String,
+    pub source: CreationSource,
+}
+
+#[derive(Debug, Clone, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CreationWorkspace {
+    pub project: CreationProject,
+    pub files: Vec<CreationFile>,
+}
+
+/// Supplied only by the command adapter's App paths and embedded registry.
+#[derive(Default)]
+pub struct Protection {
+    pub bundles: Vec<PathBuf>,
+    pub utilities: Vec<PathBuf>,
+}
+
+impl Protection {
+    fn source(&self, root: &Path) -> CreationSource {
+        let contains = |paths: &[PathBuf]| {
+            paths.iter().any(|path| {
+                root.starts_with(path)
+                    || fs::canonicalize(path)
+                        .is_ok_and(|path| root.starts_with(&path) || path.starts_with(root))
+            })
+        };
+        if contains(&self.bundles) {
+            CreationSource::Bundle
+        } else if contains(&self.utilities) {
+            CreationSource::Utility
+        } else {
+            let writable = CString::new(root.as_os_str().as_encoded_bytes())
+                .is_ok_and(|path| unsafe { libc::access(path.as_ptr(), libc::W_OK) == 0 });
+            if writable {
+                CreationSource::Folder
+            } else {
+                CreationSource::ReadOnlyFolder
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub enum CreationFileKind {
+    Text,
+    Image,
+    Binary,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub enum CreationCategory {
+    Audio,
+    Pages,
+    Modules,
+    Assets,
+    System,
+}
+
+#[derive(Debug, Clone, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CreationFile {
+    pub path: String,
+    pub size: f64,
+    pub kind: CreationFileKind,
+    pub category: CreationCategory,
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Type)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum CreationContent {
+    Text { text: String },
+    Image { url: String },
+    Binary,
+}
+
+struct OpenProject {
+    descriptor: CreationProject,
+    directory: File,
+    root: PathBuf,
+}
+
+/// One active identity; a successful replacement revokes the old capability.
+#[derive(Default)]
+pub struct CreationAccess {
+    project: Option<OpenProject>,
+    generation: u64,
+}
+
+impl CreationAccess {
+    pub fn open(
+        &mut self,
+        path: &Path,
+        protection: &Protection,
+    ) -> Result<CreationWorkspace, CreationError> {
+        let root = fs::canonicalize(path).map_err(io_error)?;
+        let directory = File::options()
+            .read(true)
+            .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW)
+            .open(&root)
+            .map_err(io_error)?;
+        let candidate = OpenProject {
+            descriptor: CreationProject {
+                identity: (self.generation + 1).to_string(),
+                root: root.to_string_lossy().into_owned(),
+                name: String::new(),
+                source: protection.source(&root),
+            },
+            directory,
+            root,
+        };
+        let manifest_file = candidate.file("manifest.json")?;
+        let raw = bounded_read(manifest_file, TEXT_MAX_BYTES)?;
+        let raw = String::from_utf8(raw)
+            .map_err(|e| CreationError::new(CreationErrorCode::InvalidUtf8, e.to_string()))?;
+        let manifest = super::manifest::parse_manifest(&raw)
+            .map_err(|e| CreationError::new(CreationErrorCode::InvalidProject, e))?;
+        if !candidate
+            .file(&manifest.score_server.entry)?
+            .metadata()
+            .map_err(io_error)?
+            .is_file()
+        {
+            return Err(CreationError::new(
+                CreationErrorCode::InvalidProject,
+                "scoreServer.entry must be a file",
+            ));
+        }
+        if !candidate
+            .file(&manifest.score_server.working_directory)?
+            .metadata()
+            .map_err(io_error)?
+            .is_dir()
+        {
+            return Err(CreationError::new(
+                CreationErrorCode::InvalidProject,
+                "scoreServer.workingDirectory must be a directory",
+            ));
+        }
+        let mut candidate = candidate;
+        candidate.descriptor.name = manifest.name;
+        let mut files = Vec::new();
+        candidate.walk(Path::new(""), 0, &mut 0, &mut Vec::new(), &mut files)?;
+        files.sort_by(|a, b| a.path.cmp(&b.path));
+        self.generation += 1;
+        let descriptor = candidate.descriptor.clone();
+        self.project = Some(candidate);
+        Ok(CreationWorkspace {
+            project: descriptor,
+            files,
+        })
+    }
+
+    pub fn close(&mut self, identity: &str) {
+        if self
+            .project
+            .as_ref()
+            .is_some_and(|p| p.descriptor.identity == identity)
+        {
+            self.project = None;
+        }
+    }
+
+    fn current(
+        &self,
+        identity: &str,
+        protection: &Protection,
+    ) -> Result<&OpenProject, CreationError> {
+        let invalid = || {
+            CreationError::new(
+                CreationErrorCode::InvalidIdentity,
+                "Reopen the project folder",
+            )
+        };
+        let project = self
+            .project
+            .as_ref()
+            .filter(|p| p.descriptor.identity == identity)
+            .ok_or_else(invalid)?;
+        let disk = fs::metadata(&project.root).map_err(|_| invalid())?;
+        let held = project.directory.metadata().map_err(io_error)?;
+        if disk.dev() != held.dev()
+            || disk.ino() != held.ino()
+            || protection.source(&project.root) != project.descriptor.source
+        {
+            return Err(invalid());
+        }
+        Ok(project)
+    }
+
+    pub fn list(
+        &self,
+        identity: &str,
+        protection: &Protection,
+    ) -> Result<Vec<CreationFile>, CreationError> {
+        let project = self.current(identity, protection)?;
+        let mut files = Vec::new();
+        project.walk(Path::new(""), 0, &mut 0, &mut Vec::new(), &mut files)?;
+        files.sort_by(|a, b| a.path.cmp(&b.path));
+        Ok(files)
+    }
+
+    pub fn read(
+        &self,
+        identity: &str,
+        path: &str,
+        protection: &Protection,
+    ) -> Result<CreationContent, CreationError> {
+        let project = self.current(identity, protection)?;
+        let file = project.file(path)?;
+        if !file.metadata().map_err(io_error)?.is_file() {
+            return Err(CreationError::new(
+                CreationErrorCode::InvalidProject,
+                "Select a regular file",
+            ));
+        }
+        match file_kind(path) {
+            CreationFileKind::Binary => Ok(CreationContent::Binary),
+            CreationFileKind::Image => {
+                let bytes = bounded_read(file, IMAGE_MAX_BYTES)?;
+                let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
+                let mime = image_mime(path).expect("image kind has a MIME type");
+                Ok(CreationContent::Image {
+                    url: format!("data:{mime};base64,{encoded}"),
+                })
+            }
+            CreationFileKind::Text => {
+                let bytes = bounded_read(file, TEXT_MAX_BYTES)?;
+                let text = String::from_utf8(bytes).map_err(|e| {
+                    CreationError::new(CreationErrorCode::InvalidUtf8, e.to_string())
+                })?;
+                Ok(CreationContent::Text { text })
+            }
+        }
+    }
+
+    pub fn finder_target(
+        &self,
+        identity: &str,
+        path: Option<&str>,
+        protection: &Protection,
+    ) -> Result<PathBuf, CreationError> {
+        let project = self.current(identity, protection)?;
+        let path = path.unwrap_or(".");
+        project.file(path)?;
+        project.resolve(path)
+    }
+}
+
+impl OpenProject {
+    fn resolve(&self, path: &str) -> Result<PathBuf, CreationError> {
+        if Path::new(path).components().any(|c| {
+            matches!(
+                c,
+                Component::ParentDir | Component::RootDir | Component::Prefix(_)
+            )
+        }) {
+            return Err(CreationError::new(CreationErrorCode::PathEscape, path));
+        }
+        let resolved = fs::canonicalize(self.root.join(path)).map_err(io_error)?;
+        if !resolved.starts_with(&self.root) {
+            return Err(CreationError::new(CreationErrorCode::PathEscape, path));
+        }
+        Ok(resolved)
+    }
+
+    fn file(&self, path: &str) -> Result<File, CreationError> {
+        let resolved = self.resolve(path)?;
+        let relative = resolved
+            .strip_prefix(&self.root)
+            .expect("containment checked");
+        // A new open file description keeps directory enumeration cursors
+        // independent; dup/try_clone would share the previous walk's cursor.
+        let fd = unsafe {
+            libc::openat(
+                self.directory.as_raw_fd(),
+                c".".as_ptr(),
+                libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC,
+            )
+        };
+        if fd < 0 {
+            return Err(io_error(io::Error::last_os_error()));
+        }
+        let mut handle = unsafe { File::from_raw_fd(fd) };
+        // Resolve internal symlinks, then open each canonical component relative
+        // to the held root. O_NOFOLLOW closes the canonicalize/open race.
+        for component in relative.components() {
+            let name = CString::new(component.as_os_str().as_encoded_bytes())
+                .map_err(|_| CreationError::new(CreationErrorCode::PathEscape, path))?;
+            // SAFETY: live directory fd and NUL-terminated name; ownership of a
+            // successful new fd transfers immediately to File.
+            let fd = unsafe {
+                libc::openat(
+                    handle.as_raw_fd(),
+                    name.as_ptr(),
+                    libc::O_RDONLY | libc::O_NOFOLLOW | libc::O_CLOEXEC | libc::O_NONBLOCK,
+                )
+            };
+            if fd < 0 {
+                return Err(io_error(io::Error::last_os_error()));
+            }
+            handle = unsafe { File::from_raw_fd(fd) };
+        }
+        Ok(handle)
+    }
+
+    fn walk(
+        &self,
+        relative: &Path,
+        depth: usize,
+        count: &mut usize,
+        ancestors: &mut Vec<PathBuf>,
+        files: &mut Vec<CreationFile>,
+    ) -> Result<(), CreationError> {
+        if depth > MAX_DEPTH {
+            return Err(CreationError::new(
+                CreationErrorCode::TooLarge,
+                "Directory depth exceeds 32",
+            ));
+        }
+        let path = relative.to_string_lossy();
+        let resolved = self.resolve(&path)?;
+        if ancestors.contains(&resolved) {
+            return Err(CreationError::new(
+                CreationErrorCode::PathEscape,
+                "Directory symlink cycle",
+            ));
+        }
+        ancestors.push(resolved);
+        let directory = self.file(&path)?;
+        for name in directory_names(directory)? {
+            if name == ".git" || name == "node_modules" {
+                continue;
+            }
+            *count += 1;
+            if *count > MAX_ENTRIES {
+                return Err(CreationError::new(
+                    CreationErrorCode::TooLarge,
+                    "File list exceeds 4096 entries",
+                ));
+            }
+            let child = relative.join(name);
+            let path = child.to_str().ok_or_else(|| {
+                CreationError::new(CreationErrorCode::InvalidUtf8, "File path is not UTF-8")
+            })?;
+            let metadata = self.file(path)?.metadata().map_err(io_error)?;
+            if metadata.is_dir() {
+                self.walk(&child, depth + 1, count, ancestors, files)?;
+            } else if metadata.is_file() {
+                files.push(CreationFile {
+                    path: path.into(),
+                    size: metadata.len() as f64,
+                    kind: file_kind(path),
+                    category: category(path),
+                });
+            }
+        }
+        ancestors.pop();
+        Ok(())
+    }
+}
+
+/// macOS does not expose directory contents through /dev/fd; fdopendir
+/// enumerates the directory we already validated and opened instead.
+fn directory_names(directory: File) -> Result<Vec<OsString>, CreationError> {
+    struct Directory(*mut libc::DIR);
+    impl Drop for Directory {
+        fn drop(&mut self) {
+            unsafe {
+                libc::closedir(self.0);
+            }
+        }
+    }
+    let fd = directory.into_raw_fd();
+    // SAFETY: fdopendir takes ownership only on success.
+    let pointer = unsafe { libc::fdopendir(fd) };
+    if pointer.is_null() {
+        let error = io::Error::last_os_error();
+        drop(unsafe { File::from_raw_fd(fd) });
+        return Err(io_error(error));
+    }
+    let directory = Directory(pointer);
+    let mut names = Vec::new();
+    loop {
+        #[cfg(target_os = "macos")]
+        unsafe {
+            *libc::__error() = 0;
+        }
+        #[cfg(target_os = "linux")]
+        unsafe {
+            *libc::__errno_location() = 0;
+        }
+        // SAFETY: the live DIR is used only by this call, and d_name is
+        // copied before the next readdir can invalidate it.
+        let entry = unsafe { libc::readdir(directory.0) };
+        if entry.is_null() {
+            let error = io::Error::last_os_error();
+            if error.raw_os_error() != Some(0) {
+                return Err(io_error(error));
+            }
+            break;
+        }
+        let name = unsafe { CStr::from_ptr((*entry).d_name.as_ptr()) };
+        if name.to_bytes() == b"." || name.to_bytes() == b".." {
+            continue;
+        }
+        names.push(std::ffi::OsStr::from_bytes(name.to_bytes()).to_os_string());
+        if names.len() > MAX_ENTRIES {
+            return Err(CreationError::new(
+                CreationErrorCode::TooLarge,
+                "File list exceeds 4096 entries",
+            ));
+        }
+    }
+    Ok(names)
+}
+
+fn bounded_read(file: File, limit: u64) -> Result<Vec<u8>, CreationError> {
+    let metadata: Metadata = file.metadata().map_err(io_error)?;
+    if !metadata.is_file() {
+        return Err(CreationError::new(
+            CreationErrorCode::InvalidProject,
+            "Select a regular file",
+        ));
+    }
+    if metadata.len() > limit {
+        return Err(CreationError::new(
+            CreationErrorCode::TooLarge,
+            format!("Limit: {limit} bytes"),
+        ));
+    }
+    let mut bytes = Vec::new();
+    file.take(limit + 1)
+        .read_to_end(&mut bytes)
+        .map_err(io_error)?;
+    if bytes.len() as u64 > limit {
+        return Err(CreationError::new(
+            CreationErrorCode::TooLarge,
+            format!("Limit: {limit} bytes"),
+        ));
+    }
+    Ok(bytes)
+}
+
+fn image_mime(path: &str) -> Option<&'static str> {
+    match Path::new(path)
+        .extension()?
+        .to_str()?
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "png" => Some("image/png"),
+        "jpg" | "jpeg" => Some("image/jpeg"),
+        "webp" => Some("image/webp"),
+        "gif" => Some("image/gif"),
+        _ => None,
+    }
+}
+
+fn file_kind(path: &str) -> CreationFileKind {
+    if image_mime(path).is_some() {
+        return CreationFileKind::Image;
+    }
+    let ext = Path::new(path)
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    if matches!(
+        ext.as_str(),
+        "" | "js"
+            | "mjs"
+            | "cjs"
+            | "ts"
+            | "tsx"
+            | "jsx"
+            | "json"
+            | "md"
+            | "txt"
+            | "html"
+            | "css"
+            | "scd"
+            | "yaml"
+            | "yml"
+            | "toml"
+            | "xml"
+            | "svg"
+            | "csv"
+            | "sh"
+            | "gitignore"
+    ) {
+        CreationFileKind::Text
+    } else {
+        CreationFileKind::Binary
+    }
+}
+
+fn category(path: &str) -> CreationCategory {
+    if path.starts_with("audio/")
+        || path.starts_with("supercollider/")
+        || path.ends_with(".scd")
+        || path.ends_with(".scsyndef")
+    {
+        CreationCategory::Audio
+    } else if path.starts_with("modules/")
+        || path.starts_with("shared/")
+        || path.starts_with("lib/")
+    {
+        CreationCategory::Modules
+    } else if file_kind(path) != CreationFileKind::Text {
+        CreationCategory::Assets
+    } else if path.starts_with("public/")
+        || path.starts_with("performer/")
+        || path.starts_with("monitor/")
+    {
+        CreationCategory::Pages
+    } else {
+        CreationCategory::System
+    }
+}
+
+#[cfg(test)]
+mod tests;

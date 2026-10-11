@@ -77,6 +77,7 @@ pub fn run() {
         .manage(crate::window::WindowManager::default())
         .manage(crate::commands::preferences::PreferencesCache::default())
         .manage(crate::commands::bundle::PendingBundleOpens::default())
+        .manage(crate::commands::creation::CreationState::default())
         .plugin({
             #[allow(unused_mut)]
             let mut targets = vec![

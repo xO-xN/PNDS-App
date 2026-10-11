@@ -158,8 +158,13 @@ pub fn load_manifest_lenient(project_root: &Path) -> Result<Manifest, String> {
     let path = project_root.join("manifest.json");
     let raw = std::fs::read_to_string(&path)
         .map_err(|_| format!("manifest.json not found or unreadable: {}", path.display()))?;
+    parse_manifest(&raw)
+}
+
+/// Schema validation shared by bounded creation reads and runtime loading.
+pub fn parse_manifest(raw: &str) -> Result<Manifest, String> {
     let value: Value =
-        serde_json::from_str(&raw).map_err(|e| format!("manifest.json is not valid JSON: {e}"))?;
+        serde_json::from_str(raw).map_err(|e| format!("manifest.json is not valid JSON: {e}"))?;
     validate_schema(&value)?;
     serde_json::from_value(value)
         .map_err(|e| format!("manifest.json does not match the schema: {e}"))

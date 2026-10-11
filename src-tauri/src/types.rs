@@ -115,6 +115,9 @@ pub struct AppPreferences {
     /// launches. Removing from the sidebar drops it here.
     #[serde(default)]
     pub recent_projects: Vec<String>,
+    /// Creation folder history, independent of performance selection.
+    #[serde(default)]
+    pub recent_creation_projects: Vec<String>,
     /// v1.1.2: one-level performance folders (set lists). Membership only —
     /// the trusted list above stays the master list, so deleting a folder
     /// merely returns its projects to the ungrouped section.
@@ -248,6 +251,7 @@ impl Default for AppPreferences {
             sample_rate: None,
             osc_targets: HashMap::new(),
             recent_projects: Vec::new(),
+            recent_creation_projects: Vec::new(),
             project_folders: Vec::new(),
             project_display_names: HashMap::new(),
             project_manifest_names: HashMap::new(),

@@ -4,6 +4,8 @@ import { Toaster } from 'sonner'
 import { useSessionStore } from '@/store/session-store'
 import { useProjectStore } from '@/store/project-store'
 import { useWindowStore } from '@/store/window-store'
+import { useCreationStore } from '@/store/creation-store'
+import { CreationView } from '@/components/creation/CreationView'
 import { useCommandKeyboard } from '@/hooks/use-command-keyboard'
 import { loadPreferences } from '@/lib/preferences'
 import { ensureUtilitiesFolder } from '@/lib/utilities-folder'
@@ -43,6 +45,7 @@ export function AppShell() {
   const runId = useSessionStore(state => state.runId)
   // §7.4: fullscreen has no rounded corners — the window fills the screen.
   const fullscreen = useWindowStore(state => state.fullscreen)
+  const creationActive = useCreationStore(state => state.active)
   // loadingDone gates the dissolve; if the page renders with a ready session
   // already in store (test escape hatch — real app never does this), skip it.
   const [loadingDone, setLoadingDone] = useState(sessionStatus === 'ready')
@@ -110,6 +113,9 @@ export function AppShell() {
       // writes back; every later structural change persists through the
       // store's own actions.
       const paths = prefs?.recentProjects ?? []
+      useCreationStore
+        .getState()
+        .restoreRecent(prefs?.recentCreationProjects ?? [])
       const folders = prefs?.projectFolders ?? []
       if (paths.length > 0 || folders.length > 0) {
         useProjectStore.getState().restoreProjectIndex(paths, folders)
@@ -262,6 +268,24 @@ export function AppShell() {
   }
 
   // ── Welcome (sidebar always open, full height) ──
+  if (creationActive) {
+    return (
+      <>
+        <div
+          data-app-frame=""
+          className={cn(
+            'relative h-screen w-screen overflow-hidden bg-(--pnds-bg)',
+            !fullscreen && 'rounded-[var(--app-corner-radius)]'
+          )}
+        >
+          <CreationView />
+          {!fullscreen && <ResizeGrip />}
+        </div>
+        <Toaster position="bottom-right" />
+      </>
+    )
+  }
+
   return (
     <>
       <div

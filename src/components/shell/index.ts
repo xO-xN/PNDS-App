@@ -1,4 +1,5 @@
 export { AppShell } from './AppShell'
+export { TrafficLights } from './TrafficLights'
 export { CloseConfirmDialog } from './CloseConfirmDialog'
 export { QuitConfirmDialog } from './QuitConfirmDialog'
 export { UpdaterFailureDialog } from './UpdaterFailureDialog'

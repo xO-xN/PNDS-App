@@ -8,6 +8,7 @@ import {
   selectProject,
 } from '@/lib/project-select'
 import { startRename } from '@/lib/project-rename'
+import { useCreationStore } from '@/store/creation-store'
 
 /**
  * True when a keyboard event originates from a text-editing target —
@@ -118,6 +119,10 @@ export function useCommandKeyboard(): void {
         return
       }
       // ⌘R must never fall through to the webview's page reload.
+      if (useCreationStore.getState().active) {
+        if (event.code === 'KeyR') event.preventDefault()
+        return
+      }
       if (event.code === 'KeyR') {
         if (isEditableTarget(event.target) || hasOpenOverlay()) return
         event.preventDefault()

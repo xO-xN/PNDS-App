@@ -138,7 +138,7 @@ pub fn resolve_staged_utilities(registry: &[ToolEntry], staged_dir: &Path) -> Ve
 /// first: the app bundle's resources (release), then — in debug builds
 /// only — the repository checkout a local `npm run utilities:fetch`
 /// unpacked into.
-fn staged_dir_candidates(app: &AppHandle) -> Vec<PathBuf> {
+pub(crate) fn staged_dir_candidates(app: &AppHandle) -> Vec<PathBuf> {
     let mut candidates = Vec::new();
     if let Ok(resources) = app.path().resource_dir() {
         candidates.push(resources.join("utilities"));

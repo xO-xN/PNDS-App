@@ -88,6 +88,7 @@ export type PreferencesPatch = Partial<
     | 'sampleRate'
     | 'outputDevice'
     | 'recentProjects'
+    | 'recentCreationProjects'
     | 'projectFolders'
     | 'projectDisplayNames'
     | 'projectManifestNames'

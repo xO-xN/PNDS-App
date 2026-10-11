@@ -4,6 +4,11 @@ Two-layer "onion" architecture for state management.
 
 ## The Two Layers
 
+Creation reading follows this same split: the workspace and recent paths live
+in `creation-store`, while file selection, search, find and preview state live
+in keyed components. Mode epochs and request ownership reject stale native
+picker/command results. See [creation-workspace.md](./creation-workspace.md).
+
 ```
 ┌─────────────────────────────────────┐
 │           useState                  │  ← Component UI State

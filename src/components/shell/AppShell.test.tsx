@@ -6,6 +6,7 @@ import { logger } from '@/lib/logger'
 import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 import { useWindowStore } from '@/store/window-store'
+import { useCreationStore } from '@/store/creation-store'
 import { AppShell } from './AppShell'
 import type { Manifest, SessionSnapshot } from '@/lib/tauri-bindings'
 
@@ -62,6 +63,14 @@ let sessionHandler: ((event: { payload: SessionSnapshot }) => void) | null
 describe('AppShell', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    useCreationStore.setState({
+      active: false,
+      workspace: null,
+      recentPaths: [],
+      opening: false,
+      request: null,
+      error: null,
+    })
     sessionHandler = null
     vi.mocked(listen).mockImplementation((event, cb) => {
       if (event === 'session-snapshot-event') {
@@ -95,6 +104,35 @@ describe('AppShell', () => {
       showCustomTrafficLights: true,
       generation: 0,
     })
+  })
+
+  it('enters creation from the idle sidebar with confirmation and returns to the idle home', async () => {
+    render(<AppShell />)
+    const entry = screen.getByRole('button', {
+      name: 'Switch to creation mode',
+    })
+    fireEvent.click(entry)
+    expect(useCreationStore.getState().active).toBe(false)
+    fireEvent.keyDown(window, { key: 'Escape' })
+    fireEvent.click(entry)
+    expect(useCreationStore.getState().active).toBe(false)
+    fireEvent.pointerDown(window)
+    fireEvent.click(entry)
+    expect(useCreationStore.getState().active).toBe(false)
+    fireEvent.click(entry)
+    await screen.findByRole('heading', { name: 'Creation mode' })
+    expect(
+      screen.getByRole('button', { name: 'Open folder project' })
+    ).toBeInTheDocument()
+    const back = screen.getByRole('button', {
+      name: 'Return to performance mode',
+    })
+    fireEvent.click(back)
+    fireEvent.click(back)
+    expect(useCreationStore.getState().active).toBe(false)
+    expect(useCreationStore.getState().workspace).toBeNull()
+    expect(commands.startProject).not.toHaveBeenCalled()
+    expect(commands.stopProject).not.toHaveBeenCalled()
   })
 
   it('shows Welcome with an always-open sidebar when idle (§10.4)', () => {

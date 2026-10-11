@@ -55,6 +55,7 @@ import {
 import { FolderSwitch } from './FolderSwitch'
 import { InlineNameInput } from './InlineNameInput'
 import { SettingsCard } from './SettingsCard'
+import { CreationModeButton } from '@/components/creation/CreationModeButton'
 import { SessionActionButton } from './SessionActionButton'
 import { TrafficLights } from './TrafficLights'
 import { cn } from '@/lib/utils'
@@ -901,6 +902,7 @@ export function Sidebar({
           <SettingsCard onPopupOpenChange={onPopupOpenChange} />
           <SessionActionButton />
         </div>
+        {sessionStatus === 'idle' && <CreationModeButton />}
       </div>
 
       {/* v1.1.2 T4/T5: the dragged card's semi-transparent floating clone

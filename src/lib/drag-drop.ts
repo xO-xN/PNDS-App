@@ -2,6 +2,7 @@ import { installAndOpenBundle, isBundlePath } from '@/lib/bundle-project'
 import { openProject } from '@/lib/open-project'
 import { importSetlistDirectory } from '@/lib/setlist-import'
 import { logger } from '@/lib/logger'
+import { useCreationStore } from '@/store/creation-store'
 
 /**
  * v1.2.0 (issue #16): Finder → App drag-and-drop. Dropping a project
@@ -19,6 +20,10 @@ import { logger } from '@/lib/logger'
  * through `RunEvent::Opened`, same as a Finder double-click.)
  */
 export async function handleDroppedPaths(paths: string[]): Promise<void> {
+  if (useCreationStore.getState().active) {
+    if (paths[0]) await useCreationStore.getState().open(paths[0])
+    return
+  }
   for (const path of paths) {
     logger.info('Importing dropped path', { path })
     if (isBundlePath(path)) {

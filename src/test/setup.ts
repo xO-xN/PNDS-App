@@ -114,6 +114,27 @@ vi.mock('@/lib/tauri-bindings', async () => {
       projectionWindowEvent: makeEvent('projection-window-event'),
     },
     commands: {
+      openCreationProject: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: {
+          code: 'invalidProject',
+          detail: 'openCreationProject not mocked',
+        },
+      }),
+      describeCreationProjects: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: [] }),
+      listCreationFiles: vi.fn().mockResolvedValue({ status: 'ok', data: [] }),
+      readCreationFile: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: { code: 'missing', detail: 'readCreationFile not mocked' },
+      }),
+      revealCreationPath: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      closeCreationProject: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
       loadPreferences: vi
         .fn()
         .mockResolvedValue({ status: 'ok', data: { theme: 'system' } }),

@@ -4,6 +4,7 @@ pub mod audio;
 pub mod bundle;
 pub mod children;
 pub mod cover;
+pub mod creation;
 pub mod logs;
 pub mod manifest;
 pub mod ports;
