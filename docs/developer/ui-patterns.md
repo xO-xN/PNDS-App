@@ -93,10 +93,12 @@ it directly; `commandPending` covers the interval before the backend publishes
 starting/stopping. The hidden panel is inert, so its controls leave keyboard
 navigation. The overlay uses logical insets and a mirrored RTL exit offset.
 
-Keep performance controls in the sidebar: its header owns projection open,
-start/withdraw-to-intro and refresh; its footer owns audio mode, read-only LAN,
-live gain and one session action. The LAN summary follows the applied session
-when its card is selected, and the global next-start choice otherwise. Existing
+Keep performance controls in the sidebar: its header owns one projection control
+and refresh. That same control opens the window, then switches intro/performance
+while it exists. Its footer owns audio mode, editable LAN, live gain and one
+session action. LAN shares the Node section’s global next-start choice through
+`lan-settings.ts`; choosing it on the running card flags Change without navigating
+the monitor. Audio mode, LAN and Room use the same end-aligned value gutter. Existing
 OSC, Room and HTTPS feedback stay conditional. Sidebar visibility never enters
 the monitor URL, iframe key or size derivation. Use workflow tests with deferred
 typed commands and real portal interactions to verify these boundaries.
@@ -292,7 +294,7 @@ node's `data-color-theme` attribute:
   brand-color dots (the halo rings behind them ARE tokens), the shadcn
   vendored scrims (`bg-black/50`), the theme row's accent
   swatch — it previews each theme's accent by definition, so it cannot be
-  one token — and the performance sidebar's ▶ projection-gate light
+  one token — and the performance sidebar's combined projection-control light
   (v1.5.0 #130, moved in #152): a STATUS light on its dedicated dark
   `--pnds-projection-control-bg` surface (orange ≥8.6:1, green ≥7.9:1), like the
   traffic lights — ungated blinks Apple system orange `#ff9f0a` (its

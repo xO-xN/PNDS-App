@@ -6,6 +6,7 @@ import { notifications } from '@/lib/notifications'
 import { logger } from '@/lib/logger'
 import { useProjectStore } from '@/store/project-store'
 import type { AudioMode } from '@/lib/tauri-bindings'
+import { chooseLanAddress, refreshLanAddresses } from '@/lib/lan-settings'
 import { isSessionLive, useSessionStore } from '@/store/session-store'
 import { useSettingsStore } from '@/store/settings-store'
 import {
@@ -42,16 +43,16 @@ const MODE_LABEL_KEYS = {
  * footer is the session action button.
  *
  * Audio mode and network precede the live gain, matching the performance
- * prototype. LAN is a read-only summary: the running card reports its
- * applied address, other selections report the next-start global choice.
+ * prototype. LAN edits share the Node section and its global next-start
+ * choice; every dropdown aligns values at the end.
  * Deferred audio/OSC changes still apply through the single footer action;
  * gain continues to act immediately on the running master synth.
  *
  * OSC target is hidden unless the selected mode is "external" (§6.6).
  *
  * #58: the card carries only per-performance rows now. The output device
- * moved to the settings Audio section and the LAN address to the Node
- * section; the Room dropdown joined for works that declare telematic
+ * moved to the settings Audio section; the LAN selection stays global
+ * and is editable both here and in the Node section; the Room dropdown joined for works that declare telematic
  * capability — the App-global group number (1–3) the hub room derives
  * from (`{manifest.id}_{group}`). The dropdown never resets (crash
  * recovery must land back in the same group's room, ADR-0004), shows only
@@ -73,7 +74,7 @@ export function SettingsCard({ onPopupOpenChange }: SettingsCardProps) {
   const audioMode = useSessionStore(state => state.audioMode)
   const oscTargetInput = useSessionStore(state => state.oscTargetInput)
   const lanIp = useSessionStore(state => state.lanIp)
-  const sessionLanIp = useSessionStore(state => state.sessionLanIp)
+  const lanAddresses = useSessionStore(state => state.lanAddresses)
   const hubRooms = useSettingsStore(state => state.hubRooms)
   // #140: the entry switch + the running session's entry state.
   const httpsEnabledSetting = useSettingsStore(
@@ -91,10 +92,10 @@ export function SettingsCard({ onPopupOpenChange }: SettingsCardProps) {
   const selectionOnRunningCard =
     !isSessionLive(sessionStatus) || currentProject?.path === sessionProjectPath
 
-  const networkAddress =
-    isSessionLive(sessionStatus) && selectionOnRunningCard
-      ? (sessionLanIp ?? lanIp)
-      : lanIp
+  const lanOptions =
+    lanIp !== null && !lanAddresses.includes(lanIp)
+      ? [lanIp, ...lanAddresses]
+      : lanAddresses
 
   const modes = currentProject?.manifest.audio.supportedModes ?? []
   const projectLoaded = currentProject !== null
@@ -202,12 +203,12 @@ export function SettingsCard({ onPopupOpenChange }: SettingsCardProps) {
 
   // Every row shares one label gutter, including the volume row (its icon
   // sits in the gutter) — so the left edge of the controls never jumps.
-  const labelClass = 'w-20 shrink-0 text-[11px] text-(--pnds-text)/45'
+  const labelClass = 'w-20 shrink-0 text-[11px] text-(--pnds-text)/65'
   // Values are data, not chrome: full text strength. Greying them is what
   // reads as "disabled", so only the disabled state may do it.
   const fieldClass =
-    'h-7 bg-(--pnds-pill) text-[12px] text-(--pnds-text) outline-none transition-colors hover:bg-(--pnds-pill-hover) disabled:text-(--pnds-text)/30 disabled:hover:bg-(--pnds-pill)'
-  const selectClass = `${fieldClass} w-full appearance-none rounded-lg ps-2.5 pe-6`
+    'font-manrope h-7 bg-(--pnds-pill) text-[12px] text-(--pnds-text) outline-none transition-colors hover:bg-(--pnds-pill-hover) disabled:text-(--pnds-text)/30 disabled:hover:bg-(--pnds-pill)'
+  const selectClass = `${fieldClass} pnds-focus-ring data-[size=sm]:h-7 w-full justify-end rounded-lg ps-2.5 pe-2 text-end [&_[data-slot=select-value]]:ms-auto [&_[data-slot=select-value]]:min-w-0 [&_[data-slot=select-value]]:justify-end`
 
   return (
     <div
@@ -237,6 +238,7 @@ export function SettingsCard({ onPopupOpenChange }: SettingsCardProps) {
             disabled={!projectLoaded}
           >
             <SelectTrigger
+              size="sm"
               aria-label={t('session.audioMode')}
               className={cn(
                 selectClass,
@@ -267,13 +269,43 @@ export function SettingsCard({ onPopupOpenChange }: SettingsCardProps) {
         className="flex items-center gap-2"
       >
         <span className={labelClass}>{t('sidebar.localNetwork')}</span>
-        <span
-          dir="ltr"
-          className="font-manrope min-w-0 flex-1 truncate text-end text-[12px] text-(--pnds-text)/70"
-          title={networkAddress ?? undefined}
-        >
-          {networkAddress ?? '—'}
-        </span>
+        <div className="min-w-0 flex-1">
+          <Select
+            value={lanIp ?? ''}
+            onValueChange={chooseLanAddress}
+            dir={i18n.dir() === 'rtl' ? 'rtl' : 'ltr'}
+            onOpenChange={open => {
+              onPopupOpenChange?.(open)
+              if (open) refreshLanAddresses()
+            }}
+          >
+            <SelectTrigger
+              size="sm"
+              aria-label={t('sidebar.localNetwork')}
+              title={t('settings.nodeHint')}
+              className={cn(
+                selectClass,
+                'border-0 shadow-none focus-visible:ring-0'
+              )}
+            >
+              <SelectValue>
+                <bdi dir="ltr">{lanIp ?? t('session.lanAddressHint')}</bdi>
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent side="top">
+              {lanOptions.length === 0 && (
+                <SelectItem value="__placeholder__" disabled>
+                  {t('session.lanAddressHint')}
+                </SelectItem>
+              )}
+              {lanOptions.map(ip => (
+                <SelectItem key={ip} value={ip}>
+                  <bdi dir="ltr">{ip}</bdi>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {/* #140: the running session's trusted-HTTPS entry — status dot +
@@ -374,6 +406,7 @@ export function SettingsCard({ onPopupOpenChange }: SettingsCardProps) {
               onOpenChange={open => onPopupOpenChange?.(open)}
             >
               <SelectTrigger
+                size="sm"
                 aria-label={t('sidebar.room')}
                 className={cn(
                   selectClass,

@@ -802,6 +802,33 @@ describe('MonitorView projection gate button (#130)', () => {
     useProjectionStore.setState({ windowExists: false })
   })
 
+  it('uses the same projection button to switch intro and performance after the window opens', async () => {
+    render(<MonitorView />)
+    fireEvent.mouseEnter(screen.getByTestId('sidebar-hover-zone'))
+    const button = screen.getByRole('button', {
+      name: 'Open projection window',
+    })
+    act(() => useProjectionStore.setState({ windowExists: true }))
+    expect(screen.getByRole('button', { name: 'Start Projection' })).toBe(
+      button
+    )
+    expect(
+      screen.queryByTestId('projection-start-button')
+    ).not.toBeInTheDocument()
+    fireEvent.click(button)
+    await vi.waitFor(() =>
+      expect(commands.toggleProjectionStart).toHaveBeenCalledTimes(1)
+    )
+    act(() => useSessionStore.setState({ projectionStarted: true }))
+    expect(screen.getByRole('button', { name: 'Withdraw Projection' })).toBe(
+      button
+    )
+    fireEvent.click(button)
+    await vi.waitFor(() =>
+      expect(commands.toggleProjectionStart).toHaveBeenCalledTimes(2)
+    )
+  })
+
   it('is absent while the projection window does not exist', () => {
     render(<MonitorView />)
 
@@ -815,7 +842,7 @@ describe('MonitorView projection gate button (#130)', () => {
 
     render(<MonitorView />)
 
-    const button = screen.getByTestId('projection-start-button')
+    const button = screen.getByTestId('open-projection-button')
     // The ungated light: system-orange blink — its rest state (and the
     // reduce-motion clamp) is the static orange highlight, distinct
     // from both the strip text and the started green.
@@ -858,7 +885,7 @@ describe('MonitorView projection gate button (#130)', () => {
 
     render(<MonitorView />)
 
-    const button = screen.getByTestId('projection-start-button')
+    const button = screen.getByTestId('open-projection-button')
     expect(button.className).not.toContain('projection-start-blink')
     expect(button.className).toContain('text-[#34c759]')
     expect(button.getAttribute('aria-label')).toBe('Withdraw Projection')
@@ -870,6 +897,6 @@ describe('MonitorView projection gate button (#130)', () => {
 
     render(<MonitorView />)
 
-    expect(screen.getByTestId('projection-start-button')).toBeDisabled()
+    expect(screen.getByTestId('open-projection-button')).toBeDisabled()
   })
 })

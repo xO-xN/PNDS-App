@@ -131,3 +131,15 @@ Tests use the approved workflow/typed-command boundary in the frontend and the
 public creation access boundary over Rust temporary directories. See
 [testing.md](./testing.md) for mock conventions and
 [app-behavior.md](./app-behavior.md) for acceptance scope.
+
+## Viewport and sidebar bounds
+
+The creation view stays within its parent viewport in both idle and running
+states. The running frame uses an explicit `minmax(0, 1fr)` grid row; creation
+root, inner flex row, reader and sidebar permit a zero minimum block size.
+This prevents the file tree’s intrinsic height from expanding the running grid
+and placing the mode footer below the App window. File trees and recent lists
+scroll within their remaining space; a bottom error/status surface is capped
+at a quarter of the view and scrolls independently. Keep the mode control out
+of those scrollers. Do not infer physical layout from jsdom visibility tests;
+small-window and long-list geometry need validation in the native Tauri window.

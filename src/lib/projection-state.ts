@@ -94,9 +94,9 @@ export function projectionContentKey(content: ProjectionContent): string {
   }
 }
 
-/** The ▶ gate button's state in the main window's performance sidebar. */
+/** Gate mode of the sidebar's combined projection control. */
 export interface ProjectionStartButtonState {
-  /** Rendered only while the projection window exists (spec #128). */
+  /** The existing projection button switches content while the window exists. */
   visible: boolean
   /** 投影已开演 — the solid-green rest state; false is the blinking ask. */
   started: boolean

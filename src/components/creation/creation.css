@@ -162,6 +162,7 @@
   flex-direction: column;
   flex-shrink: 0;
   width: 320px;
+  min-block-size: 0;
   margin: 12px;
   overflow: hidden;
   border-radius: var(--app-corner-radius);
@@ -394,6 +395,7 @@
 .creation-runtime-frame {
   display: grid;
   grid-template-columns: 344px minmax(0, 1fr) minmax(220px, 34%);
+  grid-template-rows: minmax(0, 1fr);
 }
 .creation-runtime-frame > [data-testid='monitor-host'] {
   grid-column: 3;

@@ -1,10 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { updatePreferences } from '@/lib/preferences'
-import { logger } from '@/lib/logger'
-import { commands } from '@/lib/tauri-bindings'
-import { useProjectStore } from '@/store/project-store'
-import { selectionIsRunningCard, useSessionStore } from '@/store/session-store'
+import { chooseLanAddress, refreshLanAddresses } from '@/lib/lan-settings'
+import { useSessionStore } from '@/store/session-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -12,21 +10,6 @@ import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import type { SettingsSection } from '@/store/settings-store'
 
 import { SectionTitle } from './SectionTitle'
-
-/** Refresh the machine's LAN address list. The store keeps a valid
- * choice and otherwise auto-picks the list's first entry (#147 — the
- * pre-fix "only a sole address" rule left every multi-network Mac on the
- * gray Load gate). Failure keeps the current list — the row degrades to
- * the "Select…" placeholder only when nothing was known before. */
-function refreshLanAddresses(): void {
-  void commands.listLanAddresses().then(result => {
-    if (result.status === 'error') {
-      logger.warn('Failed to list LAN addresses', { error: result.error })
-      return
-    }
-    useSessionStore.getState().setLanAddresses(result.data)
-  })
-}
 
 /**
  * #58: the settings Node section — this machine's telematic identity, set
@@ -176,24 +159,7 @@ export function NodeSection({ section }: { section: SettingsSection }) {
           onFocus={refreshLanAddresses}
           onChange={event => {
             setModified(true)
-            useSessionStore.getState().setLanIp(event.target.value)
-            // #147: a hand choice persists — it must survive the next
-            // launch (the boot seed in AppShell reads it back). Only the
-            // operator decides; the first-address auto-pick never writes.
-            void updatePreferences({ lanIp: event.target.value })
-            // Migration parity with the old sidebar row: a LAN change on
-            // the running card flags Change — restart re-spawns with the
-            // new PNDS_HOST_IP. On any other selection it is
-            // pre-configuration, not a pending change.
-            const session = useSessionStore.getState()
-            if (
-              selectionIsRunningCard(
-                session,
-                useProjectStore.getState().currentProject?.path
-              )
-            ) {
-              session.setPendingChanges(true)
-            }
+            chooseLanAddress(event.target.value)
           }}
         >
           {(lanIp === null || lanOptions.length === 0) && (

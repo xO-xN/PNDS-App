@@ -188,7 +188,31 @@ describe('SettingsCard volume row (v1.2.2, issue #30)', () => {
     expect(slider().style.getPropertyValue('--pnds-volume-fill')).toBe('0%')
   })
 
-  it('shows the running LAN until restart, and the next-start LAN for another selection', () => {
+  it('edits the shared LAN choice in a popup and defers application until Change', async () => {
+    seedRunningSession()
+    vi.mocked(commands.listLanAddresses).mockResolvedValue({
+      status: 'ok',
+      data: ['192.168.1.10', '10.0.0.5'],
+    })
+    render(<SettingsCard />)
+    await userEvent.click(
+      screen.getByRole('combobox', { name: 'Local network' })
+    )
+    await userEvent.click(
+      await screen.findByRole('option', { name: '10.0.0.5' })
+    )
+    expect(useSessionStore.getState().lanIp).toBe('10.0.0.5')
+    expect(useSessionStore.getState().pendingChanges).toBe(true)
+    await vi.waitFor(() =>
+      expect(commands.savePreferences).toHaveBeenCalledWith(
+        expect.objectContaining({ lanIp: '10.0.0.5' })
+      )
+    )
+    expect(commands.startProject).not.toHaveBeenCalled()
+    expect(commands.stopProject).not.toHaveBeenCalled()
+  })
+
+  it('shows the shared pending LAN for both the running card and other selections', () => {
     seedRunningSession()
     useSessionStore.setState({
       sessionLanIp: '192.168.1.20',
@@ -197,14 +221,49 @@ describe('SettingsCard volume row (v1.2.2, issue #30)', () => {
     render(<SettingsCard />)
 
     expect(
-      screen.getByRole('group', { name: 'Local network' })
-    ).toHaveTextContent('192.168.1.20')
+      screen.getByRole('combobox', { name: 'Local network' })
+    ).toHaveTextContent('192.168.1.30')
     act(() => {
       useProjectStore.setState({ currentProject: { path: '/other', manifest } })
     })
     expect(
-      screen.getByRole('group', { name: 'Local network' })
+      screen.getByRole('combobox', { name: 'Local network' })
     ).toHaveTextContent('192.168.1.30')
     expect(commands.startProject).not.toHaveBeenCalled()
+  })
+  it('configures LAN for another selection without flagging the running card', async () => {
+    seedRunningSession()
+    useProjectStore.setState({ currentProject: { path: '/other', manifest } })
+    vi.mocked(commands.listLanAddresses).mockResolvedValue({
+      status: 'ok',
+      data: ['192.168.1.10', '10.0.0.5'],
+    })
+    render(<SettingsCard />)
+    await userEvent.click(
+      screen.getByRole('combobox', { name: 'Local network' })
+    )
+    await userEvent.click(screen.getByRole('option', { name: '10.0.0.5' }))
+    expect(useSessionStore.getState()).toMatchObject({
+      lanIp: '10.0.0.5',
+      pendingChanges: false,
+    })
+    expect(commands.startProject).not.toHaveBeenCalled()
+    expect(commands.stopProject).not.toHaveBeenCalled()
+  })
+
+  it('keeps known addresses usable when LAN enumeration rejects', async () => {
+    seedRunningSession()
+    vi.mocked(commands.listLanAddresses).mockRejectedValueOnce(
+      new Error('enumeration unavailable')
+    )
+    render(<SettingsCard />)
+    await userEvent.click(
+      screen.getByRole('combobox', { name: 'Local network' })
+    )
+    expect(
+      screen.getByRole('option', { name: '192.168.1.10' })
+    ).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('option', { name: '192.168.1.10' }))
+    expect(useSessionStore.getState().lanIp).toBe('192.168.1.10')
   })
 })

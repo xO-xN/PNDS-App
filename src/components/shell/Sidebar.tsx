@@ -5,7 +5,6 @@ import {
   Plus,
   X,
   Projector,
-  Play,
   RefreshCw,
   Command,
   Music,
@@ -544,31 +543,34 @@ export function Sidebar({
           <button
             type="button"
             data-testid="open-projection-button"
-            aria-label={t('sidebar.openProjection')}
-            title={t('sidebar.openProjection')}
-            onClick={handleOpenProjection}
-            className="pnds-focus-ring rounded-md p-1.5 text-(--pnds-text)/70 transition hover:bg-(--pnds-text)/5 hover:text-(--pnds-text) active:scale-90 disabled:opacity-40"
-          >
-            <Projector size={15} />
-          </button>
-          {projectionStart.visible && (
-            <button
-              type="button"
-              data-testid="projection-start-button"
-              aria-label={gateLabel}
-              title={gateLabel}
-              disabled={!projectionStart.enabled}
-              onClick={toggleProjectionGate}
-              className={cn(
-                'pnds-focus-ring rounded-md bg-(--pnds-projection-control-bg) p-1.5 leading-none transition disabled:opacity-40',
-                projectionStart.started
+            aria-label={
+              projectionStart.visible ? gateLabel : t('sidebar.openProjection')
+            }
+            title={
+              projectionStart.visible ? gateLabel : t('sidebar.openProjection')
+            }
+            aria-pressed={
+              projectionStart.visible ? projectionStart.started : undefined
+            }
+            disabled={projectionStart.visible && !projectionStart.enabled}
+            onClick={
+              projectionStart.visible
+                ? toggleProjectionGate
+                : handleOpenProjection
+            }
+            className={cn(
+              'pnds-focus-ring rounded-md p-1.5 transition active:scale-90 disabled:opacity-40',
+              projectionStart.visible
+                ? 'bg-(--pnds-projection-control-bg)'
+                : 'text-(--pnds-text)/70 hover:bg-(--pnds-text)/5 hover:text-(--pnds-text)',
+              projectionStart.visible &&
+                (projectionStart.started
                   ? 'text-[#34c759]'
-                  : 'animate-[projection-start-blink_1.6s_ease-in-out_infinite] text-[#ff9f0a]'
-              )}
-            >
-              <Play size={15} fill="currentColor" aria-hidden="true" />
-            </button>
-          )}
+                  : 'animate-[projection-start-blink_1.6s_ease-in-out_infinite] text-[#ff9f0a]')
+            )}
+          >
+            <Projector size={15} aria-hidden="true" />
+          </button>
           <button
             type="button"
             aria-label={t('sidebar.refresh')}

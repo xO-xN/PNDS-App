@@ -165,8 +165,8 @@ export async function openProjectionWindow(): Promise<void> {
     logger.error('Failed to create the projection window', { error })
     notifications.error(i18n.t('toast.error.generic'))
   })
-  // #130: announce the window's EXISTENCE — the main window's ▶ gate
-  // button renders only while a venue screen is alive. Creation is
+  // #130: announce the window's EXISTENCE — the main window's projection
+  // control switches to gate mode while a venue screen is alive. Creation is
   // announced here (Tauri 2 has no run-level window-created event);
   // destruction is Rust-observed (lib.rs Destroyed), so every close
   // path is covered. A failed create never announces — no ghost button.

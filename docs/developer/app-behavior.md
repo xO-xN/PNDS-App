@@ -299,7 +299,7 @@ v1.3.0（#56）帮助中心窗口——第二个 webview 窗口（label `help`�
 
 ### 投影开演门（#130，session 级）
 
-门状态 `projectionStarted` 权威在 Rust（`SessionInner`，随 session 快照族事件下发；`toggle_projection_start` 命令只对 ready 会话生效）——双窗口同源一致，菜单加速器不经 web 状态。每次 Load/切换工程（`reset_run_state`）重置回简介；开演后关窗重开直接落 monitor（门是 session 事实，不是窗口事实）。主窗口演出侧栏顶部的**无文字 ▶ 按钮**（仅投影窗口存在时渲染；存在性由 `ProjectionWindowEvent` 驱动——创建由 opener 在 `tauri://created` 宣布、销毁由 Rust `Destroyed` 观察兜底）与 **⌘⏎** 菜单项（Window 菜单，标签随门翻转 开演⇄撤回）都调同一命令；未开演 ▶ 持续闪烁（`projection-start-blink`，关键帧自高亮态下沉，reduce-motion 全局钳制后即静态高亮），开演后常亮绿（`#34c759`）。
+门状态 `projectionStarted` 权威在 Rust（`SessionInner`，随 session 快照族事件下发；`toggle_projection_start` 命令只对 ready 会话生效）——双窗口同源一致，菜单加速器不经 web 状态。每次 Load/切换工程（`reset_run_state`）重置回简介；开演后关窗重开直接落 monitor（门是 session 事实，不是窗口事实）。主窗口演出侧栏顶部的**投影按钮**（未打开窗口时创建投影窗口，窗口存在后在同一按钮上开演／撤回；存在性由 `ProjectionWindowEvent` 驱动——创建由 opener 在 `tauri://created` 宣布、销毁由 Rust `Destroyed` 观察兜底）与 **⌘⏎** 菜单项（Window 菜单，标签随门翻转 开演⇄撤回）都调同一命令；窗口打开且未开演时投影图标持续闪烁（`projection-start-blink`，关键帧自高亮态下沉，reduce-motion 全局钳制后即静态高亮），开演后常亮绿（`#34c759`）。
 
 ### 键盘与缩放作用域（#131）
 
@@ -352,9 +352,9 @@ v1.3.0（#56）帮助中心窗口——第二个 webview 窗口（label `help`�
 
 ## Sidebar
 
-演出侧栏顶部紧凑显示窗口控制、投影窗口、投影开演／撤回（恢复简介）和手动 monitor Refresh；底部保留定稿模式按钮。工程身份由列表与既有 monitor 标题表达，不增加重复工程身份／运行状态行，也不增加 monitor 上下控制栏。帮助通过既有菜单、快捷键与欢迎页入口访问，侧栏无帮助按钮。
+演出侧栏顶部紧凑显示窗口控制、单一投影按钮和手动 monitor Refresh；投影按钮先打开窗口，之后原位切换简介／演出内容，不另设开始按钮；底部保留定稿模式按钮。工程身份由列表与既有 monitor 标题表达，不增加重复工程身份／运行状态行，也不增加 monitor 上下控制栏。帮助通过既有菜单、快捷键与欢迎页入口访问，侧栏无帮助按钮。
 
-演出卡按音频模式、网络、增益排序，只有一个满宽 Load／Change／Close 动作；External 目标、适用的 Room 分组与可信 HTTPS 入口反馈仍保留。选中与运行分离、替换运行确认、启动门控、错误 Retry 和同步提交锁沿用既有流程；提交尚未收到后端状态时按钮已禁用。输出设备与通道能力在设置「音频」，LAN、节点名、hub 地址与遮罩 token 在设置「节点」，两种模式共用。Room 按工程与分组形成，节点配置与分组在下次启动生效。
+演出卡按音频模式、网络、增益排序，音频模式／Local network／Room 的值统一靠逻辑末端对齐，只有一个满宽 Load／Change／Close 动作；External 目标、适用的 Room 分组与可信 HTTPS 入口反馈仍保留。选中与运行分离、替换运行确认、启动门控、错误 Retry 和同步提交锁沿用既有流程；提交尚未收到后端状态时按钮已禁用。输出设备与通道能力在设置「音频」，LAN、节点名、hub 地址与遮罩 token 在设置「节点」，两种模式共用；演出卡的 Local network 下拉编辑同一个全局 LAN 选择。手选地址持久化，当前运行卡选择新地址后标记 Change；其他选择只是下次启动配置，均不即时改变正在运行的 monitor 地址。Room 按工程与分组形成，节点配置与分组在下次启动生效。
 
 运行时侧栏覆盖满窗口 monitor；边缘悬停或按住 Cmd 唤出，指针离开且所有保留条件结束后自动收起。菜单、替换／关停确认、全局设置与退出确认、模式确认及启动／关停命令保持侧栏显示。指针状态独立于这些保留条件，避免弹出层关闭后仍锁定旧 hover。隐藏侧栏使用 inert，退出键盘遍历；显隐只改变覆盖层，不改变 monitor 尺寸、页面实例或导航。
 

@@ -214,7 +214,7 @@ function ReadingWorkspace({
         </div>
         <CreationModeButton />
       </aside>
-      <main className="flex min-w-0 flex-1 flex-col">
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <div className="flex items-center justify-between border-b border-(--pnds-text)/15 p-4">
           <h1 className="text-sm font-medium">{t('creation.workspace')}</h1>
         </div>
@@ -245,9 +245,9 @@ export function CreationView() {
     <div
       data-creation-view=""
       inert={settling}
-      className="flex h-full min-w-0 w-full flex-col text-(--pnds-text)"
+      className="flex h-full min-h-0 min-w-0 w-full flex-col overflow-hidden text-(--pnds-text)"
     >
-      <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
         {workspace ? (
           <ReadingWorkspace
             key={workspace.project.identity}
@@ -305,7 +305,7 @@ export function CreationView() {
         )}
       </div>
       {!pickerOpen && (error || opening) && (
-        <div className="shrink-0 bg-(--pnds-card) p-3">
+        <div className="max-h-1/4 shrink-0 overflow-auto bg-(--pnds-card) p-3">
           {error ? (
             <CreationErrorNotice error={error} />
           ) : (
