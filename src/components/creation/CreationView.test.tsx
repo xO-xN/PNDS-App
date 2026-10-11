@@ -90,6 +90,31 @@ describe('creation reading workspace', () => {
     ).not.toBeInTheDocument()
   })
 
+  it('watches external removal, keeps the draft accessible and explains the saved-disk runtime boundary', async () => {
+    useCreationStore.setState({ workspace: first })
+    useSessionStore.setState({
+      sessionStatus: 'ready',
+      sessionProjectPath: '/draft',
+    })
+    useCreationDraftsStore.getState().loaded('public/score.js', 'my page', 'v1')
+    useCreationDraftsStore.getState().edit('public/score.js', 'my unsaved page')
+    vi.mocked(commands.pollCreationChanges).mockResolvedValueOnce({
+      status: 'ok',
+      data: { files: [], changed: ['public/score.js'], revision: 1 },
+    })
+    vi.mocked(commands.readCreationFile).mockResolvedValueOnce({
+      status: 'error',
+      error: { code: 'missing', detail: 'public/score.js' },
+    })
+    render(<CreationView />)
+    await screen.findByText('Pages changed on disk · refresh pending')
+    expect(screen.getByText(/unsaved drafts are excluded/i)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'public/score.js' }))
+    await screen.findByDisplayValue('my unsaved page')
+    expect(await screen.findByLabelText('Disk changed')).toBeInTheDocument()
+    expect(commands.startProject).not.toHaveBeenCalled()
+  })
+
   it('keeps the workspace when either selector is cancelled and explains protected source choices', async () => {
     useCreationStore.setState({ workspace: first })
     vi.mocked(commands.describeCreationProjects).mockResolvedValueOnce({
@@ -405,7 +430,8 @@ describe('creation reading workspace', () => {
       expect(commands.renameCreationFile).toHaveBeenCalledWith(
         'first',
         'public/score.js',
-        'public/renamed.js'
+        'public/renamed.js',
+        []
       )
       expect(
         screen.getByRole('button', { name: 'public/renamed.js' })

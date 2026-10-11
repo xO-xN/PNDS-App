@@ -147,6 +147,56 @@ proceeds. Late save/rename/read results re-check the workspace identity before
 touching store state, so an old project's return cannot modify the new one.
 ⌘S saves the active draft from any focus position in creation mode.
 
+## External changes and running versions (#155)
+
+Rename also sends the other opened draft paths to the backend. It resolves
+the destination and those reservations under the same project capability,
+refusing a canonical destination with a recoverable draft even when its disk
+file has been deleted and the entered parent is a symlink alias. Checking only
+the frontend's entered string would silently replace that draft.
+If a destination draft arrives only after dispatch, the frontend retains it
+and keeps the source draft reachable at its now-missing old path. Neither
+draft's text or pending save is replaced by the command response.
+
+The mounted workspace runs a serial, one-second polling watcher through
+`pollCreationChanges(identity, since)`. The backend takes its baseline during
+preparation, then scans through the same held-root capability, entry/depth
+limits and exclusions as listing. Device/inode, size, nanosecond mtime and
+ctime detect writes and atomic replacements without reading large assets.
+Failed scans retain the last baseline; changed paths remain pending until the
+frontend acknowledges their revision. Preparation cancellation keeps the active
+watch baseline. No filesystem scan belongs inside the runtime lifecycle lock.
+
+`creation-changes-store.ts` owns disk revisions, per-file reader revisions and
+pending refresh/restart/compile prompts. All polls share one in-flight request
+per identity; a successful identity change resets prompts and errors. Clean
+text drafts adopt new disk text. Dirty drafts retain their text and compare it
+with the newest disk version; unreadable or deleted files retain a marked,
+reachable draft. A batch that encounters an in-flight save is replayed after
+that save settles. Reads, saves, conflict adoption and rename also carry a
+per-file operation generation, so an older same-project result cannot undo a
+newer operation or new keystrokes. Non-text and read-only previews re-read only
+when the selected file's disk revision changes.
+
+Page paths and HTML/CSS changes flag refresh; server/module source, manifest,
+audio declarations and SynthDef artifacts flag restart. SuperCollider source
+also flags compilation. These are action prompts over saved disk facts, never
+claims that the runtime adopted the files. README/agent/docs edits do not flag
+runtime work. Saving and polling never invoke navigation, start/stop, compilation
+or health updates.
+
+Manual actions capture an identity and revision after a fresh poll.
+`creation-runtime-updates.ts` uses the existing monitor nonce/reveal gate and
+acknowledges pages only when that navigation loads; a timed-out navigation
+retains the prompt. Shared session start/restart acknowledges page/source
+prompts only after its new run reaches ready and `getCreationRuntime` confirms
+the same canonical root. A successful start command only spawns the supervisor;
+it cannot acknowledge health readiness. Successful compilation acknowledges captured source
+work and still flags restart for a live runtime. Later edits and another
+identity cannot be acknowledged by an older action. Unsaved drafts never enter
+any of these operations. Performer test-window refresh remains part of the
+test-window workflow; this issue adds no performer window implementation.
+
 ## Frontend ownership
 
 `creation-store.ts` owns mode, active workspace, opening errors and recent
@@ -154,6 +204,9 @@ creation paths. Modes and issued identities are transient. Folder history is
 stored through the existing serialized preferences queue, independently of
 performance selection. Recent paths are revalidated on every open; selector
 descriptions use temporary backend access and do not revoke the active identity.
+Runtime adoption retains the backend's canonical root paired with its raw
+runtime path, so a preserved folder alias still identifies the same running
+workspace. A stale snapshot for another runtime cannot supply that association.
 
 Only one file-workspace open is accepted at a time. Mode preparation is blocked
 until that open completes, including its backend identity commit. A queue and

@@ -13,6 +13,7 @@ import {
 import { logger } from '@/lib/logger'
 import { notifications } from '@/lib/notifications'
 import { useProjectStore } from '@/store/project-store'
+import { useCreationChangesStore } from '@/store/creation-changes-store'
 import { Button } from '@/components/ui/button'
 import {
   AlertDialog,
@@ -154,6 +155,7 @@ export function DeveloperSection({ section }: { section: SettingsSection }) {
     if (!targetPath || busy) return
     setCompileResult(null)
     setCompiling(true)
+    const update = await useCreationChangesStore.getState().capture(targetPath)
     const compiled = await commands.compileProjectSynthdefs(targetPath)
     setCompiling(false)
     if (compiled.status === 'error') {
@@ -168,6 +170,8 @@ export function DeveloperSection({ section }: { section: SettingsSection }) {
       return
     }
     setCompileResult(compiled.data)
+    useCreationChangesStore.getState().complete(update, 'compile')
+    if (update) await useCreationChangesStore.getState().poll()
     logger.info('SynthDefs compiled', {
       path: targetPath,
       produced: compiled.data.produced,

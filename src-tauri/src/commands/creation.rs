@@ -2,8 +2,8 @@
 //! operations use the backend-issued identity and project-relative paths.
 
 use crate::project::creation::{
-    CreationAccess, CreationContent, CreationError, CreationErrorCode, CreationFile,
-    CreationProject, CreationWorkspace, Protection,
+    CreationAccess, CreationChanges, CreationContent, CreationError, CreationErrorCode,
+    CreationFile, CreationProject, CreationWorkspace, Protection,
 };
 use crate::project::session::{CreationRuntime, SessionManager};
 use crate::types::SessionStatus;
@@ -190,6 +190,19 @@ pub async fn list_creation_files(
 
 #[tauri::command]
 #[specta::specta]
+pub async fn poll_creation_changes(
+    app: AppHandle,
+    state: State<'_, CreationState>,
+    identity: String,
+    since: u32,
+) -> Result<CreationChanges, CreationError> {
+    state
+        .run(move |access| access.poll(&identity, since, &protection(&app)?))
+        .await
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn read_creation_file(
     app: AppHandle,
     state: State<'_, CreationState>,
@@ -232,9 +245,18 @@ pub async fn rename_creation_file(
     identity: String,
     path: String,
     next_path: String,
+    draft_paths: Vec<String>,
 ) -> Result<String, CreationError> {
     state
-        .run(move |access| access.rename(&identity, &path, &next_path, &protection(&app)?))
+        .run(move |access| {
+            access.rename(
+                &identity,
+                &path,
+                &next_path,
+                &draft_paths,
+                &protection(&app)?,
+            )
+        })
         .await
 }
 

@@ -13,6 +13,8 @@ import {
 } from '@/store/project-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { useCreationStore } from '@/store/creation-store'
+import { useCreationChangesStore } from '@/store/creation-changes-store'
+import { trackCreationRestart } from '@/lib/creation-runtime-updates'
 import { isNodeConfigComplete, isValidOscTarget } from '@/lib/preferences'
 
 /**
@@ -355,17 +357,22 @@ export async function start(): Promise<void> {
       ? await openHttpsCompatChoice()
       : true
     if (!proceed || useCreationStore.getState().modePhase !== 'idle') return
+    const update = useCreationStore.getState().active
+      ? await useCreationChangesStore.getState().capture(plan.path)
+      : null
     logger.info('Starting project', {
       path: plan.path,
       mode: plan.audioMode,
       lanIp: plan.lanIp,
     })
-    const result = await commands.startProject(
-      plan.path,
-      plan.audioMode,
-      plan.lanIp,
-      plan.oscTarget
-    )
+    const acknowledge = trackCreationRestart(update, plan.path)
+    const result = await commands
+      .startProject(plan.path, plan.audioMode, plan.lanIp, plan.oscTarget)
+      .catch(error => {
+        acknowledge(false)
+        throw error
+      })
+    acknowledge(result.status === 'ok')
     if (result.status === 'error') {
       useSessionStore.getState().failLocal(result.error)
     }
@@ -403,16 +410,21 @@ async function stopThenStart(
       ? await openHttpsCompatChoice()
       : true
     if (!proceed || useCreationStore.getState().modePhase !== 'idle') return
+    const update = useCreationStore.getState().active
+      ? await useCreationChangesStore.getState().capture(path)
+      : null
     // All choices passed: commit the transition immediately before dispatch.
     // Waiting/canceling must leave the Change action and its draft intact.
     useSessionStore.getState().setPendingChanges(false)
     await commands.stopProject()
-    const result = await commands.startProject(
-      path,
-      audioMode,
-      lanIp,
-      oscTarget
-    )
+    const acknowledge = trackCreationRestart(update, path)
+    const result = await commands
+      .startProject(path, audioMode, lanIp, oscTarget)
+      .catch(error => {
+        acknowledge(false)
+        throw error
+      })
+    acknowledge(result.status === 'ok')
     if (result.status === 'error') {
       useSessionStore.getState().failLocal(result.error)
     }

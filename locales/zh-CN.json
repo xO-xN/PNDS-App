@@ -378,7 +378,7 @@
   "creation.saving": "保存中…",
   "creation.saved": "已保存",
   "creation.unsaved": "未保存修改",
-  "creation.diskChanged": "磁盘有新版本 · 保存时核对",
+  "creation.diskChanged": "磁盘内容已变化",
   "creation.draftHint": "未保存草稿不会进入当前运行版本；保存、刷新与重启都是独立的手动操作。",
   "creation.dismissError": "知道了",
   "creation.rename": "重命名",
@@ -423,5 +423,10 @@
   "creation.switchBusy": "请等待当前启动或关停完成。",
   "creation.switchStale": "准备切换期间运行已改变，请重试。",
   "creation.workspace": "创作工作台",
-  "creation.projectContent": "作品"
+  "creation.projectContent": "作品",
+  "creation.pendingRefresh": "页面磁盘内容已变化 · 待刷新",
+  "creation.pendingRestart": "源码、音频声明或产物磁盘内容已变化 · 待重启",
+  "creation.pendingCompile": "SuperCollider 源码磁盘内容已变化 · 待编译",
+  "creation.runningDiskHint": "手动刷新、重启和编译使用已保存的磁盘文件，不包含未保存草稿。保存与外部修改不会自动更新当前运行版本。",
+  "creation.refreshPages": "刷新已保存页面"
 }

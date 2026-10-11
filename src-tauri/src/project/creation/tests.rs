@@ -2,6 +2,116 @@ use super::*;
 use std::fs;
 
 #[test]
+fn rename_cannot_replace_a_recoverable_draft_through_a_destination_alias() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = project(temp.path(), "rename-alias");
+    fs::create_dir(root.join("real")).unwrap();
+    fs::write(root.join("real/target.js"), "recoverable base").unwrap();
+    std::os::unix::fs::symlink(root.join("real"), root.join("alias")).unwrap();
+    let protection = Protection::default();
+    let mut access = CreationAccess::default();
+    let identity = access.open(&root, &protection).unwrap().project.identity;
+    access
+        .read(&identity, "real/target.js", &protection)
+        .unwrap();
+    fs::remove_file(root.join("real/target.js")).unwrap();
+    let error = access
+        .rename(
+            &identity,
+            "server.js",
+            "alias/target.js",
+            &["real/target.js".into()],
+            &protection,
+        )
+        .unwrap_err();
+    assert_eq!(error.code, CreationErrorCode::TargetExists);
+    assert!(access.read(&identity, "server.js", &protection).is_ok());
+    assert_eq!(
+        access
+            .read(&identity, "real/target.js", &protection)
+            .unwrap_err()
+            .code,
+        CreationErrorCode::Missing
+    );
+}
+
+#[test]
+fn watch_reports_add_remove_and_same_size_edits_without_losing_unacknowledged_changes() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = project(temp.path(), "watched");
+    fs::write(root.join("page.html"), "old").unwrap();
+    let protection = Protection::default();
+    let mut access = CreationAccess::default();
+    let opened = access.open(&root, &protection).unwrap();
+    let identity = &opened.project.identity;
+    assert!(access
+        .poll(identity, 0, &protection)
+        .unwrap()
+        .changed
+        .is_empty());
+    fs::write(root.join("page.html"), "new").unwrap();
+    fs::write(root.join("added.js"), "added").unwrap();
+    fs::remove_file(root.join("server.js")).unwrap();
+    let change = access.poll(identity, 0, &protection).unwrap();
+    assert_eq!(change.changed, ["added.js", "page.html", "server.js"]);
+    assert!(change.files.iter().any(|file| file.path == "added.js"));
+    assert!(!change.files.iter().any(|file| file.path == "server.js"));
+    assert_eq!(
+        access.poll(identity, 0, &protection).unwrap().changed,
+        change.changed
+    );
+    assert!(access
+        .poll(identity, change.revision, &protection)
+        .unwrap()
+        .changed
+        .is_empty());
+    let next = project(temp.path(), "next");
+    access.open(&next, &protection).unwrap();
+    assert_eq!(
+        access.poll(identity, 0, &protection).unwrap_err().code,
+        CreationErrorCode::InvalidIdentity
+    );
+}
+
+#[test]
+fn watch_omits_dependencies_and_rejects_external_symlinks_and_replaced_roots() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = project(temp.path(), "bounded");
+    let protection = Protection::default();
+    let mut access = CreationAccess::default();
+    let opened = access.open(&root, &protection).unwrap();
+    for name in ["node_modules", ".git"] {
+        fs::create_dir(root.join(name)).unwrap();
+        fs::write(root.join(name).join("ignored.js"), "ignored").unwrap();
+    }
+    assert!(access
+        .poll(&opened.project.identity, 0, &protection)
+        .unwrap()
+        .changed
+        .is_empty());
+    let outside = temp.path().join("secret.txt");
+    fs::write(&outside, "not project content").unwrap();
+    std::os::unix::fs::symlink(&outside, root.join("escape.txt")).unwrap();
+    assert_eq!(
+        access
+            .poll(&opened.project.identity, 0, &protection)
+            .unwrap_err()
+            .code,
+        CreationErrorCode::PathEscape
+    );
+    fs::remove_file(root.join("escape.txt")).unwrap();
+    fs::rename(&root, temp.path().join("old-root")).unwrap();
+    project(temp.path(), "bounded");
+    assert_eq!(
+        access
+            .poll(&opened.project.identity, 0, &protection)
+            .unwrap_err()
+            .code,
+        CreationErrorCode::InvalidIdentity
+    );
+}
+
+#[test]
 fn runtime_generation_change_rejects_a_prepared_mode_commit() {
     let manager = crate::project::session::SessionManager::default();
     let initial = manager.creation_runtime();
@@ -540,7 +650,13 @@ fn saves_reject_escape_symlinks_read_only_sources_and_bad_targets() {
     );
     assert_eq!(
         workspace
-            .rename(&read_only_identity, "server.js", "next.js", &protection)
+            .rename(
+                &read_only_identity,
+                "server.js",
+                "next.js",
+                &[],
+                &protection
+            )
             .unwrap_err()
             .code,
         CreationErrorCode::Permission
@@ -624,7 +740,13 @@ fn renames_move_files_without_overwriting_targets_or_fixing_references() {
     let mut workspace = CreationAccess::default();
     let identity = workspace.open(&root, &protection).unwrap().project.identity;
     let moved = workspace
-        .rename(&identity, "public/page.js", "pages/page.js", &protection)
+        .rename(
+            &identity,
+            "public/page.js",
+            "pages/page.js",
+            &[],
+            &protection,
+        )
         .unwrap();
     assert_eq!(moved, "pages/page.js");
     assert_eq!(
@@ -636,7 +758,7 @@ fn renames_move_files_without_overwriting_targets_or_fixing_references() {
     fs::write(root.join("target.js"), "// existing").unwrap();
     assert_eq!(
         workspace
-            .rename(&identity, "pages/page.js", "target.js", &protection)
+            .rename(&identity, "pages/page.js", "target.js", &[], &protection)
             .unwrap_err()
             .code,
         CreationErrorCode::TargetExists
@@ -652,7 +774,13 @@ fn renames_move_files_without_overwriting_targets_or_fixing_references() {
     // The manifest keeps pointing at the old name — references are the
     // external agent's job, never rewritten by the rename itself.
     workspace
-        .rename(&identity, "server.js", "renamed-server.js", &protection)
+        .rename(
+            &identity,
+            "server.js",
+            "renamed-server.js",
+            &[],
+            &protection,
+        )
         .unwrap();
     assert!(fs::read_to_string(root.join("manifest.json"))
         .unwrap()
@@ -668,7 +796,7 @@ fn renames_move_files_without_overwriting_targets_or_fixing_references() {
     ] {
         assert_eq!(
             workspace
-                .rename(&identity, "pages/page.js", path, &protection)
+                .rename(&identity, "pages/page.js", path, &[], &protection)
                 .unwrap_err()
                 .code,
             code,
@@ -678,7 +806,7 @@ fn renames_move_files_without_overwriting_targets_or_fixing_references() {
     // A missing source and an escaping source symlink read clearly.
     assert_eq!(
         workspace
-            .rename(&identity, "gone.js", "next.js", &protection)
+            .rename(&identity, "gone.js", "next.js", &[], &protection)
             .unwrap_err()
             .code,
         CreationErrorCode::Missing
@@ -687,7 +815,7 @@ fn renames_move_files_without_overwriting_targets_or_fixing_references() {
     std::os::unix::fs::symlink(temp.path().join("secret.txt"), root.join("out.js")).unwrap();
     assert_eq!(
         workspace
-            .rename(&identity, "out.js", "in.js", &protection)
+            .rename(&identity, "out.js", "in.js", &[], &protection)
             .unwrap_err()
             .code,
         CreationErrorCode::PathEscape
@@ -695,14 +823,14 @@ fn renames_move_files_without_overwriting_targets_or_fixing_references() {
     // Directories are not rename targets through the file workspace.
     assert_eq!(
         workspace
-            .rename(&identity, "public", "renamed", &protection)
+            .rename(&identity, "public", "renamed", &[], &protection)
             .unwrap_err()
             .code,
         CreationErrorCode::InvalidProject
     );
     assert_eq!(
         workspace
-            .rename("forged", "pages/page.js", "next.js", &protection)
+            .rename("forged", "pages/page.js", "next.js", &[], &protection)
             .unwrap_err()
             .code,
         CreationErrorCode::InvalidIdentity

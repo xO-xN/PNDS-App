@@ -208,6 +208,14 @@ async listCreationFiles(identity: string) : Promise<Result<CreationFile[], Creat
     else return { status: "error", error: e  as any };
 }
 },
+async pollCreationChanges(identity: string, since: number) : Promise<Result<CreationChanges, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("poll_creation_changes", { identity, since }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async readCreationFile(identity: string, path: string) : Promise<Result<CreationContent, CreationError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("read_creation_file", { identity, path }) };
@@ -224,9 +232,9 @@ async saveCreationFile(identity: string, path: string, text: string, expectedVer
     else return { status: "error", error: e  as any };
 }
 },
-async renameCreationFile(identity: string, path: string, nextPath: string) : Promise<Result<string, CreationError>> {
+async renameCreationFile(identity: string, path: string, nextPath: string, draftPaths: string[]) : Promise<Result<string, CreationError>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("rename_creation_file", { identity, path, nextPath }) };
+    return { status: "ok", data: await TAURI_INVOKE("rename_creation_file", { identity, path, nextPath, draftPaths }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -1033,6 +1041,7 @@ bridgedChannels: number;
  */
 privateBusStart: number }
 export type CreationCategory = "audio" | "pages" | "modules" | "assets" | "system"
+export type CreationChanges = { files: CreationFile[]; changed: string[]; revision: number }
 export type CreationContent = 
 /**
  * `version` fingerprints the bytes read from disk; saves must echo it

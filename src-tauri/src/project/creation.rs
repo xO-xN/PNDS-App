@@ -3,6 +3,7 @@
 use base64::Engine as _;
 use serde::Serialize;
 use specta::Type;
+use std::collections::BTreeMap;
 use std::ffi::{CStr, CString, OsString};
 use std::fs::{self, File, Metadata};
 use std::io::{self, Read, Write};
@@ -160,6 +161,17 @@ struct OpenProject {
     descriptor: CreationProject,
     directory: File,
     root: PathBuf,
+    watch: BTreeMap<String, String>,
+    pending: BTreeMap<String, u32>,
+    revision: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CreationChanges {
+    pub files: Vec<CreationFile>,
+    pub changed: Vec<String>,
+    pub revision: u32,
 }
 
 /// One active identity; a successful replacement revokes the old capability.
@@ -201,6 +213,9 @@ impl CreationAccess {
             },
             directory,
             root,
+            watch: BTreeMap::new(),
+            pending: BTreeMap::new(),
+            revision: 0,
         };
         let manifest_file = candidate.file("manifest.json")?;
         let raw = bounded_read(manifest_file, TEXT_MAX_BYTES)?;
@@ -235,6 +250,7 @@ impl CreationAccess {
         let mut files = Vec::new();
         candidate.walk(Path::new(""), 0, &mut 0, &mut Vec::new(), &mut files)?;
         files.sort_by(|a, b| a.path.cmp(&b.path));
+        candidate.watch = candidate.watch_versions(&files)?;
         self.generation += 1;
         let descriptor = candidate.descriptor.clone();
         self.prepared = Some(candidate);
@@ -334,6 +350,44 @@ impl CreationAccess {
         Ok(files)
     }
 
+    /// A bounded polling watcher uses the same held-root capability as reads.
+    /// Changes remain pending until the caller acknowledges their revision.
+    pub fn poll(
+        &mut self,
+        identity: &str,
+        since: u32,
+        protection: &Protection,
+    ) -> Result<CreationChanges, CreationError> {
+        let files = self.list(identity, protection)?;
+        let versions = self.current(identity, protection)?.watch_versions(&files)?;
+        let project = self.project.as_mut().expect("identity validated");
+        let mut changed: Vec<String> = versions
+            .iter()
+            .filter(|(path, version)| project.watch.get(*path) != Some(*version))
+            .map(|(path, _)| path.clone())
+            .collect();
+        changed.extend(
+            project
+                .watch
+                .keys()
+                .filter(|path| !versions.contains_key(*path))
+                .cloned(),
+        );
+        project.pending.retain(|_, revision| *revision > since);
+        if !changed.is_empty() {
+            project.revision += 1;
+            for path in changed {
+                project.pending.insert(path, project.revision);
+            }
+        }
+        project.watch = versions;
+        Ok(CreationChanges {
+            files,
+            changed: project.pending.keys().cloned().collect(),
+            revision: project.revision,
+        })
+    }
+
     pub fn read(
         &self,
         identity: &str,
@@ -431,6 +485,7 @@ impl CreationAccess {
         identity: &str,
         path: &str,
         next_path: &str,
+        draft_paths: &[String],
         protection: &Protection,
     ) -> Result<String, CreationError> {
         let project = self.current(identity, protection)?;
@@ -442,35 +497,25 @@ impl CreationAccess {
                 "Rename selects a regular file",
             ));
         }
-        let next = Path::new(next_path);
-        if next
-            .components()
-            .any(|component| !matches!(component, Component::Normal(_)))
-        {
-            return Err(CreationError::new(CreationErrorCode::PathEscape, next_path));
-        }
-        let name = next
-            .file_name()
-            .and_then(|name| name.to_str())
-            .filter(|name| !name.is_empty() && *name != "." && *name != "..")
-            .ok_or_else(|| {
-                CreationError::new(CreationErrorCode::InvalidProject, "Enter a file name")
-            })?;
-        let parent = match next.parent() {
-            Some(parent) if !parent.as_os_str().is_empty() => {
-                project.resolve(&parent.to_string_lossy())?
-            }
-            _ => project.root.clone(),
-        };
-        if !fs::metadata(&parent).map_err(io_error)?.is_dir() {
+        if draft_paths.len() > MAX_ENTRIES {
             return Err(CreationError::new(
-                CreationErrorCode::InvalidProject,
-                "The target folder must exist",
+                CreationErrorCode::TooLarge,
+                "Draft path list exceeds 4096 entries",
             ));
         }
-        let target = parent.join(name);
-        if !target.starts_with(&project.root) {
-            return Err(CreationError::new(CreationErrorCode::PathEscape, next_path));
+        let target = project.destination(next_path)?;
+        for draft_path in draft_paths {
+            match project.destination(draft_path) {
+                Ok(draft_target) if draft_target == target => {
+                    return Err(CreationError::new(
+                        CreationErrorCode::TargetExists,
+                        next_path,
+                    ));
+                }
+                Ok(_) => {}
+                Err(error) if error.code == CreationErrorCode::Missing => {}
+                Err(error) => return Err(error),
+            }
         }
         match fs::symlink_metadata(&target) {
             Ok(_) => {
@@ -570,6 +615,65 @@ fn validate_identity(project: &OpenProject, protection: &Protection) -> Result<(
 }
 
 impl OpenProject {
+    fn destination(&self, path: &str) -> Result<PathBuf, CreationError> {
+        let next = Path::new(path);
+        if next
+            .components()
+            .any(|component| !matches!(component, Component::Normal(_)))
+        {
+            return Err(CreationError::new(CreationErrorCode::PathEscape, path));
+        }
+        let name = next
+            .file_name()
+            .and_then(|name| name.to_str())
+            .filter(|name| !name.is_empty() && *name != "." && *name != "..")
+            .ok_or_else(|| {
+                CreationError::new(CreationErrorCode::InvalidProject, "Enter a file name")
+            })?;
+        let parent = match next.parent() {
+            Some(parent) if !parent.as_os_str().is_empty() => {
+                self.resolve(&parent.to_string_lossy())?
+            }
+            _ => self.root.clone(),
+        };
+        if !fs::metadata(&parent).map_err(io_error)?.is_dir() {
+            return Err(CreationError::new(
+                CreationErrorCode::InvalidProject,
+                "The target folder must exist",
+            ));
+        }
+        let target = parent.join(name);
+        if !target.starts_with(&self.root) {
+            return Err(CreationError::new(CreationErrorCode::PathEscape, path));
+        }
+        Ok(target)
+    }
+
+    fn watch_versions(
+        &self,
+        files: &[CreationFile],
+    ) -> Result<BTreeMap<String, String>, CreationError> {
+        files
+            .iter()
+            .map(|file| {
+                let metadata = self.file(&file.path)?.metadata().map_err(io_error)?;
+                // ctime also detects same-size writes and restored mtime; inode
+                // detects atomic replacement. Never read/decode unbounded assets.
+                let version = format!(
+                    "{}:{}:{}:{}:{}:{}:{}",
+                    metadata.dev(),
+                    metadata.ino(),
+                    metadata.len(),
+                    metadata.mtime(),
+                    metadata.mtime_nsec(),
+                    metadata.ctime(),
+                    metadata.ctime_nsec()
+                );
+                Ok((file.path.clone(), version))
+            })
+            .collect()
+    }
+
     fn resolve(&self, path: &str) -> Result<PathBuf, CreationError> {
         if Path::new(path).components().any(|c| {
             matches!(

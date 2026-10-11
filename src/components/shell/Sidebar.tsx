@@ -1,3 +1,4 @@
+import { refreshMonitorFromDisk } from '@/lib/creation-runtime-updates'
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
@@ -576,7 +577,9 @@ export function Sidebar({
             aria-label={t('sidebar.refresh')}
             title={t('sidebar.refreshHint')}
             disabled={!running}
-            onClick={() => useSessionStore.getState().bumpMonitorReload()}
+            onClick={() => {
+              void refreshMonitorFromDisk()
+            }}
             className="pnds-focus-ring rounded-md p-1.5 text-(--pnds-text)/70 transition hover:bg-(--pnds-text)/5 hover:text-(--pnds-text) active:scale-90 disabled:opacity-40"
           >
             <RefreshCw size={15} />

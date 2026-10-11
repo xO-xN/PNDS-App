@@ -21,6 +21,7 @@
  * dispatches on the FOCUSED window: with the help center front it
  * closes that window, not the main flow behind it.
  */
+import { refreshMonitorFromDisk } from '@/lib/creation-runtime-updates'
 import {
   Menu,
   MenuItem,
@@ -144,10 +145,7 @@ async function dispatchMonitorZoom(
  * showing 简介/待机 has no monitor to reload and no-ops).
  */
 function reloadBothMonitors(): void {
-  const session = useSessionStore.getState()
-  if (session.sessionStatus === 'ready') {
-    session.bumpMonitorReload()
-  }
+  void refreshMonitorFromDisk()
   void emitProjectionAction({ kind: 'reload-monitor' })
 }
 

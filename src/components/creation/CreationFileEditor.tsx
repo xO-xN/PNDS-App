@@ -13,8 +13,10 @@ import {
 } from '@/store/creation-store'
 import {
   isDraftDirty,
+  beginCreationFileOperation,
   useCreationDraftsStore,
 } from '@/store/creation-drafts-store'
+import { useCreationChangesStore } from '@/store/creation-changes-store'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -56,14 +58,18 @@ export function CreationFileEditor({
   const editorRef = useRef<HTMLTextAreaElement>(null)
   const match = useRef<HTMLElement>(null)
   const editableText = editable && file.kind === 'text'
+  const diskRevision = useCreationChangesStore(
+    state => state.fileRevisions[file.path] ?? 0
+  )
   useEffect(() => {
     if (editableText && file.path in useCreationDraftsStore.getState().drafts)
       return
     let live = true
+    const ownsOperation = beginCreationFileOperation(file.path)
     void commands
       .readCreationFile(identity, file.path)
       .then(result => {
-        if (!live) return
+        if (!live || !ownsOperation()) return
         // A late read may only seed drafts while this workspace is shown.
         if (
           editableText &&
@@ -74,6 +80,8 @@ export function CreationFileEditor({
           setError(result.error)
           return
         }
+        setError(null)
+        setImageFailed(false)
         if (editableText) {
           if (result.data.kind === 'text')
             useCreationDraftsStore
@@ -83,12 +91,12 @@ export function CreationFileEditor({
         } else setContent(result.data)
       })
       .catch(transport => {
-        if (live) setError(creationTransportError(transport))
+        if (live && ownsOperation()) setError(creationTransportError(transport))
       })
     return () => {
       live = false
     }
-  }, [identity, file.path, editableText])
+  }, [identity, file.path, editableText, diskRevision])
   const text = editableText
     ? (draft?.text ?? '')
     : content?.kind === 'text'
@@ -146,7 +154,7 @@ export function CreationFileEditor({
   const statusLabel = draft
     ? draft.saving
       ? t('creation.saving')
-      : draft.conflict
+      : draft.conflict || draft.diskChanged
         ? t('creation.diskChanged')
         : dirty
           ? t('creation.unsaved')
@@ -370,6 +378,7 @@ export function CreationFileEditor({
             </Button>
             <Button
               variant="outline"
+              disabled={draft?.saving}
               onClick={() =>
                 useCreationDraftsStore.getState().revert(file.path)
               }

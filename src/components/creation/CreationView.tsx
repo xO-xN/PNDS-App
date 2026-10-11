@@ -25,10 +25,14 @@ import {
 import {
   creationDraftsParticipant,
   selectDirtyPathKey,
+  selectDiskConflictPathKey,
   useCreationDraftsStore,
 } from '@/store/creation-drafts-store'
 import { registerCreationParticipant } from '@/lib/creation-lifecycle'
 import { useSettingsStore } from '@/store/settings-store'
+import { useCreationChangesStore } from '@/store/creation-changes-store'
+import { useSessionStore } from '@/store/session-store'
+import { refreshMonitorFromDisk } from '@/lib/creation-runtime-updates'
 import { Button } from '@/components/ui/button'
 import { TrafficLights } from '@/components/shell'
 import { CreationModeButton } from './CreationModeButton'
@@ -63,10 +67,56 @@ function ReadingWorkspace({
     useCreationDraftsStore(selectDirtyPathKey).split('\n').filter(Boolean)
   )
   const project = workspace.project
-  const visible = workspace.files.filter(file =>
+  const conflictPaths = new Set(
+    useCreationDraftsStore(selectDiskConflictPathKey)
+      .split('\n')
+      .filter(Boolean)
+  )
+  const pending = useCreationChangesStore(state => state.pending)
+  const watchError = useCreationChangesStore(state => state.error)
+  const runtimePath = useCreationStore(state =>
+    state.runtimeProject?.root === project.root
+      ? state.runtimeProject.path
+      : null
+  )
+  const running = useSessionStore(
+    state =>
+      state.sessionStatus === 'ready' &&
+      (state.sessionProjectPath === project.root ||
+        (!!runtimePath && state.sessionProjectPath === runtimePath))
+  )
+  useEffect(() => {
+    let live = true
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const poll = async () => {
+      await useCreationChangesStore.getState().poll()
+      if (live)
+        timer = setTimeout(() => {
+          void poll()
+        }, 1000)
+    }
+    void poll()
+    return () => {
+      live = false
+      clearTimeout(timer)
+    }
+  }, [project.identity])
+  // A removed file's recoverable draft remains reachable in the tree.
+  const files = [
+    ...workspace.files,
+    ...[...dirtyPaths]
+      .filter(path => !workspace.files.some(file => file.path === path))
+      .map(path => ({
+        path,
+        kind: 'text' as const,
+        category: 'system' as const,
+        size: 0,
+      })),
+  ]
+  const visible = files.filter(file =>
     file.path.toLocaleLowerCase().includes(search.toLocaleLowerCase())
   )
-  const file = workspace.files.find(file => file.path === selected)
+  const file = files.find(file => file.path === selected)
   const editable = project.source === 'folder'
   const owns = () =>
     useCreationStore.getState().workspace?.project.identity === project.identity
@@ -80,22 +130,8 @@ function ReadingWorkspace({
   }
   const refresh = async () => {
     setRefreshing(true)
-    setError(null)
-    try {
-      const result = await commands.listCreationFiles(project.identity)
-      if (!owns()) return
-      if (result.status === 'error') setError(result.error)
-      else {
-        useCreationStore.setState({
-          workspace: { project, files: result.data },
-        })
-        useCreationDraftsStore.getState().setActivePath(null)
-      }
-    } catch (error) {
-      if (owns()) setError(creationTransportError(error))
-    } finally {
-      if (owns()) setRefreshing(false)
-    }
+    await useCreationChangesStore.getState().poll()
+    if (owns()) setRefreshing(false)
   }
   return (
     <>
@@ -209,6 +245,14 @@ function ReadingWorkspace({
                           <span className="creation-file-name">
                             {file.path}
                           </span>
+                          {conflictPaths.has(file.path) && (
+                            <span
+                              aria-label={t('creation.diskChanged')}
+                              title={t('creation.diskChanged')}
+                            >
+                              !
+                            </span>
+                          )}
                           {dirtyPaths.has(file.path) && (
                             <span
                               aria-label={t('creation.unsaved')}
@@ -241,6 +285,31 @@ function ReadingWorkspace({
           <h1 className="text-sm font-medium">{t('creation.workspace')}</h1>
         </div>
         {error && <CreationErrorNotice error={error} />}
+        {watchError && <CreationErrorNotice error={watchError} />}
+        {(pending.refresh > 0 ||
+          pending.restart > 0 ||
+          pending.compile > 0) && (
+          <div className="border-b border-(--pnds-text)/15 p-4 text-start text-xs">
+            <div role="status" aria-atomic="true">
+              {pending.refresh > 0 && <p>{t('creation.pendingRefresh')}</p>}
+              {pending.restart > 0 && <p>{t('creation.pendingRestart')}</p>}
+              {pending.compile > 0 && <p>{t('creation.pendingCompile')}</p>}
+              <p className="mt-2">{t('creation.runningDiskHint')}</p>
+            </div>
+            {running && pending.refresh > 0 && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="mt-2"
+                onClick={() => {
+                  void refreshMonitorFromDisk()
+                }}
+              >
+                {t('creation.refreshPages')}
+              </Button>
+            )}
+          </div>
+        )}
         {file ? (
           <CreationFileEditor
             key={`${project.identity}:${file.path}`}

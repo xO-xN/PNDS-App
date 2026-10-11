@@ -120,6 +120,29 @@ describe('confirmed mode handoff', () => {
     expect(commands.startProject).not.toHaveBeenCalled()
   })
 
+  it('retains the backend canonical runtime identity when adopting a running folder alias', async () => {
+    const aliased = {
+      ...runtime,
+      snapshot: { ...runtime.snapshot, projectPath: '/alias' },
+    }
+    vi.mocked(commands.getCreationRuntime).mockResolvedValue({
+      status: 'ok',
+      data: aliased,
+    })
+    vi.mocked(commands.commitCreationProject).mockResolvedValue({
+      status: 'ok',
+      data: aliased,
+    })
+    await useCreationStore.getState().prepareModeSwitch()
+    await useCreationStore.getState().commitModeSwitch()
+    expect(useCreationStore.getState().runtimeProject).toEqual({
+      path: '/alias',
+      root: '/A',
+    })
+    expect(useSessionStore.getState().sessionProjectPath).toBe('/alias')
+    expect(commands.stopProject).not.toHaveBeenCalled()
+  })
+
   it('cancels a prepared switch without stopping the runtime or cleaning up windows', async () => {
     const cleanup = vi.fn().mockResolvedValue(undefined)
     unregister = registerCreationParticipant({ cleanup })

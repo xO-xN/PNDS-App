@@ -33,6 +33,8 @@ interface CreationState {
   active: boolean
   epoch: number
   workspace: CreationWorkspace | null
+  /** Canonical runtime identity supplied by the backend, including raw aliases. */
+  runtimeProject: { path: string; root: string } | null
   recentPaths: string[]
   opening: boolean
   request: CreationRequest | null
@@ -131,6 +133,14 @@ function newestSnapshot(runtime: CreationRuntime, revision: number) {
 }
 function adoptRuntime(runtime: CreationRuntime, revision: number): void {
   const snapshot = newestSnapshot(runtime, revision)
+  useCreationStore.setState({
+    runtimeProject:
+      snapshot.projectPath &&
+      runtime.projectRoot &&
+      snapshot.projectPath === runtime.snapshot.projectPath
+        ? { path: snapshot.projectPath, root: runtime.projectRoot }
+        : null,
+  })
   if (useSessionStore.getState().snapshotRevision === revision)
     useSessionStore.getState().applySnapshot(snapshot)
   if (snapshot.status === 'ready')
@@ -150,6 +160,7 @@ export const useCreationStore = create<CreationState>((set, get) => ({
   active: false,
   epoch: 0,
   workspace: null,
+  runtimeProject: null,
   recentPaths: [],
   opening: false,
   request: null,
@@ -287,6 +298,7 @@ export const useCreationStore = create<CreationState>((set, get) => ({
       set(state => ({
         active: plan.targetCreation,
         workspace,
+        ...(plan.targetCreation ? {} : { runtimeProject: null }),
         request: null,
         opening: false,
         error: null,

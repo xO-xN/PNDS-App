@@ -3,6 +3,8 @@ import { commands } from '@/lib/tauri-bindings'
 import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 import { useSettingsStore } from '@/store/settings-store'
+import { useCreationStore } from '@/store/creation-store'
+import { useCreationChangesStore } from '@/store/creation-changes-store'
 import {
   canStartNow,
   nodeGateBlocksStart,
@@ -133,6 +135,68 @@ describe('session-flow Retry (§9.3)', () => {
     )
     expect(useSessionStore.getState().sessionStatus).toBe('ready')
     expect(useSessionStore.getState().sessionError).toBeNull()
+  })
+
+  it('acknowledges disk changes only after a successful manual restart in the same creation workspace', async () => {
+    useCreationStore.setState({
+      active: true,
+      workspace: {
+        project: {
+          identity: 'restart',
+          root: '/p',
+          name: 'Draft',
+          source: 'folder',
+        },
+        files: [],
+      },
+    })
+    useSessionStore.setState({
+      sessionStatus: 'ready',
+      sessionProjectPath: '/p',
+    })
+    useCreationChangesStore.getState().changed(['server.js', 'public/page.js'])
+    vi.mocked(commands.startProject).mockResolvedValueOnce({
+      status: 'error',
+      error: 'start failed',
+    })
+    await restart()
+    expect(useCreationChangesStore.getState().pending.restart).toBeGreaterThan(
+      0
+    )
+    expect(useSessionStore.getState().sessionStatus).toBe('error')
+    vi.mocked(commands.startProject).mockImplementationOnce(async () => {
+      useSessionStore.getState().applySnapshot(snapshot({ status: 'starting' }))
+      return { status: 'ok', data: null }
+    })
+    await restart()
+    expect(useCreationChangesStore.getState().pending.restart).toBeGreaterThan(
+      0
+    )
+    useSessionStore
+      .getState()
+      .applySnapshot(snapshot({ status: 'error', error: 'health failed' }))
+    expect(useCreationChangesStore.getState().pending.restart).toBeGreaterThan(
+      0
+    )
+    vi.mocked(commands.startProject).mockImplementationOnce(async () => {
+      useSessionStore.getState().applySnapshot(snapshot({ status: 'starting' }))
+      return { status: 'ok', data: null }
+    })
+    vi.mocked(commands.getCreationRuntime).mockResolvedValueOnce({
+      status: 'ok',
+      data: {
+        generation: 'ready-run',
+        projectRoot: '/p',
+        snapshot: snapshot({ status: 'ready' }),
+      },
+    })
+    await restart()
+    useSessionStore.getState().applySnapshot(snapshot({ status: 'ready' }))
+    await vi.waitFor(() =>
+      expect(useCreationChangesStore.getState().pending.restart).toBe(0)
+    )
+    expect(useCreationChangesStore.getState().pending.refresh).toBe(0)
+    useCreationStore.setState({ active: false, workspace: null })
   })
 
   it('drives error -> starting -> ready without an intervening stop', async () => {

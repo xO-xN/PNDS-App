@@ -379,7 +379,7 @@
   "creation.saving": "Saving…",
   "creation.saved": "Saved",
   "creation.unsaved": "Unsaved changes",
-  "creation.diskChanged": "New disk version · verified on save",
+  "creation.diskChanged": "Disk changed",
   "creation.draftHint": "Unsaved drafts do not enter the running version; save, refresh or restart are separate manual steps.",
   "creation.dismissError": "Dismiss",
   "creation.rename": "Rename",
@@ -425,5 +425,10 @@
   "creation.switchBusy": "Wait for the current startup or shutdown to finish.",
   "creation.switchStale": "The runtime changed while preparing the switch. Try again.",
   "creation.workspace": "Creation workspace",
-  "creation.projectContent": "Project"
+  "creation.projectContent": "Project",
+  "creation.pendingRefresh": "Pages changed on disk · refresh pending",
+  "creation.pendingRestart": "Source, audio declarations or artifacts changed on disk · restart pending",
+  "creation.pendingCompile": "SuperCollider source changed on disk · compilation pending",
+  "creation.runningDiskHint": "Manual refresh, restart and compilation use saved disk files; unsaved drafts are excluded. Saving and external edits do not update the running version automatically.",
+  "creation.refreshPages": "Refresh saved pages"
 }

@@ -39,6 +39,12 @@ const first = {
 describe('creation drafts (#154)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(commands.renameCreationFile)
+      .mockReset()
+      .mockResolvedValue({
+        status: 'error',
+        error: { code: 'io', detail: 'rename not mocked' },
+      })
     useCreationStore.setState({
       active: true,
       workspace: first,
@@ -195,6 +201,35 @@ describe('creation drafts (#154)', () => {
     )
   })
 
+  it('keeps typing made during a reload and ignores an older disk read in the same workspace', async () => {
+    useCreationDraftsStore.getState().loaded('server.js', 'original', 'v1')
+    let resolveOld!: (
+      value: Awaited<ReturnType<typeof commands.readCreationFile>>
+    ) => void
+    vi.mocked(commands.readCreationFile).mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          resolveOld = resolve
+        })
+    )
+    const oldRead = useCreationDraftsStore.getState().reload('server.js')
+    useCreationDraftsStore.getState().edit('server.js', 'typing during reload')
+    vi.mocked(commands.readCreationFile).mockResolvedValueOnce({
+      status: 'ok',
+      data: { kind: 'text', text: 'newest disk', version: 'v3' },
+    })
+    await useCreationDraftsStore.getState().observeDisk('server.js')
+    resolveOld({
+      status: 'ok',
+      data: { kind: 'text', text: 'older disk', version: 'v2' },
+    })
+    await oldRead
+    expect(draftOf('server.js')).toMatchObject({
+      text: 'typing during reload',
+      conflict: { text: 'newest disk', version: 'v3' },
+    })
+  })
+
   it('a late save returning after a project switch cannot touch the new workspace', async () => {
     useCreationDraftsStore.getState().loaded('server.js', 'draft', 'v1')
     useCreationDraftsStore.getState().edit('server.js', 'draft edited')
@@ -270,6 +305,86 @@ describe('creation drafts (#154)', () => {
     expect(
       useCreationDraftsStore.getState().drafts['renamed/server.js']
     ).toBeDefined()
+  })
+
+  it('a refused rename cannot invalidate another file save or overwrite its recoverable draft', async () => {
+    const drafts = useCreationDraftsStore.getState()
+    drafts.loaded('server.js', 'a', 'a1')
+    drafts.loaded('target.js', 'b', 'b1')
+    drafts.edit('target.js', 'saved b')
+    let resolve!: (
+      result: Awaited<ReturnType<typeof commands.saveCreationFile>>
+    ) => void
+    vi.mocked(commands.saveCreationFile).mockImplementationOnce(
+      () =>
+        new Promise(done => {
+          resolve = done
+        })
+    )
+    const saving = drafts.save('target.js')
+    vi.mocked(commands.renameCreationFile).mockResolvedValueOnce({
+      status: 'error',
+      error: { code: 'targetExists', detail: 'target.js' },
+    })
+    expect(await drafts.rename('server.js', 'target.js')).toMatchObject({
+      code: 'targetExists',
+    })
+    resolve({ status: 'ok', data: 'b2' })
+    await saving
+    expect(draftOf('target.js')).toMatchObject({
+      text: 'saved b',
+      diskVersion: 'b2',
+      saving: false,
+    })
+  })
+
+  it('passes recoverable destination drafts through the typed rename boundary even when the entered path is an alias', async () => {
+    const drafts = useCreationDraftsStore.getState()
+    drafts.loaded('server.js', 'source', 's1')
+    drafts.edit('server.js', 'source draft')
+    drafts.loaded('real/target.js', 'old target', 't1')
+    drafts.edit('real/target.js', 'recoverable target draft')
+    vi.mocked(commands.renameCreationFile).mockResolvedValueOnce({
+      status: 'error',
+      error: { code: 'targetExists', detail: 'alias/target.js' },
+    })
+    expect(await drafts.rename('server.js', 'alias/target.js')).toMatchObject({
+      code: 'targetExists',
+    })
+    expect(commands.renameCreationFile).toHaveBeenCalledWith(
+      'first',
+      'server.js',
+      'alias/target.js',
+      ['real/target.js']
+    )
+    expect(draftOf('server.js').text).toBe('source draft')
+    expect(draftOf('real/target.js').text).toBe('recoverable target draft')
+  })
+
+  it('preserves both drafts if a canonical destination draft arrives after rename dispatch', async () => {
+    const drafts = useCreationDraftsStore.getState()
+    drafts.loaded('server.js', 'source', 's1')
+    drafts.edit('server.js', 'source draft')
+    let resolve!: (
+      result: Awaited<ReturnType<typeof commands.renameCreationFile>>
+    ) => void
+    vi.mocked(commands.renameCreationFile).mockImplementationOnce(
+      () =>
+        new Promise(done => {
+          resolve = done
+        })
+    )
+    const renamed = drafts.rename('server.js', 'alias/target.js')
+    drafts.loaded('real/target.js', 'old target', 't1')
+    drafts.edit('real/target.js', 'newly opened target draft')
+    resolve({ status: 'ok', data: 'real/target.js' })
+    await renamed
+    expect(draftOf('server.js')).toMatchObject({
+      text: 'source draft',
+      renaming: false,
+      diskChanged: true,
+    })
+    expect(draftOf('real/target.js').text).toBe('newly opened target draft')
   })
 
   it('feeds the lifecycle count and switching asks once, keeping drafts on cancel', async () => {

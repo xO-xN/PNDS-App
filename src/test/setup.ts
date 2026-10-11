@@ -162,6 +162,17 @@ vi.mock('@/lib/tauri-bindings', async () => {
         .fn()
         .mockResolvedValue({ status: 'ok', data: [] }),
       listCreationFiles: vi.fn().mockResolvedValue({ status: 'ok', data: [] }),
+      pollCreationChanges: vi.fn().mockImplementation(async () => {
+        const { useCreationStore } = await import('@/store/creation-store')
+        return {
+          status: 'ok',
+          data: {
+            files: useCreationStore.getState().workspace?.files ?? [],
+            changed: [],
+            revision: 0,
+          },
+        }
+      }),
       readCreationFile: vi.fn().mockResolvedValue({
         status: 'error',
         error: { code: 'missing', detail: 'readCreationFile not mocked' },
