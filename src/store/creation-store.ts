@@ -15,6 +15,7 @@ import { closeProjectionWindow } from '@/lib/projection-window'
 import {
   approveCreationDiscard,
   cleanupCreationParticipants,
+  confirmDiscardCreationDrafts,
 } from '@/lib/creation-lifecycle'
 import { isSessionBusy, useSessionStore } from './session-store'
 import { useProjectStore } from './project-store'
@@ -351,6 +352,9 @@ export const useCreationStore = create<CreationState>((set, get) => ({
         prepared = unwrap(await commands.prepareCreationProject(path))
         if (!owns()) return false
         if (!(await approveCreationDiscard())) return false
+        // #154: drafts ask for one explicit discard confirmation before the
+        // switch proceeds; cancelling keeps drafts, run and windows.
+        if (!(await confirmDiscardCreationDrafts())) return false
         if (!owns()) return false
         let current = unwrap(await commands.getCreationRuntime())
         assertGeneration(current, runtime)

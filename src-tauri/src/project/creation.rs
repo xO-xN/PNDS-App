@@ -5,11 +5,12 @@ use serde::Serialize;
 use specta::Type;
 use std::ffi::{CStr, CString, OsString};
 use std::fs::{self, File, Metadata};
-use std::io::{self, Read};
+use std::io::{self, Read, Write};
 use std::os::fd::{AsRawFd, FromRawFd, IntoRawFd};
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
 use std::path::{Component, Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 pub const TEXT_MAX_BYTES: u64 = 1024 * 1024;
 pub const IMAGE_MAX_BYTES: u64 = 4 * 1024 * 1024;
@@ -26,6 +27,8 @@ pub enum CreationErrorCode {
     InvalidIdentity,
     PathEscape,
     InvalidProject,
+    VersionConflict,
+    TargetExists,
     Io,
 }
 
@@ -141,8 +144,15 @@ pub struct CreationFile {
 #[derive(Debug, PartialEq, Eq, Serialize, Type)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum CreationContent {
-    Text { text: String },
-    Image { url: String },
+    /// `version` fingerprints the bytes read from disk; saves must echo it
+    /// back so the backend can detect external modification (#154).
+    Text {
+        text: String,
+        version: String,
+    },
+    Image {
+        url: String,
+    },
     Binary,
 }
 
@@ -353,7 +363,8 @@ impl CreationAccess {
                 let text = String::from_utf8(bytes).map_err(|e| {
                     CreationError::new(CreationErrorCode::InvalidUtf8, e.to_string())
                 })?;
-                Ok(CreationContent::Text { text })
+                let version = file_version(text.as_bytes());
+                Ok(CreationContent::Text { text, version })
             }
         }
     }
@@ -369,6 +380,175 @@ impl CreationAccess {
         project.file(path)?;
         project.resolve(path)
     }
+
+    /// Atomically writes `text` to `path`, refusing when the disk version no
+    /// longer matches the one the editor read (#154). The check happens at
+    /// save time on actual bytes, never through watcher notifications.
+    pub fn save(
+        &self,
+        identity: &str,
+        path: &str,
+        text: &str,
+        expected_version: &str,
+        protection: &Protection,
+    ) -> Result<String, CreationError> {
+        let project = self.current(identity, protection)?;
+        ensure_editable(project)?;
+        if file_kind(path) != CreationFileKind::Text {
+            return Err(CreationError::new(
+                CreationErrorCode::InvalidProject,
+                "Only text files can be edited",
+            ));
+        }
+        if text.len() as u64 > TEXT_MAX_BYTES {
+            return Err(CreationError::new(
+                CreationErrorCode::TooLarge,
+                format!("Limit: {TEXT_MAX_BYTES} bytes"),
+            ));
+        }
+        let file = project.file(path)?;
+        let metadata = file.metadata().map_err(io_error)?;
+        if !metadata.is_file() {
+            return Err(CreationError::new(
+                CreationErrorCode::InvalidProject,
+                "Select a regular file",
+            ));
+        }
+        let existing = bounded_read(file, TEXT_MAX_BYTES)?;
+        if file_version(&existing) != expected_version {
+            return Err(CreationError::new(CreationErrorCode::VersionConflict, path));
+        }
+        let resolved = project.resolve(path)?;
+        atomic_write(&resolved, text.as_bytes(), metadata.permissions())?;
+        Ok(file_version(text.as_bytes()))
+    }
+
+    /// Moves a project file to `next_path`. Existing targets are never
+    /// replaced and source references are left untouched for external
+    /// agents to adjust (#154).
+    pub fn rename(
+        &self,
+        identity: &str,
+        path: &str,
+        next_path: &str,
+        protection: &Protection,
+    ) -> Result<String, CreationError> {
+        let project = self.current(identity, protection)?;
+        ensure_editable(project)?;
+        let source = project.resolve(path)?;
+        if !fs::metadata(&source).map_err(io_error)?.is_file() {
+            return Err(CreationError::new(
+                CreationErrorCode::InvalidProject,
+                "Rename selects a regular file",
+            ));
+        }
+        let next = Path::new(next_path);
+        if next
+            .components()
+            .any(|component| !matches!(component, Component::Normal(_)))
+        {
+            return Err(CreationError::new(CreationErrorCode::PathEscape, next_path));
+        }
+        let name = next
+            .file_name()
+            .and_then(|name| name.to_str())
+            .filter(|name| !name.is_empty() && *name != "." && *name != "..")
+            .ok_or_else(|| {
+                CreationError::new(CreationErrorCode::InvalidProject, "Enter a file name")
+            })?;
+        let parent = match next.parent() {
+            Some(parent) if !parent.as_os_str().is_empty() => {
+                project.resolve(&parent.to_string_lossy())?
+            }
+            _ => project.root.clone(),
+        };
+        if !fs::metadata(&parent).map_err(io_error)?.is_dir() {
+            return Err(CreationError::new(
+                CreationErrorCode::InvalidProject,
+                "The target folder must exist",
+            ));
+        }
+        let target = parent.join(name);
+        if !target.starts_with(&project.root) {
+            return Err(CreationError::new(CreationErrorCode::PathEscape, next_path));
+        }
+        match fs::symlink_metadata(&target) {
+            Ok(_) => {
+                return Err(CreationError::new(
+                    CreationErrorCode::TargetExists,
+                    next_path,
+                ))
+            }
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => return Err(io_error(error)),
+        }
+        fs::rename(&source, &target).map_err(|error| {
+            if error.kind() == io::ErrorKind::AlreadyExists {
+                CreationError::new(CreationErrorCode::TargetExists, next_path)
+            } else {
+                io_error(error)
+            }
+        })?;
+        Ok(target
+            .strip_prefix(&project.root)
+            .expect("containment checked")
+            .to_string_lossy()
+            .into_owned())
+    }
+}
+
+fn ensure_editable(project: &OpenProject) -> Result<(), CreationError> {
+    if project.descriptor.source != CreationSource::Folder {
+        Err(CreationError::new(
+            CreationErrorCode::Permission,
+            "This project source is read-only",
+        ))
+    } else {
+        Ok(())
+    }
+}
+
+/// Replaces `target` atomically: a fresh temp file in the same directory is
+/// fully written and permission-matched before one rename swaps it in, so a
+/// failed save never leaves a half-written file behind.
+fn atomic_write(target: &Path, bytes: &[u8], mode: fs::Permissions) -> Result<(), CreationError> {
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let directory = target.parent().unwrap_or(Path::new("."));
+    let unique = COUNTER.fetch_add(1, Ordering::Relaxed);
+    let temp = directory.join(format!(".pnds-save-{}-{}.tmp", std::process::id(), unique));
+    let mut file = match fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temp)
+    {
+        Ok(file) => file,
+        Err(error) => return Err(io_error(error)),
+    };
+    let outcome = (|| -> Result<(), io::Error> {
+        file.write_all(bytes)?;
+        file.sync_all()?;
+        fs::set_permissions(&temp, mode)?;
+        fs::rename(&temp, target)?;
+        Ok(())
+    })();
+    if let Err(error) = outcome {
+        let _ = fs::remove_file(&temp);
+        return Err(io_error(error));
+    }
+    Ok(())
+}
+
+/// A content fingerprint binding a draft to the exact bytes it was read
+/// from; equal content keeps the version stable so idempotent external
+/// writes do not read as conflicts.
+fn file_version(bytes: &[u8]) -> String {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    let mut hasher = DefaultHasher::new();
+    bytes.hash(&mut hasher);
+    let hash = hasher.finish();
+    let len = bytes.len();
+    format!("{len:x}-{hash:x}")
 }
 
 fn validate_identity(project: &OpenProject, protection: &Protection) -> Result<(), CreationError> {
@@ -472,6 +652,11 @@ impl OpenProject {
         let directory = self.file(&path)?;
         for name in directory_names(directory)? {
             if name == ".git" || name == "node_modules" {
+                continue;
+            }
+            // Crash-orphaned atomic-save temp files stay out of the tree;
+            // only the exact save-temp prefix is hidden, not user files.
+            if name.as_os_str().as_bytes().starts_with(b".pnds-save-") {
                 continue;
             }
             *count += 1;

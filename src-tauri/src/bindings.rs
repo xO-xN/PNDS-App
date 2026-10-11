@@ -25,6 +25,8 @@ pub fn generate_bindings() -> Builder<tauri::Wry> {
         creation::describe_creation_projects,
         creation::list_creation_files,
         creation::read_creation_file,
+        creation::save_creation_file,
+        creation::rename_creation_file,
         creation::reveal_creation_path,
         creation::close_creation_project,
         https::load_https_certificate,

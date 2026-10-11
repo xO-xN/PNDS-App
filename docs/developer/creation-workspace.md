@@ -1,6 +1,7 @@
 # Creation reading workspace
 
-Issues #150 and #151 provide file reading plus the confirmed mode handoff.
+Issues #150 and #151 provide file reading plus the confirmed mode handoff;
+#154 adds manual save, rename and disk-version conflict handling.
 The visual baseline is the A layout and eighth interaction review in
 [the UI prototype](../prototypes/pnds-ui-prototype.html). Creation sidebars
 share the existing App's 320px container, margins and window controls; file
@@ -103,6 +104,48 @@ WebP and GIF, and decoded by the browser. Decode failure leaves file information
 and Finder access available. Audio and other binaries return metadata without
 playing or decoding the asset. The file column has one project-folder Finder
 button; the reader can also reveal the selected file.
+
+## Manual save, rename and disk conflicts (#154)
+
+Editable folder projects get lightweight text editing; bundle, utility and
+read-only-folder sources keep the plain reader. Every opened text file keeps a
+draft in `creation-drafts-store.ts` keyed by project-relative path, holding the
+working text, the disk text it was read from and that read's `version`
+fingerprint (content length plus hash, computed by the backend at read time).
+Switching files — and later the console tab — never drops drafts; only a
+successful workspace identity change clears them (the store subscribes to
+`creation-store`'s workspace identity, so a failed or cancelled switch keeps
+drafts, run and windows). Save writes only the current file through
+`saveCreationFile`; drafts never enter the running version, and nothing saves,
+refreshes or restarts automatically.
+
+Saves are atomic and version-checked at write time, never through watcher
+notifications: the backend re-reads the containment-checked target, compares
+the content fingerprint with the `expectedVersion` the frontend echoed, then
+writes a fresh temp file in the target directory (permission-matched, synced)
+and renames it into place. `VersionConflict` keeps the draft and fetches the
+newest disk content; the choice dialog offers reload (adopt the displayed disk
+version) or explicit overwrite. An overwrite binds to exactly the version shown
+in that dialog — which also previews the fetched disk content — so a disk that
+changes again refuses the overwrite and re-opens the choice. A conflicted save
+without an explicit overwrite (⌘S included) re-arms the choice instead of
+writing. Conflicted files stay marked until resolved. Clean drafts can adopt an
+external disk change through the toolbar reload button; dirty drafts never
+re-read implicitly. Read-only sources,
+non-text targets, missing files, oversize content, escape symlinks and unwritable
+directories each surface their existing readable error codes.
+
+Rename goes through `renameCreationFile` with a project-relative target path,
+moves the draft with the file and refreshes the tree through the same trusted
+identity. Existing targets are never replaced (`TargetExists`), references are
+never rewritten, and the editor shows the external-agent adjustment hint after
+a rename; `manifest.json` disables rename in the UI. The mode button's
+two-click confirm stays the whole confirmation for mode switches (its hint
+reports the real unsaved-file count); switching projects asks once through the
+native `confirm` gate in `confirmDiscardCreationDrafts` before the switch
+proceeds. Late save/rename/read results re-check the workspace identity before
+touching store state, so an old project's return cannot modify the new one.
+⌘S saves the active draft from any focus position in creation mode.
 
 ## Frontend ownership
 

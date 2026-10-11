@@ -444,3 +444,61 @@
   .creation-mode-next {
   transform: translateX(14px);
 }
+
+/* #154: per-file drafts — dirty markers, edit surface and status footer. */
+.creation-dirty-dot {
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--pnds-accent);
+}
+.creation-editor-textarea {
+  display: block;
+  width: 100%;
+  min-height: 100%;
+  resize: none;
+  border: none;
+  background: transparent;
+  color: var(--pnds-text);
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  line-height: 1.7;
+  white-space: pre;
+  overflow-wrap: normal;
+  outline: none;
+}
+.creation-editor-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 16px;
+  border-block-start: 1px solid
+    color-mix(in srgb, var(--pnds-text) 15%, transparent);
+  font-size: 10px;
+  color: var(--pnds-text);
+}
+.creation-editor-status [data-state='dirty'] {
+  color: var(--pnds-accent);
+}
+.creation-editor-status [data-state='conflict'] {
+  color: var(--pnds-danger);
+}
+.creation-rename-note {
+  margin-inline-start: auto;
+}
+
+.creation-conflict-preview {
+  max-height: 200px;
+  margin: 0;
+  overflow: auto;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--pnds-text) 15%, transparent);
+  border-radius: 8px;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

@@ -78,6 +78,8 @@ vi.mock('@tauri-apps/plugin-updater', () => ({
 // copies (sha256/path) — cancelled / no-op by default; tests override.
 vi.mock('@tauri-apps/plugin-dialog', () => ({
   open: vi.fn().mockResolvedValue(null),
+  // #154: the unsaved-drafts discard gate — default keeps the drafts.
+  confirm: vi.fn().mockResolvedValue(false),
 }))
 
 vi.mock('@tauri-apps/plugin-clipboard-manager', () => ({
@@ -163,6 +165,16 @@ vi.mock('@/lib/tauri-bindings', async () => {
       readCreationFile: vi.fn().mockResolvedValue({
         status: 'error',
         error: { code: 'missing', detail: 'readCreationFile not mocked' },
+      }),
+      // #154: write commands default to failure — a forgotten mock must
+      // never read as a successful save or rename.
+      saveCreationFile: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: { code: 'io', detail: 'saveCreationFile not mocked' },
+      }),
+      renameCreationFile: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: { code: 'io', detail: 'renameCreationFile not mocked' },
       }),
       revealCreationPath: vi
         .fn()

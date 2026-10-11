@@ -203,6 +203,43 @@ pub async fn read_creation_file(
 
 #[tauri::command]
 #[specta::specta]
+pub async fn save_creation_file(
+    app: AppHandle,
+    state: State<'_, CreationState>,
+    identity: String,
+    path: String,
+    text: String,
+    expected_version: String,
+) -> Result<String, CreationError> {
+    state
+        .run(move |access| {
+            access.save(
+                &identity,
+                &path,
+                &text,
+                &expected_version,
+                &protection(&app)?,
+            )
+        })
+        .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn rename_creation_file(
+    app: AppHandle,
+    state: State<'_, CreationState>,
+    identity: String,
+    path: String,
+    next_path: String,
+) -> Result<String, CreationError> {
+    state
+        .run(move |access| access.rename(&identity, &path, &next_path, &protection(&app)?))
+        .await
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn reveal_creation_path(
     app: AppHandle,
     state: State<'_, CreationState>,

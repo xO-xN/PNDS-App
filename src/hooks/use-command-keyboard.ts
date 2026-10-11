@@ -9,6 +9,7 @@ import {
 } from '@/lib/project-select'
 import { startRename } from '@/lib/project-rename'
 import { useCreationStore } from '@/store/creation-store'
+import { useCreationDraftsStore } from '@/store/creation-drafts-store'
 
 /**
  * True when a keyboard event originates from a text-editing target —
@@ -118,12 +119,20 @@ export function useCommandKeyboard(): void {
         useSettingsStore.getState().toggleSettings()
         return
       }
-      // ⌘R must never fall through to the webview's page reload.
+      // ⌘R must never fall through to the webview's page reload; in
+      // creation ⌘S saves the active file draft (#154) — a version
+      // conflict surfaces the reload-or-overwrite choice instead of
+      // silently overwriting.
       if (
         useCreationStore.getState().active ||
         useCreationStore.getState().modePhase !== 'idle'
       ) {
         if (event.code === 'KeyR') event.preventDefault()
+        if (event.code === 'KeyS' && useCreationStore.getState().active) {
+          event.preventDefault()
+          const path = useCreationDraftsStore.getState().activePath
+          if (path) void useCreationDraftsStore.getState().save(path)
+        }
         return
       }
       if (event.code === 'KeyR') {

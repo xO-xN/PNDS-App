@@ -82,7 +82,8 @@ fn opens_an_agent_draft_without_runtime_or_compile_acceptance() {
             .read(&opened.identity, "server.js", &Protection::default())
             .unwrap(),
         CreationContent::Text {
-            text: "// unfinished score server".into()
+            text: "// unfinished score server".into(),
+            version: file_version(b"// unfinished score server"),
         }
     );
 }
@@ -283,7 +284,7 @@ fn bounded_reads_distinguish_missing_permission_utf8_and_size() {
     )
     .unwrap();
     fs::write(root.join("denied.txt"), "private").unwrap();
-    fs::set_permissions(root.join("denied.txt"), fs::Permissions::from_mode(0)).unwrap();
+    fs::set_permissions(root.join("denied.txt"), fs::Permissions::from_mode(0o0)).unwrap();
     for (path, code) in [
         ("gone.txt", CreationErrorCode::Missing),
         ("invalid.txt", CreationErrorCode::InvalidUtf8),
@@ -358,5 +359,352 @@ fn listing_preserves_paths_internal_links_and_asset_types_with_bounded_previews(
             .unwrap_err()
             .code,
         CreationErrorCode::TooLarge
+    );
+}
+
+#[test]
+fn saves_atomically_with_version_checking_and_reports_new_versions() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = project(temp.path(), "draft");
+    let protection = Protection::default();
+    let mut workspace = CreationAccess::default();
+    let identity = workspace.open(&root, &protection).unwrap().project.identity;
+    let read = match workspace.read(&identity, "server.js", &protection).unwrap() {
+        CreationContent::Text { text, version } => (text, version),
+        other => panic!("unexpected content: {other:?}"),
+    };
+    let saved = workspace
+        .save(&identity, "server.js", "// edited", &read.1, &protection)
+        .unwrap();
+    assert_eq!(saved, file_version(b"// edited"));
+    assert_eq!(
+        fs::read_to_string(root.join("server.js")).unwrap(),
+        "// edited"
+    );
+    assert_eq!(
+        workspace.read(&identity, "server.js", &protection).unwrap(),
+        CreationContent::Text {
+            text: "// edited".into(),
+            version: saved,
+        }
+    );
+    // No atomic-save temp litter survives a successful write.
+    assert!(!fs::read_dir(&root).unwrap().any(|entry| entry
+        .unwrap()
+        .file_name()
+        .to_string_lossy()
+        .starts_with(".pnds-")));
+}
+
+#[test]
+fn external_disk_changes_conflict_and_repeated_changes_rerequire_confirmation() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = project(temp.path(), "draft");
+    let protection = Protection::default();
+    let mut workspace = CreationAccess::default();
+    let identity = workspace.open(&root, &protection).unwrap().project.identity;
+    let first = text_version(&workspace, &identity, "server.js", &protection);
+    // First external change: the version read at open time no longer matches.
+    fs::write(root.join("server.js"), "// external one").unwrap();
+    assert_eq!(
+        workspace
+            .save(&identity, "server.js", "// mine", &first, &protection)
+            .unwrap_err()
+            .code,
+        CreationErrorCode::VersionConflict
+    );
+    assert_eq!(
+        fs::read_to_string(root.join("server.js")).unwrap(),
+        "// external one"
+    );
+    assert!(!fs::read_dir(&root).unwrap().any(|entry| entry
+        .unwrap()
+        .file_name()
+        .to_string_lossy()
+        .starts_with(".pnds-")));
+    // The user re-reads and confirms overwriting the displayed version…
+    let second = text_version(&workspace, &identity, "server.js", &protection);
+    // …but the disk changes again before the write: a new confirmation is
+    // required, the overwrite is refused.
+    fs::write(root.join("server.js"), "// external two").unwrap();
+    assert_eq!(
+        workspace
+            .save(&identity, "server.js", "// mine", &second, &protection)
+            .unwrap_err()
+            .code,
+        CreationErrorCode::VersionConflict
+    );
+    // Re-reading the newest version finally lets the explicit overwrite land.
+    let third = text_version(&workspace, &identity, "server.js", &protection);
+    workspace
+        .save(&identity, "server.js", "// mine", &third, &protection)
+        .unwrap();
+    assert_eq!(
+        fs::read_to_string(root.join("server.js")).unwrap(),
+        "// mine"
+    );
+    // Idempotent external writes keep the version stable — no false conflict.
+    let stable = text_version(&workspace, &identity, "server.js", &protection);
+    fs::write(root.join("server.js"), "// mine").unwrap();
+    workspace
+        .save(
+            &identity,
+            "server.js",
+            "// mine again",
+            &stable,
+            &protection,
+        )
+        .unwrap();
+}
+
+fn text_version(
+    workspace: &CreationAccess,
+    identity: &str,
+    path: &str,
+    protection: &Protection,
+) -> String {
+    match workspace.read(identity, path, protection).unwrap() {
+        CreationContent::Text { version, .. } => version,
+        other => panic!("unexpected content: {other:?}"),
+    }
+}
+
+#[test]
+fn saves_reject_escape_symlinks_read_only_sources_and_bad_targets() {
+    use std::os::unix::fs::PermissionsExt;
+    let temp = tempfile::tempdir().unwrap();
+    let root = project(temp.path(), "draft");
+    fs::write(temp.path().join("secret.txt"), "outside").unwrap();
+    fs::write(root.join("track.wav"), b"audio").unwrap();
+    fs::write(root.join("gone.js"), "bye").unwrap();
+    let protection = Protection::default();
+    let mut workspace = CreationAccess::default();
+    let identity = workspace.open(&root, &protection).unwrap().project.identity;
+    // Symlinks out of the project join after opening: the tree walk that
+    // gates opening refuses them up front.
+    std::os::unix::fs::symlink(temp.path().join("secret.txt"), root.join("escape.txt")).unwrap();
+    let version = file_version(b"bye");
+    for (path, code) in [
+        ("../server.js", CreationErrorCode::PathEscape),
+        ("/etc/passwd", CreationErrorCode::PathEscape),
+        ("escape.txt", CreationErrorCode::PathEscape),
+        ("missing.js", CreationErrorCode::Missing),
+        ("track.wav", CreationErrorCode::InvalidProject),
+    ] {
+        assert_eq!(
+            workspace
+                .save(&identity, path, "// x", &version, &protection)
+                .unwrap_err()
+                .code,
+            code,
+            "case {path}"
+        );
+    }
+    assert_eq!(
+        workspace
+            .save("forged", "server.js", "// x", &version, &protection)
+            .unwrap_err()
+            .code,
+        CreationErrorCode::InvalidIdentity
+    );
+    fs::remove_file(root.join("gone.js")).unwrap();
+    assert_eq!(
+        workspace
+            .save(&identity, "gone.js", "// x", &version, &protection)
+            .unwrap_err()
+            .code,
+        CreationErrorCode::Missing
+    );
+    // A read-only folder opens as a read-only source: writing is refused
+    // with readable feedback, not a silent pass-through.
+    let readonly = project(temp.path(), "readonly");
+    fs::set_permissions(&readonly, fs::Permissions::from_mode(0o555)).unwrap();
+    let read_only_identity = workspace
+        .open(&readonly, &protection)
+        .unwrap()
+        .project
+        .identity;
+    let version = text_version(&workspace, &read_only_identity, "server.js", &protection);
+    assert_eq!(
+        workspace
+            .save(
+                &read_only_identity,
+                "server.js",
+                "// x",
+                &version,
+                &protection
+            )
+            .unwrap_err()
+            .code,
+        CreationErrorCode::Permission
+    );
+    assert_eq!(
+        workspace
+            .rename(&read_only_identity, "server.js", "next.js", &protection)
+            .unwrap_err()
+            .code,
+        CreationErrorCode::Permission
+    );
+    fs::set_permissions(&readonly, fs::Permissions::from_mode(0o755)).unwrap();
+}
+
+#[test]
+fn saves_over_the_text_limit_are_refused_before_touching_disk() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = project(temp.path(), "draft");
+    let protection = Protection::default();
+    let mut workspace = CreationAccess::default();
+    let identity = workspace.open(&root, &protection).unwrap().project.identity;
+    let version = text_version(&workspace, &identity, "server.js", &protection);
+    let huge = "a".repeat(TEXT_MAX_BYTES as usize + 1);
+    assert_eq!(
+        workspace
+            .save(&identity, "server.js", &huge, &version, &protection)
+            .unwrap_err()
+            .code,
+        CreationErrorCode::TooLarge
+    );
+    assert_eq!(
+        fs::read_to_string(root.join("server.js")).unwrap(),
+        "// unfinished score server"
+    );
+}
+
+#[test]
+fn saves_into_an_unwritable_directory_report_permission_and_change_nothing() {
+    use std::os::unix::fs::PermissionsExt;
+    let temp = tempfile::tempdir().unwrap();
+    let root = project(temp.path(), "draft");
+    fs::create_dir_all(root.join("locked")).unwrap();
+    fs::write(root.join("locked/page.js"), "// page").unwrap();
+    // The project root stays writable (still an editable Folder source);
+    // only the target directory refuses the atomic-save temp file.
+    fs::set_permissions(root.join("locked"), fs::Permissions::from_mode(0o555)).unwrap();
+    let protection = Protection::default();
+    let mut workspace = CreationAccess::default();
+    let identity = workspace.open(&root, &protection).unwrap().project.identity;
+    let version = text_version(&workspace, &identity, "locked/page.js", &protection);
+    assert_eq!(
+        workspace
+            .save(
+                &identity,
+                "locked/page.js",
+                "// edited",
+                &version,
+                &protection
+            )
+            .unwrap_err()
+            .code,
+        CreationErrorCode::Permission
+    );
+    assert_eq!(
+        fs::read_to_string(root.join("locked/page.js")).unwrap(),
+        "// page"
+    );
+    fs::set_permissions(root.join("locked"), fs::Permissions::from_mode(0o755)).unwrap();
+    workspace
+        .save(
+            &identity,
+            "locked/page.js",
+            "// edited",
+            &version,
+            &protection,
+        )
+        .unwrap();
+}
+
+#[test]
+fn renames_move_files_without_overwriting_targets_or_fixing_references() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = project(temp.path(), "draft");
+    fs::create_dir_all(root.join("public")).unwrap();
+    fs::create_dir_all(root.join("pages")).unwrap();
+    fs::write(root.join("public/page.js"), "// page").unwrap();
+    let protection = Protection::default();
+    let mut workspace = CreationAccess::default();
+    let identity = workspace.open(&root, &protection).unwrap().project.identity;
+    let moved = workspace
+        .rename(&identity, "public/page.js", "pages/page.js", &protection)
+        .unwrap();
+    assert_eq!(moved, "pages/page.js");
+    assert_eq!(
+        fs::read_to_string(root.join("pages/page.js")).unwrap(),
+        "// page"
+    );
+    assert!(!root.join("public/page.js").exists());
+    // Existing targets are never replaced — the original stays intact.
+    fs::write(root.join("target.js"), "// existing").unwrap();
+    assert_eq!(
+        workspace
+            .rename(&identity, "pages/page.js", "target.js", &protection)
+            .unwrap_err()
+            .code,
+        CreationErrorCode::TargetExists
+    );
+    assert_eq!(
+        fs::read_to_string(root.join("target.js")).unwrap(),
+        "// existing"
+    );
+    assert_eq!(
+        fs::read_to_string(root.join("pages/page.js")).unwrap(),
+        "// page"
+    );
+    // The manifest keeps pointing at the old name — references are the
+    // external agent's job, never rewritten by the rename itself.
+    workspace
+        .rename(&identity, "server.js", "renamed-server.js", &protection)
+        .unwrap();
+    assert!(fs::read_to_string(root.join("manifest.json"))
+        .unwrap()
+        .contains("\"entry\": \"server.js\""));
+    for (path, code) in [
+        ("../page.js", CreationErrorCode::PathEscape),
+        ("/tmp/page.js", CreationErrorCode::PathEscape),
+        ("", CreationErrorCode::InvalidProject),
+        (".", CreationErrorCode::PathEscape),
+        ("..", CreationErrorCode::PathEscape),
+        ("no-such-dir/page.js", CreationErrorCode::Missing),
+        ("manifest.json/../new.js", CreationErrorCode::PathEscape),
+    ] {
+        assert_eq!(
+            workspace
+                .rename(&identity, "pages/page.js", path, &protection)
+                .unwrap_err()
+                .code,
+            code,
+            "case {path}"
+        );
+    }
+    // A missing source and an escaping source symlink read clearly.
+    assert_eq!(
+        workspace
+            .rename(&identity, "gone.js", "next.js", &protection)
+            .unwrap_err()
+            .code,
+        CreationErrorCode::Missing
+    );
+    fs::write(temp.path().join("secret.txt"), "outside").unwrap();
+    std::os::unix::fs::symlink(temp.path().join("secret.txt"), root.join("out.js")).unwrap();
+    assert_eq!(
+        workspace
+            .rename(&identity, "out.js", "in.js", &protection)
+            .unwrap_err()
+            .code,
+        CreationErrorCode::PathEscape
+    );
+    // Directories are not rename targets through the file workspace.
+    assert_eq!(
+        workspace
+            .rename(&identity, "public", "renamed", &protection)
+            .unwrap_err()
+            .code,
+        CreationErrorCode::InvalidProject
+    );
+    assert_eq!(
+        workspace
+            .rename("forged", "pages/page.js", "next.js", &protection)
+            .unwrap_err()
+            .code,
+        CreationErrorCode::InvalidIdentity
     );
 }

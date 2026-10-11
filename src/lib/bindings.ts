@@ -216,6 +216,22 @@ async readCreationFile(identity: string, path: string) : Promise<Result<Creation
     else return { status: "error", error: e  as any };
 }
 },
+async saveCreationFile(identity: string, path: string, text: string, expectedVersion: string) : Promise<Result<string, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("save_creation_file", { identity, path, text, expectedVersion }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async renameCreationFile(identity: string, path: string, nextPath: string) : Promise<Result<string, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("rename_creation_file", { identity, path, nextPath }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async revealCreationPath(identity: string, path: string | null) : Promise<Result<null, CreationError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("reveal_creation_path", { identity, path }) };
@@ -1017,9 +1033,14 @@ bridgedChannels: number;
  */
 privateBusStart: number }
 export type CreationCategory = "audio" | "pages" | "modules" | "assets" | "system"
-export type CreationContent = { kind: "text"; text: string } | { kind: "image"; url: string } | { kind: "binary" }
+export type CreationContent = 
+/**
+ * `version` fingerprints the bytes read from disk; saves must echo it
+ * back so the backend can detect external modification (#154).
+ */
+{ kind: "text"; text: string; version: string } | { kind: "image"; url: string } | { kind: "binary" }
 export type CreationError = { code: CreationErrorCode; detail: string }
-export type CreationErrorCode = "missing" | "permission" | "invalidUtf8" | "tooLarge" | "invalidIdentity" | "pathEscape" | "invalidProject" | "io"
+export type CreationErrorCode = "missing" | "permission" | "invalidUtf8" | "tooLarge" | "invalidIdentity" | "pathEscape" | "invalidProject" | "versionConflict" | "targetExists" | "io"
 export type CreationFile = { path: string; size: number; kind: CreationFileKind; category: CreationCategory }
 export type CreationFileKind = "text" | "image" | "binary"
 export type CreationOption = { path: string; project: CreationProject | null; error: CreationError | null }

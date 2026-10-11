@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   FolderOpen,
@@ -22,11 +22,17 @@ import {
   creationTransportError,
   useCreationStore,
 } from '@/store/creation-store'
+import {
+  creationDraftsParticipant,
+  selectDirtyPathKey,
+  useCreationDraftsStore,
+} from '@/store/creation-drafts-store'
+import { registerCreationParticipant } from '@/lib/creation-lifecycle'
 import { useSettingsStore } from '@/store/settings-store'
 import { Button } from '@/components/ui/button'
 import { TrafficLights } from '@/components/shell'
 import { CreationModeButton } from './CreationModeButton'
-import { CreationFileReader } from './CreationFileReader'
+import { CreationFileEditor } from './CreationFileEditor'
 import { CreationProjectPicker } from './CreationProjectPicker'
 import { CreationErrorNotice } from './CreationErrorNotice'
 
@@ -47,15 +53,21 @@ function ReadingWorkspace({
 }) {
   const { t } = useTranslation()
   const [search, setSearch] = useState('')
-  const [selected, setSelected] = useState<string | null>(null)
   const [error, setError] = useState<CreationError | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const opening = useCreationStore(state => state.opening)
+  const selected = useCreationDraftsStore(state => state.activePath)
+  // Identity-stable dirty set: the tree re-renders when dirty membership
+  // changes, not on every editor keystroke.
+  const dirtyPaths = new Set(
+    useCreationDraftsStore(selectDirtyPathKey).split('\n').filter(Boolean)
+  )
   const project = workspace.project
   const visible = workspace.files.filter(file =>
     file.path.toLocaleLowerCase().includes(search.toLocaleLowerCase())
   )
   const file = workspace.files.find(file => file.path === selected)
+  const editable = project.source === 'folder'
   const owns = () =>
     useCreationStore.getState().workspace?.project.identity === project.identity
   const finder = async () => {
@@ -77,7 +89,7 @@ function ReadingWorkspace({
         useCreationStore.setState({
           workspace: { project, files: result.data },
         })
-        setSelected(null)
+        useCreationDraftsStore.getState().setActivePath(null)
       }
     } catch (error) {
       if (owns()) setError(creationTransportError(error))
@@ -187,12 +199,22 @@ function ReadingWorkspace({
                           title={file.path}
                           aria-pressed={file.path === selected}
                           className="creation-file-row pnds-focus-ring"
-                          onClick={() => setSelected(file.path)}
+                          onClick={() =>
+                            useCreationDraftsStore
+                              .getState()
+                              .setActivePath(file.path)
+                          }
                         >
                           <Icon aria-hidden="true" />
                           <span className="creation-file-name">
                             {file.path}
                           </span>
+                          {dirtyPaths.has(file.path) && (
+                            <span
+                              aria-label={t('creation.unsaved')}
+                              className="creation-dirty-dot"
+                            />
+                          )}
                           <span className="creation-file-badge">
                             {['manifest.json', 'package.json'].includes(
                               file.path
@@ -220,10 +242,11 @@ function ReadingWorkspace({
         </div>
         {error && <CreationErrorNotice error={error} />}
         {file ? (
-          <CreationFileReader
+          <CreationFileEditor
             key={`${project.identity}:${file.path}`}
             identity={project.identity}
             file={file}
+            editable={editable}
           />
         ) : (
           <p className="m-auto p-6 text-sm">{t('creation.selectFile')}</p>
@@ -241,6 +264,7 @@ export function CreationView() {
   const error = useCreationStore(state => state.error)
   const settling = useCreationStore(state => state.modePhase === 'settling')
   const [pickerOpen, setPickerOpen] = useState(false)
+  useEffect(() => registerCreationParticipant(creationDraftsParticipant), [])
   return (
     <div
       data-creation-view=""

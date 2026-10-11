@@ -20,8 +20,9 @@ for confirmation, cancellation and registered cleanup.
 ## Usage
 
 Creation commands (`openCreationProject`, `describeCreationProjects`,
-`listCreationFiles`, `readCreationFile`, `revealCreationPath`,
-`closeCreationProject`) use a backend-issued identity after opening. Source
+`listCreationFiles`, `readCreationFile`, `saveCreationFile`,
+`renameCreationFile`, `revealCreationPath`, `closeCreationProject`) use a
+backend-issued identity after opening. Source
 protection and error codes are described in
 [creation-workspace.md](./creation-workspace.md); never substitute a raw frontend
 root or an editable flag for the issued identity.

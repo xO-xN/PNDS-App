@@ -1,6 +1,10 @@
 import { useEffect, useId, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useCreationStore } from '@/store/creation-store'
+import {
+  selectUnsavedCount,
+  useCreationDraftsStore,
+} from '@/store/creation-drafts-store'
 import { isSessionBusy, useSessionStore } from '@/store/session-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { creationHasUnsavedChanges } from '@/lib/creation-lifecycle'
@@ -16,6 +20,7 @@ export function CreationModeButton() {
   const paused = useCreationStore(state => state.hoverPaused)
   const restoreFocus = useCreationStore(state => state.restoreModeFocus)
   const opening = useCreationStore(state => state.opening)
+  const unsaved = useCreationDraftsStore(selectUnsavedCount)
   const busy = useSessionStore(
     state => isSessionBusy(state.sessionStatus) || state.commandPending
   )
@@ -59,9 +64,11 @@ export function CreationModeButton() {
         : plan.runtime.snapshot.status === 'idle'
           ? t('creation.enterHint')
           : t('creation.stopToHomeHint')
-    : creationHasUnsavedChanges()
-      ? t('creation.discardHint')
-      : t('creation.leaveHint')
+    : unsaved > 0
+      ? t('creation.discardHintCount', { count: unsaved })
+      : creationHasUnsavedChanges()
+        ? t('creation.discardHint')
+        : t('creation.leaveHint')
   return (
     <div ref={root} className="creation-mode-footer">
       {phase === 'armed' && (
