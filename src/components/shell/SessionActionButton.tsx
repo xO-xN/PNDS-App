@@ -140,6 +140,13 @@ export function SessionActionButton() {
       const enter = event.key === 'Enter' && !event.ctrlKey && !event.altKey
       if ((event.metaKey || event.ctrlKey || event.altKey) && !enter) return
       if (isEditableTarget(event.target)) return
+      // The mode control owns Enter's native button activation, including
+      // its first confirmation before the shared mode-phase gate is set.
+      if (
+        event.target instanceof Element &&
+        event.target.closest('[data-mode-switch]')
+      )
+        return
       // Radix owns the keys while a dialog or select popup is open.
       if (hasOpenOverlay()) return
       if (busy) return

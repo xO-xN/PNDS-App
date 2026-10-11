@@ -1,4 +1,4 @@
-//! Creation commands accept a raw root only at open/description; subsequent
+//! Creation commands accept a raw root only at open/preparation/description; subsequent
 //! operations use the backend-issued identity and project-relative paths.
 
 use crate::project::creation::{

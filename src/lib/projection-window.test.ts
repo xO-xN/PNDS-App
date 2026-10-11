@@ -6,6 +6,7 @@ import type { Monitor } from '@tauri-apps/api/window'
 import i18n from '@/i18n/config'
 import { useSessionStore } from '@/store/session-store'
 import { useSettingsStore } from '@/store/settings-store'
+import { useCreationStore } from '@/store/creation-store'
 import { commands } from '@/lib/tauri-bindings'
 import {
   PROJECTION_WINDOW_LABEL,
@@ -22,6 +23,7 @@ import {
  * query must not eat the open), the stuck-hidden re-reveal, and the
  * theme/language live-follow bridge. Mirrors help-window.test (#56).
  */
+const nativeCreation = vi.hoisted(() => ({ deferred: false }))
 
 vi.mock('@tauri-apps/api/webviewWindow', () => ({
   WebviewWindow: Object.assign(
@@ -33,7 +35,11 @@ vi.mock('@tauri-apps/api/webviewWindow', () => ({
     ) {
       this.label = label
       this.options = options
-      this.once = vi.fn()
+      this.once = vi.fn((event: string, handler: () => void) => {
+        if (event === 'tauri://created' && !nativeCreation.deferred)
+          queueMicrotask(handler)
+        return Promise.resolve(vi.fn())
+      })
     }),
     { getByLabel: vi.fn() }
   ),
@@ -76,11 +82,18 @@ const MONITOR = {
 describe('projection-window (#129)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    nativeCreation.deferred = false
     vi.mocked(WebviewWindow.getByLabel).mockResolvedValue(null)
     vi.mocked(currentMonitor).mockResolvedValue(MONITOR)
     useSessionStore.setState({
       sessionStatus: 'idle',
       projectName: null,
+    })
+    useCreationStore.setState({
+      active: false,
+      modePhase: 'idle',
+      modePlan: null,
+      opening: false,
     })
   })
 
@@ -101,6 +114,104 @@ describe('projection-window (#129)', () => {
       y: (1080 - 800) / 2,
     })
     expect('center' in (options ?? {})).toBe(false)
+  })
+
+  it('discards a pending projection open when mode handoff enters creation', async () => {
+    let resolveMonitor!: (monitor: Monitor) => void
+    vi.mocked(currentMonitor).mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          resolveMonitor = resolve
+        })
+    )
+    const opening = openProjectionWindow()
+    await vi.waitFor(() => expect(currentMonitor).toHaveBeenCalled())
+    await useCreationStore.getState().enter()
+    expect(useCreationStore.getState().active).toBe(true)
+    resolveMonitor(MONITOR)
+    await opening
+    expect(WebviewWindow).not.toHaveBeenCalled()
+  })
+
+  it('waits for submitted native creation before closing projection and completing handoff', async () => {
+    nativeCreation.deferred = true
+    await openProjectionWindow()
+    const instance = vi.mocked(WebviewWindow).mock.results[0]?.value as {
+      once: ReturnType<typeof vi.fn>
+    }
+    const created = instance.once.mock.calls.find(
+      ([event]) => event === 'tauri://created'
+    )?.[1] as () => void
+    let finished = false
+    const entering = useCreationStore
+      .getState()
+      .enter()
+      .then(() => {
+        finished = true
+      })
+    await vi.waitFor(() =>
+      expect(
+        vi.mocked(commands.getCreationRuntime).mock.calls.length
+      ).toBeGreaterThanOrEqual(2)
+    )
+    const finishedBeforeCreation = finished
+    const closesBeforeCreation = vi.mocked(commands.closeCreationProjection)
+      .mock.calls.length
+    created()
+    await entering
+    expect(finishedBeforeCreation).toBe(false)
+    expect(closesBeforeCreation).toBe(0)
+    expect(commands.closeCreationProjection).toHaveBeenCalledOnce()
+    expect(useCreationStore.getState().active).toBe(true)
+    expect(emit).not.toHaveBeenCalledWith('projection-window-event', {
+      exists: true,
+    })
+  })
+
+  it('leaves a pending projection open intact when mode confirmation is cancelled', async () => {
+    nativeCreation.deferred = true
+    await openProjectionWindow()
+    await openProjectionWindow()
+    expect(WebviewWindow).toHaveBeenCalledOnce()
+    await useCreationStore.getState().prepareModeSwitch()
+    useCreationStore.getState().cancelModeSwitch()
+    const instance = vi.mocked(WebviewWindow).mock.results[0]?.value as {
+      once: ReturnType<typeof vi.fn>
+    }
+    const created = instance.once.mock.calls.find(
+      ([event]) => event === 'tauri://created'
+    )?.[1] as () => void
+    created()
+    expect(commands.closeCreationProjection).not.toHaveBeenCalled()
+    expect(emit).toHaveBeenCalledWith('projection-window-event', {
+      exists: true,
+    })
+    expect(useCreationStore.getState().active).toBe(false)
+  })
+
+  it('releases failed native creation so handoff and later projection opening remain usable', async () => {
+    nativeCreation.deferred = true
+    await openProjectionWindow()
+    const instance = vi.mocked(WebviewWindow).mock.results[0]?.value as {
+      once: ReturnType<typeof vi.fn>
+    }
+    const failed = instance.once.mock.calls.find(
+      ([event]) => event === 'tauri://error'
+    )?.[1] as (event: unknown) => void
+    const entering = useCreationStore.getState().enter()
+    await vi.waitFor(() =>
+      expect(useCreationStore.getState().modePhase).toBe('settling')
+    )
+    failed({ payload: 'Native creation failed' })
+    await entering
+    expect(useCreationStore.getState().active).toBe(true)
+    await useCreationStore.getState().leave()
+    nativeCreation.deferred = false
+    await openProjectionWindow()
+    expect(WebviewWindow).toHaveBeenCalledTimes(2)
+    expect(emit).toHaveBeenCalledWith('projection-window-event', {
+      exists: true,
+    })
   })
 
   // #135 follow-up (venue lag report): the venue copy renders
@@ -138,6 +249,7 @@ describe('projection-window (#129)', () => {
   })
 
   it('announces the window existence once the webview is created (#130)', async () => {
+    nativeCreation.deferred = true
     await openProjectionWindow()
 
     // The create announcement rides the webview's own created event —

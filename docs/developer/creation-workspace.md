@@ -23,6 +23,11 @@ also disable it. Esc, an outside pointer press and window blur cancel preparatio
 or confirmation. The performance overlay remains visible during confirmation.
 After completion, hover is paused until pointer exit/re-entry; keyboard focus
 is restored to the new control. Brutal and reduced motion complete directly.
+The focused mode control owns native Enter/Space activation even when a selected
+project can Load; the global Enter session alias yields to `data-mode-switch`.
+Confirmation exposes its target in the accessible name and links the actual
+consequence with `aria-describedby`. A failed keyboard submission restores focus
+to the same control so the error can be reviewed and the switch retried.
 
 Confirmation checks the runtime generation/status again before effects. An
 editable live folder is adopted without stop/start, preserving the monitor's
@@ -39,6 +44,13 @@ fixed-label `closeCreationProjection` backend command. It needs no broad fronten
 window-destroy permission. `creation-lifecycle.ts` is the registration seam for
 editors' unsaved confirmation and performer-window cleanup; a cancelled discard
 happens before stop or window cleanup.
+Projection opening captures the mode epoch and rechecks it after native queries.
+Submitted native creation stays pending until its created/error event; a mode
+commit waits for that outcome before closing projection. Duplicate opens while
+creation is pending are ignored. The created callback suppresses its existence
+announcement during committed handoff. Cancelling confirmation leaves the pending
+window intact. A delayed open cannot leave a venue window after a mode handoff;
+new projection opens are accepted only in idle-phase performance mode.
 
 Before committing, Rust checks the runtime generation under the lifecycle lock;
 only the already-validated in-memory identity activation happens inside that
@@ -60,8 +72,9 @@ latency must not block native input or an async runtime worker. The backend
 access mutex is acquired within the blocking task and preserves identity
 replacement ordering. Selector descriptions use independent temporary access.
 
-`project/creation.rs` owns one active identity and an open root-directory handle.
-Only open and description accept raw roots. Listing, reading and Finder calls
+`project/creation.rs` owns one active identity and one prepared identity, each
+with an open root-directory handle. Only open, preparation and description accept
+raw roots. Listing, reading and Finder calls
 accept an issued identity and relative path. Every call rechecks the root inode,
 device and source; replacing the directory invalidates the identity. Canonical
 containment rejects external symlinks. Component-by-component `openat` with

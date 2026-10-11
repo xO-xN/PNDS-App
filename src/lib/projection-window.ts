@@ -37,6 +37,7 @@ import { logger } from '@/lib/logger'
 import { notifications } from '@/lib/notifications'
 import { isSessionRunning, useSessionStore } from '@/store/session-store'
 import { useSettingsStore } from '@/store/settings-store'
+import { useCreationStore } from '@/store/creation-store'
 import { commands } from '@/lib/tauri-bindings'
 
 /** Create-time geometry: a venue-screen-shaped default. */
@@ -44,6 +45,9 @@ const PROJECTION_WIDTH = 1280
 const PROJECTION_HEIGHT = 800
 const PROJECTION_MIN_WIDTH = 960
 const PROJECTION_MIN_HEIGHT = 600
+// The constructor returns before native creation. Mode handoff must close
+// after either native outcome, while ordinary cancellation leaves it alone.
+let pendingProjectionCreation: Promise<void> | null = null
 
 /**
  * Where the projection window should be created: centered on the
@@ -89,10 +93,19 @@ function projectionWindowTitle(): string {
  * create it hidden on the App's current monitor.
  */
 export async function openProjectionWindow(): Promise<void> {
+  const epoch = useCreationStore.getState().epoch
+  const owns = () => {
+    const mode = useCreationStore.getState()
+    return !mode.active && mode.modePhase === 'idle' && mode.epoch === epoch
+  }
+  if (!owns() || pendingProjectionCreation) return
   const existing = await WebviewWindow.getByLabel(PROJECTION_WINDOW_LABEL)
+  if (!owns()) return
   if (existing) {
     try {
-      if (!(await existing.isVisible())) {
+      const visible = await existing.isVisible()
+      if (!owns()) return
+      if (!visible) {
         await commands.fadeInWindow(PROJECTION_WINDOW_LABEL)
       } else {
         await existing.setFocus()
@@ -114,6 +127,7 @@ export async function openProjectionWindow(): Promise<void> {
     })
   }
 
+  if (!owns() || pendingProjectionCreation) return
   const projectionWindow = new WebviewWindow(PROJECTION_WINDOW_LABEL, {
     url: 'projection.html',
     title: projectionWindowTitle(),
@@ -137,7 +151,17 @@ export async function openProjectionWindow(): Promise<void> {
     // (#34), while the help window keeps the default.
     backgroundThrottling: 'disabled' as BackgroundThrottlingPolicy,
   })
+  let resolveCreation!: () => void
+  const pending = new Promise<void>(resolve => {
+    resolveCreation = resolve
+  })
+  pendingProjectionCreation = pending
+  const finishCreation = () => {
+    if (pendingProjectionCreation === pending) pendingProjectionCreation = null
+    resolveCreation()
+  }
   projectionWindow.once('tauri://error', error => {
+    finishCreation()
     logger.error('Failed to create the projection window', { error })
     notifications.error(i18n.t('toast.error.generic'))
   })
@@ -147,6 +171,9 @@ export async function openProjectionWindow(): Promise<void> {
   // destruction is Rust-observed (lib.rs Destroyed), so every close
   // path is covered. A failed create never announces — no ghost button.
   projectionWindow.once('tauri://created', () => {
+    finishCreation()
+    const mode = useCreationStore.getState()
+    if (mode.active || mode.modePhase === 'settling') return
     void emitProjectionWindowExists(true).catch(() => {
       // Broadcast failed — the Destroyed twin still retires a stale
       // button if the window dies right away.
@@ -163,6 +190,7 @@ export async function closeProjectionWindow(options?: {
   requireCompletion: boolean
 }): Promise<void> {
   if (options?.requireCompletion) {
+    await pendingProjectionCreation
     const result = await commands.closeCreationProjection()
     if (result.status === 'error') throw new Error(result.error.detail)
     return

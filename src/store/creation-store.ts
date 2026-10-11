@@ -305,7 +305,12 @@ export const useCreationStore = create<CreationState>((set, get) => ({
       clearTimeout(timer)
       if (!committed && !preparedReleased && plan.workspace)
         await releaseIdentity(plan.workspace.project.identity)
-      if (get().modePlan === plan) set({ modePhase: 'idle', modePlan: null })
+      if (get().modePlan === plan)
+        set({
+          modePhase: 'idle',
+          modePlan: null,
+          restoreModeFocus: restoreFocus,
+        })
     }
   },
   enter: async () => {

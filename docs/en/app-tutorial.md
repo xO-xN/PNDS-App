@@ -83,7 +83,8 @@ During a performance or rehearsal, when you need to switch the audio output devi
 
 Hover or focus the mode button at the bottom of the performance sidebar
 to discover creation mode. Click once to see the consequence, then again to
-enter. Esc, clicking elsewhere or losing window focus cancels confirmation.
+enter. With the button focused, Enter or Space performs the same two-step
+confirmation. Esc, clicking elsewhere or losing window focus cancels confirmation.
 Choose **Open folder project** or continue from **Recent creations**. In creation
 mode, `⌘ O` also selects a folder. Opening never starts the project.
 

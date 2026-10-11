@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useId, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useCreationStore } from '@/store/creation-store'
 import { isSessionBusy, useSessionStore } from '@/store/session-store'
@@ -22,6 +22,7 @@ export function CreationModeButton() {
   const brutal = useSettingsStore(state => state.colorThemeSetting === 'brutal')
   const root = useRef<HTMLDivElement>(null)
   const button = useRef<HTMLButtonElement>(null)
+  const consequenceId = useId()
   const targetLabel = t(active ? 'creation.performance' : 'creation.title')
   useEffect(() => {
     const cancel = () => useCreationStore.getState().cancelModeSwitch()
@@ -64,7 +65,7 @@ export function CreationModeButton() {
   return (
     <div ref={root} className="creation-mode-footer">
       {phase === 'armed' && (
-        <p role="status" className="creation-mode-note">
+        <p id={consequenceId} role="status" className="creation-mode-note">
           {warning}
         </p>
       )}
@@ -72,6 +73,7 @@ export function CreationModeButton() {
       <button
         ref={button}
         type="button"
+        data-mode-switch=""
         className="creation-mode-switch pnds-focus-ring"
         data-mode={active ? 'creation' : 'performance'}
         data-phase={phase}
@@ -79,8 +81,11 @@ export function CreationModeButton() {
         aria-label={
           phase === 'settling'
             ? t('creation.switching', { mode: targetLabel })
-            : t(active ? 'creation.leave' : 'creation.enter')
+            : phase === 'armed'
+              ? t('creation.confirmSwitch', { mode: targetLabel })
+              : t(active ? 'creation.leave' : 'creation.enter')
         }
+        aria-describedby={phase === 'armed' ? consequenceId : undefined}
         aria-pressed={phase === 'armed'}
         disabled={busy || phase === 'settling' || opening}
         onPointerEnter={() =>

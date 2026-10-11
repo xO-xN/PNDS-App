@@ -131,33 +131,36 @@ describe('confirmed mode handoff', () => {
     expect(cleanup).not.toHaveBeenCalled()
   })
 
-  it('ends an installed bundle only after confirmation and enters the creation home', async () => {
-    vi.mocked(commands.prepareCreationProject).mockResolvedValueOnce({
-      status: 'ok',
-      data: {
-        ...workspace,
-        project: { ...workspace.project, source: 'bundle' },
-      },
-    })
-    vi.mocked(commands.stopProject).mockImplementationOnce(async () => {
-      vi.mocked(commands.getCreationRuntime).mockResolvedValue({
+  it.each(['bundle', 'utility', 'readOnlyFolder'] as const)(
+    'ends a %s runtime only after confirmation and enters the creation home',
+    async source => {
+      vi.mocked(commands.prepareCreationProject).mockResolvedValueOnce({
         status: 'ok',
-        data: idleRuntime,
+        data: {
+          ...workspace,
+          project: { ...workspace.project, source },
+        },
       })
-      vi.mocked(commands.commitCreationProject).mockResolvedValue({
-        status: 'ok',
-        data: idleRuntime,
+      vi.mocked(commands.stopProject).mockImplementationOnce(async () => {
+        vi.mocked(commands.getCreationRuntime).mockResolvedValue({
+          status: 'ok',
+          data: idleRuntime,
+        })
+        vi.mocked(commands.commitCreationProject).mockResolvedValue({
+          status: 'ok',
+          data: idleRuntime,
+        })
+        return { status: 'ok', data: null }
       })
-      return { status: 'ok', data: null }
-    })
-    await useCreationStore.getState().prepareModeSwitch()
-    expect(commands.stopProject).not.toHaveBeenCalled()
-    await useCreationStore.getState().commitModeSwitch()
-    expect(commands.stopProject).toHaveBeenCalledOnce()
-    expect(useCreationStore.getState().active).toBe(true)
-    expect(useCreationStore.getState().workspace).toBeNull()
-    expect(commands.startProject).not.toHaveBeenCalled()
-  })
+      await useCreationStore.getState().prepareModeSwitch()
+      expect(commands.stopProject).not.toHaveBeenCalled()
+      await useCreationStore.getState().commitModeSwitch()
+      expect(commands.stopProject).toHaveBeenCalledOnce()
+      expect(useCreationStore.getState().active).toBe(true)
+      expect(useCreationStore.getState().workspace).toBeNull()
+      expect(commands.startProject).not.toHaveBeenCalled()
+    }
+  )
 
   it('keeps creation drafts and runtime when the registered discard confirmation is cancelled', async () => {
     useCreationStore.setState({ active: true, workspace })
