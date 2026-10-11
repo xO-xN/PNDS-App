@@ -348,12 +348,13 @@ pub async fn fade_in_window(app: AppHandle, label: Option<String>) -> Result<(),
     // choppy until the operator clicked it once. The webview-level
     // focus lands the first responder (wry: makeFirstResponder) — the
     // same activation that click performs, durable across later
-    // key/resign of the window. Scoped to the projection label: the
+    // key/resign of the window. Also activate performer test webviews;
+    // their page owns input and animation just like projection. The
     // main/help reveals have no reported gap, and main's initial
     // first-responder setup is entangled with its guest-focus gate.
     // (`AsRef<Webview>` — the `Manager::get_webview` lookup needs the
     // unstable feature; this wrapper owns its webview directly.)
-    if label == "projection" {
+    if label == "projection" || crate::performer::is_performer_label(&label) {
         let webview: &Webview<_> = window.as_ref();
         let _ = webview.set_focus();
     }

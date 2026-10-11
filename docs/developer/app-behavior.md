@@ -487,3 +487,16 @@ Back/Close 返回 Welcome，不自动重启。
 11. 无残留 Node/scsynth，日志正确写入和轮转；
 12. Multichannel Signal Generator（staged 内置副本）可验证 16 路路由；
 13. 可产出可更新的 macOS arm64 / x86_64 release artifact。
+
+## Creation performer test windows (#157)
+
+Creation testing opens multiple independent native performer clients. The list
+owns per-client number, device/orientation, page navigation facts and focus /
+close actions. Connection is unknown under the current public runtime contract.
+Device sizing changes preserve the page; runtime restart preserves shells and
+browser identity, while manual page refresh navigates all existing pages. Music
+messages use the project server directly. Closing one never stops the project.
+Project close, confirmed mode exit and project switch clean up old shells;
+cancelled confirmations and hiding the main window retain them. Actual exit
+has a Rust cleanup fallback. Late callbacks require workspace/run/navigation
+ownership. See [creation-workspace.md](./creation-workspace.md).

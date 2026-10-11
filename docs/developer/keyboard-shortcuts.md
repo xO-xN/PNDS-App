@@ -273,3 +273,13 @@ plain Escape outside App overlays. Projection, other windows and unexpanded
 performance monitors keep their existing page-key ownership. Expansion changes
 layout and hides the mounted editor; it never toggles native fullscreen, navigates
 the iframe, starts/stops a process or cleans up test windows.
+
+## Performer test windows (#157)
+
+Cmd+W closes only the focused performer test window. Ctrl+Cmd+F changes that
+window's native fullscreen. Monitor zoom shortcuts are no-ops while a performer
+is focused; its viewport is selected explicitly through the client list. The
+plain-Escape restore accelerator remains main-only. Performer shells have no
+App web shortcut layer: nonreserved keyboard/pointer input belongs to the real
+page. Cmd+Shift+R in creation refreshes existing test pages through the shared
+manual refresh workflow. App-global menu accelerators remain reserved.

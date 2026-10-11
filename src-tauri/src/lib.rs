@@ -10,6 +10,7 @@ mod events;
 mod gateway;
 mod https;
 mod open_panel;
+mod performer;
 mod process_activity;
 mod project;
 mod types;
@@ -59,6 +60,7 @@ pub fn run() {
                 // The help center stays tracked (its size/position
                 // persisting is documented behavior).
                 .with_denylist(&["projection"])
+                .with_filter(|label| !crate::performer::is_performer_label(label))
                 .build(),
         );
     }
@@ -443,7 +445,20 @@ pub fn run() {
             // is NOT guaranteed on that path (observed: orphans left behind
             // after ⌘Q). Clean up in ExitRequested (sync, before the loop
             // ends) AND keep Exit as a belt-and-braces fallback.
+            RunEvent::WindowEvent {
+                label,
+                event: WindowEvent::Destroyed,
+                ..
+            } if crate::performer::is_performer_label(label) => {
+                let _ = crate::events::PerformerDestroyedEvent {
+                    label: label.clone(),
+                }
+                .emit(app_handle);
+            }
             RunEvent::ExitRequested { .. } => {
+                if let Err(error) = crate::performer::close_windows(app_handle, None) {
+                    log::warn!("Failed to close performer windows on exit: {error}");
+                }
                 log::info!("Application exit requested — performing cleanup");
                 {
                     let session = app_handle.state::<crate::project::session::SessionManager>();

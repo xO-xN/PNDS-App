@@ -1,5 +1,12 @@
 import { beforeEach, expect, it, vi } from 'vitest'
-import { act, fireEvent, render, screen, waitFor } from '@/test/test-utils'
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@/test/test-utils'
 import { commands, type Manifest } from '@/lib/tauri-bindings'
 import { useCreationStore } from '@/store/creation-store'
 import { useCreationTestStore } from '@/store/creation-test-store'
@@ -143,7 +150,11 @@ it('inherits the actual external target on adoption and only offers saved suppor
   await act(async () => {
     await useCreationTestStore.getState().loadManifest()
   })
-  expect(screen.getAllByRole('option')).toHaveLength(1)
+  expect(
+    within(
+      screen.getByRole('combobox', { name: 'Test audio mode' })
+    ).getAllByRole('option')
+  ).toHaveLength(1)
   expect(screen.getByText('Applied audio: External')).toBeInTheDocument()
   expect(commands.startCreationProject).not.toHaveBeenCalled()
 })

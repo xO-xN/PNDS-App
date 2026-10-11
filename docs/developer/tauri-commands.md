@@ -320,3 +320,18 @@ The frontend uses the common session-flow consent/submit/stop/start machinery;
 none of these commands saves drafts or rewrites manifest defaults. Validation
 and startup failures use `testValidation` / `testStartup`, while scope failures
 retain their existing codes. See [creation-workspace.md](./creation-workspace.md).
+
+## Performer windows (#157)
+
+`closeCreationPerformerWindows(labels: string[] | null)` destroys only UUID
+performer labels; null closes every performer shell. All supplied labels are
+validated before any destruction, and unrelated windows are rejected. Native
+`PerformerDestroyedEvent` retires the exact client after any close path. The
+frontend lifecycle protocol carries only workspace/run/navigation, viewport and
+theme/locale configuration plus page-load results; no music messages. The local
+shell has its own restricted capability and independent browser data store.
+
+Performer protocol names and typed on/emit helpers live in `src/lib/events.ts`.
+These subscriptions expose registration promises because native creation and
+shell-ready replay must wait until the listener exists. All runtime fact and
+error returns additionally check their workspace/run/navigation ownership.

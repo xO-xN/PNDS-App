@@ -35,6 +35,7 @@ export default defineConfig(async () => ({
         // v1.5.0 (#129): the projection window's thin root — same
         // multi-page pattern, no AppShell boots on the venue screen.
         projection: resolve(__dirname, 'projection.html'),
+        performer: resolve(__dirname, 'performer.html'),
       },
     },
   },

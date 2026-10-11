@@ -133,6 +133,7 @@ vi.mock('@/lib/tauri-bindings', async () => {
       windowFocusEvent: makeEvent('window-focus-event'),
       windowStateEvent: makeEvent('window-state-event'),
       projectionWindowEvent: makeEvent('projection-window-event'),
+      performerDestroyedEvent: makeEvent('performer-destroyed-event'),
     },
     commands: {
       startCreationProject: vi.fn().mockResolvedValue({
@@ -157,6 +158,9 @@ vi.mock('@/lib/tauri-bindings', async () => {
         },
       }),
       closeCreationProjection: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      closeCreationPerformerWindows: vi
         .fn()
         .mockResolvedValue({ status: 'ok', data: null }),
       getCreationRuntime: vi

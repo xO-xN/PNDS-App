@@ -165,6 +165,16 @@ pub async fn close_creation_projection(app: AppHandle) -> Result<(), CreationErr
 
 #[tauri::command]
 #[specta::specta]
+pub async fn close_creation_performer_windows(
+    app: AppHandle,
+    labels: Option<Vec<String>>,
+) -> Result<(), CreationError> {
+    crate::performer::close_windows(&app, labels)
+        .map_err(|error| CreationError::new(CreationErrorCode::Io, error))
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn commit_creation_project(
     app: AppHandle,
     state: State<'_, CreationState>,

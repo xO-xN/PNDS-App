@@ -196,7 +196,7 @@ it cannot acknowledge health readiness. Successful compilation acknowledges capt
 work and still flags restart for a live runtime. Later edits and another
 identity cannot be acknowledged by an older action. Unsaved drafts never enter
 any of these operations. Registered test pages use the refresh seam described
-below; native performer window creation remains #157.
+below; native performer windows register that seam as described below.
 
 ## Manual testing, monitor and console (#156)
 
@@ -293,3 +293,58 @@ scroll within their remaining space; a bottom error/status surface is capped
 at a quarter of the view and scrolls independently. Keep the mode control out
 of those scrollers. Do not infer physical layout from jsdom visibility tests;
 small-window and long-list geometry need validation in the native Tauri window.
+
+## Independent performer windows (#157)
+
+`performer-window.ts` owns native windows; `creation-performers-store.ts` exposes
+only their transient list and errors. Each create uses a unique UUID label and
+an independent `incognito` webview. On macOS the installed wry implementation
+uses a fresh nonpersistent WKWebsiteDataStore, isolating cookies/local storage
+between clients while retaining each client's identity across same-shell
+refresh/restart. See [Tauri v2 webview options](https://v2.tauri.app/reference/javascript/api/namespacewebview/).
+No user agent, touch, sensor or mobile-browser capabilities are spoofed. The
+local `performer.html` entry boots only the thin shell; its cross-origin iframe
+loads the actual applied performer address/port. Music traffic stays entirely
+between that page, the project server and audio target. Unadapted projects work.
+
+Phone (390 × 844) and tablet (768 × 1024) select real CSS viewport dimensions;
+landscape swaps them. A ResizeObserver fits the frame visually into the native
+window without changing the iframe's viewport. Changing device/orientation,
+theme or locale retains that iframe and navigation. Theme/locale use the same
+exact-origin postMessage bridges as monitor, on load, change, focus and heartbeat.
+The shell waits for targeted configuration before its themed native reveal;
+current page load and window focus put keyboard focus into the performer iframe.
+
+The event protocol is centralized in `events.ts`; its performer subscriptions
+return registration promises that constructors and shell-ready replay await.
+Main-window listeners are installed before native creation. A shell-ready
+handshake replays current config; config revisions reject out-of-order delivery.
+Every page navigation captures workspace identity, frontend run and a monotonic
+navigation number. Manual refresh uses the shared nonce, and awaits every current
+shell's matching load result before acknowledging saved pages. Restart suspends
+old pages, keeps the windows and isolated stores, and navigates to the new ready
+runtime's actual address. Old load/timeout/config results cannot update a newer
+run. Error publication also checks the client, workspace, run and config revision;
+successful identity changes clear old errors. Delayed send/focus/close failures
+from retired clients cannot pollute the next workspace. A DOM load event records only that navigation finished, including possible
+browser error documents: connection is explicitly unknown because the platform
+has no public performer connection-status contract. No fake connection success
+or optional music-protocol adaptation is introduced.
+
+The registered creation participant cleans up after confirmed project close,
+project switch or creation-mode exit. It waits for pending native creation,
+then uses the typed `closeCreationPerformerWindows` command. Rust accepts only
+UUID performer labels, checks the whole target list before destruction, and
+attempts every target. `None` closes all test shells, including orphans after a
+main-webview reload. Native destruction events retire exactly one row, including
+red-light and Cmd+W closes. Cmd+W targets the focused client; fullscreen targets
+its native window; monitor zoom does not alter its simulated viewport. Main
+window hiding/blur and cancelled confirmations do not run cleanup. Actual exit
+also destroys test shells in Rust. Window-state persistence excludes these
+transient labels; their local capability exposes only event/focus APIs, with no
+remote-origin IPC access and no music relay.
+
+Automated coverage uses native window substitutes through the App workflow and
+shell interface, plus the Rust scoped close boundary. WKWebView verification of
+independent client identities, phone/tablet orientations and actual keyboard /
+pointer input remains a real macOS check; jsdom dimensions are not that evidence.

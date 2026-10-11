@@ -11,6 +11,7 @@ import {
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { Button } from '@/components/ui/button'
 import type { AudioMode } from '@/lib/tauri-bindings'
+import { CreationPerformers } from './CreationPerformers'
 
 export function CreationTestControls() {
   const { t } = useTranslation()
@@ -181,6 +182,7 @@ export function CreationTestControls() {
       )}
       <p>{t('creation.testSavedOnly')}</p>
       <p>{t('creation.testGlobalAudio')}</p>
+      <CreationPerformers />
     </section>
   )
 }

@@ -3,8 +3,9 @@
  * `events` object (tauri-specta). Event names AND payload types come from
  * the same generated definition the Rust side emits through, so neither
  * side can drift; this layer only adds the lifecycle convention:
- * `onX(cb)` returns a synchronous unsubscribe, so effect cleanups and
- * try/finally blocks never juggle unlisten promises.
+ * `onX(cb)` normally returns a synchronous unsubscribe. Performer shell
+ * listeners instead return its promise: native creation must await their
+ * registration, and shell-ready replay must await its config listener.
  *
  * The help- and projection-window protocols have no generated form —
  * `emitTo` (main window → the secondary webviews) is not part of
@@ -21,6 +22,10 @@ import type {
   WindowStateSnapshot,
 } from '@/lib/tauri-bindings'
 import type { ColorTheme } from '@/lib/color-theme'
+import type {
+  PerformerConfig,
+  PerformerPageResult,
+} from '@/lib/performer-protocol'
 
 /** The help webview's Tauri window label. */
 export const HELP_WINDOW_LABEL = 'help'
@@ -248,4 +253,40 @@ export function onProjectionZoom(cb: (zoom: number) => void): Unsubscribe {
 /** Projection side: report the new zoom value for persistence. */
 export function emitProjectionZoom(zoom: number): Promise<void> {
   return emitTo(MAIN_WINDOW_LABEL, PROJECTION_ZOOM, { zoom })
+}
+
+// Performer shells await listener registration before native creation/replay.
+export const PERFORMER_READY = 'pnds:performer-ready'
+export const PERFORMER_CONFIG = 'pnds:performer-config'
+export const PERFORMER_PAGE = 'pnds:performer-page'
+export function onPerformerReady(
+  cb: (label: string) => void
+): Promise<Unsubscribe> {
+  return listen<{ label: string }>(PERFORMER_READY, event =>
+    cb(event.payload.label)
+  )
+}
+export function emitPerformerReady(label: string): Promise<void> {
+  return emitTo(MAIN_WINDOW_LABEL, PERFORMER_READY, { label })
+}
+export function onPerformerConfig(
+  cb: (config: PerformerConfig) => void
+): Promise<Unsubscribe> {
+  return listen<PerformerConfig>(PERFORMER_CONFIG, event => cb(event.payload))
+}
+export function emitPerformerConfig(config: PerformerConfig): Promise<void> {
+  return emitTo(config.label, PERFORMER_CONFIG, config)
+}
+export function onPerformerPage(
+  cb: (result: PerformerPageResult) => void
+): Promise<Unsubscribe> {
+  return listen<PerformerPageResult>(PERFORMER_PAGE, event => cb(event.payload))
+}
+export function emitPerformerPage(result: PerformerPageResult): Promise<void> {
+  return emitTo(MAIN_WINDOW_LABEL, PERFORMER_PAGE, result)
+}
+export function onPerformerDestroyed(
+  cb: (label: string) => void
+): Promise<Unsubscribe> {
+  return events.performerDestroyedEvent.listen(event => cb(event.payload.label))
 }

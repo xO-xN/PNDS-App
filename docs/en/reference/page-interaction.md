@@ -5,7 +5,7 @@ This page is for **Project creators**: it states precisely which interaction eve
 ## Ground rules: the embed model and the two keyboard layers
 
 - The **monitor page** is embedded as an iframe in the App's main window, filling the whole main area except the sidebar and the top title strip. The App does not read, inject into or call the cross-origin page DOM ([runtime-contract.md](./runtime-contract.md) §10); the input a page receives is standard web input events — there is no extra API.
-- The **performer page** does not open inside the App — performers' browsers reach the Project's own server directly; it is an ordinary mobile web page.
+- The **performer page** normally opens in performers' browsers against the Project server. Creation mode can also embed real performer pages in multiple independent native test windows; messages still travel directly through that server.
 - Keyboard input passes through **two layers** before the page: the **native menu-accelerator layer** (the macOS menu bar, app-wide, never yields) and the **App web layer** (the ⌘-shortcut layer of the App's own UI, which yields during page interaction). Which layer a chord belongs to decides whether the page can never see it, or may use it while the user interacts — see the two tables below.
 
 ## The monitor page's keyboard
@@ -52,7 +52,7 @@ Special note (`⌘ ←` / `⌘ →`): WKWebView natively treats Cmd + left/right
 
 - Pointer events (move / down / up / wheel / drag) pass through to the monitor page **in full** — the App neither intercepts nor interprets them.
 - **The right click belongs to the page author**: the App suppresses WKWebView's native web menu (Reload / Open Frame in New Window / Back, …; editable fields keep the system copy/paste menu), and the suppression only calls `preventDefault` — it never stops the event's propagation. A `contextmenu` listener on the monitor page and the custom menu it opens coexist with it naturally; no wiring is needed.
-- The App's own UI (the sidebar, …) keeps its own designed menus for right clicks; the performer page does not open in the App at all — its right clicks are entirely the Project's business.
+- The App's own UI (the sidebar, …) keeps its own designed menus for right clicks; performer right clicks in device browsers belong to the Project. App test windows suppress the native menu while preserving the page's contextmenu events.
 
 ## The top title-strip keep-out zone
 
@@ -60,7 +60,11 @@ The App floats a title strip along the **top centre** of the window (showing the
 
 ## The performer page
 
-The performer page opens directly in performers' own browsers (not in the App); its input capabilities are those of an ordinary mobile web page: **touch, multi-touch and orientation adaptivity** all work, entirely in the Project's hands — use a standard viewport and responsive layout for orientation and size changes, and store sustained interaction state as relative / normalised coordinates so it does not fossilise in old pixels after a resize (the same discipline as the monitor page's resize requirement, [runtime-contract.md](./runtime-contract.md) §10).
+The performer page normally opens directly in performers' own browsers; its input capabilities are those of an ordinary mobile web page: **touch, multi-touch and orientation adaptivity** all work, entirely in the Project's hands — use a standard viewport and responsive layout for orientation and size changes, and store sustained interaction state as relative / normalised coordinates so it does not fossilise in old pixels after a resize (the same discipline as the monitor page's resize requirement, [runtime-contract.md](./runtime-contract.md) §10).
+
+Creation's performer test windows have isolated temporary browser storage and independent client identities. Phone is a 390 × 844 CSS viewport; tablet is 768 × 1024, with width/height swapped for landscape. The shell scales the frame to fit the desktop window without changing that viewport. Size changes retain the same page, which must respond to resize. This simulates dimensions only: touch, multi-touch, sensors and mobile-browser APIs still require real-device verification.
+
+Test shells have no App web shortcut layer; native menu accelerators and macOS chords remain reserved. Other keys, Escape, pointer and page contextmenu events belong to the performer page. Main-window Escape restoration does not extend to test windows. Cmd+W closes only the focused test client; Ctrl+Cmd+F changes only its native fullscreen; monitor zoom chords do not alter its viewport. The App observes navigation lifecycle only: a load event may also be a browser error document and never proves a server connection. The public runtime protocol has no performer connection-status reporting, so the list explicitly shows “Connection unknown.” Existing Projects need no new message protocol to be tested.
 
 ## Key-choice safety zone
 

@@ -208,6 +208,14 @@ async closeCreationProjection() : Promise<Result<null, CreationError>> {
     else return { status: "error", error: e  as any };
 }
 },
+async closeCreationPerformerWindows(labels: string[] | null) : Promise<Result<null, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("close_creation_performer_windows", { labels }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async commitCreationProject(identity: string | null, generation: string) : Promise<Result<CreationRuntime, CreationError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("commit_creation_project", { identity, generation }) };
@@ -796,6 +804,7 @@ async systemSafariVersion() : Promise<Result<string | null, string>> {
 export const events = __makeEvents__<{
 helpReadyEvent: HelpReadyEvent,
 openBundleEvent: OpenBundleEvent,
+performerDestroyedEvent: PerformerDestroyedEvent,
 projectionWindowEvent: ProjectionWindowEvent,
 sessionSnapshotEvent: SessionSnapshotEvent,
 setlistExportProgressEvent: SetlistExportProgressEvent,
@@ -804,6 +813,7 @@ windowStateEvent: WindowStateEvent
 }>({
 helpReadyEvent: "help-ready-event",
 openBundleEvent: "open-bundle-event",
+performerDestroyedEvent: "performer-destroyed-event",
 projectionWindowEvent: "projection-window-event",
 sessionSnapshotEvent: "session-snapshot-event",
 setlistExportProgressEvent: "setlist-export-progress-event",
@@ -1342,6 +1352,7 @@ performerAddress?: string | null }
  */
 export type OpenBundleEvent = Record<string, never>
 export type PackResult = { outputPath: string; sha256: string }
+export type PerformerDestroyedEvent = { label: string }
 /**
  * Who is listening on a project port.
  */

@@ -22,6 +22,9 @@
  * closes that window, not the main flow behind it.
  */
 import { refreshMonitorFromDisk } from '@/lib/creation-runtime-updates'
+import { closePerformerWindow } from '@/lib/performer-window'
+import { isPerformerWindow } from '@/lib/performer-protocol'
+import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
 import {
   Menu,
   MenuItem,
@@ -107,6 +110,10 @@ async function focusedLabel(): Promise<string> {
  */
 async function closeFrontWindow(): Promise<void> {
   const focused = await focusedLabel()
+  if (isPerformerWindow(focused)) {
+    await closePerformerWindow(focused)
+    return
+  }
   if (focused === HELP_WINDOW_LABEL) {
     await closeHelpWindow()
     return
@@ -132,7 +139,9 @@ async function closeFrontWindow(): Promise<void> {
 async function dispatchMonitorZoom(
   kind: 'zoom-in' | 'zoom-out' | 'zoom-reset'
 ): Promise<void> {
-  if ((await focusedLabel()) === PROJECTION_WINDOW_LABEL) {
+  const focused = await focusedLabel()
+  if (isPerformerWindow(focused)) return
+  if (focused === PROJECTION_WINDOW_LABEL) {
     void emitProjectionAction({ kind })
     return
   }
@@ -160,7 +169,13 @@ function reloadBothMonitors(): void {
  * fullscreen action (menu, sidebar button, §7.4 single action).
  */
 async function dispatchFullscreenToggle(): Promise<void> {
-  if ((await focusedLabel()) === PROJECTION_WINDOW_LABEL) {
+  const focused = await focusedLabel()
+  if (isPerformerWindow(focused)) {
+    const window = await WebviewWindow.getByLabel(focused)
+    if (window) await window.setFullscreen(!(await window.isFullscreen()))
+    return
+  }
+  if (focused === PROJECTION_WINDOW_LABEL) {
     await toggleProjectionFullscreen()
     return
   }

@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "performer-shell",
+  "description": "Local performer test shells; remote project frames receive no IPC capability",
+  "windows": ["performer-*"],
+  "permissions": ["core:event:default", "core:window:allow-set-focus"]
+}

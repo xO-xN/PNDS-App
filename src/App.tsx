@@ -16,6 +16,7 @@ import {
 } from './lib/menu'
 import { setupHelpWindowBridge } from './lib/help-window'
 import { setupProjectionWindowBridge } from './lib/projection-window'
+import { setupPerformerWindowBridge } from './lib/performer-window'
 import { startBootUpdateCheck } from './lib/updater'
 import { runWebKitBaselineCheck } from './lib/webkit-baseline'
 import { bootCheckRenderer } from './store/updater-store'
@@ -59,6 +60,7 @@ function App() {
     logger.info('🚀 PNDS starting up')
 
     initWindowState()
+    const disposePerformers = setupPerformerWindowBridge()
 
     // v1.4.2 (#110): the WebKit baseline gate — the system Safari (and
     // with it the WebKit this UI renders on) must reach the 16.4
@@ -228,6 +230,7 @@ function App() {
     const cancelBootUpdateCheck = startBootUpdateCheck(bootCheckRenderer)
     return () => {
       cancelBootUpdateCheck()
+      disposePerformers()
       window.removeEventListener('beforeunload', onBeforeUnload)
     }
   }, [])

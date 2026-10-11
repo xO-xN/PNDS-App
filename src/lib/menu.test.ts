@@ -820,6 +820,30 @@ describe('buildAppMenu help menu (v1.3.0, #56)', () => {
     useCreationTestStore.getState().setExpanded(false)
   })
 
+  it('closes only the focused performer and leaves monitor zoom and the runtime unchanged', async () => {
+    vi.mocked(commands.closeWindowWithFade).mockClear()
+    vi.mocked(commands.stopProject).mockClear()
+    vi.mocked(commands.closeCreationPerformerWindows).mockClear()
+    const label = 'performer-00000000-0000-4000-8000-000000000001'
+    vi.mocked(commands.focusedWindowLabel).mockResolvedValue({
+      status: 'ok',
+      data: label,
+    })
+    useSessionStore.setState({ sessionStatus: 'ready', monitorZoom: 100 })
+    await buildAppMenu()
+    item('close-window').action?.()
+    await vi.waitFor(() =>
+      expect(commands.closeCreationPerformerWindows).toHaveBeenCalledWith([
+        label,
+      ])
+    )
+    item('zoom-in').action?.()
+    await Promise.resolve()
+    expect(useSessionStore.getState().monitorZoom).toBe(100)
+    expect(commands.stopProject).not.toHaveBeenCalled()
+    expect(commands.closeWindowWithFade).not.toHaveBeenCalled()
+  })
+
   it("toggles the FOCUSED window's fullscreen on ⌃⌘F", async () => {
     vi.mocked(commands.toggleFullscreen).mockClear()
     vi.mocked(commands.focusedWindowLabel).mockResolvedValue({

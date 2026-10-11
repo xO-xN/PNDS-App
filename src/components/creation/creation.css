@@ -524,6 +524,8 @@
   background: var(--pnds-bg);
   color: var(--pnds-text);
   font-size: 12px;
+  max-height: 60vh;
+  overflow: auto;
 }
 .creation-test-controls h2 {
   font-weight: 600;
@@ -537,4 +539,74 @@
 [data-creation-view][hidden],
 .creation-file-tab[hidden] {
   display: none !important;
+}
+
+/* #157: independent performer clients; only their viewport size is simulated. */
+.creation-performers {
+  border-block-start: 1px solid
+    color-mix(in srgb, var(--pnds-text) 15%, transparent);
+  padding-block-start: 8px;
+  display: grid;
+  gap: 8px;
+}
+.creation-performer-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding-block: 8px;
+}
+.performer-shell {
+  height: 100vh;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  background: var(--pnds-bg);
+  color: var(--pnds-text);
+  font-family: var(--pnds-font-ui);
+  font-size: 12px;
+}
+.performer-shell header {
+  display: grid;
+  gap: 4px;
+  padding: 12px 16px;
+  border-block-end: 1px solid
+    color-mix(in srgb, var(--pnds-text) 15%, transparent);
+}
+.performer-shell h1 {
+  font-weight: 600;
+}
+.performer-stage {
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  min-width: 0;
+  min-height: 0;
+}
+.performer-device {
+  position: relative;
+  outline: 4px solid color-mix(in srgb, var(--pnds-text) 25%, var(--pnds-bg));
+  border-radius: 8px;
+  overflow: hidden;
+}
+.performer-device iframe {
+  display: block;
+  border: none;
+  transform-origin: top left;
+}
+.performer-cover {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: var(--pnds-bg);
+}
+.performer-timeout {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline: 0;
+  padding: 8px;
+  background: var(--pnds-bg);
+}
+[data-color-theme='brutal'] .performer-device {
+  border-radius: 0;
 }
