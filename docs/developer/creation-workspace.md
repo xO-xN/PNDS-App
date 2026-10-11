@@ -1,13 +1,14 @@
 # Creation reading workspace
 
 Issues #150 and #151 provide file reading plus the confirmed mode handoff;
-#154 adds manual save, rename and disk-version conflict handling.
+#154 adds manual save, rename and disk-version conflict handling; #155 adds
+external disk tracking, and #156 adds manual testing, monitor and console.
 The visual baseline is the A layout and eighth interaction review in
 [the UI prototype](../prototypes/pnds-ui-prototype.html). Creation sidebars
 share the existing App's 320px container, margins and window controls; file
 categories, title switching and the bottom mode control follow that prototype.
 The PNDS file badge identifies known contract configuration files, not module
-provenance. Unimplemented editing/new-project/module/console controls stay absent.
+provenance. Unimplemented new-project/module controls stay absent.
 
 ## Confirmed mode handoff
 
@@ -194,8 +195,61 @@ the same canonical root. A successful start command only spawns the supervisor;
 it cannot acknowledge health readiness. Successful compilation acknowledges captured source
 work and still flags restart for a live runtime. Later edits and another
 identity cannot be acknowledged by an older action. Unsaved drafts never enter
-any of these operations. Performer test-window refresh remains part of the
-test-window workflow; this issue adds no performer window implementation.
+any of these operations. Registered test pages use the refresh seam described
+below; native performer window creation remains #157.
+
+## Manual testing, monitor and console (#156)
+
+`creation-test-store.ts` keeps saved manifest declarations and the creator's
+next-test audio mode / App OSC target separately from authoritative session
+facts. `getCreationManifest` reads the issued workspace's bounded manifest,
+without requiring compiled artifacts. File revisions reload these declarations;
+only saved supported modes appear. Initial adoption takes the real ready
+snapshot's mode and OSC target, while later snapshots never replace the pending
+choice. External targets use the existing per-project preferences queue, never
+`standaloneTarget`. Device/rate settings remain global; the device warning reads
+the creation manifest's channel requirement while this mode is active.
+
+`startCreationTest` uses the same `dispatchStart` submit/consent/stop/start and
+ready acknowledgement as performance. It first runs `preflightCreationProject`
+over the trusted identity through the complete existing preflight (including
+managed-child exclusions), then `startCreationProject` rechecks that identity
+before invoking the same `SessionManager::start`. Its reply carries the backend
+generation and snapshot; newer mirrored facts win over a late reply. Each manual
+creation start changes the navigation nonce for a saved-page cold fetch, and
+generation-aware readiness restores a run even if hidden-window startup events
+were missed. No second session engine or
+compiler is introduced. Validation failure leaves an existing runtime running;
+startup failure remains retryable. `testValidation` and `testStartup` describe
+these stages separately from the lightweight reading contract. Submission
+holds the existing command gate. Closing a creation test keeps the workspace,
+drafts, pending settings and prepared project selection; lifecycle participants
+clean up test windows, while ordinary native window hiding does not end testing.
+
+Refresh uses the existing monitor nonce and reveal gate. It also dispatches
+`CreationPageRefresh` to every registered page participant; implementations
+resolve after their current navigation loads, or reject with page-specific
+detail. All participants are attempted even on failure. The captured page
+prompt clears only after monitor and registered pages succeed in the same run;
+failures, timeouts and newer edits retain it. #157 implements the real performer
+windows through this seam. No unused client-list controls ship here.
+
+The ready monitor keeps its existing child position, iframe and URL during
+adoption and temporary expansion. Expansion changes the grid and hides/inerts
+the mounted workspace; restoration reveals the same editor and drafts. The
+title carries creation mode, the real monitor origin and restore/expand. Native
+Escape restoration covers iframe focus only while the main creation monitor is
+expanded, has focus and has no App dialog/submission. The web fallback has the
+same plain-key guard. Menu focus and dialog subscriptions preserve other
+windows' Escape behavior; late menu actions check identity and expansion revision.
+
+The second tab reads the existing bounded session output tail, now retaining
+`[node]` / `[scsynth]` source prefixes, with generation-fenced session snapshots.
+Console polling is serial and cannot adopt a late old-run response. A new
+runtime error locates the console once; revisiting files keeps editor state.
+The recent tail remains available after stop, while copied runtime facts use
+current ownership/status. Details contain no preference/token dump. No log is
+created inside the project and no terminal is provided.
 
 ## Frontend ownership
 

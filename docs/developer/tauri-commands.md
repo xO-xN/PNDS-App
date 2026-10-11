@@ -308,3 +308,15 @@ Note: Using exact versions (`=`) during RC phase to prevent breaking changes.
 
 - [tauri-specta GitHub](https://github.com/specta-rs/tauri-specta)
 - [Specta documentation](https://specta.dev/docs/tauri-specta/v2)
+
+## Creation testing (#156)
+
+`getCreationManifest(identity)` exposes saved declarations through bounded
+creation reading. `preflightCreationProject(identity)` uses the complete existing
+candidate preflight, rechecking identity after I/O. `startCreationProject(identity,
+mode, lanIp, oscTarget)` rechecks it again at dispatch and delegates to the same
+session engine, returning `CreationRuntime` (generation + authoritative snapshot).
+The frontend uses the common session-flow consent/submit/stop/start machinery;
+none of these commands saves drafts or rewrites manifest defaults. Validation
+and startup failures use `testValidation` / `testStartup`, while scope failures
+retain their existing codes. See [creation-workspace.md](./creation-workspace.md).

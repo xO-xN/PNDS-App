@@ -10,6 +10,9 @@ import {
 import { startRename } from '@/lib/project-rename'
 import { useCreationStore } from '@/store/creation-store'
 import { useCreationDraftsStore } from '@/store/creation-drafts-store'
+import { useCreationTestStore } from '@/store/creation-test-store'
+import { useSessionStore } from '@/store/session-store'
+import { useWindowStore } from '@/store/window-store'
 
 /**
  * True when a keyboard event originates from a text-editing target —
@@ -33,6 +36,23 @@ const OVERLAY_ROLES = '[role="alertdialog"], [role="listbox"], [role="menu"]'
  */
 export function hasOpenOverlay(): boolean {
   return Boolean(document.querySelector(`[role="dialog"], ${OVERLAY_ROLES}`))
+}
+
+/** Shared eligibility for the native Escape accelerator and web fallback. */
+export function canRestoreCreationWorkspace(): boolean {
+  const creation = useCreationStore.getState()
+  const windowState = useWindowStore.getState()
+  return (
+    creation.active &&
+    useCreationTestStore.getState().expanded &&
+    !creation.opening &&
+    creation.modePhase === 'idle' &&
+    !useSessionStore.getState().commandPending &&
+    !useSettingsStore.getState().settingsOpen &&
+    !windowState.confirmCloseOpen &&
+    !windowState.quitConfirmOpen &&
+    !hasOpenOverlay()
+  )
 }
 
 /**
@@ -97,6 +117,21 @@ function healIfPointerReportsMetaUp(event: MouseEvent): void {
  */
 export function useCommandKeyboard(): void {
   useEffect(() => {
+    // Capture before a mode control cancels its gesture: one Escape must
+    // not cancel a switch and then also restore the expanded workspace.
+    const handleEscape = (event: KeyboardEvent) => {
+      if (
+        event.key === 'Escape' &&
+        !event.metaKey &&
+        !event.ctrlKey &&
+        !event.altKey &&
+        !event.shiftKey &&
+        canRestoreCreationWorkspace()
+      ) {
+        event.preventDefault()
+        useCreationTestStore.getState().setExpanded(false)
+      }
+    }
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Meta') {
         useKeyboardStore.getState().setCommandKeyPressed(true)
@@ -185,6 +220,7 @@ export function useCommandKeyboard(): void {
       useKeyboardStore.getState().setCommandKeyPressed(false)
     }
 
+    window.addEventListener('keydown', handleEscape, true)
     window.addEventListener('keydown', handleKeyDown)
     window.addEventListener('keyup', handleKeyUp)
     window.addEventListener('blur', handleBlur)
@@ -193,6 +229,7 @@ export function useCommandKeyboard(): void {
     window.addEventListener('mousemove', healIfPointerReportsMetaUp)
     window.addEventListener('pointerdown', healIfPointerReportsMetaUp)
     return () => {
+      window.removeEventListener('keydown', handleEscape, true)
       window.removeEventListener('keydown', handleKeyDown)
       window.removeEventListener('keyup', handleKeyUp)
       window.removeEventListener('blur', handleBlur)

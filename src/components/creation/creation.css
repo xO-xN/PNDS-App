@@ -502,3 +502,39 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+/* #156: the page stays in the same React/DOM position when expanded. */
+.creation-runtime-frame > [data-creation-test-idle] {
+  grid-column: 3;
+  grid-row: 1;
+}
+.creation-monitor-host {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+.creation-test-controls {
+  position: relative;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  border-block-start: 1px solid
+    color-mix(in srgb, var(--pnds-text) 15%, transparent);
+  background: var(--pnds-bg);
+  color: var(--pnds-text);
+  font-size: 12px;
+}
+.creation-test-controls h2 {
+  font-weight: 600;
+}
+.creation-monitor-expanded {
+  grid-template-columns: minmax(0, 1fr);
+}
+.creation-monitor-expanded > [data-testid='monitor-host'] {
+  grid-column: 1;
+}
+[data-creation-view][hidden],
+.creation-file-tab[hidden] {
+  display: none !important;
+}

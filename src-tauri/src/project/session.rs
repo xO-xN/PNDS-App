@@ -1419,7 +1419,7 @@ impl SessionManager {
                         if guard.generation != generation {
                             continue;
                         }
-                        guard.output_tail.push_back(line);
+                        guard.output_tail.push_back(format!("[{tag}] {line}"));
                         while guard.output_tail.len() > OUTPUT_TAIL_LINES {
                             guard.output_tail.pop_front();
                         }
@@ -3480,7 +3480,7 @@ mod tests {
         assert!(content.contains("[node] two"), "log: {content}");
         assert!(!content.contains("stale-line"), "log: {content}");
         let tail = manager.snapshot().output_tail;
-        assert!(tail.iter().any(|l| l == "one"));
+        assert!(tail.iter().any(|l| l == "[node] one"));
         assert!(
             !tail.iter().any(|l| l == "stale-line"),
             "a stale generation must not pollute the tail: {tail:?}"

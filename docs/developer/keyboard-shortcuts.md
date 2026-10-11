@@ -90,7 +90,7 @@ one set of conditions:
 The plain-Esc close alias and its ⌘Esc variant remain retired (macOS owns
 ⌘Esc, and closing behind a keypress proved too easy to hit mid-show).
 #151 adds one main-shell use: Esc cancels a pending mode confirmation without
-stopping the project or closing windows. In monitor pages, main and projection
+stopping the project or closing windows. In performance monitor pages, main and projection
 alike, Esc continues to reach the page; the contract lives in
 `page-interaction.md` (window-scoped since v1.5.0 #131).
 
@@ -261,3 +261,15 @@ Tauri environment.
 | Browser intercepts shortcut       | Add `event.preventDefault()`                   |
 | Shortcut fires while typing       | Guard with an editable-target check            |
 | Sidebar hidden but shortcut works | By design — the layer is shell-level (spec #4) |
+
+## Creation monitor expansion (#156)
+
+Plain Escape restores the temporarily expanded creation workspace. A native
+`Escape` menu accelerator handles iframe focus; it is enabled only for the
+focused main window with creation expanded and no submission/settings/close/quit
+dialog. Main focus and dialog changes rebuild its enablement. Its async dispatch
+checks the workspace identity and expansion revision. The web fallback owns only
+plain Escape outside App overlays. Projection, other windows and unexpanded
+performance monitors keep their existing page-key ownership. Expansion changes
+layout and hides the mounted editor; it never toggles native fullscreen, navigates
+the iframe, starts/stops a process or cleans up test windows.

@@ -11,6 +11,8 @@ import { logger } from '@/lib/logger'
 import { useSessionStore } from '@/store/session-store'
 import { useProjectStore } from '@/store/project-store'
 import { useSettingsStore } from '@/store/settings-store'
+import { useCreationStore } from '@/store/creation-store'
+import { useCreationTestStore } from '@/store/creation-test-store'
 import { Label } from '@/components/ui/label'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import {
@@ -62,10 +64,17 @@ export function AudioSection({ section }: { section: SettingsSection }) {
   const sampleRateSetting = useSettingsStore(state => state.sampleRateSetting)
   const sessionStatus = useSessionStore(state => state.sessionStatus)
   const outputDevice = useSessionStore(state => state.outputDevice)
-  const projectChannels =
+  const creationActive = useCreationStore(state => state.active)
+  const creationChannels = useCreationTestStore(
+    state => state.manifest?.audio.outputChannels
+  )
+  const performanceChannels =
     useProjectStore(
       state => state.currentProject?.manifest.audio.outputChannels
     ) ?? 2
+  const projectChannels = creationActive
+    ? (creationChannels ?? 2)
+    : performanceChannels
   const [rates, setRates] = useState<number[] | null>(null)
   const [devices, setDevices] = useState<
     { name: string; isDefault: boolean; maxOutputChannels: number }[]

@@ -2,6 +2,31 @@ use super::*;
 use std::fs;
 
 #[test]
+fn saved_test_manifest_is_scoped_and_does_not_require_compiled_artifacts() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = project(temp.path(), "test-modes");
+    let protection = Protection::default();
+    let mut access = CreationAccess::default();
+    let opened = access.open(&root, &protection).unwrap();
+    let manifest = access
+        .manifest(&opened.project.identity, &protection)
+        .unwrap();
+    assert_eq!(
+        manifest.audio.supported_modes,
+        [crate::types::AudioMode::Internal]
+    );
+    assert_eq!(
+        manifest.audio.default_mode,
+        crate::types::AudioMode::Internal
+    );
+    assert!(crate::project::manifest::load_manifest(&root).is_err());
+    assert_eq!(
+        access.manifest("expired", &protection).unwrap_err().code,
+        CreationErrorCode::InvalidIdentity
+    );
+}
+
+#[test]
 fn rename_cannot_replace_a_recoverable_draft_through_a_destination_alias() {
     let temp = tempfile::tempdir().unwrap();
     let root = project(temp.path(), "rename-alias");

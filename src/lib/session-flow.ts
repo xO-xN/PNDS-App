@@ -1,7 +1,9 @@
 import { create } from 'zustand'
+import i18n from '@/i18n/config'
 import {
   commands,
   type AudioMode,
+  type Manifest,
   type SessionStatus,
 } from '@/lib/tauri-bindings'
 import { logger } from '@/lib/logger'
@@ -14,6 +16,7 @@ import {
 import { useSettingsStore } from '@/store/settings-store'
 import { useCreationStore } from '@/store/creation-store'
 import { useCreationChangesStore } from '@/store/creation-changes-store'
+import { isCreationWorkspacePath } from '@/store/creation-changes-store'
 import { trackCreationRestart } from '@/lib/creation-runtime-updates'
 import { isNodeConfigComplete, isValidOscTarget } from '@/lib/preferences'
 
@@ -210,6 +213,7 @@ function openHttpsCompatChoice(): Promise<boolean> {
 
 /** What a start submits to the backend — §8.1's inputs, narrowed. */
 interface StartPlan {
+  manifest: Manifest | null
   path: string
   audioMode: AudioMode
   lanIp: string
@@ -258,6 +262,7 @@ function resolveStartPlanFrom(
     return null
   }
   return {
+    manifest: inputs.currentProject.manifest,
     path: inputs.currentProject.path,
     audioMode: inputs.audioMode,
     lanIp: inputs.lanIp,
@@ -341,54 +346,95 @@ let startInFlight = false
 
 /** §8.1: explicitly start the selected project. Also the §9.3 Retry path:
  *  `error` is a legal starting point and no stop is issued first. */
+async function dispatchStart(
+  plan: StartPlan,
+  replace: boolean,
+  identity?: string
+): Promise<boolean> {
+  const owns = () =>
+    useCreationStore.getState().modePhase === 'idle' &&
+    (!identity ||
+      useCreationStore.getState().workspace?.project.identity === identity)
+  const needsChoice = plan.manifest
+    ? httpsCompatBlocked(
+        plan.manifest.scoreServer.supportsPerformerUrl,
+        useSettingsStore.getState().httpsEnabledSetting,
+        plan.manifest.scoreServer.needsHttps
+      )
+    : httpsCompatChoiceNeeded()
+  const proceed = needsChoice ? await openHttpsCompatChoice() : true
+  if (!proceed || !owns()) return false
+  const update = useCreationStore.getState().active
+    ? await useCreationChangesStore.getState().capture(plan.path)
+    : null
+  if (!owns()) return false
+  if (replace) {
+    useSessionStore.getState().setPendingChanges(false)
+    const stopped = await commands.stopProject()
+    if (stopped.status === 'error') throw new Error(stopped.error)
+    if (!owns()) return false
+  }
+  logger.info('Starting project', {
+    path: plan.path,
+    mode: plan.audioMode,
+    lanIp: plan.lanIp,
+  })
+  const snapshotRevision = useSessionStore.getState().snapshotRevision
+  const acknowledge = trackCreationRestart(update, plan.path)
+  const submission = identity
+    ? commands.startCreationProject(
+        identity,
+        plan.audioMode,
+        plan.lanIp,
+        plan.oscTarget
+      )
+    : commands.startProject(
+        plan.path,
+        plan.audioMode,
+        plan.lanIp,
+        plan.oscTarget
+      )
+  const result = await submission.catch(error => {
+    acknowledge(false)
+    throw error
+  })
+  if (!owns()) {
+    acknowledge(false)
+    return false
+  }
+  if (result.status === 'ok' && result.data && 'snapshot' in result.data) {
+    if (useSessionStore.getState().snapshotRevision === snapshotRevision)
+      useSessionStore.getState().applySnapshot(result.data.snapshot)
+    useSessionStore.getState().bumpMonitorReload()
+    acknowledge(true, result.data.generation)
+  } else acknowledge(result.status === 'ok')
+  if (result.status === 'error') {
+    const error = result.error
+    useSessionStore
+      .getState()
+      .failLocal(
+        typeof error === 'string'
+          ? error
+          : `${i18n.t(`creation.error.${error.code}`)} ${error.detail}`
+      )
+  }
+  return result.status === 'ok'
+}
+
 export async function start(): Promise<void> {
   if (startInFlight || useCreationStore.getState().modePhase !== 'idle') return
   const plan = resolveStartPlan('plain')
   if (!plan) return
-
   startInFlight = true
   useSessionStore.setState({ commandPending: true })
   try {
-    // #140: the compat choice resolves BEFORE anything is submitted —
-    // cancel aborts the whole start (the latch releases in `finally`).
-    // The ternary keeps the no-choice path synchronous up to the
-    // submit call (its tests release the mock synchronously).
-    const proceed = httpsCompatChoiceNeeded()
-      ? await openHttpsCompatChoice()
-      : true
-    if (!proceed || useCreationStore.getState().modePhase !== 'idle') return
-    const update = useCreationStore.getState().active
-      ? await useCreationChangesStore.getState().capture(plan.path)
-      : null
-    logger.info('Starting project', {
-      path: plan.path,
-      mode: plan.audioMode,
-      lanIp: plan.lanIp,
-    })
-    const acknowledge = trackCreationRestart(update, plan.path)
-    const result = await commands
-      .startProject(plan.path, plan.audioMode, plan.lanIp, plan.oscTarget)
-      .catch(error => {
-        acknowledge(false)
-        throw error
-      })
-    acknowledge(result.status === 'ok')
-    if (result.status === 'error') {
-      useSessionStore.getState().failLocal(result.error)
-    }
+    await dispatchStart(plan, false)
   } finally {
     startInFlight = false
     useSessionStore.setState({ commandPending: false })
   }
 }
 
-/**
- * The stop→start core shared by §8.3 restarts and the confirm-and-replace
- * switch: the submit latch, the capture-BEFORE-await config (stopProject
- * emits snapshots whose audio_mode is the PREVIOUS session's, and
- * applySnapshot overwrites the pending selection — ?? only guards null)
- * and the failure funnel.
- */
 async function stopThenStart(
   path: string,
   audioMode: AudioMode,
@@ -403,31 +449,94 @@ async function stopThenStart(
   startInFlight = true
   useSessionStore.setState({ commandPending: true })
   try {
-    // #140: same explicit choice on restart/replace — a canceled dialog
-    // aborts before the running session is stopped. Same synchronous
-    // shape as `start` when no choice is needed.
-    const proceed = httpsCompatChoiceNeeded()
-      ? await openHttpsCompatChoice()
-      : true
-    if (!proceed || useCreationStore.getState().modePhase !== 'idle') return
-    const update = useCreationStore.getState().active
-      ? await useCreationChangesStore.getState().capture(path)
-      : null
-    // All choices passed: commit the transition immediately before dispatch.
-    // Waiting/canceling must leave the Change action and its draft intact.
-    useSessionStore.getState().setPendingChanges(false)
-    await commands.stopProject()
-    const acknowledge = trackCreationRestart(update, path)
-    const result = await commands
-      .startProject(path, audioMode, lanIp, oscTarget)
-      .catch(error => {
-        acknowledge(false)
-        throw error
+    await dispatchStart(
+      {
+        path,
+        audioMode,
+        lanIp,
+        oscTarget,
+        manifest: useProjectStore.getState().currentProject?.manifest ?? null,
+      },
+      true
+    )
+  } finally {
+    startInFlight = false
+    useSessionStore.setState({ commandPending: false })
+  }
+}
+
+/** Creation validates its issued workspace's saved files, then shares the
+ * performance submit latch, consent, stop/start and readiness workflow. */
+export async function startCreationTest(
+  identity: string,
+  config: { audioMode: AudioMode; oscTarget: string }
+): Promise<Manifest | null> {
+  const creation = useCreationStore.getState()
+  const session = useSessionStore.getState()
+  if (
+    !creation.active ||
+    creation.workspace?.project.identity !== identity ||
+    creation.opening ||
+    creation.modePhase !== 'idle' ||
+    startInFlight ||
+    session.commandPending ||
+    ['starting', 'stopping'].includes(session.sessionStatus)
+  )
+    return null
+  const root = creation.workspace.project.root
+  if (
+    session.sessionStatus === 'ready' &&
+    !isCreationWorkspacePath(session.sessionProjectPath)
+  )
+    throw new Error(i18n.t('creation.switchStale'))
+  const lanIp = session.lanIp
+  if (!lanIp) throw new Error(i18n.t('creation.testLanMissing'))
+  startInFlight = true
+  useSessionStore.setState({ commandPending: true })
+  const owns = () =>
+    useCreationStore.getState().active &&
+    useCreationStore.getState().workspace?.project.identity === identity &&
+    useCreationStore.getState().modePhase === 'idle'
+  try {
+    const checked = await commands.preflightCreationProject(identity)
+    if (!owns()) return null
+    if (checked.status === 'error') throw checked.error
+    const manifest = checked.data
+    if (!manifest.audio.supportedModes.includes(config.audioMode))
+      throw new Error(i18n.t('creation.testUnsupportedMode'))
+    if (config.audioMode === 'external' && !isValidOscTarget(config.oscTarget))
+      throw new Error(i18n.t('creation.testOscInvalid'))
+    if (
+      nodeGateBlocked({
+        ...readStartGateInputs(),
+        currentProject: { path: root, manifest },
       })
-    acknowledge(result.status === 'ok')
-    if (result.status === 'error') {
-      useSessionStore.getState().failLocal(result.error)
-    }
+    )
+      throw new Error(i18n.t('creation.testNodeMissing'))
+    useProjectStore.setState({
+      currentProject: { path: root, manifest },
+      preflightStatus: 'ready',
+      preflightError: null,
+      activePreflight: null,
+      pendingPreflightPath: null,
+    })
+    const started = await dispatchStart(
+      {
+        path: root,
+        manifest,
+        audioMode: config.audioMode,
+        lanIp,
+        oscTarget: config.audioMode === 'external' ? config.oscTarget : null,
+      },
+      session.sessionStatus === 'ready',
+      identity
+    )
+    if (!owns()) return null
+    if (!started && useSessionStore.getState().sessionStatus === 'error')
+      throw new Error(
+        useSessionStore.getState().sessionError ?? i18n.t('creation.testFailed')
+      )
+    return started ? manifest : null
   } finally {
     startInFlight = false
     useSessionStore.setState({ commandPending: false })

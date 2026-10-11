@@ -217,6 +217,65 @@ describe('AppShell', () => {
     ).toBeInTheDocument()
   })
 
+  it.each(['submit', 'opening', 'mode switch'])(
+    'keeps the expanded monitor during %s and restores the same document afterward',
+    async gate => {
+      vi.mocked(commands.getSessionState).mockResolvedValue({
+        status: 'ok',
+        data: readySnapshot,
+      })
+      useSessionStore.getState().applySnapshot(readySnapshot)
+      useCreationStore.setState({
+        active: true,
+        workspace: {
+          project: {
+            identity: 'expand',
+            root: '/p',
+            source: 'folder',
+            name: 'Running',
+          },
+          files: [],
+        },
+      })
+      render(<AppShell />)
+      const monitor = await screen.findByTitle('Project monitor')
+      const src = monitor.getAttribute('src')
+      fireEvent.click(screen.getByRole('button', { name: 'Expand monitor' }))
+      expect(
+        screen.queryByRole('heading', { name: 'Creation workspace' })
+      ).not.toBeInTheDocument()
+      expect(screen.getByTitle('Project monitor')).toBe(monitor)
+      expect(monitor.getAttribute('src')).toBe(src)
+      act(() => {
+        if (gate === 'submit') {
+          useSessionStore.setState({ commandPending: true })
+        } else if (gate === 'opening') {
+          useCreationStore.setState({ opening: true })
+        } else {
+          useCreationStore.setState({ modePhase: 'preparing' })
+        }
+      })
+      fireEvent.keyDown(window, { key: 'Escape' })
+      expect(
+        screen.queryByRole('heading', { name: 'Creation workspace' })
+      ).not.toBeInTheDocument()
+      expect(screen.getByTitle('Project monitor')).toBe(monitor)
+      expect(monitor.getAttribute('src')).toBe(src)
+      act(() => {
+        useSessionStore.setState({ commandPending: false })
+        useCreationStore.setState({ opening: false, modePhase: 'idle' })
+      })
+      fireEvent.keyDown(window, { key: 'Escape' })
+      expect(
+        screen.getByRole('heading', { name: 'Creation workspace' })
+      ).toBeInTheDocument()
+      expect(screen.getByTitle('Project monitor')).toBe(monitor)
+      expect(monitor.getAttribute('src')).toBe(src)
+      expect(commands.stopProject).not.toHaveBeenCalled()
+      expect(commands.startProject).not.toHaveBeenCalled()
+    }
+  )
+
   // v1.5.0 (#124/#125): the main area's README routing — a drilled-in
   // folder claims it for its 自述 (protected folders included, with the
   // app-maintained empty state); home and nothing selected keeps the

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { emitTo } from '@tauri-apps/api/event'
 import { writeText } from '@tauri-apps/plugin-clipboard-manager'
 import { MenuItem } from '@tauri-apps/api/menu'
+import type * as WindowApi from '@tauri-apps/api/window'
 import i18n from '@/i18n/config'
 import { commands } from '@/lib/tauri-bindings'
 import type { Manifest } from '@/lib/tauri-bindings'
@@ -9,7 +10,17 @@ import { useProjectStore } from '@/store/project-store'
 import { useProjectionStore } from '@/store/projection-store'
 import { useSessionStore } from '@/store/session-store'
 import { useSettingsStore } from '@/store/settings-store'
+import { useCreationStore } from '@/store/creation-store'
+import { useCreationTestStore } from '@/store/creation-test-store'
+import { useWindowStore } from '@/store/window-store'
 import { buildAppMenu, setupMenuStateListener } from './menu'
+
+vi.mock('@tauri-apps/api/window', async importOriginal => ({
+  ...(await importOriginal<typeof WindowApi>()),
+  getCurrentWindow: vi.fn(() => ({
+    onFocusChanged: vi.fn().mockResolvedValue(() => undefined),
+  })),
+}))
 
 /**
  * v1.2.0 (issue #13): the menu is built from JS for i18n — these tests pin
@@ -771,6 +782,42 @@ describe('buildAppMenu help menu (v1.3.0, #56)', () => {
         kind: 'reload-monitor',
       }
     )
+  })
+
+  it('reserves native Escape only for the expanded main creation monitor without an App confirmation', async () => {
+    useCreationStore.setState({
+      active: true,
+      modePhase: 'idle',
+      opening: false,
+    })
+    useCreationTestStore.getState().setExpanded(true)
+    useSessionStore.setState({ commandPending: false })
+    useSettingsStore.setState({ settingsOpen: false })
+    useWindowStore.setState({ confirmCloseOpen: false, quitConfirmOpen: false })
+    vi.mocked(commands.focusedWindowLabel).mockResolvedValue({
+      status: 'ok',
+      data: 'main',
+    })
+    captured.menuItems = []
+    await buildAppMenu()
+    expect(item('restore-creation-workspace')).toMatchObject({
+      accelerator: 'Escape',
+      enabled: true,
+    })
+    useWindowStore.setState({ confirmCloseOpen: true })
+    captured.menuItems = []
+    await buildAppMenu()
+    expect(item('restore-creation-workspace').enabled).toBe(false)
+    useWindowStore.setState({ confirmCloseOpen: false })
+    vi.mocked(commands.focusedWindowLabel).mockResolvedValue({
+      status: 'ok',
+      data: 'help',
+    })
+    captured.menuItems = []
+    await buildAppMenu()
+    expect(item('restore-creation-workspace').enabled).toBe(false)
+    useCreationStore.setState({ active: false })
+    useCreationTestStore.getState().setExpanded(false)
   })
 
   it("toggles the FOCUSED window's fullscreen on ⌃⌘F", async () => {

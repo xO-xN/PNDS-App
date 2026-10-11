@@ -6,6 +6,9 @@ import {
 } from '@/store/session-store'
 import { useProjectStore } from '@/store/project-store'
 import { useCreationStore } from '@/store/creation-store'
+import { useCreationTestStore } from '@/store/creation-test-store'
+import { CreationTestControls } from '@/components/creation/CreationTestControls'
+import { Maximize2, Minimize2 } from 'lucide-react'
 import {
   useSettingsStore,
   currentColorThemeSetting,
@@ -37,6 +40,11 @@ import { MonitorScaleFrame } from './MonitorScaleFrame'
  */
 export function MonitorView() {
   const creationActive = useCreationStore(state => state.active)
+  const expanded = useCreationTestStore(state => state.expanded)
+  const layoutBlocked = useCreationStore(
+    state => state.opening || state.modePhase !== 'idle'
+  )
+  const pendingCommand = useSessionStore(state => state.commandPending)
   const hostRef = useRef<HTMLDivElement>(null)
   const health = useSessionStore(state => state.health)
   const projectName = useSessionStore(state => state.projectName)
@@ -185,7 +193,7 @@ export function MonitorView() {
       className={cn(
         'overflow-hidden bg-black outline-none',
         creationActive
-          ? 'relative min-h-0 min-w-0 h-full w-full'
+          ? 'creation-monitor-host relative min-h-0 min-w-0 h-full w-full'
           : 'relative h-screen w-screen'
       )}
     >
@@ -250,9 +258,44 @@ export function MonitorView() {
             : 'left-1/2 -translate-x-1/2 rounded-b-xl'
         )}
       >
-        {creationActive ? t('creation.title') : 'PNDS'} -{' '}
-        {displayOverride ?? projectName}
+        <span className="min-w-0 truncate">
+          {creationActive ? t('creation.title') : 'PNDS'} -{' '}
+          {displayOverride ?? projectName}
+        </span>
+        {creationActive && (
+          <>
+            <span className="ms-auto min-w-0 truncate px-2" dir="ltr">
+              {monitorOrigin}
+            </span>
+            <button
+              disabled={layoutBlocked || pendingCommand}
+              data-tauri-drag-region="false"
+              aria-label={t(
+                expanded
+                  ? 'creation.restoreWorkspace'
+                  : 'creation.expandMonitor'
+              )}
+              title={t(
+                expanded
+                  ? 'creation.restoreWorkspace'
+                  : 'creation.expandMonitor'
+              )}
+              className="pnds-focus-ring shrink-0 rounded p-1"
+              onClick={() =>
+                useCreationTestStore.getState().setExpanded(!expanded)
+              }
+            >
+              {expanded ? (
+                <Minimize2 size={14} aria-hidden="true" />
+              ) : (
+                <Maximize2 size={14} aria-hidden="true" />
+              )}
+            </button>
+          </>
+        )}
       </div>
+
+      {creationActive && <CreationTestControls />}
 
       {!creationActive && <HoverSidebar />}
     </div>

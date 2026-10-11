@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { open } from '@tauri-apps/plugin-dialog'
 import { within } from '@testing-library/react'
+import { writeText } from '@tauri-apps/plugin-clipboard-manager'
 import { act, fireEvent, render, screen, waitFor } from '@/test/test-utils'
 import { useCommandKeyboard } from '@/hooks/use-command-keyboard'
 import {
@@ -113,6 +114,47 @@ describe('creation reading workspace', () => {
     await screen.findByDisplayValue('my unsaved page')
     expect(await screen.findByLabelText('Disk changed')).toBeInTheDocument()
     expect(commands.startProject).not.toHaveBeenCalled()
+  })
+
+  it('shows source-tagged runtime errors in the console, copies details and keeps the edited file intact across tabs', async () => {
+    useCreationStore.setState({ workspace: first })
+    vi.mocked(commands.readCreationFile).mockResolvedValueOnce({
+      status: 'ok',
+      data: { kind: 'text', text: 'original', version: 'v1' },
+    })
+    render(<CreationView />)
+    fireEvent.click(screen.getByRole('button', { name: 'public/score.js' }))
+    const editor = await screen.findByRole('textbox', {
+      name: 'public/score.js',
+    })
+    await screen.findByDisplayValue('original')
+    fireEvent.change(editor, { target: { value: 'unsaved text' } })
+    const result = await commands.getSessionState()
+    if (result.status === 'error') throw new Error(result.error)
+    vi.mocked(commands.getSessionState).mockResolvedValueOnce({
+      status: 'ok',
+      data: {
+        ...result.data,
+        status: 'error',
+        projectPath: '/draft',
+        error: 'Node exited',
+        outputTail: ['[node] stopped unexpectedly'],
+      },
+    })
+    fireEvent.click(screen.getByRole('tab', { name: 'Console' }))
+    await screen.findByText('[node] stopped unexpectedly')
+    fireEvent.click(screen.getByRole('button', { name: 'Copy test details' }))
+    await waitFor(() =>
+      expect(writeText).toHaveBeenCalledWith(
+        expect.stringContaining('Node exited')
+      )
+    )
+    fireEvent.click(screen.getByRole('tab', { name: 'public/score.js' }))
+    expect(screen.getByRole('textbox', { name: 'public/score.js' })).toBe(
+      editor
+    )
+    expect(editor).toHaveValue('unsaved text')
+    expect(commands.saveCreationFile).not.toHaveBeenCalled()
   })
 
   it('keeps the workspace when either selector is cancelled and explains protected source choices', async () => {

@@ -39,6 +39,8 @@ import { CreationModeButton } from './CreationModeButton'
 import { CreationFileEditor } from './CreationFileEditor'
 import { CreationProjectPicker } from './CreationProjectPicker'
 import { CreationErrorNotice } from './CreationErrorNotice'
+import { CreationConsole } from './CreationConsole'
+import { useCreationTestStore } from '@/store/creation-test-store'
 
 const categories: CreationCategory[] = [
   'system',
@@ -67,6 +69,13 @@ function ReadingWorkspace({
     useCreationDraftsStore(selectDirtyPathKey).split('\n').filter(Boolean)
   )
   const project = workspace.project
+  const tab = useCreationTestStore(state => state.tab)
+  const manifestRevision = useCreationChangesStore(
+    state => state.fileRevisions['manifest.json'] ?? 0
+  )
+  useEffect(() => {
+    void useCreationTestStore.getState().loadManifest()
+  }, [project.identity, manifestRevision])
   const conflictPaths = new Set(
     useCreationDraftsStore(selectDiskConflictPathKey)
       .split('\n')
@@ -118,6 +127,22 @@ function ReadingWorkspace({
   )
   const file = files.find(file => file.path === selected)
   const editable = project.source === 'folder'
+  const switchTab = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+    event.preventDefault()
+    const next =
+      event.key === 'Home'
+        ? 'file'
+        : event.key === 'End'
+          ? 'console'
+          : tab === 'file'
+            ? 'console'
+            : 'file'
+    useCreationTestStore.getState().setTab(next)
+    event.currentTarget
+      .querySelector<HTMLButtonElement>(`[data-creation-tab="${next}"]`)
+      ?.focus()
+  }
   const owns = () =>
     useCreationStore.getState().workspace?.project.identity === project.identity
   const finder = async () => {
@@ -235,11 +260,12 @@ function ReadingWorkspace({
                           title={file.path}
                           aria-pressed={file.path === selected}
                           className="creation-file-row pnds-focus-ring"
-                          onClick={() =>
+                          onClick={() => {
                             useCreationDraftsStore
                               .getState()
                               .setActivePath(file.path)
-                          }
+                            useCreationTestStore.getState().setTab('file')
+                          }}
                         >
                           <Icon aria-hidden="true" />
                           <span className="creation-file-name">
@@ -283,6 +309,37 @@ function ReadingWorkspace({
       <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <div className="flex items-center justify-between border-b border-(--pnds-text)/15 p-4">
           <h1 className="text-sm font-medium">{t('creation.workspace')}</h1>
+          <div
+            role="tablist"
+            aria-label={t('creation.workspace')}
+            className="flex min-w-0 gap-2"
+            onKeyDown={switchTab}
+          >
+            <button
+              role="tab"
+              id={`creation-${project.identity}-file-tab`}
+              aria-controls={`creation-${project.identity}-file`}
+              data-creation-tab="file"
+              tabIndex={tab === 'file' ? 0 : -1}
+              aria-selected={tab === 'file'}
+              className="pnds-focus-ring min-w-0 truncate rounded px-2 py-1 aria-selected:bg-(--pnds-text)/10"
+              onClick={() => useCreationTestStore.getState().setTab('file')}
+            >
+              {file?.path ?? t('creation.files')}
+            </button>
+            <button
+              role="tab"
+              id={`creation-${project.identity}-console-tab`}
+              aria-controls={`creation-${project.identity}-console`}
+              data-creation-tab="console"
+              tabIndex={tab === 'console' ? 0 : -1}
+              aria-selected={tab === 'console'}
+              className="pnds-focus-ring shrink-0 rounded px-2 py-1 aria-selected:bg-(--pnds-text)/10"
+              onClick={() => useCreationTestStore.getState().setTab('console')}
+            >
+              {t('creation.console')}
+            </button>
+          </div>
         </div>
         {error && <CreationErrorNotice error={error} />}
         {watchError && <CreationErrorNotice error={watchError} />}
@@ -310,16 +367,33 @@ function ReadingWorkspace({
             )}
           </div>
         )}
-        {file ? (
-          <CreationFileEditor
-            key={`${project.identity}:${file.path}`}
-            identity={project.identity}
-            file={file}
-            editable={editable}
-          />
-        ) : (
-          <p className="m-auto p-6 text-sm">{t('creation.selectFile')}</p>
-        )}
+        <div
+          role="tabpanel"
+          id={`creation-${project.identity}-file`}
+          aria-labelledby={`creation-${project.identity}-file-tab`}
+          hidden={tab !== 'file'}
+          className="creation-file-tab flex min-h-0 flex-1 flex-col"
+        >
+          {file ? (
+            <CreationFileEditor
+              key={`${project.identity}:${file.path}`}
+              identity={project.identity}
+              file={file}
+              editable={editable}
+            />
+          ) : (
+            <p className="m-auto p-6 text-sm">{t('creation.selectFile')}</p>
+          )}
+        </div>
+        <div
+          role="tabpanel"
+          id={`creation-${project.identity}-console`}
+          aria-labelledby={`creation-${project.identity}-console-tab`}
+          hidden={tab !== 'console'}
+          className="creation-file-tab flex min-h-0 flex-1 flex-col"
+        >
+          <CreationConsole />
+        </div>
       </main>
     </>
   )
@@ -332,12 +406,14 @@ export function CreationView() {
   const opening = useCreationStore(state => state.opening)
   const error = useCreationStore(state => state.error)
   const settling = useCreationStore(state => state.modePhase === 'settling')
+  const expanded = useCreationTestStore(state => state.expanded)
   const [pickerOpen, setPickerOpen] = useState(false)
   useEffect(() => registerCreationParticipant(creationDraftsParticipant), [])
   return (
     <div
       data-creation-view=""
-      inert={settling}
+      inert={settling || expanded}
+      hidden={expanded}
       className="flex h-full min-h-0 min-w-0 w-full flex-col overflow-hidden text-(--pnds-text)"
     >
       <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">

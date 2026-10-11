@@ -28,6 +28,8 @@ pub enum CreationErrorCode {
     InvalidIdentity,
     PathEscape,
     InvalidProject,
+    TestValidation,
+    TestStartup,
     VersionConflict,
     TargetExists,
     Io,
@@ -183,6 +185,29 @@ pub struct CreationAccess {
 }
 
 impl CreationAccess {
+    pub fn descriptor(
+        &self,
+        identity: &str,
+        protection: &Protection,
+    ) -> Result<CreationProject, CreationError> {
+        Ok(self.current(identity, protection)?.descriptor.clone())
+    }
+
+    pub fn manifest(
+        &self,
+        identity: &str,
+        protection: &Protection,
+    ) -> Result<super::manifest::Manifest, CreationError> {
+        match self.read(identity, "manifest.json", protection)? {
+            CreationContent::Text { text, .. } => super::manifest::parse_manifest(&text)
+                .map_err(|detail| CreationError::new(CreationErrorCode::InvalidProject, detail)),
+            _ => Err(CreationError::new(
+                CreationErrorCode::InvalidProject,
+                "Manifest must be text",
+            )),
+        }
+    }
+
     pub fn open(
         &mut self,
         path: &Path,

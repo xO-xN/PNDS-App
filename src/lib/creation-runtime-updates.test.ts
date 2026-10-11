@@ -4,6 +4,7 @@ import { useCreationStore } from '@/store/creation-store'
 import { useCreationChangesStore } from '@/store/creation-changes-store'
 import { useSessionStore } from '@/store/session-store'
 import { refreshMonitorFromDisk } from './creation-runtime-updates'
+import { registerCreationParticipant } from './creation-lifecycle'
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -60,4 +61,27 @@ it('retains page changes arriving during navigation and rejects an old navigatio
   useCreationChangesStore.getState().changed(['public/new.html'])
   useSessionStore.getState().markMonitorLoaded()
   expect(useCreationChangesStore.getState().pending.refresh).toBeGreaterThan(0)
+})
+
+it('attempts all registered test pages and retains refresh prompts when any page fails', async () => {
+  useCreationChangesStore.getState().changed(['public/index.html'])
+  const failed = vi.fn().mockRejectedValue(new Error('client 1 failed'))
+  const second = vi.fn().mockResolvedValue(undefined)
+  const offFirst = registerCreationParticipant({ refreshPages: failed })
+  const offSecond = registerCreationParticipant({ refreshPages: second })
+  try {
+    await expect(refreshMonitorFromDisk()).rejects.toThrow('client 1 failed')
+    expect(second).toHaveBeenCalledWith({
+      identity: 'pages',
+      runId: useSessionStore.getState().runId,
+      nonce: 1,
+    })
+    useSessionStore.getState().markMonitorLoaded()
+    expect(useCreationChangesStore.getState().pending.refresh).toBeGreaterThan(
+      0
+    )
+  } finally {
+    offFirst()
+    offSecond()
+  }
 })

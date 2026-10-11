@@ -6,6 +6,9 @@ import { useProjectStore } from '@/store/project-store'
 import { useWindowStore } from '@/store/window-store'
 import { useCreationStore } from '@/store/creation-store'
 import { CreationView } from '@/components/creation'
+import { useCreationTestStore } from '@/store/creation-test-store'
+import { CreationTestControls } from '@/components/creation/CreationTestControls'
+import { useTranslation } from 'react-i18next'
 import { useCommandKeyboard } from '@/hooks/use-command-keyboard'
 import { loadPreferences } from '@/lib/preferences'
 import { ensureUtilitiesFolder } from '@/lib/utilities-folder'
@@ -38,6 +41,7 @@ import {
  * iframe can flash between the two layers.
  */
 export function AppShell() {
+  const { t } = useTranslation()
   const sessionMirror = useRef<SessionSnapshotMirror | null>(null)
   const sessionStatus = useSessionStore(state => state.sessionStatus)
   // §9.3: identifies the current loading session; a Retry bumps it so the
@@ -46,6 +50,8 @@ export function AppShell() {
   // §7.4: fullscreen has no rounded corners — the window fills the screen.
   const fullscreen = useWindowStore(state => state.fullscreen)
   const creationActive = useCreationStore(state => state.active)
+  const creationWorkspace = useCreationStore(state => state.workspace !== null)
+  const monitorExpanded = useCreationTestStore(state => state.expanded)
   // loadingDone gates the dissolve; if the page renders with a ready session
   // already in store (test escape hatch — real app never does this), skip it.
   const [loadingDone, setLoadingDone] = useState(sessionStatus === 'ready')
@@ -191,10 +197,8 @@ export function AppShell() {
           data-app-frame=""
           className={cn(
             'relative h-screen w-screen overflow-hidden bg-(--pnds-bg)',
-            creationActive &&
-              (sessionStatus === 'ready' ||
-                (sessionStatus === 'stopping' && health !== null)) &&
-              'creation-runtime-frame',
+            creationActive && creationWorkspace && 'creation-runtime-frame',
+            creationActive && monitorExpanded && 'creation-monitor-expanded',
             !fullscreen && 'rounded-[var(--app-corner-radius)]'
           )}
         >
@@ -212,6 +216,20 @@ export function AppShell() {
             (sessionStatus === 'stopping' && health !== null)) && (
             <MonitorView key={fullscreen ? 'fullscreen' : 'windowed'} />
           )}
+          {creationActive &&
+            creationWorkspace &&
+            sessionStatus !== 'ready' &&
+            !(sessionStatus === 'stopping' && health !== null) && (
+              <aside
+                data-creation-test-idle=""
+                className="flex min-h-0 min-w-0 flex-col text-(--pnds-text)"
+              >
+                <div className="grid min-h-0 flex-1 place-items-center p-4 text-center text-xs">
+                  <p>{t('creation.monitorIdle')}</p>
+                </div>
+                <CreationTestControls />
+              </aside>
+            )}
           {creationActive && <CreationView />}
           {/* #50: the splash sits over the already-mounting monitor and
               cross-fades away (LoadingScreen owns the release gating)

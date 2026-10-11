@@ -160,6 +160,30 @@ async openCreationProject(path: string) : Promise<Result<CreationWorkspace, Crea
     else return { status: "error", error: e  as any };
 }
 },
+async getCreationManifest(identity: string) : Promise<Result<Manifest, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_creation_manifest", { identity }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async preflightCreationProject(identity: string) : Promise<Result<Manifest, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("preflight_creation_project", { identity }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async startCreationProject(identity: string, mode: AudioMode, lanIp: string, oscTarget: string | null) : Promise<Result<CreationRuntime, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("start_creation_project", { identity, mode, lanIp, oscTarget }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async prepareCreationProject(path: string) : Promise<Result<CreationWorkspace, CreationError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("prepare_creation_project", { path }) };
@@ -1049,7 +1073,7 @@ export type CreationContent =
  */
 { kind: "text"; text: string; version: string } | { kind: "image"; url: string } | { kind: "binary" }
 export type CreationError = { code: CreationErrorCode; detail: string }
-export type CreationErrorCode = "missing" | "permission" | "invalidUtf8" | "tooLarge" | "invalidIdentity" | "pathEscape" | "invalidProject" | "versionConflict" | "targetExists" | "io"
+export type CreationErrorCode = "missing" | "permission" | "invalidUtf8" | "tooLarge" | "invalidIdentity" | "pathEscape" | "invalidProject" | "testValidation" | "testStartup" | "versionConflict" | "targetExists" | "io"
 export type CreationFile = { path: string; size: number; kind: CreationFileKind; category: CreationCategory }
 export type CreationFileKind = "text" | "image" | "binary"
 export type CreationOption = { path: string; project: CreationProject | null; error: CreationError | null }

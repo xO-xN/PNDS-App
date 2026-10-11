@@ -51,6 +51,14 @@ pub async fn preflight_project(
     state: State<'_, SessionManager>,
     path: String,
 ) -> Result<Manifest, String> {
+    preflight_candidate(&app, &state, &path)
+}
+
+pub(crate) fn preflight_candidate(
+    app: &AppHandle,
+    state: &SessionManager,
+    path: &str,
+) -> Result<Manifest, String> {
     let root = PathBuf::from(&path);
     if !root.is_dir() {
         return Err(format!("Project directory not found: {path}"));
@@ -59,7 +67,7 @@ pub async fn preflight_project(
     let live_pids = state.active_child_pids();
 
     // §12: stale children must be gone before port checks are meaningful.
-    let dir = app_data_dir(&app)?;
+    let dir = app_data_dir(app)?;
     let terminated =
         crate::project::children::ChildRegistry::new(dir.clone()).cleanup_orphans(&live_pids)?;
     if terminated > 0 {

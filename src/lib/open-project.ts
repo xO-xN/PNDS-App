@@ -10,6 +10,7 @@ import {
 } from '@/store/project-store'
 import { useSessionStore, isSessionLive } from '@/store/session-store'
 import { useCreationStore } from '@/store/creation-store'
+import { cleanupCreationParticipants } from '@/lib/creation-lifecycle'
 import { installAndOpenBundle, isBundlePath } from '@/lib/bundle-project'
 import { importSetlistDirectory } from '@/lib/setlist-import'
 import { DEFAULT_OSC_TARGET, loadPreferences } from '@/lib/preferences'
@@ -219,6 +220,12 @@ async function stopAndResetSelection(): Promise<void> {
   const result = await commands.stopProject()
   if (result.status === 'error') {
     logger.warn('stopProject failed during reset', { error: result.error })
+    if (useCreationStore.getState().active) throw new Error(result.error)
+  }
+  if (useCreationStore.getState().active) {
+    await cleanupCreationParticipants()
+    useSessionStore.getState().resetSession()
+    return
   }
   // stopProject resolves only after the backend has completed teardown and
   // emitted its final idle snapshot. Clear the selection here rather than in

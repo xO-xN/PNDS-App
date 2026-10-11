@@ -44,7 +44,7 @@ Since v1.5.0 (#131) a monitor page can appear in **two windows** — the main wi
 Two v1.5.0 (#131) revisions:
 
 - **Table B exists only in the main window** — the projection window has no App web layer (no sidebar, no ⌘ badge layer); every non-accelerator chord belongs to the page there.
-- **`Esc` has no App function in either window and always belongs to the page** (the main window's plain-Esc close-Project alias was retired in v1.2.0 — closing a Project goes through `⌘ W`'s confirm flow; the projection window never held that flow). The earlier "`Esc` → Close the Project (confirm flow)" wording is void.
+- **`Esc` belongs to performance and projection monitor pages** (the plain-Esc close-Project alias is retired; closing a Project uses `⌘ W`'s confirmation). The narrow v1.6 creation exception: when the main monitor is temporarily expanded, the main window has focus and no App overlay/submission is active, the App uses plain `Esc` to restore the editing workspace. It does not stop the runtime, navigate the page or close test windows. Unexpanded and other windows retain their existing ownership.
 
 Special note (`⌘ ←` / `⌘ →`): WKWebView natively treats Cmd + left/right as its own back / forward equivalents and swallows them — the keydown never reaches any page. The App reroutes exactly this chord at the native layer back onto the ordinary keyDown path so pages can listen for it; inside editable elements it keeps the system's line-start / line-end editing behaviour.
 

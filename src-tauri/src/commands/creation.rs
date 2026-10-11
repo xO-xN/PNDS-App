@@ -56,6 +56,74 @@ impl CreationState {
 
 #[tauri::command]
 #[specta::specta]
+pub async fn get_creation_manifest(
+    app: AppHandle,
+    state: State<'_, CreationState>,
+    identity: String,
+) -> Result<crate::project::manifest::Manifest, CreationError> {
+    state
+        .run(move |access| access.manifest(&identity, &protection(&app)?))
+        .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn preflight_creation_project(
+    app: AppHandle,
+    state: State<'_, CreationState>,
+    identity: String,
+) -> Result<crate::project::manifest::Manifest, CreationError> {
+    state
+        .run(move |access| {
+            let protection = protection(&app)?;
+            let project = access.descriptor(&identity, &protection)?;
+            let manifest = super::project::preflight_candidate(
+                &app,
+                &app.state::<SessionManager>(),
+                &project.root,
+            )
+            .map_err(|detail| CreationError::new(CreationErrorCode::TestValidation, detail))?;
+            access.descriptor(&identity, &protection)?;
+            Ok(manifest)
+        })
+        .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn start_creation_project(
+    app: AppHandle,
+    state: State<'_, CreationState>,
+    identity: String,
+    mode: crate::types::AudioMode,
+    lan_ip: String,
+    osc_target: Option<String>,
+) -> Result<CreationRuntime, CreationError> {
+    state
+        .run(move |access| {
+            let project = access.descriptor(&identity, &protection(&app)?)?;
+            let data_dir = super::project::app_data_dir(&app)
+                .map_err(|detail| CreationError::new(CreationErrorCode::Io, detail))?;
+            let manager = app.state::<SessionManager>();
+            manager
+                .start(
+                    app.clone(),
+                    data_dir,
+                    crate::project::session::StartRequest::new(
+                        project.root,
+                        mode,
+                        lan_ip,
+                        osc_target,
+                    ),
+                )
+                .map_err(|detail| CreationError::new(CreationErrorCode::TestStartup, detail))?;
+            Ok(manager.creation_runtime())
+        })
+        .await
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn open_creation_project(
     app: AppHandle,
     state: State<'_, CreationState>,

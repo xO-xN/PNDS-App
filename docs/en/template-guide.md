@@ -55,6 +55,10 @@ Page changes prompt a refresh; source, audio declarations and artifact changes p
 
 ## 3. Dress rehearsal self-check
 
+In the creation workspace's **Live test** area, choose an audio mode allowed by the saved declarations, then start or restart explicitly. External uses the App's test OSC target; choose the device and sample rate in global Settings. Changed choices stay pending until the runtime reaches ready. Closing a test retains the Project and drafts; hiding the main window does not end testing. A failed preflight leaves an existing test running, and a failed startup can be reviewed and retried.
+
+The monitor title shows its real address. Expand it, then restore with its button or Escape in the main window; the page and runtime keep their instance. The Console tab shows recent Node/scsynth output and errors from the existing log service, with copyable test details. Returning to the file tab retains drafts. Refreshing saved test pages reloads pages without restarting processes. Multiple performer test windows are provided by the subsequent window feature.
+
 Before packaging you must run the Project for real once — the App's packaging checks are static (structure, artifacts, dependencies present) and cannot prove the Project behaves correctly:
 
 1. Open the Project directory in the App (`⌘ O`, the sidebar `+`, or drag the directory onto the window);

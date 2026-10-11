@@ -1,7 +1,13 @@
 /** Editors and performer windows register their project-scoped exit work here. */
 import { confirm } from '@tauri-apps/plugin-dialog'
 import i18n from '@/i18n/config'
+export interface CreationPageRefresh {
+  identity: string
+  runId: number
+  nonce: number
+}
 export interface CreationParticipant {
+  refreshPages?: (request: CreationPageRefresh) => Promise<void>
   hasUnsavedChanges?: () => boolean
   /** Exact counts power real discard consequences ("3 unsaved files"). */
   unsavedCount?: () => number
@@ -44,6 +50,19 @@ export async function approveCreationDiscard(): Promise<boolean> {
 }
 export async function cleanupCreationParticipants(): Promise<void> {
   for (const participant of participants) await participant.cleanup?.()
+}
+
+export async function refreshCreationPages(
+  request: CreationPageRefresh
+): Promise<void> {
+  const results = await Promise.allSettled(
+    [...participants].map(participant => participant.refreshPages?.(request))
+  )
+  const failures = results.filter(result => result.status === 'rejected')
+  if (failures.length)
+    throw new Error(
+      `${i18n.t('creation.testPageRefreshFailed', { count: failures.length })}\n${failures.map(result => String(result.reason)).join('\n')}`
+    )
 }
 /**
  * #154: switching creation projects asks once, explicitly, before discarding

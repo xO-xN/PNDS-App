@@ -49,6 +49,9 @@ import {
 } from '@/lib/projection-window'
 import { emitProjectionAction } from '@/lib/events'
 import { commands } from '@/lib/tauri-bindings'
+import { useWindowStore } from '@/store/window-store'
+import { getCurrentWindow } from '@tauri-apps/api/window'
+import { useCreationTestStore } from '@/store/creation-test-store'
 import { useProjectStore } from '@/store/project-store'
 import { useCreationStore } from '@/store/creation-store'
 import { useProjectionStore } from '@/store/projection-store'
@@ -61,6 +64,7 @@ import {
 } from '@/store/window-store'
 import { startRename } from '@/lib/project-rename'
 import {
+  canRestoreCreationWorkspace,
   hasOpenOverlay,
   hasOpenOverlayBesidesSettings,
   isEditableTarget,
@@ -348,6 +352,29 @@ export async function buildAppMenu(): Promise<Menu> {
           // v1.5.0 (#131): both windows' monitors, one chord.
           action: reloadBothMonitors,
         }),
+        await MenuItem.new({
+          id: 'restore-creation-workspace',
+          text: t('creation.restoreWorkspace'),
+          accelerator: 'Escape',
+          enabled:
+            canRestoreCreationWorkspace() && (await focusedLabel()) === 'main',
+          action: () => {
+            const identity =
+              useCreationStore.getState().workspace?.project.identity
+            const revision = useCreationTestStore.getState().expansionRevision
+            void focusedLabel().then(label => {
+              if (
+                label === 'main' &&
+                useCreationStore.getState().workspace?.project.identity ===
+                  identity &&
+                useCreationTestStore.getState().expansionRevision ===
+                  revision &&
+                canRestoreCreationWorkspace()
+              )
+                useCreationTestStore.getState().setExpanded(false)
+            })
+          },
+        }),
       ],
     })
 
@@ -554,6 +581,42 @@ export function setupMenuStateListener(): () => void {
     state => state.currentProject,
     rebuild
   )
+  const unsubCreation = subscribeIfChanged(
+    useCreationStore,
+    state => state.active,
+    rebuild
+  )
+  const unsubExpanded = subscribeIfChanged(
+    useCreationTestStore,
+    state => state.expanded,
+    rebuild
+  )
+  const unsubCommand = subscribeIfChanged(
+    useSessionStore,
+    state => state.commandPending,
+    rebuild
+  )
+  const unsubWindowDialogs = subscribeIfChanged(
+    useWindowStore,
+    state => state.confirmCloseOpen || state.quitConfirmOpen,
+    rebuild
+  )
+  const unsubSettings = subscribeIfChanged(
+    useSettingsStore,
+    state => state.settingsOpen,
+    rebuild
+  )
+  let disposed = false
+  let offFocus: (() => void) | undefined
+  void getCurrentWindow()
+    .onFocusChanged(() => {
+      void rebuild()
+    })
+    .then(off => {
+      if (disposed) off()
+      else offFocus = off
+    })
+    .catch(error => logger.warn('Failed to watch menu focus', { error }))
   const unsubSession = subscribeIfChanged(
     useSessionStore,
     state => state.lanIp,
@@ -580,6 +643,13 @@ export function setupMenuStateListener(): () => void {
     rebuild
   )
   return () => {
+    disposed = true
+    offFocus?.()
+    unsubCommand()
+    unsubWindowDialogs()
+    unsubCreation()
+    unsubExpanded()
+    unsubSettings()
     unsubProject()
     unsubSession()
     unsubHostAddress()

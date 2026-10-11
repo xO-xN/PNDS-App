@@ -122,3 +122,13 @@ See [error-handling.md](./error-handling.md) for patterns on when to log vs show
 - No sensitive data should be logged (passwords, tokens, etc.)
 - The plugin supports log rotation when files reach size limits
 - Frontend logs stay in browser - not sent to backend by default
+
+## Creation console (#156)
+
+The creation console uses the existing session `outputTail` and error snapshots,
+not a new log sink. Child lines retain their `[node]` / `[scsynth]` prefixes in
+both the in-memory tail and the existing App-managed session log. Console reads
+are serial, identity/run/revision fenced and read-only. The recent tail remains
+available after stop; copied details use the current owned runtime facts and
+contain no preference/token dump. A newly reported runtime failure locates the
+console once, so later file editing is not interrupted by repeated snapshots.
