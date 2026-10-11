@@ -61,7 +61,7 @@ describe('Sidebar capacity caps (v1.2.1 #26, menu since v1.2.2 #28)', () => {
     useSessionStore.getState().resetSession()
   })
 
-  it('disables the menu "New folder" at 3 folders (Utilities counts) and explains why', async () => {
+  it('keeps folder creation available beyond the old total-folder cap', async () => {
     useProjectStore.setState({
       projectFolders: [
         { id: 'f1', name: 'One', projectPaths: [] },
@@ -72,16 +72,16 @@ describe('Sidebar capacity caps (v1.2.1 #26, menu since v1.2.2 #28)', () => {
     render(<Sidebar variant="static" />)
 
     const menu = await openFolderContextMenu(
-      screen.getByTestId('unfiled-segment')
+      screen.getByTestId('folder-picker')
     )
 
     const create = within(menu).getByTestId('menu-new-folder')
-    expect(create).toHaveAttribute('aria-disabled', 'true')
-    // The reason rides along under the label, not behind a tooltip.
-    expect(menu).toHaveTextContent(
-      'Folder limit reached (3, including Utilities) — delete a folder to create another.'
+    expect(create).not.toHaveAttribute('aria-disabled', 'true')
+    fireEvent.click(create)
+    expect(await screen.findByTestId('folder-name-input')).toHaveValue(
+      'New Folder'
     )
-    expect(screen.queryByTestId('folder-name-input')).not.toBeInTheDocument()
+    expect(useProjectStore.getState().projectFolders).toHaveLength(4)
   })
 
   it('keeps the menu "New folder" enabled below the cap and creating works', async () => {
@@ -94,7 +94,7 @@ describe('Sidebar capacity caps (v1.2.1 #26, menu since v1.2.2 #28)', () => {
     render(<Sidebar variant="static" />)
 
     const menu = await openFolderContextMenu(
-      screen.getByTestId('unfiled-segment')
+      screen.getByTestId('folder-picker')
     )
 
     const create = within(menu).getByTestId('menu-new-folder')
@@ -117,21 +117,28 @@ describe('Sidebar capacity caps (v1.2.1 #26, menu since v1.2.2 #28)', () => {
     // geometry follows the folder-drag tests' pinned rects (jsdom lays
     // out nothing): the segment spans x 100..170, y 200..232.
     const [loose] = screen.getAllByTestId('project-entry')
-    const segment = screen.getByTestId('folder-segment')
     if (!loose) throw new Error('Expected the ungrouped project card')
     mockBoundingClientRect(loose, { top: 0 })
+    fireEvent.pointerDown(loose, { pointerId: 1, clientX: 40, clientY: 20 })
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 60, clientY: 30 })
+    await waitFor(() =>
+      expect(screen.getByTestId('drag-clone')).toBeInTheDocument()
+    )
+    mockBoundingClientRect(screen.getByTestId('folder-drop-choices'), {
+      top: 0,
+      left: 20,
+      width: 280,
+      height: 256,
+    })
+    const segment = screen.getByText('Full', {
+      selector: '[data-folder-drop-id]',
+    })
     mockBoundingClientRect(segment, {
       top: 200,
       left: 100,
       width: 70,
       height: 32,
     })
-
-    fireEvent.pointerDown(loose, { pointerId: 1, clientX: 40, clientY: 20 })
-    fireEvent.pointerMove(window, { pointerId: 1, clientX: 60, clientY: 30 })
-    await waitFor(() =>
-      expect(screen.getByTestId('drag-clone')).toBeInTheDocument()
-    )
     fireEvent.pointerMove(window, { pointerId: 1, clientX: 135, clientY: 216 })
     expect(segment).toHaveAttribute('data-drop-active', 'true')
     fireEvent.pointerUp(window, { pointerId: 1 })

@@ -40,7 +40,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { selectProject } from '@/lib/project-select'
 import { reclaimIfManagedBundle } from '@/lib/bundle-project'
 import { revealScrollTarget } from '@/lib/list-reveal'
-import { folderDisplayName, projectDisplayName } from '@/lib/display-names'
+import { projectDisplayName } from '@/lib/display-names'
 import { builtinUtilityId } from '@/lib/builtin-utilities'
 import { utilityCardIcon } from './utility-icons'
 import { cardShift, insertionIndexFor, reorderedList } from '@/lib/drag-reorder'
@@ -252,71 +252,56 @@ export function Sidebar({
     target: ActiveDropTarget
   ): boolean => {
     const store = useProjectStore.getState()
-    if (source.kind === 'project') {
-      // v1.3.2 (user report after #75): a bundled utility tool is app
-      // content — its press never arms a drag, and the commit refuses it
-      // too (defense in depth; the segment highlight already hid it).
-      if (store.utilityPaths.includes(source.path)) return false
-      if (target.kind === 'folder') {
-        // Dropping on a folder card files the project at that folder's
-        // end (spec issue #9: 释放后工程入夹末尾). v1.2.1 (issue #26):
-        // a full folder refuses the join — say why instead of silently
-        // bouncing the card (i18n.t: kept out of React contexts).
-        // v1.3.2: Utilities takes no outside projects — refuse before the
-        // store call so the cap toast never fires for it.
-        const folder = store.projectFolders[target.index]
-        if (folder && isProtectedFolder(folder.id)) return false
-        if (folder) {
-          const joined = store.moveProjectToFolder(folder.id, source.path)
-          if (!joined) {
-            notifications.warning(
-              i18n.t('sidebar.projectLimitReached', {
-                limit: PROJECT_LIMIT_PER_DIRECTORY,
-              })
-            )
-          }
+    // v1.3.2 (user report after #75): a bundled utility tool is app
+    // content — its press never arms a drag, and the commit refuses it
+    // too (defense in depth; the segment highlight already hid it).
+    if (store.utilityPaths.includes(source.path)) return false
+    if (target.kind === 'folder') {
+      // Dropping on a folder card files the project at that folder's
+      // end (spec issue #9: 释放后工程入夹末尾). v1.2.1 (issue #26):
+      // a full folder refuses the join — say why instead of silently
+      // bouncing the card (i18n.t: kept out of React contexts).
+      // v1.3.2: Utilities takes no outside projects — refuse before the
+      // store call so the cap toast never fires for it.
+      const folder = store.projectFolders[target.index]
+      if (folder && isProtectedFolder(folder.id)) return false
+      if (folder) {
+        const joined = store.moveProjectToFolder(folder.id, source.path)
+        if (!joined) {
+          notifications.warning(
+            i18n.t('sidebar.projectLimitReached', {
+              limit: PROJECT_LIMIT_PER_DIRECTORY,
+            })
+          )
         }
-        return false
       }
-      if (target.kind === 'breadcrumb') {
-        // Dropping on the unfiled segment returns the project to
-        // ungrouped (the old breadcrumb bar).
-        if (store.activeFolderId) {
-          store.removeProjectFromFolder(store.activeFolderId, source.path)
-        }
-        return false
-      }
-      // Reordering follows the active view: inside a folder it is the
-      // set order, at the top level the master list (spec issue #7).
-      const visible = visibleProjectPaths(
-        store.recentProjectPaths,
-        store.projectFolders,
-        store.activeFolderId
-      )
-      const fromIndex = visible.indexOf(source.path)
-      if (fromIndex < 0) return false
-      const next = reorderedList(
-        visible,
-        fromIndex,
-        insertionIndexFor(target.index, target.half)
-      )
-      // reorderedList keeps its input reference for no-move drops.
-      if (next === visible) return false
-      store.applyVisibleReorder(next)
-      return true
+      return false
     }
-    // Folder drags only ever reorder within the switch row.
-    if (target.kind !== 'list') return false
-    const folderIds = store.projectFolders.map(folder => folder.id)
-    const fromIndex = folderIds.indexOf(source.id)
+    if (target.kind === 'breadcrumb') {
+      // Dropping on the unfiled segment returns the project to
+      // ungrouped (the old breadcrumb bar).
+      if (store.activeFolderId) {
+        store.removeProjectFromFolder(store.activeFolderId, source.path)
+      }
+      return false
+    }
+    // Reordering follows the active view: inside a folder it is the
+    // set order, at the top level the master list (spec issue #7).
+    const visible = visibleProjectPaths(
+      store.recentProjectPaths,
+      store.projectFolders,
+      store.activeFolderId
+    )
+    const fromIndex = visible.indexOf(source.path)
     if (fromIndex < 0) return false
     const next = reorderedList(
-      folderIds,
+      visible,
       fromIndex,
       insertionIndexFor(target.index, target.half)
     )
-    if (next === folderIds) return false
-    store.applyFolderReorder(next)
+    // reorderedList keeps its input reference for no-move drops.
+    if (next === visible) return false
+    store.applyVisibleReorder(next)
     return true
   }
 
@@ -968,23 +953,13 @@ export function Sidebar({
               transform: `translate(${dragGhost.x}px, ${dragGhost.y}px)`,
             }}
           >
-            {drag.kind === 'folder' ? (
-              <span className="min-w-0 flex-1 truncate px-1 text-center text-[13px] font-medium text-(--pnds-text)/85">
-                {(() => {
-                  const dragged =
-                    projectFolders.find(folder => folder.id === drag.id) ?? null
-                  return dragged ? folderDisplayName(dragged) : ''
-                })()}
+            <>
+              <span className="w-5 shrink-0" aria-hidden="true" />
+              <span className="flex-1 truncate text-center text-[15px] text-(--pnds-text)/85">
+                {cardName(drag.path)}
               </span>
-            ) : (
-              <>
-                <span className="w-5 shrink-0" aria-hidden="true" />
-                <span className="flex-1 truncate text-center text-[15px] text-(--pnds-text)/85">
-                  {cardName(drag.path)}
-                </span>
-                <span className="w-5 shrink-0" />
-              </>
-            )}
+              <span className="w-5 shrink-0" />
+            </>
           </div>,
           document.body
         )}

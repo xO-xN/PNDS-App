@@ -1,5 +1,6 @@
 import {
   render,
+  selectFolderInPicker,
   screen,
   fireEvent,
   within,
@@ -57,8 +58,9 @@ describe('Sidebar setlist export entry (issue #59)', () => {
     const folderId = createFolder('Gig Friday', [OTHER_PATH])
     render(<Sidebar variant="static" />)
 
+    await selectFolderInPicker('Gig Friday')
     const menu = await openFolderContextMenu(
-      screen.getByTestId('folder-segment')
+      screen.getByTestId('folder-picker')
     )
     const item = within(menu).getByTestId('menu-export-setlist')
     expect(item).toHaveTextContent(/export setlist folder/i)
@@ -76,8 +78,9 @@ describe('Sidebar setlist export entry (issue #59)', () => {
     createFolder('Empty', [])
     render(<Sidebar variant="static" />)
 
+    await selectFolderInPicker('Empty')
     const menu = await openFolderContextMenu(
-      screen.getByTestId('folder-segment')
+      screen.getByTestId('folder-picker')
     )
     const item = within(menu).getByTestId('menu-export-setlist')
     // Radix menu items gate via aria-disabled, not the native attribute.
@@ -100,8 +103,9 @@ describe('Sidebar setlist export entry (issue #59)', () => {
     })
     render(<Sidebar variant="static" />)
 
+    fireEvent.click(screen.getByRole('button', { name: 'Utilities' }))
     const menu = await openFolderContextMenu(
-      screen.getByTestId('folder-segment')
+      screen.getByTestId('folder-return')
     )
     const item = within(menu).getByTestId('menu-export-setlist')
     expect(item).toHaveAttribute('aria-disabled', 'true')
@@ -113,7 +117,7 @@ describe('Sidebar setlist export entry (issue #59)', () => {
     render(<Sidebar variant="static" />)
 
     const menu = await openFolderContextMenu(
-      screen.getByTestId('unfiled-segment')
+      screen.getByTestId('folder-picker')
     )
     expect(
       within(menu).queryByTestId('menu-export-setlist')

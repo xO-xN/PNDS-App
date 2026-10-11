@@ -1,450 +1,169 @@
 import {
+  act,
+  fireEvent,
   render,
   screen,
-  fireEvent,
-  waitFor,
-  within,
-  createFolderOrFail,
-  mockOffsets,
-  mockBoundingClientRect,
-  openFolderContextMenu,
+  selectFolderInPicker,
 } from '@/test/test-utils'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import userEvent from '@testing-library/user-event'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import i18n from '@/i18n/config'
+import { commands, type Manifest } from '@/lib/tauri-bindings'
 import { useProjectStore, UTILITIES_FOLDER_ID } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
-import { useKeyboardStore } from '@/store/keyboard-store'
-import i18n from '@/i18n/config'
+import { useCreationStore } from '@/store/creation-store'
+import { useSettingsStore } from '@/store/settings-store'
+import { moveFolderSelection } from '@/lib/project-select'
 import { Sidebar } from './Sidebar'
+import { MonitorView } from './MonitorView'
 
-vi.mock('@tauri-apps/plugin-opener', () => ({
-  openUrl: vi.fn().mockResolvedValue(undefined),
-}))
-
-vi.mock('sonner', () => ({
-  toast: { info: vi.fn(), error: vi.fn() },
-}))
-
-const FIRST_PATH = '/Users/test/Inarticulate III'
-const SECOND_PATH = '/Users/test/PNDS Score 1'
-
-/** Seeds one custom folder plus the pinned Utilities segment. */
-function seedFolders() {
-  const gigId = createFolderOrFail('Gig')
+beforeEach(async () => {
+  vi.clearAllMocks()
+  await i18n.changeLanguage('en')
+  useSessionStore.getState().resetSession()
+  useCreationStore.setState({ active: false, modePhase: 'idle' })
   useProjectStore.setState({
+    currentProject: null,
+    recentProjectPaths: ['/one', '/two', '/tool'],
+    utilityPaths: ['/tool'],
+    activeFolderId: null,
+    lastUserFolderId: null,
+    renameTarget: null,
+    pendingPreflightPath: null,
     projectFolders: [
-      { id: gigId, name: 'Gig', projectPaths: [] },
-      {
-        id: UTILITIES_FOLDER_ID,
-        name: 'Utilities',
-        projectPaths: [],
-      },
+      { id: 'a', name: 'Opening', projectPaths: ['/one'] },
+      { id: 'b', name: 'Finale', projectPaths: ['/two'] },
+      { id: UTILITIES_FOLDER_ID, name: 'Utilities', projectPaths: ['/tool'] },
     ],
   })
-  return gigId
-}
+})
+afterEach(async () => {
+  await i18n.changeLanguage('en')
+})
 
-/**
- * v1.2.2 (issue #28): the folder switch grows up — a sliding pill under
- * the active segment, a right-click menu owning folder management (the
- * inline "+" and the hover ✕ are gone), and real tab semantics (role,
- * aria-selected, roving tabindex). v1.3.5 (#104): the bare ←/→ view
- * switching is gone with it — the keyboard path is ⌘←/⌘→ only.
- */
-describe('Sidebar folder switch (v1.2.2, issue #28)', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    useKeyboardStore.getState().setCommandKeyPressed(false)
+describe('folder dropdown integration (#153)', () => {
+  it('offers all custom folders in a bounded dropdown, with Utilities outside it', async () => {
+    useProjectStore.getState().restoreProjectIndex(
+      [],
+      Array.from({ length: 40 }, (_, i) => ({
+        id: `f${i}`,
+        name: `Set ${i}`,
+        projectPaths: [],
+      }))
+    )
+    render(<Sidebar variant="static" />)
+    await userEvent.click(
+      screen.getByRole('combobox', { name: 'Performance folder' })
+    )
+    expect(screen.getAllByRole('option')).toHaveLength(42) // Home, 40 folders, New.
+    expect(screen.getByRole('listbox')).toHaveClass(
+      'max-h-[min(16rem,var(--radix-select-content-available-height))]'
+    )
+    expect(screen.getByRole('option', { name: 'Set 39' })).toBeInTheDocument()
+  })
+
+  it('folder and tools browsing keep the applied monitor and pending audio untouched', async () => {
+    const manifest: Manifest = {
+      schemaVersion: 1,
+      id: 'opening',
+      name: 'Opening',
+      version: '1.0.0',
+      description: null,
+      scoreServer: {
+        entry: 'server.js',
+        workingDirectory: '.',
+        performerPort: 6868,
+        monitorPort: 6869,
+      },
+      audio: {
+        defaultMode: 'internal',
+        supportedModes: ['internal', 'external', 'none'],
+        synthdefs: [],
+        scsynth: { sampleRate: 48000, blockSize: 64, audioBusChannels: 128 },
+        standaloneTarget: null,
+      },
+    }
     useProjectStore.setState({
-      currentProject: null,
-      recentProjectPaths: [FIRST_PATH, SECOND_PATH],
-      projectFolders: [],
-      pendingPreflightPath: null,
-      activeFolderId: null,
-      renameTarget: null,
-      preflightStatus: 'idle',
-      preflightError: null,
+      currentProject: { path: '/one', manifest },
+      preflightStatus: 'ready',
     })
-    useSessionStore.getState().resetSession()
+    useSessionStore.setState({
+      sessionStatus: 'ready',
+      sessionProjectPath: '/one',
+      sessionLanIp: '192.168.1.10',
+      audioMode: 'external',
+      oscTargetInput: '192.168.1.20:3333',
+      pendingChanges: true,
+      health: {
+        status: 'ready',
+        projectId: 'opening',
+        audioMode: 'internal',
+        audio: { status: 'running', target: null, error: null },
+        scoreServer: { performerPort: 6868, monitorPort: 6869, error: null },
+      },
+    })
+    render(<MonitorView />)
+    const frame = screen.getByTitle('Project monitor')
+    const address = frame.getAttribute('src')
+    fireEvent.mouseEnter(screen.getByTestId('sidebar-hover-zone'))
+    await selectFolderInPicker('Finale')
+    await userEvent.click(screen.getByRole('button', { name: 'Utilities' }))
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Return to Finale' })
+    )
+    expect(screen.getByTitle('Project monitor')).toBe(frame)
+    expect(frame).toHaveAttribute('src', address)
+    expect(useSessionStore.getState()).toMatchObject({
+      sessionProjectPath: '/one',
+      pendingChanges: true,
+      audioMode: 'external',
+      oscTargetInput: '192.168.1.20:3333',
+    })
+    expect(commands.startProject).not.toHaveBeenCalled()
+    expect(commands.stopProject).not.toHaveBeenCalled()
+    expect(commands.setMasterVolume).not.toHaveBeenCalled()
   })
 
-  describe('inline affordances are gone', () => {
-    it('renders no new-folder "+" and no hover ✕ on the segments', () => {
-      seedFolders()
-      render(<Sidebar variant="static" />)
-
-      expect(screen.queryByTestId('new-folder-button')).not.toBeInTheDocument()
-      for (const segment of screen.getAllByTestId('folder-segment')) {
-        expect(within(segment).queryByRole('button')).not.toBeInTheDocument()
-      }
-      // The import "+" stays (its move to the list end is ticket #29).
-      expect(screen.getByTestId('add-project-button')).toBeInTheDocument()
+  it('Cmd folder cycling uses every folder and remembers the user view behind tools', () => {
+    render(<Sidebar variant="static" />)
+    act(() => {
+      moveFolderSelection(1)
+      moveFolderSelection(1)
+      moveFolderSelection(1)
     })
-
-    it('the track carries the native right-click hint tooltip', () => {
-      seedFolders()
-      render(<Sidebar variant="static" />)
-
-      const tablist = screen.getByRole('tablist')
-      expect(tablist).toHaveAttribute('title', 'Right-click to manage folders')
-    })
+    expect(useProjectStore.getState().activeFolderId).toBe(UTILITIES_FOLDER_ID)
+    expect(
+      screen.getByRole('button', { name: 'Return to Finale' })
+    ).toBeInTheDocument()
+    act(() => moveFolderSelection(1))
+    expect(useProjectStore.getState().activeFolderId).toBeNull()
   })
 
-  describe('tab semantics', () => {
-    it('segments are tabs with a roving tabindex on the active view', () => {
-      const gigId = seedFolders()
-      render(<Sidebar variant="static" />)
-
-      const unfiled = screen.getByTestId('unfiled-segment')
-      const [gig] = screen.getAllByTestId('folder-segment')
-      if (!gig) throw new Error('Expected the Gig segment')
-      expect(unfiled).toHaveAttribute('role', 'tab')
-      expect(unfiled).toHaveAttribute('aria-selected', 'true')
-      expect(unfiled).toHaveAttribute('tabIndex', '0')
-      for (const segment of screen.getAllByTestId('folder-segment')) {
-        expect(segment).toHaveAttribute('role', 'tab')
-        expect(segment).toHaveAttribute('aria-selected', 'false')
-        expect(segment).toHaveAttribute('tabIndex', '-1')
-      }
-
-      fireEvent.click(gig)
-      expect(useProjectStore.getState().activeFolderId).toBe(gigId)
-      expect(unfiled).toHaveAttribute('aria-selected', 'false')
-      expect(unfiled).toHaveAttribute('tabIndex', '-1')
-      expect(gig).toHaveAttribute('aria-selected', 'true')
-      expect(gig).toHaveAttribute('tabIndex', '0')
-    })
-
-    it('bare ←/→ on the segments are inert — switching is ⌘-only (v1.3.5 #104)', () => {
-      const gigId = seedFolders()
-      render(<Sidebar variant="static" />)
-
-      // The click path still switches — mouse and ⌘←/⌘→ (the global web
-      // layer, covered in Sidebar.keyboard.test.tsx) are the two ways in.
-      const unfiled = screen.getByTestId('unfiled-segment')
-      const [gig] = screen.getAllByTestId('folder-segment')
-      if (!gig) throw new Error('Expected the Gig segment')
-      fireEvent.click(gig)
-      expect(useProjectStore.getState().activeFolderId).toBe(gigId)
-
-      // Bare arrows dispatched at the focused segment never move the
-      // view or the focus — the v1.2.2 #28 handler is gone.
-      gig.focus()
-      fireEvent.keyDown(gig, { key: 'ArrowRight' })
-      fireEvent.keyDown(gig, { key: 'ArrowLeft' })
-      expect(useProjectStore.getState().activeFolderId).toBe(gigId)
-      expect(document.activeElement).toBe(gig)
-
-      // Nor from the unfiled segment after focus lands on it.
-      unfiled.focus()
-      fireEvent.keyDown(unfiled, { key: 'ArrowLeft' })
-      fireEvent.keyDown(unfiled, { key: 'ArrowRight' })
-      expect(useProjectStore.getState().activeFolderId).toBe(gigId)
-      expect(document.activeElement).toBe(unfiled)
-    })
-
-    it('a segment click does not park focus — no frozen ring residue (#104)', () => {
-      const gigId = seedFolders()
-      render(<Sidebar variant="static" />)
-
-      // The browser parks focus on the clicked segment (jsdom does not,
-      // so the test focuses it first to mirror reality).
-      const [gig] = screen.getAllByTestId('folder-segment')
-      if (!gig) throw new Error('Expected the Gig segment')
-      gig.focus()
-      fireEvent.click(gig)
-
-      expect(useProjectStore.getState().activeFolderId).toBe(gigId)
-      expect(document.activeElement).toBe(document.body)
-    })
-
-    it('arrow keys inside the inline rename do not switch views', async () => {
-      seedFolders()
-      render(<Sidebar variant="static" />)
-
-      // Enter creation through the menu, then move the caret with arrows.
-      const menu = await openFolderContextMenu(
-        screen.getByTestId('unfiled-segment')
-      )
-      fireEvent.click(within(menu).getByTestId('menu-new-folder'))
-      // The edit opens a macrotask after the menu closes (FocusScope).
-      const input = await screen.findByTestId('folder-name-input')
-      fireEvent.keyDown(input, { key: 'ArrowLeft' })
-      expect(useProjectStore.getState().activeFolderId).toBeNull()
-      expect(input).toBeInTheDocument()
-    })
-
-    it('Tab order skips the project cards — the switch is the only list-level stop', () => {
-      seedFolders()
-      render(<Sidebar variant="static" />)
-
-      // The cards' title and ✕ buttons are pointer-only (⌘1..9 / ⌘↑↓ are
-      // the keyboard path); Tab walks top controls → switch → settings.
-      const [first] = screen.getAllByTestId('project-entry')
-      if (!first) throw new Error('Expected a project entry')
-      for (const button of within(first).getAllByRole('button')) {
-        expect(button).toHaveAttribute('tabIndex', '-1')
-      }
-      // The switch keeps exactly one tab stop: the active view.
-      const tabbables = screen
-        .getAllByRole('tab')
-        .filter(tab => tab.tabIndex === 0)
-      expect(tabbables).toHaveLength(1)
-      expect(tabbables[0]).toBe(screen.getByTestId('unfiled-segment'))
-    })
+  it('localizes the tool and return controls while keeping custom names', async () => {
+    useProjectStore.getState().setActiveFolderId('a')
+    await i18n.changeLanguage('zh-CN')
+    render(<Sidebar variant="static" />)
+    await userEvent.click(screen.getByRole('button', { name: '工具' }))
+    expect(
+      screen.getByRole('button', { name: '返回Opening' })
+    ).toBeInTheDocument()
+    expect(useProjectStore.getState().projectFolders.at(-1)?.name).toBe(
+      'Utilities'
+    )
   })
 
-  describe('localized names', () => {
-    it('the protected folder reads 工具 under zh (the index keeps Utilities)', async () => {
-      seedFolders()
-      await i18n.changeLanguage('zh-CN')
-      try {
-        render(<Sidebar variant="static" />)
-
-        const names = screen.getAllByTestId('folder-name')
-        expect(names[0]).toHaveTextContent('Gig')
-        expect(names[1]).toHaveTextContent('工具')
-        // The persisted structure is untouched — only display localizes.
-        expect(useProjectStore.getState().projectFolders[1]?.name).toBe(
-          'Utilities'
-        )
-      } finally {
-        await i18n.changeLanguage('en')
-      }
-    })
-  })
-
-  describe('sliding pill', () => {
-    it('carries the theme-layer hook for Stage liquid glass (#88)', () => {
-      seedFolders()
+  it.each(['pond', 'sand', 'stage', 'brutal'] as const)(
+    'keeps folder controls accessible in %s',
+    theme => {
+      useSettingsStore.setState({ colorThemeSetting: theme })
       render(<Sidebar variant="static" />)
-
-      // data-folder-pill is what theme-variables.css keys the Stage
-      // glass on (same role as data-selection-pill on the card pill) —
-      // the pure-CSS theming means this attribute is its only anchor.
-      expect(screen.getByTestId('folder-pill')).toHaveAttribute(
-        'data-folder-pill',
-        ''
-      )
-    })
-
-    it('positions itself from the active segment offsets and follows switches', async () => {
-      seedFolders()
-      render(<Sidebar variant="static" />)
-
-      // Pin the segment boxes jsdom cannot lay out; each commit re-measures
-      // in its layout effect, so a real view switch moves the pill.
-      mockOffsets(screen.getByTestId('unfiled-segment'), {
-        left: 2,
-        width: 100,
-      })
-      const [gig] = screen.getAllByTestId('folder-segment')
-      if (!gig) throw new Error('Expected the Gig segment')
-      mockOffsets(gig, { left: 104, width: 80 })
-
-      fireEvent.click(gig)
-      await waitFor(() => {
-        expect(screen.getByTestId('folder-pill').style.transform).toBe(
-          'translateX(104px)'
-        )
-        expect(screen.getByTestId('folder-pill').style.width).toBe('80px')
-      })
-
-      fireEvent.click(screen.getByTestId('unfiled-segment'))
-      await waitFor(() => {
-        expect(screen.getByTestId('folder-pill').style.transform).toBe(
-          'translateX(2px)'
-        )
-        expect(screen.getByTestId('folder-pill').style.width).toBe('100px')
-      })
-    })
-
-    it('fades out while a folder drag is live and fades back in after the drop', async () => {
-      const gigId = seedFolders()
-      render(<Sidebar variant="static" />)
-
-      // Two segments pitch 74px: x 100..174, y 200..232 (axis-swapped
-      // row hit space), same pinning as the folder-drag tests.
-      const [gig, utilities] = screen.getAllByTestId('folder-segment')
-      if (!gig || !utilities) throw new Error('Expected both segments')
-      mockBoundingClientRect(gig, {
-        top: 200,
-        left: 100,
-        width: 74,
-        height: 32,
-      })
-      mockBoundingClientRect(utilities, {
-        top: 200,
-        left: 174,
-        width: 74,
-        height: 32,
-      })
-
-      expect(screen.getByTestId('folder-pill').className).toContain(
-        'opacity-100'
-      )
-
-      fireEvent.pointerDown(gig, { pointerId: 1, clientX: 120, clientY: 216 })
-      fireEvent.pointerMove(window, {
-        pointerId: 1,
-        clientX: 140,
-        clientY: 220,
-      })
-      await waitFor(() =>
-        expect(screen.getByTestId('drag-clone')).toBeInTheDocument()
-      )
-      expect(screen.getByTestId('folder-pill').className).toContain('opacity-0')
-
-      // Drop past the Utilities midpoint reorders (the store re-pins
-      // Utilities last); after the snap frame the pill is visible again.
-      fireEvent.pointerMove(window, {
-        pointerId: 1,
-        clientX: 220,
-        clientY: 216,
-      })
-      fireEvent.pointerUp(window, { pointerId: 1 })
-      await waitFor(
-        () =>
-          expect(screen.getByTestId('folder-pill').className).toContain(
-            'opacity-100'
-          ),
-        { timeout: 3000 }
-      )
-      expect(useProjectStore.getState().projectFolders.map(f => f.id)).toEqual([
-        gigId,
-        UTILITIES_FOLDER_ID,
-      ])
-    })
-  })
-
-  describe('context menu', () => {
-    it('track / unfiled offers only folder creation', async () => {
-      render(<Sidebar variant="static" />)
-      const menu = await openFolderContextMenu(
-        screen.getByTestId('unfiled-segment')
-      )
-      expect(within(menu).getByTestId('menu-new-folder')).toBeEnabled()
       expect(
-        within(menu).queryByTestId('menu-rename-folder')
-      ).not.toBeInTheDocument()
-      expect(
-        within(menu).queryByTestId('menu-delete-folder')
-      ).not.toBeInTheDocument()
-    })
-
-    it('a folder segment offers new / rename / delete', async () => {
-      seedFolders()
-      render(<Sidebar variant="static" />)
-
-      const [gig] = screen.getAllByTestId('folder-segment')
-      if (!gig) throw new Error('Expected the Gig segment')
-      const menu = await openFolderContextMenu(gig)
-
-      expect(within(menu).getByTestId('menu-new-folder')).not.toHaveAttribute(
-        'aria-disabled',
-        'true'
+        screen.getByRole('combobox', { name: 'Performance folder' })
+      ).toBeEnabled()
+      expect(screen.getByRole('button', { name: 'Utilities' })).toBeEnabled()
+      expect(screen.getByTestId('project-list-scroll')).not.toContainElement(
+        screen.getByTestId('folder-switch')
       )
-      expect(
-        within(menu).getByTestId('menu-rename-folder')
-      ).not.toHaveAttribute('aria-disabled', 'true')
-      expect(
-        within(menu).getByTestId('menu-delete-folder')
-      ).not.toHaveAttribute('aria-disabled', 'true')
-    })
-
-    it('create enters the same inline naming as before', async () => {
-      render(<Sidebar variant="static" />)
-      const menu = await openFolderContextMenu(
-        screen.getByTestId('unfiled-segment')
-      )
-      fireEvent.click(within(menu).getByTestId('menu-new-folder'))
-
-      const input = await screen.findByTestId('folder-name-input')
-      expect(input).toHaveValue('New Folder')
-      expect(input).toHaveFocus()
-      fireEvent.change(input, { target: { value: 'Gig Friday' } })
-      fireEvent.keyDown(input, { key: 'Enter' })
-      expect(screen.getByTestId('folder-name')).toHaveTextContent('Gig Friday')
-    })
-
-    it('rename enters the ⌘R InlineNameInput on the right-clicked folder', async () => {
-      seedFolders()
-      render(<Sidebar variant="static" />)
-
-      const [gig] = screen.getAllByTestId('folder-segment')
-      if (!gig) throw new Error('Expected the Gig segment')
-      const menu = await openFolderContextMenu(gig)
-      fireEvent.click(within(menu).getByTestId('menu-rename-folder'))
-
-      const input = await screen.findByTestId('folder-name-input')
-      expect(input).toHaveValue('Gig')
-      expect(useProjectStore.getState().renameTarget).toEqual({
-        kind: 'folder',
-        id: useProjectStore.getState().projectFolders[0]?.id,
-      })
-    })
-
-    it('delete opens the existing confirmation dialog', async () => {
-      seedFolders()
-      render(<Sidebar variant="static" />)
-
-      const [gig] = screen.getAllByTestId('folder-segment')
-      if (!gig) throw new Error('Expected the Gig segment')
-      const menu = await openFolderContextMenu(gig)
-      fireEvent.click(within(menu).getByTestId('menu-delete-folder'))
-
-      const dialog = await screen.findByRole('alertdialog')
-      expect(dialog).toHaveTextContent(/Gig/)
-      expect(useProjectStore.getState().projectFolders).toHaveLength(2)
-    })
-
-    it('disables the Utilities rename and delete with the reason', async () => {
-      seedFolders()
-      render(<Sidebar variant="static" />)
-
-      const [, utilities] = screen.getAllByTestId('folder-segment')
-      if (!utilities) throw new Error('Expected the Utilities segment')
-      const menu = await openFolderContextMenu(utilities)
-
-      const rename = within(menu).getByTestId('menu-rename-folder')
-      const del = within(menu).getByTestId('menu-delete-folder')
-      expect(rename).toHaveAttribute('aria-disabled', 'true')
-      expect(del).toHaveAttribute('aria-disabled', 'true')
-      expect(menu).toHaveTextContent(/Utilities is protected/)
-      // Clicking a disabled item is a no-op — Radix blocks the select.
-      expect(useProjectStore.getState().renameTarget).toBeNull()
-    })
-
-    it('disables creation at the folder cap (Utilities counts) with the reason', async () => {
-      useProjectStore.setState({
-        projectFolders: [
-          { id: 'f1', name: 'One', projectPaths: [] },
-          { id: 'f2', name: 'Two', projectPaths: [] },
-          { id: UTILITIES_FOLDER_ID, name: 'Utilities', projectPaths: [] },
-        ],
-      })
-      render(<Sidebar variant="static" />)
-
-      const menu = await openFolderContextMenu(
-        screen.getByTestId('unfiled-segment')
-      )
-      const create = within(menu).getByTestId('menu-new-folder')
-      expect(create).toHaveAttribute('aria-disabled', 'true')
-      expect(menu).toHaveTextContent(/Folder limit reached \(3/)
-      expect(screen.queryByTestId('folder-name-input')).not.toBeInTheDocument()
-    })
-
-    it('reports open state so the hover sidebar must not retract', async () => {
-      const onPopupOpenChange = vi.fn()
-      seedFolders()
-      render(<Sidebar variant="static" onPopupOpenChange={onPopupOpenChange} />)
-
-      const [gig] = screen.getAllByTestId('folder-segment')
-      if (!gig) throw new Error('Expected the Gig segment')
-      await openFolderContextMenu(gig)
-      expect(onPopupOpenChange).toHaveBeenCalledWith(true)
-
-      fireEvent.keyDown(document, { key: 'Escape' })
-      await waitFor(() => expect(onPopupOpenChange).toHaveBeenCalledWith(false))
-    })
-  })
+    }
+  )
 })

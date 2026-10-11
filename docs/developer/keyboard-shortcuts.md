@@ -54,11 +54,11 @@ Its behaviors (spec issue #4, later additions noted):
   continues inside it ("下一首曲子" mental model, v1.1.2 T7).
 - **Cmd+←/Cmd+→** → moves one folder view along the row through
   `moveFolderSelection` (`src/lib/project-select.ts`) — the same entry a
-  segment click uses, so the selection reset and the live-session keep
+  dropdown selection uses, so the selection reset and the live-session keep
   behave alike. The ends wrap (v1.3.1 user report: with three views the
   old clamp read as stuck, not as an edge; a same-view press stays a
   full no-op) — see
-  [Folder Switch Tabs](#folder-switch-tabs-v122-issue-28). Together the
+  [Folder Dropdown](#folder-dropdown-v16-issue-153). Together the
   Cmd arrows navigate the folder/project grid. v1.3.5 (#104): these
   chords are the only keyboard folder switch — the segments' bare
   ←/→ handler is gone. (They briefly nudged the master volume before
@@ -98,30 +98,18 @@ confirmation. The capture-phase session alias yields to `data-mode-switch`,
 including the first activation before mode preparation has set its shared gate.
 Both successful and failed keyboard submissions restore focus to the mode control.
 
-## Folder Switch Tabs (v1.2.2, issue #28)
+## Folder Dropdown (v1.6, issue #153)
 
-The sidebar's folder switch is a real `tablist`: the segments carry
-`role="tab"` + `aria-selected` with a roving tabindex (only the active
-view is tab-stoppable, so one Tab reaches the switch). v1.2.2 (#28)
-gave the focused segment bare **←/→** switching through `nextFolderView`;
-v1.3.5 (#104) removed that handler — after a click parked focus on a
-segment, plain arrows kept switching views and read as the Cmd
-shortcuts firing without Cmd held. Bare arrows on a segment are now
-fully inert; the roving tabindex and Tab order are untouched. A segment
-click also drops the focus the browser parks on it — the ring only ever
-appears for Tab, never frozen after a click.
+The user folder control is a bounded Radix Select. Tab reaches its trigger;
+standard select keys open it, move through options, select or cancel. The app's
+Enter submit yields while the listbox is open. The independent Utilities button
+is keyboard reachable and toggles back to the preceding user view. Its return
+entry does the same; a deleted remembered folder falls back to Home.
 
-**Cmd+←/Cmd+→** are the keyboard folder switch, registered in the web
-Cmd layer and working from anywhere: `moveFolderSelection` walks the
-stops through `setActiveFolderView` (the segment-click entry; internally
-`nextFolderView`, `src/lib/project-select.ts` — unfiled first, the
-folders in display order, Utilities pinned last) and **wraps at the
-ends** — Cmd+← at the Home view lands
-on the last folder, Cmd+→ at the last folder lands on Home (v1.3.1 user
-report; until v1.3.0 these clamped, which read as stuck with three
-views). Text inputs keep the keys as
-line-start/end and overlays block the move, the standard web-layer
-guards.
+Cmd+←/Cmd+→ still cycle through Home, all user folders and Utilities in index
+order, wrapping at the ends through `moveFolderSelection` and the same view
+entry as the dropdown. A step onto Utilities records the preceding user view.
+There is no fixed folder count. Text inputs and open overlays retain their keys.
 
 Guards: text inputs own their keys (`isEditableTarget`), and while a
 Radix dialog or select popup is open (`hasOpenOverlay`) Enter/Esc belong

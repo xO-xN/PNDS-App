@@ -26,7 +26,7 @@ v1.4.0（#59 导出、#63 导入，spec #57）。演出文件夹的移交机制�
 ## 导出链路
 
 ```
-侧栏文件夹 segment 右键 →「导出演出文件夹…」（Sidebar 上下文菜单）
+侧栏当前用户编组下拉右键 →「导出演出文件夹…」（Sidebar 上下文菜单）
   └─ src/lib/setlist-export.ts   exportSetlistFolder(folderId)
        ├─ plugin-dialog 选目录（取消 = 什么都不发生）
        ├─ commands.getSetlistExportInfo(paths)   ← 描述即打包性预检（Rust）

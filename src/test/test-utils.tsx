@@ -7,6 +7,7 @@ import {
 } from '@testing-library/react'
 import { I18nextProvider } from 'react-i18next'
 import i18n from '@/i18n/config'
+import userEvent from '@testing-library/user-event'
 import { useProjectStore } from '@/store/project-store'
 import {
   ThemeProviderContext,
@@ -124,18 +125,18 @@ export async function openFolderContextMenu(
   return await screen.findByTestId('folder-context-menu')
 }
 
-/**
- * Creates a folder through the store or throws — v1.2.1 (issue #26) made
- * `createFolder` nullable at the folder cap, and setup code in tests
- * (always well below the cap) wants a plain id back.
- */
+/** Creates a fixture folder through the same unique-name action as the UI. */
 export function createFolderOrFail(name: string): string {
-  const id = useProjectStore.getState().createFolder(name)
-  if (id === null) {
-    throw new Error(`Folder creation was refused: ${name}`)
-  }
-  return id
+  return useProjectStore.getState().createFolder(name)
 }
 
 export * from '@testing-library/react'
 export { customRender as render }
+
+/** Select a browsing folder using the same dropdown interaction as the app. */
+export async function selectFolderInPicker(name: string): Promise<void> {
+  await userEvent.click(
+    screen.getByRole('combobox', { name: i18n.t('sidebar.performanceFolder') })
+  )
+  await userEvent.click(await screen.findByRole('option', { name }))
+}

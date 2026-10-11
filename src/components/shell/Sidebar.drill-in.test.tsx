@@ -1,5 +1,6 @@
 import {
   render,
+  selectFolderInPicker,
   screen,
   fireEvent,
   within,
@@ -8,7 +9,6 @@ import {
   mockBoundingClientRect,
   createFolderOrFail,
 } from '@/test/test-utils'
-import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { commands } from '@/lib/tauri-bindings'
 import { useProjectStore } from '@/store/project-store'
@@ -82,11 +82,10 @@ describe('Sidebar folder drill-in (v1.1.2 T3)', () => {
   }
 
   it('selecting a folder segment switches the view: only members listed', async () => {
-    const user = userEvent.setup()
     seedFolder()
     render(<Sidebar variant="static" />)
 
-    await user.click(screen.getByTestId('folder-segment'))
+    await selectFolderInPicker('Set list')
 
     const entries = screen.getAllByTestId('project-entry')
     expect(entries).toHaveLength(2)
@@ -98,22 +97,21 @@ describe('Sidebar folder drill-in (v1.1.2 T3)', () => {
     // view, the folder segment names it, and the add-project "+" stays
     // reachable — inside a folder view it is the import entry that lands
     // projects in this folder.
-    expect(screen.getByTestId('unfiled-segment')).toBeInTheDocument()
-    expect(screen.getByTestId('folder-name')).toHaveTextContent('Set list')
+    expect(screen.getByTestId('folder-picker')).toBeInTheDocument()
+    expect(screen.getByTestId('folder-picker')).toHaveTextContent('Set list')
     expect(screen.getByTestId('add-project-button')).toBeInTheDocument()
   })
 
   it('the unfiled segment returns to the default view and the flat list', async () => {
-    const user = userEvent.setup()
     seedFolder()
     render(<Sidebar variant="static" />)
 
-    await user.click(screen.getByTestId('folder-segment'))
-    await user.click(screen.getByTestId('unfiled-segment'))
+    await selectFolderInPicker('Set list')
+    await selectFolderInPicker('Home')
 
     // Back at Home: one ungrouped entry, the switch intact.
     expect(screen.getAllByTestId('project-entry')).toHaveLength(1)
-    expect(screen.getByTestId('folder-segment')).toBeInTheDocument()
+    expect(screen.getByTestId('folder-picker')).toBeInTheDocument()
     expect(useProjectStore.getState().activeFolderId).toBeNull()
   })
 
@@ -127,7 +125,8 @@ describe('Sidebar folder drill-in (v1.1.2 T3)', () => {
   })
 
   it('the folder holding the session project shows the in-use dot (#39)', () => {
-    seedFolder()
+    const folderId = seedFolder()
+    useProjectStore.getState().setActiveFolderId(folderId)
     useProjectStore.setState({
       currentProject: { path: FIRST_PATH, manifest },
       preflightStatus: 'ready',
@@ -140,7 +139,7 @@ describe('Sidebar folder drill-in (v1.1.2 T3)', () => {
 
     // v1.2.3 (#39): the dot follows the SESSION's project (SECOND, inside
     // the folder) even while another card is selected.
-    const segment = screen.getByTestId('folder-segment')
+    const segment = screen.getByTestId('folder-picker')
     expect(within(segment).getByTestId('folder-in-use-dot')).toBeInTheDocument()
 
     // A merely preflighted (idle) selection is not "in use".
@@ -151,7 +150,7 @@ describe('Sidebar folder drill-in (v1.1.2 T3)', () => {
       })
     })
     expect(
-      within(screen.getByTestId('folder-segment')).queryByTestId(
+      within(screen.getByTestId('folder-picker')).queryByTestId(
         'folder-in-use-dot'
       )
     ).not.toBeInTheDocument()
@@ -173,11 +172,10 @@ describe('Sidebar folder drill-in (v1.1.2 T3)', () => {
   })
 
   it('drag-reorders inside the folder view and persists the set order (v1.1.2 T4)', async () => {
-    const user = userEvent.setup()
     seedFolder()
     render(<AppShell />)
 
-    await user.click(screen.getByTestId('folder-segment'))
+    await selectFolderInPicker('Set list')
 
     const entries = screen.getAllByTestId('project-entry')
     const first = entries[0]
@@ -252,11 +250,10 @@ describe('Sidebar folder drill-in (v1.1.2 T3)', () => {
     }
 
     it('badges number only the folder members, 1..9, while drilled in', async () => {
-      const user = userEvent.setup()
       seedFolder()
       render(<AppShell />)
 
-      await user.click(screen.getByTestId('folder-segment'))
+      await selectFolderInPicker('Set list')
       pressCmd()
 
       const badges = screen.getAllByTestId('project-number-badge')
@@ -268,7 +265,8 @@ describe('Sidebar folder drill-in (v1.1.2 T3)', () => {
       // on purpose: userEvent's synthetic pointer sequence carries no
       // modifier state, which would trip the #106 self-heal and drop
       // the hold — a real click under a held ⌘ reports Meta down.
-      fireEvent.click(screen.getByTestId('unfiled-segment'))
+      await selectFolderInPicker('Home')
+      pressCmd()
       expect(
         screen
           .getAllByTestId('project-number-badge')
@@ -276,7 +274,7 @@ describe('Sidebar folder drill-in (v1.1.2 T3)', () => {
       ).toEqual(['1'])
     })
 
-    it('a folder deeper than nine members still caps badges at nine', () => {
+    it('a folder deeper than nine members still caps badges at nine', async () => {
       const paths = Array.from({ length: 10 }, (_, i) => `/Users/test/S${i}`)
       useProjectStore.setState({ recentProjectPaths: [FIRST_PATH, ...paths] })
       const id = createFolderOrFail('Big set')
@@ -291,11 +289,10 @@ describe('Sidebar folder drill-in (v1.1.2 T3)', () => {
     })
 
     it('reordering inside the folder re-numbers the badges in real time', async () => {
-      const user = userEvent.setup()
       seedFolder()
       render(<AppShell />)
 
-      await user.click(screen.getByTestId('folder-segment'))
+      await selectFolderInPicker('Set list')
       pressCmd()
       expect(badgeNumbersByPath()).toEqual([
         [SECOND_PATH, '1'],

@@ -403,6 +403,40 @@ mod tests {
         assert!(prefs.project_display_names.is_empty());
     }
 
+    #[test]
+    fn legacy_many_folders_roundtrip_through_a_temporary_preferences_file() {
+        let legacy = r#"{
+            "theme": "system",
+            "recentProjects": ["/one", "/two"],
+            "projectFolders": [
+                {"id": "a", "name": "Opening", "projectPaths": ["/one"]},
+                {"id": "b", "name": "Middle", "projectPaths": ["/two"], "intro": "Tour notes"},
+                {"id": "c", "name": "Third", "projectPaths": []},
+                {"id": "d", "name": "Finale", "projectPaths": []},
+                {"id": "utilities", "name": "Utilities", "projectPaths": []}
+            ]
+        }"#;
+        let prefs: AppPreferences = serde_json::from_str(legacy).unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("preferences.json");
+        std::fs::write(&path, serde_json::to_vec(&prefs).unwrap()).unwrap();
+        let restored: AppPreferences =
+            serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
+        let ids: Vec<_> = restored
+            .project_folders
+            .iter()
+            .map(|folder| folder.id.as_str())
+            .collect();
+        assert_eq!(ids, ["a", "b", "c", "d", "utilities"]);
+        assert_eq!(restored.project_folders[0].project_paths, ["/one"]);
+        assert_eq!(restored.project_folders[0].intro, None);
+        assert_eq!(
+            restored.project_folders[1].intro.as_deref(),
+            Some("Tour notes")
+        );
+        assert_eq!(restored.recent_projects, ["/one", "/two"]);
+    }
+
     /// #147: preference files written before `lanIp` existed must load
     /// losslessly (serde default), and a stored choice must round-trip.
     #[test]

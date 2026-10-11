@@ -93,8 +93,11 @@ describe('interaction consistency (v1.2.2, issue #32)', () => {
   it('gives every enumerated control the shared focus ring', () => {
     render(<Sidebar variant="static" />)
 
-    // The folder-switch segments (unfiled + folders).
-    for (const tab of screen.getAllByRole('tab')) {
+    // The user folder picker and independent tools entry.
+    for (const tab of [
+      screen.getByRole('combobox', { name: 'Performance folder' }),
+      screen.getByRole('button', { name: 'Utilities' }),
+    ]) {
       expect(tab.className).toContain('pnds-focus-ring')
     }
 
@@ -115,7 +118,7 @@ describe('interaction consistency (v1.2.2, issue #32)', () => {
     ).toContain('focus-visible:opacity-100')
   })
 
-  it('presses: cards and segments darken, plain buttons micro-shrink', () => {
+  it('presses: cards and browsing controls darken, plain buttons micro-shrink', () => {
     const { container } = render(<Sidebar variant="static" />)
 
     // Cards: press-darkening on both card states (they carry inline drag
@@ -126,8 +129,11 @@ describe('interaction consistency (v1.2.2, issue #32)', () => {
     if (!other) throw new Error('Expected a second, non-current project card')
     expect(other.className).toContain('active:bg-(--pnds-text)/10')
 
-    // Segments darken too.
-    for (const tab of screen.getAllByRole('tab')) {
+    // Folder browsing controls darken too.
+    for (const tab of [
+      screen.getByRole('combobox', { name: 'Performance folder' }),
+      screen.getByRole('button', { name: 'Utilities' }),
+    ]) {
       expect(tab.className).toContain('active:bg-(--pnds-text)/10')
     }
 

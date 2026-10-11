@@ -4,6 +4,8 @@ import { logger } from '@/lib/logger'
 import { notifications } from '@/lib/notifications'
 import {
   PROJECT_LIMIT_PER_DIRECTORY,
+  UTILITIES_FOLDER_ID,
+  previousUserFolderId,
   useProjectStore,
 } from '@/store/project-store'
 import { useSessionStore, isSessionLive } from '@/store/session-store'
@@ -62,6 +64,17 @@ export async function openProject(path: string): Promise<void> {
   if (useCreationStore.getState().active) {
     await useCreationStore.getState().open(path)
     return
+  }
+  const browsing = useProjectStore.getState()
+  // A new import belongs to the user view remembered behind Utilities.
+  // Switch before checking its per-list capacity or committing membership.
+  if (
+    browsing.activeFolderId === UTILITIES_FOLDER_ID &&
+    !browsing.utilityPaths.includes(path)
+  ) {
+    browsing.setActiveFolderId(
+      previousUserFolderId(browsing.projectFolders, browsing.lastUserFolderId)
+    )
   }
   const store = useProjectStore.getState()
   if (!store.recentProjectPaths.includes(path)) {

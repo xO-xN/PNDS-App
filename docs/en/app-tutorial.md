@@ -16,9 +16,10 @@ This guide covers the PNDS App's core interface, how Projects are organised, aud
 
 The App's **left sidebar** is the main working area; it manages the full lifecycle and hierarchy of your performance Projects:
 
-- **Import a Project**: click the **`+ Import Project`** button at the end of the Project list, or press `⌘ O`, to import a `.pnds` file into the **Home** folder.
-- **Folder organisation**: create custom folders to group Projects by performance programme, movement or repertoire.
-- **Free ordering**: press and hold a Project card to drag it freely — drop it into a folder or reorder it.
+- **Import a Project**: click the **`+ Import Project`** button at the end of the Project list, or press `⌘ O`, to import a `.pnds` file into the current user folder, or **Home** when no grouping is selected.
+- **Folder organisation**: choose custom performance folders from the scrollable dropdown, with no folder-count limit. Create from the dropdown or context menu; rename, move up/down, export and delete from the current folder’s context menu. Deleting only removes the grouping, preserving project files.
+- **Free ordering**: drag Project cards to reorder members. A temporary folder list appears while dragging: drop onto a user folder to append there, or Home to ungroup it. Newly opened projects join the current user folder; each list retains its 30-project addition cap.
+- **Independent Utilities**: the Utilities button opens the registered tools and replaces the user dropdown with a return entry. Click Utilities again or Return to restore the previous view; a deleted folder falls back to Home. Browsing never stops a performance or applies pending audio changes. Opening a user project from Utilities returns to the preceding user folder first.
 
 ---
 
@@ -35,7 +36,7 @@ The App's **left sidebar** is the main working area; it manages the full lifecyc
 
 ## 4. Built-in utilities
 
-The sidebar's **Utilities** folder carries three ready-to-run validation Projects covering three layers of the performance chain (in a fixed order):
+The sidebar's independent **Utilities** button offers ready-to-run validation Projects covering three layers of the performance chain (in a fixed order):
 
 - **Multichannel Gen** ([Multichannel-Signal-Generator](https://github.com/xO-xN/Multichannel-Signal-Generator)): a 16-channel signal generator. When — verifying your audio interface's channel mapping, wiring and reinforcement setup, especially before a multichannel work goes on. Once loaded, its monitor offers 16 vertical faders to confirm, channel by channel, that sound goes where it should.
 - **Local Diagnostics** ([Local-Network-Diagnostics](https://github.com/xO-xN/Local-Network-Diagnostics)): local-network diagnostics. When — checking the Wi-Fi leg from performers' devices to the Host (latency / jitter / loss) before a show; performers scan and test from their phones.

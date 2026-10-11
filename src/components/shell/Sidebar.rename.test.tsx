@@ -1,5 +1,6 @@
 import {
   render,
+  selectFolderInPicker,
   screen,
   fireEvent,
   waitFor,
@@ -128,6 +129,28 @@ describe('⌘R project rename (v1.1.2 T6)', () => {
       utilityPaths: [],
     })
     useSessionStore.getState().resetSession()
+    vi.mocked(commands.getSessionState).mockResolvedValue({
+      status: 'ok',
+      data: {
+        status: 'idle',
+        projectName: null,
+        projectPath: null,
+        audioMode: 'internal',
+        lanIp: null,
+        hostAddress: null,
+        oscTarget: null,
+        health: null,
+        error: null,
+        outputTail: [],
+        volume: 80,
+        startupStage: 0,
+        channelPlan: null,
+        outputDevice: null,
+        projectionStarted: false,
+        httpsEntry: { status: 'off', url: null, error: null },
+        dnsMapping: { status: 'off', domain: null, ip: null, error: null },
+      },
+    })
   })
 
   it('enters inline edit on the selected project, focused with the name selected', () => {
@@ -315,7 +338,7 @@ describe('⌘R project rename (v1.1.2 T6)', () => {
         })
       )
     })
-    expect(screen.getByTestId('folder-name')).toHaveTextContent('Tour 2026')
+    expect(screen.getByTestId('folder-picker')).toHaveTextContent('Tour 2026')
   })
 
   it('a selected project wins over the folder while drilled in', () => {
@@ -336,7 +359,7 @@ describe('⌘R project rename (v1.1.2 T6)', () => {
     expect(screen.queryByTestId('folder-name-input')).not.toBeInTheDocument()
   })
 
-  it('entering or leaving a folder view resets the selection', () => {
+  it('entering or leaving a folder view resets the selection', async () => {
     // Folder views are exclusive (the collapsed sidebar shows only one
     // side), so navigation must not leave an invisible card as the ⌘R
     // target. Covers the reported bug: an ungrouped project staying
@@ -352,23 +375,26 @@ describe('⌘R project rename (v1.1.2 T6)', () => {
     render(<AppShell />)
 
     // Enter: selection resets, ⌘R falls through to the folder name.
-    fireEvent.click(screen.getByTestId('folder-segment'))
+    await selectFolderInPicker('Gig')
     expect(useProjectStore.getState().currentProject).toBeNull()
 
     pressCmdR()
     expect(screen.getByTestId('folder-name-input')).toBeInTheDocument()
     expect(screen.queryByTestId('project-name-input')).not.toBeInTheDocument()
+    fireEvent.keyDown(screen.getByTestId('folder-name-input'), {
+      key: 'Escape',
+    })
 
     // Leave: a selection made inside the folder resets at the top too.
     useProjectStore.setState({
       currentProject: { path: SECOND_PATH, manifest: secondManifest },
       preflightStatus: 'ready',
     })
-    fireEvent.click(screen.getByTestId('unfiled-segment'))
+    await selectFolderInPicker('Home')
     expect(useProjectStore.getState().currentProject).toBeNull()
   })
 
-  it('a running session keeps its project through folder navigation', () => {
+  it('a running session keeps its project through folder navigation', async () => {
     // During a live session currentProject is not a selection — the
     // in-use dot and the top-level current marker read it — so folder
     // navigation must not clear it (rename is blocked while running).
@@ -376,10 +402,10 @@ describe('⌘R project rename (v1.1.2 T6)', () => {
     createFolderOrFail('Gig')
     render(<AppShell />)
 
-    fireEvent.click(screen.getByTestId('folder-segment'))
+    await selectFolderInPicker('Gig')
     expect(useProjectStore.getState().currentProject?.path).toBe(FIRST_PATH)
 
-    fireEvent.click(screen.getByTestId('unfiled-segment'))
+    await selectFolderInPicker('Home')
     expect(useProjectStore.getState().currentProject?.path).toBe(FIRST_PATH)
   })
 

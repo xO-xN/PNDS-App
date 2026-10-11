@@ -1,5 +1,6 @@
 import {
   render,
+  selectFolderInPicker,
   screen,
   fireEvent,
   createFolderOrFail,
@@ -175,7 +176,7 @@ describe('Sidebar project-list scrolling (issue #25)', () => {
   })
 
   describe('the project column is its own scroll region', () => {
-    it('holds every project card; the folder switch and settings stay outside (static)', () => {
+    it('holds every project card; the folder switch and settings stay outside (static)', async () => {
       useProjectStore.setState({ recentProjectPaths: TWELVE_PATHS })
       createFolderOrFail('Set list')
       render(<Sidebar variant="static" />)
@@ -186,16 +187,12 @@ describe('Sidebar project-list scrolling (issue #25)', () => {
       for (const entry of entries) {
         expect(scroller).toContainElement(entry)
       }
-      expect(scroller).not.toContainElement(
-        screen.getByTestId('folder-segment')
-      )
-      expect(scroller).not.toContainElement(
-        screen.getByTestId('unfiled-segment')
-      )
+      expect(scroller).not.toContainElement(screen.getByTestId('folder-picker'))
+      expect(scroller).not.toContainElement(screen.getByTestId('folder-picker'))
       expect(scroller).not.toContainElement(screen.getByTestId('settings-card'))
     })
 
-    it('the overlay variant shares the same scrolling layout', () => {
+    it('the overlay variant shares the same scrolling layout', async () => {
       useProjectStore.setState({ recentProjectPaths: TWELVE_PATHS })
       render(<Sidebar variant="overlay" />)
 
@@ -208,49 +205,47 @@ describe('Sidebar project-list scrolling (issue #25)', () => {
       expect(scroller).not.toContainElement(screen.getByTestId('settings-card'))
     })
 
-    it('the folder switch still renders under many projects', () => {
+    it('the folder switch still renders under many projects', async () => {
       useProjectStore.setState({ recentProjectPaths: TWELVE_PATHS })
       render(<Sidebar variant="static" />)
 
-      expect(screen.getByTestId('unfiled-segment')).toBeInTheDocument()
-      expect(screen.getByTestId('folder-pill')).toBeInTheDocument()
+      expect(screen.getByTestId('folder-picker')).toBeInTheDocument()
+      expect(screen.getByTestId('folder-switch')).toBeInTheDocument()
     })
 
-    it('the folder view scrolls its members; the switch and footer stay outside', () => {
+    it('the folder view scrolls its members; the switch and footer stay outside', async () => {
       const folderId = createFolderOrFail('Set list')
       useProjectStore.getState().moveProjectToFolder(folderId, pathAt(0))
       render(<Sidebar variant="static" />)
 
-      fireEvent.click(screen.getByTestId('folder-segment'))
+      await selectFolderInPicker('Set list')
 
       const scroller = screen.getByTestId('project-list-scroll')
       expect(scroller).toContainElement(screen.getByTestId('project-entry'))
-      expect(scroller).not.toContainElement(
-        screen.getByTestId('unfiled-segment')
-      )
+      expect(scroller).not.toContainElement(screen.getByTestId('folder-picker'))
       expect(scroller).not.toContainElement(screen.getByTestId('settings-card'))
     })
   })
 
   describe('empty states', () => {
-    it('the empty unfiled view shows the hint inside the scroller; the switch stays reachable', () => {
+    it('the empty unfiled view shows the hint inside the scroller; the switch stays reachable', async () => {
       render(<Sidebar variant="static" />)
 
       const scroller = screen.getByTestId('project-list-scroll')
       expect(scroller).toHaveTextContent('No projects opened yet')
-      expect(screen.getByTestId('unfiled-segment')).toBeInTheDocument()
-      expect(screen.getByTestId('folder-pill')).toBeInTheDocument()
+      expect(screen.getByTestId('folder-picker')).toBeInTheDocument()
+      expect(screen.getByTestId('folder-switch')).toBeInTheDocument()
     })
 
-    it('an empty folder shows its hint inside the scroller', () => {
+    it('an empty folder shows its hint inside the scroller', async () => {
       createFolderOrFail('Set list')
       render(<Sidebar variant="static" />)
 
-      fireEvent.click(screen.getByTestId('folder-segment'))
+      await selectFolderInPicker('Set list')
 
       const scroller = screen.getByTestId('project-list-scroll')
       expect(scroller).toHaveTextContent('This folder is empty')
-      expect(screen.getByTestId('unfiled-segment')).toBeInTheDocument()
+      expect(screen.getByTestId('folder-picker')).toBeInTheDocument()
     })
   })
 

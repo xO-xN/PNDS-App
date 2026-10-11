@@ -149,7 +149,7 @@ jsdom has no layout and no hit-testing, so pointer dragging cannot be simulated 
 
 ### Testing Imperative Indicator Pills
 
-The pill engine (`src/hooks/use-indicator-pill.ts`, v1.3.2 issue #78) is scheduling-only: its tests inject spy configs, fire `resize` on `window`, and drive a stubbed `document.fonts.ready`. The shared geometry writes read `offsetLeft`/`offsetTop`/`offsetWidth`/`offsetHeight`, which the test DOM leaves at 0 — pin them with `mockOffsets` (`src/test/test-utils.tsx`), which covers both axis pairs. End-to-end pill behavior (slide, snap, hide) stays covered by the Sidebar tests asserting the `folder-pill` / `card-selection-pill` testids.
+The pill engine (`src/hooks/use-indicator-pill.ts`, v1.3.2 issue #78) is scheduling-only: its tests inject spy configs, fire `resize` on `window`, and drive a stubbed `document.fonts.ready`. The shared geometry writes read `offsetLeft`/`offsetTop`/`offsetWidth`/`offsetHeight`, which the test DOM leaves at 0 — pin them with `mockOffsets` (`src/test/test-utils.tsx`), which covers both axis pairs. End-to-end pill behavior (slide, snap, hide) stays covered by the Sidebar tests asserting the `card-selection-pill` testid (the folder dropdown has replaced segmented folder pills).
 
 ### Testing Development Watch Isolation
 

@@ -527,8 +527,13 @@ describe('AppShell', () => {
 
     // The grouped project is hidden from the Home segment; the folder
     // segment renders with the persisted name.
-    await screen.findByTestId('folder-segment')
-    expect(screen.getByTestId('folder-name')).toHaveTextContent('Gig Friday')
+    await waitFor(() =>
+      expect(useProjectStore.getState().projectFolders).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ name: 'Gig Friday' }),
+        ])
+      )
+    )
     const entries = screen.getAllByTestId('project-entry')
     expect(entries).toHaveLength(1)
     expect(entries[0]).toHaveAttribute(
@@ -665,7 +670,7 @@ describe('AppShell', () => {
     render(<AppShell />)
 
     await screen.findByTestId('project-entry')
-    expect(screen.queryByTestId('folder-segment')).not.toBeInTheDocument()
+    expect(useProjectStore.getState().projectFolders).toEqual([])
     expect(useProjectStore.getState().projectFolders).toEqual([])
   })
 
@@ -686,8 +691,16 @@ describe('AppShell', () => {
     render(<AppShell />)
 
     // The folder appears with the two installed tools as members.
-    await screen.findByTestId('folder-segment')
-    expect(screen.getByTestId('folder-name')).toHaveTextContent('Utilities')
+    await waitFor(() =>
+      expect(useProjectStore.getState().projectFolders).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: 'utilities', projectPaths: TOOLS }),
+        ])
+      )
+    )
+    expect(
+      screen.getByRole('button', { name: 'Utilities' })
+    ).toBeInTheDocument()
     // Both tools are folder members, so the Home segment stays empty.
     expect(screen.queryByTestId('project-entry')).not.toBeInTheDocument()
     expect(useProjectStore.getState().recentProjectPaths).toEqual(TOOLS)

@@ -147,8 +147,8 @@ describe('Sidebar', () => {
     // default view; folder management lives in the context menu (issue
     // #28), so no new-folder button exists anymore (the bottom "Open"
     // pill is long gone too).
-    expect(screen.getByTestId('unfiled-segment')).toBeInTheDocument()
-    expect(screen.getByRole('tablist')).toBeInTheDocument()
+    expect(screen.getByTestId('folder-picker')).toBeInTheDocument()
+    expect(screen.getByTestId('folder-switch')).toBeInTheDocument()
     expect(screen.getByTestId('add-project-button')).toBeInTheDocument()
     expect(screen.queryByTestId('new-folder-button')).not.toBeInTheDocument()
     expect(screen.queryByText('Open')).not.toBeInTheDocument()

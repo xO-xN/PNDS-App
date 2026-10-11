@@ -1,385 +1,87 @@
 import {
+  act,
+  fireEvent,
   render,
   screen,
-  fireEvent,
   waitFor,
   within,
-  createFolderOrFail,
-  openFolderContextMenu,
-  mockBoundingClientRect,
 } from '@/test/test-utils'
 import userEvent from '@testing-library/user-event'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { commands } from '@/lib/tauri-bindings'
-import { notifications } from '@/lib/notifications'
 import { useProjectStore, UTILITIES_FOLDER_ID } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 import { Sidebar } from './Sidebar'
 
-vi.mock('@tauri-apps/plugin-opener', () => ({
-  openUrl: vi.fn().mockResolvedValue(undefined),
-}))
-
-vi.mock('sonner', () => ({
-  toast: { info: vi.fn(), error: vi.fn() },
-}))
-
-vi.mock('@/lib/notifications', () => ({
-  notifications: {
-    error: vi.fn(),
-    success: vi.fn(),
-    info: vi.fn(),
-    warning: vi.fn(),
-  },
-}))
-
-const PROJECT_PATH = '/Users/test/Inarticulate III'
-const OTHER_PATH = '/Users/test/PNDS Score 1'
-const THIRD_PATH = '/Users/test/Another Score'
-
-/**
- * v1.1.2 T1 (issue #5): folder basics — creation with inline naming,
- * the two-segment top-level layout, deletion semantics and persistence.
- * Since v1.2.2 (issue #28) creation and deletion enter through the
- * right-click context menu.
- */
-describe('Sidebar folders (v1.1.2)', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    useProjectStore.setState({
-      currentProject: null,
-      recentProjectPaths: [PROJECT_PATH, OTHER_PATH, THIRD_PATH],
-      projectFolders: [],
-      pendingPreflightPath: null,
-      preflightStatus: 'idle',
-      preflightError: null,
-    })
-    useSessionStore.getState().resetSession()
-  })
-
-  it('creates a folder from the context menu and names it inline (Enter)', async () => {
-    const user = userEvent.setup()
-    render(<Sidebar variant="static" />)
-
-    const menu = await openFolderContextMenu(
-      screen.getByTestId('unfiled-segment')
-    )
-    fireEvent.click(within(menu).getByTestId('menu-new-folder'))
-
-    // Creation (a macrotask after the menu closes) immediately enters
-    // inline naming with the default name.
-    const input = await screen.findByTestId('folder-name-input')
-    expect(input).toHaveValue('New Folder')
-    expect(input).toHaveFocus()
-
-    await user.clear(input)
-    await user.type(input, 'Gig Friday{Enter}')
-
-    expect(screen.getByTestId('folder-name')).toHaveTextContent('Gig Friday')
-    await waitFor(() => {
-      expect(commands.savePreferences).toHaveBeenCalledWith(
-        expect.objectContaining({
-          projectFolders: [
-            expect.objectContaining({ name: 'Gig Friday', projectPaths: [] }),
-          ],
-        })
-      )
-    })
-  })
-
-  it('Escape during creation discards the empty folder', async () => {
-    const user = userEvent.setup()
-    render(<Sidebar variant="static" />)
-
-    const menu = await openFolderContextMenu(
-      screen.getByTestId('unfiled-segment')
-    )
-    fireEvent.click(within(menu).getByTestId('menu-new-folder'))
-    await user.type(
-      await screen.findByTestId('folder-name-input'),
-      'Nope{Escape}'
-    )
-
-    expect(screen.queryByTestId('folder-segment')).not.toBeInTheDocument()
-    expect(useProjectStore.getState().projectFolders).toEqual([])
-  })
-
-  it('renders the folder as a switch segment outside the scrolling list', () => {
-    createFolderOrFail('Set list')
-    const [folder] = useProjectStore.getState().projectFolders
-    if (!folder) throw new Error('Expected the created folder')
-    useProjectStore.getState().moveProjectToFolder(folder.id, OTHER_PATH)
-
-    render(<Sidebar variant="static" />)
-
-    // OTHER_PATH lives in the folder: only the two ungrouped cards render,
-    // and the folder segment sits in the switch row, not the scroller.
-    const entries = screen.getAllByTestId('project-entry')
-    expect(entries).toHaveLength(2)
-    const scroller = screen.getByTestId('project-list-scroll')
-    expect(scroller).not.toContainElement(screen.getByTestId('folder-segment'))
-    expect(screen.getByTestId('unfiled-segment')).toBeInTheDocument()
-  })
-
-  it('repeat creations pick fresh names; renaming onto an existing name is refused', async () => {
-    render(<Sidebar variant="static" />)
-
-    // First creation, committed unchanged.
-    let menu = await openFolderContextMenu(
-      screen.getByTestId('unfiled-segment')
-    )
-    fireEvent.click(within(menu).getByTestId('menu-new-folder'))
-    fireEvent.keyDown(await screen.findByTestId('folder-name-input'), {
-      key: 'Enter',
-    })
-    expect(screen.getByTestId('folder-name')).toHaveTextContent('New Folder')
-
-    // Second creation without typing: the default is taken → suffix 2.
-    menu = await openFolderContextMenu(screen.getByTestId('unfiled-segment'))
-    fireEvent.click(within(menu).getByTestId('menu-new-folder'))
-    fireEvent.keyDown(await screen.findByTestId('folder-name-input'), {
-      key: 'Enter',
-    })
-    // New folders prepend, so the second creation is the first segment.
-    const [newest, oldest] = screen.getAllByTestId('folder-segment')
-    if (!newest || !oldest) throw new Error('Expected both segments')
-    expect(within(newest).getByTestId('folder-name')).toHaveTextContent(
-      'New Folder 2'
-    )
-
-    // Renaming the second onto the first's name: refused with the reason,
-    // the old name stays.
-    menu = await openFolderContextMenu(newest)
-    fireEvent.click(within(menu).getByTestId('menu-rename-folder'))
-    const input = await screen.findByTestId('folder-name-input')
-    await fireEvent.change(input, { target: { value: 'New Folder' } })
-    fireEvent.keyDown(input, { key: 'Enter' })
-
-    expect(notifications.warning).toHaveBeenCalledWith(
-      'A folder named “New Folder” already exists.'
-    )
-    expect(within(newest).getByTestId('folder-name')).toHaveTextContent(
-      'New Folder 2'
-    )
-  })
-
-  it('deleting from the menu confirms, then returns its projects to ungrouped', async () => {
-    const user = userEvent.setup()
-    const folderId = createFolderOrFail('Set list')
-    useProjectStore.getState().moveProjectToFolder(folderId, OTHER_PATH)
-    useProjectStore.getState().moveProjectToFolder(folderId, THIRD_PATH)
-
-    render(<Sidebar variant="static" />)
-
-    // Members are hidden from the Home segment while grouped.
-    expect(screen.getAllByTestId('project-entry')).toHaveLength(1)
-
-    const menu = await openFolderContextMenu(
-      screen.getByTestId('folder-segment')
-    )
-    fireEvent.click(within(menu).getByTestId('menu-delete-folder'))
-
-    // Confirmation copy spells out the ungrouped fallback.
-    const dialog = await screen.findByRole('alertdialog')
-    expect(dialog).toHaveTextContent(/return to the ungrouped list/i)
-    expect(dialog).toHaveTextContent(/Set list/)
-
-    await user.click(within(dialog).getByRole('button', { name: /^delete$/i }))
-
-    expect(useProjectStore.getState().projectFolders).toEqual([])
-    // All three projects are back as ungrouped entries; trust is untouched.
-    expect(screen.getAllByTestId('project-entry')).toHaveLength(3)
-    expect(useProjectStore.getState().recentProjectPaths).toEqual([
-      PROJECT_PATH,
-      OTHER_PATH,
-      THIRD_PATH,
-    ])
-    await waitFor(() => {
-      expect(commands.savePreferences).toHaveBeenCalledWith(
-        expect.objectContaining({ projectFolders: [] })
-      )
-    })
-  })
-
-  it('removing a project keeps folder membership of the others intact', async () => {
-    const user = userEvent.setup()
-    const folderId = createFolderOrFail('Set list')
-    useProjectStore.getState().moveProjectToFolder(folderId, OTHER_PATH)
-
-    render(<Sidebar variant="static" />)
-
-    // The first ungrouped card (Inarticulate III) offers remove-from-history.
-    const firstEntry = screen.getAllByTestId('project-entry')[0]
-    if (!firstEntry) throw new Error('Expected an ungrouped project entry')
-    await user.click(
-      within(firstEntry).getByRole('button', { name: /remove from history/i })
-    )
-
-    const state = useProjectStore.getState()
-    expect(state.recentProjectPaths).toEqual([OTHER_PATH, THIRD_PATH])
-    // The folder and its member are untouched — removing one index never
-    // regroups anything else.
-    expect(state.projectFolders[0]?.projectPaths).toEqual([OTHER_PATH])
-    await waitFor(() => {
-      expect(commands.savePreferences).toHaveBeenCalledWith(
-        expect.objectContaining({
-          recentProjects: [OTHER_PATH, THIRD_PATH],
-          projectFolders: [
-            expect.objectContaining({ projectPaths: [OTHER_PATH] }),
-          ],
-        })
-      )
-    })
+beforeEach(() => {
+  vi.clearAllMocks()
+  useSessionStore.getState().resetSession()
+  useProjectStore.setState({
+    currentProject: null,
+    recentProjectPaths: ['/one', '/tool'],
+    utilityPaths: ['/tool'],
+    activeFolderId: null,
+    lastUserFolderId: null,
+    renameTarget: null,
+    projectFolders: [
+      { id: 'set', name: 'Set', projectPaths: ['/one'] },
+      { id: UTILITIES_FOLDER_ID, name: 'Utilities', projectPaths: ['/tool'] },
+    ],
   })
 })
 
-describe('Utilities folder protection (v1.1.2 T7, spec issue #11)', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    useProjectStore.setState({
-      currentProject: null,
-      recentProjectPaths: [PROJECT_PATH, OTHER_PATH],
-      projectFolders: [
-        {
-          id: UTILITIES_FOLDER_ID,
-          name: 'Utilities',
-          projectPaths: [PROJECT_PATH, OTHER_PATH],
-        },
-      ],
-      pendingPreflightPath: null,
-      activeFolderId: null,
-      renameTarget: null,
-      utilityPaths: [],
-      preflightStatus: 'idle',
-      preflightError: null,
-    })
-    useSessionStore.getState().resetSession()
-  })
-
-  it('renders the Utilities segment without a delete affordance', () => {
+describe('independent Utilities browser (#153)', () => {
+  it('shows registered tool cards with no remove or drag affordance', async () => {
     render(<Sidebar variant="static" />)
-
-    const segment = screen
-      .getAllByTestId('folder-segment')
-      .find(segment => segment.textContent?.includes('Utilities'))
-    expect(segment).toBeDefined()
+    await userEvent.click(screen.getByRole('button', { name: 'Utilities' }))
+    const card = screen.getByTestId('project-entry')
+    expect(card).toHaveAttribute('data-project-path', '/tool')
     expect(
-      within(segment as HTMLElement).queryByRole('button', {
-        name: 'Delete folder',
-      })
+      within(card).queryByRole('button', { name: /remove from history/i })
     ).not.toBeInTheDocument()
-  })
-
-  it('⌘R never starts a rename of the selected Utilities folder', () => {
-    useProjectStore.setState({ activeFolderId: UTILITIES_FOLDER_ID })
-    render(<Sidebar variant="static" />)
-
-    fireEvent.keyDown(window, {
-      key: 'r',
-      code: 'KeyR',
-      metaKey: true,
-    })
-
-    expect(useProjectStore.getState().renameTarget).toBeNull()
-    expect(screen.queryByTestId('folder-name-input')).not.toBeInTheDocument()
-    expect(screen.getByTestId('folder-name')).toHaveTextContent('Utilities')
-  })
-
-  it('still selects and shows the bundled examples like any folder', () => {
-    render(<Sidebar variant="static" />)
-
-    const utilitiesSegment = screen
-      .getAllByTestId('folder-segment')
-      .find(segment => segment.textContent?.includes('Utilities'))
-    if (!utilitiesSegment) throw new Error('Expected the Utilities segment')
-    fireEvent.click(utilitiesSegment)
-
-    expect(useProjectStore.getState().activeFolderId).toBe(UTILITIES_FOLDER_ID)
-    expect(screen.getAllByTestId('project-entry')).toHaveLength(2)
-  })
-
-  // v1.3.2 (user report after #75): the bundled tools are app content —
-  // their cards carry no removal affordance and never arm a drag.
-  it('a bundled tool card offers no ✕ and never becomes a drag', () => {
-    useProjectStore.setState({ utilityPaths: [PROJECT_PATH] })
-    render(<Sidebar variant="static" />)
-
-    const utilitiesSegment = screen
-      .getAllByTestId('folder-segment')
-      .find(segment => segment.textContent?.includes('Utilities'))
-    if (!utilitiesSegment) throw new Error('Expected the Utilities segment')
-    fireEvent.click(utilitiesSegment)
-
-    const toolCard = screen
-      .getAllByTestId(/project-entry|current-project-card/)
-      .find(card => card.getAttribute('data-project-path') === PROJECT_PATH)
-    if (!toolCard) throw new Error('Expected the tool card')
-
-    expect(
-      within(toolCard).queryByRole('button', { name: /remove from history/i })
-    ).not.toBeInTheDocument()
-
-    // Press and move past the click slack — a user card would activate;
-    // a tool card stays a plain (selectable) card.
-    fireEvent.pointerDown(toolCard, { pointerId: 1, clientX: 40, clientY: 80 })
-    fireEvent.pointerMove(window, { pointerId: 1, clientX: 80, clientY: 120 })
+    fireEvent.pointerDown(card, { pointerId: 1, clientX: 40, clientY: 80 })
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 120, clientY: 90 })
     expect(screen.queryByTestId('drag-clone')).not.toBeInTheDocument()
-    fireEvent.pointerUp(window, { pointerId: 1 })
-    expect(useProjectStore.getState().projectFolders[0]?.projectPaths).toEqual([
-      PROJECT_PATH,
-      OTHER_PATH,
-    ])
   })
 
-  it('dragging a user project onto the Utilities segment neither highlights nor joins it', async () => {
-    useProjectStore.setState({
-      recentProjectPaths: [PROJECT_PATH, OTHER_PATH],
-      projectFolders: [
-        {
-          id: UTILITIES_FOLDER_ID,
-          name: 'Utilities',
-          projectPaths: [],
-        },
-      ],
-      utilityPaths: [],
-    })
+  it('deleting a user grouping leaves the tools and their registry order intact', async () => {
     render(<Sidebar variant="static" />)
-
-    const [first, second] = screen.getAllByTestId('project-entry')
-    const utilitiesSegment = screen
-      .getAllByTestId('folder-segment')
-      .find(segment => segment.textContent?.includes('Utilities'))
-    if (!first || !second) throw new Error('Expected two ungrouped cards')
-    if (!utilitiesSegment) throw new Error('Expected the Utilities segment')
-    mockBoundingClientRect(first, { top: 0 })
-    mockBoundingClientRect(second, { top: 61 })
-    mockBoundingClientRect(utilitiesSegment, {
-      top: 200,
-      left: 100,
-      width: 70,
-      height: 32,
-    })
-
-    // Drag the second card over the Utilities segment.
-    fireEvent.pointerDown(second, { pointerId: 1, clientX: 40, clientY: 80 })
-    fireEvent.pointerMove(window, { pointerId: 1, clientX: 60, clientY: 90 })
-    await waitFor(() =>
-      expect(screen.getByTestId('drag-clone')).toBeInTheDocument()
+    act(() => useProjectStore.getState().deleteFolder('set'))
+    expect(useProjectStore.getState().projectFolders).toEqual([
+      { id: UTILITIES_FOLDER_ID, name: 'Utilities', projectPaths: ['/tool'] },
+    ])
+    await userEvent.click(screen.getByRole('button', { name: 'Utilities' }))
+    expect(screen.getByTestId('project-entry')).toHaveAttribute(
+      'data-project-path',
+      '/tool'
     )
-    fireEvent.pointerMove(window, { pointerId: 1, clientX: 135, clientY: 216 })
+    await waitFor(() =>
+      expect(commands.savePreferences).toHaveBeenCalledWith(
+        expect.objectContaining({
+          projectFolders: [
+            {
+              id: UTILITIES_FOLDER_ID,
+              name: 'Utilities',
+              projectPaths: ['/tool'],
+            },
+          ],
+        })
+      )
+    )
+  })
 
-    // The protected segment never lights up as a drop zone...
-    expect(utilitiesSegment).not.toHaveAttribute('data-drop-active', 'true')
-    fireEvent.pointerUp(window, { pointerId: 1 })
-
-    // ...and the drop commits nothing — no join, no misleading cap toast.
+  it('removing a user project persists membership without removing tools', async () => {
+    useProjectStore.getState().setActiveFolderId('set')
+    render(<Sidebar variant="static" />)
+    await userEvent.click(
+      screen.getByRole('button', { name: /remove from history/i })
+    )
+    expect(useProjectStore.getState().recentProjectPaths).toEqual(['/tool'])
     expect(useProjectStore.getState().projectFolders[0]?.projectPaths).toEqual(
       []
     )
-    expect(useProjectStore.getState().recentProjectPaths).toEqual([
-      PROJECT_PATH,
-      OTHER_PATH,
+    expect(useProjectStore.getState().projectFolders[1]?.projectPaths).toEqual([
+      '/tool',
     ])
-    expect(notifications.warning).not.toHaveBeenCalled()
   })
 })

@@ -5,7 +5,6 @@ import {
   visibleProjectPaths,
   isProtectedFolder,
   UTILITIES_FOLDER_ID,
-  folderLimitReached,
 } from './project-store'
 import { commands, type Manifest } from '@/lib/tauri-bindings'
 import { createFolderOrFail } from '@/test/test-utils'
@@ -992,7 +991,7 @@ describe('replaceProjectIndex (v1.3.2, issue #76 — setlist import seam)', () =
     expect(useProjectStore.getState().addRecentProject('/new')).toBe(false)
   })
 
-  it('an over-limit folder area loads too — createFolder still refuses more', () => {
+  it('loads legacy folder order intact and allows another folder', () => {
     useProjectStore.getState().replaceProjectIndex(
       [],
       ['One', 'Two', 'Three', 'Four'].map((name, i) => ({
@@ -1003,11 +1002,10 @@ describe('replaceProjectIndex (v1.3.2, issue #76 — setlist import seam)', () =
     )
 
     expect(useProjectStore.getState().projectFolders).toHaveLength(4)
-    expect(folderLimitReached(useProjectStore.getState().projectFolders)).toBe(
-      true
-    )
-    expect(useProjectStore.getState().createFolder('Five')).toBeNull()
-    expect(useProjectStore.getState().projectFolders).toHaveLength(4)
+    const id = createFolderOrFail('Five')
+    expect(
+      useProjectStore.getState().projectFolders.map(folder => folder.id)
+    ).toEqual([id, 'f-0', 'f-1', 'f-2', 'f-3'])
   })
 
   it('app content rides through: tools and the Utilities folder survive', () => {
@@ -1152,7 +1150,7 @@ describe('capacity limits (v1.2.1, issue #26)', () => {
     })
   })
 
-  it('createFolder refuses the 4th folder — Utilities counts toward the 3', () => {
+  it('creates more than three custom folders while Utilities remains protected', () => {
     createFolderOrFail('One')
     createFolderOrFail('Two')
     useProjectStore.setState({
@@ -1161,13 +1159,10 @@ describe('capacity limits (v1.2.1, issue #26)', () => {
         { id: UTILITIES_FOLDER_ID, name: 'Utilities', projectPaths: [] },
       ],
     })
-    expect(folderLimitReached(useProjectStore.getState().projectFolders)).toBe(
-      true
-    )
-
-    const refused = useProjectStore.getState().createFolder('Three')
-    expect(refused).toBeNull()
-    expect(useProjectStore.getState().projectFolders).toHaveLength(3)
+    createFolderOrFail('Three')
+    createFolderOrFail('Four')
+    expect(useProjectStore.getState().projectFolders).toHaveLength(5)
+    expect(isProtectedFolder(UTILITIES_FOLDER_ID)).toBe(true)
   })
 
   it('createFolder still works at 2 folders and below', () => {
@@ -1256,7 +1251,7 @@ describe('capacity limits (v1.2.1, issue #26)', () => {
     expect(useProjectStore.getState().addRecentProject('/new')).toBe(true)
   })
 
-  it('legacy over-limit data loads as-is, but cannot grow (defensive)', () => {
+  it('legacy over-limit data loads intact while project additions remain capped', () => {
     const member = fullFolder(30)
     useProjectStore.getState().restoreProjectIndex(
       [...ungroupedPaths(31), ...member.paths],
@@ -1279,9 +1274,11 @@ describe('capacity limits (v1.2.1, issue #26)', () => {
     ).toHaveLength(31)
     expect(state.projectFolders).toHaveLength(4)
 
-    // Only further additions are refused.
+    // Project additions remain capped; folder creation is unlimited.
     expect(useProjectStore.getState().addRecentProject('/new')).toBe(false)
-    expect(useProjectStore.getState().createFolder('D')).toBeNull()
+    expect(useProjectStore.getState().createFolder('D')).toEqual(
+      expect.any(String)
+    )
   })
 
   it('refused actions write nothing to preferences', async () => {
@@ -1301,7 +1298,6 @@ describe('capacity limits (v1.2.1, issue #26)', () => {
 
     useProjectStore.getState().addRecentProject('/new') // top level at 30
     useProjectStore.getState().moveProjectToFolder('f-full', '/top-0') // folder at 30
-    useProjectStore.getState().createFolder('Capped') // 3 folders exist
     await new Promise(resolve => setTimeout(resolve, 0))
 
     expect(commands.savePreferences).not.toHaveBeenCalled()

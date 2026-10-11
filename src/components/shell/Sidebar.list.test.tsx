@@ -85,7 +85,9 @@ describe('Sidebar project list (v1.2.2, issue #29)', () => {
 
       // The switch row is only the track now.
       expect(
-        within(screen.getByRole('tablist')).queryByTestId('add-project-button')
+        within(screen.getByTestId('folder-switch')).queryByTestId(
+          'add-project-button'
+        )
       ).not.toBeInTheDocument()
     })
 

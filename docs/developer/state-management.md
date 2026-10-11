@@ -211,7 +211,24 @@ The real stores in `src/store/` and what belongs in each:
 
 Shared domain state goes in the matching store; anything component-local stays in `useState`.
 
-### Project Preflight Ownership
+### Performance Folder Browsing
+
+`activeFolderId` and `lastUserFolderId` are transient view state. Entering
+Utilities records the preceding user view; returning validates the remembered
+id against the current user folders and falls back to Home after deletion.
+Every entry, including Cmd folder cycling, passes through `setActiveFolderId`.
+The detour never persists, changes the session or applies pending audio settings.
+Opening a user project from Utilities returns before the existing addition-cap
+check and membership commit; selecting a registered tool stays in Utilities.
+
+Folder count is unlimited. Preserve the original arrays, ids, names, member
+order and intro fields on restore; only legacy missing/null intros normalize to
+undefined. Structural actions still use the shared preferences queue. The
+in-memory disk test in `src/store/performance-folders.test.ts` overlaps structural
+commits with unrelated settings and verifies a complete reload, including the
+protected registry members and order.
+
+## Project Preflight Ownership
 
 `open-project.runPreflight` owns the complete selection flow for card clicks,
 keyboard selection, directory opens and installed bundles. `project-store` issues

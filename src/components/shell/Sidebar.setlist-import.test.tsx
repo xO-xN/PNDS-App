@@ -126,15 +126,7 @@ describe('Sidebar setlist import landing (issue #63)', () => {
 
     // The folder segment exists with the set's name (Home + Utilities
     // flank it in the switch row).
-    const segments = screen.getAllByTestId('folder-segment')
-    const gig = segments.find(segment =>
-      within(segment).getByTestId('folder-name')
-    )
-    expect(gig).toBeDefined()
-    if (!gig) throw new Error('Expected the setlist folder segment')
-    expect(within(gig).getByTestId('folder-name')).toHaveTextContent(
-      'Gig Friday'
-    )
+    expect(screen.getByTestId('folder-picker')).toHaveTextContent('Gig Friday')
   })
 
   it('the receiving machine’s own projects leave the index with the set', async () => {

@@ -5,8 +5,10 @@ import {
   waitFor,
   mockBoundingClientRect,
   createFolderOrFail,
+  selectFolderInPicker,
+  openFolderContextMenu,
+  within,
 } from '@/test/test-utils'
-import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { commands } from '@/lib/tauri-bindings'
 import { useProjectStore } from '@/store/project-store'
@@ -71,18 +73,26 @@ describe('Sidebar folder drags (v1.1.2 T5, folder switch)', () => {
     // Ungrouped FIRST/SECOND pitch 61px; the folder segment sits below
     // them in the (pinned) switch row geometry: x 100..170, y 200..232.
     const [first, second] = screen.getAllByTestId('project-entry')
-    const segment = screen.getByTestId('folder-segment')
     if (!first || !second) throw new Error('Expected two ungrouped cards')
     mockBoundingClientRect(first, { top: 0 })
     mockBoundingClientRect(second, { top: 61 })
+    await dragCardTo(second, 60, 90)
+    mockBoundingClientRect(screen.getByTestId('folder-drop-choices'), {
+      top: 0,
+      left: 20,
+      width: 280,
+      height: 256,
+    })
+    const segment = screen.getByText('Set list', {
+      selector: '[data-folder-drop-id]',
+    })
     mockBoundingClientRect(segment, {
       top: 200,
       left: 100,
       width: 70,
       height: 32,
     })
-
-    await dragCardTo(second, 135, 216)
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 135, clientY: 216 })
 
     // Hovering the segment highlights it as the drop zone.
     expect(segment).toHaveAttribute('data-drop-active', 'true')
@@ -122,29 +132,37 @@ describe('Sidebar folder drags (v1.1.2 T5, folder switch)', () => {
   })
 
   it('dropping a member on the unfiled segment returns it to ungrouped, persisted', async () => {
-    const user = userEvent.setup()
     const folderId = createFolderOrFail('Set list')
     useProjectStore.getState().moveProjectToFolder(folderId, SECOND_PATH)
     useProjectStore.getState().moveProjectToFolder(folderId, THIRD_PATH)
     render(<Sidebar variant="static" />)
 
-    await fireEvent.click(screen.getByTestId('folder-segment'))
+    await selectFolderInPicker('Set list')
 
     // The unfiled segment spans x 100..160, y 0..32; the two members
     // pitch 61px from y 100.
-    const unfiled = screen.getByTestId('unfiled-segment')
+    const [first, second] = screen.getAllByTestId('project-entry')
+    if (!first || !second) throw new Error('Expected two folder members')
+    mockBoundingClientRect(first, { top: 100 })
+    mockBoundingClientRect(second, { top: 161 })
+
+    await dragCardTo(first, 60, 90)
+    mockBoundingClientRect(screen.getByTestId('folder-drop-choices'), {
+      top: 0,
+      left: 20,
+      width: 280,
+      height: 256,
+    })
+    const unfiled = screen.getByText('Home', {
+      selector: '[data-unfiled-drop]',
+    })
     mockBoundingClientRect(unfiled, {
       top: 0,
       left: 100,
       width: 60,
       height: 32,
     })
-    const [first, second] = screen.getAllByTestId('project-entry')
-    if (!first || !second) throw new Error('Expected two folder members')
-    mockBoundingClientRect(first, { top: 100 })
-    mockBoundingClientRect(second, { top: 161 })
-
-    await dragCardTo(first, 130, 16)
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 130, clientY: 16 })
 
     expect(unfiled).toHaveAttribute('data-drop-active', 'true')
     fireEvent.pointerUp(window, { pointerId: 1 })
@@ -172,66 +190,36 @@ describe('Sidebar folder drags (v1.1.2 T5, folder switch)', () => {
     // Back at the unfiled view the project is ungrouped again. (userEvent:
     // a real click starts with pointerdown, which re-arms the click
     // suppression the drop left behind.)
-    await user.click(screen.getByTestId('unfiled-segment'))
+    await selectFolderInPicker('Home')
     expect(screen.getAllByTestId('project-entry')).toHaveLength(2)
   })
 
-  it('segments reorder within the switch row, persisted', async () => {
-    const friday = createFolderOrFail('Friday')
-    const saturday = createFolderOrFail('Saturday')
-    const sunday = createFolderOrFail('Sunday')
+  it('folder menu ordering persists without changing membership', async () => {
+    const first = createFolderOrFail('Friday')
+    const second = createFolderOrFail('Saturday')
+    useProjectStore.getState().setActiveFolderId(first)
     render(<Sidebar variant="static" />)
-
-    const segments = screen.getAllByTestId('folder-segment')
-    expect(segments).toHaveLength(3)
-    // The three segments pitch 74px along the row at y 200.
-    mockBoundingClientRect(segments[0] as HTMLElement, {
-      top: 200,
-      left: 20,
-      width: 70,
-      height: 32,
-    })
-    mockBoundingClientRect(segments[1] as HTMLElement, {
-      top: 200,
-      left: 94,
-      width: 70,
-      height: 32,
-    })
-    mockBoundingClientRect(segments[2] as HTMLElement, {
-      top: 200,
-      left: 168,
-      width: 70,
-      height: 32,
-    })
-
-    // Newest-created first (v1.2.0 top insertion): segments[0] is Sunday.
-    // Drag Sunday over Saturday's right half → insert after it.
-    await dragCardTo(segments[0] as HTMLElement, 150, 216)
-    // Saturday yields one stride left, opening Sunday's landing slot.
-    expect(segments[1]).toHaveStyle({ transform: 'translateX(-74px)' })
-
-    fireEvent.pointerUp(window, { pointerId: 1 })
-
-    expect(
-      useProjectStore.getState().projectFolders.map(folder => folder.id)
-    ).toEqual([saturday, sunday, friday])
-    // The DOM follows the new folder order.
-    expect(
-      screen
-        .getAllByTestId('folder-segment')
-        .map(segment => segment.getAttribute('data-folder-segment'))
-    ).toEqual([saturday, sunday, friday])
-    await waitFor(() => {
+    const menu = await openFolderContextMenu(
+      screen.getByRole('combobox', { name: 'Performance folder' })
+    )
+    fireEvent.click(
+      within(menu).getByRole('menuitem', { name: 'Move folder up' })
+    )
+    await waitFor(() =>
+      expect(
+        useProjectStore.getState().projectFolders.map(folder => folder.id)
+      ).toEqual([first, second])
+    )
+    await waitFor(() =>
       expect(commands.savePreferences).toHaveBeenCalledWith(
         expect.objectContaining({
           projectFolders: [
-            expect.objectContaining({ name: 'Saturday' }),
-            expect.objectContaining({ name: 'Sunday' }),
-            expect.objectContaining({ name: 'Friday' }),
+            expect.objectContaining({ id: first }),
+            expect.objectContaining({ id: second }),
           ],
         })
       )
-    })
+    )
   })
 
   it('a project dragged back over the list neither joins a folder nor saves', async () => {
@@ -244,16 +232,9 @@ describe('Sidebar folder drags (v1.1.2 T5, folder switch)', () => {
     render(<Sidebar variant="static" />)
 
     const [first, second] = screen.getAllByTestId('project-entry')
-    const segment = screen.getByTestId('folder-segment')
     if (!first || !second) throw new Error('Expected two ungrouped cards')
     mockBoundingClientRect(first, { top: 0 })
     mockBoundingClientRect(second, { top: 61 })
-    mockBoundingClientRect(segment, {
-      top: 200,
-      left: 100,
-      width: 70,
-      height: 32,
-    })
 
     // Hover the segment, then retreat to the list and drop on a no-move slot.
     await dragCardTo(second, 135, 216)
@@ -264,5 +245,42 @@ describe('Sidebar folder drags (v1.1.2 T5, folder switch)', () => {
       THIRD_PATH,
     ])
     expect(commands.savePreferences).not.toHaveBeenCalled()
+  })
+  it('a clipped folder row cannot intercept a drop on the visible project list', async () => {
+    useProjectStore.setState({
+      projectFolders: Array.from({ length: 10 }, (_, i) => ({
+        id: `f${i}`,
+        name: `Folder ${i}`,
+        projectPaths: [],
+      })),
+    })
+    render(<Sidebar variant="static" />)
+    const [first, second, third] = screen.getAllByTestId('project-entry')
+    if (!first || !second || !third) throw new Error('Expected three cards')
+    mockBoundingClientRect(first, { top: 80 })
+    mockBoundingClientRect(second, { top: 141 })
+    mockBoundingClientRect(third, { top: 202 })
+    await dragCardTo(second, 60, 90)
+    mockBoundingClientRect(screen.getByTestId('folder-drop-choices'), {
+      top: 0,
+      left: 20,
+      width: 280,
+      height: 64,
+    })
+    // This row exists but has scrolled/clipped out below the popup.
+    mockBoundingClientRect(
+      screen.getByText('Folder 9', { selector: '[data-folder-drop-id]' }),
+      { top: 80, left: 20, width: 280, height: 32 }
+    )
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 135, clientY: 90 })
+    fireEvent.pointerUp(window, { pointerId: 1 })
+    expect(useProjectStore.getState().projectFolders[9]?.projectPaths).toEqual(
+      []
+    )
+    expect(useProjectStore.getState().recentProjectPaths).toEqual([
+      SECOND_PATH,
+      FIRST_PATH,
+      THIRD_PATH,
+    ])
   })
 })

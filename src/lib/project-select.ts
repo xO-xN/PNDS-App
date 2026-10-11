@@ -1,4 +1,9 @@
-import { useProjectStore, visibleProjectPaths } from '@/store/project-store'
+import {
+  useProjectStore,
+  visibleProjectPaths,
+  UTILITIES_FOLDER_ID,
+  previousUserFolderId,
+} from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 import { openProject } from '@/lib/open-project'
 import type { ProjectFolder } from '@/lib/tauri-bindings'
@@ -126,4 +131,14 @@ export function moveProjectSelection(direction: 1 | -1): void {
   if (nextPath === undefined || nextPath === currentPath) return
 
   selectProject(nextPath)
+}
+
+/** The tools detour affects browsing alone and remembers the preceding user view. */
+export function toggleUtilitiesView(): void {
+  const state = useProjectStore.getState()
+  const id =
+    state.activeFolderId === UTILITIES_FOLDER_ID
+      ? previousUserFolderId(state.projectFolders, state.lastUserFolderId)
+      : UTILITIES_FOLDER_ID
+  setActiveFolderView(id)
 }

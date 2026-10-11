@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { commands } from '@/lib/tauri-bindings'
 import { createFolderOrFail } from '@/test/test-utils'
 import { notifications } from '@/lib/notifications'
-import { useProjectStore } from '@/store/project-store'
+import { useProjectStore, UTILITIES_FOLDER_ID } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 import { openProject, promptOpenProject, stopAndReset } from './open-project'
 import { importSetlistDirectory } from '@/lib/setlist-import'
@@ -53,6 +53,44 @@ const NEW_PATH = '/Users/test/Score 4'
  * project at that folder's end, top level leaves it ungrouped.
  */
 describe('openProject (no trust gate)', () => {
+  it('opening from Utilities returns to the preceding user folder and appends there', async () => {
+    useProjectStore.setState({
+      recentProjectPaths: ['/existing', '/tool'],
+      projectFolders: [
+        { id: 'set', name: 'Set', projectPaths: ['/existing'] },
+        { id: UTILITIES_FOLDER_ID, name: 'Utilities', projectPaths: ['/tool'] },
+      ],
+      activeFolderId: UTILITIES_FOLDER_ID,
+      lastUserFolderId: 'set',
+      utilityPaths: ['/tool'],
+    })
+    await openProject(NEW_PATH)
+    expect(useProjectStore.getState().activeFolderId).toBe('set')
+    expect(useProjectStore.getState().projectFolders[0]?.projectPaths).toEqual([
+      '/existing',
+      NEW_PATH,
+    ])
+    expect(useProjectStore.getState().projectFolders[1]?.projectPaths).toEqual([
+      '/tool',
+    ])
+    expect(commands.startProject).not.toHaveBeenCalled()
+    expect(commands.stopProject).not.toHaveBeenCalled()
+  })
+  it('selecting a registered tool stays in Utilities', async () => {
+    useProjectStore.setState({
+      recentProjectPaths: ['/tool'],
+      projectFolders: [
+        { id: UTILITIES_FOLDER_ID, name: 'Utilities', projectPaths: ['/tool'] },
+      ],
+      activeFolderId: UTILITIES_FOLDER_ID,
+      lastUserFolderId: null,
+      utilityPaths: ['/tool'],
+    })
+    await openProject('/tool')
+    expect(useProjectStore.getState().activeFolderId).toBe(UTILITIES_FOLDER_ID)
+    expect(useProjectStore.getState().currentProject?.path).toBe('/tool')
+  })
+
   let folderId: string
 
   beforeEach(async () => {

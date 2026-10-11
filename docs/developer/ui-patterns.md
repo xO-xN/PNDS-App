@@ -101,6 +101,27 @@ OSC, Room and HTTPS feedback stay conditional. Sidebar visibility never enters
 the monitor URL, iframe key or size derivation. Use workflow tests with deferred
 typed commands and real portal interactions to verify these boundaries.
 
+## User Folder Dropdown
+
+`FolderSwitch` uses the existing Radix Select for the bounded, scrollable user
+folder menu and a separate Utilities toggle. While tools are active the picker
+becomes a return button; folder create/rename temporarily uses the same inline
+name editor. Select and context-menu visibility are ORed before reporting to
+HoverSidebar. Menu actions that change focus run from close-auto-focus after
+the portal's trapped scope is gone. The hover latch checks DOM containment:
+React portal mouse events also bubble through the component tree, even though
+the pointer never entered the physical sidebar.
+
+User folder ordering uses the current folder's context menu. Project-card drag
+reordering still snapshots the yielding list geometry. During a project drag,
+a temporary absolute list overlays that geometry with Home and user-folder
+membership targets. These choices do not yield, so the adapter reads their
+live boxes while scrolling them, clipped to the visible menu viewport; hidden
+rows cannot intercept project-list drops. It resolves ids back to current store indices
+rather than assuming Utilities is part of the visible dropdown. Tools are never
+drag sources or user-membership targets. Workflow tests pin list and choice
+rectangles; the physical drag feel is a manual acceptance step.
+
 ## Tailwind v4 Configuration
 
 Tailwind v4 uses CSS-based configuration instead of `tailwind.config.js`.

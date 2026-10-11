@@ -26,17 +26,26 @@ export interface PreflightRequest {
 export const UTILITIES_FOLDER_ID = 'utilities'
 
 /**
- * v1.2.1 (issue #26): hard sidebar capacity caps — hardcoded constants,
- * not preferences. Over-limit legacy data loads untouched (defensive: no
- * destructive migration on performance machines); the caps only refuse
- * further additions.
+ * Each project list retains its 30-entry addition cap. Folder count is
+ * unlimited (#153); over-limit legacy project lists still load untouched.
  */
-export const FOLDER_LIMIT = 3
 export const PROJECT_LIMIT_PER_DIRECTORY = 30
 
 /** True for folders the sidebar must keep as-is (no rename, no delete). */
 export function isProtectedFolder(id: string): boolean {
   return id === UTILITIES_FOLDER_ID
+}
+
+/** Deleted user folders return to Home; a saved Utilities id is never a destination. */
+export function previousUserFolderId(
+  folders: ProjectFolder[],
+  id: string | null
+): string | null {
+  return id !== null &&
+    !isProtectedFolder(id) &&
+    folders.some(folder => folder.id === id)
+    ? id
+    : null
 }
 
 /**
@@ -48,15 +57,6 @@ export function newFolderId(): string {
   return typeof crypto !== 'undefined' && 'randomUUID' in crypto
     ? crypto.randomUUID()
     : `folder-${Date.now()}-${Math.random().toString(36).slice(2)}`
-}
-
-/**
- * v1.2.1 (issue #26): the folder area is at its cap (Utilities counts) —
- * the sidebar's FOLDERS "+" derives its disabled state from this, never
- * from its own count.
- */
-export function folderLimitReached(folders: ProjectFolder[]): boolean {
-  return folders.length >= FOLDER_LIMIT
 }
 
 /**
@@ -109,6 +109,8 @@ interface ProjectState {
    * level. Session-memory view state — never persisted (spec issue #4).
    */
   activeFolderId: string | null
+  /** Session-only return destination for the independent Utilities view. */
+  lastUserFolderId: string | null
   /**
    * v1.1.2 T6: user-chosen display name per project path (spec issue #10).
    * Absent entry = derived path-basename name. Persisted in preferences.
@@ -177,7 +179,7 @@ interface ProjectState {
    *
    * Batch-vs-cap policy (decided here, v1.3.2): a replace is a load, not
    * an addition — directories (and the folder area) may land over
-   * `PROJECT_LIMIT_PER_DIRECTORY` / `FOLDER_LIMIT` exactly like
+   * `PROJECT_LIMIT_PER_DIRECTORY` exactly like
    * over-limit legacy data (v1.2.1): loaded as-is, further additions
    * refused. Nothing can reject the batch midway, so an import is
    * all-or-nothing by construction.
@@ -209,11 +211,10 @@ interface ProjectState {
    */
   setProjectFolders: (folders: ProjectFolder[]) => void
   /**
-   * v1.2.1 (issue #26): creates a folder and returns its id (caller drives
-   * inline naming), or null when the folder area is at `FOLDER_LIMIT`
-   * (Utilities counts). A refusal changes nothing.
+   * Creates an unlimited user grouping and returns its id for inline naming.
+   * Existing project counts remain subject to PROJECT_LIMIT_PER_DIRECTORY.
    */
-  createFolder: (name: string) => string | null
+  createFolder: (name: string) => string
   /** true when the rename applied (false: protected or duplicate). */
   renameFolder: (id: string, name: string) => boolean
   /** Deletes the grouping; member projects return to ungrouped. */
@@ -464,6 +465,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
   preflightErrors: {},
   confirmCloseProjectOpen: false,
   activeFolderId: null,
+  lastUserFolderId: null,
   projectDisplayNames: {},
   manifestProjectNames: {},
   renameTarget: null,
@@ -582,7 +584,12 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
     set(state =>
       state.activeFolderId === id
         ? {}
-        : { activeFolderId: id, ...cancelledPreflightState(state) }
+        : {
+            activeFolderId: id,
+            lastUserFolderId:
+              id === UTILITIES_FOLDER_ID ? state.activeFolderId : id,
+            ...cancelledPreflightState(state),
+          }
     ),
 
   setProjectDisplayNames: names => set({ projectDisplayNames: names }),
@@ -676,10 +683,6 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
 
   createFolder: name => {
     const before = get()
-    // v1.2.1 (issue #26): the folder cap (Utilities counts) refuses the
-    // creation outright — the sidebar's "+" is disabled at the same
-    // threshold via `folderLimitReached`.
-    if (folderLimitReached(before.projectFolders)) return null
     const id = newFolderId()
     // v1.2.2 (user feedback): the fresh folder never shares a name —
     // repeat creations pick up " 2", " 3"… instead of colliding.

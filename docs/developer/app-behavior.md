@@ -74,19 +74,20 @@ App 不是：
 
 打开路径不弹信任确认：PNDS App 是「操作者即机主」的演出工具，打开的工程由操作者本人放入本机，运行前再弹一次本地代码确认是纯摩擦。工程历史的增删与数据格式（`recentProjects`）保持不变。
 
-工程文件夹（侧栏顶部的分段控件 switch）：
+工程文件夹（#153：侧栏顶部的用户编组下拉与独立工具入口）：
 
-- track 撑满行宽，段宽随名字分配，白色 pill 滑动切换；段为 `role="tab"` + roving tabindex；
-- ←/→ 在聚焦段上循环切换视图；⌘←/→ 在任意位置切换当前文件夹视图，两端循环回绕（v1.3.1 用户反馈：三视图下旧的端点钳制读起来像卡住；与段箭头同规，经段点击同一入口）。v1.3.3（#89 用户反馈：⌘←/⌘→ 无声失效）：WKWebView 把「仅 Command + 左/右方向键」当作自身后退/前进等价键在原生层吃掉，keydown 到不了页面（实测 ⌘↓ 与裸方向键可达 DOM、⌘横箭头不可；jsdom 全绿故仅真实环境可见）——window.rs 的 `install_cmd_arrow_webview_passthrough` 沿 #79 守卫的 shadow/exchange 双路模式挂 `performKeyEquivalent:`，把精确匹配的该组合改道普通 `keyDown` 路径（页面 ⌘ 层照常接管，文本框/浮层守卫语义与 v1.3.1 一致），其余组合（含 ⌘↓/⌘↑）原样转发 WKWebView；改道守卫为类级、随启动安装一次；
-- 文件夹管理走段的右键菜单：新建 / 重命名（与 ⌘R 同动作）/ 删除；Utilities 文件夹受保护（重命名与删除禁用并说明原因），文件夹上限 3 个时「新建」禁用并说明原因；
+- 用户编组使用可滚动下拉，含主页、自定义文件夹和新建入口；自定义文件夹数量不限，旧数据完整加载、保存而不截断。每个列表 30 个工程的新增容量规则保持不变；已有超限列表仍完整加载。
+- 工具按钮随时切换到注册表工具列表；工具激活时隐藏用户下拉，改为返回上一个用户视图的入口。再次按工具或按返回恢复原视图，原文件夹已删除时回主页。记忆只在当前会话存在，不持久化；从工具视图打开用户工程先回该用户编组，再按原容量与入夹规则添加。浏览切换不启动／停止演出、不应用待修改音频配置。
+- 下拉使用标准选择器键盘操作，打开时 Enter／箭头／Esc 由弹出层处理；⌘←/→ 仍按主页、用户编组、工具的既有顺序循环浏览，与下拉共用 `setActiveFolderView`。v1.3.3（#89 用户反馈：⌘←/⌘→ 无声失效）：WKWebView 把「仅 Command + 左/右方向键」当作自身后退/前进等价键在原生层吃掉，keydown 到不了页面（实测 ⌘↓ 与裸方向键可达 DOM、⌘横箭头不可；jsdom 全绿故仅真实环境可见）——window.rs 的 `install_cmd_arrow_webview_passthrough` 沿 #79 守卫的 shadow/exchange 双路模式挂 `performKeyEquivalent:`，把精确匹配的该组合改道普通 `keyDown` 路径（页面 ⌘ 层照常接管，文本框/浮层守卫语义与 v1.3.1 一致），其余组合（含 ⌘↓/⌘↑）原样转发 WKWebView；改道守卫为类级、随启动安装一次；
+- 新建可从下拉或当前编组的右键菜单进入；右键继续提供重命名（与 ⌘R 同动作）、导出和删除，并用上移／下移调整用户编组顺序。内置工具仍按注册表固定成员、顺序和名称，保护规则在结构性 store 动作上执行。
 - Utilities 文件夹的成员随 App 更新单向补齐（v1.3.0，issue #55）：每个内置工具在本机只「offer」一次，凭 `offeredUtilities` 记录判断——新发售的工具（如 v1.3.0 的 TND）在升级安装的下次启动补入历史与文件夹；记录缺失的老安装以「路径已出现在索引里」视为已 offer 静默回填，容量拒收的工具不记录、留待下次启动重试；工具身份是 registry id 而非绝对路径（v1.3.1 用户反馈）：正式版与 dev 构建把同一工具暂存在不同根下却共享偏好域，按路径认曾把每个工具双列（6 条目/3 工具）——现在启动时旧根副本从索引清除、保留的工具改挂当前根（历史与 Utilities 成员），`offeredUtilities` 改以 id 记录，旧路径记录按 `/utilities/<id>` 后缀视同其工具；
 - 内置工具是 App 内容，一经种入即不可变（v1.3.2 用户反馈）：卡片不拖拽（无位置重排、不可移出或移入其它文件夹）、无 ✕（不可从历史移除）、⌘R 不改名；Utilities 段不接受外部工程拖入（不高亮、落点拒绝且不弹上限提示）；`clearRecentProjects` 清空用户历史时保留工具。守卫在 project-store 的结构性动作上（`utilityPaths` 集合由每次启动的 `builtinUtilities` 注册表解析注入，不持久化；注册表解析失败时退回按 Utilities 成员的 `/utilities/` 路径形状识别，降级会话内守卫仍在），UI 的禁用只是第一道（utilities-folder.ts 负责注册）；
 - 内置工具的显示顺序固定为 App 注册表顺序（v1.3.3 #81，用户要求）：multichannel → local → telematic → mobile-sensor-meter。每次启动把 Utilities 夹内顺序归一化到注册表顺序——种子只在首次建夹时跑，v1.3.3 之前种入的老安装靠这条迁移跟上重排；顺序无变化时不动持久化；
 - 内置工具在侧栏 / 设置列表 / 运行标题显示 App 提供的简洁别名（v1.3.3 #84 用户报告：320px 侧栏下长名截断）：Multichannel Gen / Local Diagnostics / Telematic Diagnostics / Sensor Meter。别名是解析层事实（builtin-utilities.ts → `projectDisplayName`，MonitorView 运行标题同序），排在「preflight 学到的 manifest 名」之上——选中卡片触发的 preflight 会照常把正式 manifest 名学进 `manifestProjectNames`（#16 的通用机制），但显示不再被它顶回长名（#84 首版把别名启动时学习进 store，恰被这条学习覆盖，用户报告后改为解析层）；manifest 与工具仓库的正式名不变，用户改名层对工具仍然禁用；
 - 内置工具卡左侧定轴槽显示示意 icon（v1.3.3 #85 用户要求）：multichannel → 波形（AudioWaveform）、local → 网络节点（Network）、telematic → 地球（Globe）、mobile-sensor-meter → 仪表（Gauge），未映射的未来工具回退扳手；按路径形状 `…/utilities/<id>` 解析 id（与别名同键），槽宽与居中标题光轴不变，普通工程卡保持裸 spacer；glyph 相对行几何中心上移 1px——15px 标题的光轴（小写字面质量）在中心线上方，正中放置的 icon 读起来偏低（#85 用户反馈）；
-- 工程拖到文件夹段上入夹、拖到未分组段返回；拖动排序期间 pill 淡出，落定后在新位置淡入；
+- 工程卡继续拖动排序；拖动时出现可滚动的临时编组落点，释放后加入目标用户文件夹末尾，拖到主页则回到未分组。工具不出现在用户入夹落点，也不成为拖动源。编组顺序调整不改变成员顺序。
 - 正在运行的工程卡片左缘有 accent 竖条；空闲选中仅白底。Brutal 下工程列为章鱼插画预留底部整段净空（#71 v2 用户反馈：卡片翻页止于插画上方、永不压图，卡片在所有主题保持透明静止底）；「+ 导入工程」留在列表尾部（随列表滚动，不压插画），Brutal 下为实体按钮（卡色底、黑框、硬投影，按下压入投影），其余主题维持半透明 chip。
-- 暗场（stage）主题的两个选择 pill——文件夹段滑 pill（`data-folder-pill`）与工程卡选择 pill（`data-selection-pill`，几何引擎按选中卡全盒定尺寸，玻璃即选中卡的表面；其上的卡片行是透明的）——渲染为**磨砂**液态玻璃（v1.3.3 #88：先严格移植 yzrt 纯 CSS 液态玻璃配方，再按用户方向加磨砂——虚化所有效果；随后多轮仅调透明度，填充 10%→6%→4%→3%）：填充 3% 白；文件夹 pill 的白色高光比工程卡 pill 弱一级（角部高光对 40/25 vs 55/35、角部高光面 45 vs 60——段 pill 更小、等值白读起来更烫，用户要求单独调弱）；六层 inset 阴影栈虚化（角对 0.9/0.55 → 0.55/0.35、blur 半径翻倍、暗内缘 2px→4px blur）；投影放宽抬高（0 6px 16px@35%）；::before 折射暗环 blur 8px→14px；::after 静态 45° 角部高光 blur 3px→8px、白 0.8→0.6；子 span 内白环（参考的 .circle-overlay）blur 1px→4px。**静态、无动态背景**（漂移高光为中间版本，用户要求移除）。与参考的两处差异均因 App DOM：`contrast(3)`/`brightness(0.9)` 外壳不移植（需包住整个侧栏、会毁文字；参考自身的 fx-layer filter 同样使其 backdrop blur 失效）；卡 pill 不带 backdrop blur（其 backdrop root 是带渐隐 mask 的滚动容器，v1.2.2 #29），文件夹 pill 的 backdrop blur 随磨砂 2px→6px。pill 的命令式几何（transform/width）不受影响。浅色主题保持实心卡色 pill，Brutal 保持硬平面。
+- 暗场（stage）工程卡选择 pill（`data-selection-pill`，几何引擎按选中卡全盒定尺寸）继续使用磨砂液态玻璃：3% 白填充、角部高光与六层虚化 inset 阴影，静态无动态背景；因项目滚动容器的渐隐 mask 形成 backdrop root，卡 pill 不带 backdrop blur。用户编组下拉沿用主题 token，原分段 folder pill 不再渲染。
 
 默认主题的 id 为 `pond`（v1.3.3 #91，语汇与显示名 池塘/Pond 对齐；#90 先改的显示名）：`ColorTheme` 联合、`DEFAULT_COLOR_THEME`、主题表、设置面板选项、`data-color-theme` 属性与主题桥（§11 的 `theme` 值 / `?theme=`）全部用 `pond`。`lavender` 与 `midnight` 同入 `LEGACY_THEME_NAMES` 静默迁移（存量偏好 `lavender` → `pond`）；Rust `validate_color_theme` 白名单同时容纳新旧值。改名对页面跟随是视觉无操作：页面（Template `theme-follow`）不认识的 id 会被忽略并保持自身默认配色——恰与 pond 同款；Template 仓的 `THEME_PALETTES` 以 `pond` 为主键、`lavender` 为同调色板别名（双向版本偏斜保险，老 App 推 `lavender` 新页面仍跟随）。唯一实质影响：显式分支 `onTheme('lavender')` 的自定义页面在 pond 主题下不再触发回调。
 

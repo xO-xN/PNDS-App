@@ -96,10 +96,18 @@ export function HoverSidebar() {
         // covers the left edge, so an entry straight into the popover
         // (the ⌘-summoned case) must also latch hoverVisible — otherwise
         // releasing ⌘ retracts the sidebar under the pointer.
-        onMouseEnter={() => setHoverVisible(true)}
+        onMouseEnter={event => {
+          // React portals bubble through this tree, but their options
+          // are physically outside the sidebar and must not latch hover.
+          if (event.currentTarget.contains(event.target as Node))
+            setHoverVisible(true)
+        }}
         // Pointer location is independent of portal/operation holds. A
         // hold ending must hide the panel if the pointer already left.
-        onMouseLeave={() => setHoverVisible(false)}
+        onMouseLeave={event => {
+          if (event.currentTarget.contains(event.target as Node))
+            setHoverVisible(false)
+        }}
       >
         <Sidebar
           variant="overlay"
