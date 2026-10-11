@@ -224,7 +224,7 @@ export async function toggleProjectionFullscreen(): Promise<void> {
 
 /**
  * v1.5.0 (#130): 投影开演 ⇄ 撤回 — THE gate action. Every entry (the ▶
- * button in the monitor title bar, the ⌘⏎ menu accelerator) calls this
+ * button in the performance sidebar, the ⌘⏎ menu accelerator) calls this
  * one helper, which calls the Rust authority; the new state arrives for
  * every window with the next session snapshot. A failed toggle (e.g. a
  * session stopping mid-click) logs — the UI entries are already gated on

@@ -31,21 +31,21 @@ import {
 import { cn } from '@/lib/utils'
 import type { CSSProperties } from 'react'
 
-const MODE_LABELS: Record<string, string> = {
-  internal: 'Internal Synth',
-  external: 'External Synth',
-  none: 'None',
-}
+const MODE_LABEL_KEYS = {
+  internal: 'sidebar.audioMode.internal',
+  external: 'sidebar.audioMode.external',
+  none: 'sidebar.audioMode.none',
+} as const
 
 /**
  * Sidebar settings card (§10.2), rendered as the body of the card whose
  * footer is the session action button.
  *
- * The layout encodes the one distinction that matters here: master volume
- * is live (it hits the running master synth on drag), everything below the
- * rule is deferred — the new value shows immediately but is NOT applied
- * until the user presses the footer button (Load / Change, §8.3). The
- * deferred rows therefore sit directly above the button that applies them.
+ * Audio mode and network precede the live gain, matching the performance
+ * prototype. LAN is a read-only summary: the running card reports its
+ * applied address, other selections report the next-start global choice.
+ * Deferred audio/OSC changes still apply through the single footer action;
+ * gain continues to act immediately on the running master synth.
  *
  * OSC target is hidden unless the selected mode is "external" (§6.6).
  *
@@ -72,6 +72,8 @@ export function SettingsCard({ onPopupOpenChange }: SettingsCardProps) {
   const sessionProjectPath = useSessionStore(state => state.sessionProjectPath)
   const audioMode = useSessionStore(state => state.audioMode)
   const oscTargetInput = useSessionStore(state => state.oscTargetInput)
+  const lanIp = useSessionStore(state => state.lanIp)
+  const sessionLanIp = useSessionStore(state => state.sessionLanIp)
   const hubRooms = useSettingsStore(state => state.hubRooms)
   // #140: the entry switch + the running session's entry state.
   const httpsEnabledSetting = useSettingsStore(
@@ -88,6 +90,11 @@ export function SettingsCard({ onPopupOpenChange }: SettingsCardProps) {
   // would also enable the row while a different card runs).
   const selectionOnRunningCard =
     !isSessionLive(sessionStatus) || currentProject?.path === sessionProjectPath
+
+  const networkAddress =
+    isSessionLive(sessionStatus) && selectionOnRunningCard
+      ? (sessionLanIp ?? lanIp)
+      : lanIp
 
   const modes = currentProject?.manifest.audio.supportedModes ?? []
   const projectLoaded = currentProject !== null
@@ -195,76 +202,18 @@ export function SettingsCard({ onPopupOpenChange }: SettingsCardProps) {
 
   // Every row shares one label gutter, including the volume row (its icon
   // sits in the gutter) — so the left edge of the controls never jumps.
-  const labelClass = 'w-12 shrink-0 text-[11px] text-(--pnds-text)/45'
+  const labelClass = 'w-20 shrink-0 text-[11px] text-(--pnds-text)/45'
   // Values are data, not chrome: full text strength. Greying them is what
   // reads as "disabled", so only the disabled state may do it.
   const fieldClass =
     'h-7 bg-(--pnds-pill) text-[12px] text-(--pnds-text) outline-none transition-colors hover:bg-(--pnds-pill-hover) disabled:text-(--pnds-text)/30 disabled:hover:bg-(--pnds-pill)'
-  const selectClass = `${fieldClass} w-full appearance-none rounded-lg pl-2.5 pr-6`
+  const selectClass = `${fieldClass} w-full appearance-none rounded-lg ps-2.5 pe-6`
 
   return (
     <div
       data-testid="settings-card"
-      className="flex flex-col gap-2 px-3.5 pb-3.5 pt-3"
+      className="flex flex-col gap-1.5 px-3.5 py-2.5"
     >
-      {/* Master volume (§7.5: internal only; N>2 fixed at 100%/0dB — the
-          slider greys out and shows 100; N<=2 keeps the dB-linear curve and
-          80% default). Live — applied on drag, never deferred. The speaker
-          is a click-to-mute toggle (#30): mute remembers the current value,
-          a second click restores it; the state lives in the session store
-          only, so every reopened session returns to the known 80%. */}
-      <div className="flex items-center gap-2">
-        <span
-          className={cn(
-            labelClass,
-            'flex items-center',
-            !volumeEnabled && 'opacity-45'
-          )}
-        >
-          <button
-            type="button"
-            data-testid="mute-toggle"
-            onClick={handleMuteToggle}
-            disabled={!volumeEnabled}
-            aria-label={muted ? t('sidebar.unmute') : t('sidebar.mute')}
-            aria-pressed={muted}
-            className={cn(
-              'pnds-focus-ring -mx-2 flex size-7 items-center justify-center rounded-md',
-              'transition-transform active:scale-90'
-            )}
-          >
-            {muted ? <VolumeX size={14} /> : <Volume2 size={14} />}
-          </button>
-        </span>
-        <input
-          type="range"
-          dir="ltr"
-          aria-label={
-            fixedGain ? t('sidebar.volumeFixed') : t('sidebar.volume')
-          }
-          min={0}
-          max={100}
-          value={Math.round(volumeDisplay)}
-          disabled={!volumeEnabled}
-          onChange={e => handleVolumeChange(Number(e.target.value))}
-          style={
-            {
-              '--pnds-volume-fill': `${Math.round(volumeDisplay)}%`,
-            } as CSSProperties
-          }
-          className="pnds-focus-ring pnds-volume-slider h-7 w-full rounded-full disabled:opacity-35"
-        />
-        <span
-          data-testid="volume-value"
-          className={cn(
-            'font-manrope w-7 shrink-0 text-end text-[11px] tabular-nums',
-            volumeEnabled ? 'text-(--pnds-text)/70' : 'text-(--pnds-text)/30'
-          )}
-        >
-          {Math.round(volumeDisplay)}
-        </span>
-      </div>
-
       {/* #140: compat notice — the switch is on but the selected
           project has not declared adaptation; its starts run over plain
           HTTP (the start dialog asks for the explicit choice). */}
@@ -277,12 +226,9 @@ export function SettingsCard({ onPopupOpenChange }: SettingsCardProps) {
         </p>
       )}
 
-      {/* Everything below is deferred until the footer button (§8.3). */}
-      <hr className="my-0.5 border-(--pnds-text)/10" />
-
       {/* Audio mode (§6.1): Radix Select like the device row. */}
       <div className="flex items-center gap-2">
-        <span className={labelClass}>Synth</span>
+        <span className={labelClass}>{t('session.audioMode')}</span>
         <div className="relative flex-1">
           <Select
             value={audioMode}
@@ -307,12 +253,27 @@ export function SettingsCard({ onPopupOpenChange }: SettingsCardProps) {
               )}
               {modes.map(mode => (
                 <SelectItem key={mode} value={mode}>
-                  {MODE_LABELS[mode] ?? mode}
+                  {t(MODE_LABEL_KEYS[mode])}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
         </div>
+      </div>
+
+      <div
+        role="group"
+        aria-label={t('sidebar.localNetwork')}
+        className="flex items-center gap-2"
+      >
+        <span className={labelClass}>{t('sidebar.localNetwork')}</span>
+        <span
+          dir="ltr"
+          className="font-manrope min-w-0 flex-1 truncate text-end text-[12px] text-(--pnds-text)/70"
+          title={networkAddress ?? undefined}
+        >
+          {networkAddress ?? '—'}
+        </span>
       </div>
 
       {/* #140: the running session's trusted-HTTPS entry — status dot +
@@ -359,13 +320,13 @@ export function SettingsCard({ onPopupOpenChange }: SettingsCardProps) {
       {httpsEntry.status === 'error' && entryRowVisible && httpsEntry.error && (
         <>
           <p
-            className="text-(--pnds-danger) ps-14 text-[11px] leading-snug"
+            className="text-(--pnds-danger) ps-[88px] text-[11px] leading-snug"
             data-testid="session-entry-error"
           >
             {httpsEntry.error}
           </p>
           <p
-            className="text-(--pnds-text)/60 ps-14 text-[11px] leading-snug"
+            className="text-(--pnds-text)/60 ps-[88px] text-[11px] leading-snug"
             data-testid="session-entry-recovery"
           >
             {t('sidebar.entryRecovery')}
@@ -433,6 +394,63 @@ export function SettingsCard({ onPopupOpenChange }: SettingsCardProps) {
           </div>
         </div>
       )}
+      {/* Master volume (§7.5: internal only; N>2 fixed at 100%/0dB — the
+          slider greys out and shows 100; N<=2 keeps the dB-linear curve and
+          80% default). Live — applied on drag, never deferred. The speaker
+          is a click-to-mute toggle (#30): mute remembers the current value,
+          a second click restores it; the state lives in the session store
+          only, so every reopened session returns to the known 80%. */}
+      <div className="flex items-center gap-2">
+        <span
+          className={cn(
+            labelClass,
+            'flex items-center',
+            !volumeEnabled && 'opacity-45'
+          )}
+        >
+          <button
+            type="button"
+            data-testid="mute-toggle"
+            onClick={handleMuteToggle}
+            disabled={!volumeEnabled}
+            aria-label={muted ? t('sidebar.unmute') : t('sidebar.mute')}
+            aria-pressed={muted}
+            className={cn(
+              'pnds-focus-ring -mx-2 flex size-7 items-center justify-center rounded-md',
+              'transition-transform active:scale-90'
+            )}
+          >
+            {muted ? <VolumeX size={14} /> : <Volume2 size={14} />}
+          </button>
+        </span>
+        <input
+          type="range"
+          dir="ltr"
+          aria-label={
+            fixedGain ? t('sidebar.volumeFixed') : t('sidebar.volume')
+          }
+          min={0}
+          max={100}
+          value={Math.round(volumeDisplay)}
+          disabled={!volumeEnabled}
+          onChange={e => handleVolumeChange(Number(e.target.value))}
+          style={
+            {
+              '--pnds-volume-fill': `${Math.round(volumeDisplay)}%`,
+            } as CSSProperties
+          }
+          className="pnds-focus-ring pnds-volume-slider h-7 w-full rounded-full disabled:opacity-35"
+        />
+        <span
+          data-testid="volume-value"
+          className={cn(
+            'font-manrope w-7 shrink-0 text-end text-[11px] tabular-nums',
+            volumeEnabled ? 'text-(--pnds-text)/70' : 'text-(--pnds-text)/30'
+          )}
+        >
+          {Math.round(volumeDisplay)}
+        </span>
+      </div>
     </div>
   )
 }

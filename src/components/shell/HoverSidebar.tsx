@@ -1,9 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Sidebar } from './Sidebar'
 import { useSessionStore } from '@/store/session-store'
 import { useKeyboardStore } from '@/store/keyboard-store'
 import { useProjectStore } from '@/store/project-store'
 import { useCreationStore } from '@/store/creation-store'
+import { useSettingsStore } from '@/store/settings-store'
+import { useWindowStore } from '@/store/window-store'
 import { cn } from '@/lib/utils'
 
 /**
@@ -19,6 +21,20 @@ import { cn } from '@/lib/utils'
  */
 export function HoverSidebar() {
   const [hoverVisible, setHoverVisible] = useState(false)
+  const [pointerActive, setPointerActive] = useState(false)
+  useEffect(() => {
+    // Gain and card drags may release outside this element, or be
+    // canceled by the native window. Neither may strand a gesture hold.
+    const releasePointer = () => setPointerActive(false)
+    window.addEventListener('pointerup', releasePointer, true)
+    window.addEventListener('pointercancel', releasePointer, true)
+    window.addEventListener('blur', releasePointer)
+    return () => {
+      window.removeEventListener('pointerup', releasePointer, true)
+      window.removeEventListener('pointercancel', releasePointer, true)
+      window.removeEventListener('blur', releasePointer)
+    }
+  }, [])
   // While a settings popup is open (Radix portals live outside the sidebar
   // element), mouse-leave auto-hide must not dismiss the sidebar.
   const [popupOpen, setPopupOpen] = useState(false)
@@ -26,6 +42,11 @@ export function HoverSidebar() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const commandKeyPressed = useKeyboardStore(state => state.commandKeyPressed)
   const running = useSessionStore(state => state.sessionStatus === 'ready')
+  const operationPending = useSessionStore(state => state.commandPending)
+  const settingsOpen = useSettingsStore(state => state.settingsOpen)
+  const windowDialogOpen = useWindowStore(
+    state => state.confirmCloseOpen || state.quitConfirmOpen
+  )
   // v1.1.2 T6: ⌘R reveals the sidebar straight into the inline edit, and
   // the edit must outlast the Cmd key / hover that summoned it (spec
   // issue #10: 编辑聚焦期间侧栏保持显现).
@@ -35,8 +56,12 @@ export function HoverSidebar() {
   const peeking = commandKeyPressed && running
   const sidebarVisible =
     hoverVisible ||
+    pointerActive ||
     popupOpen ||
     dialogOpen ||
+    operationPending ||
+    settingsOpen ||
+    windowDialogOpen ||
     peeking ||
     renaming ||
     modeConfirmation
@@ -48,7 +73,7 @@ export function HoverSidebar() {
           than before, so the whole left edge triggers it. */}
       <div
         data-testid="sidebar-hover-zone"
-        className="absolute -top-2 -bottom-2 left-0 z-40 w-3.5"
+        className="absolute -top-2 -bottom-2 start-0 z-40 w-3.5"
         onMouseEnter={() => setHoverVisible(true)}
       />
 
@@ -58,11 +83,13 @@ export function HoverSidebar() {
       <div
         data-testid="sidebar-popover"
         data-sidebar-motion=""
+        inert={!sidebarVisible}
+        onPointerDownCapture={() => setPointerActive(true)}
         className={cn(
-          'absolute bottom-3 left-3 top-3 z-50 transition-all duration-200 ease-out',
+          'absolute bottom-3 start-3 top-3 z-50 transition-all duration-200 ease-out motion-reduce:transition-none',
           sidebarVisible
             ? 'translate-x-0 opacity-100'
-            : 'pointer-events-none -translate-x-5 opacity-0'
+            : 'pointer-events-none -translate-x-5 opacity-0 rtl:translate-x-5'
         )}
         // The ⌘-peek promise in the module doc: releasing ⌘ keeps the
         // sidebar while the pointer is inside it. The hover strip only
@@ -70,9 +97,9 @@ export function HoverSidebar() {
         // (the ⌘-summoned case) must also latch hoverVisible — otherwise
         // releasing ⌘ retracts the sidebar under the pointer.
         onMouseEnter={() => setHoverVisible(true)}
-        onMouseLeave={() => {
-          if (!popupOpen && !dialogOpen) setHoverVisible(false)
-        }}
+        // Pointer location is independent of portal/operation holds. A
+        // hold ending must hide the panel if the pointer already left.
+        onMouseLeave={() => setHoverVisible(false)}
       >
         <Sidebar
           variant="overlay"

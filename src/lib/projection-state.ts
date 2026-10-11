@@ -94,7 +94,7 @@ export function projectionContentKey(content: ProjectionContent): string {
   }
 }
 
-/** The ▶ gate button's state in the main window's monitor title bar. */
+/** The ▶ gate button's state in the main window's performance sidebar. */
 export interface ProjectionStartButtonState {
   /** Rendered only while the projection window exists (spec #128). */
   visible: boolean
@@ -106,7 +106,7 @@ export interface ProjectionStartButtonState {
 
 /**
  * v1.5.0 (#130): (session snapshot × gate × window existence) → the ▶
- * button's state — the pure half of the acceptance machine; MonitorView
+ * button's state — the pure half of the acceptance machine; Sidebar
  * renders from it and both entries (button, ⌘⏎) toggle through the
  * same Rust command. The session argument is a structural subset of
  * SessionSnapshot, so the projection tests feed full snapshots while

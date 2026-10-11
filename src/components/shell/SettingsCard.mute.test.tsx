@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@/test/test-utils'
+import { render, screen, fireEvent, act } from '@/test/test-utils'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { commands } from '@/lib/tauri-bindings'
@@ -186,5 +186,25 @@ describe('SettingsCard volume row (v1.2.2, issue #30)', () => {
 
     fireEvent.click(screen.getByTestId('mute-toggle'))
     expect(slider().style.getPropertyValue('--pnds-volume-fill')).toBe('0%')
+  })
+
+  it('shows the running LAN until restart, and the next-start LAN for another selection', () => {
+    seedRunningSession()
+    useSessionStore.setState({
+      sessionLanIp: '192.168.1.20',
+      lanIp: '192.168.1.30',
+    })
+    render(<SettingsCard />)
+
+    expect(
+      screen.getByRole('group', { name: 'Local network' })
+    ).toHaveTextContent('192.168.1.20')
+    act(() => {
+      useProjectStore.setState({ currentProject: { path: '/other', manifest } })
+    })
+    expect(
+      screen.getByRole('group', { name: 'Local network' })
+    ).toHaveTextContent('192.168.1.30')
+    expect(commands.startProject).not.toHaveBeenCalled()
   })
 })

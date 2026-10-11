@@ -830,6 +830,28 @@ describe('MonitorView projection gate button (#130)', () => {
     )
   })
 
+  it('offers projection start and intro withdrawal in the sidebar without navigating the monitor', () => {
+    useProjectionStore.setState({ windowExists: true })
+    render(<MonitorView />)
+    const frame = screen.getByTitle('Project monitor')
+    const address = frame.getAttribute('src')
+    const host = screen.getByTestId('monitor-host')
+
+    fireEvent.mouseEnter(screen.getByTestId('sidebar-hover-zone'))
+    expect(screen.getByTestId('sidebar')).toContainElement(
+      screen.getByRole('button', { name: 'Start Projection' })
+    )
+    act(() => useSessionStore.setState({ projectionStarted: true }))
+    expect(screen.getByTestId('sidebar')).toContainElement(
+      screen.getByRole('button', { name: 'Withdraw Projection' })
+    )
+    fireEvent.mouseLeave(screen.getByTestId('sidebar-popover'))
+
+    expect(host).toHaveClass('h-screen', 'w-screen')
+    expect(screen.getByTitle('Project monitor')).toBe(frame)
+    expect(frame).toHaveAttribute('src', address)
+  })
+
   it('goes solid green with the withdraw label once the gate opens', () => {
     useProjectionStore.setState({ windowExists: true })
     useSessionStore.setState({ projectionStarted: true })

@@ -54,7 +54,11 @@ import {
  * the render branch below. Enter never starts through the gate: the
  * verdict flows into `canStartNowFrom`.
  */
-export function SessionActionButton() {
+export function SessionActionButton({
+  onDialogOpenChange,
+}: {
+  onDialogOpenChange?: (open: boolean) => void
+}) {
   const { t } = useTranslation()
   // The gate's every input, one subscription. The verdict below derives
   // FROM these values on purpose: the React Compiler memoizes any
@@ -74,6 +78,10 @@ export function SessionActionButton() {
   )
   const pendingChanges = useSessionStore(state => state.pendingChanges)
   const [confirmSwitchOpen, setConfirmSwitchOpen] = useState(false)
+
+  useEffect(() => {
+    onDialogOpenChange?.(confirmSwitchOpen)
+  }, [confirmSwitchOpen, onDialogOpenChange])
 
   const running = sessionStatus === 'ready'
   const busy =
@@ -184,7 +192,8 @@ export function SessionActionButton() {
 
   // Full-bleed footer: the card clips the bottom corners, so no radius
   // and no shadow here — the card owns both.
-  const baseClass = 'h-10 w-full text-[14px] transition-colors'
+  const baseClass =
+    'pnds-focus-ring h-10 w-full text-[14px] transition-colors disabled:cursor-default'
 
   // Close (the running card is selected, no pending change) — #58: Close
   // survives the「设置节点」gate; wiping the node config mid-show must not
@@ -193,13 +202,14 @@ export function SessionActionButton() {
     return (
       <button
         type="button"
+        disabled={busy}
         onClick={() => void stopAndReset()}
         className={cn(
           baseClass,
           'bg-(--pnds-danger) text-(--pnds-danger-foreground) hover:bg-(--pnds-danger-hover)'
         )}
       >
-        {t('sidebar.closeProject')}
+        {busy ? t('session.stopping') : t('sidebar.closeProject')}
       </button>
     )
   }

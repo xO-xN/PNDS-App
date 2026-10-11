@@ -5,6 +5,7 @@ import {
   Plus,
   X,
   Projector,
+  Play,
   RefreshCw,
   Command,
   Music,
@@ -27,9 +28,14 @@ import {
 } from '@/store/session-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { useKeyboardStore } from '@/store/keyboard-store'
+import { useProjectionStore } from '@/store/projection-store'
+import { projectionStartButton } from '@/lib/projection-state'
 import { notifications } from '@/lib/notifications'
 import { promptOpenProject, stopAndReset } from '@/lib/open-project'
-import { openProjectionWindow } from '@/lib/projection-window'
+import {
+  openProjectionWindow,
+  toggleProjectionGate,
+} from '@/lib/projection-window'
 import { Spinner } from '@/components/ui/spinner'
 import { selectProject } from '@/lib/project-select'
 import { reclaimIfManagedBundle } from '@/lib/bundle-project'
@@ -201,6 +207,19 @@ export function Sidebar({
   )
   const renameTarget = useProjectStore(state => state.renameTarget)
   const sessionStatus = useSessionStore(state => state.sessionStatus)
+  const projectionStarted = useSessionStore(state => state.projectionStarted)
+  const projectionWindowExists = useProjectionStore(state => state.windowExists)
+  const projectionStart = projectionStartButton(projectionWindowExists, {
+    status: sessionStatus,
+    projectionStarted,
+  })
+  // One label for aria and tooltip — the action wording follows the gate.
+  const gateLabel = t(
+    projectionStart.started
+      ? 'projection.withdrawAction'
+      : 'projection.startAction'
+  )
+
   // v1.2.3 (#39): the running indicators follow the SESSION's project, not
   // the selection — selecting B while A runs moves the pill but never the
   // accent bar or the folder in-use dot.
@@ -468,7 +487,9 @@ export function Sidebar({
   // folder-delete confirm (FolderSwitch) reports its own visibility up;
   // this is the one place the two dialogs merge.
   const [folderDialogOpen, setFolderDialogOpen] = useState(false)
-  const dialogOpen = folderDialogOpen || confirmCloseProjectOpen
+  const [sessionDialogOpen, setSessionDialogOpen] = useState(false)
+  const dialogOpen =
+    folderDialogOpen || sessionDialogOpen || confirmCloseProjectOpen
   useEffect(() => {
     onDialogOpenChange?.(dialogOpen)
   }, [dialogOpen, onDialogOpenChange])
@@ -526,7 +547,7 @@ export function Sidebar({
           clusters opt out so they stay clickable. */}
       <div
         data-tauri-drag-region
-        className="flex h-14 items-start justify-between px-4 pt-4"
+        className="flex h-11 shrink-0 items-start justify-between px-4 pt-3"
       >
         <div data-tauri-drag-region="false">
           <TrafficLights />
@@ -545,6 +566,24 @@ export function Sidebar({
           >
             <Projector size={15} />
           </button>
+          {projectionStart.visible && (
+            <button
+              type="button"
+              data-testid="projection-start-button"
+              aria-label={gateLabel}
+              title={gateLabel}
+              disabled={!projectionStart.enabled}
+              onClick={toggleProjectionGate}
+              className={cn(
+                'pnds-focus-ring rounded-md bg-(--pnds-projection-control-bg) p-1.5 leading-none transition disabled:opacity-40',
+                projectionStart.started
+                  ? 'text-[#34c759]'
+                  : 'animate-[projection-start-blink_1.6s_ease-in-out_infinite] text-[#ff9f0a]'
+              )}
+            >
+              <Play size={15} fill="currentColor" aria-hidden="true" />
+            </button>
+          )}
           <button
             type="button"
             aria-label={t('sidebar.refresh')}
@@ -558,7 +597,7 @@ export function Sidebar({
         </div>
       </div>
 
-      <nav className="mt-2 flex min-h-0 flex-1 flex-col">
+      <nav className="mt-1 flex min-h-0 flex-1 flex-col">
         {/* v1.2.1 (folder switch): the segmented control above the project
             column — segments, sliding pill, context-menu CRUD and the
             delete confirm — lives in FolderSwitch; the sidebar hands it
@@ -882,7 +921,10 @@ export function Sidebar({
           stays outside the project scroller. The art keeps the column's
           reserved zone clear (#71 v2); this wrapper is its containing
           block. */}
-      <div data-testid="settings-footer" className="relative px-5 pb-2 pt-6">
+      <div
+        data-testid="settings-footer"
+        className={cn('relative shrink-0 px-5 pb-2', brutal ? 'pt-6' : 'pt-3')}
+      >
         {brutal && (
           /* A stretching div, not the img: a replaced element ignores the
              inset stretch (it would render at intrinsic size), while this
@@ -900,7 +942,7 @@ export function Sidebar({
         )}
         <div className="overflow-hidden rounded-xl bg-(--pnds-card) shadow-(--pnds-card-shadow)">
           <SettingsCard onPopupOpenChange={onPopupOpenChange} />
-          <SessionActionButton />
+          <SessionActionButton onDialogOpenChange={setSessionDialogOpen} />
         </div>
       </div>
       <CreationModeButton />

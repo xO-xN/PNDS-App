@@ -81,6 +81,26 @@ Source and interaction/bridge tests are in `src/`, `test/ui*.test.js` and
 `docs/ui-design.md`. It is distributed as an ordinary project, not in the utility
 registry or staging tree.
 
+## Performance overlay sidebar
+
+`HoverSidebar` keeps pointer presence separate from pointer gestures, popup, dialog, mode and
+command holds. Pointer-up/cancel outside the sidebar or window blur releases
+the gesture hold, so a gain/card drag never disappears under the pointer. Always clear the pointer latch on leave, including while a
+portal is open; ending the last hold then hides a panel the pointer already
+left. `Sidebar` combines its folder/project and session replacement dialogs
+before reporting visibility. App settings and window confirmation stores hold
+it directly; `commandPending` covers the interval before the backend publishes
+starting/stopping. The hidden panel is inert, so its controls leave keyboard
+navigation. The overlay uses logical insets and a mirrored RTL exit offset.
+
+Keep performance controls in the sidebar: its header owns projection open,
+start/withdraw-to-intro and refresh; its footer owns audio mode, read-only LAN,
+live gain and one session action. The LAN summary follows the applied session
+when its card is selected, and the global next-start choice otherwise. Existing
+OSC, Room and HTTPS feedback stay conditional. Sidebar visibility never enters
+the monitor URL, iframe key or size derivation. Use workflow tests with deferred
+typed commands and real portal interactions to verify these boundaries.
+
 ## Tailwind v4 Configuration
 
 Tailwind v4 uses CSS-based configuration instead of `tailwind.config.js`.
@@ -251,8 +271,9 @@ node's `data-color-theme` attribute:
   brand-color dots (the halo rings behind them ARE tokens), the shadcn
   vendored scrims (`bg-black/50`), the theme row's accent
   swatch — it previews each theme's accent by definition, so it cannot be
-  one token — and the monitor title strip's ▶ projection-gate light
-  (v1.5.0 #130): a STATUS light on the dark monitor-bar scrim, like the
+  one token — and the performance sidebar's ▶ projection-gate light
+  (v1.5.0 #130, moved in #152): a STATUS light on its dedicated dark
+  `--pnds-projection-control-bg` surface (orange ≥8.6:1, green ≥7.9:1), like the
   traffic lights — ungated blinks Apple system orange `#ff9f0a` (its
   reduce-motion clamp rests there as the static highlight), 开演'd holds
   Apple system green `#34c759` (the logo palette's green). Green/orange

@@ -16,7 +16,7 @@ This guide covers the PNDS App's core interface, how Projects are organised, aud
 
 The App's **left sidebar** is the main working area; it manages the full lifecycle and hierarchy of your performance Projects:
 
-- **Import a Project**: click the **`+ Import Project`** button at the top of the sidebar, or press `⌘ O`, to import a `.pnds` file into the **Home** folder.
+- **Import a Project**: click the **`+ Import Project`** button at the end of the Project list, or press `⌘ O`, to import a `.pnds` file into the **Home** folder.
 - **Folder organisation**: create custom folders to group Projects by performance programme, movement or repertoire.
 - **Free ordering**: press and hold a Project card to drag it freely — drop it into a folder or reorder it.
 
@@ -27,7 +27,8 @@ The App's **left sidebar** is the main working area; it manages the full lifecyc
 **Click** a Project card in the sidebar to select it; the panel at the bottom left expands with the Project's runtime settings:
 
 - **Audio Mode**: view or switch the Project's default DSP / synthesis engine mode; the differences between the three modes are covered in [audio-modes.md](../reference/audio-modes.md).
-- **Output & Volume**: choose the monitoring / reinforcement audio hardware and calibrate the initial master output gain. The volume control only attenuates (maximum 0 dB); when a Project has multichannel output the App disables the control — adjust gain on your external audio interface instead. The speaker button mutes / restores in one click (`⌘ M`); mute lasts for the current performance only — reloading returns to the default 80%.
+- **Local network**: the running card shows the LAN address applied to this performance; other selections show the global address for their next start. Choose it in Settings → Node; changing that choice never retargets the running monitor.
+- **Output & Volume**: choose output hardware in Settings → Audio, applying at the next start. The sidebar gain acts live on the selected running Project. The volume control only attenuates (maximum 0 dB); when a Project has multichannel output the App disables the control — adjust gain on your external audio interface instead. The speaker button mutes / restores in one click (`⌘ M`); mute lasts for the current performance only — reloading returns to the default 80%.
 - **OSC Port**: the UDP port used to send control signals to external hosts (Max, SuperCollider, Ableton Live, lighting consoles, …).
 
 ---
@@ -74,7 +75,9 @@ PNDS evokes "many ponds, connected": several sites, each a Mac plus its local pe
 During a performance or rehearsal, when you need to switch the audio output device, change volume or check connections:
 
 - **Edge hover**: move the pointer to the far left edge of the window and the settings sidebar glides in.
-- **Keyboard summon**: hold `⌘` and the sidebar appears instantly; release the key or move the pointer away and it slides back out, keeping the main view free of distraction.
+- **Keyboard summon**: hold `⌘` to reveal the sidebar. It hides once the key is released and the pointer leaves. Dropdowns, dialogs, mode confirmation and startup/shutdown operations keep it visible until they finish. The sidebar overlays the full-window monitor; revealing or hiding it never resizes or reloads the page.
+- **One performance action**: the footer offers Load, Change or Close as one full-width button. Selecting another Project leaves the performance running; Load asks before replacing it. Apply audio-mode or External-target edits with Change; the error page keeps Retry.
+- **Projection and intro**: the header opens the venue window and offers ▶ once that window exists. Start Projection reveals its monitor; Withdraw Projection restores the intro. Refresh reloads the monitor page; the menu and `⌘⏎` keep projection control. Help remains available from its menu and `⌘ ?`.
 - **Full-screen performance**: `⌃⌘ F`, the menu item or the sidebar button enters full screen; the monitor page adapts to the new size.
 
 ---
@@ -129,21 +132,21 @@ closes the reader and returns to the idle home.
 
 The shortcuts an App user reaches for (creators asking "which keys can my pages get?" — see [page interaction](../reference/page-interaction.md)):
 
-| Shortcut              | Action                                    |
-| --------------------- | ----------------------------------------- |
-| `⌘ O`                 | Import a Project                          |
-| `⌘ 1`–`⌘ 9`           | Select the Nth visible Project            |
-| `⌘ ↓` / `⌘ ↑`         | Next / previous Project                   |
-| `⌘ ←` / `⌘ →`         | Switch folder view (wrapping at the ends) |
-| `⌘ R`                 | Rename the selected Project / folder      |
-| `Enter`               | Load the Project / restart after a change |
-| `Esc`                 | Close the Project (confirm flow)          |
-| `⌘` (hold)            | Summon the sidebar + number badges        |
-| `⌃ ⌘ F`               | Enter / leave full screen                 |
-| `⌘ M`                 | Master mute / restore                     |
-| `⌘ =` / `⌘ -` / `⌘ 0` | Monitor zoom in / out / actual size       |
-| `⌘ ⇧ R`               | Reload the monitor page                   |
-| `⌘ ,`                 | Open / close the settings panel           |
-| `⌘ ?`                 | Open the help center                      |
-| `⌘ W`                 | Close window (confirm flow while running) |
-| `⌘ Q`                 | Quit the App (confirm flow while running) |
+| Shortcut              | Action                                        |
+| --------------------- | --------------------------------------------- |
+| `⌘ O`                 | Import a Project                              |
+| `⌘ 1`–`⌘ 9`           | Select the Nth visible Project                |
+| `⌘ ↓` / `⌘ ↑`         | Next / previous Project                       |
+| `⌘ ←` / `⌘ →`         | Switch folder view (wrapping at the ends)     |
+| `⌘ R`                 | Rename the selected Project / folder          |
+| `Enter`               | Load the Project / restart after a change     |
+| `Esc`                 | Cancel mode confirmation / dismiss an overlay |
+| `⌘` (hold)            | Summon the sidebar + number badges            |
+| `⌃ ⌘ F`               | Enter / leave full screen                     |
+| `⌘ M`                 | Master mute / restore                         |
+| `⌘ =` / `⌘ -` / `⌘ 0` | Monitor zoom in / out / actual size           |
+| `⌘ ⇧ R`               | Reload the monitor page                       |
+| `⌘ ,`                 | Open / close the settings panel               |
+| `⌘ ?`                 | Open the help center                          |
+| `⌘ W`                 | Close window (confirm flow while running)     |
+| `⌘ Q`                 | Quit the App (confirm flow while running)     |

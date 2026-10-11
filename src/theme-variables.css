@@ -191,6 +191,8 @@
      keep the current dark scrim so any monitor content stays legible. */
   --pnds-monitor-bar: rgb(0 0 0 / 30%);
   --pnds-monitor-bar-text: rgb(255 255 255 / 85%);
+  /* Projection status colors keep their dark backing in every sidebar theme. */
+  --pnds-projection-control-bg: #111827;
 
   /* Session action states. Each is checked for >=4.5:1 against its own
      label color, so don't lighten them without rechecking. */
