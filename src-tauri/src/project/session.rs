@@ -602,6 +602,10 @@ struct SessionInner {
     master_synth_ready: bool,
     project_name: Option<String>,
     project_path: Option<String>,
+    /// Ports from the manifest applied at start, never from a later selection/edit.
+    applied_score_ports: Option<[u16; 2]>,
+    /// Actual score child birth identity, retained while its handle drains.
+    applied_score_process: Option<children::ManagedChildIdentity>,
     audio_mode: Option<AudioMode>,
     lan_ip: Option<String>,
     /// #62: the injected connection address (see `SessionSnapshot`).
@@ -655,6 +659,8 @@ impl Default for SessionInner {
             master_synth_ready: false,
             project_name: None,
             project_path: None,
+            applied_score_ports: None,
+            applied_score_process: None,
             audio_mode: None,
             lan_ip: None,
             host_address: None,
@@ -709,6 +715,8 @@ impl SessionInner {
         self.master_synth_ready = false;
         self.project_name = None;
         self.project_path = None;
+        self.applied_score_ports = None;
+        self.applied_score_process = None;
         self.audio_mode = None;
         self.lan_ip = None;
         self.host_address = None;
@@ -922,6 +930,10 @@ impl SessionManager {
         {
             let mut inner = self.lock();
             inner.project_name = Some(manifest.name.clone());
+            inner.applied_score_ports = Some([
+                manifest.score_server.performer_port,
+                manifest.score_server.monitor_port,
+            ]);
             if let Some(address) = &request.performer_address {
                 inner.host_address = Some(address.clone());
             }
@@ -1330,6 +1342,7 @@ impl SessionManager {
 
         {
             let mut inner = self.lock();
+            inner.applied_score_process = Some(child.identity().clone());
             inner.child = Some(child);
             inner.startup_stage = 3;
         }
@@ -2388,6 +2401,45 @@ impl SessionManager {
         }
         pids
     }
+
+    pub fn check_port_status(
+        &self,
+        port: u16,
+    ) -> Result<crate::project::ports::PortStatus, String> {
+        let inner = self.lock();
+        let mut status = crate::project::ports::port_status(port)?;
+        Self::attribute_port(&inner, &mut status);
+        Ok(status)
+    }
+
+    pub fn release_port(
+        &self,
+        port: u16,
+        confirmed: &crate::project::ports::PortOccupant,
+    ) -> Result<crate::project::ports::PortReleaseResult, String> {
+        let mut result = crate::project::ports::release_port(port, confirmed)?;
+        let inner = self.lock();
+        Self::attribute_port(&inner, &mut result.status);
+        Ok(result)
+    }
+
+    fn attribute_port(inner: &SessionInner, status: &mut crate::project::ports::PortStatus) {
+        if status.managed_by_app
+            && status.occupant.as_ref().is_some_and(|occupant| {
+                inner
+                    .applied_score_process
+                    .as_ref()
+                    .is_some_and(|identity| {
+                        identity.matches(occupant.pid, Some(&occupant.started_at))
+                    })
+            })
+            && inner
+                .applied_score_ports
+                .is_some_and(|ports| ports.contains(&status.port))
+        {
+            status.running_project = inner.project_name.clone();
+        }
+    }
 }
 
 /// Builds a readable error line from a health payload in `error` status (§5).
@@ -2763,6 +2815,74 @@ mod tests {
             Duration::from_secs(2)
         ));
         assert!(child.try_wait().unwrap().is_some());
+    }
+
+    #[tokio::test]
+    async fn ports_use_applied_runtime_and_direct_command_cannot_kill_managed_child() {
+        use crate::project::ports::{test_support, PortReleaseOutcome};
+        use tauri::Manager;
+
+        let app = tauri::test::mock_app();
+        app.manage(SessionManager::default());
+        let manager = app.state::<SessionManager>();
+        let dir = tempfile::tempdir().unwrap();
+        let registry = ChildRegistry::new(dir.path().into());
+        let mut child = SupervisedChild::spawn(
+            &registry,
+            "ports-fixture",
+            &mut test_support::listener_command(0),
+        )
+        .unwrap();
+        let port_a = test_support::read_port(child.child());
+        let external_b = test_support::Listener::spawn(0);
+        {
+            let mut inner = manager.lock();
+            inner.project_name = Some("Running A".into());
+            inner.project_path = Some("/running/A".into());
+            inner.applied_score_ports = Some([port_a, port_a]);
+            inner.applied_score_process = Some(child.identity().clone());
+            inner.child = Some(child);
+        }
+
+        let a = crate::commands::project::check_port_status(port_a, app.state())
+            .await
+            .unwrap();
+        assert!(a.managed_by_app);
+        assert_eq!(a.running_project.as_deref(), Some("Running A"));
+        let b = crate::commands::project::check_port_status(external_b.port, app.state())
+            .await
+            .unwrap();
+        assert!(!b.managed_by_app);
+        assert_eq!(b.running_project, None);
+        assert_eq!(b.occupant.unwrap().pid, external_b.pid);
+
+        let confirmed = a.occupant.unwrap();
+        let result = crate::commands::project::release_port(port_a, confirmed.clone(), app.state())
+            .await
+            .unwrap();
+        assert_eq!(result.outcome, PortReleaseOutcome::Cancelled);
+        assert_eq!(result.status.occupant, Some(confirmed.clone()));
+
+        // Teardown moves real handles out of SessionInner before waiting.
+        // That temporary move must not revoke protection or runtime attribution.
+        let mut draining = manager.lock().child.take().unwrap();
+        let result = crate::commands::project::release_port(port_a, confirmed, app.state())
+            .await
+            .unwrap();
+        assert_eq!(result.outcome, PortReleaseOutcome::Cancelled);
+        assert_eq!(result.status.running_project.as_deref(), Some("Running A"));
+        assert_eq!(
+            draining.shutdown(Duration::from_secs(2)),
+            ShutdownOutcome::Confirmed
+        );
+        drop(draining);
+
+        // The same applied port later held by an external process is external.
+        let replacement = test_support::Listener::spawn(port_a);
+        let status = manager.check_port_status(port_a).unwrap();
+        assert!(!status.managed_by_app);
+        assert_eq!(status.running_project, None);
+        assert_eq!(status.occupant.unwrap().pid, replacement.pid);
     }
 
     /// Regression: stop() with no running child deadlocked before (emit was

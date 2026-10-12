@@ -383,16 +383,33 @@ vi.mock('@/lib/tauri-bindings', async () => {
         .fn()
         .mockResolvedValue({ status: 'ok', data: '26.6.2' }),
       // v1.2.0 (issue #14): port occupancy — default: both ports free.
+      getProjectPorts: vi.fn().mockResolvedValue({
+        status: 'ok',
+        data: { performerPort: 6868, monitorPort: 6869 },
+      }),
       checkPortStatus: vi.fn().mockImplementation((port: number) =>
         Promise.resolve({
           status: 'ok',
-          data: { port, occupant: null },
+          data: {
+            port,
+            occupant: null,
+            managedByApp: false,
+            runningProject: null,
+          },
         })
       ),
       releasePort: vi.fn().mockImplementation((port: number) =>
         Promise.resolve({
           status: 'ok',
-          data: { port, occupant: null },
+          data: {
+            outcome: 'released',
+            status: {
+              port,
+              occupant: null,
+              managedByApp: false,
+              runningProject: null,
+            },
+          },
         })
       ),
       // v1.2.0 (issue #16): .pnds bundles — default: pack probe targets a

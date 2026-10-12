@@ -14,6 +14,7 @@ import i18n from '@/i18n/config'
 import { useSettingsStore } from '@/store/settings-store'
 import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
+import { useCreationStore } from '@/store/creation-store'
 import { useCommandKeyboard } from '@/hooks/use-command-keyboard'
 import { SettingsPanel } from './SettingsPanel'
 import type { Manifest } from '@/lib/tauri-bindings'
@@ -343,14 +344,32 @@ describe('SettingsPanel Ports section (v1.2.0 issue #14)', () => {
 
   const occupant = {
     pid: 4242,
+    startedAt: '123:456',
     name: 'node',
     commandLine: '/usr/local/bin/node /Users/test/rogue/server.js',
   }
 
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(commands.getProjectPorts).mockImplementation(path => {
+      const selected =
+        path === '/failed/B'
+          ? manifestCustomPorts
+          : (useProjectStore.getState().currentProject?.manifest ?? manifest)
+      return Promise.resolve({
+        status: 'ok',
+        data: {
+          performerPort: selected.scoreServer.performerPort,
+          monitorPort: selected.scoreServer.monitorPort,
+        },
+      })
+    })
+    useCreationStore.setState({ active: false, workspace: null })
+    useSessionStore.setState({ sessionStatus: 'idle' })
     useProjectStore.setState({
       currentProject: null,
+      pendingPreflightPath: null,
+      failedPreflightPath: null,
       recentProjectPaths: [],
       projectFolders: [],
       activeFolderId: null,
@@ -401,17 +420,89 @@ describe('SettingsPanel Ports section (v1.2.0 issue #14)', () => {
     ).toBeInTheDocument()
   })
 
+  it('queries selected B without attributing its different ports to running A', async () => {
+    vi.mocked(commands.checkPortStatus).mockImplementation(port =>
+      Promise.resolve({
+        status: 'ok',
+        data: {
+          port,
+          occupant: null,
+          managedByApp: false,
+          runningProject: null,
+        },
+      })
+    )
+    useProjectStore.setState({
+      currentProject: { path: '/Users/test/B', manifest: manifestCustomPorts },
+    })
+    useSessionStore.setState({
+      sessionStatus: 'ready',
+      sessionProjectPath: '/Users/test/A',
+    })
+    useSettingsStore.getState().openSettings()
+    render(<SettingsPanel />)
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId('port-available')).toHaveLength(2)
+    })
+    expect(screen.queryByTestId('port-running')).not.toBeInTheDocument()
+    expect(commands.checkPortStatus).toHaveBeenCalledWith(7000)
+    expect(commands.checkPortStatus).toHaveBeenCalledWith(7001)
+    useSessionStore.setState({ sessionStatus: 'idle' })
+  })
+
+  it('queries the selected failed-preflight project instead of default ports', async () => {
+    useProjectStore.setState({
+      currentProject: null,
+      failedPreflightPath: '/failed/B',
+      preflightStatus: 'error',
+    })
+    useSettingsStore.getState().openSettings()
+    render(<SettingsPanel />)
+    await waitFor(() => {
+      expect(commands.checkPortStatus).toHaveBeenCalledWith(7000)
+      expect(commands.checkPortStatus).toHaveBeenCalledWith(7001)
+    })
+    expect(
+      screen.queryByText('Default ports (no project selected)')
+    ).not.toBeInTheDocument()
+  })
+
   it('shows the occupant identity and releases after a full-identity confirm', async () => {
     vi.mocked(commands.checkPortStatus).mockImplementation(port =>
       Promise.resolve(
         port === 6868
-          ? { status: 'ok', data: { port, occupant } }
-          : { status: 'ok', data: { port, occupant: null } }
+          ? {
+              status: 'ok',
+              data: {
+                port,
+                occupant,
+                managedByApp: false,
+                runningProject: null,
+              },
+            }
+          : {
+              status: 'ok',
+              data: {
+                port,
+                occupant: null,
+                managedByApp: false,
+                runningProject: null,
+              },
+            }
       )
     )
     vi.mocked(commands.releasePort).mockResolvedValue({
       status: 'ok',
-      data: { port: 6868, occupant: null },
+      data: {
+        outcome: 'released',
+        status: {
+          port: 6868,
+          occupant: null,
+          managedByApp: false,
+          runningProject: null,
+        },
+      },
     })
     useSettingsStore.getState().openSettings()
     render(<SettingsPanel />)
@@ -433,10 +524,21 @@ describe('SettingsPanel Ports section (v1.2.0 issue #14)', () => {
     )
     expect(commands.releasePort).not.toHaveBeenCalled()
 
+    vi.mocked(commands.checkPortStatus).mockImplementation(port =>
+      Promise.resolve({
+        status: 'ok',
+        data: {
+          port,
+          occupant: null,
+          managedByApp: false,
+          runningProject: null,
+        },
+      })
+    )
     fireEvent.click(within(dialog).getByRole('button', { name: 'Release' }))
 
     await waitFor(() => {
-      expect(commands.releasePort).toHaveBeenCalledWith(6868)
+      expect(commands.releasePort).toHaveBeenCalledWith(6868, occupant)
     })
     await waitFor(() => {
       // Both rows read available — 6868 after the release, 6869 all along.
@@ -458,11 +560,125 @@ describe('SettingsPanel Ports section (v1.2.0 issue #14)', () => {
     })
   })
 
-  it('shows “this project is running” and offers no release while the session is live', async () => {
+  it('queries the creation workspace saved manifest and rereads it on refresh', async () => {
+    useCreationStore.setState({
+      active: true,
+      workspace: {
+        project: {
+          identity: 'workspace-B',
+          root: '/B',
+          name: 'B',
+          source: 'folder',
+        },
+        files: [],
+      },
+    })
+    vi.mocked(commands.getCreationManifest).mockResolvedValue({
+      status: 'ok',
+      data: manifestCustomPorts,
+    })
     vi.mocked(commands.checkPortStatus).mockImplementation(port =>
       Promise.resolve({
         status: 'ok',
-        data: { port, occupant },
+        data: {
+          port,
+          occupant: null,
+          managedByApp: false,
+          runningProject: null,
+        },
+      })
+    )
+    useProjectStore.setState({ currentProject: { path: '/A', manifest } })
+    useSettingsStore.getState().openSettings()
+    render(<SettingsPanel />)
+    await waitFor(() => {
+      expect(
+        screen.getAllByTestId('port-row').map(row => row.dataset.port)
+      ).toEqual(['7000', '7001'])
+    })
+    expect(commands.getCreationManifest).toHaveBeenCalledWith('workspace-B')
+    expect(commands.checkPortStatus).not.toHaveBeenCalledWith(6868)
+
+    vi.mocked(commands.getCreationManifest).mockResolvedValue({
+      status: 'ok',
+      data: {
+        ...manifestCustomPorts,
+        scoreServer: {
+          ...manifestCustomPorts.scoreServer,
+          performerPort: 7100,
+          monitorPort: 7101,
+        },
+      },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+    await waitFor(() => {
+      expect(
+        screen.getAllByTestId('port-row').map(row => row.dataset.port)
+      ).toEqual(['7100', '7101'])
+    })
+    expect(commands.startProject).not.toHaveBeenCalled()
+    useCreationStore.setState({ active: false, workspace: null })
+  })
+
+  it('cancels a stale release and refreshes the new managed identity', async () => {
+    const managed = {
+      port: 6868,
+      occupant,
+      managedByApp: true,
+      runningProject: 'Running A',
+    }
+    vi.mocked(commands.checkPortStatus).mockImplementation(port =>
+      Promise.resolve({
+        status: 'ok',
+        data: {
+          port,
+          occupant: port === 6868 ? occupant : null,
+          managedByApp: false,
+          runningProject: null,
+        },
+      })
+    )
+    vi.mocked(commands.releasePort).mockResolvedValue({
+      status: 'ok',
+      data: { outcome: 'cancelled', status: managed },
+    })
+    useSettingsStore.getState().openSettings()
+    render(<SettingsPanel />)
+    await screen.findByTestId('port-in-use')
+    fireEvent.click(screen.getByRole('button', { name: 'Release' }))
+    const dialog = screen.getByRole('alertdialog')
+    vi.mocked(commands.checkPortStatus).mockImplementation(port =>
+      Promise.resolve({
+        status: 'ok',
+        data:
+          port === 6868
+            ? managed
+            : {
+                port,
+                occupant: null,
+                managedByApp: false,
+                runningProject: null,
+              },
+      })
+    )
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Release' }))
+    expect(await screen.findByText('Running: Running A')).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Release' })
+    ).not.toBeInTheDocument()
+    expect(commands.checkPortStatus).toHaveBeenCalledTimes(4)
+  })
+
+  it('shows the backend running project and offers no release for managed ports', async () => {
+    vi.mocked(commands.checkPortStatus).mockImplementation(port =>
+      Promise.resolve({
+        status: 'ok',
+        data: {
+          port,
+          occupant,
+          managedByApp: true,
+          runningProject: 'Project A',
+        },
       })
     )
     useProjectStore.setState({
@@ -477,8 +693,8 @@ describe('SettingsPanel Ports section (v1.2.0 issue #14)', () => {
     expect(
       screen.getAllByText('Close the project to release its ports.')
     ).toHaveLength(2)
-    // Our own session holds the ports — no occupant dump, no Release.
-    expect(screen.queryByTestId('port-occupant')).not.toBeInTheDocument()
+    expect(screen.getAllByText('Running: Project A')).toHaveLength(2)
+    expect(screen.getAllByTestId('port-occupant')).toHaveLength(2)
     expect(
       screen.queryByRole('button', { name: 'Release' })
     ).not.toBeInTheDocument()

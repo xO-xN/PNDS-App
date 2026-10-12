@@ -623,13 +623,24 @@ async checkPortStatus(port: number) : Promise<Result<PortStatus, string>> {
 }
 },
 /**
- * v1.2.0 (issue #14): release an occupied port — SIGTERM → grace → SIGKILL
- * on the freshly-resolved occupant (same escalation as §12 child cleanup).
- * Returns the port's post-release status; the caller refreshes from it.
+ * #163: saved target ports without runtime preflight or process side effects.
  */
-async releasePort(port: number) : Promise<Result<PortStatus, string>> {
+async getProjectPorts(path: string) : Promise<Result<ProjectPorts, string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("release_port", { port }) };
+    return { status: "ok", data: await TAURI_INVOKE("get_project_ports", { path }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * #163: release only the confirmed external process identity. Backend-owned
+ * children and the App itself are protected before both shutdown signals.
+ * Cancellation returns fresh occupancy without terminating a replacement.
+ */
+async releasePort(port: number, confirmed: PortOccupant) : Promise<Result<PortReleaseResult, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("release_port", { port, confirmed }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -1399,17 +1410,23 @@ export type PerformerVisibilityEvent = { label: string; visible: boolean }
  */
 export type PortOccupant = { pid: number; 
 /**
- * Short process name — the first token of the full command line.
+ * Executable name from ps comm, independent of whitespace in its path.
  */
 name: string; 
 /**
  * Full command line, for the confirm dialog and the error page.
  */
-commandLine: string }
+commandLine: string; 
+/**
+ * Kernel process birth time; distinguishes a reused PID with the same command.
+ */
+startedAt: string }
+export type PortReleaseOutcome = "released" | "cancelled" | "failed"
+export type PortReleaseResult = { outcome: PortReleaseOutcome; status: PortStatus }
 /**
  * Occupancy of one TCP port.
  */
-export type PortStatus = { port: number; occupant: PortOccupant | null }
+export type PortStatus = { port: number; occupant: PortOccupant | null; managedByApp: boolean; runningProject: string | null }
 /**
  * A named one-level group of project paths (spec issue #4).
  */
@@ -1423,6 +1440,7 @@ export type ProjectFolder = { id: string; name: string; projectPaths: string[];
  * project manifests; rides the project-index persistence.
  */
 intro?: string | null }
+export type ProjectPorts = { performerPort: number; monitorPort: number }
 /**
  * v1.5.0 (#130): the projection window came or went — observed at the
  * run-event level (every close path: the ⌘W dispatch, the red traffic

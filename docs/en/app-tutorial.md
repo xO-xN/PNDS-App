@@ -129,6 +129,16 @@ closes the reader and returns to the idle home.
 
 ---
 
+### Inspecting and releasing ports
+
+Open Settings (`⌘ ,`) → Ports to inspect the selected project's manifest performer and monitor ports. Creation mode reads the workspace's saved manifest; drafts do not change the query target. With no target, the defaults are 6868/6869. The section queries once on entry; click Refresh to update it. There is no background polling.
+
+An external listener shows its PID, process name and complete command line. Release asks you to confirm that identity. The App verifies the same process again before signalling, waits for graceful exit and uses bounded force exit when needed. If the listener disappears, changes identity or becomes managed by this App, release cancels and refreshes; confirm the new identity before trying again. The startup error page's Release and Retry also confirms first, and retries only after a successful release reports the port available.
+
+Ports held by this App show their actual running project and ask you to close the project; they offer no direct Release. Selecting B while A runs queries B's ports. Ownership uses A's ports applied at startup and real child processes, so B's different ports are never labelled as running A.
+
+---
+
 ## Appendix: shortcut quick reference
 
 The shortcuts an App user reaches for (creators asking "which keys can my pages get?" — see [page interaction](../reference/page-interaction.md)):

@@ -1,4 +1,11 @@
-import { render, screen, act, fireEvent, waitFor } from '@/test/test-utils'
+import {
+  render,
+  screen,
+  act,
+  fireEvent,
+  waitFor,
+  within,
+} from '@/test/test-utils'
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { commands } from '@/lib/tauri-bindings'
 import { useProjectStore } from '@/store/project-store'
@@ -163,6 +170,7 @@ describe('Error Page port-conflict linkage (v1.2.0 issue #14)', () => {
     'Port 6868 is already in use.\nOpen Settings → Ports (⌘,) to see who holds it and release the port, then try again.'
   const occupant = {
     pid: 4242,
+    startedAt: '123:456',
     name: 'node',
     commandLine: '/usr/local/bin/node /Users/test/rogue/server.js',
   }
@@ -185,7 +193,7 @@ describe('Error Page port-conflict linkage (v1.2.0 issue #14)', () => {
   it('shows the occupant identity for the conflicting port', async () => {
     vi.mocked(commands.checkPortStatus).mockResolvedValue({
       status: 'ok',
-      data: { port: 6868, occupant },
+      data: { port: 6868, occupant, managedByApp: false, runningProject: null },
     })
 
     render(<ErrorScreen />)
@@ -213,14 +221,22 @@ describe('Error Page port-conflict linkage (v1.2.0 issue #14)', () => {
     expect(commands.checkPortStatus).not.toHaveBeenCalled()
   })
 
-  it('Release and Retry clears the port and restarts in one interaction', async () => {
+  it('Release and Retry confirms the full identity before clearing and restarting', async () => {
     vi.mocked(commands.checkPortStatus).mockResolvedValue({
       status: 'ok',
-      data: { port: 6868, occupant },
+      data: { port: 6868, occupant, managedByApp: false, runningProject: null },
     })
     vi.mocked(commands.releasePort).mockResolvedValue({
       status: 'ok',
-      data: { port: 6868, occupant: null },
+      data: {
+        outcome: 'released',
+        status: {
+          port: 6868,
+          occupant: null,
+          managedByApp: false,
+          runningProject: null,
+        },
+      },
     })
 
     render(<ErrorScreen />)
@@ -235,7 +251,14 @@ describe('Error Page port-conflict linkage (v1.2.0 issue #14)', () => {
       fireEvent.click(releaseAndRetry)
     })
 
-    expect(commands.releasePort).toHaveBeenCalledWith(6868)
+    const dialog = screen.getByRole('alertdialog')
+    expect(dialog).toHaveTextContent(occupant.commandLine)
+    expect(commands.releasePort).not.toHaveBeenCalled()
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Release' }))
+    })
+
+    expect(commands.releasePort).toHaveBeenCalledWith(6868, occupant)
     expect(commands.stopProject).not.toHaveBeenCalled()
     expect(commands.startProject).toHaveBeenCalledTimes(1)
     expect(commands.startProject).toHaveBeenCalledWith(
@@ -249,7 +272,7 @@ describe('Error Page port-conflict linkage (v1.2.0 issue #14)', () => {
   it('a failed release surfaces the error and does not start', async () => {
     vi.mocked(commands.checkPortStatus).mockResolvedValue({
       status: 'ok',
-      data: { port: 6868, occupant },
+      data: { port: 6868, occupant, managedByApp: false, runningProject: null },
     })
     vi.mocked(commands.releasePort).mockResolvedValue({
       status: 'error',
@@ -262,7 +285,14 @@ describe('Error Page port-conflict linkage (v1.2.0 issue #14)', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Release and Retry' }))
     })
 
-    expect(commands.releasePort).toHaveBeenCalledWith(6868)
+    await act(async () => {
+      fireEvent.click(
+        within(screen.getByRole('alertdialog')).getByRole('button', {
+          name: 'Release',
+        })
+      )
+    })
+    expect(commands.releasePort).toHaveBeenCalledWith(6868, occupant)
     expect(commands.startProject).not.toHaveBeenCalled()
   })
 
@@ -272,7 +302,12 @@ describe('Error Page port-conflict linkage (v1.2.0 issue #14)', () => {
     // and the ordinary Retry button stays the enabled way forward.
     vi.mocked(commands.checkPortStatus).mockResolvedValue({
       status: 'ok',
-      data: { port: 6868, occupant: null },
+      data: {
+        port: 6868,
+        occupant: null,
+        managedByApp: false,
+        runningProject: null,
+      },
     })
 
     render(<ErrorScreen />)
@@ -281,5 +316,82 @@ describe('Error Page port-conflict linkage (v1.2.0 issue #14)', () => {
       expect(commands.checkPortStatus).toHaveBeenCalledWith(6868)
     })
     expect(screen.getByRole('button', { name: 'Retry' })).toBeEnabled()
+  })
+
+  it('a changed occupant cancels Release and Retry and shows the new identity', async () => {
+    vi.mocked(commands.checkPortStatus).mockResolvedValue({
+      status: 'ok',
+      data: { port: 6868, occupant, managedByApp: false, runningProject: null },
+    })
+    vi.mocked(commands.releasePort).mockResolvedValue({
+      status: 'ok',
+      data: {
+        outcome: 'cancelled',
+        status: {
+          port: 6868,
+          occupant: {
+            ...occupant,
+            pid: 5252,
+            startedAt: '789:10',
+            commandLine: '/new/server',
+          },
+          managedByApp: true,
+          runningProject: 'Running A',
+        },
+      },
+    })
+    render(<ErrorScreen />)
+    await screen.findByText(occupant.commandLine)
+    fireEvent.click(screen.getByRole('button', { name: 'Release and Retry' }))
+    fireEvent.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', {
+        name: 'Release',
+      })
+    )
+    expect(await screen.findByText('/new/server')).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Release and Retry' })
+    ).not.toBeInTheDocument()
+    expect(commands.startProject).not.toHaveBeenCalled()
+  })
+
+  it('does not retry a different selection after a late successful release', async () => {
+    vi.mocked(commands.checkPortStatus).mockResolvedValue({
+      status: 'ok',
+      data: { port: 6868, occupant, managedByApp: false, runningProject: null },
+    })
+    let finish!: (
+      result: Awaited<ReturnType<typeof commands.releasePort>>
+    ) => void
+    vi.mocked(commands.releasePort).mockImplementation(
+      () =>
+        new Promise(resolve => {
+          finish = resolve
+        })
+    )
+    render(<ErrorScreen />)
+    await screen.findByText(occupant.commandLine)
+    fireEvent.click(screen.getByRole('button', { name: 'Release and Retry' }))
+    fireEvent.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', {
+        name: 'Release',
+      })
+    )
+    await act(async () => {
+      useProjectStore.setState({ currentProject: { path: '/new/B', manifest } })
+      finish({
+        status: 'ok',
+        data: {
+          outcome: 'released',
+          status: {
+            port: 6868,
+            occupant: null,
+            managedByApp: false,
+            runningProject: null,
+          },
+        },
+      })
+    })
+    expect(commands.startProject).not.toHaveBeenCalled()
   })
 })

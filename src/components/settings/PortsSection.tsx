@@ -5,21 +5,12 @@ import i18n from '@/i18n/config'
 import { commands, type PortStatus } from '@/lib/tauri-bindings'
 import { logger } from '@/lib/logger'
 import { notifications } from '@/lib/notifications'
-import { useProjectStore } from '@/store/project-store'
-import { useSessionStore } from '@/store/session-store'
+import { selectSelectedPath, useProjectStore } from '@/store/project-store'
+import { useCreationStore } from '@/store/creation-store'
 import { Button } from '@/components/ui/button'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
 import { cn } from '@/lib/utils'
 import { PortOccupantDetails } from './PortOccupantDetails'
+import { PortReleaseConfirmation } from './PortReleaseConfirmation'
 import { SectionTitle } from './SectionTitle'
 import type { SettingsSection } from '@/store/settings-store'
 
@@ -27,125 +18,132 @@ import type { SettingsSection } from '@/store/settings-store'
 const DEFAULT_PERFORMER_PORT = 6868
 const DEFAULT_MONITOR_PORT = 6869
 
-/**
- * v1.2.0 (issue #14): the settings Ports section. It watches the selected
- * project's manifest ports (falling back to 6868/6869 with no selection),
- * shows each port's occupant identity when taken, and can release a port —
- * behind a confirm dialog that repeats the full identity — using the same
- * SIGTERM → grace → SIGKILL semantics as the App's own process cleanup.
- *
- * Query discipline: once when the panel opens (this section only mounts
- * while the dialog is open) plus the manual Refresh button. No polling,
- * ever — a live-looking status nobody asked for is worse than a stale one.
- *
- * While a session is live or draining (starting/ready/stopping) the ports
- * belong to this very project: the rows say so and Release is disabled
- * (closing the project is the right lever — never SIGKILL our own children
- * mid-shutdown).
- */
+/** Queries only on entry, target changes and explicit refresh. Backend facts
+ * own runtime attribution; selection and saved declarations never imply ownership. */
 export function PortsSection({ section }: { section: SettingsSection }) {
   const { t } = useTranslation()
   const currentProject = useProjectStore(state => state.currentProject)
-  const sessionStatus = useSessionStore(state => state.sessionStatus)
-
+  const selectedPath = useProjectStore(selectSelectedPath)
+  const creationActive = useCreationStore(state => state.active)
+  const workspace = useCreationStore(state => state.workspace)
+  const creationIdentity = creationActive
+    ? workspace?.project.identity
+    : undefined
   const performerPort =
-    currentProject?.manifest.scoreServer.performerPort ?? DEFAULT_PERFORMER_PORT
+    (!creationActive && currentProject?.manifest.scoreServer.performerPort) ||
+    DEFAULT_PERFORMER_PORT
   const monitorPort =
-    currentProject?.manifest.scoreServer.monitorPort ?? DEFAULT_MONITOR_PORT
-  // The running session always IS the selected project, so this flag means
-  // "these ports are ours right now".
-  const sessionLive =
-    sessionStatus === 'starting' ||
-    sessionStatus === 'ready' ||
-    sessionStatus === 'stopping'
+    (!creationActive && currentProject?.manifest.scoreServer.monitorPort) ||
+    DEFAULT_MONITOR_PORT
+  const targetKey = creationActive
+    ? `creation:${creationIdentity ?? ''}`
+    : `${selectedPath ?? ''}:${performerPort}:${monitorPort}`
 
-  const [statuses, setStatuses] = useState<PortStatus[] | null>(null)
-  const [checking, setChecking] = useState(false)
-  const [confirmStatus, setConfirmStatus] = useState<PortStatus | null>(null)
+  const [query, setQuery] = useState<{
+    target: string
+    statuses: PortStatus[] | null
+    failed: boolean
+  } | null>(null)
+  const statuses = query?.target === targetKey ? query.statuses : null
+  const failed = query?.target === targetKey && query.failed
+  const [checking, setChecking] = useState(true)
+  const [refresh, setRefresh] = useState(0)
+  const [confirmation, setConfirmation] = useState<{
+    target: string
+    status: PortStatus
+  } | null>(null)
+  const confirmStatus =
+    confirmation?.target === targetKey ? confirmation.status : null
   const [releasingPort, setReleasingPort] = useState<number | null>(null)
 
-  // One query on mount (= panel open, Radix unmounts closed dialogs) and
-  // whenever the watched ports change — all setState after the await, and
-  // a taken-down panel never applies a stale response. The Refresh button
-  // covers everything else. No polling, ever. (No manual useCallback — the
-  // React Compiler memoizes; the effect re-runs when the ports change.)
   useEffect(() => {
     let stale = false
     void (async () => {
-      const results = await Promise.all([
-        commands.checkPortStatus(performerPort),
-        commands.checkPortStatus(monitorPort),
-      ])
-      const ok: PortStatus[] = []
-      let failure: string | null = null
-      for (const result of results) {
-        if (result.status === 'ok') ok.push(result.data)
-        else failure = result.error
-      }
-      if (stale) return
-      if (failure !== null) {
-        logger.warn('Failed to check port status', { error: failure })
+      try {
+        let ports = [performerPort, monitorPort]
+        if (creationIdentity) {
+          // Read the saved manifest through the issued creation identity;
+          // an unfinished draft cannot retarget this diagnostic query.
+          const result = await commands.getCreationManifest(creationIdentity)
+          if (result.status === 'error') throw new Error(result.error.detail)
+          ports = [
+            result.data.scoreServer.performerPort,
+            result.data.scoreServer.monitorPort,
+          ]
+        } else if (!creationActive && selectedPath) {
+          const result = await commands.getProjectPorts(selectedPath)
+          if (result.status === 'error') throw new Error(result.error)
+          ports = [result.data.performerPort, result.data.monitorPort]
+        }
+        const results = await Promise.all(
+          ports.map(port => commands.checkPortStatus(port))
+        )
+        const ok: PortStatus[] = []
+        for (const result of results) {
+          if (result.status === 'error') throw new Error(result.error)
+          ok.push(result.data)
+        }
+        if (!stale) setQuery({ target: targetKey, statuses: ok, failed: false })
+      } catch (error) {
+        if (stale) return
+        logger.warn('Failed to check port status', { error })
         notifications.error(i18n.t('settings.portCheckFailed'))
-        setStatuses(null)
-      } else {
-        setStatuses(ok)
+        setQuery({ target: targetKey, statuses: null, failed: true })
+      } finally {
+        if (!stale) setChecking(false)
       }
     })()
     return () => {
       stale = true
     }
-  }, [performerPort, monitorPort])
+  }, [
+    performerPort,
+    monitorPort,
+    creationIdentity,
+    creationActive,
+    selectedPath,
+    targetKey,
+    refresh,
+  ])
 
-  const handleRefresh = async () => {
+  const handleRefresh = () => {
     setChecking(true)
-    const results = await Promise.all([
-      commands.checkPortStatus(performerPort),
-      commands.checkPortStatus(monitorPort),
-    ])
-    const ok: PortStatus[] = []
-    let failure: string | null = null
-    for (const result of results) {
-      if (result.status === 'ok') ok.push(result.data)
-      else failure = result.error
-    }
-    if (failure !== null) {
-      logger.warn('Failed to check port status', { error: failure })
-      notifications.error(i18n.t('settings.portCheckFailed'))
-      setStatuses(null)
-    } else {
-      setStatuses(ok)
-    }
-    setChecking(false)
+    setConfirmation(null)
+    setRefresh(value => value + 1)
   }
 
   const handleRelease = async () => {
     const target = confirmStatus
-    setConfirmStatus(null)
-    if (!target) return
+    setConfirmation(null)
+    if (!target?.occupant || target.managedByApp || releasingPort !== null)
+      return
     setReleasingPort(target.port)
-    const result = await commands.releasePort(target.port)
-    if (result.status === 'error') {
-      logger.error('Failed to release port', {
-        port: target.port,
-        error: result.error,
-      })
-      notifications.error(i18n.t('settings.portReleaseFailed'), result.error)
-    } else {
-      // The command reports the post-release truth — adopt it directly.
-      setStatuses(prev =>
-        prev
-          ? prev.map(status =>
-              status.port === result.data.port ? result.data : status
-            )
-          : [result.data]
-      )
+    try {
+      const result = await commands.releasePort(target.port, target.occupant)
+      if (result.status === 'error') throw new Error(result.error)
+      if (result.data.outcome === 'cancelled') {
+        notifications.error(i18n.t('settings.portReleaseCancelled'))
+      } else if (result.data.outcome === 'failed') {
+        notifications.error(i18n.t('settings.portReleaseFailed'))
+      }
+    } catch (error) {
+      logger.error('Failed to release port', { port: target.port, error })
+      notifications.error(i18n.t('settings.portReleaseFailed'))
+    } finally {
+      setReleasingPort(null)
+      handleRefresh()
     }
-    setReleasingPort(null)
   }
 
   const rows: { label: string; port: number }[] = [
-    { label: t('settings.portPerformer'), port: performerPort },
-    { label: t('settings.portMonitor'), port: monitorPort },
+    {
+      label: t('settings.portPerformer'),
+      port: statuses?.[0]?.port ?? performerPort,
+    },
+    {
+      label: t('settings.portMonitor'),
+      port: statuses?.[1]?.port ?? monitorPort,
+    },
   ]
 
   return (
@@ -161,8 +159,8 @@ export function PortsSection({ section }: { section: SettingsSection }) {
         <Button
           variant="outline"
           size="sm"
-          disabled={checking}
-          onClick={() => void handleRefresh()}
+          disabled={checking || releasingPort !== null}
+          onClick={handleRefresh}
         >
           <RefreshCw
             size={12}
@@ -173,7 +171,7 @@ export function PortsSection({ section }: { section: SettingsSection }) {
         </Button>
       </div>
 
-      {!currentProject && (
+      {!(creationActive ? workspace : selectedPath) && (
         <p className="text-muted-foreground text-xs">
           {t('settings.portsFallbackHint')}
         </p>
@@ -183,10 +181,11 @@ export function PortsSection({ section }: { section: SettingsSection }) {
         {rows.map(({ label, port }) => {
           const status = statuses?.find(status => status.port === port) ?? null
           const occupant = status?.occupant ?? null
+          const sessionLive = status?.managedByApp === true
           const releasing = releasingPort === port
           return (
             <div
-              key={port}
+              key={label}
               data-testid="port-row"
               data-port={port}
               className="flex flex-col gap-1 rounded-lg border border-(--pnds-text)/10 px-3 py-2"
@@ -198,17 +197,23 @@ export function PortsSection({ section }: { section: SettingsSection }) {
                 <span className="font-manrope text-muted-foreground text-sm">
                   {port}
                 </span>
-                <span className="ml-auto flex items-center gap-2">
+                <span className="ms-auto flex items-center gap-2">
                   {sessionLive ? (
                     <span
                       data-testid="port-running"
                       className="text-xs text-(--pnds-accent-text)"
                     >
-                      {t('settings.portRunningHere')}
+                      {status?.runningProject
+                        ? t('settings.portRunningProject', {
+                            project: status.runningProject,
+                          })
+                        : t('settings.portRunningHere')}
                     </span>
                   ) : status === null ? (
                     <span className="text-muted-foreground text-xs">
-                      {t('settings.portChecking')}
+                      {failed
+                        ? t('settings.portCheckFailed')
+                        : t('settings.portChecking')}
                     </span>
                   ) : occupant ? (
                     <span
@@ -229,8 +234,10 @@ export function PortsSection({ section }: { section: SettingsSection }) {
                     <Button
                       variant="outline"
                       size="sm"
-                      disabled={releasing || releasingPort !== null}
-                      onClick={() => setConfirmStatus(status)}
+                      disabled={checking || releasing || releasingPort !== null}
+                      onClick={() =>
+                        status && setConfirmation({ target: targetKey, status })
+                      }
                     >
                       {releasing
                         ? t('error.releasing')
@@ -239,7 +246,7 @@ export function PortsSection({ section }: { section: SettingsSection }) {
                   )}
                 </span>
               </div>
-              {occupant && !sessionLive && (
+              {occupant && (
                 <PortOccupantDetails occupant={occupant} className="mt-1" />
               )}
               {sessionLive && (
@@ -252,41 +259,11 @@ export function PortsSection({ section }: { section: SettingsSection }) {
         })}
       </div>
 
-      {/* Release confirmation — the full identity is repeated here so the
-          user never kills a process they cannot see. */}
-      <AlertDialog
-        open={confirmStatus !== null}
-        onOpenChange={open => {
-          if (!open) setConfirmStatus(null)
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {t('settings.portReleaseTitle', {
-                port: confirmStatus?.port ?? 0,
-              })}
-            </AlertDialogTitle>
-            <AlertDialogDescription asChild>
-              <div>
-                <p>{t('settings.portReleaseDescription')}</p>
-                {confirmStatus?.occupant && (
-                  <PortOccupantDetails
-                    occupant={confirmStatus.occupant}
-                    className="bg-muted mt-3 rounded-md p-2 font-mono"
-                  />
-                )}
-              </div>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{t('settings.close')}</AlertDialogCancel>
-            <AlertDialogAction autoFocus onClick={() => void handleRelease()}>
-              {t('settings.portRelease')}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <PortReleaseConfirmation
+        status={confirmStatus}
+        onCancel={() => setConfirmation(null)}
+        onConfirm={() => void handleRelease()}
+      />
     </section>
   )
 }

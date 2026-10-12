@@ -288,7 +288,7 @@ vi.mock('@/lib/tauri-bindings', () => ({
 | `openAppLogDir`                | none                                                           | `Result<null, string>`                         | Reveal app log dir in Finder (settings About)                                                                                                                                           |
 | `systemSafariVersion`          | none                                                           | `Result<string \| null, string>`               | Installed Safari version for the WebKit baseline gate (#110); null = unreadable, frontend stays silent                                                                                  |
 | `checkPortStatus`              | `port: number`                                                 | `Result<PortStatus, string>`                   | Occupancy of one TCP port (settings Ports)                                                                                                                                              |
-| `releasePort`                  | `port: number`                                                 | `Result<PortStatus, string>`                   | SIGTERM→grace→SIGKILL release; returns post-release status                                                                                                                              |
+| `releasePort`                  | `port: number, confirmed: PortOccupant`                        | `Result<PortReleaseResult, string>`            | Identity-confirmed external release; returns outcome and fresh status (#163)                                                                                                            |
 | `getBundleOutputInfo`          | `path: string, outputPath: string \| null`                     | `Result<BundleOutputInfo, string>`             | Pack probe: output path + exists flag + packability errors                                                                                                                              |
 | `packProjectBundle`            | `path: string, overwrite: boolean, outputPath: string \| null` | `Result<PackResult, string>`                   | Pack saved project to chosen `.pnds` (`null`: sibling) + sha256                                                                                                                         |
 | `installBundle`                | `path: string`                                                 | `Result<string, string>`                       | Install `.pnds` into `bundles/<id>-<version>/`                                                                                                                                          |
@@ -344,3 +344,13 @@ error returns additionally check their workspace/run/navigation ownership.
 setup for the performer's standard WebKit dialogs and optional synthetic input
 script. Shell-ready follows its completion. Per-instance delegate inheritance
 retains wry's other handlers; no remote page receives a new IPC capability.
+
+## Identity-confirmed Ports release (#163)
+
+`getProjectPorts(path)` reads saved declarations without runtime preflight,
+including a selected card whose preflight failed.
+`checkPortStatus` reports actual managed ownership and the running project only
+for its applied ports. `releasePort` requires the identity shown in the
+confirmation; the backend protects actual child handles before both signals.
+See [Ports inspection and release](./ports.md) for cancellation, lifecycle
+locking and controlled-process tests.

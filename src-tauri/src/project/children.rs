@@ -17,6 +17,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::process::{Child, Command};
+use std::sync::{LazyLock, Mutex};
 use std::time::{Duration, Instant};
 
 /// Issue #93: the score server's shutdown grace window. Healthy projects
@@ -35,6 +36,31 @@ pub(crate) const ORPHAN_GRACE_WINDOW: Duration = Duration::from_secs(2);
 const PROCESS_POLL_INTERVAL: Duration = Duration::from_millis(100);
 
 const SESSION_CHILDREN_FILE: &str = "session-children.json";
+
+/// Actual supervised handles, including boot and shutdown while the handle
+/// is temporarily outside SessionInner. Port release holds this lock across
+/// revalidation and signals; spawn cannot acquire a protected identity midway.
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub(crate) struct ManagedChildIdentity {
+    pid: u32,
+    started_at: Option<String>,
+}
+
+impl ManagedChildIdentity {
+    pub(crate) fn matches(&self, pid: u32, started_at: Option<&str>) -> bool {
+        self.pid == pid && (self.started_at.is_none() || self.started_at.as_deref() == started_at)
+    }
+}
+
+static MANAGED_CHILD_PIDS: LazyLock<Mutex<HashSet<ManagedChildIdentity>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
+
+pub(crate) fn with_managed_child_pids<T>(
+    read: impl FnOnce(&HashSet<ManagedChildIdentity>) -> T,
+) -> T {
+    let guard = MANAGED_CHILD_PIDS.lock().unwrap_or_else(|e| e.into_inner());
+    read(&guard)
+}
 
 /// A process that the App started and must clean up on exit / next launch.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -83,16 +109,57 @@ pub fn kill_escalate(child: &mut Child, pid: u32, timeout: Duration) -> bool {
 /// (port release, and the orphan cleanup below): SIGTERM → poll → SIGKILL.
 /// The orphan cleanup inlines this flow only because it also rewrites the
 /// record file between the two signals; everything else goes through here.
+#[cfg(test)]
 pub(crate) fn terminate_pid_escalate(pid: u32, timeout: Duration) -> bool {
-    let _ = Command::new("/bin/kill").arg(pid.to_string()).status();
+    terminate_pid_escalate_checked(pid, timeout, || true) == PidTermination::Gone
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum PidTermination {
+    Gone,
+    Cancelled,
+    Survived,
+}
+
+/// Same bounded policy, with an identity/ownership check immediately before
+/// EACH signal. In particular a reused PID never receives the later SIGKILL.
+pub(crate) fn terminate_pid_escalate_checked(
+    pid: u32,
+    timeout: Duration,
+    may_signal: impl Fn() -> bool,
+) -> PidTermination {
+    let signal = |force: bool| {
+        with_managed_child_pids(|managed| {
+            let birth = crate::project::ports::process_started_at(pid);
+            let owned = managed
+                .iter()
+                .any(|identity| identity.matches(pid, birth.as_deref()));
+            if pid == std::process::id() || owned || !may_signal() {
+                return false;
+            }
+            let mut command = Command::new("/bin/kill");
+            if force {
+                command.arg("-9");
+            }
+            let _ = command.arg(pid.to_string()).status();
+            true
+        })
+    };
+    if !signal(false) {
+        return PidTermination::Cancelled;
+    }
     if wait_until_gone(pid, timeout) {
-        return true;
+        return PidTermination::Gone;
+    }
+    if !signal(true) {
+        return PidTermination::Cancelled;
     }
     log::warn!("PID {pid} ignored SIGTERM; sending SIGKILL");
-    let _ = Command::new("/bin/kill")
-        .args(["-9", &pid.to_string()])
-        .status();
-    wait_until_gone(pid, timeout)
+    if wait_until_gone(pid, timeout) {
+        PidTermination::Gone
+    } else {
+        PidTermination::Survived
+    }
 }
 
 fn process_alive(pid: u32) -> bool {
@@ -107,7 +174,7 @@ fn process_alive(pid: u32) -> bool {
 /// the process is gone or unreadable. Shared with the port-release service.
 pub(crate) fn process_command_line(pid: u32) -> Option<String> {
     let output = Command::new("/bin/ps")
-        .args(["-p", &pid.to_string(), "-o", "command="])
+        .args(["-ww", "-p", &pid.to_string(), "-o", "command="])
         .output()
         .ok()?;
     if !output.status.success() {
@@ -302,7 +369,7 @@ pub enum ShutdownOutcome {
 /// policy and the record-keeping rule exist exactly here.
 pub struct SupervisedChild {
     child: Child,
-    pid: u32,
+    identity: ManagedChildIdentity,
     registry: ChildRegistry,
     marker: String,
     registered: bool,
@@ -333,11 +400,17 @@ impl SupervisedChild {
         marker: impl Into<String>,
         cmd: &mut Command,
     ) -> std::io::Result<Self> {
+        let mut managed = MANAGED_CHILD_PIDS.lock().unwrap_or_else(|e| e.into_inner());
         let child = cmd.spawn()?;
         let pid = child.id();
+        let identity = ManagedChildIdentity {
+            pid,
+            started_at: crate::project::ports::process_started_at(pid),
+        };
+        managed.insert(identity.clone());
         Ok(Self {
             child,
-            pid,
+            identity,
             registry: registry.clone(),
             marker: marker.into(),
             registered: false,
@@ -347,7 +420,7 @@ impl SupervisedChild {
     /// Writes the ownership record now (idempotent).
     pub fn register(&mut self) {
         if !self.registered {
-            self.registry.record(self.pid, self.marker.clone());
+            self.registry.record(self.identity.pid, self.marker.clone());
             self.registered = true;
         }
     }
@@ -355,7 +428,7 @@ impl SupervisedChild {
     /// §12 bounded shutdown: SIGTERM → grace window → SIGKILL → confirm.
     /// `Confirmed` drops the ownership record; `Unconfirmed` keeps it.
     pub fn shutdown(&mut self, window: Duration) -> ShutdownOutcome {
-        let outcome = if kill_escalate(&mut self.child, self.pid, window) {
+        let outcome = if kill_escalate(&mut self.child, self.identity.pid, window) {
             ShutdownOutcome::Confirmed
         } else {
             ShutdownOutcome::Unconfirmed
@@ -372,7 +445,7 @@ impl SupervisedChild {
         match outcome {
             ShutdownOutcome::Confirmed => {
                 if self.registered {
-                    self.registry.clear(self.pid);
+                    self.registry.clear(self.identity.pid);
                 }
             }
             ShutdownOutcome::Unconfirmed => self.register(),
@@ -380,7 +453,11 @@ impl SupervisedChild {
     }
 
     pub fn id(&self) -> u32 {
-        self.pid
+        self.identity.pid
+    }
+
+    pub(crate) fn identity(&self) -> &ManagedChildIdentity {
+        &self.identity
     }
 
     /// Non-blocking reap poll — the supervisor / watchdog exit checks.
@@ -393,6 +470,15 @@ impl SupervisedChild {
     /// here.
     pub fn child(&mut self) -> &mut Child {
         &mut self.child
+    }
+}
+
+impl Drop for SupervisedChild {
+    fn drop(&mut self) {
+        MANAGED_CHILD_PIDS
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(&self.identity);
     }
 }
 

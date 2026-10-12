@@ -189,17 +189,33 @@ pub async fn list_supported_sample_rates() -> Vec<u32> {
 /// section queries this on open / manual refresh (no polling).
 #[tauri::command]
 #[specta::specta]
-pub async fn check_port_status(port: u16) -> Result<PortStatus, String> {
-    Ok(crate::project::ports::port_status(port))
+pub async fn check_port_status(
+    port: u16,
+    state: State<'_, SessionManager>,
+) -> Result<PortStatus, String> {
+    state.check_port_status(port)
 }
 
-/// v1.2.0 (issue #14): release an occupied port — SIGTERM → grace → SIGKILL
-/// on the freshly-resolved occupant (same escalation as §12 child cleanup).
-/// Returns the port's post-release status; the caller refreshes from it.
+/// #163: saved target ports without runtime preflight or process side effects.
 #[tauri::command]
 #[specta::specta]
-pub async fn release_port(port: u16) -> Result<PortStatus, String> {
-    Ok(crate::project::ports::release_port(port))
+pub async fn get_project_ports(
+    path: String,
+) -> Result<crate::project::ports::ProjectPorts, String> {
+    crate::project::ports::project_ports(std::path::Path::new(&path))
+}
+
+/// #163: release only the confirmed external process identity. Backend-owned
+/// children and the App itself are protected before both shutdown signals.
+/// Cancellation returns fresh occupancy without terminating a replacement.
+#[tauri::command]
+#[specta::specta]
+pub async fn release_port(
+    port: u16,
+    confirmed: crate::project::ports::PortOccupant,
+    state: State<'_, SessionManager>,
+) -> Result<crate::project::ports::PortReleaseResult, String> {
+    state.release_port(port, &confirmed)
 }
 
 /// v1.5.0 (#125): reads a project's root README.md for the main area's
