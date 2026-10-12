@@ -538,14 +538,16 @@
   flex: 0 0 auto;
   width: auto;
   height: auto;
-  aspect-ratio: 4 / 3;
+  padding-block-start: 28px;
   margin: 10px;
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--pnds-text) 15%, transparent);
   border-radius: 9px;
 }
 .creation-monitor-host .monitor-page-viewport {
-  inset-block-start: 28px;
+  position: relative;
+  inset: auto;
+  aspect-ratio: var(--creation-monitor-page-ratio);
 }
 .creation-monitor-strip {
   position: absolute;
@@ -578,10 +580,10 @@
   font-family: var(--font-mono, monospace);
   opacity: 0.65;
 }
-.creation-monitor-idle {
+.creation-monitor-placeholder {
   display: grid;
   place-items: center;
-  padding: 40px 16px 16px;
+  padding: 16px;
   text-align: center;
   background: var(--pnds-bg);
 }
@@ -766,6 +768,11 @@
   flex: 1;
   aspect-ratio: auto;
   margin: 0;
+}
+.creation-monitor-expanded .monitor-page-viewport {
+  position: absolute;
+  inset: 28px 0 0;
+  aspect-ratio: auto;
 }
 .creation-monitor-expanded .creation-performers,
 [data-creation-view][hidden],

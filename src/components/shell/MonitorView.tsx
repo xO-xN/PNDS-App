@@ -30,6 +30,7 @@ import {
 import { cn } from '@/lib/utils'
 import { useGuestFocusGate } from '@/hooks/use-guest-focus-gate'
 import { HoverSidebar } from './HoverSidebar'
+import { useMonitorPreview } from '@/hooks/use-monitor-preview'
 import { MonitorScaleFrame } from './MonitorScaleFrame'
 
 /**
@@ -42,6 +43,10 @@ import { MonitorScaleFrame } from './MonitorScaleFrame'
 export function MonitorView() {
   const creationActive = useCreationStore(state => state.active)
   const expanded = useCreationTestStore(state => state.expanded)
+  const { viewportRef, surfaceStyle, preview } = useMonitorPreview(
+    creationActive,
+    expanded
+  )
   const layoutBlocked = useCreationStore(
     state => state.opening || state.modePhase !== 'idle'
   )
@@ -197,13 +202,13 @@ export function MonitorView() {
       )}
     >
       {creationActive && <CreationTestControls />}
-      <div className="monitor-surface">
-        <div className="monitor-page-viewport">
+      <div className="monitor-surface" style={surfaceStyle}>
+        <div ref={viewportRef} className="monitor-page-viewport" dir="ltr">
           {/* §v1.1.1: browser-style zoom — the shared MonitorScaleFrame
           (transform + inverse size; #131: the projection window's
           monitor half renders its own zoom through the same frame). The
           title strip and hover sidebar are siblings and stay at 100%. */}
-          <MonitorScaleFrame zoom={monitorZoom}>
+          <MonitorScaleFrame zoom={monitorZoom} preview={preview}>
             <iframe
               key={reloadNonce}
               ref={node => {

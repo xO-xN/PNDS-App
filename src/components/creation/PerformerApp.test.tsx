@@ -3,9 +3,13 @@ import { beforeEach, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen, waitFor } from '@/test/test-utils'
 import { listen, emitTo } from '@tauri-apps/api/event'
 import { commands } from '@/lib/tauri-bindings'
+import { fitPerformerWindow } from '@/lib/performer-window-size'
 import { PerformerApp } from './PerformerApp'
 import type { PerformerConfig } from '@/lib/performer-protocol'
 
+vi.mock('@/lib/performer-window-size', () => ({
+  fitPerformerWindow: vi.fn().mockResolvedValue(undefined),
+}))
 vi.mock('@tauri-apps/api/webviewWindow', () => ({
   getCurrentWebviewWindow: () => ({ label: 'performer-test' }),
 }))
@@ -26,6 +30,7 @@ const first: PerformerConfig = {
 let receive: (value: PerformerConfig) => Promise<void>
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.mocked(fitPerformerWindow).mockResolvedValue(undefined)
   vi.mocked(commands.preparePerformerWindow).mockResolvedValue({
     status: 'ok',
     data: null,
@@ -85,6 +90,11 @@ it('keeps the real page and input in place while resizing, follows bridges, and 
   )
   await act(async () => receive(first))
   const frame = await screen.findByTitle('Performer page #1')
+  expect(fitPerformerWindow).toHaveBeenCalledWith(
+    { width: 390, height: 844 },
+    expect.any(Function),
+    expect.any(Function)
+  )
   expect(frame).toHaveAttribute('src', first.url)
   expect(frame).toHaveStyle({ width: '390px', height: '844px' })
   const content = (frame as HTMLIFrameElement).contentWindow
@@ -109,6 +119,11 @@ it('keeps the real page and input in place while resizing, follows bridges, and 
     })
   )
   expect(screen.getByTitle('performer 页面 #1')).toBe(frame)
+  expect(fitPerformerWindow).toHaveBeenLastCalledWith(
+    { width: 1180, height: 820 },
+    expect.any(Function),
+    expect.any(Function)
+  )
   expect(frame).toHaveStyle({ width: '1180px', height: '820px' })
   expect(post).toHaveBeenCalledWith(
     expect.objectContaining({ type: 'pnds:theme', theme: 'brutal' }),
@@ -267,6 +282,48 @@ it('shows an options-send failure and allows the next request', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Tablet' }))
   await act(async () => receive({ ...first, revision: 2, device: 'tablet' }))
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+})
+
+it('fits the newest initial configuration even when an older same-size fit is still pending', async () => {
+  let finishOld!: () => void
+  vi.mocked(fitPerformerWindow).mockReturnValueOnce(
+    new Promise(resolve => {
+      finishOld = resolve
+    })
+  )
+  render(<PerformerApp />)
+  await waitFor(() => expect(emitTo).toHaveBeenCalled())
+  let older!: Promise<void>
+  await act(async () => {
+    older = receive(first)
+  })
+  await waitFor(() => expect(fitPerformerWindow).toHaveBeenCalledTimes(1))
+  await act(async () => receive({ ...first, revision: 2, theme: 'brutal' }))
+  expect(fitPerformerWindow).toHaveBeenCalledTimes(2)
+  const frame = await screen.findByTitle('Performer page #1')
+  await act(async () => {
+    finishOld()
+    await older
+  })
+  expect(screen.getByTitle('Performer page #1')).toBe(frame)
+  expect(document.documentElement).toHaveAttribute('data-color-theme', 'brutal')
+})
+
+it('keeps the real page usable after an automatic window fit fails and retries on a device change', async () => {
+  vi.mocked(fitPerformerWindow).mockRejectedValueOnce(
+    new Error('Native window sizing failed')
+  )
+  render(<PerformerApp />)
+  await waitFor(() => expect(emitTo).toHaveBeenCalled())
+  await act(async () => receive(first))
+  const frame = await screen.findByTitle('Performer page #1')
+  expect(screen.getByRole('alert')).toHaveTextContent(
+    'Native window sizing failed'
+  )
+  expect(commands.fadeInWindow).toHaveBeenCalledWith(first.label)
+  await act(async () => receive({ ...first, revision: 2, device: 'tablet' }))
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(screen.getByTitle('Performer page #1')).toBe(frame)
 })
 
 it('reveals a readable preparation failure without loading an unprepared project page', async () => {

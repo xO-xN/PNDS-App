@@ -343,7 +343,7 @@ red-light and Cmd+W closes. Cmd+W targets the focused client; fullscreen targets
 its native window; monitor zoom does not alter its simulated viewport. Main
 window hiding/blur and cancelled confirmations do not run cleanup. Actual exit
 also destroys test shells in Rust. Window-state persistence excludes these
-transient labels; their local capability exposes only event/focus APIs, with no
+transient labels; their local capability exposes only event/focus and fitting geometry APIs, with no
 remote-origin IPC access and no music relay.
 
 Automated coverage uses native window substitutes through the App workflow and
@@ -367,7 +367,7 @@ project source or music protocol is rewritten. A preparation failure reveals a
 readable shell error. Native menu focus resolves a sheet's owning App window.
 
 The user approved mouse-to-single-touch simulation after real testing. New test
-clients enable it with a visible checkbox in both the main list and their shell;
+clients enable it with a visible checkbox in their own shell;
 turning it off restores original mouse/pointer input without navigation. Native
 setup installs `performer-touch-script.js` once at document start in each project's
 frames. Only a parent-window `pnds:test-touch` message enables it. Mouse down /
@@ -389,7 +389,7 @@ it does not replace other real-device or multi-client identity acceptance checks
 
 The creation preview follows the finalized A layout and review eight in
 [the prototype notes](../prototypes/README.md): a Live test heading with the
-saved audio-mode choices, a separate bordered 4:3 monitor with an address/mode
+saved audio-mode choices, a separate bordered monitor with an address/mode
 strip and expand action, then a compact performer list with a count and bottom
 add button. Runtime start/restart, close, refresh and live gain stay in a compact
 bar; saved-file/global-audio explanations use a keyboard-accessible disclosure.
@@ -397,8 +397,10 @@ The running badge always shows the applied audio mode, separately from the
 selected next-start mode. Pending configuration and actionable errors remain visible. The right panel
 scrolls inside its own bounds when the window or client list is small.
 
-The same monitor surface/viewport ancestry is used in both modes. Expansion
-changes layout and hides controls/list without reparenting the iframe or changing
+The same monitor surface/viewport ancestry is used in both modes. The small preview renders the current main window’s full CSS viewport, uniformly
+scaled into the right panel. Its aspect follows window resize instead of a fixed
+4:3 card. Expansion uses the actual available monitor area (excluding its strip)
+and changes layout and hides controls/list without reparenting the iframe or changing
 its URL. Its load cover belongs to the monitor viewport, so it cannot cover test
 controls. Client-number buttons focus their native window; each close button
 addresses only its own UUID. List device/orientation summaries follow shell
@@ -406,7 +408,16 @@ configuration; page navigation status remains distinct from unknown connection.
 
 Independent performer shells place device/orientation segments in the top toolbar
 and viewport size, fit percentage and the explicit mouse-to-single-touch option
-in the bottom status bar. The fitted device wrapper scales a full-size inner
+in the bottom status bar; the main list contains no input checkbox. Initial
+configuration and device/orientation changes fit the native window to the device
+plus measured toolbar/footer/padding. `performer-window-size.ts` converts the
+current monitor's work area and window chrome to logical pixels, uniformly caps
+the device at 100%, remeasures wrapped controls, and keeps the outer window within
+the work area. Fullscreen/maximized windows retain their chosen bounds; ordinary
+manual resizing is not undone by theme, input, refresh or runtime-only changes.
+Only current configurations may apply late geometry, and a failed fit reveals
+usable content plus an error. A bounded layout wait also works while the initial
+window is hidden. The fitted device wrapper scales a full-size inner
 surface, rather than shrinking the iframe's CSS viewport. Its geometry stays
 LTR even in RTL shells; the embedded page retains its own locale/layout. Shell
 option requests carry the current workspace/run/navigation/revision and wait
@@ -419,4 +430,12 @@ current document and client identity; only explicit runtime navigation reloads.
 
 Workflow tests cover shell actions, list focus/close, stale options and unchanged
 iframe identity. Actual visual fitting, theme painting and WKWebView input still
-require native macOS acceptance; the user deferred this pass on 2026-10-12.
+require native macOS acceptance. Automated geometry uses controlled DOM measurements
+and native substitutes; those do not establish actual WKWebView painting.
+
+On 2026-10-12 the user restarted the development App and confirmed all three
+adjustments: performer windows tighten on opening/orientation changes, the main
+list omits the mouse checkbox, and the monitor thumbnail follows the main window
+aspect while expansion fills its available area. This is native acceptance for
+these adjustments, rather than a claim about untested multi-monitor arrangements
+or other device input capabilities.

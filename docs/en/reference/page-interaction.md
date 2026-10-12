@@ -76,3 +76,10 @@ When choosing interaction keys for the monitor page:
 - Table B's chords are usable but carry the yield semantics: they belong to the page while it holds focus (or the pointer is inside the monitor area) and to the App otherwise — if a performance-critical action rides on a conditional chord, make "focus is inside the page" a stable state of the work (for example, have the page focus an element on load).
 
 Performer test windows support the Project's normal JavaScript dialogs, including player-number prompts. **Mouse simulates one touch** is visibly enabled for new test clients; drag with the left button to simulate one contact, or turn it off for the page's original mouse behavior. Switching this option does not reload the page. These are untrusted synthetic touch events; native text/form controls remain usable, and real multitouch, pressure, sensors and mobile-browser behavior still require a device.
+
+Creator monitor thumbnails render the current App window's full desktop CSS viewport
+at a uniform visual scale. Expanding uses the actual available monitor area;
+restoring and window resizing keep the same page. Performer test shells automatically
+fit their native bounds to the simulated device on opening or changing device /
+orientation, limited by the screen work area. Their real CSS device viewport is
+unchanged by this fitting; the mouse-to-single-touch option lives in the shell.

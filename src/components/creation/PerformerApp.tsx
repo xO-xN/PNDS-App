@@ -14,6 +14,7 @@ import { setColorThemeAttribute } from '@/lib/color-theme'
 import { pushThemeToFrame } from '@/lib/theme-bridge'
 import { pushLocaleToFrame } from '@/lib/locale-bridge'
 import { MONITOR_REVEAL_TIMEOUT_MS } from '@/lib/monitor-reveal'
+import { fitPerformerWindow } from '@/lib/performer-window-size'
 import { pushPerformerInput } from '@/lib/performer-input'
 import {
   performerViewport,
@@ -32,8 +33,12 @@ export function PerformerApp() {
   const [loaded, setLoaded] = useState(-1)
   const [timedOut, setTimedOut] = useState(-1)
   const latest = useRef<PerformerConfig | null>(null)
+  const fittedViewport = useRef<ReturnType<typeof performerViewport> | null>(
+    null
+  )
   const frame = useRef<HTMLIFrameElement>(null)
   const stage = useRef<HTMLDivElement>(null)
+  const footer = useRef<HTMLElement>(null)
   const [available, setAvailable] = useState({ width: 840, height: 630 })
   useEffect(() => {
     let disposed = false
@@ -60,7 +65,8 @@ export function PerformerApp() {
         value.revision <= (latest.current?.revision ?? -1)
       )
         return
-      const previousLocale = latest.current?.locale
+      const previous = latest.current
+      const previousLocale = previous?.locale
       latest.current = value
       await i18n.changeLanguage(value.locale)
       if (value.locale !== previousLocale) {
@@ -72,11 +78,36 @@ export function PerformerApp() {
         }
       }
       if (disposed || latest.current !== value) return
-      setPreparationError(null)
       setColorThemeAttribute(value.theme)
+      let resizeError: string | null = null
+      const nextViewport = performerViewport(value.device, value.orientation)
+      if (
+        fittedViewport.current?.width !== nextViewport.width ||
+        fittedViewport.current?.height !== nextViewport.height
+      ) {
+        try {
+          await fitPerformerWindow(
+            nextViewport,
+            () => ({
+              width: 40,
+              height:
+                (stage.current?.offsetTop ?? 0) +
+                (footer.current?.offsetHeight ?? 0) +
+                40,
+            }),
+            () => !disposed && latest.current === value
+          )
+          if (!disposed && latest.current === value)
+            fittedViewport.current = nextViewport
+        } catch (error) {
+          resizeError = String(error)
+        }
+      }
+      if (disposed || latest.current !== value) return
+      setPreparationError(null)
       optionsRequest.current = null
       setOptionsPending(false)
-      setOptionsError(null)
+      setOptionsError(resizeError)
       setConfig(value)
       void commands
         .fadeInWindow(label)
@@ -319,24 +350,23 @@ export function PerformerApp() {
           <p role="status">{t('creation.performers.page.standby')}</p>
         )}
       </div>
-      <footer className="performer-statusbar">
+      <footer ref={footer} className="performer-statusbar">
         <span dir="ltr">
           {viewport.width} × {viewport.height}{' '}
           <span>· {Math.round(scale * 100)}%</span>
         </span>
-        {config && (
-          <label className="creation-performer-input">
-            <input
-              type="checkbox"
-              checked={config.mouseTouch}
-              disabled={optionsPending}
-              onChange={event =>
-                requestOptions({ mouseTouch: event.target.checked })
-              }
-            />
-            {t('creation.performers.mouseTouch')}
-          </label>
-        )}
+        <label className="creation-performer-input">
+          <input
+            type="checkbox"
+            checked={config?.mouseTouch ?? true}
+            disabled={!config || optionsPending}
+            onChange={event =>
+              requestOptions({ mouseTouch: event.target.checked })
+            }
+          />
+          {t('creation.performers.mouseTouch')}
+        </label>
+
         <span title={t('creation.performers.simulation')}>
           {t('creation.performers.connectionUnknown')}
         </span>

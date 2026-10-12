@@ -508,5 +508,6 @@
   "creation.performers.deviceLabel": "Simulated device",
   "creation.performers.orientationLabel": "Screen orientation",
   "creation.testRunningAudio": "Running · {{mode}}",
-  "creation.performers.optionsUnacknowledged": "Window settings were not acknowledged. Try again."
+  "creation.performers.optionsUnacknowledged": "Window settings were not acknowledged. Try again.",
+  "creation.performers.resizeUnavailable": "The screen work area is unavailable; resize the test window manually."
 }

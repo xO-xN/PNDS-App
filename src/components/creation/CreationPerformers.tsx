@@ -5,7 +5,6 @@ import { useCreationStore } from '@/store/creation-store'
 import { useSessionStore } from '@/store/session-store'
 import {
   closePerformerWindow,
-  configurePerformerWindow,
   focusPerformerWindow,
   openPerformerWindow,
 } from '@/lib/performer-window'
@@ -70,22 +69,6 @@ export function CreationPerformers() {
                     {t(`creation.performers.${client.device}`)} ·{' '}
                     {t(`creation.performers.${client.orientation}`)}
                   </span>
-                  <label className="creation-performer-input">
-                    <input
-                      type="checkbox"
-                      checked={client.mouseTouch}
-                      disabled={busy || status !== 'ready'}
-                      onChange={event => {
-                        void configurePerformerWindow(
-                          client.label,
-                          client.device,
-                          client.orientation,
-                          event.target.checked
-                        )
-                      }}
-                    />
-                    {t('creation.performers.mouseTouch')}
-                  </label>
                 </div>
                 <span
                   role="status"

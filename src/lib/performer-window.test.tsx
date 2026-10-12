@@ -259,6 +259,9 @@ describe('independent performer windows', () => {
     const focus = await screen.findByRole('button', {
       name: 'Focus performer #1',
     })
+    expect(
+      screen.queryByRole('checkbox', { name: 'Mouse simulates one touch' })
+    ).not.toBeInTheDocument()
     const label = labelAt(0)
     act(() => deliver(PERFORMER_READY, { label }))
     fireEvent.click(focus)

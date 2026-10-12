@@ -7,9 +7,7 @@ import { useWindowStore } from '@/store/window-store'
 import { useCreationStore } from '@/store/creation-store'
 import { CreationView } from '@/components/creation'
 import { useCreationTestStore } from '@/store/creation-test-store'
-import { CreationTestControls } from '@/components/creation/CreationTestControls'
-import { CreationPerformers } from '@/components/creation/CreationPerformers'
-import { useTranslation } from 'react-i18next'
+import { CreationTestIdle } from '@/components/creation/CreationTestIdle'
 import { useCommandKeyboard } from '@/hooks/use-command-keyboard'
 import { loadPreferences } from '@/lib/preferences'
 import { ensureUtilitiesFolder } from '@/lib/utilities-folder'
@@ -42,7 +40,6 @@ import {
  * iframe can flash between the two layers.
  */
 export function AppShell() {
-  const { t } = useTranslation()
   const sessionMirror = useRef<SessionSnapshotMirror | null>(null)
   const sessionStatus = useSessionStore(state => state.sessionStatus)
   // §9.3: identifies the current loading session; a Retry bumps it so the
@@ -221,24 +218,7 @@ export function AppShell() {
             creationWorkspace &&
             sessionStatus !== 'ready' &&
             !(sessionStatus === 'stopping' && health !== null) && (
-              <aside
-                data-creation-test-idle=""
-                className="creation-monitor-host"
-              >
-                <CreationTestControls />
-                <div className="monitor-surface creation-monitor-idle">
-                  <div className="creation-monitor-strip">
-                    <span>
-                      monitor
-                      <span className="creation-monitor-mode">
-                        {t('creation.title')}
-                      </span>
-                    </span>
-                  </div>
-                  <p>{t('creation.monitorIdle')}</p>
-                </div>
-                <CreationPerformers />
-              </aside>
+              <CreationTestIdle />
             )}
           {creationActive && <CreationView />}
           {/* #50: the splash sits over the already-mounting monitor and

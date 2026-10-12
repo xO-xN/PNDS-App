@@ -16,10 +16,13 @@ import type { ReactNode } from 'react'
 export function MonitorScaleFrame({
   zoom,
   children,
+  preview,
 }: {
   /** Zoom percent (50–200; §v1.1.1 browser-style bounds). */
   zoom: number
   children: ReactNode
+  /** Full desktop viewport, visually fitted into the creator thumbnail. */
+  preview?: { width: number; height: number; scale: number }
 }) {
   const scale = zoom / 100
   return (
@@ -27,9 +30,12 @@ export function MonitorScaleFrame({
       data-testid="monitor-scale-frame"
       className="h-full w-full"
       style={{
-        width: `${100 / scale}%`,
-        height: `${100 / scale}%`,
-        transform: `scale(${scale})`,
+        position: preview ? 'absolute' : undefined,
+        insetBlockStart: preview ? 0 : undefined,
+        insetInlineStart: preview ? 0 : undefined,
+        width: preview ? `${preview.width / scale}px` : `${100 / scale}%`,
+        height: preview ? `${preview.height / scale}px` : `${100 / scale}%`,
+        transform: `scale(${scale * (preview?.scale ?? 1)})`,
         transformOrigin: 'top left',
       }}
     >

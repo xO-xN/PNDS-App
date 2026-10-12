@@ -3,5 +3,16 @@
   "identifier": "performer-shell",
   "description": "Local performer test shells; remote project frames receive no IPC capability",
   "windows": ["performer-*"],
-  "permissions": ["core:event:default", "core:window:allow-set-focus"]
+  "permissions": [
+    "core:event:default",
+    "core:window:allow-set-focus",
+    "core:window:allow-current-monitor",
+    "core:window:allow-inner-size",
+    "core:window:allow-outer-size",
+    "core:window:allow-outer-position",
+    "core:window:allow-is-fullscreen",
+    "core:window:allow-is-maximized",
+    "core:window:allow-set-size",
+    "core:window:allow-set-position"
+  ]
 }
