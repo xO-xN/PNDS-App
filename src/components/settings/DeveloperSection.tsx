@@ -1,19 +1,14 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { AudioWaveform, FolderOpen, RefreshCw } from 'lucide-react'
+import { FolderOpen, RefreshCw } from 'lucide-react'
 import { open } from '@tauri-apps/plugin-dialog'
 import { writeText } from '@tauri-apps/plugin-clipboard-manager'
 import { toast } from 'sonner'
 import i18n from '@/i18n/config'
-import {
-  commands,
-  type PackResult,
-  type SynthdefCompileResult,
-} from '@/lib/tauri-bindings'
+import { commands, type PackResult } from '@/lib/tauri-bindings'
 import { logger } from '@/lib/logger'
 import { notifications } from '@/lib/notifications'
 import { useProjectStore } from '@/store/project-store'
-import { useCreationChangesStore } from '@/store/creation-changes-store'
 import { Button } from '@/components/ui/button'
 import {
   AlertDialog,
@@ -29,48 +24,7 @@ import type { SettingsSection } from '@/store/settings-store'
 
 import { SectionTitle } from './SectionTitle'
 
-/** One "label: monospace value" line of a tool result panel. */
-function DetailRow({
-  label,
-  value,
-  testId,
-}: {
-  label: string
-  value: string
-  testId: string
-}) {
-  return (
-    <div className="flex min-w-0 items-center gap-2">
-      <span className="text-muted-foreground shrink-0 text-xs">{label}</span>
-      <span
-        className="text-muted-foreground min-w-0 flex-1 truncate font-mono text-xs"
-        title={value}
-        data-testid={testId}
-      >
-        {value}
-      </span>
-    </div>
-  )
-}
-
-/**
- * v1.2.0 (issues #16 + #17): the settings Developer Tools section. Both
- * tools share one target — the selected project, browsable to any folder:
- *
- * - Pack Bundle stages in a temp dir, validates the manifest, synthdef
- *   artifacts and node_modules presence, never runs npm, and leaves the
- *   source tree untouched. Output lands next to the project as
- *   `<name>-<version>.pnds` (an existing file is confirmed before the
- *   overwrite) and the result shows the path plus a copyable sha256.
- * - Compile SynthDef runs the App's generic sclang runner over
- *   `supercollider/source/*.scd` (contract: def name = artifact file name =
- *   manifest reference), then verifies every manifest reference exists.
- *   Failures surface the sclang output; a missing SuperCollider gets
- *   install guidance.
- *
- * Query discipline: one backend round-trip per user action; no pre-warming
- * (the panel may mount for months of sessions without a click).
- */
+/** Settings retains bundle packing; SynthDef compilation lives in the creation SCD toolbar. */
 export function DeveloperSection({ section }: { section: SettingsSection }) {
   const { t } = useTranslation()
   const currentProject = useProjectStore(state => state.currentProject)
@@ -85,12 +39,8 @@ export function DeveloperSection({ section }: { section: SettingsSection }) {
     string | null
   >(null)
 
-  const [compiling, setCompiling] = useState(false)
-  const [compileResult, setCompileResult] =
-    useState<SynthdefCompileResult | null>(null)
-
   const targetPath = browsedPath ?? currentProject?.path ?? null
-  const busy = packing || compiling
+  const busy = packing
 
   const handleBrowse = async () => {
     const selected = await open({
@@ -101,7 +51,6 @@ export function DeveloperSection({ section }: { section: SettingsSection }) {
     if (selected) {
       setBrowsedPath(selected)
       setResult(null)
-      setCompileResult(null)
     }
   }
 
@@ -149,33 +98,6 @@ export function DeveloperSection({ section }: { section: SettingsSection }) {
       return
     }
     await runPack(false)
-  }
-
-  const handleCompile = async () => {
-    if (!targetPath || busy) return
-    setCompileResult(null)
-    setCompiling(true)
-    const update = await useCreationChangesStore.getState().capture(targetPath)
-    const compiled = await commands.compileProjectSynthdefs(targetPath)
-    setCompiling(false)
-    if (compiled.status === 'error') {
-      logger.error('SynthDef compile failed', {
-        path: targetPath,
-        error: compiled.error,
-      })
-      notifications.error(
-        i18n.t('settings.developerCompileFailed'),
-        compiled.error
-      )
-      return
-    }
-    setCompileResult(compiled.data)
-    useCreationChangesStore.getState().complete(update, 'compile')
-    if (update) await useCreationChangesStore.getState().poll()
-    logger.info('SynthDefs compiled', {
-      path: targetPath,
-      produced: compiled.data.produced,
-    })
   }
 
   const copyValue = async (value: string) => {
@@ -240,47 +162,7 @@ export function DeveloperSection({ section }: { section: SettingsSection }) {
               ? t('settings.developerPacking')
               : t('settings.developerPackProject')}
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!targetPath || busy}
-            onClick={() => void handleCompile()}
-          >
-            <AudioWaveform
-              size={12}
-              aria-hidden="true"
-              className={compiling ? 'animate-pulse' : undefined}
-            />
-            {compiling
-              ? t('settings.developerCompiling')
-              : t('settings.developerCompileSynthdef')}
-          </Button>
         </div>
-
-        {compileResult && (
-          <div
-            data-testid="developer-compile-result"
-            className="bg-muted/50 mt-1 flex flex-col gap-1.5 rounded-md p-2"
-          >
-            <DetailRow
-              label={t('settings.developerCompiledLabel')}
-              value={compileResult.produced.join(', ')}
-              testId="developer-compile-produced"
-            />
-            {compileResult.verified.length > 0 && (
-              <DetailRow
-                label={t('settings.developerVerifiedLabel')}
-                value={compileResult.verified.join(', ')}
-                testId="developer-compile-verified"
-              />
-            )}
-            <DetailRow
-              label={t('settings.developerSclangLabel')}
-              value={compileResult.sclangPath}
-              testId="developer-compile-sclang"
-            />
-          </div>
-        )}
 
         {result && (
           <div

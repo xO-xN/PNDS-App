@@ -16,13 +16,7 @@ import { useProjectStore } from '@/store/project-store'
 import { DeveloperSection } from './DeveloperSection'
 import type { Manifest } from '@/lib/tauri-bindings'
 
-/**
- * v1.2.0 (issues #16 + #17): the settings Developer Tools section. The
- * shared target defaults to the selected project (browsable to any folder).
- * Packing (#16) confirms before overwrite and surfaces the output path plus
- * a copyable sha256; SynthDef compile (#17) runs the generic sclang runner
- * and surfaces produced artifacts and verified manifest references.
- */
+/** Settings bundle target/packing workflow and the migrated compile entry. */
 
 vi.mock('@/lib/notifications', () => ({
   notifications: {
@@ -249,65 +243,10 @@ describe('DeveloperSection pack flow', () => {
   })
 })
 
-describe('DeveloperSection compile flow', () => {
-  function compileButton() {
-    return screen.getByRole('button', { name: 'Compile SynthDef' })
-  }
-
-  it('compiles the target and shows produced artifacts with verified manifest references', async () => {
-    selectProject()
-    openPanel()
-    vi.mocked(commands.compileProjectSynthdefs).mockResolvedValue({
-      status: 'ok',
-      data: {
-        sclangPath: '/Applications/SuperCollider.app/Contents/MacOS/sclang',
-        produced: ['demo.scsyndef', 'extra.scsyndef'],
-        verified: ['supercollider/synthdefs/demo.scsyndef'],
-      },
-    })
-
-    fireEvent.click(compileButton())
-
-    await waitFor(() => {
-      expect(commands.compileProjectSynthdefs).toHaveBeenCalledWith(
-        SELECTED_PATH
-      )
-    })
-    expect(screen.getByTestId('developer-compile-produced').textContent).toBe(
-      'demo.scsyndef, extra.scsyndef'
-    )
-    expect(screen.getByTestId('developer-compile-verified').textContent).toBe(
-      'supercollider/synthdefs/demo.scsyndef'
-    )
-    expect(
-      screen.getByTestId('developer-compile-sclang').textContent
-    ).toContain('SuperCollider.app')
-  })
-
-  it('surfaces a compile failure with the sclang output as an error toast', async () => {
-    selectProject()
-    openPanel()
-    vi.mocked(commands.compileProjectSynthdefs).mockResolvedValue({
-      status: 'error',
-      error:
-        'SynthDef compilation failed (sclang exit code 1).\n\nERROR: Parse error',
-    })
-
-    fireEvent.click(compileButton())
-
-    await waitFor(() => {
-      expect(notifications.error).toHaveBeenCalledWith(
-        'Could not compile the SynthDefs',
-        'SynthDef compilation failed (sclang exit code 1).\n\nERROR: Parse error'
-      )
-    })
-    expect(
-      screen.queryByTestId('developer-compile-result')
-    ).not.toBeInTheDocument()
-  })
-
-  it('is disabled without a target', () => {
-    openPanel()
-    expect(compileButton()).toBeDisabled()
-  })
+it('keeps SynthDef compilation in the creation workspace instead of settings', () => {
+  selectProject()
+  openPanel()
+  expect(
+    screen.queryByRole('button', { name: /Compile SynthDef/ })
+  ).not.toBeInTheDocument()
 })

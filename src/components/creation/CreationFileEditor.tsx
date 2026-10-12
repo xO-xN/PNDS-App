@@ -17,6 +17,11 @@ import {
   useCreationDraftsStore,
 } from '@/store/creation-drafts-store'
 import { useCreationChangesStore } from '@/store/creation-changes-store'
+import {
+  useCreationCompileStore,
+  selectCompileDraftPaths,
+} from '@/store/creation-compile-store'
+import { useSessionStore } from '@/store/session-store'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -54,6 +59,19 @@ export function CreationFileEditor({
 }) {
   const { t, i18n } = useTranslation()
   const draft = useCreationDraftsStore(state => state.drafts[file.path])
+  const compileBusy = useCreationCompileStore(state => state.busy)
+  const compileDraftPaths = useCreationDraftsStore(selectCompileDraftPaths)
+  const runtimeBusy = useSessionStore(
+    state =>
+      state.commandPending ||
+      ['starting', 'stopping'].includes(state.sessionStatus)
+  )
+  const isScd = editable && file.path.endsWith('.scd')
+  const compileReason = compileDraftPaths
+    ? t('creation.compile.unsaved', { paths: compileDraftPaths })
+    : runtimeBusy
+      ? t('creation.compile.runtimeBusy')
+      : null
   const renameNote = useCreationDraftsStore(state => state.renameNote)
   const [manifestView, setManifestView] = useState<'form' | 'text'>('form')
   const [readmeView, setReadmeView] = useState<'preview' | 'text'>('preview')
@@ -296,6 +314,19 @@ export function CreationFileEditor({
               </Button>
             </>
           )}
+          {isScd && (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={compileBusy || !!compileReason || !draft}
+              title={compileReason ?? t('creation.compile.scope')}
+              onClick={() => void useCreationCompileStore.getState().run()}
+            >
+              {compileBusy
+                ? t('creation.compile.busy')
+                : t('creation.compile.action')}
+            </Button>
+          )}
           <Button size="sm" variant="outline" onClick={() => void reveal()}>
             {t('creation.revealFile')}
           </Button>
@@ -312,6 +343,11 @@ export function CreationFileEditor({
           )}
         </div>
         {!editable && <p className="text-xs">{t('creation.readOnly')}</p>}
+        {isScd && (
+          <p role="status" className="text-xs">
+            {compileReason ?? t('creation.compile.scope')}
+          </p>
+        )}
         {editableText && dirty && (
           <p className="text-xs">{t('creation.draftHint')}</p>
         )}

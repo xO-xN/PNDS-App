@@ -434,14 +434,21 @@ vi.mock('@/lib/tauri-bindings', async () => {
       pickProjectOrBundle: vi
         .fn()
         .mockResolvedValue({ status: 'ok', data: null }),
-      // v1.2.0 (issue #17): SynthDef compile — default: one artifact that
-      // satisfies the fixture manifests.
-      compileProjectSynthdefs: vi.fn().mockResolvedValue({
+      // #161: trusted creation compile — default report satisfies fixture references.
+      compileCreationSynthdefs: vi.fn().mockResolvedValue({
         status: 'ok',
         data: {
           sclangPath: '/Applications/SuperCollider.app/Contents/MacOS/sclang',
           produced: ['demo.scsyndef'],
-          verified: ['supercollider/synthdefs/demo.scsyndef'],
+          references: [
+            {
+              path: 'supercollider/synthdefs/demo.scsyndef',
+              status: 'verified',
+              detail: null,
+            },
+          ],
+          output: 'wrote demo.scsyndef',
+          error: null,
         },
       }),
     },

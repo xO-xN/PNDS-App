@@ -70,7 +70,9 @@ export type {
   SetlistExportProgressEvent,
   SetlistExportResult,
   SetlistProjectInfo,
-  SynthdefCompileResult,
+  SynthdefCompileReport,
+  SynthdefReferenceCheck,
+  SynthdefReferenceStatus,
   WindowStateSnapshot,
 } from './bindings'
 

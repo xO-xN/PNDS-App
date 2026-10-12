@@ -77,7 +77,7 @@ describe('external disk changes (#155)', () => {
       0
     )
     expect(commands.startProject).not.toHaveBeenCalled()
-    expect(commands.compileProjectSynthdefs).not.toHaveBeenCalled()
+    expect(commands.compileCreationSynthdefs).not.toHaveBeenCalled()
     expect(useSessionStore.getState().sessionStatus).toBe('ready')
   })
 

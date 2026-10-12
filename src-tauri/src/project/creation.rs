@@ -16,8 +16,12 @@ use std::sync::atomic::{AtomicU64, Ordering};
 mod blank;
 #[cfg(test)]
 mod blank_runtime;
+mod compile;
+#[cfg(test)]
+mod compile_tests;
 mod handoff;
 pub use blank::NewProjectOptions;
+pub use compile::{SynthdefCompileReport, SynthdefCompiler};
 
 pub const TEXT_MAX_BYTES: u64 = 1024 * 1024;
 pub const IMAGE_MAX_BYTES: u64 = 4 * 1024 * 1024;

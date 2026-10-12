@@ -8,12 +8,59 @@ use crate::project::creation::{
 use crate::project::session::{CreationRuntime, SessionManager};
 use crate::types::SessionStatus;
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_opener::OpenerExt;
 
 #[derive(Default)]
-pub struct CreationState(Arc<Mutex<CreationAccess>>);
+pub struct CreationState {
+    access: Arc<Mutex<CreationAccess>>,
+    compile_busy: Arc<AtomicBool>,
+}
+
+struct CompileGuard(Arc<AtomicBool>);
+impl Drop for CompileGuard {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::Release);
+    }
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn compile_creation_synthdefs(
+    app: AppHandle,
+    state: State<'_, CreationState>,
+    identity: String,
+) -> Result<crate::project::creation::SynthdefCompileReport, CreationError> {
+    let access = state.access.clone();
+    let busy = state.compile_busy.clone();
+    run_blocking(move || {
+        if busy
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .is_err()
+        {
+            return Err(CreationError::new(
+                CreationErrorCode::TestValidation,
+                "SynthDef compilation is already running",
+            ));
+        }
+        let _guard = CompileGuard(busy);
+        let lock_error =
+            |_| CreationError::new(CreationErrorCode::Io, "Creation workspace lock failed");
+        let job = access
+            .lock()
+            .map_err(lock_error)?
+            .prepare_synthdefs(&identity, &protection(&app)?)?;
+        let output = job.run(&crate::project::creation::SynthdefCompiler::default());
+        let result = access
+            .lock()
+            .map_err(lock_error)?
+            .finish_synthdefs(output, &protection(&app)?);
+        result
+    })
+    .await
+}
 
 fn protection(app: &AppHandle) -> Result<Protection, CreationError> {
     let bundles = super::bundle::bundles_root(app)
@@ -43,7 +90,7 @@ impl CreationState {
         &self,
         operation: impl FnOnce(&mut CreationAccess) -> Result<T, CreationError> + Send + 'static,
     ) -> Result<T, CreationError> {
-        let state = self.0.clone();
+        let state = self.access.clone();
         run_blocking(move || {
             let mut access = state.lock().map_err(|_| {
                 CreationError::new(CreationErrorCode::Io, "Creation workspace lock failed")

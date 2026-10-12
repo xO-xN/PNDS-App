@@ -4,6 +4,6 @@ Open Sound Control (OSC) is a network protocol for real-time communication betwe
 
 In PNDS, OSC is how a Project talks to its sound engine (the App's built-in scsynth, or any external device that accepts OSC). PNDS itself dictates no OSC rules — the work's Project defines all of them.
 
-During development you can debug the score in PNDS using External mode, sending OSC to an external SuperCollider; once the sound engine is designed, compile the scsyndef files with the Developer Tools in the App's settings — PNDS loads them at runtime and voices the sound directly on the App's internal scsynth.
+During development you can debug the score in PNDS using External mode, sending OSC to an external SuperCollider; once the sound engine is designed, compile the scsyndef files from an SCD file's toolbar in the App's Creation mode — PNDS loads them at runtime and voices the sound directly on the App's internal scsynth.
 
 Injection of the OSC target (`PNDS_OSC_TARGET`, distinguishing Internal / External / None) is covered in [runtime-contract.md](./runtime-contract.md) §3.

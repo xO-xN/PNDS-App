@@ -629,3 +629,44 @@ number for a new device, and settings selections keep Change available. Sidebar
 plain arrows switch projects correctly; the user reported a blue outline on its
 noninteractive focus receiver, so that surface now suppresses the browser's
 outline while controls retain their normal focus rings.
+
+## SynthDef compilation
+
+Issue #161 moves compilation from Settings to the SCD toolbar. The typed command
+accepts only the active backend-issued creation identity. The source must be an
+editable folder; protected bundle/tool roots and read-only folders are rejected.
+All saved `supercollider/source/*.scd` files are compiled together with the existing
+`.add`/`writeDefFile` wrapper. No compiler is shipped: standard SuperCollider app
+installation wins, with PATH fallback and a 120-second ceiling.
+
+`CreationAccess::prepare_synthdefs` captures bounded manifest/source bytes and
+output versions. The command releases the creation access mutex while the compiler
+runs, so reading, saving and switching workspaces remain responsive. A separate
+process lease prevents overlapping commands. Output goes into private staging;
+finish rechecks the capability, source set and versions before descriptor-relative,
+no-follow atomic artifact writes. Output headers must name exactly the artifact
+basename. Every manifest reference is checked through the held project root,
+regardless of audio mode. Existing valid referenced files can satisfy references;
+only this run's published files appear in `produced`. This header/name check is not
+an audio or complete SynthDef graph validation.
+
+Both output pipes are drained with bounded tails. The compiler has its own process
+group; completion, failure and timeout terminate descendants before joining readers.
+A missing compiler, failed process, empty output or name mismatch leaves references
+unchecked. A completed compile can publish valid files while reporting other missing
+or invalid declarations; it never reports overall verification in that case.
+
+The frontend gates on all SCD and root manifest drafts (including saves, renames and
+disk conflicts), then rechecks after its pre-dispatch watcher synchronization.
+Compilation has an independent store and console section, so runtime log polling
+cannot erase its report. Workspace identities fence late reports and tree updates;
+the global process lease lasts until the old request settles. Successful completion
+clears only the captured compile revision, preserving later source edits. Published
+artifacts refresh the tree; a running session remains unchanged with restart pending.
+No runtime start, stop, reload or monitor refresh is dispatched by compilation.
+
+Tests use the confirmed SCD toolbar/console command seam and the trusted Rust
+workflow with temporary projects and executable substitutes. Release validation
+with installed sclang is deliberately ignored by CI:
+`cargo test creation::compile_tests::compile_with_real_sclang -- --ignored`.
+Run it from `src-tauri`, then perform the release's native device/audio acceptance.

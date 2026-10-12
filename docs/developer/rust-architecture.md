@@ -19,7 +19,7 @@ src-tauri/src/
 │   ├── notifications.rs
 │   ├── project.rs      # Preflight / session / ports / audio-device commands
 │   ├── bundle.rs       # .pnds pack / install / reclaim / open-queue commands
-│   ├── synthdef.rs     # SynthDef compile command
+│   ├── creation.rs     # Trusted creation commands, including SynthDef compilation
 │   ├── tools.rs        # Built-in utility tools behind the Utilities folder
 │   └── system.rs       # Reveal app data / log dirs in Finder
 └── project/            # Project domain logic (fully path-based, testable)
@@ -33,7 +33,10 @@ src-tauri/src/
     ├── audio.rs        # CoreAudio capabilities + scsynth bridge
     ├── sidecars.rs     # Bundled node/scsynth lookup by build target triple (build.rs forwards cargo TARGET)
     ├── logs.rs         # Per-session logs
-    └── synthdef.rs     # sclang compile service
+    ├── creation.rs     # Held-root creation capability and file workflow
+    ├── creation/
+    │   └── compile.rs  # Trusted compile preparation, version checks and artifact publication
+    └── synthdef.rs     # Local sclang lookup and controlled compile process adapter
 ```
 
 `commands/` holds the `#[tauri::command]` handlers (thin: they parse args and delegate to `project/` or `window.rs`); `project/` holds the domain logic with unit tests. `lib.rs` registers the handler from `bindings.rs` and owns the run-event loop (close/hide, dock reopen, `.pnds` open requests, exit cleanup).

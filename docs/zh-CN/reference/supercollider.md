@@ -14,13 +14,15 @@ manifest.json         "synthdefs": ["supercollider/synthdefs/my-voice.scsyndef"]
 
 - `.scd` 源码放 `supercollider/source/`，是**唯一事实源**——不要手改 `.scsyndef`，不要在工程里保留旧的构建脚本；
 - 带连字符的名字必须用引号符号写法 `SynthDef('my-voice', …)`（裸标识符不允许连字符）；
-- 编译入口在 **App → 设置（⌘,）→ 开发者工具 →「编译 SynthDef」**，默认作用于当前选中工程，也可「浏览…」选择任意文件夹；
+- 在**创作模式**打开可编辑的文件夹工程，查看任意 `.scd` 文件时点击工具栏的**「编译 SynthDef」**。它编译当前工程已保存的全部 `supercollider/source/*.scd`，与当前选中的文件无关。演出包安装目录、内置工具和只读文件夹不可编译；
+- 先保存或重新载入全部 SCD 和根 manifest 草稿；未解决的磁盘冲突、正在保存的文件也会阻止编译。符合 schema 的 manifest 可先保存缺失的产物引用，再编译补齐。编译中不可重复提交；
 - App 依次查找 `/Applications/SuperCollider.app/Contents/MacOS/sclang` 与 `PATH` 中的 `sclang`；
-- 编译完成后 App 逐个点名校验 manifest 引用的产物：缺哪个、这次实际产出了哪些，都会精确列出；
+- 控制台显示本次使用的编译器、产物、编译器输出和每一条 `audio.synthdefs` 引用，External、None 模式也全部核对。App 按 [SynthDef 文件头契约](https://doc.sccode.org/Reference/Synth-Definition-File-Format.html) 比对内嵌符号名与文件名；缺失、无效和未核对的引用均会列出；
+- 编译先写临时目录，写回前再次核对工程身份及已保存的输入；期间输入或产物变化，请保存或重新载入后再次编译。写回成功更新文件树，并保留重启待办。**请手动重启**应用产物；编译不会刷新页面、启动 session 或替换当前运行版本；
 - 常见失败形态：
   - **未装 SuperCollider** → 提示安装地址（https://supercollider.github.io/downloads），或把 `sclang` 放进 `PATH`；
   - **`supercollider/source/` 缺失或没有 `.scd`** → 明确报错，没有东西可编译；
-  - **源码编译错误** → 错误通知显示 sclang 输出原文（类库横幅已裁掉），据此定位是代码问题还是环境问题；
+  - **源码编译错误** → 控制台显示 sclang 输出原文（类库横幅已裁掉），据此定位是代码问题还是环境问题；
   - **sclang 超时被终止** → SuperCollider 可能在弹窗等待，关掉其对话框后重试；
   - **名字对不上** → 契约报错，点名缺失的产物与实际产物，改三处中的任意一处对齐即可。
 

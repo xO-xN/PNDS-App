@@ -6,6 +6,7 @@ import { useSessionStore } from '@/store/session-store'
 import { useCreationStore } from '@/store/creation-store'
 import { isCreationWorkspacePath } from '@/store/creation-changes-store'
 import { Button } from '@/components/ui/button'
+import { useCreationCompileStore } from '@/store/creation-compile-store'
 
 export function CreationConsole() {
   const { t } = useTranslation()
@@ -14,6 +15,9 @@ export function CreationConsole() {
   const error = useCreationTestStore(state => state.error)
   const runtimeError = useCreationTestStore(state => state.runtimeError)
   const workspace = useCreationStore(state => state.workspace)
+  const compiling = useCreationCompileStore(state => state.busy)
+  const compileReport = useCreationCompileStore(state => state.report)
+  const compileError = useCreationCompileStore(state => state.error)
   const [copyError, setCopyError] = useState<string | null>(null)
   useEffect(() => {
     if (tab !== 'console') return
@@ -42,6 +46,8 @@ export function CreationConsole() {
             project: workspace?.project.root,
             commandError: error,
             runtimeError,
+            compilation: compileReport,
+            compilationError: compileError,
             runtime:
               ownsRuntime || facts.sessionStatus === 'idle'
                 ? {
@@ -90,6 +96,66 @@ export function CreationConsole() {
         </Button>
       </div>
       <p>{t('creation.consoleSource')}</p>
+      {(compiling || compileReport || compileError) && (
+        <section
+          aria-label={t('creation.compile.console')}
+          className="my-3 space-y-2 rounded border border-(--pnds-text)/15 p-3"
+        >
+          <h3 className="font-medium">{t('creation.compile.console')}</h3>
+          {compiling && <p role="status">{t('creation.compile.busy')}</p>}
+          {compileError && <p role="alert">{compileError}</p>}
+          {compileReport && (
+            <>
+              <p>
+                {t('creation.compile.compiler')}:{' '}
+                <span dir="ltr" className="break-all font-mono">
+                  {compileReport.sclangPath ?? t('creation.compile.notFound')}
+                </span>
+              </p>
+              <p>
+                {t('creation.compile.produced')}:{' '}
+                <span dir="ltr" className="break-all font-mono">
+                  {compileReport.produced.join(', ') ||
+                    t('creation.compile.noArtifacts')}
+                </span>
+              </p>
+              <p>{t('creation.compile.references')}</p>
+              <ul className="space-y-1">
+                {compileReport.references.map((reference, index) => (
+                  <li key={`${index}:${reference.path}`}>
+                    <span dir="ltr" className="break-all font-mono">
+                      {reference.path}
+                    </span>{' '}
+                    · {t(`creation.compile.reference.${reference.status}`)}
+                    {reference.detail && (
+                      <p className="break-all">{reference.detail}</p>
+                    )}
+                  </li>
+                ))}
+              </ul>
+              {!compileReport.references.length && (
+                <p>{t('creation.compile.noReferences')}</p>
+              )}
+              {compileReport.error ? (
+                <p role="alert">{compileReport.error}</p>
+              ) : (
+                <p role="status">{t('creation.compile.verified')}</p>
+              )}
+              {!!compileReport.produced.length && (
+                <p>{t('creation.compile.restart')}</p>
+              )}
+              {compileReport.output && (
+                <pre
+                  dir="ltr"
+                  className="whitespace-pre-wrap break-all select-text"
+                >
+                  {compileReport.output}
+                </pre>
+              )}
+            </>
+          )}
+        </section>
+      )}
       {error && (
         <p role="alert">
           {t('creation.consoleAppError')} {error}

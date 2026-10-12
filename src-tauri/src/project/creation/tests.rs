@@ -543,7 +543,7 @@ fn preparing_then_cancelling_keeps_the_active_project_readable() {
     );
 }
 
-fn project(parent: &std::path::Path, name: &str) -> std::path::PathBuf {
+pub(super) fn project(parent: &std::path::Path, name: &str) -> std::path::PathBuf {
     let root = parent.join(name);
     fs::create_dir_all(&root).unwrap();
     fs::write(root.join("server.js"), "// unfinished score server").unwrap();

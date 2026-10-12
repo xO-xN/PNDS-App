@@ -1,47 +1,26 @@
 //! SynthDef compile runner (v1.2.0, issue #17).
 //!
-//! One generic runner for every project: loads `supercollider/source/*.scd`
-//! with the locally installed SuperCollider (`sclang`, standard app path +
-//! PATH fallback), has the sources register their SynthDefs (`.add`), writes
-//! each newly registered def to `supercollider/synthdefs/<defName>.scsyndef`,
-//! and afterwards verifies every `manifest.audio.synthdefs` reference —
-//! enforcing the contract "SynthDef name = artifact file name = manifest
-//! reference".
+//! Process adapter for the trusted creation workflow. Loads the caller's
+//! standard source set with local sclang and the existing .add/writeDefFile
+//! wrapper, writing into caller-owned staging. The creation capability owns
+//! manifest checks and final artifact publication.
 //!
 //! The sclang side runs [`RUNNER_SCRIPT`], a static wrapper validated against
 //! SuperCollider 3.14 whose argv is `<synthdefs-dir> <source.scd>…`. All
-//! functions here are path-based (no AppHandle) so the flow is testable with
-//! stub executables — CI has no sclang.
+//! functions here are path-based (no AppHandle). Project validation and
+//! publication belong to creation/compile.rs; CI uses substitute executables.
 
-use serde::{Deserialize, Serialize};
-use specta::Type;
 use std::fs;
+use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, Instant};
 
 /// The standard macOS SuperCollider install location, checked before PATH.
 const STANDARD_SCLANG: &str = "/Applications/SuperCollider.app/Contents/MacOS/sclang";
 
-/// Hard ceiling for one sclang run. The wrapper always exits by itself, so
-/// hitting this means sclang hung (e.g. it dropped into its REPL).
-const SCLANG_TIMEOUT: Duration = Duration::from_secs(120);
-
 /// Where the class-library compile banner ends and real output starts.
 const SCLANG_BANNER_END: &str = "*** Welcome to SuperCollider";
-
-#[derive(Debug, Clone, Serialize, Deserialize, Type)]
-#[serde(rename_all = "camelCase")]
-pub struct SynthdefCompileResult {
-    /// The sclang binary this run used (standard app path or PATH hit).
-    pub sclang_path: String,
-    /// Basenames of the `.scsyndef` artifacts written during this run
-    /// (modified within the run window), sorted.
-    pub produced: Vec<String>,
-    /// The `manifest.audio.synthdefs` references confirmed on disk after
-    /// the compile (empty for projects that do not support internal mode).
-    pub verified: Vec<String>,
-}
 
 /// The sclang program the App generates into a temp dir and executes. Kept
 /// verbatim from the SuperCollider 3.14 validation run — the quirks it works
@@ -114,13 +93,6 @@ exitCode.exit;
 )
 "#;
 
-/// Compiles the project's SynthDef sources with the locally installed
-/// SuperCollider (standard app path, then PATH).
-pub fn compile_synthdefs(project_root: &Path) -> Result<SynthdefCompileResult, String> {
-    let sclang = find_sclang()?;
-    compile_synthdefs_with(project_root, &sclang, SCLANG_TIMEOUT)
-}
-
 /// Locates `sclang`: the standard macOS app install first, then the PATH.
 pub fn find_sclang() -> Result<PathBuf, String> {
     find_sclang_with(PathBuf::from(STANDARD_SCLANG), std::env::var_os("PATH"))
@@ -151,70 +123,32 @@ fn find_sclang_with(
     )
 }
 
-/// The orchestration under [`compile_synthdefs`], with the sclang binary and
-/// timeout injected so CI can drive it with stub executables.
-fn compile_synthdefs_with(
-    project_root: &Path,
+/// Runs the existing .add/writeDefFile wrapper with a caller-owned output directory.
+/// The creation workflow stages output before publishing it through its capability.
+pub(super) fn run_sclang(
+    root: &Path,
+    sources: &[PathBuf],
+    synthdefs_dir: &Path,
     sclang: &Path,
     timeout: Duration,
-) -> Result<SynthdefCompileResult, String> {
-    let root = project_root.canonicalize().map_err(|e| {
-        format!(
-            "Cannot resolve the project directory {}: {e}",
-            project_root.display()
-        )
-    })?;
-    let manifest = crate::project::manifest::load_manifest_lenient(&root)?;
-
-    let source_dir = root.join("supercollider/source");
-    if !source_dir.is_dir() {
-        return Err(format!(
-            "The project has no supercollider/source/ directory — there are no SynthDef \
-             .scd sources to compile (looked in {}).",
-            source_dir.display()
-        ));
-    }
-    let mut sources: Vec<PathBuf> = fs::read_dir(&source_dir)
-        .map_err(|e| format!("Failed to read {}: {e}", source_dir.display()))?
-        .filter_map(|e| e.ok())
-        .map(|e| e.path())
-        .filter(|p| p.is_file() && p.extension().is_some_and(|ext| ext == "scd"))
-        .collect();
-    sources.sort();
-    if sources.is_empty() {
-        return Err(format!(
-            "supercollider/source/ contains no .scd source files — nothing to compile (looked in \
-             {}).",
-            source_dir.display()
-        ));
-    }
-
-    // Every declared manifest reference is verified afterwards (spec #12:
-    // the check is unconditional; internal-mode schemas guarantee a
-    // non-empty array, other modes may still declare artifacts).
-    let refs: Vec<String> = manifest.audio.synthdefs.clone().unwrap_or_default();
-
-    let synthdefs_dir = root.join("supercollider/synthdefs");
-    fs::create_dir_all(&synthdefs_dir)
-        .map_err(|e| format!("Failed to create {}: {e}", synthdefs_dir.display()))?;
-
+) -> Result<String, String> {
     let staging =
         tempfile::tempdir().map_err(|e| format!("Failed to create the staging directory: {e}"))?;
     let wrapper = staging.path().join("pnds-compile.scd");
     fs::write(&wrapper, RUNNER_SCRIPT)
         .map_err(|e| format!("Failed to write the compile script: {e}"))?;
 
-    let run_started = SystemTime::now();
     let mut child = Command::new(sclang)
         .arg(&wrapper)
-        .arg(&synthdefs_dir)
-        .args(&sources)
-        .current_dir(&root)
+        .arg(synthdefs_dir)
+        .args(sources)
+        .current_dir(root)
         // sclang falls into an interactive REPL when its script aborts —
         // with stdin closed it EOFs out instead of hanging forever.
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
+        .process_group(0)
         .spawn()
         .map_err(|e| format!("Failed to start {}: {e}", sclang.display()))?;
 
@@ -226,12 +160,10 @@ fn compile_synthdefs_with(
     let started = Instant::now();
     let status = loop {
         match child.try_wait() {
-            Ok(Some(status)) => break status,
+            Ok(Some(status)) => break Ok(status),
             Ok(None) => {
                 if started.elapsed() > timeout {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    return Err(format!(
+                    break Err(format!(
                         "sclang did not finish within {} seconds and was terminated — \
                          SuperCollider may be showing a dialog or waiting for input.",
                         timeout.as_secs()
@@ -239,11 +171,20 @@ fn compile_synthdefs_with(
                 }
                 std::thread::sleep(Duration::from_millis(50));
             }
-            Err(e) => return Err(format!("Failed to wait for sclang: {e}")),
+            Err(e) => break Err(format!("Failed to wait for sclang: {e}")),
         }
     };
+    // Sources can launch child processes. Close the entire compile group,
+    // including inherited pipes, before joining readers on every exit path.
+    unsafe {
+        libc::kill(-(child.id() as i32), libc::SIGKILL);
+    }
+    let _ = child.kill();
+    let _ = child.wait();
     let stdout = stdout_handle.join().unwrap_or_default();
     let stderr = stderr_handle.join().unwrap_or_default();
+    let status =
+        status.map_err(|error| format!("{error}\n\n{}", sclang_output(&stdout, &stderr)))?;
 
     if !status.success() {
         let code = status.code().unwrap_or(-1);
@@ -253,40 +194,7 @@ fn compile_synthdefs_with(
         ));
     }
 
-    let produced = fresh_scyndefs(&synthdefs_dir, run_started)?;
-    if produced.is_empty() {
-        return Err(format!(
-            "sclang reported success but wrote no .scsyndef artifacts into \
-             supercollider/synthdefs/.\n\n{}",
-            sclang_output(&stdout, &stderr)
-        ));
-    }
-
-    let missing: Vec<String> = refs
-        .iter()
-        .filter(|r| !reference_satisfied(&root, r))
-        .cloned()
-        .collect();
-    if !missing.is_empty() {
-        return Err(format!(
-            "Compiled artifacts do not satisfy the manifest — the contract is: SynthDef name = \
-             artifact file name = manifest reference.\nMissing after compile:\n{}\nProduced this \
-             run:\n{}",
-            bullet_list(&missing),
-            bullet_list(
-                &produced
-                    .iter()
-                    .map(|p| format!("supercollider/synthdefs/{p}"))
-                    .collect::<Vec<_>>()
-            ),
-        ));
-    }
-
-    Ok(SynthdefCompileResult {
-        sclang_path: sclang.display().to_string(),
-        produced,
-        verified: refs,
-    })
+    Ok(sclang_output(&stdout, &stderr))
 }
 
 /// Reads a child pipe to EOF on a background thread, returning UTF-8 lossy
@@ -303,7 +211,12 @@ fn spawn_reader(
         loop {
             match pipe.read(&mut buffer) {
                 Ok(0) | Err(_) => break,
-                Ok(n) => text.extend_from_slice(&buffer[..n]),
+                Ok(n) => {
+                    text.extend_from_slice(&buffer[..n]);
+                    if text.len() > 1024 * 1024 {
+                        text.drain(..text.len() - 1024 * 1024);
+                    }
+                }
             }
         }
         String::from_utf8_lossy(&text).into_owned()
@@ -336,104 +249,10 @@ fn trim_sclang_banner(output: &str) -> String {
     output.to_string()
 }
 
-fn bullet_list(items: &[String]) -> String {
-    items
-        .iter()
-        .map(|item| format!("  - {item}"))
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
-/// True when the manifest reference names an existing file inside the
-/// project. The lenient manifest load skips `validate_paths`, so unsafe
-/// references (absolute or escaping) are treated as missing instead of
-/// probing outside the project root.
-fn reference_satisfied(root: &Path, reference: &str) -> bool {
-    let rel = Path::new(reference);
-    !rel.is_absolute()
-        && !rel
-            .components()
-            .any(|c| matches!(c, std::path::Component::ParentDir))
-        && root.join(rel).is_file()
-}
-
-/// Basenames of the `.scsyndef` files modified at or after `since` — i.e.
-/// the artifacts this run actually wrote (recompiles rewrite in place, so
-/// name-diffing would miss them).
-fn fresh_scyndefs(dir: &Path, since: SystemTime) -> Result<Vec<String>, String> {
-    let mut names = Vec::new();
-    for entry in fs::read_dir(dir).map_err(|e| format!("Failed to read {}: {e}", dir.display()))? {
-        let entry = entry.map_err(|e| format!("Failed to read {}: {e}", dir.display()))?;
-        let name = entry.file_name().to_string_lossy().into_owned();
-        if !name.ends_with(".scsyndef") {
-            continue;
-        }
-        let modified = entry
-            .metadata()
-            .ok()
-            .and_then(|m| m.modified().ok())
-            .unwrap_or(SystemTime::UNIX_EPOCH);
-        if modified >= since {
-            names.push(name);
-        }
-    }
-    names.sort();
-    Ok(names)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::fs;
-    use std::os::unix::fs::PermissionsExt;
-
-    /// Writes a stub `sclang` executable with the given shell body and
-    /// returns its path. A real sclang hides the script path from
-    /// `thisProcess.argv`, but the shell stub sees it: `$1` is the wrapper
-    /// script, `$2` the synthdefs dir, `$3…` the sources.
-    fn stub_sclang(dir: &Path, body: &str) -> PathBuf {
-        let path = dir.join("sclang");
-        fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
-        fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
-        path
-    }
-
-    /// An internal-mode fixture project whose manifest references
-    /// `supercollider/synthdefs/demo.scsyndef`, with one .scd source.
-    fn fixture_project(dir: &Path) {
-        fs::create_dir_all(dir.join("supercollider/source")).unwrap();
-        fs::create_dir_all(dir.join("supercollider/synthdefs")).unwrap();
-        fs::write(dir.join("server.js"), "// score server").unwrap();
-        fs::write(
-            dir.join("supercollider/source/voice.scd"),
-            "SynthDef('demo', { | out = 0 | Out.ar(out, Silent.ar(1)); }).add;\n",
-        )
-        .unwrap();
-        fs::write(
-            dir.join("manifest.json"),
-            r#"{
-              "schemaVersion": 1,
-              "id": "demo",
-              "name": "Demo",
-              "version": "0.1.0",
-              "scoreServer": {
-                "entry": "server.js",
-                "workingDirectory": ".",
-                "performerPort": 6868,
-                "monitorPort": 6869
-              },
-              "audio": {
-                "defaultMode": "internal",
-                "supportedModes": ["internal", "external", "none"],
-                "synthdefs": ["supercollider/synthdefs/demo.scsyndef"],
-                "scsynth": { "sampleRate": 48000, "blockSize": 64, "audioBusChannels": 128 }
-              }
-            }"#,
-        )
-        .unwrap();
-    }
-
-    const OK_TIMEOUT: Duration = Duration::from_secs(30);
 
     #[test]
     fn find_sclang_prefers_standard_path_then_path_fallback() {
@@ -469,264 +288,9 @@ mod tests {
     }
 
     #[test]
-    fn compile_runs_sclang_and_verifies_manifest_references() {
-        let parent = tempfile::tempdir().unwrap();
-        let project = parent.path().join("P");
-        fs::create_dir_all(&project).unwrap();
-        fixture_project(&project);
-        // The stub "compiles" the source into the referenced artifact.
-        let sclang = stub_sclang(
-            parent.path(),
-            r#"printf 'SCgf-demo' > "$2/demo.scsyndef"; echo "wrote demo.scsyndef""#,
-        );
-
-        let result = compile_synthdefs_with(&project, &sclang, OK_TIMEOUT).unwrap();
-        assert_eq!(result.sclang_path, sclang.display().to_string());
-        assert_eq!(result.produced, vec!["demo.scsyndef".to_string()]);
-        assert_eq!(
-            result.verified,
-            vec!["supercollider/synthdefs/demo.scsyndef".to_string()]
-        );
-    }
-
-    #[test]
-    fn compile_requires_source_dir_and_scd_files() {
-        let parent = tempfile::tempdir().unwrap();
-        let project = parent.path().join("P");
-        fs::create_dir_all(&project).unwrap();
-        fixture_project(&project);
-        let sclang = stub_sclang(parent.path(), "exit 0");
-
-        // Directory gone.
-        fs::remove_dir_all(project.join("supercollider/source")).unwrap();
-        let err = compile_synthdefs_with(&project, &sclang, OK_TIMEOUT).unwrap_err();
-        assert!(err.contains("supercollider/source/"), "unexpected: {err}");
-
-        // Directory present but empty of .scd files.
-        fs::create_dir_all(project.join("supercollider/source")).unwrap();
-        let err = compile_synthdefs_with(&project, &sclang, OK_TIMEOUT).unwrap_err();
-        assert!(err.contains("no .scd source files"), "unexpected: {err}");
-    }
-
-    #[test]
-    fn compile_failure_surfaces_sclang_output_and_exit_code() {
-        let parent = tempfile::tempdir().unwrap();
-        let project = parent.path().join("P");
-        fs::create_dir_all(&project).unwrap();
-        fixture_project(&project);
-        // sclang prints compile errors on stdout; stderr is usually empty.
-        let sclang = stub_sclang(
-            parent.path(),
-            r#"printf 'compiling class library...\n*** Welcome to SuperCollider 3.14.1. ***\nERROR: Parse error\n  line 1\n' ; printf 'stderr-noise' >&2; exit 7"#,
-        );
-
-        let err = compile_synthdefs_with(&project, &sclang, OK_TIMEOUT).unwrap_err();
-        assert!(err.contains("exit code 7"), "unexpected: {err}");
-        assert!(err.contains("ERROR: Parse error"), "unexpected: {err}");
-        assert!(err.contains("stderr-noise"), "unexpected: {err}");
-        // The class-library banner is trimmed away.
-        assert!(
-            !err.contains("compiling class library"),
-            "unexpected: {err}"
-        );
-    }
-
-    #[test]
-    fn compile_kills_a_hung_sclang() {
-        let parent = tempfile::tempdir().unwrap();
-        let project = parent.path().join("P");
-        fs::create_dir_all(&project).unwrap();
-        fixture_project(&project);
-        let sclang = stub_sclang(parent.path(), "sleep 60");
-
-        let started = Instant::now();
-        let err =
-            compile_synthdefs_with(&project, &sclang, Duration::from_millis(300)).unwrap_err();
-        assert!(err.contains("did not finish"), "unexpected: {err}");
-        assert!(
-            started.elapsed() < Duration::from_secs(10),
-            "the runner must kill instead of waiting out the sleep"
-        );
-    }
-
-    #[test]
-    fn compile_names_every_missing_manifest_artifact() {
-        let parent = tempfile::tempdir().unwrap();
-        let project = parent.path().join("P");
-        fs::create_dir_all(&project).unwrap();
-        fixture_project(&project);
-        // Manifest wants demo.scsyndef plus a second artifact the stub never
-        // writes — the contract violation must be named precisely.
-        let manifest_path = project.join("manifest.json");
-        let manifest = fs::read_to_string(&manifest_path).unwrap();
-        fs::write(
-            &manifest_path,
-            manifest.replace(
-                r#""synthdefs": ["supercollider/synthdefs/demo.scsyndef"],"#,
-                r#""synthdefs": ["supercollider/synthdefs/demo.scsyndef", "supercollider/synthdefs/extra.scsyndef"],"#,
-            ),
-        )
-        .unwrap();
-        let sclang = stub_sclang(parent.path(), r#"printf 'SCgf' > "$2/demo.scsyndef""#);
-
-        let err = compile_synthdefs_with(&project, &sclang, OK_TIMEOUT).unwrap_err();
-        assert!(err.contains("extra.scsyndef"), "unexpected: {err}");
-        assert!(
-            err.contains("SynthDef name = artifact file name"),
-            "unexpected: {err}"
-        );
-        // The produced artifact is listed so the mismatch is diagnosable.
-        assert!(
-            err.contains("- supercollider/synthdefs/demo.scsyndef"),
-            "unexpected: {err}"
-        );
-    }
-
-    #[test]
-    fn compile_rejects_a_silent_success_that_wrote_nothing() {
-        let parent = tempfile::tempdir().unwrap();
-        let project = parent.path().join("P");
-        fs::create_dir_all(&project).unwrap();
-        fixture_project(&project);
-        let sclang = stub_sclang(parent.path(), "exit 0");
-
-        let err = compile_synthdefs_with(&project, &sclang, OK_TIMEOUT).unwrap_err();
-        assert!(err.contains("wrote no .scsyndef"), "unexpected: {err}");
-    }
-
-    #[test]
-    fn compile_only_rewrites_artifacts_touched_by_this_run() {
-        let parent = tempfile::tempdir().unwrap();
-        let project = parent.path().join("P");
-        fs::create_dir_all(&project).unwrap();
-        fixture_project(&project);
-        // A stale artifact from an earlier compile must not be reported as
-        // produced (nor let a failed run pass verification).
-        fs::write(
-            project.join("supercollider/synthdefs/stale.scsyndef"),
-            b"old",
-        )
-        .unwrap();
-        let sclang = stub_sclang(parent.path(), r#"printf 'SCgf' > "$2/demo.scsyndef""#);
-
-        let result = compile_synthdefs_with(&project, &sclang, OK_TIMEOUT).unwrap();
-        assert_eq!(result.produced, vec!["demo.scsyndef".to_string()]);
-    }
-
-    /// Spec #12: the post-compile verification is unconditional — a
-    /// non-internal project that still declares artifacts gets them checked.
-    #[test]
-    fn compile_verifies_declared_references_of_non_internal_projects() {
-        let parent = tempfile::tempdir().unwrap();
-        let project = parent.path().join("P");
-        fs::create_dir_all(&project).unwrap();
-        fixture_project(&project);
-        fs::write(
-            project.join("manifest.json"),
-            r#"{
-              "schemaVersion": 1,
-              "id": "demo",
-              "name": "Demo",
-              "version": "0.1.0",
-              "scoreServer": {
-                "entry": "server.js",
-                "workingDirectory": ".",
-                "performerPort": 6868,
-                "monitorPort": 6869
-              },
-              "audio": {
-                "defaultMode": "none",
-                "supportedModes": ["none"],
-                "synthdefs": ["supercollider/synthdefs/demo.scsyndef"]
-              }
-            }"#,
-        )
-        .unwrap();
-        let sclang = stub_sclang(parent.path(), r#"printf 'SCgf' > "$2/demo.scsyndef""#);
-
-        let result = compile_synthdefs_with(&project, &sclang, OK_TIMEOUT).unwrap();
-        assert_eq!(
-            result.verified,
-            vec!["supercollider/synthdefs/demo.scsyndef".to_string()]
-        );
-    }
-
-    /// Unsafe references must be reported missing, never resolved outside
-    /// the project root (the lenient load skips `validate_paths`).
-    #[test]
-    fn compile_treats_unsafe_references_as_missing() {
-        let parent = tempfile::tempdir().unwrap();
-        let project = parent.path().join("P");
-        fs::create_dir_all(&project).unwrap();
-        fixture_project(&project);
-        // This file exists — but outside the project root.
-        let outside = parent.path().join("outside.scsyndef");
-        fs::write(&outside, b"SCgf").unwrap();
-        let manifest_path = project.join("manifest.json");
-        let manifest = fs::read_to_string(&manifest_path).unwrap();
-        fs::write(
-            &manifest_path,
-            manifest.replace(
-                r#""synthdefs": ["supercollider/synthdefs/demo.scsyndef"],"#,
-                r#""synthdefs": ["../outside.scsyndef"],"#,
-            ),
-        )
-        .unwrap();
-        let sclang = stub_sclang(parent.path(), r#"printf 'SCgf' > "$2/demo.scsyndef""#);
-
-        let err = compile_synthdefs_with(&project, &sclang, OK_TIMEOUT).unwrap_err();
-        assert!(err.contains("../outside.scsyndef"), "unexpected: {err}");
-        assert!(err.contains("Missing after compile"), "unexpected: {err}");
-    }
-
-    #[test]
-    fn compile_of_non_internal_project_has_no_references_to_verify() {
-        let parent = tempfile::tempdir().unwrap();
-        let project = parent.path().join("P");
-        fs::create_dir_all(&project).unwrap();
-        fixture_project(&project);
-        fs::write(
-            project.join("manifest.json"),
-            r#"{
-              "schemaVersion": 1,
-              "id": "demo",
-              "name": "Demo",
-              "version": "0.1.0",
-              "scoreServer": {
-                "entry": "server.js",
-                "workingDirectory": ".",
-                "performerPort": 6868,
-                "monitorPort": 6869
-              },
-              "audio": { "defaultMode": "none", "supportedModes": ["none"] }
-            }"#,
-        )
-        .unwrap();
-        let sclang = stub_sclang(parent.path(), r#"printf 'SCgf' > "$2/demo.scsyndef""#);
-
-        let result = compile_synthdefs_with(&project, &sclang, OK_TIMEOUT).unwrap();
-        assert!(result.verified.is_empty());
-        assert_eq!(result.produced, vec!["demo.scsyndef".to_string()]);
-    }
-
-    #[test]
     fn trim_sclang_banner_keeps_output_without_the_marker() {
         assert_eq!(trim_sclang_banner("plain output"), "plain output");
         let noisy = "compiling class library...\ncompile done\n*** Welcome to SuperCollider 3.14.1. ***\nERROR: boom\ncleanup";
         assert_eq!(trim_sclang_banner(noisy), "ERROR: boom\ncleanup");
-    }
-
-    /// Local-only sanity check against the real SuperCollider and the two
-    /// migrated score projects (the machine this runs on has both). CI has
-    /// no sclang — run manually with:
-    /// `cargo test synthdef::tests::compile_with_real_sclang -- --ignored`
-    #[test]
-    #[ignore]
-    fn compile_with_real_sclang() {
-        let base = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../");
-        for project in ["PNDS Template", "Inarticulate III"] {
-            let result = compile_synthdefs(&base.join(project)).unwrap();
-            println!("{project}: {:?}", result);
-        }
     }
 }

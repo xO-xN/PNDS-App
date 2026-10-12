@@ -168,6 +168,14 @@ async createBlankProject(options: NewProjectOptions) : Promise<Result<CreationWo
     else return { status: "error", error: e  as any };
 }
 },
+async compileCreationSynthdefs(identity: string) : Promise<Result<SynthdefCompileReport, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("compile_creation_synthdefs", { identity }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async getCreationManifest(identity: string) : Promise<Result<Manifest, CreationError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("get_creation_manifest", { identity }) };
@@ -746,19 +754,6 @@ async takePendingBundleOpens() : Promise<Result<string[], string>> {
 async pickProjectOrBundle(title: string) : Promise<Result<string | null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("pick_project_or_bundle", { title }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Compiles the project's SynthDef sources and verifies the manifest's
- * artifact references (contract: def name = artifact file name = manifest
- * reference). Fails with the sclang output when compilation fails.
- */
-async compileProjectSynthdefs(path: string) : Promise<Result<SynthdefCompileResult, string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("compile_project_synthdefs", { path }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -1581,21 +1576,9 @@ export type SetlistReadout = { setlistJson: string; bundles: SetlistBundleFile[]
  * the open flow away from a valid set.
  */
 readme: string | null }
-export type SynthdefCompileResult = { 
-/**
- * The sclang binary this run used (standard app path or PATH hit).
- */
-sclangPath: string; 
-/**
- * Basenames of the `.scsyndef` artifacts written during this run
- * (modified within the run window), sorted.
- */
-produced: string[]; 
-/**
- * The `manifest.audio.synthdefs` references confirmed on disk after
- * the compile (empty for projects that do not support internal mode).
- */
-verified: string[] }
+export type SynthdefCompileReport = { sclangPath: string | null; produced: string[]; references: SynthdefReferenceCheck[]; output: string; error: string | null }
+export type SynthdefReferenceCheck = { path: string; status: SynthdefReferenceStatus; detail: string | null }
+export type SynthdefReferenceStatus = "verified" | "missing" | "invalid" | "notChecked"
 /**
  * The window regained macOS focus (formerly `pnds:window-focus`).
  * Payload-less by design: every consumer re-derives from the stores
