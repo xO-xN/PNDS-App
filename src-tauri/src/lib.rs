@@ -77,6 +77,7 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .manage(crate::project::session::SessionManager::default())
         .manage(crate::window::WindowManager::default())
+        .manage(crate::performer::VisibilityIntent::default())
         .manage(crate::commands::preferences::PreferencesCache::default())
         .manage(crate::commands::bundle::PendingBundleOpens::default())
         .manage(crate::commands::creation::CreationState::default())
@@ -324,6 +325,32 @@ pub fn run() {
                 });
             }
 
+            RunEvent::WindowEvent {
+                label,
+                event: WindowEvent::CloseRequested { api, .. },
+                ..
+            } if crate::performer::is_performer_label(label) => {
+                api.prevent_close();
+                if let Err(error) = crate::performer::set_visibility(app_handle, label, false) {
+                    log::warn!("Failed to hide performer window: {error}");
+                }
+            }
+            RunEvent::WindowEvent {
+                label,
+                event: WindowEvent::Focused(_),
+                ..
+            } if crate::performer::is_performer_label(label) => {
+                if let Some(window) = app_handle.get_webview_window(label) {
+                    if let Ok(visible) = window.is_visible() {
+                        let _ = crate::events::PerformerVisibilityEvent {
+                            label: label.clone(),
+                            visible,
+                        }
+                        .emit(app_handle);
+                    }
+                }
+            }
+
             // macOS: Hide the main window instead of quitting so the dock icon can
             // reopen it. On other platforms, the close proceeds normally.
             RunEvent::WindowEvent {
@@ -450,6 +477,7 @@ pub fn run() {
                 event: WindowEvent::Destroyed,
                 ..
             } if crate::performer::is_performer_label(label) => {
+                crate::performer::forget_visibility(app_handle, label);
                 let _ = crate::events::PerformerDestroyedEvent {
                     label: label.clone(),
                 }

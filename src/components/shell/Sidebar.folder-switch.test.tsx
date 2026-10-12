@@ -1,5 +1,4 @@
 import {
-  act,
   fireEvent,
   render,
   screen,
@@ -13,7 +12,6 @@ import { useProjectStore, UTILITIES_FOLDER_ID } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 import { useCreationStore } from '@/store/creation-store'
 import { useSettingsStore } from '@/store/settings-store'
-import { moveFolderSelection } from '@/lib/project-select'
 import { Sidebar } from './Sidebar'
 import { MonitorView } from './MonitorView'
 
@@ -124,19 +122,14 @@ describe('folder dropdown integration (#153)', () => {
     expect(commands.setMasterVolume).not.toHaveBeenCalled()
   })
 
-  it('Cmd folder cycling uses every folder and remembers the user view behind tools', () => {
+  it('folder picking remembers the user view behind Utilities', async () => {
     render(<Sidebar variant="static" />)
-    act(() => {
-      moveFolderSelection(1)
-      moveFolderSelection(1)
-      moveFolderSelection(1)
-    })
+    await selectFolderInPicker('Finale')
+    await userEvent.click(screen.getByRole('button', { name: 'Utilities' }))
     expect(useProjectStore.getState().activeFolderId).toBe(UTILITIES_FOLDER_ID)
-    expect(
-      screen.getByRole('button', { name: 'Return to Finale' })
-    ).toBeInTheDocument()
-    act(() => moveFolderSelection(1))
-    expect(useProjectStore.getState().activeFolderId).toBeNull()
+    const back = screen.getByRole('button', { name: 'Return to Finale' })
+    await userEvent.click(back)
+    expect(useProjectStore.getState().activeFolderId).toBe('b')
   })
 
   it('localizes the tool and return controls while keeping custom names', async () => {

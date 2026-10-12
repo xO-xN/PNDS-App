@@ -93,8 +93,10 @@ function seedRunningSession(currentPath: string) {
   })
 }
 
-function pressCmdArrow(key: 'ArrowDown' | 'ArrowUp') {
-  fireEvent.keyDown(window, { key, metaKey: true })
+function pressSidebarArrow(key: 'ArrowDown' | 'ArrowUp') {
+  const sidebar = screen.getByTestId('sidebar')
+  fireEvent.mouseEnter(sidebar)
+  fireEvent.keyDown(sidebar, { key })
 }
 
 function pressEscape() {
@@ -102,13 +104,13 @@ function pressEscape() {
 }
 
 /**
- * v1.1.2 T7 (spec issue #4/#11): ⌘↓/⌘↑ move the selection along the
+ * v1.1.2 T7 (spec issue #4/#11): ↓/↑ move the selection along the
  * visible order — clamped, folder-aware, click-equal semantics — and Esc
  * closes the open project like the sidebar's Close button. The listeners
  * are registered by AppShell / SessionActionButton, so every test mounts
  * the shell.
  */
-describe('Cmd+↑/↓ project navigation and Esc close (v1.1.2 T7)', () => {
+describe('Sidebar ↑/↓ project navigation and Escape ownership (v1.1.2 T7)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(commands.preflightProject).mockResolvedValue({
@@ -129,47 +131,47 @@ describe('Cmd+↑/↓ project navigation and Esc close (v1.1.2 T7)', () => {
     useSessionStore.getState().resetSession()
   })
 
-  describe('⌘↓/⌘↑ along the visible order', () => {
-    it('⌘↓ selects the first project when nothing is selected', () => {
+  describe('↓/↑ along the visible order', () => {
+    it('↓ selects the first project when nothing is selected', () => {
       render(<AppShell />)
 
-      pressCmdArrow('ArrowDown')
+      pressSidebarArrow('ArrowDown')
 
       expect(commands.preflightProject).toHaveBeenCalledWith(FIRST_PATH)
     })
 
-    it('walks down with ⌘↓ and back up with ⌘↑', () => {
+    it('walks down with ↓ and back up with ↑', () => {
       useProjectStore.setState({
         currentProject: { path: FIRST_PATH, manifest },
         preflightStatus: 'ready',
       })
       render(<AppShell />)
 
-      pressCmdArrow('ArrowDown')
+      pressSidebarArrow('ArrowDown')
       expect(commands.preflightProject).toHaveBeenCalledWith(SECOND_PATH)
 
       useProjectStore.setState({
         currentProject: { path: SECOND_PATH, manifest },
       })
-      pressCmdArrow('ArrowUp')
+      pressSidebarArrow('ArrowUp')
       expect(commands.preflightProject).toHaveBeenCalledWith(FIRST_PATH)
     })
 
-    it('clamps at both ends — repeated ⌘↓ never wraps to the first', () => {
+    it('clamps at both ends — repeated ↓ never wraps to the first', () => {
       useProjectStore.setState({
         currentProject: { path: FIRST_PATH, manifest },
         preflightStatus: 'ready',
       })
       render(<AppShell />)
 
-      pressCmdArrow('ArrowUp')
+      pressSidebarArrow('ArrowUp')
       expect(commands.preflightProject).not.toHaveBeenCalled()
 
       useProjectStore.setState({
         currentProject: { path: THIRD_PATH, manifest },
       })
-      pressCmdArrow('ArrowDown')
-      pressCmdArrow('ArrowDown')
+      pressSidebarArrow('ArrowDown')
+      pressSidebarArrow('ArrowDown')
       expect(commands.preflightProject).not.toHaveBeenCalled()
       expect(useProjectStore.getState().currentProject?.path).toBe(THIRD_PATH)
     })
@@ -189,7 +191,7 @@ describe('Cmd+↑/↓ project navigation and Esc close (v1.1.2 T7)', () => {
 
       // Text input (the OSC target field) swallows the shortcut.
       const oscInput = screen.getByRole('textbox', { name: /osc target/i })
-      fireEvent.keyDown(oscInput, { key: 'ArrowDown', metaKey: true })
+      fireEvent.keyDown(oscInput, { key: 'ArrowDown' })
       expect(commands.preflightProject).not.toHaveBeenCalledWith(FIRST_PATH)
 
       // A modal dialog owns the keyboard while open (the ⌘W close confirm
@@ -200,7 +202,6 @@ describe('Cmd+↑/↓ project navigation and Esc close (v1.1.2 T7)', () => {
       if (!entry) throw new Error('Expected a visible project entry')
       fireEvent.keyDown(entry, {
         key: 'ArrowDown',
-        metaKey: true,
       })
       expect(commands.preflightProject).not.toHaveBeenCalledWith(THIRD_PATH)
     })
@@ -221,7 +222,7 @@ describe('Cmd+↑/↓ project navigation and Esc close (v1.1.2 T7)', () => {
       })
       render(<AppShell />)
 
-      pressCmdArrow('ArrowDown')
+      pressSidebarArrow('ArrowDown')
 
       // The view stays at the top level — the move lands on the view's
       // own next member, never bounces into the selection's folder.
@@ -245,7 +246,7 @@ describe('Cmd+↑/↓ project navigation and Esc close (v1.1.2 T7)', () => {
       })
       render(<AppShell />)
 
-      pressCmdArrow('ArrowUp')
+      pressSidebarArrow('ArrowUp')
 
       expect(commands.preflightProject).toHaveBeenCalledWith(SECOND_PATH)
       expect(commands.preflightProject).not.toHaveBeenCalledWith(FIRST_PATH)
@@ -255,9 +256,9 @@ describe('Cmd+↑/↓ project navigation and Esc close (v1.1.2 T7)', () => {
       seedRunningSession(FIRST_PATH)
       render(<AppShell />)
 
-      // Sidebar hidden, session running: the shortcut still fires — and
+      // Sidebar owns the keys while the session keeps running — and
       // v1.2.3 (#39) freely selects under the session, no confirmation.
-      pressCmdArrow('ArrowDown')
+      pressSidebarArrow('ArrowDown')
 
       expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
       await waitFor(() => {
@@ -279,7 +280,7 @@ describe('Cmd+↑/↓ project navigation and Esc close (v1.1.2 T7)', () => {
       })
       render(<AppShell />)
 
-      pressCmdArrow('ArrowDown')
+      pressSidebarArrow('ArrowDown')
 
       expect(useProjectStore.getState().activeFolderId).toBeNull()
       expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()

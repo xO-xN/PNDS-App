@@ -76,6 +76,12 @@ pub struct PerformerDestroyedEvent {
     pub label: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
+pub struct PerformerVisibilityEvent {
+    pub label: String,
+    pub visible: bool,
+}
+
 /// The App's event set as a fresh builder for any runtime. The real app
 /// composes it with commands (bindings.rs); tests mount it on
 /// mock-runtime apps so `Event::emit` resolves its registry entry.
@@ -89,5 +95,6 @@ pub fn events_builder<R: tauri::Runtime>() -> tauri_specta::Builder<R> {
         HelpReadyEvent,
         ProjectionWindowEvent,
         PerformerDestroyedEvent,
+        PerformerVisibilityEvent,
     ])
 }

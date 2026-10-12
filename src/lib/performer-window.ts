@@ -4,8 +4,11 @@ import {
   onPerformerPage,
   onPerformerDestroyed,
   onPerformerOptions,
+  onPerformerVisibility,
+  onPerformerReleased,
 } from '@/lib/events'
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
+import { isPerformerWindow } from '@/lib/performer-protocol'
 import type { BackgroundThrottlingPolicy } from '@tauri-apps/api/window'
 import i18n, { currentResolvedLanguage } from '@/i18n/config'
 import { commands } from '@/lib/tauri-bindings'
@@ -42,6 +45,9 @@ interface Client {
   created: Promise<void>
   finishCreation: () => void
   ready: boolean
+  visibilityRequest: number
+  deletion: Promise<void> | null
+  released: (() => void) | null
   navigationKey: string
   waiters: Set<(loaded: boolean) => void>
 }
@@ -59,6 +65,7 @@ function publish(): void {
 function retire(label: string): void {
   const client = clients.get(label)
   if (!client) return
+  client.released?.()
   for (const settle of client.waiters) settle(false)
   clients.delete(label)
   publish()
@@ -121,6 +128,7 @@ function syncClient(client: Client): void {
   const creation = useCreationStore.getState()
   if (
     closingAll ||
+    client.state.disposing ||
     !creation.active ||
     creation.workspace?.project.identity !== client.state.identity
   )
@@ -206,7 +214,10 @@ async function refreshPages(request: CreationPageRefresh): Promise<void> {
     return
   await Promise.all(
     [...clients.values()]
-      .filter(client => client.state.identity === request.identity)
+      .filter(
+        client =>
+          client.state.identity === request.identity && !client.state.disposing
+      )
       .map(client => {
         if (client.state.pageStatus === 'loaded') return Promise.resolve()
         return new Promise<void>((resolve, reject) => {
@@ -280,6 +291,9 @@ export async function openPerformerWindow(
     const client: Client = {
       window: native,
       ready: false,
+      visibilityRequest: 0,
+      deletion: null,
+      released: null,
       navigationKey: '',
       waiters: new Set(),
       created: new Promise<void>((resolve, reject) => {
@@ -300,6 +314,7 @@ export async function openPerformerWindow(
         theme: currentColorThemeSetting(),
         locale: currentResolvedLanguage(),
         pageStatus: 'loading',
+        visible: false,
         mouseTouch: true,
       },
     }
@@ -331,17 +346,42 @@ export async function openPerformerWindow(
       showError(error)
   }
 }
-export async function focusPerformerWindow(label: string): Promise<void> {
+export async function setPerformerWindowVisible(
+  label: string,
+  visible: boolean
+): Promise<void> {
   const client = clients.get(label)
-  if (!client || closingAll) return
-  const operation = client.state
+  if (closingAll || client?.state.disposing || !isPerformerWindow(label)) return
+  const operation = client?.state
+  const request = client ? ++client.visibilityRequest : 0
   try {
-    await client.created
-    if (clients.get(label) === client && !closingAll)
-      await client.window.setFocus()
+    if (client) await client.created
+    if (
+      closingAll ||
+      (client &&
+        (clients.get(label) !== client || client.visibilityRequest !== request))
+    )
+      return
+    const result = await commands.setCreationPerformerVisibility(label, visible)
+    if (result.status === 'error') throw new Error(result.error.detail)
+    if (
+      !client ||
+      clients.get(label) !== client ||
+      closingAll ||
+      client.visibilityRequest !== request ||
+      client.state.disposing
+    )
+      return
+    client.state = { ...client.state, visible }
+    publish()
+    if (visible) await client.window.setFocus()
   } catch (error) {
-    reportClientError(client, operation, error)
+    if (client && operation && client.visibilityRequest === request)
+      reportClientError(client, operation, error)
   }
+}
+export async function focusPerformerWindow(label: string): Promise<void> {
+  await setPerformerWindowVisible(label, true)
 }
 export async function configurePerformerWindow(
   label: string,
@@ -352,6 +392,7 @@ export async function configurePerformerWindow(
   const client = clients.get(label)
   if (
     !client ||
+    client.state.disposing ||
     closingAll ||
     !useCreationStore.getState().active ||
     client.state.identity !==
@@ -374,16 +415,55 @@ export async function configurePerformerWindow(
 }
 export async function closePerformerWindow(label: string): Promise<void> {
   const client = clients.get(label)
-  const operation = client?.state
-  if (client) await client.created.catch(() => undefined)
-  try {
-    const result = await commands.closeCreationPerformerWindows([label])
-    if (result.status === 'error') throw new Error(result.error.detail)
-    retire(label)
-  } catch (error) {
-    if (client && operation) reportClientError(client, operation, error)
-    throw error
+  if (client?.deletion) return client.deletion
+  const deleting = async () => {
+    const operation = client?.state
+    try {
+      if (client) {
+        await client.created.catch(() => undefined)
+        if (clients.get(label) !== client) return
+        if (client.ready && !client.state.disposing) {
+          const released = new Promise<void>(resolve => {
+            const timer = setTimeout(() => {
+              client.released = null
+              resolve()
+            }, 1500)
+            client.released = () => {
+              clearTimeout(timer)
+              client.released = null
+              resolve()
+            }
+          })
+          client.visibilityRequest++
+          client.state = {
+            ...client.state,
+            disposing: true,
+            url: null,
+            revision: client.state.revision + 1,
+            pageStatus: 'standby',
+          }
+          publish()
+          await Promise.race([
+            send(client).catch(() => client.released?.()),
+            released,
+          ])
+          await released
+          if (clients.get(label) !== client) return
+        }
+      }
+      const result = await commands.closeCreationPerformerWindows([label])
+      if (result.status === 'error') throw new Error(result.error.detail)
+      retire(label)
+    } catch (error) {
+      if (client && operation) reportClientError(client, client.state, error)
+      throw error
+    } finally {
+      if (client) client.deletion = null
+    }
   }
+  const pending = deleting()
+  if (client) client.deletion = pending
+  return pending
 }
 export async function closeAllPerformerWindows(): Promise<void> {
   closingAll = true
@@ -413,6 +493,30 @@ export function setupPerformerWindowBridge(): () => void {
     }),
     onPerformerPage(pageResult),
     onPerformerDestroyed(retire),
+    onPerformerVisibility((label, visible) => {
+      const client = clients.get(label)
+      if (
+        !client ||
+        closingAll ||
+        client.state.identity !==
+          useCreationStore.getState().workspace?.project.identity
+      )
+        return
+      if (!visible) client.visibilityRequest++
+      client.state = { ...client.state, visible }
+      publish()
+    }),
+    onPerformerReleased(result => {
+      const client = clients.get(result.label)
+      if (
+        client?.state.disposing &&
+        result.identity === client.state.identity &&
+        result.runId === client.state.runId &&
+        result.navigation === client.state.navigation &&
+        result.revision === client.state.revision
+      )
+        client.released?.()
+    }),
     onPerformerOptions(change => {
       const client = clients.get(change.label)
       if (

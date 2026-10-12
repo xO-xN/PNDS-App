@@ -1,11 +1,12 @@
 import { useTranslation } from 'react-i18next'
-import { Plus, Smartphone, Tablet, X } from 'lucide-react'
+import { Eye, EyeOff, Plus, Smartphone, Tablet, X } from 'lucide-react'
 import { useCreationPerformersStore } from '@/store/creation-performers-store'
 import { useCreationStore } from '@/store/creation-store'
 import { useSessionStore } from '@/store/session-store'
 import {
   closePerformerWindow,
   focusPerformerWindow,
+  setPerformerWindowVisible,
   openPerformerWindow,
 } from '@/lib/performer-window'
 
@@ -84,11 +85,40 @@ export function CreationPerformers() {
                 </span>
                 <button
                   className="creation-icon-button pnds-focus-ring"
+                  disabled={busy || client.disposing}
+                  aria-label={t(
+                    client.visible
+                      ? 'creation.performers.hideClient'
+                      : 'creation.performers.showClient',
+                    { number: client.number }
+                  )}
+                  title={t(
+                    client.visible
+                      ? 'creation.performers.hideClient'
+                      : 'creation.performers.showClient',
+                    { number: client.number }
+                  )}
+                  aria-pressed={client.visible}
+                  onClick={() => {
+                    void setPerformerWindowVisible(
+                      client.label,
+                      !client.visible
+                    )
+                  }}
+                >
+                  {client.visible ? (
+                    <EyeOff aria-hidden="true" />
+                  ) : (
+                    <Eye aria-hidden="true" />
+                  )}
+                </button>
+                <button
+                  className="creation-icon-button pnds-focus-ring"
                   disabled={busy}
-                  aria-label={t('creation.performers.closeClient', {
+                  aria-label={t('creation.performers.deleteClient', {
                     number: client.number,
                   })}
-                  title={t('creation.performers.closeClient', {
+                  title={t('creation.performers.deleteClient', {
                     number: client.number,
                   })}
                   onClick={() => {

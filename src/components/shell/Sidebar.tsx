@@ -37,7 +37,7 @@ import {
   toggleProjectionGate,
 } from '@/lib/projection-window'
 import { Spinner } from '@/components/ui/spinner'
-import { selectProject } from '@/lib/project-select'
+import { moveProjectSelection, selectProject } from '@/lib/project-select'
 import { reclaimIfManagedBundle } from '@/lib/bundle-project'
 import { revealScrollTarget } from '@/lib/list-reveal'
 import { projectDisplayName } from '@/lib/display-names'
@@ -65,6 +65,8 @@ import { CreationModeButton } from '@/components/creation'
 import { SessionActionButton } from './SessionActionButton'
 import { TrafficLights } from './TrafficLights'
 import { cn } from '@/lib/utils'
+import { hasOpenOverlay, isEditableTarget } from '@/hooks/use-command-keyboard'
+import { useCreationStore } from '@/store/creation-store'
 import octoSidebar2x from '@/assets/octo-sidebar-2x.png'
 
 /** #71 (Brutal): how far the octopus's clamped hands and face reach
@@ -88,6 +90,7 @@ interface SidebarProps {
   variant: 'static' | 'overlay'
   /** Overlay mode: a settings popup menu is open — keep the sidebar visible. */
   onPopupOpenChange?: (open: boolean) => void
+  onSettingCommitted?: () => void
   /** Overlay mode: a sidebar dialog (folder delete) is open — releasing
    * Cmd must not retract the peeked sidebar. */
   onDialogOpenChange?: (open: boolean) => void
@@ -144,9 +147,9 @@ function ListEmptyState({
  * menu disables at the folder cap (#26) and for the protected Utilities
  * folder, with the reasons spelled out. Segments are tabs: roving
  * tabindex, accent focus ring (bare ←/→ switching removed in v1.3.5
- * #104 — ⌘←/⌘→ is the keyboard path). The project cards
+ * #104; Cmd left/right navigation is now retired). The project cards
  * hold no tab stops of their own (the title and ✕ buttons are
- * pointer-only; ⌘1..9 and ⌘↑/↓ are their keyboard path), so Tab walks
+ * pointer-only; ⌘1..9 and sidebar-owned plain ↑/↓ select projects), so Tab walks
  * the top controls → the switch → the settings footer only.
  *
  * v1.2.2 (issue #29): the project column polishes up — the import entry
@@ -180,6 +183,7 @@ function ListEmptyState({
 export function Sidebar({
   variant,
   onPopupOpenChange,
+  onSettingCommitted,
   onDialogOpenChange,
 }: SidebarProps) {
   const { t } = useTranslation()
@@ -519,8 +523,38 @@ export function Sidebar({
     <aside
       data-testid="sidebar"
       data-sidebar-surface=""
+      tabIndex={-1}
+      onMouseEnter={event => {
+        if (
+          variant === 'overlay' &&
+          !event.currentTarget.contains(document.activeElement) &&
+          !hasOpenOverlay()
+        )
+          event.currentTarget.focus({ preventScroll: true })
+      }}
+      onKeyDownCapture={event => {
+        if (
+          !['ArrowUp', 'ArrowDown'].includes(event.key) ||
+          event.metaKey ||
+          event.ctrlKey ||
+          event.altKey ||
+          event.shiftKey ||
+          isEditableTarget(event.target) ||
+          hasOpenOverlay() ||
+          (event.target as HTMLElement).closest(
+            '[role="combobox"], [role="slider"], select'
+          ) ||
+          useCreationStore.getState().active ||
+          useCreationStore.getState().modePhase !== 'idle'
+        )
+          return
+        event.preventDefault()
+        event.stopPropagation()
+        if (!event.repeat && !useSessionStore.getState().commandPending)
+          moveProjectSelection(event.key === 'ArrowDown' ? 1 : -1)
+      }}
       className={cn(
-        'relative flex w-[320px] flex-col overflow-hidden rounded-[var(--app-corner-radius)] text-sm',
+        'relative flex w-[320px] flex-col overflow-hidden rounded-[var(--app-corner-radius)] text-sm outline-none',
         variant === 'static' &&
           'm-3 border border-(--pnds-text)/5 bg-(--pnds-sidebar-bg) shadow-sm',
         variant === 'overlay' &&
@@ -931,7 +965,10 @@ export function Sidebar({
           </div>
         )}
         <div className="overflow-hidden rounded-xl bg-(--pnds-card) shadow-(--pnds-card-shadow)">
-          <SettingsCard onPopupOpenChange={onPopupOpenChange} />
+          <SettingsCard
+            onPopupOpenChange={onPopupOpenChange}
+            onSettingCommitted={onSettingCommitted}
+          />
           <SessionActionButton onDialogOpenChange={setSessionDialogOpen} />
         </div>
       </div>

@@ -25,6 +25,7 @@ pub fn generate_bindings() -> Builder<tauri::Wry> {
         creation::get_creation_runtime,
         creation::close_creation_projection,
         creation::close_creation_performer_windows,
+        creation::set_creation_performer_visibility,
         creation::prepare_performer_window,
         creation::commit_creation_project,
         creation::describe_creation_projects,

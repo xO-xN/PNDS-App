@@ -123,6 +123,31 @@ describe('HoverSidebar ⌘-peek pointer latch', () => {
     await waitFor(expectHidden)
   })
 
+  it('keeps a running sidebar visible after choosing a pending audio setting until the operator leaves again', async () => {
+    const base = await commands.getSessionState()
+    if (base.status !== 'ok') throw new Error('Missing session snapshot')
+    useProjectStore.setState({
+      currentProject: { path: '/p', manifest },
+      preflightStatus: 'ready',
+    })
+    useSessionStore.getState().applySnapshot({
+      ...base.data,
+      status: 'ready',
+      projectPath: '/p',
+      audioMode: 'none',
+    })
+    render(<HoverSidebar />)
+    fireEvent.mouseEnter(screen.getByTestId('sidebar-popover'))
+    await userEvent.click(screen.getByRole('combobox', { name: 'Audio mode' }))
+    fireEvent.mouseLeave(screen.getByTestId('sidebar-popover'))
+    await userEvent.click(screen.getByRole('option', { name: 'External' }))
+    await screen.findByRole('button', { name: 'Change' })
+    expectVisible()
+    fireEvent.mouseEnter(screen.getByTestId('sidebar-popover'))
+    fireEvent.mouseLeave(screen.getByTestId('sidebar-popover'))
+    expectHidden()
+  })
+
   it('holds the sidebar through replacement confirmation and hides on cancel', async () => {
     useProjectStore.setState({
       currentProject: { path: '/b', manifest },

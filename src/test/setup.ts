@@ -134,6 +134,7 @@ vi.mock('@/lib/tauri-bindings', async () => {
       windowStateEvent: makeEvent('window-state-event'),
       projectionWindowEvent: makeEvent('projection-window-event'),
       performerDestroyedEvent: makeEvent('performer-destroyed-event'),
+      performerVisibilityEvent: makeEvent('performer-visibility-event'),
     },
     commands: {
       startCreationProject: vi.fn().mockResolvedValue({
@@ -161,6 +162,9 @@ vi.mock('@/lib/tauri-bindings', async () => {
         .fn()
         .mockResolvedValue({ status: 'ok', data: null }),
       closeCreationPerformerWindows: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      setCreationPerformerVisibility: vi
         .fn()
         .mockResolvedValue({ status: 'ok', data: null }),
       preparePerformerWindow: vi

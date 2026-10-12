@@ -133,21 +133,20 @@ closes the reader and returns to the idle home.
 
 The shortcuts an App user reaches for (creators asking "which keys can my pages get?" — see [page interaction](../reference/page-interaction.md)):
 
-| Shortcut              | Action                                        |
-| --------------------- | --------------------------------------------- |
-| `⌘ O`                 | Import a Project                              |
-| `⌘ 1`–`⌘ 9`           | Select the Nth visible Project                |
-| `⌘ ↓` / `⌘ ↑`         | Next / previous Project                       |
-| `⌘ ←` / `⌘ →`         | Switch folder view (wrapping at the ends)     |
-| `⌘ R`                 | Rename the selected Project / folder          |
-| `Enter`               | Load the Project / restart after a change     |
-| `Esc`                 | Cancel mode confirmation / dismiss an overlay |
-| `⌘` (hold)            | Summon the sidebar + number badges            |
-| `⌃ ⌘ F`               | Enter / leave full screen                     |
-| `⌘ M`                 | Master mute / restore                         |
-| `⌘ =` / `⌘ -` / `⌘ 0` | Monitor zoom in / out / actual size           |
-| `⌘ ⇧ R`               | Reload the monitor page                       |
-| `⌘ ,`                 | Open / close the settings panel               |
-| `⌘ ?`                 | Open the help center                          |
-| `⌘ W`                 | Close window (confirm flow while running)     |
-| `⌘ Q`                 | Quit the App (confirm flow while running)     |
+| Shortcut                   | Action                                        |
+| -------------------------- | --------------------------------------------- |
+| `⌘ O`                      | Import a Project                              |
+| `⌘ 1`–`⌘ 9`                | Select the Nth visible Project                |
+| `↓` / `↑` (inside sidebar) | Next / previous Project                       |
+| `⌘ R`                      | Rename the selected Project / folder          |
+| `Enter`                    | Load the Project / restart after a change     |
+| `Esc`                      | Cancel mode confirmation / dismiss an overlay |
+| `⌘` (hold)                 | Summon the sidebar + number badges            |
+| `⌃ ⌘ F`                    | Enter / leave full screen                     |
+| `⌘ M`                      | Master mute / restore                         |
+| `⌘ =` / `⌘ -` / `⌘ 0`      | Monitor zoom in / out / actual size           |
+| `⌘ ⇧ R`                    | Reload the monitor page                       |
+| `⌘ ,`                      | Open / close the settings panel               |
+| `⌘ ?`                      | Open the help center                          |
+| `⌘ W`                      | Close window (confirm flow while running)     |
+| `⌘ Q`                      | Quit the App (confirm flow while running)     |

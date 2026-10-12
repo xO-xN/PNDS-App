@@ -23,8 +23,7 @@ Keyboard input reaches the app through two layers: native menu accelerators
 | Cmd+Return    | Projection start gate 开演/撤回 (v1.5.0 #130; enabled with a venue screen + ready session)                                                                                                                                                                                                 | Menu (`menu.ts`)                                           |
 | Cmd (hold)    | Number badges + sidebar peek while running                                                                                                                                                                                                                                                 | Web (`use-command-keyboard.ts`)                            |
 | Cmd+1..9      | Select the Nth visible project (v1.1.2)                                                                                                                                                                                                                                                    | Web (`use-command-keyboard.ts`)                            |
-| Cmd+↓ / Cmd+↑ | Next/previous project in the visible order (v1.1.2 T7)                                                                                                                                                                                                                                     | Web (`use-command-keyboard.ts`)                            |
-| Cmd+← / Cmd+→ | Previous/next folder view, wrapping at the ends — the only keyboard path (bare ←/→ removed v1.3.5 #104)                                                                                                                                                                                    | Web (`use-command-keyboard.ts`)                            |
+| ↑ / ↓         | Select previous/next project while operating the performance sidebar; editable controls and popups retain their keys                                                                                                                                                                       | Sidebar capture                                            |
 | Enter         | Load (idle) / Change-restart (pending); focused mode button confirms its switch (#151)                                                                                                                                                                                                     | Web (`SessionActionButton.tsx` / `CreationModeButton.tsx`) |
 | Esc           | Cancel pending mode confirmation in the main shell (#151); monitor pages keep their own Esc behavior                                                                                                                                                                                       | Web (`CreationModeButton.tsx`) / page                      |
 
@@ -45,25 +44,15 @@ Its behaviors (spec issue #4, later additions noted):
 - **Cmd+1..9** → selects the Nth visible project through `selectProject`
   (`src/lib/project-select.ts`) — the same unified entry the card click
   uses, so semantics can never drift between mouse and keyboard.
-- **Cmd+↓/Cmd+↑** → moves the selection one project along the visible
-  order through `moveProjectSelection` (`src/lib/project-select.ts`), with
-  the same click-equal semantics as Cmd+1..9 (idle selects, a running
-  session goes through the switch confirmation, app-behavior「状态与
-  Session」). The ends clamp —
-  never wrap — and when the current project sits inside a folder while the
-  user is at the top level, the move drills into that folder first and
-  continues inside it ("下一首曲子" mental model, v1.1.2 T7).
-- **Cmd+←/Cmd+→** → moves one folder view along the row through
-  `moveFolderSelection` (`src/lib/project-select.ts`) — the same entry a
-  dropdown selection uses, so the selection reset and the live-session keep
-  behave alike. The ends wrap (v1.3.1 user report: with three views the
-  old clamp read as stuck, not as an edge; a same-view press stays a
-  full no-op) — see
-  [Folder Dropdown](#folder-dropdown-v16-issue-153). Together the
-  Cmd arrows navigate the folder/project grid. v1.3.5 (#104): these
-  chords are the only keyboard folder switch — the segments' bare
-  ←/→ handler is gone. (They briefly nudged the master volume before
-  v1.2.2 shipped; that role is gone, Cmd+M keeps mute.)
+- **Plain ↑/↓ in the performance sidebar** → `moveProjectSelection` uses the
+  same preflight-only selection as a card click. It clamps within the current
+  folder, never starts/stops audio and prevents browser text selection/scroll.
+  Entering the overlay sidebar transfers document focus to its surface when
+  focus was outside it. Text inputs, sliders, comboboxes, open overlays and
+  creation-mode confirmations retain their keys. Holding an arrow does not
+  repeat project moves. Bare arrows in monitor/projection remain page input.
+- **Left/right folder navigation is retired**, including Cmd+←/Cmd+→. Use the
+  folder dropdown / Utilities entry; an open selector keeps its standard keys.
 - **Cmd+R** → starts the inline rename through `startRename`
   (`src/lib/project-rename.ts`): the selected project's card (or the
   selected folder segment's name when nothing is selected). The Edit
@@ -107,10 +96,8 @@ Enter submit yields while the listbox is open. The independent Utilities button
 is keyboard reachable and toggles back to the preceding user view. Its return
 entry does the same; a deleted remembered folder falls back to Home.
 
-Cmd+←/Cmd+→ still cycle through Home, all user folders and Utilities in index
-order, wrapping at the ends through `moveFolderSelection` and the same view
-entry as the dropdown. A step onto Utilities records the preceding user view.
-There is no fixed folder count. Text inputs and open overlays retain their keys.
+Folder switching uses the dropdown and Utilities control. Arrow keys inside
+its popup select options; no global left/right folder shortcut remains.
 
 Guards: text inputs own their keys (`isEditableTarget`), and while a
 Radix dialog or select popup is open (`hasOpenOverlay`) Enter/Esc belong
@@ -168,11 +155,9 @@ a live internal ≤2-channel session is running.
   (the same replacement strategy as ⌘Q/⌘W). Unlike ⌘R it carries no
   text-input/overlay guards — mute opens no UI, and emergency silence
   should work under any dialog.
-- **⌘←/⌘→ volume nudges were cut before v1.2.2 shipped** — the chords
-  switched to folder-view navigation (see above), leaving the slider as
-  the only fine-grained volume control. They had lived in the web layer
-  (⌘←/⌘→ are line-start/end in text fields, which a menu accelerator
-  would break); the folder role inherits that layer choice.
+- **Cmd-arrow volume nudges remain retired.** Folder navigation no longer
+  consumes these chords either. Native passthrough still lets editable fields
+  and project pages receive normal command-arrow input.
 
 ## Cmd+Q Quit Flow (v1.1.2 T7)
 
@@ -276,9 +261,11 @@ the iframe, starts/stops a process or cleans up test windows.
 
 ## Performer test windows (#157)
 
-Cmd+W closes only the focused performer test window. Ctrl+Cmd+F changes that
+Cmd+W and the native red close button hide the focused performer test window.
+The main list retains the device; its show/hide button and numbered focus action
+reopen the same page/client. Only the list X deletes a device and unloads its page. Ctrl+Cmd+F changes that
 window's native fullscreen. Monitor zoom shortcuts are no-ops while a performer
-is focused; its viewport is selected explicitly through the client list. The
+is focused; its viewport is selected explicitly through its own shell toolbar. The
 plain-Escape restore accelerator remains main-only. Performer shells have no
 App web shortcut layer: nonreserved keyboard/pointer input belongs to the real
 page. Cmd+Shift+R in creation refreshes existing test pages through the shared

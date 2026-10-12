@@ -21,18 +21,23 @@ import { cn } from '@/lib/utils'
  */
 export function HoverSidebar() {
   const [hoverVisible, setHoverVisible] = useState(false)
+  const [settingHold, setSettingHold] = useState(false)
   const [pointerActive, setPointerActive] = useState(false)
   useEffect(() => {
     // Gain and card drags may release outside this element, or be
     // canceled by the native window. Neither may strand a gesture hold.
     const releasePointer = () => setPointerActive(false)
+    const releaseWindow = () => {
+      setPointerActive(false)
+      setSettingHold(false)
+    }
     window.addEventListener('pointerup', releasePointer, true)
     window.addEventListener('pointercancel', releasePointer, true)
-    window.addEventListener('blur', releasePointer)
+    window.addEventListener('blur', releaseWindow)
     return () => {
       window.removeEventListener('pointerup', releasePointer, true)
       window.removeEventListener('pointercancel', releasePointer, true)
-      window.removeEventListener('blur', releasePointer)
+      window.removeEventListener('blur', releaseWindow)
     }
   }, [])
   // While a settings popup is open (Radix portals live outside the sidebar
@@ -53,9 +58,17 @@ export function HoverSidebar() {
   const renaming = useProjectStore(state => state.renameTarget !== null)
   const modeConfirmation = useCreationStore(state => state.modePhase !== 'idle')
 
+  useEffect(() => {
+    return useSessionStore.subscribe(state => {
+      if (state.commandPending || state.sessionStatus !== 'ready')
+        setSettingHold(false)
+    })
+  }, [])
+
   const peeking = commandKeyPressed && running
   const sidebarVisible =
     hoverVisible ||
+    settingHold ||
     pointerActive ||
     popupOpen ||
     dialogOpen ||
@@ -105,13 +118,16 @@ export function HoverSidebar() {
         // Pointer location is independent of portal/operation holds. A
         // hold ending must hide the panel if the pointer already left.
         onMouseLeave={event => {
-          if (event.currentTarget.contains(event.target as Node))
+          if (event.currentTarget.contains(event.target as Node)) {
             setHoverVisible(false)
+            setSettingHold(false)
+          }
         }}
       >
         <Sidebar
           variant="overlay"
           onPopupOpenChange={setPopupOpen}
+          onSettingCommitted={() => setSettingHold(true)}
           onDialogOpenChange={setDialogOpen}
         />
       </div>

@@ -22,7 +22,7 @@
  * closes that window, not the main flow behind it.
  */
 import { refreshMonitorFromDisk } from '@/lib/creation-runtime-updates'
-import { closePerformerWindow } from '@/lib/performer-window'
+import { setPerformerWindowVisible } from '@/lib/performer-window'
 import { isPerformerWindow } from '@/lib/performer-protocol'
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
 import {
@@ -111,7 +111,7 @@ async function focusedLabel(): Promise<string> {
 async function closeFrontWindow(): Promise<void> {
   const focused = await focusedLabel()
   if (isPerformerWindow(focused)) {
-    await closePerformerWindow(focused)
+    await setPerformerWindowVisible(focused, false)
     return
   }
   if (focused === HELP_WINDOW_LABEL) {

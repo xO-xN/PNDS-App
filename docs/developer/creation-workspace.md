@@ -338,8 +338,22 @@ project switch or creation-mode exit. It waits for pending native creation,
 then uses the typed `closeCreationPerformerWindows` command. Rust accepts only
 UUID performer labels, checks the whole target list before destruction, and
 attempts every target. `None` closes all test shells, including orphans after a
-main-webview reload. Native destruction events retire exactly one row, including
-red-light and Cmd+W closes. Cmd+W targets the focused client; fullscreen targets
+main-webview reload. Native red-close and Cmd+W requests hide the focused client, leaving the row,
+page, isolated storage and connection alive. Explicit visibility requests
+also mark the native device as manually controlled. The first automatic reveal
+checks that intent on the UI thread immediately before showing, so a delayed
+prepare/fit result cannot reopen a user-hidden device. Destruction removes the
+transient native intent; it is never persisted. Visibility is a Rust-owned event
+plus typed command; the numbered focus action also shows a hidden client. Only
+the list X deletes a device. Its shell navigates the existing iframe to
+`about:blank`, acknowledges that blank document with matching workspace/run/
+navigation/revision, then the manager destroys only that native UUID. A bounded
+1.5-second fallback still destroys an unresponsive shell; repeated deletes share
+one task. Retiring clients ignore configuration/refresh that could reconnect them.
+The App observes only the blank lifecycle, never the real score DOM or music
+protocol. Inarticulate III releases its player assignment on actual socket
+disconnect; the App does not force-clear project IDs with invented messages.
+Native destruction events retire exactly one row. Cmd+W targets the focused client; fullscreen targets
 its native window; monitor zoom does not alter its simulated viewport. Main
 window hiding/blur and cancelled confirmations do not run cleanup. Actual exit
 also destroys test shells in Rust. Window-state persistence excludes these
@@ -402,8 +416,8 @@ scaled into the right panel. Its aspect follows window resize instead of a fixed
 4:3 card. Expansion uses the actual available monitor area (excluding its strip)
 and changes layout and hides controls/list without reparenting the iframe or changing
 its URL. Its load cover belongs to the monitor viewport, so it cannot cover test
-controls. Client-number buttons focus their native window; each close button
-addresses only its own UUID. List device/orientation summaries follow shell
+controls. Client-number buttons show/focus their native window; the separate visibility
+button hides/shows it, while X deletes only that device UUID. List device/orientation summaries follow shell
 configuration; page navigation status remains distinct from unknown connection.
 
 Independent performer shells place device/orientation segments in the top toolbar
@@ -439,3 +453,24 @@ list omits the mouse checkbox, and the monitor thumbnail follows the main window
 aspect while expansion fills its available area. This is native acceptance for
 these adjustments, rather than a claim about untested multi-monitor arrangements
 or other device input capabilities.
+
+## Performance sidebar control ownership
+
+Plain up/down project selection belongs to the sidebar capture boundary. Hover
+entry into the overlay hands document focus to the sidebar surface, preserving
+existing focus inside it and open overlays. Inputs, sliders and comboboxes keep
+their normal arrow keys; main/projection monitor input remains page-owned. The
+retired Cmd-arrow project/folder handlers no longer run globally.
+
+Committing an audio, LAN or room dropdown keeps a separate sidebar hold after
+the portal closes. The operator can inspect the new setting and use Change.
+Cancellation creates no hold. Physical leave after re-entry, window blur and
+session command/lifecycle changes release it; portal mouse events cannot clear
+or fake physical sidebar presence. See `HoverSidebar` and workflow regressions.
+
+On 2026-10-12 the user confirmed in the restarted development App that hiding
+retains/restores the same performer, X deletion frees the Inarticulate III player
+number for a new device, and settings selections keep Change available. Sidebar
+plain arrows switch projects correctly; the user reported a blue outline on its
+noninteractive focus receiver, so that surface now suppresses the browser's
+outline while controls retain their normal focus rings.

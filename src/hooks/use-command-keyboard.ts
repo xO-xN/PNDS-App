@@ -2,11 +2,7 @@ import { useEffect } from 'react'
 import { useKeyboardStore } from '@/store/keyboard-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { visibleProjectPaths, useProjectStore } from '@/store/project-store'
-import {
-  moveFolderSelection,
-  moveProjectSelection,
-  selectProject,
-} from '@/lib/project-select'
+import { selectProject } from '@/lib/project-select'
 import { startRename } from '@/lib/project-rename'
 import { useCreationStore } from '@/store/creation-store'
 import { useCreationDraftsStore } from '@/store/creation-drafts-store'
@@ -99,13 +95,8 @@ function healIfPointerReportsMetaUp(event: MouseEvent): void {
  * - ⌘, → toggle the in-app settings panel (v1.2.0, issue #13)
  * - ⌘R → rename the selected project (folder name inside a folder view
  *   with nothing selected) via the same entry as the Edit-menu item
- * - ⌘↓/⌘↑ → move the selection along the visible order (clamped, no
- *   wrap; auto-drills into the current project's folder) via the same
- *   entry as a click
- * - ⌘→/⌘← → one folder view along the row (clamped, no wrap) via the
- *   same entry as a segment click — together with ⌘↓/⌘↑ the Cmd arrows
- *   navigate the folder/project grid. (Before v1.2.2 shipped they nudged
- *   the master volume; that role is gone, ⌘M keeps mute.)
+ * - plain up/down project navigation is owned by Sidebar's capture boundary;
+ *   monitor/projection arrows stay page-owned. Cmd-arrow navigation is retired.
  * - ⌘1..9 → select the Nth visible project via the same entry as a click,
  *   folder-aware (a drilled-in view numbers only the folder's members);
  *   pressing the selected project's number deselects it (v1.2.0, same
@@ -174,27 +165,6 @@ export function useCommandKeyboard(): void {
         if (isEditableTarget(event.target) || hasOpenOverlay()) return
         event.preventDefault()
         startRename()
-        return
-      }
-      // v1.1.2 T7 (spec issue #4/#11): ⌘↓/⌘↑ next/previous project. Must
-      // not fall through to the webview's scroll-to-end/beginning.
-      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-        if (isEditableTarget(event.target) || hasOpenOverlay()) return
-        event.preventDefault()
-        moveProjectSelection(event.key === 'ArrowDown' ? 1 : -1)
-        return
-      }
-      // ⌘←/⌘→ move one folder view along the row, wrapping at the ends
-      // (v1.3.1 user report — the old clamp read as stuck, not as an
-      // edge). Since v1.3.5 (#104) the ONLY keyboard folder switch: the
-      // segments' bare ←/→ handler is gone. Text fields keep ⌘←/⌘→ as
-      // line-start/end, and the row is not navigated under an overlay.
-      // Web-layer on purpose — a menu accelerator would consume the key
-      // even inside an input.
-      if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-        if (isEditableTarget(event.target) || hasOpenOverlay()) return
-        event.preventDefault()
-        moveFolderSelection(event.key === 'ArrowRight' ? 1 : -1)
         return
       }
       if (!/^[1-9]$/.test(event.key)) return

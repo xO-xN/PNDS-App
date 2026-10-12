@@ -17,6 +17,7 @@ export interface PerformerConfig {
   theme: ColorTheme
   locale: string
   mouseTouch: boolean
+  disposing?: boolean
 }
 export interface PerformerOptionsChange {
   label: string
@@ -28,6 +29,10 @@ export interface PerformerOptionsChange {
     Pick<PerformerConfig, 'device' | 'orientation' | 'mouseTouch'>
   >
 }
+export type PerformerReleaseResult = Pick<
+  PerformerConfig,
+  'label' | 'identity' | 'runId' | 'navigation' | 'revision'
+>
 export interface PerformerPageResult {
   label: string
   identity: string

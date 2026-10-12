@@ -216,6 +216,14 @@ async closeCreationPerformerWindows(labels: string[] | null) : Promise<Result<nu
     else return { status: "error", error: e  as any };
 }
 },
+async setCreationPerformerVisibility(label: string, visible: boolean) : Promise<Result<null, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("set_creation_performer_visibility", { label, visible }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async preparePerformerWindow(label: string, ok: string, cancel: string) : Promise<Result<null, CreationError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("prepare_performer_window", { label, ok, cancel }) };
@@ -813,6 +821,7 @@ export const events = __makeEvents__<{
 helpReadyEvent: HelpReadyEvent,
 openBundleEvent: OpenBundleEvent,
 performerDestroyedEvent: PerformerDestroyedEvent,
+performerVisibilityEvent: PerformerVisibilityEvent,
 projectionWindowEvent: ProjectionWindowEvent,
 sessionSnapshotEvent: SessionSnapshotEvent,
 setlistExportProgressEvent: SetlistExportProgressEvent,
@@ -822,6 +831,7 @@ windowStateEvent: WindowStateEvent
 helpReadyEvent: "help-ready-event",
 openBundleEvent: "open-bundle-event",
 performerDestroyedEvent: "performer-destroyed-event",
+performerVisibilityEvent: "performer-visibility-event",
 projectionWindowEvent: "projection-window-event",
 sessionSnapshotEvent: "session-snapshot-event",
 setlistExportProgressEvent: "setlist-export-progress-event",
@@ -1361,6 +1371,7 @@ performerAddress?: string | null }
 export type OpenBundleEvent = Record<string, never>
 export type PackResult = { outputPath: string; sha256: string }
 export type PerformerDestroyedEvent = { label: string }
+export type PerformerVisibilityEvent = { label: string; visible: boolean }
 /**
  * Who is listening on a project port.
  */

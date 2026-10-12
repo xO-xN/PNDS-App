@@ -280,7 +280,7 @@ describe('Sidebar project-list scrolling (issue #25)', () => {
       pinColumnGeometry(scroller, { scrollTop: 300 })
       revealCalls.length = 0
 
-      fireEvent.keyDown(window, { key: 'ArrowDown', metaKey: true })
+      fireEvent.keyDown(screen.getByTestId('sidebar'), { key: 'ArrowDown' })
       expect(revealCalls).toEqual([])
 
       // ⌘6 = the sixth card (index 5): content top 655, bottom 712 →
@@ -327,7 +327,7 @@ describe('Sidebar project-list scrolling (issue #25)', () => {
       pinColumnGeometry(scroller, { scrollTop: 0 })
       revealCalls.length = 0
 
-      fireEvent.keyDown(window, { key: 'ArrowUp', metaKey: true })
+      fireEvent.keyDown(screen.getByTestId('sidebar'), { key: 'ArrowUp' })
 
       expect(revealCalls).toEqual([])
       expect(useProjectStore.getState().currentProject?.path).toBe(pathAt(0))
@@ -369,7 +369,7 @@ describe('Sidebar project-list scrolling (issue #25)', () => {
       })
       render(<AppShell />)
 
-      fireEvent.keyDown(window, { key: 'ArrowDown', metaKey: true })
+      fireEvent.keyDown(screen.getByTestId('sidebar'), { key: 'ArrowDown' })
 
       // The view stays put; the move enters the top-level list (the
       // selection's folder is NOT followed).

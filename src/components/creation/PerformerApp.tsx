@@ -3,6 +3,7 @@ import {
   emitPerformerReady,
   onPerformerConfig,
   emitPerformerOptions,
+  emitPerformerReleased,
 } from '@/lib/events'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -29,6 +30,7 @@ export function PerformerApp() {
   const [preparationError, setPreparationError] = useState<string | null>(null)
   const [optionsPending, setOptionsPending] = useState(false)
   const [optionsError, setOptionsError] = useState<string | null>(null)
+  const nativeRevealed = useRef(false)
   const optionsRequest = useRef<object | null>(null)
   const [loaded, setLoaded] = useState(-1)
   const [timedOut, setTimedOut] = useState(-1)
@@ -51,12 +53,21 @@ export function PerformerApp() {
       )
       if (result.status === 'error') throw new Error(result.error.detail)
     }
+    const reveal = () => {
+      if (nativeRevealed.current || latest.current?.disposing) return
+      nativeRevealed.current = true
+      void commands
+        .fadeInWindow(label)
+        .catch(error =>
+          logger.warn('Failed to reveal performer window', { error })
+        )
+    }
     const failed = (error: unknown) => {
       if (disposed) return
       optionsRequest.current = null
       setOptionsPending(false)
       setPreparationError(String(error))
-      void commands.fadeInWindow(label)
+      reveal()
     }
     const pending = onPerformerConfig(async value => {
       if (
@@ -82,8 +93,9 @@ export function PerformerApp() {
       let resizeError: string | null = null
       const nextViewport = performerViewport(value.device, value.orientation)
       if (
-        fittedViewport.current?.width !== nextViewport.width ||
-        fittedViewport.current?.height !== nextViewport.height
+        !value.disposing &&
+        (fittedViewport.current?.width !== nextViewport.width ||
+          fittedViewport.current?.height !== nextViewport.height)
       ) {
         try {
           await fitPerformerWindow(
@@ -109,11 +121,7 @@ export function PerformerApp() {
       setOptionsPending(false)
       setOptionsError(resizeError)
       setConfig(value)
-      void commands
-        .fadeInWindow(label)
-        .catch(error =>
-          logger.warn('Failed to reveal performer window', { error })
-        )
+      reveal()
     })
     void pending
       .then(async () => {
@@ -138,7 +146,7 @@ export function PerformerApp() {
     return () => observer.disconnect()
   }, [])
   useEffect(() => {
-    if (!config?.url) return
+    if (!config?.url || config.disposing) return
     const origin = new URL(config.url).origin
     const push = () => {
       pushThemeToFrame(frame.current, origin, config.theme)
@@ -158,7 +166,7 @@ export function PerformerApp() {
     }
   }, [config])
   useEffect(() => {
-    if (!config?.url || loaded === config.navigation) return
+    if (!config?.url || config.disposing || loaded === config.navigation) return
     const timer = setTimeout(() => {
       if (latest.current?.navigation !== config.navigation) return
       setTimedOut(config.navigation)
@@ -237,7 +245,7 @@ export function PerformerApp() {
                 key={device}
                 className="pnds-focus-ring"
                 aria-pressed={config?.device === device}
-                disabled={!config || optionsPending}
+                disabled={!config || config.disposing || optionsPending}
                 onClick={() => requestOptions({ device })}
               >
                 {t(`creation.performers.${device}`)}
@@ -254,7 +262,7 @@ export function PerformerApp() {
                 key={orientation}
                 className="pnds-focus-ring"
                 aria-pressed={config?.orientation === orientation}
-                disabled={!config || optionsPending}
+                disabled={!config || config.disposing || optionsPending}
                 onClick={() => requestOptions({ orientation })}
               >
                 {t(`creation.performers.${orientation}`)}
@@ -274,7 +282,7 @@ export function PerformerApp() {
         </p>
       )}
       <div ref={stage} className="performer-stage">
-        {config?.url ? (
+        {config && (config.url || config.disposing) ? (
           <div
             className="performer-device-wrap"
             dir="ltr"
@@ -297,12 +305,29 @@ export function PerformerApp() {
                 title={t('creation.performers.pageTitle', {
                   number: config.number,
                 })}
-                src={config.url}
+                src={
+                  config.disposing ? 'about:blank' : (config.url ?? undefined)
+                }
                 style={{
                   width: viewport.width,
                   height: viewport.height,
                 }}
                 onLoad={() => {
+                  if (config.disposing) {
+                    if (
+                      latest.current === config &&
+                      frame.current?.contentDocument?.URL === 'about:blank'
+                    ) {
+                      void emitPerformerReleased({
+                        label: config.label,
+                        identity: config.identity,
+                        runId: config.runId,
+                        navigation: config.navigation,
+                        revision: config.revision,
+                      })
+                    }
+                    return
+                  }
                   if (
                     latest.current?.navigation !== config.navigation ||
                     latest.current.runId !== config.runId
@@ -333,7 +358,7 @@ export function PerformerApp() {
                   })
                 }}
               />
-              {!revealed && (
+              {!revealed && !config.disposing && (
                 <div className="performer-cover" role="status">
                   {t('creation.performers.page.loading')}
                 </div>
@@ -359,7 +384,7 @@ export function PerformerApp() {
           <input
             type="checkbox"
             checked={config?.mouseTouch ?? true}
-            disabled={!config || optionsPending}
+            disabled={!config || config.disposing || optionsPending}
             onChange={event =>
               requestOptions({ mouseTouch: event.target.checked })
             }

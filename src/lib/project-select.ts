@@ -6,7 +6,6 @@ import {
 } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 import { openProject } from '@/lib/open-project'
-import type { ProjectFolder } from '@/lib/tauri-bindings'
 
 /**
  * The single entry for selecting a project card (spec issue #4: 选中语义
@@ -60,45 +59,8 @@ export function setActiveFolderView(folderId: string | null): void {
   project.setActiveFolderId(folderId)
 }
 
-/** The folder-view stops in row order: the unfiled view first, then the
- * folders in display order (at most four stops under the #26 cap). */
-function folderViewStops(folders: ProjectFolder[]): (string | null)[] {
-  return [null, ...folders.map(folder => folder.id)]
-}
-
 /**
- * The next folder view along the row, wrapping at the ends (the row is
- * short, so wrapping beats clamping). Born as the focused segment's
- * bare ←/→ walker (v1.2.2 #28); since v1.3.5 (#104) ⌘←/⌘→ — through
- * moveFolderSelection below — is the only caller.
- */
-export function nextFolderView(
-  folders: ProjectFolder[],
-  activeFolderId: string | null,
-  direction: 1 | -1
-): string | null {
-  const viewIds = folderViewStops(folders)
-  const currentIndex = Math.max(0, viewIds.indexOf(activeFolderId))
-  const nextIndex = (currentIndex + direction + viewIds.length) % viewIds.length
-  return viewIds[nextIndex] ?? null
-}
-
-/**
- * ⌘←/⌘→ — one folder view along the row, through the same entry as a
- * segment click. Wraps at the ends (v1.3.1 user report: with three
- * views the old clamp read as stuck at an edge, not as an edge), and a
- * press that resolves to the current view is a full no-op — re-running
- * the click entry would reset an idle selection even though the view
- * never moved. Since v1.3.5 (#104) the only keyboard folder switch.
- */
-export function moveFolderSelection(direction: 1 | -1): void {
-  const { projectFolders, activeFolderId } = useProjectStore.getState()
-  const next = nextFolderView(projectFolders, activeFolderId, direction)
-  if (next !== activeFolderId) setActiveFolderView(next)
-}
-
-/**
- * v1.1.2 T7 (spec issue #4/#11): ⌘↓/⌘↑ — move the selection one project
+ * v1.1.2 T7 (spec issue #4/#11): Sidebar ↑/↓ — move the selection one project
  * along the CURRENT view's visible order, with the same semantics as
  * clicking a card (idle selects; a live session just keeps running
  * underneath, #39). The ends clamp — the selection never wraps, and the
@@ -110,7 +72,7 @@ export function moveProjectSelection(direction: 1 | -1): void {
 
   // v1.2.3 (user feedback on #39): the move acts on the CURRENT view —
   // never auto-drills back into the selected project's folder. Switching
-  // to Home with ⌘←/→ and pressing ⌘↓ must select a Home project, not
+  // to Home in the dropdown and pressing ↓ must select a Home project, not
   // bounce to wherever the selection lives.
   const visible = visibleProjectPaths(
     project.recentProjectPaths,

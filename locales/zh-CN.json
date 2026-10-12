@@ -507,5 +507,8 @@
   "creation.performers.orientationLabel": "屏幕方向",
   "creation.testRunningAudio": "运行中 · {{mode}}",
   "creation.performers.optionsUnacknowledged": "窗口设置未收到回复，请重试。",
-  "creation.performers.resizeUnavailable": "无法获取屏幕可用区域，请手动调整测试窗口大小。"
+  "creation.performers.resizeUnavailable": "无法获取屏幕可用区域，请手动调整测试窗口大小。",
+  "creation.performers.hideClient": "隐藏 performer #{{number}}",
+  "creation.performers.showClient": "显示 performer #{{number}}",
+  "creation.performers.deleteClient": "删除 performer #{{number}}"
 }

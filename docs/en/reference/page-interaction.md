@@ -32,12 +32,10 @@ Since v1.5.0 (#131) a monitor page can appear in **two windows** — the main wi
 
 ### Table B: conditionally available — belong to the page while the user interacts with it
 
-| Chord         | App action when the page is not being interacted with |
-| ------------- | ----------------------------------------------------- |
-| `⌘ 1`–`⌘ 9`   | Select the Nth visible Project                        |
-| `⌘ ↓` / `⌘ ↑` | Next / previous Project                               |
-| `⌘ ←` / `⌘ →` | Switch folder view (wrapping at the ends)             |
-| `Enter`       | Load the Project / restart after a change             |
+| Chord       | App action when the page is not being interacted with |
+| ----------- | ----------------------------------------------------- |
+| `⌘ 1`–`⌘ 9` | Select the Nth visible Project                        |
+| `Enter`     | Load the Project / restart after a change             |
 
 **"During page interaction"** means: any element of the page holds keyboard focus (other than body / html), or the pointer sits inside the monitor area (a safety net for homemade controls that never fire focus events, e.g. a div menu with no tabindex). While that holds, the App's web ⌘ layer stands down and never steals the keyboard back — the chords above are the page's to handle. When the interaction ends (focus falls back to the page body, the pointer leaves the area) the keyboard returns to the App at once.
 
@@ -64,7 +62,7 @@ The performer page normally opens directly in performers' own browsers; its inpu
 
 Creation's performer test windows have isolated temporary browser storage and independent client identities. Phone is a 390 × 844 CSS viewport; tablet is 820 × 1180, with width/height swapped for landscape. The shell scales the frame to fit the desktop window without changing that viewport. Size changes retain the same page, which must respond to resize. This simulates dimensions only: touch, multi-touch, sensors and mobile-browser APIs still require real-device verification.
 
-Test shells have no App web shortcut layer; native menu accelerators and macOS chords remain reserved. Other keys, Escape, pointer and page contextmenu events belong to the performer page. Main-window Escape restoration does not extend to test windows. Cmd+W closes only the focused test client; Ctrl+Cmd+F changes only its native fullscreen; monitor zoom chords do not alter its viewport. The App observes navigation lifecycle only: a load event may also be a browser error document and never proves a server connection. The public runtime protocol has no performer connection-status reporting, so the list explicitly shows “Connection unknown.” Existing Projects need no new message protocol to be tested.
+Test shells have no App web shortcut layer; native menu accelerators and macOS chords remain reserved. Other keys, Escape, pointer and page contextmenu events belong to the performer page. Main-window Escape restoration does not extend to test windows. Cmd+W hides only the focused test window, preserving its client; the list X unloads and deletes that device; Ctrl+Cmd+F changes only its native fullscreen; monitor zoom chords do not alter its viewport. The App observes navigation lifecycle only: a load event may also be a browser error document and never proves a server connection. The public runtime protocol has no performer connection-status reporting, so the list explicitly shows “Connection unknown.” Existing Projects need no new message protocol to be tested.
 
 ## Key-choice safety zone
 
@@ -83,3 +81,9 @@ restoring and window resizing keep the same page. Performer test shells automati
 fit their native bounds to the simulated device on opening or changing device /
 orientation, limited by the screen work area. Their real CSS device viewport is
 unchanged by this fitting; the mouse-to-single-touch option lives in the shell.
+
+Plain up/down arrows select projects only inside the performance sidebar. Text
+controls, selectors and popups keep their standard keys; monitor/projection
+arrows remain page-owned. App Cmd-arrow navigation and left/right folder cycling
+are retired. Hiding a performer test window preserves its page and ID; deleting
+the device unloads the page and closes its connection before native destruction.

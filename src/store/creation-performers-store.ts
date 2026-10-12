@@ -6,6 +6,7 @@ import type {
 
 export interface CreationPerformer extends PerformerConfig {
   pageStatus: PerformerPageStatus
+  visible: boolean
 }
 export const useCreationPerformersStore = create<{
   windows: CreationPerformer[]

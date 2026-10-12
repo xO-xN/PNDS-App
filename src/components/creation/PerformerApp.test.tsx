@@ -124,6 +124,7 @@ it('keeps the real page and input in place while resizing, follows bridges, and 
     expect.any(Function),
     expect.any(Function)
   )
+  expect(commands.fadeInWindow).toHaveBeenCalledTimes(1)
   expect(frame).toHaveStyle({ width: '1180px', height: '820px' })
   expect(post).toHaveBeenCalledWith(
     expect.objectContaining({ type: 'pnds:theme', theme: 'brutal' }),
@@ -307,6 +308,27 @@ it('fits the newest initial configuration even when an older same-size fit is st
   })
   expect(screen.getByTitle('Performer page #1')).toBe(frame)
   expect(document.documentElement).toHaveAttribute('data-color-theme', 'brutal')
+})
+
+it('navigates the same real frame to blank and acknowledges teardown before the native device is destroyed', async () => {
+  render(<PerformerApp />)
+  await waitFor(() => expect(emitTo).toHaveBeenCalled())
+  await act(async () => receive(first))
+  const frame = await screen.findByTitle('Performer page #1')
+  fireEvent.load(frame)
+  await act(async () =>
+    receive({ ...first, revision: 2, url: null, disposing: true })
+  )
+  expect(screen.getByTitle('Performer page #1')).toBe(frame)
+  expect(frame).toHaveAttribute('src', 'about:blank')
+  fireEvent.load(frame)
+  expect(emitTo).toHaveBeenCalledWith('main', 'pnds:performer-released', {
+    label: first.label,
+    identity: first.identity,
+    runId: first.runId,
+    navigation: first.navigation,
+    revision: 2,
+  })
 })
 
 it('keeps the real page usable after an automatic window fit fails and retries on a device change', async () => {

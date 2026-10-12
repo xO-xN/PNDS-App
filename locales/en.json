@@ -509,5 +509,8 @@
   "creation.performers.orientationLabel": "Screen orientation",
   "creation.testRunningAudio": "Running · {{mode}}",
   "creation.performers.optionsUnacknowledged": "Window settings were not acknowledged. Try again.",
-  "creation.performers.resizeUnavailable": "The screen work area is unavailable; resize the test window manually."
+  "creation.performers.resizeUnavailable": "The screen work area is unavailable; resize the test window manually.",
+  "creation.performers.hideClient": "Hide performer #{{number}}",
+  "creation.performers.showClient": "Show performer #{{number}}",
+  "creation.performers.deleteClient": "Delete performer #{{number}}"
 }

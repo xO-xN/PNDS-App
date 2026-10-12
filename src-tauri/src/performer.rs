@@ -1,5 +1,29 @@
 //! Project test windows have independent lifetimes and no music-message bridge.
+use std::collections::HashSet;
+use std::sync::Mutex;
 use tauri::{AppHandle, Manager, Runtime};
+use tauri_specta::Event;
+#[derive(Default)]
+pub struct VisibilityIntent {
+    manually_controlled: Mutex<HashSet<String>>,
+}
+
+pub fn initial_reveal_allowed<R: Runtime>(app: &AppHandle<R>, label: &str) -> bool {
+    !app.state::<VisibilityIntent>()
+        .manually_controlled
+        .lock()
+        .unwrap()
+        .contains(label)
+}
+
+pub fn forget_visibility<R: Runtime>(app: &AppHandle<R>, label: &str) {
+    app.state::<VisibilityIntent>()
+        .manually_controlled
+        .lock()
+        .unwrap()
+        .remove(label);
+}
+
 #[cfg(target_os = "macos")]
 mod native;
 
@@ -47,6 +71,39 @@ pub fn is_performer_label(label: &str) -> bool {
                 byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)
             }
         })
+}
+
+/// Visibility does not retire the device or its performer connection.
+pub fn set_visibility<R: Runtime>(
+    app: &AppHandle<R>,
+    label: &str,
+    visible: bool,
+) -> Result<(), String> {
+    if !is_performer_label(label) {
+        return Err("Invalid performer window label".into());
+    }
+    let window = app
+        .get_webview_window(label)
+        .ok_or("Performer window not found")?;
+    // Explicit show/hide owns this device from now on; a delayed cold-start
+    // reveal must never supersede a user's choice.
+    app.state::<VisibilityIntent>()
+        .manually_controlled
+        .lock()
+        .unwrap()
+        .insert(label.into());
+    if visible {
+        window.show()
+    } else {
+        window.hide()
+    }
+    .map_err(|error| error.to_string())?;
+    crate::events::PerformerVisibilityEvent {
+        label: label.into(),
+        visible,
+    }
+    .emit(app)
+    .map_err(|error| error.to_string())
 }
 
 /// Destroy only issued test-window labels. `None` also catches orphaned shells
@@ -100,6 +157,49 @@ mod tests {
                     .await
                     .is_err()
             );
+        }
+    }
+
+    #[test]
+    fn hiding_preserves_the_issued_device_window() {
+        let app = mock_builder()
+            .manage(VisibilityIntent::default())
+            .manage(crate::window::WindowManager::default())
+            .build(mock_context(noop_assets()))
+            .unwrap();
+        let registry = crate::events::events_builder::<tauri::test::MockRuntime>();
+        registry.mount_events(&app);
+        let label = "performer-00000000-0000-4000-8000-000000000001";
+        tauri::WebviewWindowBuilder::new(
+            &app,
+            label,
+            tauri::WebviewUrl::App("performer.html".into()),
+        )
+        .build()
+        .unwrap();
+        assert!(initial_reveal_allowed(app.handle(), label));
+        set_visibility(app.handle(), label, true).unwrap();
+        set_visibility(app.handle(), label, false).unwrap();
+        assert!(!initial_reveal_allowed(app.handle(), label));
+        let window = app.get_webview_window(label).unwrap();
+        assert!(!crate::window::reveal_performer_if_allowed(app.handle(), &window, label).unwrap());
+
+        assert!(app.get_webview_window(label).is_some());
+        set_visibility(app.handle(), label, true).unwrap();
+        assert!(app.get_webview_window(label).is_some());
+    }
+
+    #[test]
+    fn visibility_rejects_unrelated_or_missing_windows() {
+        let app = mock_builder().build(mock_context(noop_assets())).unwrap();
+        for label in [
+            "main",
+            "projection",
+            "performer-../../main",
+            "performer-00000000-0000-4000-8000-000000000001",
+        ] {
+            assert!(set_visibility(app.handle(), label, false).is_err());
+            assert!(set_visibility(app.handle(), label, true).is_err());
         }
     }
 

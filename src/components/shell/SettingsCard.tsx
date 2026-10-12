@@ -64,9 +64,13 @@ export interface SettingsCardProps {
    * keep the floating sidebar visible (Radix portals leave the sidebar
    * element, which would otherwise trigger its mouse-leave auto-hide). */
   onPopupOpenChange?: (open: boolean) => void
+  onSettingCommitted?: () => void
 }
 
-export function SettingsCard({ onPopupOpenChange }: SettingsCardProps) {
+export function SettingsCard({
+  onPopupOpenChange,
+  onSettingCommitted,
+}: SettingsCardProps) {
   const { t } = useTranslation()
   const currentProject = useProjectStore(state => state.currentProject)
   const sessionStatus = useSessionStore(state => state.sessionStatus)
@@ -233,7 +237,10 @@ export function SettingsCard({ onPopupOpenChange }: SettingsCardProps) {
         <div className="relative flex-1">
           <Select
             value={audioMode}
-            onValueChange={handleModeChange}
+            onValueChange={value => {
+              handleModeChange(value)
+              onSettingCommitted?.()
+            }}
             onOpenChange={open => onPopupOpenChange?.(open)}
             disabled={!projectLoaded}
           >
@@ -272,7 +279,10 @@ export function SettingsCard({ onPopupOpenChange }: SettingsCardProps) {
         <div className="min-w-0 flex-1">
           <Select
             value={lanIp ?? ''}
-            onValueChange={chooseLanAddress}
+            onValueChange={value => {
+              chooseLanAddress(value)
+              onSettingCommitted?.()
+            }}
             dir={i18n.dir() === 'rtl' ? 'rtl' : 'ltr'}
             onOpenChange={open => {
               onPopupOpenChange?.(open)
@@ -402,7 +412,10 @@ export function SettingsCard({ onPopupOpenChange }: SettingsCardProps) {
           <div className="relative flex-1">
             <Select
               value={String(roomGroup)}
-              onValueChange={handleRoomChange}
+              onValueChange={value => {
+                handleRoomChange(value)
+                onSettingCommitted?.()
+              }}
               onOpenChange={open => onPopupOpenChange?.(open)}
             >
               <SelectTrigger

@@ -820,7 +820,7 @@ describe('buildAppMenu help menu (v1.3.0, #56)', () => {
     useCreationTestStore.getState().setExpanded(false)
   })
 
-  it('closes only the focused performer and leaves monitor zoom and the runtime unchanged', async () => {
+  it('hides only the focused performer and leaves monitor zoom and the runtime unchanged', async () => {
     vi.mocked(commands.closeWindowWithFade).mockClear()
     vi.mocked(commands.stopProject).mockClear()
     vi.mocked(commands.closeCreationPerformerWindows).mockClear()
@@ -833,9 +833,10 @@ describe('buildAppMenu help menu (v1.3.0, #56)', () => {
     await buildAppMenu()
     item('close-window').action?.()
     await vi.waitFor(() =>
-      expect(commands.closeCreationPerformerWindows).toHaveBeenCalledWith([
+      expect(commands.setCreationPerformerVisibility).toHaveBeenCalledWith(
         label,
-      ])
+        false
+      )
     )
     item('zoom-in').action?.()
     await Promise.resolve()

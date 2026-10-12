@@ -137,6 +137,51 @@ describe('Cmd keyboard layer (v1.1.2)', () => {
     useSessionStore.getState().resetSession()
   })
 
+  it('uses plain up/down in the performance sidebar without scrolling or selecting title text', async () => {
+    seedRunningSession(FIRST_PATH)
+    vi.mocked(commands.preflightProject).mockResolvedValue({
+      status: 'ok',
+      data: manifest,
+    })
+    render(<AppShell />)
+    fireEvent.mouseEnter(screen.getByTestId('sidebar-popover'))
+    const sidebar = screen.getByTestId('sidebar')
+    const key = new KeyboardEvent('keydown', {
+      key: 'ArrowDown',
+      bubbles: true,
+      cancelable: true,
+    })
+    fireEvent(sidebar, key)
+    expect(key.defaultPrevented).toBe(true)
+    await waitFor(() =>
+      expect(useProjectStore.getState().currentProject?.path).toBe(SECOND_PATH)
+    )
+    fireEvent.keyDown(sidebar, { key: 'ArrowUp' })
+    await waitFor(() =>
+      expect(useProjectStore.getState().currentProject?.path).toBe(FIRST_PATH)
+    )
+    expect(commands.stopProject).not.toHaveBeenCalled()
+  })
+
+  it('preserves monitor-page arrows and settings select arrows while the sidebar alone owns project navigation', () => {
+    seedRunningSession(FIRST_PATH)
+    render(<AppShell />)
+    const frameKey = new KeyboardEvent('keydown', {
+      key: 'ArrowDown',
+      bubbles: true,
+      cancelable: true,
+    })
+    fireEvent(screen.getByTitle('Project monitor'), frameKey)
+    expect(frameKey.defaultPrevented).toBe(false)
+    expect(commands.preflightProject).not.toHaveBeenCalled()
+    fireEvent.mouseEnter(screen.getByTestId('sidebar-popover'))
+    const select = screen.getByRole('combobox', { name: 'Audio mode' })
+    fireEvent.keyDown(select, { key: 'ArrowDown' })
+    expect(screen.getByRole('listbox')).toBeInTheDocument()
+    expect(commands.preflightProject).not.toHaveBeenCalled()
+    fireEvent.keyDown(screen.getByRole('listbox'), { key: 'Escape' })
+  })
+
   describe('number badges', () => {
     it('badges the first nine visible projects while Cmd is held', () => {
       useProjectStore.setState({ recentProjectPaths: TEN_PATHS })
@@ -447,7 +492,7 @@ describe('Cmd keyboard layer (v1.1.2)', () => {
     })
   })
 
-  describe('Cmd+Left/Right folder-view switching', () => {
+  describe('retired Left/Right folder-view switching', () => {
     const pressCmdArrow = (key: 'ArrowLeft' | 'ArrowRight') => {
       fireEvent.keyDown(window, { key, metaKey: true })
     }
@@ -469,30 +514,13 @@ describe('Cmd keyboard layer (v1.1.2)', () => {
       return [gig, archives]
     }
 
-    it('moves through the row in display order and back', () => {
-      const [gig, archives] = seedFolderRow()
+    it('leaves left/right arrows alone instead of switching folder views', () => {
+      seedFolderRow()
       render(<AppShell />)
-
-      pressCmdArrow('ArrowRight')
-      expect(useProjectStore.getState().activeFolderId).toBe(gig)
-
-      pressCmdArrow('ArrowRight')
-      expect(useProjectStore.getState().activeFolderId).toBe(archives)
-
-      pressCmdArrow('ArrowLeft')
-      pressCmdArrow('ArrowLeft')
-      expect(useProjectStore.getState().activeFolderId).toBeNull()
-    })
-
-    it('wraps at both ends — Home is left of the first folder, the last folder is right of Home (v1.3.1)', () => {
-      const [, archives] = seedFolderRow()
-      render(<AppShell />)
-
-      pressCmdArrow('ArrowLeft')
-      expect(useProjectStore.getState().activeFolderId).toBe(archives)
-
-      useProjectStore.setState({ activeFolderId: archives })
-      pressCmdArrow('ArrowRight')
+      for (const key of ['ArrowLeft', 'ArrowRight'] as const) {
+        pressCmdArrow(key)
+        fireEvent.keyDown(screen.getByTestId('sidebar'), { key })
+      }
       expect(useProjectStore.getState().activeFolderId).toBeNull()
     })
 

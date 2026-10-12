@@ -19,6 +19,7 @@ import {
   focusPerformerWindow,
   openPerformerWindow,
   setupPerformerWindowBridge,
+  setPerformerWindowVisible,
 } from './performer-window'
 import { useCreationPerformersStore } from '@/store/creation-performers-store'
 
@@ -74,6 +75,11 @@ beforeEach(() => {
     data: null,
   })
   handlers.clear()
+  vi.mocked(emitTo).mockImplementation(async (_target, name, payload) => {
+    const config = payload as PerformerConfig
+    if (name === PERFORMER_CONFIG && config.disposing)
+      queueMicrotask(() => deliver('pnds:performer-released', config))
+  })
   vi.mocked(listen).mockImplementation(async (name, callback) => {
     handlers.set(
       String(name),
@@ -308,7 +314,7 @@ describe('independent performer windows', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add performer' }))
     await screen.findByRole('button', { name: 'Focus performer #2' })
     const second = labelAt(1)
-    fireEvent.click(screen.getByRole('button', { name: 'Close performer #1' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete performer #1' }))
     await waitFor(() =>
       expect(commands.closeCreationPerformerWindows).toHaveBeenCalledWith([
         label,
@@ -324,6 +330,124 @@ describe('independent performer windows', () => {
     expect(commands.closeCreationPerformerWindows).toHaveBeenCalledWith(null)
     expect(useCreationPerformersStore.getState().windows).toHaveLength(0)
     expect(useCreationStore.getState().workspace?.project.identity).toBe('test')
+  })
+
+  it('keeps a hidden device in the list, reopens the same client and deletes it only with X', async () => {
+    render(<CreationPerformers />)
+    fireEvent.click(screen.getByRole('button', { name: 'Add performer' }))
+    await screen.findByRole('button', { name: 'Focus performer #1' })
+    const label = labelAt()
+    act(() => deliver(PERFORMER_READY, { label }))
+    act(() => deliver('performer-visibility-event', { label, visible: true }))
+    const before = configFor(label)
+    fireEvent.click(screen.getByRole('button', { name: 'Hide performer #1' }))
+    await screen.findByRole('button', { name: 'Show performer #1' })
+    expect(labelAt()).toBe(label)
+    expect(configFor(label)).toMatchObject({
+      identity: before.identity,
+      navigation: before.navigation,
+      url: before.url,
+    })
+    expect(commands.closeCreationPerformerWindows).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Show performer #1' }))
+    await screen.findByRole('button', { name: 'Hide performer #1' })
+    expect(labelAt()).toBe(label)
+    fireEvent.click(screen.getByRole('button', { name: 'Delete performer #1' }))
+    await waitFor(() =>
+      expect(commands.closeCreationPerformerWindows).toHaveBeenCalledWith([
+        label,
+      ])
+    )
+    expect(useCreationPerformersStore.getState().windows).toHaveLength(0)
+  })
+
+  it('waits for the matching real-page release before deleting one device and leaves the other alive', async () => {
+    await openPerformerWindow('phone', 'portrait')
+    await openPerformerWindow('tablet', 'landscape')
+    const label = labelAt(0)
+    const second = labelAt(1)
+    deliver(PERFORMER_READY, { label })
+    const old = configFor(label)
+    vi.mocked(emitTo).mockResolvedValue(undefined)
+    const closing = closePerformerWindow(label)
+    await waitFor(() => expect(configFor(label).disposing).toBe(true))
+    expect(commands.closeCreationPerformerWindows).not.toHaveBeenCalled()
+    deliver('pnds:performer-released', old)
+    await Promise.resolve()
+    expect(commands.closeCreationPerformerWindows).not.toHaveBeenCalled()
+    deliver('pnds:performer-released', configFor(label))
+    await closing
+    expect(commands.closeCreationPerformerWindows).toHaveBeenCalledWith([label])
+    expect(
+      useCreationPerformersStore.getState().windows.map(client => client.label)
+    ).toEqual([second])
+  })
+
+  it('can still delete an unresponsive shell after the bounded release wait', async () => {
+    await openPerformerWindow('phone', 'portrait')
+    const label = labelAt()
+    deliver(PERFORMER_READY, { label })
+    vi.mocked(emitTo).mockResolvedValue(undefined)
+    vi.useFakeTimers()
+    try {
+      const closing = closePerformerWindow(label)
+      await vi.advanceTimersByTimeAsync(1500)
+      await closing
+      expect(commands.closeCreationPerformerWindows).toHaveBeenCalledWith([
+        label,
+      ])
+      expect(useCreationPerformersStore.getState().windows).toHaveLength(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('a red-close visibility event wins over a late show response', async () => {
+    await openPerformerWindow('phone', 'portrait')
+    const label = labelAt()
+    deliver(PERFORMER_READY, { label })
+    let finish!: (value: { status: 'ok'; data: null }) => void
+    vi.mocked(commands.setCreationPerformerVisibility).mockReturnValueOnce(
+      new Promise(resolve => {
+        finish = resolve
+      })
+    )
+    const showing = setPerformerWindowVisible(label, true)
+    await waitFor(() =>
+      expect(commands.setCreationPerformerVisibility).toHaveBeenCalledWith(
+        label,
+        true
+      )
+    )
+    deliver('performer-visibility-event', { label, visible: false })
+    finish({ status: 'ok', data: null })
+    await showing
+    expect(useCreationPerformersStore.getState().windows[0]?.visible).toBe(
+      false
+    )
+    expect(
+      vi.mocked(WebviewWindow).mock.results[0]?.value.setFocus
+    ).not.toHaveBeenCalled()
+  })
+
+  it('a hung config send cannot strand deletion beyond the release deadline', async () => {
+    await openPerformerWindow('phone', 'portrait')
+    const label = labelAt()
+    deliver(PERFORMER_READY, { label })
+    vi.mocked(emitTo).mockImplementation(
+      () => new Promise<void>(() => undefined)
+    )
+    vi.useFakeTimers()
+    try {
+      const closing = closePerformerWindow(label)
+      await vi.advanceTimersByTimeAsync(1500)
+      expect(commands.closeCreationPerformerWindows).toHaveBeenCalledWith([
+        label,
+      ])
+      await closing
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('keeps viewport options usable while the test is in standby without starting music', async () => {

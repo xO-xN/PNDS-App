@@ -26,6 +26,7 @@ import type {
   PerformerConfig,
   PerformerPageResult,
   PerformerOptionsChange,
+  PerformerReleaseResult,
 } from '@/lib/performer-protocol'
 
 /** The help webview's Tauri window label. */
@@ -304,4 +305,25 @@ export function emitPerformerOptions(
   change: PerformerOptionsChange
 ): Promise<void> {
   return emitTo(MAIN_WINDOW_LABEL, PERFORMER_OPTIONS, change)
+}
+
+export function onPerformerVisibility(
+  cb: (label: string, visible: boolean) => void
+): Promise<Unsubscribe> {
+  return events.performerVisibilityEvent.listen(event =>
+    cb(event.payload.label, event.payload.visible)
+  )
+}
+const PERFORMER_RELEASED = 'pnds:performer-released'
+export function onPerformerReleased(
+  cb: (result: PerformerReleaseResult) => void
+): Promise<Unsubscribe> {
+  return listen<PerformerReleaseResult>(PERFORMER_RELEASED, event =>
+    cb(event.payload)
+  )
+}
+export function emitPerformerReleased(
+  result: PerformerReleaseResult
+): Promise<void> {
+  return emitTo(MAIN_WINDOW_LABEL, PERFORMER_RELEASED, result)
 }

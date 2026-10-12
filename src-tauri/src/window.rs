@@ -322,6 +322,40 @@ pub async fn fade_in_window(app: AppHandle, label: Option<String>) -> Result<(),
     let window = app
         .get_webview_window(&label)
         .ok_or(format!("{label} window not found"))?;
+    if crate::performer::is_performer_label(&label) {
+        let handle = app.clone();
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        app.run_on_main_thread(move || {
+            let result = reveal_performer_if_allowed(&handle, &window, &label).map(|_| ());
+            let _ = tx.send(result);
+        })
+        .map_err(|error| error.to_string())?;
+        return rx.await.map_err(|error| error.to_string())?;
+    }
+    reveal_window(&app, &window, &label)
+}
+
+/// Runs on the UI thread, so explicit visibility requests cannot interleave
+/// with the initial-show decision. Returns whether automatic reveal was allowed.
+pub(crate) fn reveal_performer_if_allowed<R: Runtime>(
+    app: &AppHandle<R>,
+    window: &WebviewWindow<R>,
+    label: &str,
+) -> Result<bool, String> {
+    if app.get_webview_window(label).is_none()
+        || !crate::performer::initial_reveal_allowed(app, label)
+    {
+        return Ok(false);
+    }
+    reveal_window(app, window, label)?;
+    Ok(true)
+}
+
+fn reveal_window<R: Runtime>(
+    app: &AppHandle<R>,
+    window: &WebviewWindow<R>,
+    label: &str,
+) -> Result<(), String> {
     let state = app.state::<WindowManager>();
     if state.quitting.load(Ordering::SeqCst) {
         return Ok(());
@@ -331,9 +365,9 @@ pub async fn fade_in_window(app: AppHandle, label: Option<String>) -> Result<(),
     if window.is_visible().unwrap_or(false) {
         return Ok(());
     }
-    let gen = reveal_generation(&state, &label);
+    let gen = reveal_generation(&state, label);
     let generation = gen.next();
-    set_opacity(&window, 0.0);
+    set_opacity(window, 0.0);
     window
         .show()
         .map_err(|e| format!("Failed to show the hidden window: {e}"))?;
@@ -354,11 +388,11 @@ pub async fn fade_in_window(app: AppHandle, label: Option<String>) -> Result<(),
     // first-responder setup is entangled with its guest-focus gate.
     // (`AsRef<Webview>` — the `Manager::get_webview` lookup needs the
     // unstable feature; this wrapper owns its webview directly.)
-    if label == "projection" || crate::performer::is_performer_label(&label) {
+    if label == "projection" || crate::performer::is_performer_label(label) {
         let webview: &Webview<_> = window.as_ref();
         let _ = webview.set_focus();
     }
-    spawn_ramp(window, gen, generation, 1.0);
+    spawn_ramp(window.clone(), gen, generation, 1.0);
     log::info!("Cold-start reveal: {label} window shown and fading in");
     Ok(())
 }

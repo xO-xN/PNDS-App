@@ -175,6 +175,17 @@ pub async fn close_creation_performer_windows(
 
 #[tauri::command]
 #[specta::specta]
+pub async fn set_creation_performer_visibility(
+    app: AppHandle,
+    label: String,
+    visible: bool,
+) -> Result<(), CreationError> {
+    crate::performer::set_visibility(&app, &label, visible)
+        .map_err(|error| CreationError::new(CreationErrorCode::Io, error))
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn prepare_performer_window(
     app: AppHandle,
     label: String,
