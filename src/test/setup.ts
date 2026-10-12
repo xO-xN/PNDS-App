@@ -215,6 +215,13 @@ vi.mock('@/lib/tauri-bindings', async () => {
         status: 'error',
         error: { code: 'io', detail: 'saveCreationFile not mocked' },
       }),
+      readCreationHandoff: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: { text: '', version: null } }),
+      appendCreationHandoff: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: { code: 'io', detail: 'appendCreationHandoff not mocked' },
+      }),
       renameCreationFile: vi.fn().mockResolvedValue({
         status: 'error',
         error: { code: 'io', detail: 'renameCreationFile not mocked' },

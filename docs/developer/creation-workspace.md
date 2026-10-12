@@ -194,6 +194,55 @@ the missing artifacts. Sample rate and devices remain global App settings;
 the form never touches them. Read-only sources keep the plain text reader
 for `manifest.json`. Labels live under `creation.manifest.*` in both locales.
 
+## README editing and creator handoff (#159)
+
+Root README variants use the existing locale-variant → `README.md` fallback.
+The language choice retains that requested locale while naming the actual file;
+switching variants keeps their separate drafts. Covers reuse `ProjectCoverPage`
+and its optional image. Ordinary documents render through `HelpMarkdown`, with
+a text-edit toggle and intercepted links using the existing project README
+policy. Unsafe cover candidates explain their duplicate fields, missing first
+section or unclosed fence and stay in read-only preview.
+
+`creation-readme.ts` edits source spans rather than serializing the presentation
+parser's sanitized values. It preserves every unedited byte, including unknown
+metadata, whitespace, line endings, fenced content and later sections. Form
+fields remain views over the existing file draft, save version and conflict flow.
+The heading and title may be temporarily empty while being edited.
+
+A successful README save offers an explicit language-sync handoff, tied to the
+saved content fingerprint. A plain README has no intrinsic language tag; the
+selected language supplies it, while a localized filename names its language.
+No translation is performed. Manual task drafts and these offers live in
+`creation-handoff-store.ts`; cancelling the task dialog retains them. They join
+the creation lifecycle discard gate and clear only when the workspace identity
+successfully changes. Existing handoff text remains editable through the usual
+file editor, including external agent status and evidence.
+
+`readCreationHandoff` reads `docs/creator-handoff.md` and its optional disk version;
+absence has a distinct null version. `appendCreationHandoff` accepts a task with
+a stable UUID, intent, project-relative affected files, acceptance and a
+creator-supplied pending/in-progress/blocked status. Appending preserves the
+existing document verbatim, including unknown task formats and agent states.
+The command returns an already-recorded task unchanged on retry with the same
+ID. It does not translate, modify code, install Skills or claim agent completion.
+
+The commands use the existing issued identity, source protection, bounds and
+blocking-task lock. Handoff directory/file access additionally uses `openat`
+with `O_NOFOLLOW`: `docs` and the target must be real source entries, so task
+records cannot land through an alias in runtime assets. A synced, permission-matched
+temporary file is committed with `renameat`; first creation uses a no-clobber
+`linkat`. Root and parent identity plus content versions are rechecked before
+commit. Conflicts preview the latest document and require a new explicit append;
+a further disk change refuses it again. An open dirty handoff draft must be
+saved or resolved first. Root `docs` remains excluded by the existing packer.
+
+`project/handoff.rs` owns task validation/rendering and the initial document.
+The resource `creator-agent-entry.md` is the reusable AGENTS entry for the
+new-project generator; `creator-handoff.md` is its initial handoff text. Module
+adding can use the same task format and append boundary. PNDS Template's source
+AGENTS entry points to its handoff and installed-contract lookup rules.
+
 ## External changes and running versions (#155)
 
 Rename also sends the other opened draft paths to the backend. It resolves

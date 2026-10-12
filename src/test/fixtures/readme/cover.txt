@@ -1,0 +1,28 @@
+# Original
+
+[中文](README.zh-CN.md) | **English**
+
+title: Original
+composer: Composer
+composer_url: https://example.com/author
+github_url: https://github.com/example/score
+website_url: https://example.com/score
+color_palette: [#123456, #abcdef, #112233, #445566]
+custom_credit: Preserve exactly:  two spaces
+
+Unrecognized preface stays here.
+
+## About the piece
+
+An original introduction.
+
+```text
+## A heading inside a fence
+title: not metadata
+```
+
+---
+
+## Technical notes
+
+Keep [this link](relative.md), **formatting** and unknown content.

@@ -341,6 +341,39 @@ pub async fn save_creation_file(
 
 #[tauri::command]
 #[specta::specta]
+pub async fn read_creation_handoff(
+    app: AppHandle,
+    state: State<'_, CreationState>,
+    identity: String,
+) -> Result<crate::project::handoff::HandoffDocument, CreationError> {
+    state
+        .run(move |access| access.read_handoff(&identity, &protection(&app)?))
+        .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn append_creation_handoff(
+    app: AppHandle,
+    state: State<'_, CreationState>,
+    identity: String,
+    task: crate::project::handoff::HandoffTask,
+    expected_version: Option<String>,
+) -> Result<crate::project::handoff::HandoffDocument, CreationError> {
+    state
+        .run(move |access| {
+            access.append_handoff(
+                &identity,
+                &task,
+                expected_version.as_deref(),
+                &protection(&app)?,
+            )
+        })
+        .await
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn rename_creation_file(
     app: AppHandle,
     state: State<'_, CreationState>,

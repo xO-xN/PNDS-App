@@ -2,6 +2,180 @@ use super::*;
 use std::fs;
 
 #[test]
+fn saved_cover_fixture_round_trips_through_the_intro_language_fallback() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = project(temp.path(), "readme-fixture");
+    let before = include_str!("../../../../src/test/fixtures/readme/cover.txt");
+    let after = include_str!("../../../../src/test/fixtures/readme/cover-edited.txt");
+    fs::write(root.join("README.md"), before).unwrap();
+    let protection = Protection::default();
+    let mut access = CreationAccess::default();
+    let identity = access.open(&root, &protection).unwrap().project.identity;
+    let version = text_version(&access, &identity, "README.md", &protection);
+    access
+        .save(&identity, "README.md", after, &version, &protection)
+        .unwrap();
+    for locale in ["en", "zh-CN"] {
+        assert_eq!(
+            crate::project::readme::read_project_readme(root.clone(), Some(locale))
+                .unwrap()
+                .as_deref(),
+            Some(after)
+        );
+    }
+    fs::write(root.join("README.zh-CN.md"), "# 中文\n\n已保存的简介\n").unwrap();
+    assert_eq!(
+        crate::project::readme::read_project_readme(root.clone(), Some("zh-CN"))
+            .unwrap()
+            .as_deref(),
+        Some("# 中文\n\n已保存的简介\n")
+    );
+    assert_eq!(
+        crate::project::readme::read_project_readme(root, Some("en"))
+            .unwrap()
+            .as_deref(),
+        Some(after)
+    );
+}
+
+#[test]
+fn handoff_creation_respects_absence_scope_readonly_and_symlink_boundaries() {
+    use crate::project::handoff::{HandoffTask, HANDOFF_PATH};
+    let temp = tempfile::tempdir().unwrap();
+    let root = project(temp.path(), "new-handoff");
+    let task = HandoffTask {
+        id: "701a5180-a2dd-47dc-9319-9312f3790f64".into(),
+        intent: "Connect module".into(),
+        files: vec!["public/score.js".into()],
+        acceptance: "Creator verifies on a device".into(),
+        status: "pending".into(),
+    };
+    let protection = Protection::default();
+    let mut access = CreationAccess::default();
+    let identity = access.open(&root, &protection).unwrap().project.identity;
+    assert!(access
+        .read_handoff(&identity, &protection)
+        .unwrap()
+        .version
+        .is_none());
+    assert_eq!(
+        access
+            .append_handoff("forged", &task, None, &protection)
+            .unwrap_err()
+            .code,
+        CreationErrorCode::InvalidIdentity
+    );
+    let first = access
+        .append_handoff(&identity, &task, None, &protection)
+        .unwrap();
+    assert!(first
+        .text
+        .contains("/Applications/PNDS.app/Contents/Resources/help/en/reference/README.md"));
+    assert!(access
+        .list(&identity, &protection)
+        .unwrap()
+        .iter()
+        .any(|file| file.path == HANDOFF_PATH));
+    let other = HandoffTask {
+        id: "3927d683-4431-465b-aefc-3f51fe0fdb21".into(),
+        ..task.clone()
+    };
+    assert_eq!(
+        access
+            .append_handoff(&identity, &other, None, &protection)
+            .unwrap_err()
+            .code,
+        CreationErrorCode::VersionConflict
+    );
+    assert_eq!(
+        access.read_handoff(&identity, &protection).unwrap().text,
+        first.text
+    );
+    assert_eq!(
+        fs::read_dir(root.join("docs")).unwrap().count(),
+        1,
+        "atomic save leaves no temporary files"
+    );
+    let locked = Protection {
+        bundles: vec![root.clone()],
+        utilities: vec![],
+    };
+    let readonly = access.open(&root, &locked).unwrap().project.identity;
+    assert_eq!(
+        access
+            .append_handoff(&readonly, &other, first.version.as_deref(), &locked)
+            .unwrap_err()
+            .code,
+        CreationErrorCode::Permission
+    );
+    let identity = access.open(&root, &protection).unwrap().project.identity;
+    let outside = temp.path().join("outside");
+    fs::write(&outside, "external file").unwrap();
+    fs::remove_file(root.join(HANDOFF_PATH)).unwrap();
+    std::os::unix::fs::symlink(&outside, root.join(HANDOFF_PATH)).unwrap();
+    assert_eq!(
+        access
+            .append_handoff(&identity, &other, None, &protection)
+            .unwrap_err()
+            .code,
+        CreationErrorCode::PathEscape
+    );
+    assert_eq!(fs::read_to_string(outside).unwrap(), "external file");
+}
+
+#[test]
+fn handoff_append_preserves_external_agent_work_and_refuses_stale_versions() {
+    use crate::project::handoff::{HandoffTask, HANDOFF_PATH};
+    let temp = tempfile::tempdir().unwrap();
+    let root = project(temp.path(), "handoff");
+    fs::create_dir(root.join("docs")).unwrap();
+    let original = "# Author notes\r\n\r\n## Existing task\r\nStatus: completed by external agent\r\nUnknown:  preserve\r\n";
+    fs::write(root.join(HANDOFF_PATH), original).unwrap();
+    let protection = Protection::default();
+    let mut access = CreationAccess::default();
+    let identity = access.open(&root, &protection).unwrap().project.identity;
+    let read = access.read_handoff(&identity, &protection).unwrap();
+    let task = HandoffTask {
+        id: "8eb92a8a-c9eb-4a4b-84ca-5a64131e4612".into(),
+        intent: "更新另一语言 README / Update the other README language".into(),
+        files: vec!["README.md".into(), "README.zh-CN.md".into()],
+        acceptance: "Preserve metadata and unknown text; author reviews the translation.".into(),
+        status: "pending".into(),
+    };
+    let external = format!("{original}\r\nAgent evidence: native check complete.\r\n");
+    fs::write(root.join(HANDOFF_PATH), &external).unwrap();
+    assert_eq!(
+        access
+            .append_handoff(&identity, &task, read.version.as_deref(), &protection)
+            .unwrap_err()
+            .code,
+        CreationErrorCode::VersionConflict
+    );
+    assert_eq!(
+        access.read_handoff(&identity, &protection).unwrap().text,
+        external
+    );
+    let latest = access.read_handoff(&identity, &protection).unwrap();
+    let saved = access
+        .append_handoff(&identity, &task, latest.version.as_deref(), &protection)
+        .unwrap();
+    let expected = format!("{external}\n<!-- pnds-task:8eb92a8a-c9eb-4a4b-84ca-5a64131e4612 -->\n## 更新另一语言 README / Update the other README language\n\nStatus / 状态: pending\n\n### Intent / 意图\n\n更新另一语言 README / Update the other README language\n\n### Files / 涉及文件\n\n- README.md\n- README.zh-CN.md\n\n### Acceptance / 验收条件\n\nPreserve metadata and unknown text; author reviews the translation.\n");
+    assert_eq!(saved.text, expected);
+    assert_eq!(
+        access.read_handoff(&identity, &protection).unwrap().text,
+        expected
+    );
+    // A lost response/retry must preserve externally updated task states too.
+    assert_eq!(
+        access
+            .append_handoff(&identity, &task, latest.version.as_deref(), &protection)
+            .unwrap()
+            .text,
+        expected
+    );
+}
+
+#[test]
 fn saved_test_manifest_is_scoped_and_does_not_require_compiled_artifacts() {
     let temp = tempfile::tempdir().unwrap();
     let root = project(temp.path(), "test-modes");

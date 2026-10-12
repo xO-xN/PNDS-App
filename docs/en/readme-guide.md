@@ -91,6 +91,40 @@ Give GitHub readers a language-switcher line (in-app such relative links never n
 
 Keep both READMEs on the same structure; when translation lags, update the default-language file first.
 
+## Editing and handing off in Creation mode
+
+Open project README chooses the App-language variant, falling back to `README.md`.
+The editor names the actual file and keeps separate drafts when switching
+languages or files. A plain `README.md` has no language tag; your language choice
+supplies the source language for a sync task.
+
+Recognized covers expose the title, composer, links, four colors, first heading
+and section content. Editing changes only the selected field and preserves
+unknown metadata, extra paragraphs, language links and later sections. Duplicate
+metadata, a missing first section or an unclosed code fence produces an explained
+read-only preview. Ordinary READMEs render as documents and offer Edit text.
+Links follow the existing external-opening and main-window navigation policy.
+
+Save is manual and shares the ordinary draft, disk-version and conflict flow.
+After saving, Record README language sync lets you review the affected files,
+saved fingerprint and acceptance criteria before appending to
+`docs/creator-handoff.md`. An external agent performs the translation and the
+creator reviews it. The App does not call a translation model. A later performance
+intro reads the saved document; saving does not refresh pages or restart a test.
+
+Record a manual task captures intent, affected files, acceptance and the status
+you provide. Cancel keeps the task draft; declining a project switch retains it
+too. A changed disk handoff must be previewed and confirmed again before append;
+another change refuses that confirmation. Save or resolve an open dirty handoff
+file before appending a task.
+
+Appending preserves existing tasks, unknown content and external agent status.
+Recording a task is not implementation or verification. Handoffs remain in the
+source project's root `docs/`, which is excluded from `.pnds`. Task drafts count
+as unsaved work when switching projects or leaving creation. PNDS Template's
+AGENTS entry points external agents to the handoff and platform contracts; they
+record actual status and verification evidence after implementation.
+
 ## On the venue screen
 
 Until the projection start (▶ / ⌘⏎), the projection window holds its **intro** — and the intro shows this README: the cover-page format shows the cover page (the huge title, the band); a plain README shows the full, static document view. The first screen the arriving audience sees is what you wrote, which adds one discipline to everything that goes up:

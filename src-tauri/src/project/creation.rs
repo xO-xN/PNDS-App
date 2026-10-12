@@ -13,6 +13,8 @@ use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
 use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
+mod handoff;
+
 pub const TEXT_MAX_BYTES: u64 = 1024 * 1024;
 pub const IMAGE_MAX_BYTES: u64 = 4 * 1024 * 1024;
 const MAX_ENTRIES: usize = 4096;

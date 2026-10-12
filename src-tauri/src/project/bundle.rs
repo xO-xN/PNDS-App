@@ -753,6 +753,43 @@ mod tests {
     }
 
     #[test]
+    fn creator_handoff_stays_in_source_while_saved_readme_is_delivered() {
+        use crate::project::creation::{CreationAccess, Protection};
+        use crate::project::handoff::{HandoffTask, HANDOFF_PATH};
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("Score");
+        fs::create_dir(&root).unwrap();
+        fixture_project(&root);
+        fs::write(root.join("README.md"), "# Saved introduction\n").unwrap();
+        let mut access = CreationAccess::default();
+        let protection = Protection::default();
+        let identity = access.open(&root, &protection).unwrap().project.identity;
+        access
+            .append_handoff(
+                &identity,
+                &HandoffTask {
+                    id: "8b66bc44-f6bc-4dd8-9a6c-b22cc2b78f1c".into(),
+                    intent: "Translate README".into(),
+                    files: vec!["README.md".into(), "README.zh-CN.md".into()],
+                    acceptance: "Creator reviews both languages".into(),
+                    status: "pending".into(),
+                },
+                None,
+                &protection,
+            )
+            .unwrap();
+        let output = temp.path().join("score.pnds");
+        pack_project_to(&root, &output, APP_VERSION).unwrap();
+        let installed = install_bundle(&temp.path().join("bundles"), &output).unwrap();
+        assert_eq!(
+            fs::read_to_string(installed.join("README.md")).unwrap(),
+            "# Saved introduction\n"
+        );
+        assert!(!installed.join(HANDOFF_PATH).exists());
+        assert!(root.join(HANDOFF_PATH).is_file());
+    }
+
+    #[test]
     fn pack_metadata_records_format_version_and_packer() {
         let parent = tempfile::tempdir().unwrap();
         let output = pack_fixture(parent.path());

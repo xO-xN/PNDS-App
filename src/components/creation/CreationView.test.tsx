@@ -325,7 +325,7 @@ describe('creation reading workspace', () => {
       await waitFor(() =>
         expect(
           screen.getByText(
-            'End testing, close test windows and projection, and discard 1 unsaved files. Esc cancels.'
+            'End testing, close test windows and projection, and discard 1 unsaved files or handoff tasks. Esc cancels.'
           )
         ).toBeInTheDocument()
       )

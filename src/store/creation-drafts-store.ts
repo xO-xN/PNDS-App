@@ -4,6 +4,14 @@ import { commands, type CreationError } from '@/lib/tauri-bindings'
 import type { CreationParticipant } from '@/lib/creation-lifecycle'
 import { creationTransportError, useCreationStore } from './creation-store'
 import { useCreationChangesStore } from './creation-changes-store'
+import { useCreationHandoffStore } from './creation-handoff-store'
+import {
+  editReadmeCover,
+  inspectEditableReadme,
+  isProjectReadme,
+  type CoverField,
+  type EditableReadme,
+} from '@/lib/creation-readme'
 
 /**
  * #154: per-file editing drafts for the creation workspace. Drafts live at
@@ -13,6 +21,8 @@ import { useCreationChangesStore } from './creation-changes-store'
  */
 export interface CreationDraft {
   text: string
+  /** Source spans belong to this same draft, retaining safe editing boundaries during incomplete keystrokes. */
+  readme?: EditableReadme
   /** Disk content of `diskVersion` — the base the draft diverges from. */
   diskText: string
   diskVersion: string
@@ -28,6 +38,7 @@ export interface CreationDraft {
 interface CreationDraftsState {
   drafts: Record<string, CreationDraft>
   activePath: string | null
+  readmeLocale: string | null
   /** Canonical path of the last rename, so the editor can show the
    * external-agent reference hint until that file is edited or saved. */
   renameNote: string | null
@@ -35,8 +46,10 @@ interface CreationDraftsState {
    * derived open for any other or newer conflict. */
   dismissedConflict: { path: string; version: string } | null
   setActivePath: (path: string | null) => void
+  setReadmeLocale: (locale: string) => void
   loaded: (path: string, text: string, version: string) => void
   edit: (path: string, text: string) => void
+  editReadme: (path: string, field: CoverField, value: string) => void
   save: (path: string, overwriteVersion?: string) => Promise<void>
   /** Re-reads a clean draft from disk, adopting external changes that have
    * nothing unsaved to conflict with. */
@@ -91,9 +104,11 @@ export const useCreationDraftsStore = create<CreationDraftsState>(
   (set, get) => ({
     drafts: {},
     activePath: null,
+    readmeLocale: null,
     renameNote: null,
     dismissedConflict: null,
     setActivePath: path => set({ activePath: path, renameNote: null }),
+    setReadmeLocale: readmeLocale => set({ readmeLocale }),
     loaded: (path, text, version) =>
       set(state =>
         path in state.drafts
@@ -103,6 +118,9 @@ export const useCreationDraftsStore = create<CreationDraftsState>(
                 ...state.drafts,
                 [path]: {
                   text,
+                  readme: isProjectReadme(path)
+                    ? inspectEditableReadme(text)
+                    : undefined,
                   diskText: text,
                   diskVersion: version,
                   conflict: null,
@@ -116,9 +134,31 @@ export const useCreationDraftsStore = create<CreationDraftsState>(
       ),
     edit: (path, text) =>
       set(state => ({
-        ...patch(state, path, { text, error: null }),
+        ...patch(state, path, {
+          text,
+          error: null,
+          readme:
+            state.drafts[path]?.readme?.kind === 'document'
+              ? state.drafts[path]?.readme
+              : isProjectReadme(path)
+                ? inspectEditableReadme(text)
+                : undefined,
+        }),
         renameNote: state.renameNote === path ? null : state.renameNote,
       })),
+    editReadme: (path, field, value) =>
+      set(state => {
+        const draft = state.drafts[path]
+        if (!draft) return {}
+        const document = draft.readme ?? inspectEditableReadme(draft.text)
+        if (document.kind !== 'cover') return {}
+        const edited = editReadmeCover(draft.text, document, field, value)
+        return patch(state, path, {
+          text: edited.text,
+          readme: edited.document,
+          error: null,
+        })
+      }),
     save: async (path, overwriteVersion) => {
       const identity = useCreationStore.getState().workspace?.project.identity
       const draft = get().drafts[path]
@@ -130,6 +170,7 @@ export const useCreationDraftsStore = create<CreationDraftsState>(
         return
       }
       const expected = overwriteVersion ?? draft.diskVersion
+      const locale = get().readmeLocale ?? i18n.resolvedLanguage ?? 'en'
       const ownsOperation = beginCreationFileOperation(path)
       set(state => patch(state, path, { saving: true, error: null }))
       const stillRelevant = () => ownsOperation() && path in get().drafts
@@ -192,6 +233,9 @@ export const useCreationDraftsStore = create<CreationDraftsState>(
           renameNote: state.renameNote === path ? null : state.renameNote,
         }))
         useCreationChangesStore.getState().changed([path])
+        useCreationHandoffStore
+          .getState()
+          .offerReadmeSync(path, result.data, locale)
       } catch (error) {
         if (stillRelevant())
           set(state =>
@@ -236,6 +280,9 @@ export const useCreationDraftsStore = create<CreationDraftsState>(
                   }
                 : {
                     text: disk.text,
+                    readme: isProjectReadme(path)
+                      ? inspectEditableReadme(disk.text)
+                      : undefined,
                     diskText: disk.text,
                     diskVersion: disk.version,
                     diskChanged: false,
@@ -273,6 +320,9 @@ export const useCreationDraftsStore = create<CreationDraftsState>(
         const { text, version } = draft.conflict
         return patch(state, path, {
           text,
+          readme: isProjectReadme(path)
+            ? inspectEditableReadme(text)
+            : undefined,
           diskText: text,
           diskVersion: version,
           conflict: null,
@@ -372,6 +422,7 @@ export const useCreationDraftsStore = create<CreationDraftsState>(
       set({
         drafts: {},
         activePath: null,
+        readmeLocale: null,
         renameNote: null,
         dismissedConflict: null,
       })

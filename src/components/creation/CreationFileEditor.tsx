@@ -29,6 +29,13 @@ import {
 } from '@/components/ui/dialog'
 import { CreationErrorNotice } from './CreationErrorNotice'
 import { CreationManifestForm } from './CreationManifestForm'
+import { CreationReadme } from './CreationReadme'
+import {
+  inspectEditableReadme,
+  isProjectReadme,
+  resolveCreationReadme,
+  projectReadmeLocale,
+} from '@/lib/creation-readme'
 
 /**
  * #154: the reading workspace's file panel. Editable folder projects get a
@@ -45,10 +52,16 @@ export function CreationFileEditor({
   file: CreationFile
   editable: boolean
 }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const draft = useCreationDraftsStore(state => state.drafts[file.path])
   const renameNote = useCreationDraftsStore(state => state.renameNote)
   const [manifestView, setManifestView] = useState<'form' | 'text'>('form')
+  const [readmeView, setReadmeView] = useState<'preview' | 'text'>('preview')
+  const workspace = useCreationStore(state => state.workspace)
+  const readmeLocale =
+    useCreationDraftsStore(state => state.readmeLocale) ??
+    i18n.resolvedLanguage ??
+    'en'
   const [content, setContent] = useState<CreationContent | null>(null)
   const [error, setError] = useState<CreationError | null>(null)
   const [imageFailed, setImageFailed] = useState(false)
@@ -106,6 +119,9 @@ export function CreationFileEditor({
     : content?.kind === 'text'
       ? content.text
       : ''
+  const isReadme = file.kind === 'text' && isProjectReadme(file.path)
+  const readmeDocument = draft?.readme ?? inspectEditableReadme(text)
+  const unsafeReadme = isReadme && readmeDocument.kind === 'unsafe'
   const index = query
     ? text.toLocaleLowerCase().indexOf(query.toLocaleLowerCase(), start)
     : -1
@@ -178,6 +194,58 @@ export function CreationFileEditor({
           )}
         </div>
         <div className="flex flex-wrap items-center gap-3">
+          {isReadme && (
+            <>
+              <label className="flex items-center gap-2 text-sm">
+                {t('creation.readme.language')}
+                <select
+                  className="pnds-focus-ring rounded border bg-(--pnds-card) p-1"
+                  value={projectReadmeLocale(file.path) ?? readmeLocale}
+                  onChange={event => {
+                    useCreationDraftsStore
+                      .getState()
+                      .setReadmeLocale(event.target.value)
+                    const next = resolveCreationReadme(
+                      workspace?.files.map(file => file.path) ?? [],
+                      event.target.value
+                    )
+                    if (next)
+                      useCreationDraftsStore.getState().setActivePath(next)
+                  }}
+                >
+                  <option value="en">English</option>
+                  <option value="zh-CN">简体中文</option>
+                </select>
+              </label>
+              <p className="text-xs">
+                {t('creation.readme.resolvedFile', { path: file.path })}
+              </p>
+              {editableText && !unsafeReadme && (
+                <div
+                  role="group"
+                  aria-label={t('creation.readme.view')}
+                  className="flex gap-1"
+                >
+                  <Button
+                    size="sm"
+                    variant={readmeView === 'preview' ? 'default' : 'outline'}
+                    onClick={() => setReadmeView('preview')}
+                  >
+                    {t('creation.readme.viewPreview')}
+                  </Button>
+                  {readmeDocument.kind === 'document' && (
+                    <Button
+                      size="sm"
+                      variant={readmeView === 'text' ? 'default' : 'outline'}
+                      onClick={() => setReadmeView('text')}
+                    >
+                      {t('creation.readme.viewText')}
+                    </Button>
+                  )}
+                </div>
+              )}
+            </>
+          )}
           {isManifest && (
             <div
               className="flex items-center gap-1"
@@ -210,7 +278,7 @@ export function CreationFileEditor({
             <>
               <Button
                 size="sm"
-                disabled={!dirty || draft?.saving}
+                disabled={!dirty || draft?.saving || unsafeReadme}
                 onClick={saveCurrent}
               >
                 {t('creation.save')}
@@ -247,45 +315,47 @@ export function CreationFileEditor({
         {editableText && dirty && (
           <p className="text-xs">{t('creation.draftHint')}</p>
         )}
-        {file.kind === 'text' && (!isManifest || manifestView === 'text') && (
-          <div className="flex items-center gap-2">
-            <Input
-              aria-label={t('creation.findText')}
-              placeholder={t('creation.findText')}
-              value={query}
-              onChange={event => {
-                setQuery(event.target.value)
-                setStart(0)
-              }}
-            />
-            <Button
-              variant="outline"
-              disabled={!query || index < 0}
-              onClick={() => {
-                const next = index + query.length
-                setStart(
-                  text
-                    .toLocaleLowerCase()
-                    .indexOf(query.toLocaleLowerCase(), next) < 0
-                    ? 0
-                    : next
-                )
-                if (editableText) {
-                  editorRef.current?.focus()
-                  editorRef.current?.setSelectionRange(
-                    index,
-                    index + query.length
+        {file.kind === 'text' &&
+          (!isManifest || manifestView === 'text') &&
+          (!isReadme || (readmeView === 'text' && !unsafeReadme)) && (
+            <div className="flex items-center gap-2">
+              <Input
+                aria-label={t('creation.findText')}
+                placeholder={t('creation.findText')}
+                value={query}
+                onChange={event => {
+                  setQuery(event.target.value)
+                  setStart(0)
+                }}
+              />
+              <Button
+                variant="outline"
+                disabled={!query || index < 0}
+                onClick={() => {
+                  const next = index + query.length
+                  setStart(
+                    text
+                      .toLocaleLowerCase()
+                      .indexOf(query.toLocaleLowerCase(), next) < 0
+                      ? 0
+                      : next
                   )
-                }
-              }}
-            >
-              {t('creation.nextMatch')}
-            </Button>
-            {query && index < 0 && (
-              <span role="status">{t('creation.noMatch')}</span>
-            )}
-          </div>
-        )}
+                  if (editableText) {
+                    editorRef.current?.focus()
+                    editorRef.current?.setSelectionRange(
+                      index,
+                      index + query.length
+                    )
+                  }
+                }}
+              >
+                {t('creation.nextMatch')}
+              </Button>
+              {query && index < 0 && (
+                <span role="status">{t('creation.noMatch')}</span>
+              )}
+            </div>
+          )}
       </header>
       <div className="min-h-0 flex-1 overflow-auto p-4">
         {(error || draft?.error) && (
@@ -307,7 +377,21 @@ export function CreationFileEditor({
         {!content && !draft && !error && (
           <p role="status">{t('creation.loading')}</p>
         )}
-        {editableText ? (
+        {isReadme &&
+        (draft || content?.kind === 'text') &&
+        (readmeView === 'preview' || unsafeReadme || !editableText) ? (
+          <CreationReadme
+            text={text}
+            root={workspace?.project.root ?? ''}
+            document={draft?.readme}
+            editable={editableText}
+            onChange={(field, value) =>
+              useCreationDraftsStore
+                .getState()
+                .editReadme(file.path, field, value)
+            }
+          />
+        ) : editableText ? (
           draft ? (
             isManifest && manifestView === 'form' ? (
               <CreationManifestForm

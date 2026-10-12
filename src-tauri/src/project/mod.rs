@@ -5,6 +5,7 @@ pub mod bundle;
 pub mod children;
 pub mod cover;
 pub mod creation;
+pub mod handoff;
 pub mod logs;
 pub mod manifest;
 pub mod ports;

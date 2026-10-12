@@ -41,6 +41,12 @@ import { CreationProjectPicker } from './CreationProjectPicker'
 import { CreationErrorNotice } from './CreationErrorNotice'
 import { CreationConsole } from './CreationConsole'
 import { useCreationTestStore } from '@/store/creation-test-store'
+import { resolveCreationReadme } from '@/lib/creation-readme'
+import { CreationHandoff } from './CreationHandoff'
+import {
+  creationHandoffParticipant,
+  HANDOFF_PATH,
+} from '@/store/creation-handoff-store'
 
 const categories: CreationCategory[] = [
   'system',
@@ -57,7 +63,7 @@ function ReadingWorkspace({
   workspace: CreationWorkspace
   chooseProject: () => void
 }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const [search, setSearch] = useState('')
   const [error, setError] = useState<CreationError | null>(null)
   const [refreshing, setRefreshing] = useState(false)
@@ -204,6 +210,28 @@ function ReadingWorkspace({
               <button
                 type="button"
                 className="pnds-focus-ring"
+                aria-label={t('creation.readme.open')}
+                disabled={
+                  !resolveCreationReadme(
+                    files.map(file => file.path),
+                    i18n.resolvedLanguage ?? 'en'
+                  )
+                }
+                onClick={() => {
+                  useCreationDraftsStore.getState().setActivePath(
+                    resolveCreationReadme(
+                      files.map(file => file.path),
+                      i18n.resolvedLanguage ?? 'en'
+                    )
+                  )
+                  useCreationTestStore.getState().setTab('file')
+                }}
+              >
+                <FileText aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                className="pnds-focus-ring"
                 aria-label={t('creation.openFinder')}
                 onClick={() => void finder()}
               >
@@ -342,6 +370,10 @@ function ReadingWorkspace({
           </div>
         </div>
         {error && <CreationErrorNotice error={error} />}
+        <CreationHandoff
+          editable={editable}
+          exists={files.some(file => file.path === HANDOFF_PATH)}
+        />
         {watchError && <CreationErrorNotice error={watchError} />}
         {(pending.refresh > 0 ||
           pending.restart > 0 ||
@@ -409,6 +441,7 @@ export function CreationView() {
   const expanded = useCreationTestStore(state => state.expanded)
   const [pickerOpen, setPickerOpen] = useState(false)
   useEffect(() => registerCreationParticipant(creationDraftsParticipant), [])
+  useEffect(() => registerCreationParticipant(creationHandoffParticipant), [])
   return (
     <div
       data-creation-view=""

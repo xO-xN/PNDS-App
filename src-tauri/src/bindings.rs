@@ -33,6 +33,8 @@ pub fn generate_bindings() -> Builder<tauri::Wry> {
         creation::poll_creation_changes,
         creation::read_creation_file,
         creation::save_creation_file,
+        creation::read_creation_handoff,
+        creation::append_creation_handoff,
         creation::rename_creation_file,
         creation::reveal_creation_path,
         creation::close_creation_project,

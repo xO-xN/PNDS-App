@@ -38,6 +38,8 @@ export type {
   CreationRuntime,
   CreationSource,
   CreationWorkspace,
+  HandoffDocument,
+  HandoffTask,
   DnsListeners,
   DnsMappingFacts,
   DnsMappingState,

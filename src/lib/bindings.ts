@@ -280,6 +280,22 @@ async saveCreationFile(identity: string, path: string, text: string, expectedVer
     else return { status: "error", error: e  as any };
 }
 },
+async readCreationHandoff(identity: string) : Promise<Result<HandoffDocument, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("read_creation_handoff", { identity }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async appendCreationHandoff(identity: string, task: HandoffTask, expectedVersion: string | null) : Promise<Result<HandoffDocument, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("append_creation_handoff", { identity, task, expectedVersion }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async renameCreationFile(identity: string, path: string, nextPath: string, draftPaths: string[]) : Promise<Result<string, CreationError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("rename_creation_file", { identity, path, nextPath, draftPaths }) };
@@ -1182,6 +1198,8 @@ daemon: boolean;
  * enabling requires the installed, bundled App).
  */
 plistPresent: boolean; listeners: DnsListeners | null; bindError: string | null; upstreams: string[]; mapping: DnsMappingFacts | null; knownDomains: string[]; stats: JsonValue | null }
+export type HandoffDocument = { text: string; version: string | null }
+export type HandoffTask = { id: string; intent: string; files: string[]; acceptance: string; status: string }
 export type HealthAudio = { 
 /**
  * `starting | ready | error | disabled` (disabled = none mode, §9)
