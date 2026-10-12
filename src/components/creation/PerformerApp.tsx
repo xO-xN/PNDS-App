@@ -2,7 +2,7 @@ import {
   emitPerformerPage,
   emitPerformerReady,
   onPerformerConfig,
-  emitPerformerInput,
+  emitPerformerOptions,
 } from '@/lib/events'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -18,6 +18,7 @@ import { pushPerformerInput } from '@/lib/performer-input'
 import {
   performerViewport,
   type PerformerConfig,
+  type PerformerOptionsChange,
 } from '@/lib/performer-protocol'
 
 /** Thin local shell; it never reads the performer DOM or relays music events. */
@@ -25,6 +26,9 @@ export function PerformerApp() {
   const { t } = useTranslation()
   const [config, setConfig] = useState<PerformerConfig | null>(null)
   const [preparationError, setPreparationError] = useState<string | null>(null)
+  const [optionsPending, setOptionsPending] = useState(false)
+  const [optionsError, setOptionsError] = useState<string | null>(null)
+  const optionsRequest = useRef<object | null>(null)
   const [loaded, setLoaded] = useState(-1)
   const [timedOut, setTimedOut] = useState(-1)
   const latest = useRef<PerformerConfig | null>(null)
@@ -44,6 +48,8 @@ export function PerformerApp() {
     }
     const failed = (error: unknown) => {
       if (disposed) return
+      optionsRequest.current = null
+      setOptionsPending(false)
       setPreparationError(String(error))
       void commands.fadeInWindow(label)
     }
@@ -68,6 +74,9 @@ export function PerformerApp() {
       if (disposed || latest.current !== value) return
       setPreparationError(null)
       setColorThemeAttribute(value.theme)
+      optionsRequest.current = null
+      setOptionsPending(false)
+      setOptionsError(null)
       setConfig(value)
       void commands
         .fadeInWindow(label)
@@ -83,6 +92,7 @@ export function PerformerApp() {
       .catch(failed)
     return () => {
       disposed = true
+      optionsRequest.current = null
       void pending.then(off => off())
     }
   }, [])
@@ -131,122 +141,206 @@ export function PerformerApp() {
     }, MONITOR_REVEAL_TIMEOUT_MS)
     return () => clearTimeout(timer)
   }, [config, loaded])
+  useEffect(() => {
+    if (!optionsPending) return
+    const request = optionsRequest.current
+    const timer = setTimeout(() => {
+      if (optionsRequest.current !== request) return
+      optionsRequest.current = null
+      setOptionsPending(false)
+      setOptionsError(t('creation.performers.optionsUnacknowledged'))
+    }, 5000)
+    return () => clearTimeout(timer)
+  }, [optionsPending, t])
   const viewport = performerViewport(
     config?.device ?? 'phone',
     config?.orientation ?? 'portrait'
   )
   const scale = Math.min(
     1,
-    Math.max(0.1, (available.width - 32) / viewport.width),
-    Math.max(0.1, (available.height - 32) / viewport.height)
+    Math.max(0.1, (available.width - 40) / viewport.width),
+    Math.max(0.1, (available.height - 40) / viewport.height)
   )
   const revealed =
     !!config && (loaded === config.navigation || timedOut === config.navigation)
+  const requestOptions = (options: PerformerOptionsChange['options']) => {
+    const current = latest.current
+    if (!current || optionsPending) return
+    const request = {}
+    optionsRequest.current = request
+    setOptionsPending(true)
+    setOptionsError(null)
+    void emitPerformerOptions({
+      label: current.label,
+      identity: current.identity,
+      runId: current.runId,
+      navigation: current.navigation,
+      revision: current.revision,
+      options,
+    }).catch(error => {
+      if (optionsRequest.current !== request) return
+      optionsRequest.current = null
+      setOptionsPending(false)
+      setOptionsError(String(error))
+    })
+  }
   return (
     <main className="performer-shell">
-      <header>
-        <h1>
-          {t('creation.performers.client', { number: config?.number ?? '—' })}
-        </h1>
-        {config && (
-          <p>
-            {t(`creation.performers.${config.device}`)} ·{' '}
-            {t(`creation.performers.${config.orientation}`)} · {viewport.width}{' '}
-            × {viewport.height}
-          </p>
-        )}
-        <p>{t('creation.performers.simulation')}</p>
-        <p>{t('creation.performers.connectionUnknown')}</p>
-        {config && (
-          <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={config.mouseTouch}
-              onChange={event => {
-                void emitPerformerInput({
-                  label: config.label,
-                  identity: config.identity,
-                  runId: config.runId,
-                  navigation: config.navigation,
-                  revision: config.revision,
-                  mouseTouch: event.target.checked,
-                })
-              }}
-            />
-            {t('creation.performers.mouseTouch')}
-          </label>
-        )}
-        {preparationError && (
-          <p role="alert">
-            {t('creation.performers.prepareFailed', {
-              detail: preparationError,
-            })}
-          </p>
-        )}
+      <header className="performer-toolbar">
+        <div className="performer-toolbar-title">
+          <h1>
+            {t('creation.performers.client', { number: config?.number ?? '—' })}
+          </h1>
+          <span title={t('creation.performers.simulation')}>
+            {t('creation.performers.viewportTest')}
+          </span>
+        </div>
+        <div className="performer-tools">
+          <div
+            className="performer-segmented"
+            role="group"
+            aria-label={t('creation.performers.deviceLabel')}
+          >
+            {(['phone', 'tablet'] as const).map(device => (
+              <button
+                key={device}
+                className="pnds-focus-ring"
+                aria-pressed={config?.device === device}
+                disabled={!config || optionsPending}
+                onClick={() => requestOptions({ device })}
+              >
+                {t(`creation.performers.${device}`)}
+              </button>
+            ))}
+          </div>
+          <div
+            className="performer-segmented"
+            role="group"
+            aria-label={t('creation.performers.orientationLabel')}
+          >
+            {(['portrait', 'landscape'] as const).map(orientation => (
+              <button
+                key={orientation}
+                className="pnds-focus-ring"
+                aria-pressed={config?.orientation === orientation}
+                disabled={!config || optionsPending}
+                onClick={() => requestOptions({ orientation })}
+              >
+                {t(`creation.performers.${orientation}`)}
+              </button>
+            ))}
+          </div>
+        </div>
       </header>
+      {preparationError && (
+        <p role="alert" className="performer-shell-error">
+          {t('creation.performers.prepareFailed', { detail: preparationError })}
+        </p>
+      )}
+      {optionsError && (
+        <p role="alert" className="performer-shell-error">
+          {t('creation.performers.error', { detail: optionsError })}
+        </p>
+      )}
       <div ref={stage} className="performer-stage">
         {config?.url ? (
           <div
-            className="performer-device"
+            className="performer-device-wrap"
+            dir="ltr"
             style={{
               width: viewport.width * scale,
               height: viewport.height * scale,
             }}
           >
-            <iframe
-              ref={frame}
-              key={config.navigation}
-              title={t('creation.performers.pageTitle', {
-                number: config.number,
-              })}
-              src={config.url}
+            <div
+              className="performer-device"
               style={{
                 width: viewport.width,
                 height: viewport.height,
                 transform: `scale(${scale})`,
               }}
-              onLoad={() => {
-                if (
-                  latest.current?.navigation !== config.navigation ||
-                  latest.current.runId !== config.runId
-                )
-                  return
-                setLoaded(config.navigation)
-                frame.current?.focus({ preventScroll: true })
-                const url = config.url
-                if (!url) return
-                const origin = new URL(url).origin
-                pushThemeToFrame(frame.current, origin, latest.current.theme)
-                pushLocaleToFrame(frame.current, origin, latest.current.locale)
-                pushPerformerInput(
-                  frame.current,
-                  origin,
-                  latest.current.mouseTouch
-                )
-                void emitPerformerPage({
-                  label: config.label,
-                  identity: config.identity,
-                  runId: config.runId,
-                  navigation: config.navigation,
-                  loaded: true,
-                })
-              }}
-            />
-            {!revealed && (
-              <div className="performer-cover" role="status">
-                {t('creation.performers.page.loading')}
-              </div>
-            )}
-            {timedOut === config.navigation && loaded !== config.navigation && (
-              <p className="performer-timeout" role="status">
-                {t('creation.performers.page.timeout')}
-              </p>
-            )}
+            >
+              <iframe
+                ref={frame}
+                key={config.navigation}
+                title={t('creation.performers.pageTitle', {
+                  number: config.number,
+                })}
+                src={config.url}
+                style={{
+                  width: viewport.width,
+                  height: viewport.height,
+                }}
+                onLoad={() => {
+                  if (
+                    latest.current?.navigation !== config.navigation ||
+                    latest.current.runId !== config.runId
+                  )
+                    return
+                  setLoaded(config.navigation)
+                  frame.current?.focus({ preventScroll: true })
+                  const url = config.url
+                  if (!url) return
+                  const origin = new URL(url).origin
+                  pushThemeToFrame(frame.current, origin, latest.current.theme)
+                  pushLocaleToFrame(
+                    frame.current,
+                    origin,
+                    latest.current.locale
+                  )
+                  pushPerformerInput(
+                    frame.current,
+                    origin,
+                    latest.current.mouseTouch
+                  )
+                  void emitPerformerPage({
+                    label: config.label,
+                    identity: config.identity,
+                    runId: config.runId,
+                    navigation: config.navigation,
+                    loaded: true,
+                  })
+                }}
+              />
+              {!revealed && (
+                <div className="performer-cover" role="status">
+                  {t('creation.performers.page.loading')}
+                </div>
+              )}
+              {timedOut === config.navigation &&
+                loaded !== config.navigation && (
+                  <p className="performer-timeout" role="status">
+                    {t('creation.performers.page.timeout')}
+                  </p>
+                )}
+            </div>
           </div>
         ) : (
           <p role="status">{t('creation.performers.page.standby')}</p>
         )}
       </div>
+      <footer className="performer-statusbar">
+        <span dir="ltr">
+          {viewport.width} × {viewport.height}{' '}
+          <span>· {Math.round(scale * 100)}%</span>
+        </span>
+        {config && (
+          <label className="creation-performer-input">
+            <input
+              type="checkbox"
+              checked={config.mouseTouch}
+              disabled={optionsPending}
+              onChange={event =>
+                requestOptions({ mouseTouch: event.target.checked })
+              }
+            />
+            {t('creation.performers.mouseTouch')}
+          </label>
+        )}
+        <span title={t('creation.performers.simulation')}>
+          {t('creation.performers.connectionUnknown')}
+        </span>
+      </footer>
     </main>
   )
 }

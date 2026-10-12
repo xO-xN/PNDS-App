@@ -100,7 +100,7 @@ it('stages audio changes independently of applied facts and restarts only after 
   fireEvent.change(screen.getByRole('combobox', { name: 'Test audio mode' }), {
     target: { value: 'external' },
   })
-  expect(screen.getByText('Applied audio: Internal')).toBeInTheDocument()
+  expect(screen.getByText('Running · Internal')).toBeInTheDocument()
   expect(
     screen.getByText('Configuration pending · restart to apply')
   ).toBeInTheDocument()
@@ -115,7 +115,7 @@ it('stages audio changes independently of applied facts and restarts only after 
       '127.0.0.1:50000'
     )
   )
-  expect(screen.queryByText('Applied audio: External')).not.toBeInTheDocument()
+  expect(screen.queryByText('Running · External')).not.toBeInTheDocument()
 })
 
 it('inherits the actual external target on adoption and only offers saved supported modes', async () => {
@@ -155,7 +155,7 @@ it('inherits the actual external target on adoption and only offers saved suppor
       screen.getByRole('combobox', { name: 'Test audio mode' })
     ).getAllByRole('option')
   ).toHaveLength(1)
-  expect(screen.getByText('Applied audio: External')).toBeInTheDocument()
+  expect(screen.getByText('Running · External')).toBeInTheDocument()
   expect(commands.startCreationProject).not.toHaveBeenCalled()
 })
 

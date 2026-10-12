@@ -309,7 +309,7 @@ local `performer.html` entry boots only the thin shell; its cross-origin iframe
 loads the actual applied performer address/port. Music traffic stays entirely
 between that page, the project server and audio target. Unadapted projects work.
 
-Phone (390 × 844) and tablet (768 × 1024) select real CSS viewport dimensions;
+Phone (390 × 844) and tablet (820 × 1180) select real CSS viewport dimensions;
 landscape swaps them. A ResizeObserver fits the frame visually into the native
 window without changing the iframe's viewport. Changing device/orientation,
 theme or locale retains that iframe and navigation. Theme/locale use the same
@@ -384,3 +384,39 @@ and exercises the exact embedded script through frame input/message boundaries.
 On 2026-10-12 the user confirmed in the real App that Inarticulate III's ID prompt,
 score display and mouse dragging all work. This verifies the reported failure;
 it does not replace other real-device or multi-client identity acceptance checks.
+
+## Creator monitor and performer surfaces
+
+The creation preview follows the finalized A layout and review eight in
+[the prototype notes](../prototypes/README.md): a Live test heading with the
+saved audio-mode choices, a separate bordered 4:3 monitor with an address/mode
+strip and expand action, then a compact performer list with a count and bottom
+add button. Runtime start/restart, close, refresh and live gain stay in a compact
+bar; saved-file/global-audio explanations use a keyboard-accessible disclosure.
+The running badge always shows the applied audio mode, separately from the
+selected next-start mode. Pending configuration and actionable errors remain visible. The right panel
+scrolls inside its own bounds when the window or client list is small.
+
+The same monitor surface/viewport ancestry is used in both modes. Expansion
+changes layout and hides controls/list without reparenting the iframe or changing
+its URL. Its load cover belongs to the monitor viewport, so it cannot cover test
+controls. Client-number buttons focus their native window; each close button
+addresses only its own UUID. List device/orientation summaries follow shell
+configuration; page navigation status remains distinct from unknown connection.
+
+Independent performer shells place device/orientation segments in the top toolbar
+and viewport size, fit percentage and the explicit mouse-to-single-touch option
+in the bottom status bar. The fitted device wrapper scales a full-size inner
+surface, rather than shrinking the iframe's CSS viewport. Its geometry stays
+LTR even in RTL shells; the embedded page retains its own locale/layout. Shell
+option requests carry the current workspace/run/navigation/revision and wait
+for authoritative configuration before accepting another request. The main
+window ignores stale requests and replays the authoritative configuration to the
+same client. A request without a configuration reply releases its controls after
+five seconds with retry feedback; late request failures cannot clear newer
+requests. Device/orientation/input changes retain the
+current document and client identity; only explicit runtime navigation reloads.
+
+Workflow tests cover shell actions, list focus/close, stale options and unchanged
+iframe identity. Actual visual fitting, theme painting and WKWebView input still
+require native macOS acceptance; the user deferred this pass on 2026-10-12.

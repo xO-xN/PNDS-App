@@ -1,20 +1,14 @@
-import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Plus, Smartphone, Tablet, X } from 'lucide-react'
 import { useCreationPerformersStore } from '@/store/creation-performers-store'
 import { useCreationStore } from '@/store/creation-store'
 import { useSessionStore } from '@/store/session-store'
-import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
-import { Button } from '@/components/ui/button'
 import {
   closePerformerWindow,
   configurePerformerWindow,
   focusPerformerWindow,
   openPerformerWindow,
 } from '@/lib/performer-window'
-import type {
-  PerformerDevice,
-  PerformerOrientation,
-} from '@/lib/performer-protocol'
 
 export function CreationPerformers() {
   const { t } = useTranslation()
@@ -28,9 +22,6 @@ export function CreationPerformers() {
   const pending = useSessionStore(state => state.commandPending)
   const status = useSessionStore(state => state.sessionStatus)
   const path = useSessionStore(state => state.sessionProjectPath)
-  const [device, setDevice] = useState<PerformerDevice>('phone')
-  const [orientation, setOrientation] =
-    useState<PerformerOrientation>('portrait')
   const ownsRun =
     !!workspace &&
     (path === workspace.project.root ||
@@ -38,143 +29,108 @@ export function CreationPerformers() {
         runtimeProject.path === path))
   const busy =
     blocked || pending || status === 'starting' || status === 'stopping'
-  const choices = (value: PerformerDevice | PerformerOrientation) => (
-    <NativeSelectOption value={value}>
-      {t(`creation.performers.${value}`)}
-    </NativeSelectOption>
-  )
   return (
     <section
       aria-label={t('creation.performers.title')}
       className="creation-performers"
     >
-      <h3>{t('creation.performers.title')}</h3>
-      <div className="flex flex-wrap items-center gap-2">
-        <NativeSelect
-          aria-label={t('creation.performers.newDevice')}
-          value={device}
-          disabled={busy}
-          onChange={event => setDevice(event.target.value as PerformerDevice)}
-        >
-          {choices('phone')}
-          {choices('tablet')}
-        </NativeSelect>
-        <NativeSelect
-          aria-label={t('creation.performers.newOrientation')}
-          value={orientation}
-          disabled={busy}
-          onChange={event =>
-            setOrientation(event.target.value as PerformerOrientation)
-          }
-        >
-          {choices('portrait')}
-          {choices('landscape')}
-        </NativeSelect>
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={busy || status !== 'ready' || !ownsRun}
-          onClick={() => {
-            void openPerformerWindow(device, orientation)
-          }}
-        >
-          {t('creation.performers.add')}
-        </Button>
-      </div>
-      <p>{t('creation.performers.simulation')}</p>
+      <header>
+        <h3>{t('creation.performers.title')}</h3>
+        <span className="creation-performer-count">{windows.length}</span>
+      </header>
       {windows.length === 0 ? (
-        <p>{t('creation.performers.empty')}</p>
+        <p className="creation-performer-empty">
+          {t('creation.performers.empty')}
+        </p>
       ) : (
-        <ul className="max-h-40 overflow-auto">
-          {windows.map(client => (
-            <li key={client.label} className="creation-performer-row">
-              <span>
-                {t('creation.performers.client', { number: client.number })}
-              </span>
-              <NativeSelect
-                aria-label={t('creation.performers.clientDevice', {
-                  number: client.number,
-                })}
-                value={client.device}
-                disabled={busy || status !== 'ready'}
-                onChange={event => {
-                  void configurePerformerWindow(
-                    client.label,
-                    event.target.value as PerformerDevice,
-                    client.orientation
-                  )
-                }}
-              >
-                {choices('phone')}
-                {choices('tablet')}
-              </NativeSelect>
-              <NativeSelect
-                aria-label={t('creation.performers.clientOrientation', {
-                  number: client.number,
-                })}
-                value={client.orientation}
-                disabled={busy || status !== 'ready'}
-                onChange={event => {
-                  void configurePerformerWindow(
-                    client.label,
-                    client.device,
-                    event.target.value as PerformerOrientation
-                  )
-                }}
-              >
-                {choices('portrait')}
-                {choices('landscape')}
-              </NativeSelect>
-              <span role="status">
-                {t(`creation.performers.page.${client.pageStatus}`)} ·{' '}
-                {t('creation.performers.connectionUnknown')}
-              </span>
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={client.mouseTouch}
-                  disabled={busy || status !== 'ready'}
-                  onChange={event => {
-                    void configurePerformerWindow(
-                      client.label,
-                      client.device,
-                      client.orientation,
-                      event.target.checked
+        <ul className="creation-performer-list">
+          {windows.map(client => {
+            const Device = client.device === 'phone' ? Smartphone : Tablet
+            return (
+              <li key={client.label} className="creation-performer-row">
+                <Device
+                  aria-hidden="true"
+                  data-orientation={client.orientation}
+                  className="creation-performer-icon"
+                />
+                <div className="creation-performer-info">
+                  <button
+                    className="pnds-focus-ring"
+                    disabled={busy}
+                    aria-label={t('creation.performers.focusClient', {
+                      number: client.number,
+                    })}
+                    onClick={() => {
+                      void focusPerformerWindow(client.label)
+                    }}
+                  >
+                    {t('creation.performers.client', { number: client.number })}
+                  </button>
+                  <span>
+                    {t(`creation.performers.${client.device}`)} ·{' '}
+                    {t(`creation.performers.${client.orientation}`)}
+                  </span>
+                  <label className="creation-performer-input">
+                    <input
+                      type="checkbox"
+                      checked={client.mouseTouch}
+                      disabled={busy || status !== 'ready'}
+                      onChange={event => {
+                        void configurePerformerWindow(
+                          client.label,
+                          client.device,
+                          client.orientation,
+                          event.target.checked
+                        )
+                      }}
+                    />
+                    {t('creation.performers.mouseTouch')}
+                  </label>
+                </div>
+                <span
+                  role="status"
+                  className="creation-performer-status"
+                  title={t(`creation.performers.page.${client.pageStatus}`)}
+                >
+                  <i aria-hidden="true" />
+                  {t('creation.performers.connectionUnknown')}
+                  <span className="sr-only">
+                    {' '}
+                    · {t(`creation.performers.page.${client.pageStatus}`)}
+                  </span>
+                </span>
+                <button
+                  className="creation-icon-button pnds-focus-ring"
+                  disabled={busy}
+                  aria-label={t('creation.performers.closeClient', {
+                    number: client.number,
+                  })}
+                  title={t('creation.performers.closeClient', {
+                    number: client.number,
+                  })}
+                  onClick={() => {
+                    void closePerformerWindow(client.label).catch(
+                      () => undefined
                     )
                   }}
-                />
-                {t('creation.performers.mouseTouch')}
-              </label>
-              <Button
-                size="sm"
-                variant="ghost"
-                disabled={busy}
-                aria-label={t('creation.performers.focusClient', {
-                  number: client.number,
-                })}
-                onClick={() => {
-                  void focusPerformerWindow(client.label)
-                }}
-              >
-                {t('creation.performers.focus')}
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                disabled={busy}
-                aria-label={t('creation.performers.closeClient', {
-                  number: client.number,
-                })}
-                onClick={() => {
-                  void closePerformerWindow(client.label).catch(() => undefined)
-                }}
-              >
-                {t('creation.performers.close')}
-              </Button>
-            </li>
-          ))}
+                >
+                  <X aria-hidden="true" />
+                </button>
+              </li>
+            )
+          })}
         </ul>
       )}
+      <button
+        className="creation-performer-add pnds-focus-ring"
+        disabled={busy || status !== 'ready' || !ownsRun}
+        onClick={() => {
+          void openPerformerWindow('phone', 'portrait')
+        }}
+      >
+        <Plus aria-hidden="true" />
+        {t('creation.performers.add')}
+      </button>
       {error && <p role="alert">{error}</p>}
     </section>
   )

@@ -13,6 +13,7 @@ import { useCreationStore } from '@/store/creation-store'
 import { useSessionStore } from '@/store/session-store'
 import { commands, type CreationRuntime } from '@/lib/tauri-bindings'
 import {
+  configurePerformerWindow,
   closePerformerWindow,
   closeAllPerformerWindows,
   focusPerformerWindow,
@@ -252,38 +253,92 @@ describe('independent performer windows', () => {
     await i18n.changeLanguage('en')
   })
 
-  it('offers device choices and unknown connection facts, and closing the project cleans up all clients', async () => {
+  it('focuses clients by number, follows shell device choices and rejects stale options without navigating', async () => {
     render(<CreationPerformers />)
-    fireEvent.change(screen.getByLabelText('New test device'), {
-      target: { value: 'tablet' },
-    })
-    fireEvent.change(screen.getByLabelText('New test orientation'), {
-      target: { value: 'landscape' },
-    })
     fireEvent.click(screen.getByRole('button', { name: 'Add performer' }))
-    await screen.findByRole('button', { name: 'Focus performer #1' })
+    const focus = await screen.findByRole('button', {
+      name: 'Focus performer #1',
+    })
     const label = labelAt(0)
     act(() => deliver(PERFORMER_READY, { label }))
+    fireEvent.click(focus)
+    await waitFor(() =>
+      expect(
+        vi.mocked(WebviewWindow).mock.results[0]?.value.setFocus
+      ).toHaveBeenCalled()
+    )
     expect(configFor(label)).toMatchObject({
-      device: 'tablet',
-      orientation: 'landscape',
+      device: 'phone',
+      orientation: 'portrait',
     })
     expect(screen.getByText(/Connection unknown/)).toBeInTheDocument()
     const original = configFor(label)
-    fireEvent.change(screen.getByLabelText('Orientation for performer #1'), {
-      target: { value: 'portrait' },
-    })
+    const options = {
+      label,
+      identity: original.identity,
+      runId: original.runId,
+      navigation: original.navigation,
+      revision: original.revision,
+      options: { device: 'tablet', orientation: 'landscape' },
+    }
+    act(() => deliver('pnds:performer-options', options))
     expect(configFor(label)).toMatchObject({
-      orientation: 'portrait',
+      device: 'tablet',
+      orientation: 'landscape',
       navigation: original.navigation,
       url: original.url,
     })
+    expect(screen.getByText('Tablet · Landscape')).toBeInTheDocument()
+    vi.mocked(emitTo).mockClear()
+    act(() =>
+      deliver('pnds:performer-options', {
+        ...options,
+        options: { orientation: 'portrait' },
+      })
+    )
+    expect(configFor(label).orientation).toBe('landscape')
+    expect(emitTo).toHaveBeenCalledWith(
+      label,
+      PERFORMER_CONFIG,
+      expect.objectContaining({ orientation: 'landscape' })
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Add performer' }))
+    await screen.findByRole('button', { name: 'Focus performer #2' })
+    const second = labelAt(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Close performer #1' }))
+    await waitFor(() =>
+      expect(commands.closeCreationPerformerWindows).toHaveBeenCalledWith([
+        label,
+      ])
+    )
+    act(() => deliver('performer-destroyed-event', { label }))
+    expect(
+      useCreationPerformersStore.getState().windows.map(client => client.label)
+    ).toEqual([second])
     await act(async () => {
       await stopAndReset()
     })
     expect(commands.closeCreationPerformerWindows).toHaveBeenCalledWith(null)
     expect(useCreationPerformersStore.getState().windows).toHaveLength(0)
     expect(useCreationStore.getState().workspace?.project.identity).toBe('test')
+  })
+
+  it('keeps viewport options usable while the test is in standby without starting music', async () => {
+    await openPerformerWindow('phone', 'portrait')
+    const label = labelAt()
+    deliver(PERFORMER_READY, { label })
+    useSessionStore.setState({ sessionStatus: 'error' })
+    const standby = configFor(label)
+    expect(standby.url).toBeNull()
+    await configurePerformerWindow(label, 'tablet', 'landscape', false)
+    expect(configFor(label)).toMatchObject({
+      device: 'tablet',
+      orientation: 'landscape',
+      mouseTouch: false,
+      navigation: standby.navigation,
+      url: null,
+    })
+    expect(commands.startProject).not.toHaveBeenCalled()
   })
 
   it('preserves clients on cancelled mode confirmation or main-window hiding, and closes them on mode exit', async () => {

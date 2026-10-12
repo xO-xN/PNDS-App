@@ -498,5 +498,13 @@
   "creation.performers.dialogOK": "确定",
   "creation.performers.dialogCancel": "取消",
   "creation.performers.mouseTouch": "鼠标模拟单点触摸",
-  "creation.performers.prepareFailed": "测试窗口准备失败：{{detail}}"
+  "creation.performers.prepareFailed": "测试窗口准备失败：{{detail}}",
+  "creation.testAudioLabel": "音频",
+  "creation.testOscLabel": "外部 OSC",
+  "creation.testInfo": "测试说明",
+  "creation.performers.viewportTest": "视口测试",
+  "creation.performers.deviceLabel": "模拟设备",
+  "creation.performers.orientationLabel": "屏幕方向",
+  "creation.testRunningAudio": "运行中 · {{mode}}",
+  "creation.performers.optionsUnacknowledged": "窗口设置未收到回复，请重试。"
 }

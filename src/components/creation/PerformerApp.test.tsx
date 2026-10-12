@@ -109,7 +109,7 @@ it('keeps the real page and input in place while resizing, follows bridges, and 
     })
   )
   expect(screen.getByTitle('performer 页面 #1')).toBe(frame)
-  expect(frame).toHaveStyle({ width: '1024px', height: '768px' })
+  expect(frame).toHaveStyle({ width: '1180px', height: '820px' })
   expect(post).toHaveBeenCalledWith(
     expect.objectContaining({ type: 'pnds:theme', theme: 'brutal' }),
     'http://127.0.0.1:6868'
@@ -121,14 +121,14 @@ it('keeps the real page and input in place while resizing, follows bridges, and 
   fireEvent.click(screen.getByRole('checkbox', { name: '鼠标模拟单点触摸' }))
   expect(emitTo).toHaveBeenCalledWith(
     'main',
-    'pnds:performer-input',
+    'pnds:performer-options',
     expect.objectContaining({
       label: first.label,
       identity: first.identity,
       runId: 1,
       navigation: 1,
       revision: 2,
-      mouseTouch: false,
+      options: { mouseTouch: false },
     })
   )
   expect(frame).toHaveAttribute('src', first.url)
@@ -137,8 +137,136 @@ it('keeps the real page and input in place while resizing, follows bridges, and 
     'http://127.0.0.1:6868'
   )
   await act(async () => receive(first))
-  expect(frame).toHaveStyle({ width: '1024px', height: '768px' })
+  expect(frame).toHaveStyle({ width: '1180px', height: '820px' })
   expect(commands.startProject).not.toHaveBeenCalled()
+})
+
+it('changes device and orientation from the shell toolbar without navigating or restarting the project', async () => {
+  render(<PerformerApp />)
+  await waitFor(() => expect(emitTo).toHaveBeenCalled())
+  await act(async () => receive(first))
+  const frame = await screen.findByTitle('Performer page #1')
+  fireEvent.load(frame)
+  fireEvent.click(screen.getByRole('button', { name: 'Tablet' }))
+  expect(emitTo).toHaveBeenCalledWith('main', 'pnds:performer-options', {
+    label: first.label,
+    identity: first.identity,
+    runId: 1,
+    navigation: 1,
+    revision: 1,
+    options: { device: 'tablet' },
+  })
+  await act(async () => receive({ ...first, revision: 2, device: 'tablet' }))
+  expect(screen.getByRole('button', { name: 'Tablet' })).toHaveAttribute(
+    'aria-pressed',
+    'true'
+  )
+  expect(frame).toHaveStyle({ width: '820px', height: '1180px' })
+  fireEvent.click(screen.getByRole('button', { name: 'Landscape' }))
+  expect(emitTo).toHaveBeenCalledWith(
+    'main',
+    'pnds:performer-options',
+    expect.objectContaining({
+      revision: 2,
+      options: { orientation: 'landscape' },
+    })
+  )
+  await act(async () =>
+    receive({
+      ...first,
+      revision: 3,
+      device: 'tablet',
+      orientation: 'landscape',
+    })
+  )
+  expect(screen.getByTitle('Performer page #1')).toBe(frame)
+  expect(frame).toHaveAttribute('src', first.url)
+  expect(frame).toHaveStyle({ width: '1180px', height: '820px' })
+  expect(
+    screen.getByRole('checkbox', { name: 'Mouse simulates one touch' })
+  ).toBeChecked()
+  expect(commands.startProject).not.toHaveBeenCalled()
+  expect(commands.stopProject).not.toHaveBeenCalled()
+})
+
+it('releases an unacknowledged options request and allows retry without replacing the performer page', async () => {
+  render(<PerformerApp />)
+  await waitFor(() => expect(emitTo).toHaveBeenCalled())
+  await act(async () => receive(first))
+  const frame = await screen.findByTitle('Performer page #1')
+  fireEvent.load(frame)
+  vi.useFakeTimers()
+  try {
+    fireEvent.click(screen.getByRole('button', { name: 'Tablet' }))
+    expect(screen.getByRole('button', { name: 'Tablet' })).toBeDisabled()
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000)
+    })
+    expect(screen.getByRole('button', { name: 'Tablet' })).toBeEnabled()
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Window settings were not acknowledged. Try again.'
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Tablet' }))
+    await act(async () => receive({ ...first, revision: 2, device: 'tablet' }))
+    expect(screen.getByRole('button', { name: 'Tablet' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    )
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByTitle('Performer page #1')).toBe(frame)
+    expect(frame).toHaveAttribute('src', first.url)
+  } finally {
+    vi.useRealTimers()
+  }
+})
+
+it('ignores a late send failure after the timed-out request has been replaced', async () => {
+  render(<PerformerApp />)
+  await waitFor(() => expect(emitTo).toHaveBeenCalled())
+  await act(async () => receive(first))
+  fireEvent.load(await screen.findByTitle('Performer page #1'))
+  let failOld!: (error: Error) => void
+  vi.mocked(emitTo).mockReturnValueOnce(
+    new Promise<void>((_, reject) => {
+      failOld = reject
+    })
+  )
+  vi.useFakeTimers()
+  try {
+    fireEvent.click(screen.getByRole('button', { name: 'Tablet' }))
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000)
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Landscape' }))
+    await act(async () => failOld(new Error('Old request failed')))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Landscape' })).toBeDisabled()
+    await act(async () =>
+      receive({ ...first, revision: 2, orientation: 'landscape' })
+    )
+    expect(screen.getByRole('button', { name: 'Landscape' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Landscape' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    )
+  } finally {
+    vi.useRealTimers()
+  }
+})
+
+it('shows an options-send failure and allows the next request', async () => {
+  render(<PerformerApp />)
+  await waitFor(() => expect(emitTo).toHaveBeenCalled())
+  await act(async () => receive(first))
+  vi.mocked(emitTo).mockRejectedValueOnce(new Error('Window event unavailable'))
+  fireEvent.click(screen.getByRole('button', { name: 'Tablet' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Window event unavailable'
+  )
+  expect(screen.getByRole('button', { name: 'Tablet' })).toBeEnabled()
+  fireEvent.click(screen.getByRole('button', { name: 'Tablet' }))
+  await act(async () => receive({ ...first, revision: 2, device: 'tablet' }))
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 })
 
 it('reveals a readable preparation failure without loading an unprepared project page', async () => {

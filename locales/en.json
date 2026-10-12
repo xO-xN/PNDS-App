@@ -500,5 +500,13 @@
   "creation.performers.dialogOK": "OK",
   "creation.performers.dialogCancel": "Cancel",
   "creation.performers.mouseTouch": "Mouse simulates one touch",
-  "creation.performers.prepareFailed": "Test window preparation failed: {{detail}}"
+  "creation.performers.prepareFailed": "Test window preparation failed: {{detail}}",
+  "creation.testAudioLabel": "Audio",
+  "creation.testOscLabel": "External OSC",
+  "creation.testInfo": "Test information",
+  "creation.performers.viewportTest": "Viewport test",
+  "creation.performers.deviceLabel": "Simulated device",
+  "creation.performers.orientationLabel": "Screen orientation",
+  "creation.testRunningAudio": "Running · {{mode}}",
+  "creation.performers.optionsUnacknowledged": "Window settings were not acknowledged. Try again."
 }

@@ -8,6 +8,7 @@ import { useCreationStore } from '@/store/creation-store'
 import { CreationView } from '@/components/creation'
 import { useCreationTestStore } from '@/store/creation-test-store'
 import { CreationTestControls } from '@/components/creation/CreationTestControls'
+import { CreationPerformers } from '@/components/creation/CreationPerformers'
 import { useTranslation } from 'react-i18next'
 import { useCommandKeyboard } from '@/hooks/use-command-keyboard'
 import { loadPreferences } from '@/lib/preferences'
@@ -222,12 +223,21 @@ export function AppShell() {
             !(sessionStatus === 'stopping' && health !== null) && (
               <aside
                 data-creation-test-idle=""
-                className="flex min-h-0 min-w-0 flex-col text-(--pnds-text)"
+                className="creation-monitor-host"
               >
-                <div className="grid min-h-0 flex-1 place-items-center p-4 text-center text-xs">
+                <CreationTestControls />
+                <div className="monitor-surface creation-monitor-idle">
+                  <div className="creation-monitor-strip">
+                    <span>
+                      monitor
+                      <span className="creation-monitor-mode">
+                        {t('creation.title')}
+                      </span>
+                    </span>
+                  </div>
                   <p>{t('creation.monitorIdle')}</p>
                 </div>
-                <CreationTestControls />
+                <CreationPerformers />
               </aside>
             )}
           {creationActive && <CreationView />}

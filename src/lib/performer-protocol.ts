@@ -18,13 +18,15 @@ export interface PerformerConfig {
   locale: string
   mouseTouch: boolean
 }
-export interface PerformerInputChange {
+export interface PerformerOptionsChange {
   label: string
   identity: string
   runId: number
   navigation: number
   revision: number
-  mouseTouch: boolean
+  options: Partial<
+    Pick<PerformerConfig, 'device' | 'orientation' | 'mouseTouch'>
+  >
 }
 export interface PerformerPageResult {
   label: string
@@ -43,7 +45,7 @@ export function performerViewport(
   orientation: PerformerOrientation
 ): { width: number; height: number } {
   const [short, long] =
-    device === 'phone' ? ([390, 844] as const) : ([768, 1024] as const)
+    device === 'phone' ? ([390, 844] as const) : ([820, 1180] as const)
   return orientation === 'portrait'
     ? { width: short, height: long }
     : { width: long, height: short }

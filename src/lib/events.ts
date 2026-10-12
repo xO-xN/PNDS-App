@@ -25,7 +25,7 @@ import type { ColorTheme } from '@/lib/color-theme'
 import type {
   PerformerConfig,
   PerformerPageResult,
-  PerformerInputChange,
+  PerformerOptionsChange,
 } from '@/lib/performer-protocol'
 
 /** The help webview's Tauri window label. */
@@ -292,16 +292,16 @@ export function onPerformerDestroyed(
   return events.performerDestroyedEvent.listen(event => cb(event.payload.label))
 }
 
-const PERFORMER_INPUT = 'pnds:performer-input'
-export function onPerformerInput(
-  cb: (change: PerformerInputChange) => void
+const PERFORMER_OPTIONS = 'pnds:performer-options'
+export function onPerformerOptions(
+  cb: (change: PerformerOptionsChange) => void
 ): Promise<Unsubscribe> {
-  return listen<PerformerInputChange>(PERFORMER_INPUT, event =>
+  return listen<PerformerOptionsChange>(PERFORMER_OPTIONS, event =>
     cb(event.payload)
   )
 }
-export function emitPerformerInput(
-  change: PerformerInputChange
+export function emitPerformerOptions(
+  change: PerformerOptionsChange
 ): Promise<void> {
-  return emitTo(MAIN_WINDOW_LABEL, PERFORMER_INPUT, change)
+  return emitTo(MAIN_WINDOW_LABEL, PERFORMER_OPTIONS, change)
 }

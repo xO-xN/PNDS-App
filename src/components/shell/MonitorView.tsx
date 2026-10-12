@@ -8,6 +8,7 @@ import { useProjectStore } from '@/store/project-store'
 import { useCreationStore } from '@/store/creation-store'
 import { useCreationTestStore } from '@/store/creation-test-store'
 import { CreationTestControls } from '@/components/creation/CreationTestControls'
+import { CreationPerformers } from '@/components/creation/CreationPerformers'
 import { Maximize2, Minimize2 } from 'lucide-react'
 import {
   useSettingsStore,
@@ -192,110 +193,119 @@ export function MonitorView() {
       data-testid="monitor-host"
       className={cn(
         'overflow-hidden bg-black outline-none',
-        creationActive
-          ? 'creation-monitor-host relative min-h-0 min-w-0 h-full w-full'
-          : 'relative h-screen w-screen'
+        creationActive ? 'creation-monitor-host' : 'relative h-screen w-screen'
       )}
     >
-      {/* §v1.1.1: browser-style zoom — the shared MonitorScaleFrame
+      {creationActive && <CreationTestControls />}
+      <div className="monitor-surface">
+        <div className="monitor-page-viewport">
+          {/* §v1.1.1: browser-style zoom — the shared MonitorScaleFrame
           (transform + inverse size; #131: the projection window's
           monitor half renders its own zoom through the same frame). The
           title strip and hover sidebar are siblings and stay at 100%. */}
-      <MonitorScaleFrame zoom={monitorZoom}>
-        <iframe
-          key={reloadNonce}
-          ref={node => {
-            iframeRef.current = node
-          }}
-          src={iframeSrc}
-          title="Project monitor"
-          className="block h-full w-full border-0"
-          onMouseEnter={gate.onFramePointerEnter}
-          onMouseLeave={gate.onFramePointerLeave}
-          onLoad={() => {
-            // A fresh document has not been interacted with — the guest
-            // gate re-arms for the page that just loaded (its reporter
-            // re-registers with it).
-            gate.rearm()
-            reclaimKeyboardFocus()
-            pushBridges()
-            // #50: the load event IS the reveal signal — the splash (or
-            // the reload cover) may now dissolve off this navigation.
-            useSessionStore.getState().markMonitorLoaded()
-          }}
-        />
-      </MonitorScaleFrame>
+          <MonitorScaleFrame zoom={monitorZoom}>
+            <iframe
+              key={reloadNonce}
+              ref={node => {
+                iframeRef.current = node
+              }}
+              src={iframeSrc}
+              title="Project monitor"
+              className="block h-full w-full border-0"
+              onMouseEnter={gate.onFramePointerEnter}
+              onMouseLeave={gate.onFramePointerLeave}
+              onLoad={() => {
+                // A fresh document has not been interacted with — the guest
+                // gate re-arms for the page that just loaded (its reporter
+                // re-registers with it).
+                gate.rearm()
+                reclaimKeyboardFocus()
+                pushBridges()
+                // #50: the load event IS the reveal signal — the splash (or
+                // the reload cover) may now dissolve off this navigation.
+                useSessionStore.getState().markMonitorLoaded()
+              }}
+            />
+          </MonitorScaleFrame>
 
-      {/* #50: reveal cover — appears INSTANTLY over a rebuilding iframe
+          {/* #50: reveal cover — appears INSTANTLY over a rebuilding iframe
           (a fading-in cover would flash it through), fades out with the
           splash's cross-fade timing once the gate releases. Sits under
           the title strip (z-40) so the drag region never disappears.
           data-reveal-motion exempts the fade from Brutal's instant rule
           (theme-variables.css) — the cross-fade is the anti-flash
           contract, not a surface tint. */}
-      <div
-        aria-hidden
-        data-testid="monitor-reveal-cover"
-        data-reveal-motion=""
-        className={cn(
-          'absolute inset-0 z-30 bg-(--pnds-bg)',
-          revealed && 'pointer-events-none opacity-0'
-        )}
-        style={
-          revealed ? { transition: MONITOR_REVEAL_FADE_TRANSITION } : undefined
-        }
-      />
-
-      {/* Top-center title / window drag region (§10.1). Themed via the
+          <div
+            aria-hidden
+            data-testid="monitor-reveal-cover"
+            data-reveal-motion=""
+            className={cn(
+              'absolute inset-0 z-30 bg-(--pnds-bg)',
+              revealed && 'pointer-events-none opacity-0'
+            )}
+            style={
+              revealed
+                ? { transition: MONITOR_REVEAL_FADE_TRANSITION }
+                : undefined
+            }
+          />
+        </div>
+        {/* Top-center title / window drag region (§10.1). Themed via the
           monitor-bar tokens (v1.2.3 issue #38) — a scrim over the project
           page, so light themes keep the dark value. */}
-      <div
-        data-tauri-drag-region
-        className={cn(
-          'absolute top-0 z-40 flex cursor-default select-none items-center bg-(--pnds-monitor-bar) px-5 py-1.5 text-xs font-medium tracking-wide text-(--pnds-monitor-bar-text) backdrop-blur-md',
-          creationActive
-            ? 'inset-x-0'
-            : 'left-1/2 -translate-x-1/2 rounded-b-xl'
-        )}
-      >
-        <span className="min-w-0 truncate">
-          {creationActive ? t('creation.title') : 'PNDS'} -{' '}
-          {displayOverride ?? projectName}
-        </span>
-        {creationActive && (
-          <>
-            <span className="ms-auto min-w-0 truncate px-2" dir="ltr">
-              {monitorOrigin}
-            </span>
-            <button
-              disabled={layoutBlocked || pendingCommand}
-              data-tauri-drag-region="false"
-              aria-label={t(
-                expanded
-                  ? 'creation.restoreWorkspace'
-                  : 'creation.expandMonitor'
-              )}
-              title={t(
-                expanded
-                  ? 'creation.restoreWorkspace'
-                  : 'creation.expandMonitor'
-              )}
-              className="pnds-focus-ring shrink-0 rounded p-1"
-              onClick={() =>
-                useCreationTestStore.getState().setExpanded(!expanded)
-              }
-            >
-              {expanded ? (
-                <Minimize2 size={14} aria-hidden="true" />
-              ) : (
-                <Maximize2 size={14} aria-hidden="true" />
-              )}
-            </button>
-          </>
-        )}
+        <div
+          data-tauri-drag-region
+          className={cn(
+            creationActive
+              ? 'creation-monitor-strip'
+              : 'absolute top-0 left-1/2 z-40 flex -translate-x-1/2 cursor-default select-none items-center rounded-b-xl bg-(--pnds-monitor-bar) px-5 py-1.5 text-xs font-medium tracking-wide text-(--pnds-monitor-bar-text) backdrop-blur-md'
+          )}
+        >
+          <span className="min-w-0 truncate">
+            {creationActive
+              ? 'monitor'
+              : `PNDS - ${displayOverride ?? projectName}`}
+            {creationActive && (
+              <span className="creation-monitor-mode">
+                {t('creation.title')}
+              </span>
+            )}
+          </span>
+          {creationActive && (
+            <>
+              <span className="creation-monitor-address" dir="ltr">
+                {monitorOrigin}
+              </span>
+              <button
+                disabled={layoutBlocked || pendingCommand}
+                data-tauri-drag-region="false"
+                aria-label={t(
+                  expanded
+                    ? 'creation.restoreWorkspace'
+                    : 'creation.expandMonitor'
+                )}
+                title={t(
+                  expanded
+                    ? 'creation.restoreWorkspace'
+                    : 'creation.expandMonitor'
+                )}
+                aria-pressed={expanded}
+                className="creation-icon-button pnds-focus-ring"
+                onClick={() =>
+                  useCreationTestStore.getState().setExpanded(!expanded)
+                }
+              >
+                {expanded ? (
+                  <Minimize2 size={14} aria-hidden="true" />
+                ) : (
+                  <Maximize2 size={14} aria-hidden="true" />
+                )}
+              </button>
+            </>
+          )}
+        </div>
       </div>
-
-      {creationActive && <CreationTestControls />}
+      {creationActive && <CreationPerformers />}
 
       {!creationActive && <HoverSidebar />}
     </div>
