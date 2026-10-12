@@ -67,9 +67,59 @@ pub fn validate_packable(project_root: &Path) -> Result<(Manifest, PathBuf), Str
         ));
     }
     let manifest = crate::project::manifest::load_manifest(project_root)?;
+    crate::project::manifest::validate_synthdef_paths(&manifest, project_root)?;
     crate::project::preflight::check_dependencies(project_root)?;
     let output = bundle_output_path(project_root, &manifest)?;
     Ok((manifest, output))
+}
+
+/// Static output probe used before the native save dialog and again for its
+/// selected destination. It never runs the launch preflight.
+pub fn output_info(project_root: &Path, output: Option<&Path>) -> Result<BundleOutputInfo, String> {
+    let (_, default_output) = validate_packable(project_root)?;
+    let output = output.unwrap_or(&default_output);
+    validate_output_location(project_root, output)?;
+    Ok(BundleOutputInfo {
+        output_path: output.to_string_lossy().into_owned(),
+        exists: output.exists(),
+    })
+}
+
+fn validate_output_location(project_root: &Path, output: &Path) -> Result<(), String> {
+    if !output.is_absolute()
+        || output
+            .components()
+            .any(|part| matches!(part, Component::ParentDir))
+        || !output
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("pnds"))
+    {
+        return Err("Choose an absolute .pnds output path without parent traversal".to_string());
+    }
+    if fs::symlink_metadata(output).is_ok_and(|meta| meta.file_type().is_symlink()) {
+        return Err("The bundle output must not be a symbolic link".to_string());
+    }
+    let root = project_root
+        .canonicalize()
+        .map_err(|e| format!("Cannot resolve source: {e}"))?;
+    let mut ancestor = output
+        .parent()
+        .ok_or("The output has no parent directory")?;
+    while !ancestor.exists() {
+        ancestor = ancestor
+            .parent()
+            .ok_or("The output has no existing parent directory")?;
+    }
+    let parent = ancestor
+        .canonicalize()
+        .map_err(|e| format!("Cannot resolve output directory: {e}"))?;
+    if parent.starts_with(root) {
+        return Err(
+            "Choose a bundle location outside the source project; packaging must not modify it"
+                .to_string(),
+        );
+    }
+    Ok(())
 }
 
 /// Packs the project at `project_root` into `<parent>/<name>-<version>.pnds`.
@@ -82,14 +132,27 @@ pub fn pack_project(
     overwrite: bool,
     packed_with: &str,
 ) -> Result<PackResult, String> {
-    let (manifest, output) = validate_packable(project_root)?;
+    pack_project_at(project_root, None, overwrite, packed_with)
+}
+
+/// The workspace and developer tools share one packer. A chosen destination
+/// must stay outside the source tree, including through directory aliases.
+pub fn pack_project_at(
+    project_root: &Path,
+    output: Option<&Path>,
+    overwrite: bool,
+    packed_with: &str,
+) -> Result<PackResult, String> {
+    let (manifest, default_output) = validate_packable(project_root)?;
+    let output = output.unwrap_or(&default_output);
+    validate_output_location(project_root, output)?;
     if output.exists() && !overwrite {
         return Err(format!(
             "A bundle already exists at {}.\nConfirm the overwrite to replace it.",
             output.display()
         ));
     }
-    pack_staged(project_root, &manifest, &output, packed_with)
+    pack_staged(project_root, &manifest, output, packed_with, overwrite)
 }
 
 /// Packs `project_root` to the caller-chosen `output` path (v1.4.0, #59:
@@ -102,18 +165,18 @@ pub fn pack_project_to(
     output: &Path,
     packed_with: &str,
 ) -> Result<PackResult, String> {
-    let (manifest, _) = validate_packable(project_root)?;
-    pack_staged(project_root, &manifest, output, packed_with)
+    pack_project_at(project_root, Some(output), true, packed_with)
 }
 
 /// The staging-isolated pack core shared by both pack entries: copy the
-/// runtime tree into a temp dir, zip it beside `output` as a `.part`
-/// sibling, then atomically rename into place and hash.
+/// runtime tree into a temp dir, zip into a unique sibling temporary file,
+/// hash the completed archive, then atomically publish it.
 fn pack_staged(
     project_root: &Path,
     manifest: &Manifest,
     output: &Path,
     packed_with: &str,
+    overwrite: bool,
 ) -> Result<PackResult, String> {
     // stage in the system temp dir so the source tree is never touched.
     let staging =
@@ -121,32 +184,26 @@ fn pack_staged(
     let root_name = zip_root_name(manifest);
     let staged_root = staging.path().join(&root_name);
     copy_runtime_tree(project_root, project_root, &staged_root)?;
+    // Exclusions and materialized links must still leave a runnable saved
+    // project. A declaration into root docs/tests cannot silently disappear.
+    validate_packable(&staged_root)?;
 
     if let Some(parent) = output.parent() {
         fs::create_dir_all(parent)
             .map_err(|e| format!("Failed to create {}: {e}", parent.display()))?;
     }
-    // write to a sibling temp file, then atomically rename into place.
-    let tmp_output = output.with_file_name(format!(
-        ".{}.part",
-        output
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or_default()
-    ));
-    let write_result = write_bundle_zip(&staged_root, &root_name, packed_with, &tmp_output);
-    match write_result {
-        Ok(()) => {
-            fs::rename(&tmp_output, output)
-                .map_err(|e| format!("Failed to finalize {}: {e}", output.display()))?;
-        }
-        Err(error) => {
-            let _ = fs::remove_file(&tmp_output);
-            return Err(error);
-        }
+    let temp = tempfile::NamedTempFile::new_in(output.parent().expect("validated parent"))
+        .map_err(|e| format!("Failed to create the bundle temporary file: {e}"))?;
+    write_bundle_zip(&staged_root, &root_name, packed_with, temp.path())?;
+    let sha256 = sha256_hex(temp.path())?;
+    if overwrite {
+        temp.persist(output)
+    } else {
+        // A file appearing after the UI probe must not be overwritten without
+        // confirmation. Failure also removes this operation's temporary file.
+        temp.persist_noclobber(output)
     }
-
-    let sha256 = sha256_hex(output)?;
+    .map_err(|e| format!("Failed to finalize {}: {e}", output.display()))?;
     Ok(PackResult {
         output_path: output.to_string_lossy().into_owned(),
         sha256,
@@ -269,6 +326,9 @@ fn copy_dir(
                 continue; // out-of-root symlink: skip
             }
             if target.is_dir() {
+                if is_excluded(&name, true, is_project_root) {
+                    continue;
+                }
                 copy_dir(&target, canonical_root, false, &dst.join(&name))?;
             } else {
                 // Follows the link; preserves the target's permission bits.
@@ -711,6 +771,201 @@ mod tests {
         fixture_project(&project);
         pack_project(&project, false, APP_VERSION).unwrap();
         parent.join("Inarticulate III-0.1.0.pnds")
+    }
+
+    #[test]
+    fn chosen_output_round_trips_saved_files_and_excludes_handoff() {
+        let temp = tempfile::tempdir().unwrap();
+        let project = temp.path().join("source");
+        fs::create_dir(&project).unwrap();
+        fixture_project(&project);
+        fs::write(project.join("README.md"), "Saved introduction").unwrap();
+        fs::write(project.join("docs/creator-handoff.md"), "Private task").unwrap();
+        let output = temp.path().join("delivery/chosen.pnds");
+        let result = pack_project_at(&project, Some(&output), false, APP_VERSION).unwrap();
+        assert_eq!(PathBuf::from(result.output_path), output);
+        assert_eq!(result.sha256, sha256_hex(&output).unwrap());
+        assert!(!temp.path().join("Inarticulate III-0.1.0.pnds").exists());
+        let installed = install_bundle(&temp.path().join("bundles"), &output).unwrap();
+        assert_eq!(
+            fs::read_to_string(installed.join("README.md")).unwrap(),
+            "Saved introduction"
+        );
+        assert!(!installed.join("docs/creator-handoff.md").exists());
+        assert_eq!(
+            fs::read_to_string(project.join("docs/creator-handoff.md")).unwrap(),
+            "Private task"
+        );
+        assert_eq!(
+            fs::read_to_string(project.join("server.js")).unwrap(),
+            "// score server"
+        );
+    }
+
+    #[test]
+    fn chosen_output_requires_overwrite_and_cannot_modify_source() {
+        let temp = tempfile::tempdir().unwrap();
+        let project = temp.path().join("source");
+        fs::create_dir(&project).unwrap();
+        fixture_project(&project);
+        let output = temp.path().join("existing.pnds");
+        fs::write(&output, "previous bundle").unwrap();
+        let error = pack_project_at(&project, Some(&output), false, APP_VERSION).unwrap_err();
+        assert!(error.contains("already exists"), "{error}");
+        assert_eq!(fs::read_to_string(&output).unwrap(), "previous bundle");
+        pack_project_at(&project, Some(&output), true, APP_VERSION).unwrap();
+        install_bundle(&temp.path().join("installed"), &output).unwrap();
+        let inside = project.join("delivery/new.pnds");
+        assert!(pack_project_at(&project, Some(&inside), true, APP_VERSION).is_err());
+        assert!(!project.join("delivery").exists());
+        #[cfg(unix)]
+        {
+            let alias = temp.path().join("alias");
+            std::os::unix::fs::symlink(&project, &alias).unwrap();
+            assert!(
+                pack_project_at(&project, Some(&alias.join("new.pnds")), true, APP_VERSION)
+                    .is_err()
+            );
+            assert!(!project.join("new.pnds").exists());
+        }
+    }
+
+    #[test]
+    fn pack_checks_all_declared_audio_even_without_internal_mode() {
+        let temp = tempfile::tempdir().unwrap();
+        let project = temp.path().join("source");
+        fs::create_dir(&project).unwrap();
+        fixture_project(&project);
+        let path = project.join("manifest.json");
+        let mut manifest: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        manifest["audio"]["supportedModes"] = serde_json::json!(["external", "none"]);
+        manifest["audio"]["defaultMode"] = serde_json::json!("none");
+        manifest["audio"]["synthdefs"] = serde_json::json!([
+            "supercollider/synthdefs/inarticulate-iii.scsyndef",
+            "missing.scsyndef"
+        ]);
+        fs::write(path, manifest.to_string()).unwrap();
+        let output = temp.path().join("chosen.pnds");
+        let error = pack_project_at(&project, Some(&output), false, APP_VERSION).unwrap_err();
+        assert!(error.contains("audio.synthdefs"), "{error}");
+        assert!(!output.exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn root_handoff_directory_link_keeps_the_same_exclusions() {
+        let temp = tempfile::tempdir().unwrap();
+        let project = temp.path().join("source");
+        fs::create_dir(&project).unwrap();
+        fixture_project(&project);
+        fs::remove_file(project.join("docs/notes.md")).unwrap();
+        fs::remove_dir(project.join("docs")).unwrap();
+        std::os::unix::fs::symlink(project.join("test"), project.join("docs")).unwrap();
+        let output = temp.path().join("chosen.pnds");
+        pack_project_at(&project, Some(&output), false, APP_VERSION).unwrap();
+        let installed = install_bundle(&temp.path().join("installed"), &output).unwrap();
+        assert!(!installed.join("docs").exists());
+        assert!(!installed.join("test").exists());
+    }
+
+    #[tokio::test]
+    async fn output_command_keeps_default_naming_and_reports_chosen_destination() {
+        let temp = tempfile::tempdir().unwrap();
+        let project = temp.path().join("source");
+        fs::create_dir(&project).unwrap();
+        fixture_project(&project);
+        let path = project.join("manifest.json");
+        let mut manifest: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        manifest["name"] = serde_json::json!("Score / Name");
+        manifest["version"] = serde_json::json!("2.0.1");
+        fs::write(path, manifest.to_string()).unwrap();
+        let source = project.to_string_lossy().into_owned();
+        let info = crate::commands::bundle::get_bundle_output_info(source.clone(), None)
+            .await
+            .unwrap();
+        assert_eq!(
+            PathBuf::from(&info.output_path),
+            temp.path().join("Score - Name-2.0.1.pnds")
+        );
+        assert!(!info.exists);
+        let output = temp.path().join("delivery.pnds");
+        fs::write(&output, "old bundle").unwrap();
+        let info = crate::commands::bundle::get_bundle_output_info(
+            source,
+            Some(output.to_string_lossy().into_owned()),
+        )
+        .await
+        .unwrap();
+        assert!(info.exists);
+        assert_eq!(PathBuf::from(info.output_path), output);
+        pack_project_at(&project, Some(&output), true, APP_VERSION).unwrap();
+    }
+
+    #[test]
+    fn chosen_output_validation_failures_preserve_existing_delivery() {
+        for missing in [
+            "manifest.json",
+            "server.js",
+            "node_modules",
+            "supercollider/synthdefs/inarticulate-iii.scsyndef",
+        ] {
+            let temp = tempfile::tempdir().unwrap();
+            let project = temp.path().join("source");
+            fs::create_dir(&project).unwrap();
+            fixture_project(&project);
+            let output = temp.path().join("delivery.pnds");
+            fs::write(&output, "previous delivery").unwrap();
+            let target = project.join(missing);
+            if target.is_dir() {
+                fs::remove_dir_all(target).unwrap();
+            } else {
+                fs::remove_file(target).unwrap();
+            }
+            assert!(
+                pack_project_at(&project, Some(&output), true, APP_VERSION).is_err(),
+                "accepted missing {missing}"
+            );
+            assert_eq!(fs::read_to_string(output).unwrap(), "previous delivery");
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn declared_artifact_link_outside_source_is_rejected_without_output() {
+        let temp = tempfile::tempdir().unwrap();
+        let project = temp.path().join("source");
+        fs::create_dir(&project).unwrap();
+        fixture_project(&project);
+        let artifact = project.join("supercollider/synthdefs/inarticulate-iii.scsyndef");
+        fs::remove_file(&artifact).unwrap();
+        let external = temp.path().join("external.scsyndef");
+        fs::write(&external, "SCgf").unwrap();
+        std::os::unix::fs::symlink(&external, artifact).unwrap();
+        let output = temp.path().join("delivery.pnds");
+        let error = pack_project_at(&project, Some(&output), false, APP_VERSION).unwrap_err();
+        assert!(error.contains("outside the project"), "{error}");
+        assert!(!output.exists());
+        assert_eq!(fs::read_to_string(external).unwrap(), "SCgf");
+    }
+
+    #[test]
+    fn failed_publication_cleans_up_only_its_temporary_file() {
+        let temp = tempfile::tempdir().unwrap();
+        let project = temp.path().join("source");
+        fs::create_dir(&project).unwrap();
+        fixture_project(&project);
+        let output = temp.path().join("delivery.pnds");
+        fs::create_dir(&output).unwrap();
+        let error = pack_project_at(&project, Some(&output), true, APP_VERSION).unwrap_err();
+        assert!(error.contains("Failed to finalize"), "{error}");
+        let mut remaining: Vec<_> = fs::read_dir(temp.path())
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect();
+        remaining.sort();
+        assert_eq!(remaining, ["delivery.pnds", "source"]);
     }
 
     fn zip_entry_names(path: &Path) -> Vec<String> {

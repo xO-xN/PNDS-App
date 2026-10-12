@@ -624,5 +624,11 @@
   "creation.compile.reference.notChecked": "Not checked",
   "creation.compile.noReferences": "No SynthDef references declared.",
   "creation.compile.verified": "Compilation verified against all declared references.",
-  "creation.compile.restart": "Restart manually to use these artifacts; the current runtime keeps its loaded version."
+  "creation.compile.restart": "Restart manually to use these artifacts; the current runtime keeps its loaded version.",
+  "creation.bundle.action": "Generate .pnds",
+  "creation.bundle.continue": "Generate anyway",
+  "creation.bundle.savedOnly": "Includes saved files only; unsaved drafts do not enter the bundle.",
+  "creation.bundle.drafts": "Unsaved drafts will not be included. Save them first to include these changes, or continue with the saved files.",
+  "creation.bundle.untested": "No successful test has been recorded for this workspace. We recommend testing the saved project first. You can still generate the bundle.",
+  "creation.bundle.version": "Increase the project version whenever its content changes before distributing a new bundle."
 }

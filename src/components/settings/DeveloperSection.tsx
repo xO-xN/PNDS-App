@@ -57,7 +57,11 @@ export function DeveloperSection({ section }: { section: SettingsSection }) {
   const runPack = async (overwrite: boolean) => {
     if (!targetPath || busy) return
     setPacking(true)
-    const packResult = await commands.packProjectBundle(targetPath, overwrite)
+    const packResult = await commands.packProjectBundle(
+      targetPath,
+      overwrite,
+      null
+    )
     setPacking(false)
     if (packResult.status === 'error') {
       logger.error('Bundle pack failed', {
@@ -84,7 +88,7 @@ export function DeveloperSection({ section }: { section: SettingsSection }) {
     // Packability + overwrite probe in one shot: a missing synthdef or
     // absent node_modules fails here with the same readable error the pack
     // itself would raise.
-    const info = await commands.getBundleOutputInfo(targetPath)
+    const info = await commands.getBundleOutputInfo(targetPath, null)
     if (info.status === 'error') {
       logger.error('Bundle pre-check failed', {
         path: targetPath,

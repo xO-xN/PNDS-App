@@ -148,7 +148,8 @@ describe('DeveloperSection pack flow', () => {
     await waitFor(() => {
       expect(commands.packProjectBundle).toHaveBeenCalledWith(
         SELECTED_PATH,
-        false
+        false,
+        null
       )
     })
     expect(screen.getByTestId('developer-pack-path').textContent).toBe(
@@ -184,7 +185,8 @@ describe('DeveloperSection pack flow', () => {
     await waitFor(() => {
       expect(commands.packProjectBundle).toHaveBeenCalledWith(
         SELECTED_PATH,
-        true
+        true,
+        null
       )
     })
     expect(screen.getByTestId('developer-pack-sha').textContent).toBe(

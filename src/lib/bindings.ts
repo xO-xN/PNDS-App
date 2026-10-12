@@ -640,9 +640,9 @@ async releasePort(port: number) : Promise<Result<PortStatus, string>> {
  * pack would produce and whether it already exists (overwrite confirm),
  * plus the same manifest/dependency validations the pack itself runs.
  */
-async getBundleOutputInfo(path: string) : Promise<Result<BundleOutputInfo, string>> {
+async getBundleOutputInfo(path: string, outputPath: string | null) : Promise<Result<BundleOutputInfo, string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("get_bundle_output_info", { path }) };
+    return { status: "ok", data: await TAURI_INVOKE("get_bundle_output_info", { path, outputPath }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -653,9 +653,9 @@ async getBundleOutputInfo(path: string) : Promise<Result<BundleOutputInfo, strin
  * source untouched). `overwrite` must be true to replace an existing
  * output — the UI confirms first via [`get_bundle_output_info`].
  */
-async packProjectBundle(path: string, overwrite: boolean) : Promise<Result<PackResult, string>> {
+async packProjectBundle(path: string, overwrite: boolean, outputPath: string | null) : Promise<Result<PackResult, string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("pack_project_bundle", { path, overwrite }) };
+    return { status: "ok", data: await TAURI_INVOKE("pack_project_bundle", { path, overwrite, outputPath }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };

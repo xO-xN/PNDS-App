@@ -78,6 +78,7 @@ vi.mock('@tauri-apps/plugin-updater', () => ({
 // copies (sha256/path) — cancelled / no-op by default; tests override.
 vi.mock('@tauri-apps/plugin-dialog', () => ({
   open: vi.fn().mockResolvedValue(null),
+  save: vi.fn().mockResolvedValue(null),
   // #154: the unsaved-drafts discard gate — default keeps the drafts.
   confirm: vi.fn().mockResolvedValue(false),
 }))

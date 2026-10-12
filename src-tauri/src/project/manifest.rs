@@ -430,16 +430,26 @@ fn validate_paths(manifest: &Manifest, root: &Path) -> Result<(), String> {
         .supported_modes
         .contains(&crate::types::AudioMode::Internal)
     {
-        for synthdef in manifest.audio.synthdefs.as_deref().unwrap_or(&[]) {
-            let path = resolve_within(root, &canonical_root, synthdef, "audio.synthdefs[]")?;
-            if !path.is_file() {
-                return Err(format!(
-                    "audio.synthdefs entry is not a file: \"{synthdef}\""
-                ));
-            }
-        }
+        validate_synthdef_paths(manifest, root)?;
     }
 
+    Ok(())
+}
+
+/// Packaging checks every declared artifact, independently of supported or
+/// selected audio mode. Runtime loading retains its internal-mode gate.
+pub(crate) fn validate_synthdef_paths(manifest: &Manifest, root: &Path) -> Result<(), String> {
+    let canonical_root = root
+        .canonicalize()
+        .map_err(|e| format!("Cannot resolve project directory: {e}"))?;
+    for synthdef in manifest.audio.synthdefs.as_deref().unwrap_or(&[]) {
+        let path = resolve_within(root, &canonical_root, synthdef, "audio.synthdefs[]")?;
+        if !path.is_file() {
+            return Err(format!(
+                "audio.synthdefs entry is not a file: \"{synthdef}\""
+            ));
+        }
+    }
     Ok(())
 }
 

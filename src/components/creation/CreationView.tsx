@@ -44,6 +44,7 @@ import { CreationConsole } from './CreationConsole'
 import { useCreationTestStore } from '@/store/creation-test-store'
 import { resolveCreationReadme } from '@/lib/creation-readme'
 import { CreationHandoff } from './CreationHandoff'
+import { CreationBundle } from './CreationBundle'
 import {
   creationHandoffParticipant,
   HANDOFF_PATH,
@@ -371,6 +372,7 @@ function ReadingWorkspace({
           </div>
         </div>
         {error && <CreationErrorNotice error={error} />}
+        {editable && <CreationBundle project={project} />}
         <CreationHandoff
           editable={editable}
           exists={files.some(file => file.path === HANDOFF_PATH)}

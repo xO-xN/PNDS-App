@@ -28,12 +28,12 @@ pub(crate) fn bundles_root(app: &AppHandle) -> Result<PathBuf, String> {
 /// plus the same manifest/dependency validations the pack itself runs.
 #[tauri::command]
 #[specta::specta]
-pub async fn get_bundle_output_info(path: String) -> Result<BundleOutputInfo, String> {
-    let (_, output) = bundle::validate_packable(&PathBuf::from(&path))?;
-    Ok(BundleOutputInfo {
-        output_path: output.to_string_lossy().into_owned(),
-        exists: output.exists(),
-    })
+pub async fn get_bundle_output_info(
+    path: String,
+    output_path: Option<String>,
+) -> Result<BundleOutputInfo, String> {
+    let output = output_path.map(PathBuf::from);
+    bundle::output_info(&PathBuf::from(path), output.as_deref())
 }
 
 /// Packs the project at `path` (spec issue #16: staging-isolated, no npm,
@@ -45,9 +45,15 @@ pub async fn pack_project_bundle(
     app: AppHandle,
     path: String,
     overwrite: bool,
+    output_path: Option<String>,
 ) -> Result<PackResult, String> {
     let packed_with = app.package_info().version.to_string();
-    bundle::pack_project(&PathBuf::from(path), overwrite, &packed_with)
+    let output = output_path.map(PathBuf::from);
+    let root = PathBuf::from(path);
+    match output {
+        Some(output) => bundle::pack_project_at(&root, Some(&output), overwrite, &packed_with),
+        None => bundle::pack_project(&root, overwrite, &packed_with),
+    }
 }
 
 /// Installs a `.pnds` into `bundles/<id>-<version>/` (always reinstalling

@@ -26,6 +26,8 @@ interface CreationTestState {
   expansionRevision: number
   log: string[]
   runtimeError: string | null
+  /** In-memory record for this workspace; only a ready runtime counts. */
+  hasSuccessfulTest: boolean
   loadManifest: () => Promise<void>
   setMode: (mode: AudioMode) => void
   setTarget: (target: string) => void
@@ -49,6 +51,7 @@ const initial = () => ({
   expansionRevision: 0,
   log: [],
   runtimeError: null,
+  hasSuccessfulTest: false,
 })
 let metadataRequest = 0
 let logRequest = 0
@@ -197,6 +200,12 @@ useCreationStore.subscribe(state => {
   }
 })
 useSessionStore.subscribe(state => {
+  if (
+    useCreationStore.getState().active &&
+    state.sessionStatus === 'ready' &&
+    isCreationWorkspacePath(state.sessionProjectPath)
+  )
+    useCreationTestStore.setState({ hasSuccessfulTest: true })
   if (
     state.sessionStatus !== 'ready' &&
     useCreationTestStore.getState().expanded

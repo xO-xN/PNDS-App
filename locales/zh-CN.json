@@ -622,5 +622,11 @@
   "creation.compile.reference.notChecked": "未核对",
   "creation.compile.noReferences": "未声明 SynthDef 引用。",
   "creation.compile.verified": "编译已通过全部声明引用的核对。",
-  "creation.compile.restart": "请手动重启以使用这些产物；当前运行继续使用已加载的版本。"
+  "creation.compile.restart": "请手动重启以使用这些产物；当前运行继续使用已加载的版本。",
+  "creation.bundle.action": "生成 .pnds",
+  "creation.bundle.continue": "仍然生成",
+  "creation.bundle.savedOnly": "仅打包已保存文件，未保存草稿不入包。",
+  "creation.bundle.drafts": "未保存草稿不会进入工程包。请先保存以包含这些修改，或继续打包已保存文件。",
+  "creation.bundle.untested": "此工作台尚无成功测试记录。建议先测试已保存工程，也可继续生成工程包。",
+  "creation.bundle.version": "分发新工程包前，内容有更改时须提升工程 version。"
 }

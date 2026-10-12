@@ -31,25 +31,28 @@ Rules:
 
 ## Packing
 
-Entry point: **Settings (⌘,) → Developer Tools → Bundle Project**. It packs the selected Project by default; **Browse…** picks any other folder.
+Entry point: **Creation mode → Workspace → Generate .pnds**, using the native save dialog to choose the output location. **Settings (⌘,) → Developer Tools → Bundle Project** still packs the selected Project, or a folder picked through **Browse…**, beside that folder. Both entries share the same packer.
+
+The workspace packages saved files on disk; **unsaved drafts are excluded and are never automatically saved**. Drafts require confirmation of this boundary. Without a successful test record, the App recommends testing first but allows confirmation to continue. This in-memory record is created only when the current workspace reaches runtime readiness; closing the test retains it, while switching or reopening the workspace resets it. The record does not certify later edits.
 
 Pre-pack validation (any failure refuses packing with a readable error):
 
-1. `manifest.json` passes the App's full load validation (including every synthdef artifact the manifest references being present);
+1. the required manifest and server entry files exist, `manifest.json` passes the App's full load validation, and **every declared synthdef artifact** exists inside the Project, regardless of audio mode;
 2. dependency check: when `package.json` declares non-empty production dependencies (`dependencies` / `optionalDependencies`), the Project must already carry `node_modules/`;
-3. packing itself **runs no npm commands**, touches no network, and modifies nothing in the source Project directory.
+3. packing performs static file validation only: it **runs no npm commands**, touches no network, does not compile automatically or invoke a runtime preflight with process cleanup or startup effects, and leaves the source Project and current runtime unchanged.
 
 Staging and the exclusion list:
 
 - copying happens in a staging area in the system temp directory; the source Project directory is left untouched;
-- excluded (never enters the bundle): `.DS_Store` and `.git*` files/directories at any depth; the `docs/`, `test/` and `tests/` directories directly under the Project root only (authoring material, not runtime assets);
+- excluded (never enters the bundle): `.DS_Store` and `.git*` files/directories at any depth; the `docs/`, `test/` and `tests/` directories directly under the Project root only, including directory symlinks. These exclusions keep `docs/creator-handoff.md` tasks and root test material out of the bundle. App-local drafts, test records and preferences are never written into it;
 - symlinks in the source Project: targets inside the Project directory are materialised as ordinary file copies; targets outside are skipped;
 - every other file is copied verbatim (including `node_modules/`, `.scd` sources, audio/, public/, … — exclusion only subtracts; nothing is ever reordered or rewritten). The Project root's `README.md` (its self-description, see [structure.md](./structure.md)) and the optional cover image `cover.png` are among them: they travel with the bundle and the receiving machine's App renders them when the Project's card is selected (the cover into the README panel's upper zone);
 - devDependencies don't affect the validation but do ride along inside `node_modules` — running `npm prune --omit=dev` before release meaningfully shrinks the `.pnds`.
 
 Artifacts:
 
-- output path: `<name>-<version>.pnds` beside the Project directory, where `name` is the sanitised manifest `name` (replacing `/\:*?"<>|` with `-`) and `version` is the manifest `version`;
+- the workspace writes to the `.pnds` location chosen in the native save dialog; the default name and Settings output remain `<name>-<version>.pnds`, where `name` is the sanitised manifest `name` (replacing `/\:*?"<>|` with `-`) and `version` is the manifest `version`; the output must be outside the source Project, including through directory symlink aliases; parent traversal and symlink output files are rejected.
+- cancelling a prompt or the save dialog produces no output;
 - when a file of that name already exists, the UI layer confirms before overwriting (overwrite = full rewrite);
 - writing uses a temp file in the same directory plus an atomic rename;
 - on success the App shows the creator the artifact path and the file's sha256 (hexadecimal) for manual verification after distribution. The v1 opening side does **not** enforce sha256.

@@ -670,3 +670,37 @@ workflow with temporary projects and executable substitutes. Release validation
 with installed sclang is deliberately ignored by CI:
 `cargo test creation::compile_tests::compile_with_real_sclang -- --ignored`.
 Run it from `src-tauri`, then perform the release's native device/audio acceptance.
+
+## Workspace bundle generation (#162)
+
+`CreationBundle` is offered for writable folder workspaces. It confirms unsaved
+draft exclusion and, when there is no successful test record, recommends testing
+while allowing the user to proceed. The test store records readiness for the
+current workspace in memory; starting, failure and another project's runtime do
+not count. Closing retains the record; changing workspace identity resets it.
+This is advisory history, not proof that subsequently saved changes were tested.
+
+The native save dialog starts with the existing sanitized manifest name and
+version. Its cancellation dispatches no pack command. `getBundleOutputInfo` and
+`packProjectBundle` extend the existing commands with `outputPath: string | null`;
+`null` retains the Settings sibling destination. The chosen output is probed for
+an explicit overwrite confirmation and revalidated by the packer. Each awaited
+step checks workspace ownership, and a local operation lock prevents duplicate
+requests. Late results cannot package or decorate a replacement workspace.
+
+Rust uses the existing static manifest and dependency gates, plus every declared
+SynthDef path regardless of audio mode. It never invokes launch preflight, npm,
+network operations or compilation. The source is only read. Output containment
+checks reject destinations inside the source tree, including symlink aliases;
+root docs/test/tests directory links obey the same exclusions as directories.
+Staged content is revalidated after exclusions and materialization. Unique sibling
+temporary files are atomically published, with no-clobber publication unless
+overwrite was explicitly approved; failed publication cleans up its temporary
+file. SHA-256 is computed from this operation's completed archive before publication.
+
+Tests drive the actual workbench and typed commands for draft exclusion, advisory
+testing, save/overwrite cancellation, duplicate clicks and late selection. Rust
+temporary-directory pack/install round trips cover output choice, source protection,
+required files/dependencies/artifacts, containment, metadata and permission retention.
+The existing bilingual reference-manual paths remain unchanged. Native macOS save
+panels and theme rendering still require the user's normal App acceptance run.
