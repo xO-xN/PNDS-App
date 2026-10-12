@@ -26,6 +26,10 @@ backend-issued identity after opening. Source
 protection and error codes are described in
 [creation-workspace.md](./creation-workspace.md); never substitute a raw frontend
 root or an editable flag for the issued identity.
+`saveCreationFile` is also the manifest form's single write path (#158): a save
+of the project-root `manifest.json` is schema-validated first
+(`CreationErrorCode::ManifestInvalid`, before the version check), while a
+`manifest.json` in a subdirectory stays an ordinary text save.
 
 ### Calling Commands
 

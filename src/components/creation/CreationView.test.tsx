@@ -576,4 +576,258 @@ describe('creation reading workspace', () => {
       ).toBeInTheDocument()
     })
   })
+
+  describe('creation manifest form (#158)', () => {
+    const manifestWorkspace: CreationWorkspace = {
+      project: first.project,
+      files: [
+        { path: 'manifest.json', kind: 'text', category: 'system', size: 400 },
+        { path: 'public/score.js', kind: 'text', category: 'pages', size: 13 },
+      ],
+    }
+    const diskManifest = JSON.stringify({
+      schemaVersion: 1,
+      id: 'inarticulate-iii',
+      name: 'Inarticulate III',
+      version: '1.0.1',
+      scoreServer: {
+        entry: 'server.js',
+        workingDirectory: '.',
+        performerPort: 6868,
+        monitorPort: 6869,
+        routes: { '/health': 'stub' },
+      },
+      roles: ['alpha'],
+      audio: {
+        defaultMode: 'internal',
+        supportedModes: ['internal', 'external'],
+        outputChannels: 2,
+        synthdefs: ['supercollider/synthdefs/a.scsyndef'],
+        scsynth: { sampleRate: 96000, blockSize: 64, audioBusChannels: 128 },
+      },
+    })
+
+    beforeEach(() => {
+      vi.clearAllMocks()
+      vi.stubGlobal(
+        'ResizeObserver',
+        class {
+          observe() {
+            /* No jsdom layout. */
+          }
+          unobserve() {
+            /* No observed element. */
+          }
+          disconnect() {
+            /* No observer to disconnect. */
+          }
+        }
+      )
+      useSessionStore.setState({ sessionStatus: 'idle' })
+      useCreationStore.setState({
+        modePhase: 'idle',
+        modePlan: null,
+        modeError: null,
+        hoverPaused: false,
+        modePointerInside: false,
+        restoreModeFocus: false,
+        active: true,
+        workspace: manifestWorkspace,
+        recentPaths: ['/draft'],
+        opening: false,
+        request: null,
+        error: null,
+      })
+      useCreationDraftsStore.setState({
+        drafts: {},
+        activePath: null,
+        renameNote: null,
+      })
+    })
+
+    it('edits declarations through the form and saves disk output that preserves unknown fields', async () => {
+      vi.mocked(commands.readCreationFile).mockResolvedValueOnce({
+        status: 'ok',
+        data: { kind: 'text', text: diskManifest, version: 'v1' },
+      })
+      vi.mocked(commands.saveCreationFile).mockResolvedValueOnce({
+        status: 'ok',
+        data: 'v2',
+      })
+      render(<CreationView />)
+      fireEvent.click(screen.getByRole('button', { name: 'manifest.json' }))
+      const name = (await screen.findByLabelText(
+        'Work title'
+      )) as HTMLInputElement
+      expect(name.value).toBe('Inarticulate III')
+      expect(
+        screen.queryByRole('textbox', { name: 'manifest.json' })
+      ).not.toBeInTheDocument()
+      fireEvent.change(name, { target: { value: 'Renamed III' } })
+      fireEvent.change(screen.getByLabelText('Performer port'), {
+        target: { value: '6870' },
+      })
+      fireEvent.click(screen.getByRole('checkbox', { name: 'External' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+      await waitFor(() =>
+        expect(commands.saveCreationFile).toHaveBeenCalledTimes(1)
+      )
+      const saveCall = vi.mocked(commands.saveCreationFile).mock.calls.at(0)
+      if (!saveCall) throw new Error('saveCreationFile was not called')
+      const [identity, path, text, version] = saveCall
+      expect(identity).toBe('first')
+      expect(path).toBe('manifest.json')
+      expect(version).toBe('v1')
+      const saved = JSON.parse(text)
+      expect(saved.name).toBe('Renamed III')
+      expect(saved.scoreServer.performerPort).toBe(6870)
+      expect(saved.audio.supportedModes).toEqual(['internal'])
+      // Unknown and unedited fields survive the form round-trip untouched.
+      expect(saved.roles).toEqual(['alpha'])
+      expect(saved.scoreServer.routes).toEqual({ '/health': 'stub' })
+      expect(saved.audio.scsynth.sampleRate).toBe(96000)
+      expect(saved.audio.scsynth.blockSize).toBe(64)
+      expect(text.endsWith('\n')).toBe(true)
+    })
+
+    it('shows the save-gate rejection readably and keeps the draft dirty', async () => {
+      vi.mocked(commands.readCreationFile).mockResolvedValueOnce({
+        status: 'ok',
+        data: { kind: 'text', text: diskManifest, version: 'v1' },
+      })
+      vi.mocked(commands.saveCreationFile).mockResolvedValueOnce({
+        status: 'error',
+        error: {
+          code: 'manifestInvalid',
+          detail:
+            'audio.supportedModes must be a non-empty array of internal, external or none',
+        },
+      })
+      render(<CreationView />)
+      fireEvent.click(screen.getByRole('button', { name: 'manifest.json' }))
+      await screen.findByLabelText('Work title')
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Internal' }))
+      fireEvent.click(screen.getByRole('checkbox', { name: 'External' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+      expect(
+        await screen.findByText(/failed save validation/i)
+      ).toBeInTheDocument()
+      expect(
+        screen.getByText(/non-empty array of internal/)
+      ).toBeInTheDocument()
+      expect(
+        useCreationDraftsStore.getState().drafts['manifest.json']?.text
+      ).toContain('"supportedModes": []')
+    })
+
+    it('falls back to the text view for non-object JSON and recovers once fixed', async () => {
+      vi.mocked(commands.readCreationFile).mockResolvedValueOnce({
+        status: 'ok',
+        data: { kind: 'text', text: '{ not json', version: 'v1' },
+      })
+      render(<CreationView />)
+      fireEvent.click(screen.getByRole('button', { name: 'manifest.json' }))
+      expect(
+        await screen.findByText(/not an editable JSON object/i)
+      ).toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: 'Text' }))
+      const editor = screen.getByRole('textbox', {
+        name: 'manifest.json',
+      }) as HTMLTextAreaElement
+      expect(editor.value).toBe('{ not json')
+      fireEvent.change(editor, { target: { value: diskManifest } })
+      fireEvent.click(screen.getByRole('button', { name: 'Form' }))
+      expect(
+        ((await screen.findByLabelText('Work title')) as HTMLInputElement).value
+      ).toBe('Inarticulate III')
+    })
+
+    it('shares one draft across the form and text views', async () => {
+      vi.mocked(commands.readCreationFile).mockResolvedValueOnce({
+        status: 'ok',
+        data: { kind: 'text', text: diskManifest, version: 'v1' },
+      })
+      render(<CreationView />)
+      fireEvent.click(screen.getByRole('button', { name: 'manifest.json' }))
+      fireEvent.change(await screen.findByLabelText('Work title'), {
+        target: { value: 'Form edit' },
+      })
+      fireEvent.click(screen.getByRole('button', { name: 'Text' }))
+      const editor = screen.getByRole('textbox', {
+        name: 'manifest.json',
+      }) as HTMLTextAreaElement
+      expect(editor.value).toContain('"name": "Form edit"')
+      fireEvent.change(editor, {
+        target: { value: editor.value.replace('"1.0.1"', '"1.0.2"') },
+      })
+      fireEvent.click(screen.getByRole('button', { name: 'Form' }))
+      expect(
+        ((await screen.findByLabelText('Version')) as HTMLInputElement).value
+      ).toBe('1.0.2')
+      expect(
+        ((await screen.findByLabelText('Work title')) as HTMLInputElement).value
+      ).toBe('Form edit')
+    })
+
+    it('resolves manifest save conflicts through the shared reload-or-overwrite flow', async () => {
+      vi.mocked(commands.readCreationFile)
+        .mockResolvedValueOnce({
+          status: 'ok',
+          data: { kind: 'text', text: diskManifest, version: 'v1' },
+        })
+        .mockResolvedValueOnce({
+          status: 'ok',
+          data: {
+            kind: 'text',
+            text: JSON.stringify({
+              ...JSON.parse(diskManifest),
+              name: 'External edit',
+            }),
+            version: 'v9',
+          },
+        })
+      vi.mocked(commands.saveCreationFile).mockResolvedValueOnce({
+        status: 'error',
+        error: { code: 'versionConflict', detail: 'manifest.json' },
+      })
+      render(<CreationView />)
+      fireEvent.click(screen.getByRole('button', { name: 'manifest.json' }))
+      fireEvent.change(await screen.findByLabelText('Work title'), {
+        target: { value: 'Renamed III' },
+      })
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+      await screen.findByText('The file changed on disk')
+      fireEvent.click(screen.getByRole('button', { name: 'Reload from disk' }))
+      expect(
+        ((await screen.findByLabelText('Work title')) as HTMLInputElement).value
+      ).toBe('External edit')
+      const draft = useCreationDraftsStore.getState().drafts['manifest.json']
+      expect(draft?.conflict).toBeNull()
+      expect(draft?.diskVersion).toBe('v9')
+      expect(draft?.text).toBe(draft?.diskText)
+    })
+
+    it('flags non-integer numbers without snapping the field mid-keystroke', async () => {
+      vi.mocked(commands.readCreationFile).mockResolvedValueOnce({
+        status: 'ok',
+        data: { kind: 'text', text: diskManifest, version: 'v1' },
+      })
+      render(<CreationView />)
+      fireEvent.click(screen.getByRole('button', { name: 'manifest.json' }))
+      const port = (await screen.findByLabelText(
+        'Performer port'
+      )) as HTMLInputElement
+      fireEvent.focus(port)
+      fireEvent.change(port, { target: { value: '68a' } })
+      expect(port.value).toBe('68a')
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        /whole number/i
+      )
+      expect(
+        useCreationDraftsStore.getState().drafts['manifest.json']?.text
+      ).not.toContain('performerPort')
+      fireEvent.blur(port)
+      expect(port.value).toBe('')
+    })
+  })
 })

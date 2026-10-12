@@ -532,6 +532,130 @@ fn saves_atomically_with_version_checking_and_reports_new_versions() {
 }
 
 #[test]
+fn manifest_saves_validate_schema_without_requiring_compiled_artifacts() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = project(temp.path(), "form-save");
+    let protection = Protection::default();
+    let mut workspace = CreationAccess::default();
+    let identity = workspace.open(&root, &protection).unwrap().project.identity;
+    let version = text_version(&workspace, &identity, "manifest.json", &protection);
+    // A legal declaration edit saves even though the referenced artifact
+    // has never been compiled (#158): saving is its own gate. The saved
+    // text carries unrecognized fields the way the form produces them.
+    let edited = r#"{
+  "schemaVersion": 1,
+  "id": "form-save",
+  "name": "Form Save",
+  "version": "0.2.0",
+  "roles": ["alpha"],
+  "scoreServer": {
+    "entry": "server.js",
+    "workingDirectory": ".",
+    "performerPort": 6870,
+    "monitorPort": 6869,
+    "routes": { "/health": "stub" }
+  },
+  "audio": {
+    "defaultMode": "internal",
+    "supportedModes": ["internal"],
+    "synthdefs": ["not-compiled.scsyndef"],
+    "scsynth": { "sampleRate": 96000, "blockSize": 64, "audioBusChannels": 128 }
+  }
+}
+"#;
+    let saved = workspace
+        .save(&identity, "manifest.json", edited, &version, &protection)
+        .unwrap();
+    assert_eq!(saved, file_version(edited.as_bytes()));
+    // Disk output keeps the unknown fields and the legacy sampleRate.
+    let on_disk = fs::read_to_string(root.join("manifest.json")).unwrap();
+    assert_eq!(on_disk, edited);
+    assert!(on_disk.contains("\"roles\""));
+    assert!(on_disk.contains("\"routes\""));
+    assert!(on_disk.contains("\"sampleRate\": 96000"));
+    // Save success is not runnability or packability: the launch and bundle
+    // gates still refuse the missing artifact.
+    assert!(crate::project::manifest::load_manifest(&root)
+        .unwrap_err()
+        .contains("not-compiled.scsyndef"));
+    assert!(crate::project::bundle::validate_packable(&root).is_err());
+    // Once the artifact exists the same saved declaration passes both
+    // gates — the form never blocked it, the compiler caught it up.
+    fs::write(root.join("not-compiled.scsyndef"), b"compiled").unwrap();
+    crate::project::manifest::load_manifest(&root).unwrap();
+    crate::project::bundle::validate_packable(&root).unwrap();
+    // Schema violations are refused with the field-specific reason and
+    // never touch disk.
+    let invalid = edited.replace("6870", "6869");
+    let error = workspace
+        .save(&identity, "manifest.json", &invalid, &saved, &protection)
+        .unwrap_err();
+    assert_eq!(error.code, CreationErrorCode::ManifestInvalid);
+    assert!(error.detail.contains("must differ"));
+    assert_eq!(
+        fs::read_to_string(root.join("manifest.json")).unwrap(),
+        edited
+    );
+}
+
+#[test]
+fn manifest_save_validation_scopes_to_the_root_manifest_only() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = project(temp.path(), "scoped");
+    fs::create_dir(root.join("notes")).unwrap();
+    fs::write(root.join("notes/manifest.json"), "draft notes").unwrap();
+    let protection = Protection::default();
+    let mut workspace = CreationAccess::default();
+    let identity = workspace.open(&root, &protection).unwrap().project.identity;
+    let version = text_version(&workspace, &identity, "notes/manifest.json", &protection);
+    // A manifest.json in a subdirectory is an ordinary text file: schema
+    // validation must not reach it.
+    workspace
+        .save(
+            &identity,
+            "notes/manifest.json",
+            "not json at all",
+            &version,
+            &protection,
+        )
+        .unwrap();
+    assert_eq!(
+        fs::read_to_string(root.join("notes/manifest.json")).unwrap(),
+        "not json at all"
+    );
+}
+
+#[test]
+fn manifest_save_reports_schema_problems_before_version_conflicts() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = project(temp.path(), "precedence");
+    let protection = Protection::default();
+    let mut workspace = CreationAccess::default();
+    let identity = workspace.open(&root, &protection).unwrap().project.identity;
+    let version = text_version(&workspace, &identity, "manifest.json", &protection);
+    // The disk changes externally while the draft holds a schema violation:
+    // the fixable content error comes first — a confirm-and-overwrite must
+    // never be able to land an invalid manifest.
+    fs::write(
+        root.join("manifest.json"),
+        fs::read_to_string(root.join("manifest.json"))
+            .unwrap()
+            .replace("6868", "6870"),
+    )
+    .unwrap();
+    let error = workspace
+        .save(
+            &identity,
+            "manifest.json",
+            "{\"schemaVersion\": 1}",
+            &version,
+            &protection,
+        )
+        .unwrap_err();
+    assert_eq!(error.code, CreationErrorCode::ManifestInvalid);
+}
+
+#[test]
 fn external_disk_changes_conflict_and_repeated_changes_rerequire_confirmation() {
     let temp = tempfile::tempdir().unwrap();
     let root = project(temp.path(), "draft");

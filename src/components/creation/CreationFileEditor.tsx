@@ -28,11 +28,13 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { CreationErrorNotice } from './CreationErrorNotice'
+import { CreationManifestForm } from './CreationManifestForm'
 
 /**
  * #154: the reading workspace's file panel. Editable folder projects get a
  * lightweight draft editor (save ⌘S, rename, version-checked writes);
- * read-only sources keep the plain reader.
+ * read-only sources keep the plain reader. #158: manifest.json edits
+ * through a declaration form that shares the same draft and conflict flow.
  */
 export function CreationFileEditor({
   identity,
@@ -46,6 +48,7 @@ export function CreationFileEditor({
   const { t } = useTranslation()
   const draft = useCreationDraftsStore(state => state.drafts[file.path])
   const renameNote = useCreationDraftsStore(state => state.renameNote)
+  const [manifestView, setManifestView] = useState<'form' | 'text'>('form')
   const [content, setContent] = useState<CreationContent | null>(null)
   const [error, setError] = useState<CreationError | null>(null)
   const [imageFailed, setImageFailed] = useState(false)
@@ -58,6 +61,7 @@ export function CreationFileEditor({
   const editorRef = useRef<HTMLTextAreaElement>(null)
   const match = useRef<HTMLElement>(null)
   const editableText = editable && file.kind === 'text'
+  const isManifest = editableText && file.path === 'manifest.json'
   const diskRevision = useCreationChangesStore(
     state => state.fileRevisions[file.path] ?? 0
   )
@@ -174,6 +178,28 @@ export function CreationFileEditor({
           )}
         </div>
         <div className="flex flex-wrap items-center gap-3">
+          {isManifest && (
+            <div
+              className="flex items-center gap-1"
+              role="group"
+              aria-label={t('creation.manifest.viewLabel')}
+            >
+              <Button
+                size="sm"
+                variant={manifestView === 'form' ? 'default' : 'outline'}
+                onClick={() => setManifestView('form')}
+              >
+                {t('creation.manifest.viewForm')}
+              </Button>
+              <Button
+                size="sm"
+                variant={manifestView === 'text' ? 'default' : 'outline'}
+                onClick={() => setManifestView('text')}
+              >
+                {t('creation.manifest.viewText')}
+              </Button>
+            </div>
+          )}
           <p className="text-sm">
             {t('creation.fileInfo', {
               type: file.path.split('.').pop()?.toUpperCase() ?? file.kind,
@@ -221,7 +247,7 @@ export function CreationFileEditor({
         {editableText && dirty && (
           <p className="text-xs">{t('creation.draftHint')}</p>
         )}
-        {file.kind === 'text' && (
+        {file.kind === 'text' && (!isManifest || manifestView === 'text') && (
           <div className="flex items-center gap-2">
             <Input
               aria-label={t('creation.findText')}
@@ -283,19 +309,28 @@ export function CreationFileEditor({
         )}
         {editableText ? (
           draft ? (
-            <textarea
-              ref={editorRef}
-              dir="ltr"
-              className="creation-editor-textarea"
-              aria-label={file.path}
-              value={draft.text}
-              spellCheck={false}
-              onChange={event =>
-                useCreationDraftsStore
-                  .getState()
-                  .edit(file.path, event.target.value)
-              }
-            />
+            isManifest && manifestView === 'form' ? (
+              <CreationManifestForm
+                text={draft.text}
+                onChange={next =>
+                  useCreationDraftsStore.getState().edit(file.path, next)
+                }
+              />
+            ) : (
+              <textarea
+                ref={editorRef}
+                dir="ltr"
+                className="creation-editor-textarea"
+                aria-label={file.path}
+                value={draft.text}
+                spellCheck={false}
+                onChange={event =>
+                  useCreationDraftsStore
+                    .getState()
+                    .edit(file.path, event.target.value)
+                }
+              />
+            )
           ) : null
         ) : content?.kind === 'text' ? (
           <pre

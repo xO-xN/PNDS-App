@@ -148,6 +148,52 @@ proceeds. Late save/rename/read results re-check the workspace identity before
 touching store state, so an old project's return cannot modify the new one.
 ⌘S saves the active draft from any focus position in creation mode.
 
+## Manifest declaration form (#158)
+
+`manifest.json` stays a normal draft-backed text file — the form
+(`CreationManifestForm.tsx`) is a pure _view_ over that same draft text, so
+dirty markers, ⌘S, the conflict flow, rename-disable and the lifecycle
+discard count all keep one source of truth. There is deliberately no second
+field-shaped store: every edit goes through
+`src/lib/creation-manifest-form.ts`, which parses the current draft JSON,
+mutates the one edited declaration and re-serializes (two-space indent plus
+trailing newline). Unrecognized fields — `roles`, `scoreServer.routes`,
+legacy `audio.scsynth.sampleRate`, `supportsPerformerUrl`, `needsHttps` —
+and any unedited lenient declaration survive every round-trip untouched,
+because serialization starts from the parsed object, never from a typed
+literal. Editing through the form therefore reformats the file once; field
+_values_ are what must be preserved, not the original byte layout.
+
+The editor header offers a form/text toggle (form is the default; the find
+bar is text-view only). When the draft is not a JSON _object_ — unparseable,
+an array or a scalar — the form shows a fallback note and the text view is
+where it gets fixed. Field semantics: contract-required strings stay
+writable even blank (the save gate judges); blank optional strings
+(`description`, `performerAddress`, `standaloneTarget`) remove the
+declaration; numeric fields write only sign-free integers and remove the
+declaration otherwise, so the save gate names the missing field instead of a
+stale number silently surviving; `synthdefs` is one path per line, blank
+lines dropped; clearing `telematic` returns the project to _undeclared_
+(only an explicit `true` is ever written, per manifest.md); an empty
+supported-modes selection writes `[]` so the rejection reads "no allowed
+mode", not "missing field". Text inputs hold local string state while
+focused and settle back to what the draft declares on blur — an invalid
+number must not snap away mid-keystroke.
+
+Save-time schema enforcement lives at the Rust `save` boundary
+(`project/creation.rs`): a save whose (containment-checked) target is the
+project-root `manifest.json` runs `parse_manifest` first and refuses with
+`CreationErrorCode::ManifestInvalid` (field-specific English detail under the
+localized headline) **before** the version-conflict check — a
+confirm-and-overwrite can never land an invalid manifest. A `manifest.json`
+in a subdirectory is an ordinary text file and is not validated.
+Validation deliberately stops at `parse_manifest`: a declaration referencing
+not-yet-compiled SynthDefs saves fine, because runnability and packability
+stay separate gates — launch preflight and `validate_packable` still fail on
+the missing artifacts. Sample rate and devices remain global App settings;
+the form never touches them. Read-only sources keep the plain text reader
+for `manifest.json`. Labels live under `creation.manifest.*` in both locales.
+
 ## External changes and running versions (#155)
 
 Rename also sends the other opened draft paths to the backend. It resolves

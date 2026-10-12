@@ -1101,7 +1101,7 @@ export type CreationContent =
  */
 { kind: "text"; text: string; version: string } | { kind: "image"; url: string } | { kind: "binary" }
 export type CreationError = { code: CreationErrorCode; detail: string }
-export type CreationErrorCode = "missing" | "permission" | "invalidUtf8" | "tooLarge" | "invalidIdentity" | "pathEscape" | "invalidProject" | "testValidation" | "testStartup" | "versionConflict" | "targetExists" | "io"
+export type CreationErrorCode = "missing" | "permission" | "invalidUtf8" | "tooLarge" | "invalidIdentity" | "pathEscape" | "invalidProject" | "manifestInvalid" | "testValidation" | "testStartup" | "versionConflict" | "targetExists" | "io"
 export type CreationFile = { path: string; size: number; kind: CreationFileKind; category: CreationCategory }
 export type CreationFileKind = "text" | "image" | "binary"
 export type CreationOption = { path: string; project: CreationProject | null; error: CreationError | null }

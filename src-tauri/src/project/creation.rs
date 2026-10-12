@@ -28,6 +28,7 @@ pub enum CreationErrorCode {
     InvalidIdentity,
     PathEscape,
     InvalidProject,
+    ManifestInvalid,
     TestValidation,
     TestStartup,
     VersionConflict,
@@ -485,6 +486,20 @@ impl CreationAccess {
                 format!("Limit: {TEXT_MAX_BYTES} bytes"),
             ));
         }
+        // #158: the manifest form and the text editor share this one write
+        // path, so schema problems are refused — before the version check —
+        // with the field-specific reason and never touch disk. Validation
+        // deliberately stops at parse_manifest: missing SynthDef artifacts
+        // belong to the launch and bundle gates, so a legal declaration can
+        // be saved before it is compiled.
+        if is_root_manifest(path) {
+            if let Err(detail) = crate::project::manifest::parse_manifest(text) {
+                return Err(CreationError::new(
+                    CreationErrorCode::ManifestInvalid,
+                    detail,
+                ));
+            }
+        }
         let file = project.file(path)?;
         let metadata = file.metadata().map_err(io_error)?;
         if !metadata.is_file() {
@@ -576,6 +591,18 @@ fn ensure_editable(project: &OpenProject) -> Result<(), CreationError> {
     } else {
         Ok(())
     }
+}
+
+/// True only for the project root's manifest — a `manifest.json` inside a
+/// subdirectory is an ordinary text file whose saving carries no contract.
+fn is_root_manifest(path: &str) -> bool {
+    let mut components = Path::new(path)
+        .components()
+        .filter(|component| !matches!(component, Component::CurDir));
+    matches!(
+        (components.next(), components.next()),
+        (Some(Component::Normal(name)), None) if name == std::ffi::OsStr::new("manifest.json")
+    )
 }
 
 /// Replaces `target` atomically: a fresh temp file in the same directory is
