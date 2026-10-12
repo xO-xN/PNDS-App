@@ -406,6 +406,13 @@ export const useCreationStore = create<CreationState>((set, get) => ({
           recentPaths: rememberWorkspace(workspace, state.recentPaths),
           error: null,
         }))
+        if (newProject)
+          useProjectStore
+            .getState()
+            .registerCreatedProject(
+              workspace.project.root,
+              workspace.project.name
+            )
         return true
       } catch (error) {
         if (owns()) {

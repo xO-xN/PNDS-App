@@ -147,6 +147,8 @@ interface ProjectState {
    * persisted index untouched; the caller surfaces the reason.
    */
   addRecentProject: (path: string) => boolean
+  /** Completed creations are registered first in Home, even if its manual-addition cap is full. */
+  registerCreatedProject: (path: string, name: string) => void
   removeRecentProject: (path: string) => void
   /** Empties the history; folder memberships go with it (folders stay). */
   clearRecentProjects: () => void
@@ -502,6 +504,41 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
     }))
     persistIndexIfChanged(before, get())
     return true
+  },
+
+  registerCreatedProject: (path, name) => {
+    const before = get()
+    if (before.utilityPaths.includes(path)) return
+    const index = {
+      recentProjectPaths: [
+        path,
+        ...before.recentProjectPaths.filter(other => other !== path),
+      ],
+      projectFolders: withoutFolderMember(before.projectFolders, path),
+      manifestProjectNames: { ...before.manifestProjectNames, [path]: name },
+    }
+    set({
+      ...index,
+      activeFolderId: null,
+      lastUserFolderId: null,
+      ...cancelledPreflightState(before),
+    })
+    if (
+      sameJson(
+        {
+          recentProjectPaths: before.recentProjectPaths,
+          projectFolders: before.projectFolders,
+          manifestProjectNames: before.manifestProjectNames,
+        },
+        index
+      )
+    )
+      return
+    void updatePreferences({
+      recentProjects: index.recentProjectPaths,
+      projectFolders: index.projectFolders,
+      projectManifestNames: index.manifestProjectNames,
+    })
   },
 
   removeRecentProject: path => {

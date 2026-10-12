@@ -22,6 +22,15 @@ Success adopts a prepared identity through the ordinary commit command, without
 starting. A later switch failure reports the complete directory already created
 so a retry never silently overwrites it.
 
+Successful new-project adoption also registers its canonical path and declared
+name at the front of performance Home through `project-store`, then shows Home
+when returning to performance. Path, folder membership and learned name persist
+together through the preference queue; no preflight, selection or start is
+implied. Creation registration retains all existing entries even when Home is
+already at its manual-addition cap, like loading an existing over-limit index.
+Manual imports retain their existing cap. Cancellation and failed adoption do
+not register a performance card.
+
 `CreationAccess::create_blank` validates the target against backend bundle and
 utility protection. It writes fixed assets and localized metadata into a private
 sibling staging directory, using held directory descriptors and no-follow,

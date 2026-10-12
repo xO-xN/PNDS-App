@@ -13,8 +13,12 @@ one new project folder and never replaces an existing file or directory.
 Cancelling the picker, form or discard confirmation preserves the old workspace
 and running test.
 
-Success enters an editable workspace **without starting**. Test manually in
-Internal, External or None. The blank project has no piece sounds or production
+Success enters an editable workspace **without starting**.
+The project also appears first in performance Home under its work name. After
+returning to performance, select its card and load it manually; the entry is
+remembered across App restarts.
+
+Test manually in Internal, External or None. The blank project has no piece sounds or production
 dependencies: Internal writes only zeros to the injected private buses, while
 External sends no music messages until a piece protocol is implemented. Technical
 audio code, SCD source and its matching precompiled SynthDef are included, so
