@@ -16,6 +16,15 @@ export interface PerformerConfig {
   orientation: PerformerOrientation
   theme: ColorTheme
   locale: string
+  mouseTouch: boolean
+}
+export interface PerformerInputChange {
+  label: string
+  identity: string
+  runId: number
+  navigation: number
+  revision: number
+  mouseTouch: boolean
 }
 export interface PerformerPageResult {
   label: string

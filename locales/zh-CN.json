@@ -480,7 +480,7 @@
   "creation.performers.landscape": "横向",
   "creation.performers.add": "添加 performer",
   "creation.performers.empty": "启动测试后，可添加独立 performer 窗口。",
-  "creation.performers.simulation": "仅模拟页面尺寸，不模拟触屏、传感器或移动浏览器能力。",
+  "creation.performers.simulation": "模拟页面尺寸；可用鼠标模拟单点触摸事件。不模拟传感器、多点触控或移动浏览器能力。",
   "creation.performers.connectionUnknown": "连接未知",
   "creation.performers.focus": "聚焦",
   "creation.performers.close": "关闭",
@@ -494,5 +494,9 @@
   "creation.performers.page.loading": "正在加载页面",
   "creation.performers.page.loaded": "页面导航已结束",
   "creation.performers.page.timeout": "页面加载超时",
-  "creation.performers.page.standby": "等待工程运行"
+  "creation.performers.page.standby": "等待工程运行",
+  "creation.performers.dialogOK": "确定",
+  "creation.performers.dialogCancel": "取消",
+  "creation.performers.mouseTouch": "鼠标模拟单点触摸",
+  "creation.performers.prepareFailed": "测试窗口准备失败：{{detail}}"
 }

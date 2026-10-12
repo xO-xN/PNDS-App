@@ -335,3 +335,8 @@ Performer protocol names and typed on/emit helpers live in `src/lib/events.ts`.
 These subscriptions expose registration promises because native creation and
 shell-ready replay must wait until the listener exists. All runtime fact and
 error returns additionally check their workspace/run/navigation ownership.
+
+`preparePerformerWindow(label, ok, cancel)` is a UUID-scoped, awaited macOS
+setup for the performer's standard WebKit dialogs and optional synthetic input
+script. Shell-ready follows its completion. Per-instance delegate inheritance
+retains wry's other handlers; no remote page receives a new IPC capability.

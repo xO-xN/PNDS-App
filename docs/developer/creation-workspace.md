@@ -302,7 +302,9 @@ an independent `incognito` webview. On macOS the installed wry implementation
 uses a fresh nonpersistent WKWebsiteDataStore, isolating cookies/local storage
 between clients while retaining each client's identity across same-shell
 refresh/restart. See [Tauri v2 webview options](https://v2.tauri.app/reference/javascript/api/namespacewebview/).
-No user agent, touch, sensor or mobile-browser capabilities are spoofed. The
+No user agent, hardware-touch, sensor or mobile-browser capabilities are spoofed.
+The explicitly labelled mouse-to-single-touch option is synthetic DOM input,
+as described below; it never reports hardware capability or trusted touch. The
 local `performer.html` entry boots only the thin shell; its cross-origin iframe
 loads the actual applied performer address/port. Music traffic stays entirely
 between that page, the project server and audio target. Unadapted projects work.
@@ -348,3 +350,37 @@ Automated coverage uses native window substitutes through the App workflow and
 shell interface, plus the Rust scoped close boundary. WKWebView verification of
 independent client identities, phone/tablet orientations and actual keyboard /
 pointer input remains a real macOS check; jsdom dimensions are not that evidence.
+
+## Performer JavaScript dialogs and simulated input
+
+Inarticulate III deliberately draws black until its standard `prompt()` selects
+a player. The macOS wry UI delegate omits JavaScript alert/confirm/prompt handlers,
+so socket connection alone left that project connected but unselected. A Safari
+comparison with the identical project rendered the score after choosing an ID.
+`preparePerformerWindow` now awaits UI-thread setup before shell-ready / iframe
+creation. It accepts only issued UUID performer labels. A per-instance subclass
+of the existing native delegate supplies standard AppKit sheets, preserving
+wry's other handlers; completion blocks are copied and completed with normal
+prompt string/null and confirm true/false semantics. The page origin is displayed
+without URL query tokens. Buttons follow the App locale. No page prompt function,
+project source or music protocol is rewritten. A preparation failure reveals a
+readable shell error. Native menu focus resolves a sheet's owning App window.
+
+The user approved mouse-to-single-touch simulation after real testing. New test
+clients enable it with a visible checkbox in both the main list and their shell;
+turning it off restores original mouse/pointer input without navigation. Native
+setup installs `performer-touch-script.js` once at document start in each project's
+frames. Only a parent-window `pnds:test-touch` message enables it. Mouse down /
+move / up produce one untrusted DOM touch sequence; pointer capture, blur,
+cancellation and disabling release the contact. Native text/form controls keep
+their mouse behavior. This includes a TouchList-shaped payload for desktop WebKit
+without Touch constructors, rather than pretending it has mobile APIs. Events
+are delivered directly to the page: no OSC, score state or audio goes through
+Rust/React. Real multitouch, pressure, sensors and mobile-browser APIs still need
+a device. Run/navigation/revision checks also protect input-option messages.
+
+Regression coverage waits for native preparation before ready, shows failures,
+and exercises the exact embedded script through frame input/message boundaries.
+On 2026-10-12 the user confirmed in the real App that Inarticulate III's ID prompt,
+score display and mouse dragging all work. This verifies the reported failure;
+it does not replace other real-device or multi-client identity acceptance checks.

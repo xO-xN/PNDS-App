@@ -163,6 +163,9 @@ vi.mock('@/lib/tauri-bindings', async () => {
       closeCreationPerformerWindows: vi
         .fn()
         .mockResolvedValue({ status: 'ok', data: null }),
+      preparePerformerWindow: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
       getCreationRuntime: vi
         .fn()
         .mockResolvedValue({ status: 'ok', data: idleRuntime }),

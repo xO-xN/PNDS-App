@@ -129,6 +129,22 @@ export function CreationPerformers() {
                 {t(`creation.performers.page.${client.pageStatus}`)} ·{' '}
                 {t('creation.performers.connectionUnknown')}
               </span>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={client.mouseTouch}
+                  disabled={busy || status !== 'ready'}
+                  onChange={event => {
+                    void configurePerformerWindow(
+                      client.label,
+                      client.device,
+                      client.orientation,
+                      event.target.checked
+                    )
+                  }}
+                />
+                {t('creation.performers.mouseTouch')}
+              </label>
               <Button
                 size="sm"
                 variant="ghost"

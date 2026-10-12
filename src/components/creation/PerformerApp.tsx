@@ -2,6 +2,7 @@ import {
   emitPerformerPage,
   emitPerformerReady,
   onPerformerConfig,
+  emitPerformerInput,
 } from '@/lib/events'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -13,6 +14,7 @@ import { setColorThemeAttribute } from '@/lib/color-theme'
 import { pushThemeToFrame } from '@/lib/theme-bridge'
 import { pushLocaleToFrame } from '@/lib/locale-bridge'
 import { MONITOR_REVEAL_TIMEOUT_MS } from '@/lib/monitor-reveal'
+import { pushPerformerInput } from '@/lib/performer-input'
 import {
   performerViewport,
   type PerformerConfig,
@@ -22,6 +24,7 @@ import {
 export function PerformerApp() {
   const { t } = useTranslation()
   const [config, setConfig] = useState<PerformerConfig | null>(null)
+  const [preparationError, setPreparationError] = useState<string | null>(null)
   const [loaded, setLoaded] = useState(-1)
   const [timedOut, setTimedOut] = useState(-1)
   const latest = useRef<PerformerConfig | null>(null)
@@ -31,6 +34,19 @@ export function PerformerApp() {
   useEffect(() => {
     let disposed = false
     const label = getCurrentWebviewWindow().label
+    const prepare = async () => {
+      const result = await commands.preparePerformerWindow(
+        label,
+        i18n.t('creation.performers.dialogOK'),
+        i18n.t('creation.performers.dialogCancel')
+      )
+      if (result.status === 'error') throw new Error(result.error.detail)
+    }
+    const failed = (error: unknown) => {
+      if (disposed) return
+      setPreparationError(String(error))
+      void commands.fadeInWindow(label)
+    }
     const pending = onPerformerConfig(async value => {
       if (
         disposed ||
@@ -38,9 +54,19 @@ export function PerformerApp() {
         value.revision <= (latest.current?.revision ?? -1)
       )
         return
+      const previousLocale = latest.current?.locale
       latest.current = value
       await i18n.changeLanguage(value.locale)
+      if (value.locale !== previousLocale) {
+        try {
+          await prepare()
+        } catch (error) {
+          if (latest.current === value) failed(error)
+          return
+        }
+      }
       if (disposed || latest.current !== value) return
+      setPreparationError(null)
       setColorThemeAttribute(value.theme)
       setConfig(value)
       void commands
@@ -49,9 +75,12 @@ export function PerformerApp() {
           logger.warn('Failed to reveal performer window', { error })
         )
     })
-    void pending.then(() => {
-      if (!disposed) void emitPerformerReady(label)
-    })
+    void pending
+      .then(async () => {
+        await prepare()
+        if (!disposed) void emitPerformerReady(label)
+      })
+      .catch(failed)
     return () => {
       disposed = true
       void pending.then(off => off())
@@ -73,6 +102,7 @@ export function PerformerApp() {
     const push = () => {
       pushThemeToFrame(frame.current, origin, config.theme)
       pushLocaleToFrame(frame.current, origin, config.locale)
+      pushPerformerInput(frame.current, origin, config.mouseTouch)
     }
     push()
     const regain = () => {
@@ -127,6 +157,32 @@ export function PerformerApp() {
         )}
         <p>{t('creation.performers.simulation')}</p>
         <p>{t('creation.performers.connectionUnknown')}</p>
+        {config && (
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={config.mouseTouch}
+              onChange={event => {
+                void emitPerformerInput({
+                  label: config.label,
+                  identity: config.identity,
+                  runId: config.runId,
+                  navigation: config.navigation,
+                  revision: config.revision,
+                  mouseTouch: event.target.checked,
+                })
+              }}
+            />
+            {t('creation.performers.mouseTouch')}
+          </label>
+        )}
+        {preparationError && (
+          <p role="alert">
+            {t('creation.performers.prepareFailed', {
+              detail: preparationError,
+            })}
+          </p>
+        )}
       </header>
       <div ref={stage} className="performer-stage">
         {config?.url ? (
@@ -162,6 +218,11 @@ export function PerformerApp() {
                 const origin = new URL(url).origin
                 pushThemeToFrame(frame.current, origin, latest.current.theme)
                 pushLocaleToFrame(frame.current, origin, latest.current.locale)
+                pushPerformerInput(
+                  frame.current,
+                  origin,
+                  latest.current.mouseTouch
+                )
                 void emitPerformerPage({
                   label: config.label,
                   identity: config.identity,

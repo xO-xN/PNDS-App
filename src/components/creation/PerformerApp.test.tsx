@@ -21,10 +21,15 @@ const first: PerformerConfig = {
   orientation: 'portrait',
   theme: 'pond',
   locale: 'en',
+  mouseTouch: true,
 }
 let receive: (value: PerformerConfig) => Promise<void>
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.mocked(commands.preparePerformerWindow).mockResolvedValue({
+    status: 'ok',
+    data: null,
+  })
   vi.stubGlobal(
     'ResizeObserver',
     class {
@@ -45,6 +50,30 @@ beforeEach(() => {
       }
     return () => undefined
   })
+})
+
+it('prepares native JavaScript dialogs before allowing the real performer page to load', async () => {
+  let prepared!: (value: { status: 'ok'; data: null }) => void
+  vi.mocked(commands.preparePerformerWindow).mockReturnValueOnce(
+    new Promise(resolve => {
+      prepared = resolve
+    })
+  )
+  render(<PerformerApp />)
+  await waitFor(() =>
+    expect(commands.preparePerformerWindow).toHaveBeenCalledWith(
+      first.label,
+      'OK',
+      'Cancel'
+    )
+  )
+  expect(emitTo).not.toHaveBeenCalled()
+  await act(async () => prepared({ status: 'ok', data: null }))
+  await waitFor(() =>
+    expect(emitTo).toHaveBeenCalledWith('main', PERFORMER_READY, {
+      label: first.label,
+    })
+  )
 })
 
 it('keeps the real page and input in place while resizing, follows bridges, and ignores older configurations', async () => {
@@ -86,12 +115,48 @@ it('keeps the real page and input in place while resizing, follows bridges, and 
     'http://127.0.0.1:6868'
   )
   expect(post).toHaveBeenCalledWith(
+    { type: 'pnds:test-touch', version: 1, enabled: true },
+    'http://127.0.0.1:6868'
+  )
+  fireEvent.click(screen.getByRole('checkbox', { name: '鼠标模拟单点触摸' }))
+  expect(emitTo).toHaveBeenCalledWith(
+    'main',
+    'pnds:performer-input',
+    expect.objectContaining({
+      label: first.label,
+      identity: first.identity,
+      runId: 1,
+      navigation: 1,
+      revision: 2,
+      mouseTouch: false,
+    })
+  )
+  expect(frame).toHaveAttribute('src', first.url)
+  expect(post).toHaveBeenCalledWith(
     expect.objectContaining({ type: 'pnds:locale', locale: 'zh-CN' }),
     'http://127.0.0.1:6868'
   )
   await act(async () => receive(first))
   expect(frame).toHaveStyle({ width: '1024px', height: '768px' })
   expect(commands.startProject).not.toHaveBeenCalled()
+})
+
+it('reveals a readable preparation failure without loading an unprepared project page', async () => {
+  vi.mocked(commands.preparePerformerWindow).mockResolvedValueOnce({
+    status: 'error',
+    error: { code: 'io', detail: 'Native dialog setup failed' },
+  })
+  render(<PerformerApp />)
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Native dialog setup failed'
+  )
+  expect(commands.fadeInWindow).toHaveBeenCalledWith(first.label)
+  expect(screen.queryByTitle('Performer page #1')).not.toBeInTheDocument()
+  expect(emitTo).not.toHaveBeenCalledWith(
+    'main',
+    PERFORMER_READY,
+    expect.anything()
+  )
 })
 
 it('replaces only the navigation and rejects a late load from the previous run', async () => {

@@ -4,7 +4,7 @@ This page is for **Project creators**: it states precisely which interaction eve
 
 ## Ground rules: the embed model and the two keyboard layers
 
-- The **monitor page** is embedded as an iframe in the App's main window, filling the whole main area except the sidebar and the top title strip. The App does not read, inject into or call the cross-origin page DOM ([runtime-contract.md](./runtime-contract.md) §10); the input a page receives is standard web input events — there is no extra API.
+- The **monitor page** is embedded as an iframe in the App's main window, filling the whole main area except the sidebar and the top title strip. The App does not read, inject into or call the cross-origin page DOM ([runtime-contract.md](./runtime-contract.md) §10); the page receives standard web input events. The labelled performer input simulation below is a narrow native input exception, with no page-DOM inspection or music relay.
 - The **performer page** normally opens in performers' browsers against the Project server. Creation mode can also embed real performer pages in multiple independent native test windows; messages still travel directly through that server.
 - Keyboard input passes through **two layers** before the page: the **native menu-accelerator layer** (the macOS menu bar, app-wide, never yields) and the **App web layer** (the ⌘-shortcut layer of the App's own UI, which yields during page interaction). Which layer a chord belongs to decides whether the page can never see it, or may use it while the user interacts — see the two tables below.
 
@@ -74,3 +74,5 @@ When choosing interaction keys for the monitor page:
 - **Unreliable**: macOS system-level chords — `⌘ Tab`, `⌘ Space`, screenshots (`⌘ ⇧ 3` / `4` / `5`), … — no web page can intercept these, in WKWebView or anywhere else.
 - **Avoid the `⌘` family altogether**: beyond Table A's menu accelerators and the system-level chords, future App versions may add more `⌘` accelerators. Plain keys with `⇧` / `⌥` cover nearly every performance interaction; the cost of a key conflict far outweighs the elegance of a chord.
 - Table B's chords are usable but carry the yield semantics: they belong to the page while it holds focus (or the pointer is inside the monitor area) and to the App otherwise — if a performance-critical action rides on a conditional chord, make "focus is inside the page" a stable state of the work (for example, have the page focus an element on load).
+
+Performer test windows support the Project's normal JavaScript dialogs, including player-number prompts. **Mouse simulates one touch** is visibly enabled for new test clients; drag with the left button to simulate one contact, or turn it off for the page's original mouse behavior. Switching this option does not reload the page. These are untrusted synthetic touch events; native text/form controls remain usable, and real multitouch, pressure, sensors and mobile-browser behavior still require a device.

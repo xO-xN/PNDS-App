@@ -283,3 +283,7 @@ plain-Escape restore accelerator remains main-only. Performer shells have no
 App web shortcut layer: nonreserved keyboard/pointer input belongs to the real
 page. Cmd+Shift+R in creation refreshes existing test pages through the shared
 manual refresh workflow. App-global menu accelerators remain reserved.
+
+JavaScript sheets in performer tests use native Return/Escape button handling.
+Focused-window dispatch resolves the sheet parent, so Cmd+W/fullscreen do not
+fall back to the main window merely because the sheet is the key NSWindow.

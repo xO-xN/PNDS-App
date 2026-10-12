@@ -384,9 +384,9 @@ The Project's monitor page must:
 
 Entering or leaving macOS full screen only changes the window's size and decoration state: the App does not restart Node and does not reload the monitor iframe; the Project must adapt using standard resize events.
 
-**Right-click belongs to the page author**: the App suppresses WKWebView's native web menu (Reload, Open Frame in New Window, Back, …; editable fields keep the system copy/paste menu). The suppression only calls `preventDefault()` and never stops propagation — a Project's own context menu, built by listening for `contextmenu` in its monitor page, coexists with it naturally, and the App needs (and offers) no wiring for it. Right-click in the App's own UI (the sidebar, …) belongs to the App's designed menus; the performer page is never opened inside the App, so its right-click is entirely the Project's own business.
+**Right-click belongs to the page author**: the App suppresses WKWebView's native web menu (Reload, Open Frame in New Window, Back, …; editable fields keep the system copy/paste menu). The suppression only calls `preventDefault()` and never stops propagation — a Project's own context menu, built by listening for `contextmenu` in its monitor page, coexists with it naturally, and the App needs (and offers) no wiring for it. Right-click in the App's own UI (the sidebar, …) belongs to the App's designed menus; performer pages on devices own their right clicks. Creation test windows retain native menu suppression while preserving the page's own contextmenu events.
 
-The App never reads, injects or calls into cross-origin iframe DOM.
+The App shell does not read or call into cross-origin score-page DOM or business functions. Creation performer test windows are a narrow native-input exception: they support standard JavaScript dialogs, and an input-only WKUserScript supplies simulation only while their labelled mouse-single-touch option is enabled. It dispatches untrusted touch events and recognises native form controls; it does not inspect score state, replace page content or relay music messages. Performance/projection monitor pages do not receive this input simulation. Device browsers still provide their own real input capabilities.
 
 A manual Refresh may rebuild the iframe on the user's explicit action; it is a recovery tool, not part of the normal resize flow.
 
@@ -430,7 +430,7 @@ Conventions:
 - `palette` carries the final colour values (its keys share names with the App's semantic tokens) — most Projects consume only the palette and never need the theme concept; when the App adds a theme, Projects follow with zero changes. The `theme` name is for Projects that fork a whole design language (e.g. switching corner radii or font weights per theme).
 - Delivery is best-effort, last-value-wins: the App does not guarantee exactly-once (a suspended WebView may drop messages; the App re-pushes on focus regain). The page must apply messages idempotently (writing the values into its own CSS variables is enough).
 - To avoid a first-frame colour flash, a page may read the URL query parameter `?theme=<name>` as its initial value. From v1.3.0 the App **always** carries the parameter when loading or reloading the monitor (the value is snapshotted at iframe navigation — switching theme mid-session does not reload the page; updates still arrive via postMessage); the Project must still tolerate its absence (opening directly in a browser, older App versions, …).
-- The performer page takes no part (it is not opened inside the App and always uses the Project's own colours).
+- Performers' device browsers receive no App push and use the Project's colours. Creation performer test windows send the same optional first-frame `?theme=` and palette messages; pages may ignore them and remain unchanged.
 - The App never injects or rewrites anything in the monitor page — whether and how to use the push is entirely the Project's call.
 
 ### Locale push
@@ -453,7 +453,7 @@ Conventions:
 - Delivery semantics match the theme bridge: best-effort, last-value-wins; the page must apply messages idempotently; the App does not guarantee exactly-once.
 - To avoid a first-frame language flash, a page may read the URL query parameter `?lang=<code>` as its initial value. The value is snapshotted at iframe navigation — switching language mid-session does not reload the page; updates arrive via postMessage; the Project must still tolerate its absence (opening directly in a browser, older App versions, …).
 - Pages that don't implement locale following are entirely unaffected: the App never injects or rewrites anything in the monitor page, and `?lang=` is a harmless query parameter to a page that ignores it.
-- The performer page takes no part (it is not opened inside the App and always uses the Project's own language).
+- Performers' device browsers receive no App push and use the Project's language. Creation performer test windows send the same optional first-frame `?lang=` and locale messages; pages may ignore them and remain unchanged.
 
 ## 12. Shutdown contract
 

@@ -500,3 +500,9 @@ Project close, confirmed mode exit and project switch clean up old shells;
 cancelled confirmations and hiding the main window retain them. Actual exit
 has a Rust cleanup fallback. Late callbacks require workspace/run/navigation
 ownership. See [creation-workspace.md](./creation-workspace.md).
+
+Performer tests support normal JavaScript alert/confirm/prompt as native sheets,
+including a prompt before a project chooses its performer ID. A labelled mouse
+single-touch option is enabled for new clients and can be changed per client
+without reloading; it produces untrusted DOM touch events while preserving native
+form controls. This is input simulation, not mobile browser/hardware emulation.

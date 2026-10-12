@@ -216,6 +216,14 @@ async closeCreationPerformerWindows(labels: string[] | null) : Promise<Result<nu
     else return { status: "error", error: e  as any };
 }
 },
+async preparePerformerWindow(label: string, ok: string, cancel: string) : Promise<Result<null, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("prepare_performer_window", { label, ok, cancel }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async commitCreationProject(identity: string | null, generation: string) : Promise<Result<CreationRuntime, CreationError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("commit_creation_project", { identity, generation }) };

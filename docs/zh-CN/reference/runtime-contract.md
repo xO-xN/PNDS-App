@@ -384,9 +384,9 @@ monitor iframe 在 session 中保持同一文档实例。窗口 resize 和进入
 
 进入或退出 macOS 全屏只改变窗口尺寸与装饰状态：App 不重启 Node、不重载 monitor iframe，工程必须依靠标准 resize 事件完成适配。
 
-**右键属于页面作者**：App 抑制 WKWebView 的原生 web 菜单（Reload / Open Frame in New Window / Back 等；可编辑字段保留系统复制粘贴菜单）。抑制只 `preventDefault`、不拦截事件传播——工程在 monitor 页监听 `contextmenu` 实现的自定义右键菜单与它天然共存，App 侧无需也不提供任何接线。App 自身界面（侧栏等）的右键属于 App 设计的菜单；performer 页不在 App 中打开，右键完全由工程自理。
+**右键属于页面作者**：App 抑制 WKWebView 的原生 web 菜单（Reload / Open Frame in New Window / Back 等；可编辑字段保留系统复制粘贴菜单）。抑制只 `preventDefault`、不拦截事件传播——工程在 monitor 页监听 `contextmenu` 实现的自定义右键菜单与它天然共存，App 侧无需也不提供任何接线。App 自身界面（侧栏等）的右键属于 App 设计的菜单；设备浏览器中的 performer 页右键完全由工程自理；创作测试窗口沿用原生菜单抑制，保留页面自己的 contextmenu 事件。
 
-App 不读取、注入或调用跨 origin iframe DOM。
+App 外框不读取或调用跨 origin 谱面 DOM 和业务函数。创作 performer 测试窗口有一项窄的原生输入例外：支持标准 JavaScript 弹窗；明确标注的「鼠标模拟单点触摸」选项开启时，通过输入专用 WKUserScript 分派不可信触摸事件，并识别原生表单控件。它不读取乐谱状态、替换页面内容或转发音乐消息。演出／投影 monitor 不启用这项输入模拟；设备浏览器仍提供各自的真实输入能力。
 
 手动 Refresh 可以由用户显式重建 iframe；它是恢复工具，不是正常 resize 流程。
 
@@ -435,7 +435,7 @@ v1.2.3 起，App 在 monitor iframe 加载完成、主题切换与窗口重获�
 - `palette` 是最终颜色值（键名与 App 的语义 token 同名）——大多数工程只消费 palette，无需知道主题概念；App 新增主题时工程零改动自动跟随。`theme` 名留给需要整套设计语言分叉的工程（如按主题切换圆角/字重）。
 - 送达语义是 best-effort、“最新值覆盖”：App 不保证恰好一次（挂起的 WebView 可能丢消息，App 在焦点重获时重推）。页面必须幂等地应用消息（把值写入自己的 CSS 变量即可）。
 - 页面首帧配色如需避免闪变，可在加载时读取 URL 查询参数 `?theme=<name>` 作为初值。v1.3.0 起 App 加载与重载 monitor 时**总是**携带该参数（值在 iframe 导航时快照——会话中切换主题不会重载页面，更新仍由 postMessage 推送）；工程仍须容忍其缺席（直接在浏览器打开、旧版 App 等）。
-- performer 页不参与（不在 App 中打开，永远使用工程自带配色）。
+- 演奏者设备浏览器不接收 App 推送，使用工程自带配色。创作 performer 测试窗口会发送相同的可选首帧 `?theme=` 和 palette 消息；页面可以忽略它们，保持原样。
 - App 不会注入或改写 monitor 页的任何内容——是否、如何使用推送完全由工程决定。
 
 ### 语言推送
@@ -458,7 +458,7 @@ v1.3.0 起，App 以与主题桥相同的机制向 monitor 页面推送当前**�
 - 送达语义与主题桥一致：best-effort、“最新值覆盖”，页面必须幂等地应用消息；App 不保证恰好一次。
 - 页面首帧如需避免语言闪变，可在加载时读取 URL 查询参数 `?lang=<code>` 作为初值。值在 iframe 导航时快照——会话中切换语言不会重载页面，更新由 postMessage 推送；工程仍须容忍其缺席（直接在浏览器打开、旧版 App 等）。
 - 不实现语言跟随的页面完全不受影响：App 不注入或改写 monitor 页的任何内容，`?lang=` 对忽略它的页面只是无害的查询参数。
-- performer 页不参与（不在 App 中打开，永远使用工程自带语言）。
+- 演奏者设备浏览器不接收 App 推送，使用工程自带语言。创作 performer 测试窗口会发送相同的可选首帧 `?lang=` 和 locale 消息；页面可以忽略它们，保持原样。
 
 ## 12. Shutdown Contract
 

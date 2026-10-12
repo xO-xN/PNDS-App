@@ -175,6 +175,19 @@ pub async fn close_creation_performer_windows(
 
 #[tauri::command]
 #[specta::specta]
+pub async fn prepare_performer_window(
+    app: AppHandle,
+    label: String,
+    ok: String,
+    cancel: String,
+) -> Result<(), CreationError> {
+    crate::performer::prepare_window(&app, &label, ok, cancel)
+        .await
+        .map_err(|error| CreationError::new(CreationErrorCode::Io, error))
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn commit_creation_project(
     app: AppHandle,
     state: State<'_, CreationState>,

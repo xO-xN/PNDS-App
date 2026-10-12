@@ -1,5 +1,39 @@
 //! Project test windows have independent lifetimes and no music-message bridge.
 use tauri::{AppHandle, Manager, Runtime};
+#[cfg(target_os = "macos")]
+mod native;
+
+pub async fn prepare_window<R: Runtime>(
+    app: &AppHandle<R>,
+    label: &str,
+    ok: String,
+    cancel: String,
+) -> Result<(), String> {
+    if !is_performer_label(label) {
+        return Err("Invalid performer window label".into());
+    }
+    let window = app
+        .get_webview_window(label)
+        .ok_or("Performer window not found")?;
+    #[cfg(target_os = "macos")]
+    {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        window
+            .with_webview(move |webview| {
+                // Tauri runs this closure on the UI thread; await it before the
+                // shell creates any project iframe (including its first prompt).
+                let result = unsafe { native::install(webview.inner().cast(), &ok, &cancel) };
+                let _ = tx.send(result);
+            })
+            .map_err(|error| error.to_string())?;
+        rx.await.map_err(|error| error.to_string())?
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (window, ok, cancel);
+        Ok(())
+    }
+}
 
 pub fn is_performer_label(label: &str) -> bool {
     let Some(id) = label.strip_prefix("performer-") else {
@@ -51,6 +85,23 @@ pub fn close_windows<R: Runtime>(
 mod tests {
     use super::*;
     use tauri::test::{mock_builder, mock_context, noop_assets};
+
+    #[tokio::test]
+    async fn preparation_rejects_unrelated_or_missing_windows_before_native_access() {
+        let app = mock_builder().build(mock_context(noop_assets())).unwrap();
+        for label in [
+            "main",
+            "projection",
+            "performer-../../main",
+            "performer-00000000-0000-4000-8000-000000000001",
+        ] {
+            assert!(
+                prepare_window(app.handle(), label, "OK".into(), "Cancel".into())
+                    .await
+                    .is_err()
+            );
+        }
+    }
 
     #[test]
     fn scoped_close_rejects_non_test_labels_before_dispatch() {

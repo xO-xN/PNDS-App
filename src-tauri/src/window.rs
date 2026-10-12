@@ -370,6 +370,42 @@ pub async fn fade_in_window(app: AppHandle, label: Option<String>) -> Result<(),
 #[tauri::command]
 #[specta::specta]
 pub async fn focused_window_label(app: AppHandle) -> Result<String, String> {
+    // A document-modal JavaScript sheet is a separate key NSWindow. Resolve
+    // its owning App window before the ordinary focus query, so Cmd+W cannot
+    // fall back to closing the main project while a performer prompt is up.
+    #[cfg(target_os = "macos")]
+    {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        let handle = app.clone();
+        app.run_on_main_thread(move || {
+            use objc2_app_kit::NSApplication;
+            use objc2_foundation::MainThreadMarker;
+            let label = MainThreadMarker::new().and_then(|mtm| {
+                let key = NSApplication::sharedApplication(mtm).keyWindow()?;
+                let mut parent = key.sheetParent()?;
+                while let Some(ancestor) = parent.sheetParent() {
+                    parent = ancestor;
+                }
+                handle
+                    .webview_windows()
+                    .into_iter()
+                    .find_map(|(label, window)| {
+                        window
+                            .ns_window()
+                            .ok()
+                            .filter(|pointer| {
+                                *pointer == objc2::rc::Retained::as_ptr(&parent).cast_mut().cast()
+                            })
+                            .map(|_| label)
+                    })
+            });
+            let _ = tx.send(label);
+        })
+        .map_err(|error| error.to_string())?;
+        if let Some(label) = rx.await.map_err(|error| error.to_string())? {
+            return Ok(label);
+        }
+    }
     Ok(app
         .webview_windows()
         .into_iter()

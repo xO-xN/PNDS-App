@@ -3,6 +3,7 @@ import {
   onPerformerReady,
   onPerformerPage,
   onPerformerDestroyed,
+  onPerformerInput,
 } from '@/lib/events'
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
 import type { BackgroundThrottlingPolicy } from '@tauri-apps/api/window'
@@ -299,6 +300,7 @@ export async function openPerformerWindow(
         theme: currentColorThemeSetting(),
         locale: currentResolvedLanguage(),
         pageStatus: 'loading',
+        mouseTouch: true,
       },
     }
     clients.set(label, client)
@@ -344,7 +346,8 @@ export async function focusPerformerWindow(label: string): Promise<void> {
 export async function configurePerformerWindow(
   label: string,
   device: PerformerDevice,
-  orientation: PerformerOrientation
+  orientation: PerformerOrientation,
+  mouseTouch?: boolean
 ): Promise<void> {
   const client = clients.get(label)
   if (!client || !canOpen()) return
@@ -352,6 +355,7 @@ export async function configurePerformerWindow(
     ...client.state,
     device,
     orientation,
+    mouseTouch: mouseTouch ?? client.state.mouseTouch,
     revision: client.state.revision + 1,
   }
   publish()
@@ -402,6 +406,23 @@ export function setupPerformerWindowBridge(): () => void {
     }),
     onPerformerPage(pageResult),
     onPerformerDestroyed(retire),
+    onPerformerInput(change => {
+      const client = clients.get(change.label)
+      if (
+        !client ||
+        change.identity !== client.state.identity ||
+        change.runId !== client.state.runId ||
+        change.navigation !== client.state.navigation ||
+        change.revision !== client.state.revision
+      )
+        return
+      void configurePerformerWindow(
+        change.label,
+        client.state.device,
+        client.state.orientation,
+        change.mouseTouch
+      )
+    }),
   ]
   bridgeReady = Promise.all(pending)
   void bridgeReady.catch(error =>

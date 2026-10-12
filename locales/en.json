@@ -482,7 +482,7 @@
   "creation.performers.landscape": "Landscape",
   "creation.performers.add": "Add performer",
   "creation.performers.empty": "Start a test, then add independent performer windows.",
-  "creation.performers.simulation": "Viewport dimensions only; touch, sensors and mobile browser capabilities are not emulated.",
+  "creation.performers.simulation": "Viewport simulation; optional mouse input simulates one untrusted touch. Sensors, multitouch and mobile browser capabilities are not emulated.",
   "creation.performers.connectionUnknown": "Connection unknown",
   "creation.performers.focus": "Focus",
   "creation.performers.close": "Close",
@@ -496,5 +496,9 @@
   "creation.performers.page.loading": "Loading page",
   "creation.performers.page.loaded": "Navigation finished",
   "creation.performers.page.timeout": "Page load timed out",
-  "creation.performers.page.standby": "Waiting for the running project"
+  "creation.performers.page.standby": "Waiting for the running project",
+  "creation.performers.dialogOK": "OK",
+  "creation.performers.dialogCancel": "Cancel",
+  "creation.performers.mouseTouch": "Mouse simulates one touch",
+  "creation.performers.prepareFailed": "Test window preparation failed: {{detail}}"
 }
