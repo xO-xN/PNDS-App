@@ -18,6 +18,7 @@ pub fn generate_bindings() -> Builder<tauri::Wry> {
         preferences::load_preferences,
         preferences::save_preferences,
         creation::open_creation_project,
+        creation::create_blank_project,
         creation::get_creation_manifest,
         creation::preflight_creation_project,
         creation::start_creation_project,

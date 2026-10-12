@@ -38,6 +38,7 @@ import { TrafficLights } from '@/components/shell'
 import { CreationModeButton } from './CreationModeButton'
 import { CreationFileEditor } from './CreationFileEditor'
 import { CreationProjectPicker } from './CreationProjectPicker'
+import { CreationNewProject } from './CreationNewProject'
 import { CreationErrorNotice } from './CreationErrorNotice'
 import { CreationConsole } from './CreationConsole'
 import { useCreationTestStore } from '@/store/creation-test-store'
@@ -440,6 +441,7 @@ export function CreationView() {
   const settling = useCreationStore(state => state.modePhase === 'settling')
   const expanded = useCreationTestStore(state => state.expanded)
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [newProjectOpen, setNewProjectOpen] = useState(false)
   useEffect(() => registerCreationParticipant(creationDraftsParticipant), [])
   useEffect(() => registerCreationParticipant(creationHandoffParticipant), [])
   return (
@@ -483,6 +485,13 @@ export function CreationView() {
                   {t('creation.openFolder')}
                 </Button>
                 <h3 className="mt-6 mb-3 text-xs">{t('creation.recent')}</h3>
+                <Button
+                  variant="outline"
+                  disabled={opening}
+                  onClick={() => setNewProjectOpen(true)}
+                >
+                  {t('creation.newProject.open')}
+                </Button>
                 {recent.map(path => (
                   <Button
                     key={path}
@@ -506,7 +515,7 @@ export function CreationView() {
           </>
         )}
       </div>
-      {!pickerOpen && (error || opening) && (
+      {!pickerOpen && !newProjectOpen && (error || opening) && (
         <div className="max-h-1/4 shrink-0 overflow-auto bg-(--pnds-card) p-3">
           {error ? (
             <CreationErrorNotice error={error} />
@@ -516,7 +525,16 @@ export function CreationView() {
         </div>
       )}
       {pickerOpen && (
-        <CreationProjectPicker onClose={() => setPickerOpen(false)} />
+        <CreationProjectPicker
+          onClose={() => setPickerOpen(false)}
+          onNewProject={() => {
+            setPickerOpen(false)
+            setNewProjectOpen(true)
+          }}
+        />
+      )}
+      {newProjectOpen && (
+        <CreationNewProject onClose={() => setNewProjectOpen(false)} />
       )}
     </div>
   )

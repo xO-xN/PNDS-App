@@ -8,6 +8,7 @@ import {
   type CreationWorkspace,
   type CreationRuntime,
   type Result,
+  type NewProjectOptions,
 } from '@/lib/tauri-bindings'
 import { DEFAULT_OSC_TARGET, updatePreferences } from '@/lib/preferences'
 import { logger } from '@/lib/logger'
@@ -54,7 +55,8 @@ interface CreationState {
   enter: () => Promise<void>
   leave: () => Promise<void>
   restoreRecent: (paths: string[]) => void
-  open: (path: string) => Promise<boolean>
+  open: (path: string, newProject?: NewProjectOptions) => Promise<boolean>
+  create: (options: NewProjectOptions) => Promise<boolean>
   pick: () => Promise<boolean>
 }
 let openQueue: Promise<unknown> = Promise.resolve()
@@ -342,7 +344,9 @@ export const useCreationStore = create<CreationState>((set, get) => ({
     set(state => ({
       recentPaths: [...new Set([...state.recentPaths, ...paths])].slice(0, 20),
     })),
-  open: async path => {
+  create: options =>
+    get().open(`${options.parent}/${options.folderName}`, options),
+  open: async (path, newProject) => {
     if (
       !get().active ||
       get().opening ||
@@ -361,12 +365,18 @@ export const useCreationStore = create<CreationState>((set, get) => ({
       try {
         const runtime = unwrap(await commands.getCreationRuntime())
         assertAvailable(runtime)
-        prepared = unwrap(await commands.prepareCreationProject(path))
+        if (newProject) {
+          if (!(await approveCreationDiscard())) return false
+          if (!(await confirmDiscardCreationDrafts())) return false
+          if (!owns()) return false
+          assertGeneration(unwrap(await commands.getCreationRuntime()), runtime)
+          prepared = unwrap(await commands.createBlankProject(newProject))
+        } else prepared = unwrap(await commands.prepareCreationProject(path))
         if (!owns()) return false
-        if (!(await approveCreationDiscard())) return false
+        if (!newProject && !(await approveCreationDiscard())) return false
         // #154: drafts ask for one explicit discard confirmation before the
         // switch proceeds; cancelling keeps drafts, run and windows.
-        if (!(await confirmDiscardCreationDrafts())) return false
+        if (!newProject && !(await confirmDiscardCreationDrafts())) return false
         if (!owns()) return false
         let current = unwrap(await commands.getCreationRuntime())
         assertGeneration(current, runtime)
@@ -398,7 +408,18 @@ export const useCreationStore = create<CreationState>((set, get) => ({
         }))
         return true
       } catch (error) {
-        if (owns()) set({ error: creationTransportError(error) })
+        if (owns()) {
+          const failure = creationTransportError(error)
+          set({
+            error:
+              newProject && prepared
+                ? {
+                    ...failure,
+                    detail: `${i18n.t('creation.newProject.createdAt', { path: prepared.project.root })}\n${failure.detail}`,
+                  }
+                : failure,
+          })
+        }
         return false
       } finally {
         if (prepared && !committed)

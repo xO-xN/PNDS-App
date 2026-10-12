@@ -2,6 +2,191 @@ use super::*;
 use std::fs;
 
 #[test]
+fn blank_project_is_complete_localized_and_prepared_without_replacing_the_old_workspace() {
+    let temp = tempfile::tempdir().unwrap();
+    let old = project(temp.path(), "old");
+    let mut access = CreationAccess::default();
+    let protection = Protection::default();
+    let old_identity = access.open(&old, &protection).unwrap().project.identity;
+    let options = NewProjectOptions {
+        parent: temp.path().to_string_lossy().into_owned(),
+        folder_name: "new-score".into(),
+        name: "My New Score".into(),
+        author: "Composer".into(),
+        description: "A new piece.".into(),
+        locale: "zh-CN".into(),
+    };
+    let prepared = access.create_blank(&options, &protection).unwrap();
+    assert_eq!(prepared.project.source, CreationSource::Folder);
+    assert_eq!(prepared.project.name, "My New Score");
+    assert!(access.read(&old_identity, "server.js", &protection).is_ok());
+    let root = temp.path().join("new-score");
+    let manifest = crate::project::manifest::load_manifest(&root).unwrap();
+    assert_eq!(manifest.id, "new-score");
+    assert_eq!(
+        manifest.audio.default_mode,
+        crate::types::AudioMode::Internal
+    );
+    assert_eq!(
+        manifest.audio.supported_modes,
+        [
+            crate::types::AudioMode::Internal,
+            crate::types::AudioMode::External,
+            crate::types::AudioMode::None
+        ]
+    );
+    assert_eq!(manifest.audio.output_channels, 2);
+    crate::project::bundle::validate_packable(&root).unwrap();
+    assert!(!root.join("node_modules").exists());
+    assert!(root.join("README.zh-CN.md").is_file());
+    assert!(!root.join("README.md").exists());
+    let readme = crate::project::readme::read_project_readme(root.clone(), Some("zh-CN"))
+        .unwrap()
+        .unwrap();
+    assert!(readme.contains("title: My New Score\ncomposer: Composer\n"));
+    let handoff = fs::read_to_string(root.join("docs/creator-handoff.md")).unwrap();
+    assert!(handoff.contains("README.zh-CN.md"));
+    assert!(handoff.contains("README.md"));
+    assert!(handoff.contains("Status / 状态: pending"));
+    assert!(fs::read_to_string(root.join("AGENTS.md"))
+        .unwrap()
+        .contains("/Applications/PNDS.app/Contents/Resources/help/en/reference/README.md"));
+    access
+        .commit(&prepared.project.identity, &protection)
+        .unwrap();
+    assert!(access
+        .read(&prepared.project.identity, "server.js", &protection)
+        .is_ok());
+    assert_eq!(
+        access
+            .read(&old_identity, "server.js", &protection)
+            .unwrap_err()
+            .code,
+        CreationErrorCode::InvalidIdentity
+    );
+}
+
+#[test]
+fn blank_creation_refuses_existing_targets_protected_roots_escape_and_permission_failure() {
+    use std::os::unix::fs::PermissionsExt;
+    let temp = tempfile::tempdir().unwrap();
+    let mut access = CreationAccess::default();
+    let protection = Protection::default();
+    let old = project(temp.path(), "old");
+    let identity = access.open(&old, &protection).unwrap().project.identity;
+    let options = NewProjectOptions {
+        parent: temp.path().to_string_lossy().into_owned(),
+        folder_name: "existing".into(),
+        name: "Score".into(),
+        author: String::new(),
+        description: String::new(),
+        locale: "en".into(),
+    };
+    fs::create_dir(temp.path().join("existing")).unwrap();
+    fs::write(
+        temp.path().join("existing/author.txt"),
+        "author-owned content",
+    )
+    .unwrap();
+    assert_eq!(
+        access.create_blank(&options, &protection).unwrap_err().code,
+        CreationErrorCode::TargetExists
+    );
+    assert_eq!(
+        fs::read_to_string(temp.path().join("existing/author.txt")).unwrap(),
+        "author-owned content"
+    );
+    for name in ["../escape", "/absolute", "two/folders", "-invalid", ""] {
+        let rejected = NewProjectOptions {
+            folder_name: name.into(),
+            ..options.clone()
+        };
+        assert_eq!(
+            access
+                .create_blank(&rejected, &protection)
+                .unwrap_err()
+                .code,
+            CreationErrorCode::InvalidProject
+        );
+    }
+    let managed = temp.path().join("bundles");
+    fs::create_dir(&managed).unwrap();
+    let locked = Protection {
+        bundles: vec![managed.clone()],
+        utilities: vec![],
+    };
+    let rejected = NewProjectOptions {
+        parent: managed.to_string_lossy().into_owned(),
+        folder_name: "forbidden".into(),
+        ..options.clone()
+    };
+    assert_eq!(
+        access.create_blank(&rejected, &locked).unwrap_err().code,
+        CreationErrorCode::Permission
+    );
+    let denied = temp.path().join("denied");
+    fs::create_dir(&denied).unwrap();
+    fs::set_permissions(&denied, fs::Permissions::from_mode(0o555)).unwrap();
+    let refused = access.create_blank(
+        &NewProjectOptions {
+            parent: denied.to_string_lossy().into_owned(),
+            folder_name: "score".into(),
+            ..options
+        },
+        &protection,
+    );
+    fs::set_permissions(&denied, fs::Permissions::from_mode(0o755)).unwrap();
+    assert_eq!(refused.unwrap_err().code, CreationErrorCode::Permission);
+    assert!(fs::read_dir(&denied).unwrap().next().is_none());
+    assert!(access.read(&identity, "server.js", &protection).is_ok());
+    assert!(!fs::read_dir(temp.path()).unwrap().any(|entry| entry
+        .unwrap()
+        .file_name()
+        .to_string_lossy()
+        .starts_with(".pnds-create-")));
+}
+
+#[test]
+fn concurrent_blank_creations_publish_exactly_one_complete_project_without_replacing_it() {
+    let temp = tempfile::tempdir().unwrap();
+    let parent = temp.path().to_path_buf();
+    let barrier = std::sync::Arc::new(std::sync::Barrier::new(2));
+    let threads: Vec<_> = (0..2)
+        .map(|_| {
+            let barrier = barrier.clone();
+            let parent = parent.clone();
+            std::thread::spawn(move || {
+                let options = NewProjectOptions {
+                    parent: parent.to_string_lossy().into_owned(),
+                    folder_name: "new-score".into(),
+                    name: "Score".into(),
+                    author: String::new(),
+                    description: String::new(),
+                    locale: "en".into(),
+                };
+                barrier.wait();
+                CreationAccess::default().create_blank(&options, &Protection::default())
+            })
+        })
+        .collect();
+    let results: Vec<_> = threads
+        .into_iter()
+        .map(|thread| thread.join().unwrap())
+        .collect();
+    assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 1);
+    assert_eq!(
+        results
+            .iter()
+            .find_map(|result| result.as_ref().err())
+            .unwrap()
+            .code,
+        CreationErrorCode::TargetExists
+    );
+    crate::project::bundle::validate_packable(&parent.join("new-score")).unwrap();
+    assert_eq!(fs::read_dir(&parent).unwrap().count(), 1);
+}
+
+#[test]
 fn saved_cover_fixture_round_trips_through_the_intro_language_fallback() {
     let temp = tempfile::tempdir().unwrap();
     let root = project(temp.path(), "readme-fixture");

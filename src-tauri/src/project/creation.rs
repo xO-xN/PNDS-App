@@ -13,7 +13,11 @@ use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
 use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
+mod blank;
+#[cfg(test)]
+mod blank_runtime;
 mod handoff;
+pub use blank::NewProjectOptions;
 
 pub const TEXT_MAX_BYTES: u64 = 1024 * 1024;
 pub const IMAGE_MAX_BYTES: u64 = 4 * 1024 * 1024;

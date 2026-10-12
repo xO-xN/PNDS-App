@@ -72,7 +72,7 @@ export default tseslint.config(
   {
     // Node-side scripts and their vitest harness (.mjs) — plain Node
     // globals, no browser/DOM assumptions.
-    files: ['scripts/**/*.{js,mjs}', 'src/lib/*.test.mjs'],
+    files: ['scripts/**/*.{js,mjs}', 'src/lib/*.test.mjs', 'src-tauri/resources/blank-project/**/*.js', 'src-tauri/src/project/creation/*.mjs'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'module',
@@ -80,6 +80,7 @@ export default tseslint.config(
         console: 'readonly',
         process: 'readonly',
         Buffer: 'readonly',
+        URL: 'readonly',
         fetch: 'readonly',
         __dirname: 'readonly',
         __filename: 'readonly',

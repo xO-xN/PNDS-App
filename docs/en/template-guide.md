@@ -4,6 +4,33 @@ This guide walks you through creating, developing and publishing a PNDS Project 
 
 ---
 
+## Creating a blank project in the App
+
+Creation home and Switch to another project both offer New blank project. Enter
+the work name, new folder name/project ID and optional creator/description, then
+choose an existing parent through the native directory picker. The App creates
+one new project folder and never replaces an existing file or directory.
+Cancelling the picker, form or discard confirmation preserves the old workspace
+and running test.
+
+Success enters an editable workspace **without starting**. Test manually in
+Internal, External or None. The blank project has no piece sounds or production
+dependencies: Internal writes only zeros to the injected private buses, while
+External sends no music messages until a piece protocol is implemented. Technical
+audio code, SCD source and its matching precompiled SynthDef are included, so
+creation requires neither local sclang nor an npm installation.
+
+The initial README uses the creation-time App language, with the other language
+recorded as a pending task in `docs/creator-handoff.md`. Root AGENTS points an
+external agent to that document and the installed App's platform contracts for
+continuing the score, interaction and sound. Handoffs remain in source and are
+excluded from `.pnds`. After changing the SCD, use the App compiler and follow its
+local SuperCollider setup guidance.
+
+Permission, destination and creation failures show their actual reason. If the
+complete project was created but workspace switching failed, the message names
+the directory; open it later through Open folder project.
+
 ## Prerequisites
 
 Before you start, make sure your machine has:

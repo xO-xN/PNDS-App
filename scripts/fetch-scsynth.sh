@@ -101,6 +101,8 @@ if [ "${SKIP_SYNTHDEF_BUILD:-0}" != "1" ]; then
       exit 1
     fi
     echo "[pnds] synthdef ready: $SYNTHDEF_OUT_DIR/pndsMaster.scsyndef"
+    echo "[pnds] verifying the blank-project source and precompiled silent SynthDef…"
+    SCLANG="$SCLANG" bash "$ROOT/scripts/check-blank-synthdef.sh" --check
   else
     echo "warning: sclang not found at $SCLANG; skipping synthdef compile" >&2
     echo "         run \`npm run synthdefs:build\` separately if needed" >&2

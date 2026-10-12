@@ -160,6 +160,14 @@ async openCreationProject(path: string) : Promise<Result<CreationWorkspace, Crea
     else return { status: "error", error: e  as any };
 }
 },
+async createBlankProject(options: NewProjectOptions) : Promise<Result<CreationWorkspace, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("create_blank_project", { options }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async getCreationManifest(identity: string) : Promise<Result<Manifest, CreationError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("get_creation_manifest", { identity }) };
@@ -1382,6 +1390,7 @@ telematic?: boolean | null;
  * the same variable, zero project changes.
  */
 performerAddress?: string | null }
+export type NewProjectOptions = { parent: string; folderName: string; name: string; author: string; description: string; locale: string }
 /**
  * A queued `.pnds` bundle finished installing (formerly
  * `pnds:open-bundle`) — the frontend opens the installed project.

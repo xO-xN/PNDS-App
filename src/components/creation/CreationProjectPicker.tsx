@@ -19,7 +19,13 @@ import {
 } from '@/components/ui/dialog'
 import { CreationErrorNotice } from './CreationErrorNotice'
 
-export function CreationProjectPicker({ onClose }: { onClose: () => void }) {
+export function CreationProjectPicker({
+  onClose,
+  onNewProject,
+}: {
+  onClose: () => void
+  onNewProject: () => void
+}) {
   const { t } = useTranslation()
   const recent = useCreationStore(state => state.recentPaths)
   const performance = useProjectStore(state => state.recentProjectPaths)
@@ -102,6 +108,9 @@ export function CreationProjectPicker({ onClose }: { onClose: () => void }) {
         </Button>
         <Button variant="outline" disabled={opening} onClick={onClose}>
           {t('creation.cancel')}
+        </Button>
+        <Button variant="outline" disabled={opening} onClick={onNewProject}>
+          {t('creation.newProject.open')}
         </Button>
       </DialogContent>
     </Dialog>

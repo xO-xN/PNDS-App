@@ -8,7 +8,58 @@ The visual baseline is the A layout and eighth interaction review in
 share the existing App's 320px container, margins and window controls; file
 categories, title switching and the bottom mode control follow that prototype.
 The PNDS file badge identifies known contract configuration files, not module
-provenance. Unimplemented new-project/module controls stay absent.
+provenance. #160 adds blank-project creation; unimplemented module controls stay absent.
+
+## Blank-project creation (#160)
+
+The home and project picker open the same `CreationNewProject` form. Native
+selection chooses an existing parent; the single kebab-case folder name also
+becomes the project ID. Cancelling the native picker or form preserves the
+workspace and runtime. The existing serialized project-switch flow confirms
+discard **before** calling `createBlankProject`; a declined discard creates no
+directory. Filesystem creation completes before any old runtime is stopped.
+Success adopts a prepared identity through the ordinary commit command, without
+starting. A later switch failure reports the complete directory already created
+so a retry never silently overwrites it.
+
+`CreationAccess::create_blank` validates the target against backend bundle and
+utility protection. It writes fixed assets and localized metadata into a private
+sibling staging directory, using held directory descriptors and no-follow,
+exclusive file creation. Parent/staging identities are checked before publication;
+`renameatx_np(RENAME_EXCL)` publishes the whole directory without replacing even
+an empty existing target. Failed staging is cleaned, and publication/opening
+failures are reported separately. Generation prepares a new identity while
+leaving the old active capability valid until the frontend commits the switch.
+
+The generator embeds `resources/blank-project/` at compile time. Its ESM server
+uses only Node built-ins and the existing manifest/health/lifecycle contract;
+both HTTP roots serve responsive static pages and tolerate bridge/cache query
+parameters. The default is Internal, with External and None also declared.
+Internal loads the shipped mono `pndsBlank`, creates its group before readiness,
+and instantiates one zero-signal synth per injected private output bus. It waits
+for `/done` and `/synced`, releases its own group on stop and never quits the
+Host's scsynth. External sends no piece messages; None opens no audio socket.
+No production dependencies, performer business protocol or sound assets ship.
+
+The initial README is in the creation-time App language (`README.md` for English,
+`README.zh-CN.md` for Chinese). A pending other-language task reuses
+`project/handoff.rs`; AGENTS points at that handoff and the installed platform
+contracts. No translation model or Skills installation runs.
+
+The committed silent SynthDef is real sclang output. Normal builds compare its
+and the source's SHA-256 against `synthdef.sha256`, requiring no local sclang.
+Release provisioning uses the mounted SuperCollider compiler to regenerate it
+and compare bytes through `scripts/check-blank-synthdef.sh --check`. Updating the
+source requires the script's explicit `--write`, followed by `--check`; runtime
+creation only copies the checked bytes. Generated SCD uses `.add`, so the existing
+App compiler can rebuild it after the creator changes the source.
+
+Tests exercise UI cancellation/creation, temporary-directory publication and
+no-clobber conflicts, and generated artifacts through the fixed bundled Node,
+real HTTP and controlled OSC replies. The mode matrix starts and restarts each
+mode, checks private-bus routing/absence of External messages and graceful process
+and port cleanup. These are protocol evidence; native App/device acceptance
+remains with the user-started development App.
 
 ## Confirmed mode handoff
 

@@ -58,6 +58,7 @@ export type {
   HttpsProblemCode,
   HttpsValidationOutcome,
   Manifest,
+  NewProjectOptions,
   PackResult,
   PortOccupant,
   PortStatus,

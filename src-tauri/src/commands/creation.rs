@@ -136,6 +136,18 @@ pub async fn open_creation_project(
 
 #[tauri::command]
 #[specta::specta]
+pub async fn create_blank_project(
+    app: AppHandle,
+    state: State<'_, CreationState>,
+    options: crate::project::creation::NewProjectOptions,
+) -> Result<CreationWorkspace, CreationError> {
+    state
+        .run(move |access| access.create_blank(&options, &protection(&app)?))
+        .await
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn prepare_creation_project(
     app: AppHandle,
     state: State<'_, CreationState>,

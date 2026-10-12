@@ -190,6 +190,10 @@ vi.mock('@/lib/tauri-bindings', async () => {
           detail: 'openCreationProject not mocked',
         },
       }),
+      createBlankProject: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: { code: 'io', detail: 'createBlankProject not mocked' },
+      }),
       describeCreationProjects: vi
         .fn()
         .mockResolvedValue({ status: 'ok', data: [] }),
