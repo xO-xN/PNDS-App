@@ -196,5 +196,6 @@ full check passed 1,531 frontend tests, 361 main Rust tests and 39 DNS tests;
 real sclang compiled and checked the blank artifact. Both local 1.6.0 candidate
 Apps build and pass architecture, signature and resource inspection.
 [Current #164 evidence](../acceptance/164-v1.6.0-workflows.md) supersedes the
-earlier UI-task pending statuses above. Clean Apple Silicon and Intel release
-installation still remains required; #164 is kept open for that gate.
+earlier UI-task pending statuses above. On 2026-10-14 the owner additionally confirmed both candidate lanes tested
+without issues and requested a draft release. CI signing/asset verification is
+tracked in #164 before final release closeout.
