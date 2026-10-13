@@ -187,3 +187,14 @@ by the agent. Broader #164 and release readiness are not yet established.
 The starting worktree already contains uncommitted plans, prototypes,
 documentation, locale/scripts and package changes. They are preserved; this
 implementation is not their authorship or a reason to reset the worktree.
+
+## #164 follow-up acceptance (2026-10-13)
+
+The owner confirmed the complete Apple Silicon development-App workflow matrix
+passes, including the five real offline module additions. The ordinary-terminal
+full check passed 1,531 frontend tests, 361 main Rust tests and 39 DNS tests;
+real sclang compiled and checked the blank artifact. Both local 1.6.0 candidate
+Apps build and pass architecture, signature and resource inspection.
+[Current #164 evidence](../acceptance/164-v1.6.0-workflows.md) supersedes the
+earlier UI-task pending statuses above. Clean Apple Silicon and Intel release
+installation still remains required; #164 is kept open for that gate.
