@@ -9,7 +9,7 @@ The release system provides:
 - Automated GitHub Actions workflow for building releases
 - Version management script for updating all version files
 - Check-only update notifier (v1.4.3, #121): the app checks latest.json and points at Releases — it never downloads, installs, or relaunches
-- macOS builds in two lanes: Apple Silicon (arm64, mainline) and Intel (x86_64, macOS ≥ 12)
+- macOS builds in two lanes: Apple Silicon (arm64, mainline) and Intel (x86_64, macOS ≥ 13.5)
 
 ## Initial Setup
 
@@ -307,3 +307,18 @@ The signing pipeline is retained unchanged (check-only #121): the private key si
 | Updates not detected     | Verify endpoint URL and public key match                                                                |
 | Download fails           | Downloads happen in the browser now (check-only) — check the release assets, signatures, and disk space |
 | Check fails behind proxy | See [Proxies](#proxies-v140-issue-60) — System Settings proxy or `launchctl setenv`                     |
+
+## Version-specific draft notes
+
+Version notes can live under `.github/release-notes/`, such as `v1.6.0.md`.
+Pass that file to `gh release create --draft --notes-file` before the tag build
+finishes. The existing dual-lane workflow finds the draft by tag and uploads
+its artifacts normally.
+
+A pre-created draft retains its release body, but the workflow's embedded
+`RELEASE_BODY` can still become `latest.json.notes`. After both lanes finish,
+verify that the draft body and updater notes describe the actual version. If
+needed, copy the version-specific notes into that field and replace only
+`latest.json` with `gh release upload --clobber`, preserving platform URLs and
+signatures. Re-download the manifest to confirm the remote content and verify
+its asset identities against the draft's asset list.

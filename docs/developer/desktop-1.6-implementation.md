@@ -197,5 +197,5 @@ real sclang compiled and checked the blank artifact. Both local 1.6.0 candidate
 Apps build and pass architecture, signature and resource inspection.
 [Current #164 evidence](../acceptance/164-v1.6.0-workflows.md) supersedes the
 earlier UI-task pending statuses above. On 2026-10-14 the owner additionally confirmed both candidate lanes tested
-without issues and requested a draft release. CI signing/asset verification is
-tracked in #164 before final release closeout.
+without issues and requested a draft release. CI signing/asset verification passed for both lanes; #164 closes with the
+complete draft while publication remains a separate owner action.
