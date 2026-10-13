@@ -14,12 +14,12 @@ import { useSettingsStore } from '@/store/settings-store'
 import { useCreationStore } from '@/store/creation-store'
 import { useCreationTestStore } from '@/store/creation-test-store'
 import { Label } from '@/components/ui/label'
-import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
+  SelectValue,
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import type { SettingsSection } from '@/store/settings-store'
@@ -63,6 +63,9 @@ export function AudioSection({ section }: { section: SettingsSection }) {
   const { t } = useTranslation()
   const sampleRateSetting = useSettingsStore(state => state.sampleRateSetting)
   const sessionStatus = useSessionStore(state => state.sessionStatus)
+  const applied = useSessionStore(state =>
+    state.latestSnapshot?.status === 'ready' ? state.latestSnapshot : null
+  )
   const outputDevice = useSessionStore(state => state.outputDevice)
   const creationActive = useCreationStore(state => state.active)
   const creationChannels = useCreationTestStore(
@@ -169,6 +172,14 @@ export function AudioSection({ section }: { section: SettingsSection }) {
       <SectionTitle id={`settings-${section}-title`}>
         {t('settings.audio')}
       </SectionTitle>
+      {applied?.audioMode === 'internal' && (
+        <p className="desktop-applied" role="status">
+          {t('desktop.appliedAudio', {
+            mode: applied.audioMode,
+            device: `${applied.outputDevice ?? '—'}${applied.appliedSampleRate ? ` · ${applied.appliedSampleRate / 1000} kHz` : ''}`,
+          })}
+        </p>
+      )}
       {/* #58: output device (moved from the sidebar settings card) — the
           §7.6 display contract travels intact: channel counts per entry,
           channel-poor entries stay selectable with the red loss text, and
@@ -184,6 +195,7 @@ export function AudioSection({ section }: { section: SettingsSection }) {
           value={outputDevice}
           onValueChange={device => {
             useSessionStore.getState().setOutputDevice(device)
+            flagAudioChange()
             void updatePreferences({
               outputDevice: device === SYSTEM_DEFAULT_DEVICE ? null : device,
             })
@@ -228,7 +240,7 @@ export function AudioSection({ section }: { section: SettingsSection }) {
               <span className="flex min-w-0 flex-1 items-center gap-1.5">
                 <span className="truncate">{t('sidebar.systemDefault')}</span>
                 {selectedDefaultChannels !== undefined && (
-                  <span className="shrink-0 text-(--pnds-text)/45">
+                  <span className="shrink-0 text-(--pnds-text-secondary)">
                     {t('sidebar.deviceChannelCount', {
                       channels: selectedDefaultChannels,
                     })}
@@ -255,7 +267,7 @@ export function AudioSection({ section }: { section: SettingsSection }) {
                         'shrink-0',
                         deviceInsufficient
                           ? 'font-manrope text-[10px] leading-none font-semibold text-(--pnds-danger)'
-                          : 'text-(--pnds-text)/45'
+                          : 'text-(--pnds-text-secondary)'
                       )}
                     >
                       {deviceInsufficient
@@ -285,21 +297,26 @@ export function AudioSection({ section }: { section: SettingsSection }) {
       </div>
       <div className="flex items-center justify-between gap-4">
         <Label htmlFor="settings-sample-rate">{t('settings.sampleRate')}</Label>
-        <NativeSelect
-          id="settings-sample-rate"
-          value={sampleRateSetting}
-          onChange={event => {
-            const rate = Number(event.target.value)
+        <Select
+          value={String(sampleRateSetting)}
+          onValueChange={value => {
+            const rate = Number(value)
             useSettingsStore.getState().setSampleRateSetting(rate)
+            flagAudioChange()
             void updatePreferences({ sampleRate: rate })
           }}
         >
-          {options.map(rate => (
-            <NativeSelectOption key={rate} value={rate}>
-              {formatSampleRate(rate)}
-            </NativeSelectOption>
-          ))}
-        </NativeSelect>
+          <SelectTrigger id="settings-sample-rate">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {options.map(rate => (
+              <SelectItem key={rate} value={String(rate)}>
+                {formatSampleRate(rate)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
       <p
         className="text-muted-foreground text-xs"
@@ -311,4 +328,15 @@ export function AudioSection({ section }: { section: SettingsSection }) {
       </p>
     </section>
   )
+}
+
+function flagAudioChange() {
+  const session = useSessionStore.getState()
+  const current = useProjectStore.getState().currentProject
+  if (
+    session.sessionStatus === 'ready' &&
+    (useCreationStore.getState().active ||
+      current?.path === session.sessionProjectPath)
+  )
+    session.setPendingChanges(true)
 }

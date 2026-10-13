@@ -77,7 +77,7 @@ export function LoadingScreen({ onDissolveEnd }: Props) {
       <Button
         variant="link"
         size="sm"
-        className="mt-6 text-(--pnds-text)/40 hover:text-(--pnds-text)/60"
+        className="mt-6 text-(--pnds-text-secondary) hover:text-(--pnds-text)"
         onClick={() => void handleCancel()}
       >
         {t('loading.cancel')}

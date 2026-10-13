@@ -4,7 +4,7 @@ import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { useCreationStore } from '@/store/creation-store'
-import { useCreationChangesStore } from '@/store/creation-changes-store'
+import { useCreationFilesStore } from '@/store/creation-files-store'
 import {
   canStartNow,
   nodeGateBlocksStart,
@@ -154,30 +154,24 @@ describe('session-flow Retry (§9.3)', () => {
       sessionStatus: 'ready',
       sessionProjectPath: '/p',
     })
-    useCreationChangesStore.getState().changed(['server.js', 'public/page.js'])
+    useCreationFilesStore.getState().changed(['server.js', 'public/page.js'])
     vi.mocked(commands.startProject).mockResolvedValueOnce({
       status: 'error',
       error: 'start failed',
     })
     await restart()
-    expect(useCreationChangesStore.getState().pending.restart).toBeGreaterThan(
-      0
-    )
+    expect(useCreationFilesStore.getState().pending.restart).toBeGreaterThan(0)
     expect(useSessionStore.getState().sessionStatus).toBe('error')
     vi.mocked(commands.startProject).mockImplementationOnce(async () => {
       useSessionStore.getState().applySnapshot(snapshot({ status: 'starting' }))
       return { status: 'ok', data: null }
     })
     await restart()
-    expect(useCreationChangesStore.getState().pending.restart).toBeGreaterThan(
-      0
-    )
+    expect(useCreationFilesStore.getState().pending.restart).toBeGreaterThan(0)
     useSessionStore
       .getState()
       .applySnapshot(snapshot({ status: 'error', error: 'health failed' }))
-    expect(useCreationChangesStore.getState().pending.restart).toBeGreaterThan(
-      0
-    )
+    expect(useCreationFilesStore.getState().pending.restart).toBeGreaterThan(0)
     vi.mocked(commands.startProject).mockImplementationOnce(async () => {
       useSessionStore.getState().applySnapshot(snapshot({ status: 'starting' }))
       return { status: 'ok', data: null }
@@ -193,9 +187,9 @@ describe('session-flow Retry (§9.3)', () => {
     await restart()
     useSessionStore.getState().applySnapshot(snapshot({ status: 'ready' }))
     await vi.waitFor(() =>
-      expect(useCreationChangesStore.getState().pending.restart).toBe(0)
+      expect(useCreationFilesStore.getState().pending.restart).toBe(0)
     )
-    expect(useCreationChangesStore.getState().pending.refresh).toBe(0)
+    expect(useCreationFilesStore.getState().pending.refresh).toBe(0)
     useCreationStore.setState({ active: false, workspace: null })
   })
 

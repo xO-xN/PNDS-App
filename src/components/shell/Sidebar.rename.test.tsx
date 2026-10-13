@@ -425,7 +425,7 @@ describe('⌘R project rename (v1.1.2 T6)', () => {
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
   })
 
-  it('the monitor title strip follows the display-name override', () => {
+  it('the monitor accessible identity follows the display-name override without a title overlay', () => {
     useProjectStore.setState({
       currentProject: { path: FIRST_PATH, manifest },
       projectDisplayNames: { [FIRST_PATH]: 'Encore Set' },
@@ -438,15 +438,20 @@ describe('⌘R project rename (v1.1.2 T6)', () => {
     })
     render(<MonitorView />)
 
-    expect(screen.getByText(/PNDS - Encore Set/)).toBeInTheDocument()
+    expect(screen.getByTestId('monitor-host')).toHaveAccessibleName(
+      'Encore Set'
+    )
     expect(
-      screen.queryByText(/PNDS - Inarticulate III/)
-    ).not.toBeInTheDocument()
+      screen
+        .getByTestId('monitor-host')
+        .querySelector('[data-tauri-drag-region]')
+    ).toBeNull()
+    expect(screen.queryByText(/Inarticulate III/)).not.toBeInTheDocument()
   })
 
   /** v1.2.3 (#42): the title names the SESSION's project — selecting
    * another card (with its own rename) never retitles the live show. */
-  it('the monitor title stays on the session project while another card is selected (#42)', () => {
+  it('the monitor accessible identity stays on the session project while another card is selected (#42)', () => {
     useProjectStore.setState({
       currentProject: { path: SECOND_PATH, manifest },
       projectDisplayNames: {
@@ -463,11 +468,9 @@ describe('⌘R project rename (v1.1.2 T6)', () => {
     })
     render(<MonitorView />)
 
-    expect(screen.getByText(/PNDS - Opener/)).toBeInTheDocument()
-    expect(screen.queryByText(/PNDS - Encore Set/)).not.toBeInTheDocument()
-    expect(
-      screen.queryByText(/PNDS - Inarticulate III/)
-    ).not.toBeInTheDocument()
+    expect(screen.getByTestId('monitor-host')).toHaveAccessibleName('Opener')
+    expect(screen.queryByText(/Encore Set/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Inarticulate III/)).not.toBeInTheDocument()
   })
 
   it('reveals a hidden hover sidebar into the edit, and the edit outlives Cmd', async () => {

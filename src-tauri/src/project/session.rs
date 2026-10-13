@@ -116,6 +116,9 @@ pub struct SessionSnapshot {
     pub channel_plan: Option<crate::project::audio::ChannelPlan>,
     /// Final CoreAudio output device in use (internal sessions).
     pub output_device: Option<String>,
+    /// Effective sample rate captured at Internal spawn, independent of pending preferences.
+    #[specta(optional)]
+    pub applied_sample_rate: Option<u32>,
     /// #130: the projection start gate (投影开演) — true once the conductor
     /// has revealed the monitor on the venue screen, false while it holds
     /// the 简介 (project README) screen. Session-level and
@@ -622,6 +625,7 @@ struct SessionInner {
     channel_plan: Option<crate::project::audio::ChannelPlan>,
     /// Final output device name for the running internal session.
     output_device: Option<String>,
+    applied_sample_rate: Option<u32>,
     /// #130: the projection start gate — see `SessionSnapshot`.
     projection_started: bool,
     /// #140: the running entry gateway, owned exactly as long as the
@@ -672,6 +676,7 @@ impl Default for SessionInner {
             startup_stage: 0,
             channel_plan: None,
             output_device: None,
+            applied_sample_rate: None,
             projection_started: false,
             gateway: None,
             https_entry: HttpsEntryState::default(),
@@ -702,6 +707,7 @@ impl SessionInner {
             startup_stage: self.startup_stage,
             channel_plan: self.channel_plan.clone(),
             output_device: self.output_device.clone(),
+            applied_sample_rate: self.applied_sample_rate,
             projection_started: self.projection_started,
             https_entry: self.https_entry.clone(),
             dns_mapping: self.dns_mapping.clone(),
@@ -727,6 +733,7 @@ impl SessionInner {
         self.volume = crate::project::audio::DEFAULT_VOLUME_PERCENT;
         self.channel_plan = None;
         self.output_device = None;
+        self.applied_sample_rate = None;
         self.startup_stage = 0;
         // #130: every Load/switch re-gates the projection to 简介 — the
         // next work's monitor is never revealed by the previous one's
@@ -1107,6 +1114,7 @@ impl SessionManager {
             let mut inner = self.lock();
             inner.channel_plan = Some(plan.clone());
             inner.output_device = request.output_device.clone();
+            inner.applied_sample_rate = effective_sc_cfg.as_ref().map(|config| config.sample_rate);
             // §7.5: multichannel masters are fixed at 100% / 0 dB.
             if plan.project_channels > 2 {
                 inner.volume = 100.0;
@@ -2473,6 +2481,18 @@ mod tests {
         let mut cmd = Command::new("sleep");
         cmd.arg(seconds.to_string());
         SupervisedChild::spawn(&registry, format!("sleep {seconds}"), &mut cmd).unwrap()
+    }
+
+    #[test]
+    fn applied_sample_rate_is_reported_until_run_cleanup() {
+        let mut inner = SessionInner {
+            status: SessionStatus::Ready,
+            applied_sample_rate: Some(48_000),
+            ..SessionInner::default()
+        };
+        assert_eq!(inner.snapshot().applied_sample_rate, Some(48_000));
+        inner.reset_run_state();
+        assert_eq!(inner.snapshot().applied_sample_rate, None);
     }
 
     #[test]

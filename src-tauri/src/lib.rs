@@ -160,6 +160,10 @@ pub fn run() {
             // square-corners flag is still false here — the frontend sets
             // it right after applying the saved Brutal theme.
             if let Some(window) = app.get_webview_window("main") {
+                #[cfg(target_os = "macos")]
+                {
+                    crate::window::configure_main_chrome(&window);
+                }
                 let square = app
                     .state::<crate::window::WindowManager>()
                     .square_corners
@@ -229,6 +233,8 @@ pub fn run() {
                 ..
             } if label == "main" => {
                 if let Some(window) = app_handle.get_webview_window("main") {
+                    #[cfg(target_os = "macos")]
+                    crate::window::sync_main_control_position(&window);
                     let state = app_handle.state::<crate::window::WindowManager>();
                     let is_fs = window.is_fullscreen().unwrap_or(false);
                     let cached = state.fullscreen.load(std::sync::atomic::Ordering::SeqCst);

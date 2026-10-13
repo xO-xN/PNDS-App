@@ -1,7 +1,9 @@
+import { seedCreationDraft } from '@/test/creation-files'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { commands, type CreationWorkspace } from '@/lib/tauri-bindings'
 import { useCreationStore } from './creation-store'
 import { useSessionStore } from './session-store'
+import { useCreationFilesStore } from './creation-files-store'
 import { open } from '@tauri-apps/plugin-dialog'
 
 const workspace: CreationWorkspace = {
@@ -99,6 +101,46 @@ describe('creation workflow', () => {
         })
       )
     )
+  })
+
+  it('removes only creation history while retaining the open workspace, draft and run', async () => {
+    useCreationStore.setState({
+      active: true,
+      workspace,
+      recentPaths: ['/draft', '/older'],
+    })
+    useSessionStore.setState({
+      sessionStatus: 'ready',
+      sessionProjectPath: '/draft',
+    })
+    seedCreationDraft('README.md', 'saved', 'v1')
+    useCreationFilesStore.getState().edit('README.md', 'unsaved')
+    vi.mocked(commands.loadPreferences).mockResolvedValue({
+      status: 'ok',
+      data: {
+        theme: 'system',
+        language: null,
+        recentProjects: ['/performance'],
+        recentCreationProjects: ['/draft', '/older'],
+      },
+    })
+    useCreationStore.getState().removeRecent('/draft')
+    expect(useCreationStore.getState().recentPaths).toEqual(['/older'])
+    expect(useCreationStore.getState().workspace).toBe(workspace)
+    expect(useSessionStore.getState().sessionProjectPath).toBe('/draft')
+    expect(useCreationFilesStore.getState().drafts['README.md']?.text).toBe(
+      'unsaved'
+    )
+    await vi.waitFor(() =>
+      expect(commands.savePreferences).toHaveBeenCalledWith(
+        expect.objectContaining({
+          recentProjects: ['/performance'],
+          recentCreationProjects: ['/older'],
+        })
+      )
+    )
+    expect(commands.stopProject).not.toHaveBeenCalled()
+    expect(commands.closeCreationProject).not.toHaveBeenCalled()
   })
 
   it('keeps a submitted file switch owned until it completes before allowing a mode switch', async () => {

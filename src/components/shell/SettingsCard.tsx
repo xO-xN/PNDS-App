@@ -65,11 +65,15 @@ export interface SettingsCardProps {
    * element, which would otherwise trigger its mouse-leave auto-hide). */
   onPopupOpenChange?: (open: boolean) => void
   onSettingCommitted?: () => void
+  showAudioMode?: boolean
+  showGain?: boolean
 }
 
 export function SettingsCard({
   onPopupOpenChange,
   onSettingCommitted,
+  showAudioMode = true,
+  showGain = true,
 }: SettingsCardProps) {
   const { t } = useTranslation()
   const currentProject = useProjectStore(state => state.currentProject)
@@ -207,7 +211,7 @@ export function SettingsCard({
 
   // Every row shares one label gutter, including the volume row (its icon
   // sits in the gutter) — so the left edge of the controls never jumps.
-  const labelClass = 'w-20 shrink-0 text-[11px] text-(--pnds-text)/65'
+  const labelClass = 'w-20 shrink-0 text-[11px] text-(--pnds-text-secondary)'
   // Values are data, not chrome: full text strength. Greying them is what
   // reads as "disabled", so only the disabled state may do it.
   const fieldClass =
@@ -231,45 +235,46 @@ export function SettingsCard({
         </p>
       )}
 
-      {/* Audio mode (§6.1): Radix Select like the device row. */}
-      <div className="flex items-center gap-2">
-        <span className={labelClass}>{t('session.audioMode')}</span>
-        <div className="relative flex-1">
-          <Select
-            value={audioMode}
-            onValueChange={value => {
-              handleModeChange(value)
-              onSettingCommitted?.()
-            }}
-            onOpenChange={open => onPopupOpenChange?.(open)}
-            disabled={!projectLoaded}
-          >
-            <SelectTrigger
-              size="sm"
-              aria-label={t('session.audioMode')}
-              className={cn(
-                selectClass,
-                'border-0 shadow-none focus-visible:ring-0'
-              )}
+      {/* Creation retains mode choices; performance uses the manifest default. */}
+      {showAudioMode && (
+        <div className="flex items-center gap-2">
+          <span className={labelClass}>{t('session.audioMode')}</span>
+          <div className="relative flex-1">
+            <Select
+              value={audioMode}
+              onValueChange={value => {
+                handleModeChange(value)
+                onSettingCommitted?.()
+              }}
+              onOpenChange={open => onPopupOpenChange?.(open)}
+              disabled={!projectLoaded}
             >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent side="top">
-              {modes.length === 0 && (
-                <SelectItem value="__placeholder__" disabled>
-                  —
-                </SelectItem>
-              )}
-              {modes.map(mode => (
-                <SelectItem key={mode} value={mode}>
-                  {t(MODE_LABEL_KEYS[mode])}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+              <SelectTrigger
+                size="sm"
+                aria-label={t('session.audioMode')}
+                className={cn(
+                  selectClass,
+                  'border-0 shadow-none focus-visible:ring-0'
+                )}
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent side="top">
+                {modes.length === 0 && (
+                  <SelectItem value="__placeholder__" disabled>
+                    —
+                  </SelectItem>
+                )}
+                {modes.map(mode => (
+                  <SelectItem key={mode} value={mode}>
+                    {t(MODE_LABEL_KEYS[mode])}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
-      </div>
-
+      )}
       <div
         role="group"
         aria-label={t('sidebar.localNetwork')}
@@ -332,8 +337,9 @@ export function SettingsCard({
             data-testid="session-entry-status"
             className={cn(
               'shrink-0 text-[11px]',
-              httpsEntry.status === 'ready' && 'text-(--pnds-accent-text)',
-              httpsEntry.status === 'preparing' && 'text-(--pnds-text)/60',
+              httpsEntry.status === 'ready' && 'text-(--pnds-success)',
+              httpsEntry.status === 'preparing' &&
+                'text-(--pnds-text-secondary)',
               httpsEntry.status === 'error' && 'text-(--pnds-danger)'
             )}
           >
@@ -348,7 +354,7 @@ export function SettingsCard({
               }}
               title={httpsEntry.url}
               dir="ltr"
-              className="pnds-focus-ring font-manrope truncate text-end text-[11px] text-(--pnds-text)/70 underline-offset-2 hover:underline"
+              className="pnds-focus-ring font-manrope truncate text-end text-[11px] text-(--pnds-text-secondary) underline-offset-2 hover:underline"
             >
               {httpsEntry.url.replace(/^https:\/\//, '')}
             </button>
@@ -368,7 +374,7 @@ export function SettingsCard({
             {httpsEntry.error}
           </p>
           <p
-            className="text-(--pnds-text)/60 ps-[88px] text-[11px] leading-snug"
+            className="text-(--pnds-text-secondary) ps-[88px] text-[11px] leading-snug"
             data-testid="session-entry-recovery"
           >
             {t('sidebar.entryRecovery')}
@@ -383,6 +389,7 @@ export function SettingsCard({
           <span className={labelClass}>OSC</span>
           <input
             aria-label={t('sidebar.oscTarget')}
+            dir="ltr"
             value={oscTargetInput}
             disabled={!projectLoaded}
             onChange={e => {
@@ -395,7 +402,7 @@ export function SettingsCard({
             }}
             className={cn(
               fieldClass,
-              'font-manrope w-full rounded-lg px-2.5',
+              'font-manrope min-w-0 flex-1 rounded-lg px-2.5 text-end',
               !oscTargetValid && 'ring-1 ring-(--pnds-danger)'
             )}
           />
@@ -446,57 +453,61 @@ export function SettingsCard({
           is a click-to-mute toggle (#30): mute remembers the current value,
           a second click restores it; the state lives in the session store
           only, so every reopened session returns to the known 80%. */}
-      <div className="flex items-center gap-2">
-        <span
-          className={cn(
-            labelClass,
-            'flex items-center',
-            !volumeEnabled && 'opacity-45'
-          )}
-        >
-          <button
-            type="button"
-            data-testid="mute-toggle"
-            onClick={handleMuteToggle}
-            disabled={!volumeEnabled}
-            aria-label={muted ? t('sidebar.unmute') : t('sidebar.mute')}
-            aria-pressed={muted}
+      {showGain && (
+        <div className="flex items-center gap-2">
+          <span
             className={cn(
-              'pnds-focus-ring -mx-2 flex size-7 items-center justify-center rounded-md',
-              'transition-transform active:scale-90'
+              labelClass,
+              'flex items-center',
+              !volumeEnabled && 'opacity-45'
             )}
           >
-            {muted ? <VolumeX size={14} /> : <Volume2 size={14} />}
-          </button>
-        </span>
-        <input
-          type="range"
-          dir="ltr"
-          aria-label={
-            fixedGain ? t('sidebar.volumeFixed') : t('sidebar.volume')
-          }
-          min={0}
-          max={100}
-          value={Math.round(volumeDisplay)}
-          disabled={!volumeEnabled}
-          onChange={e => handleVolumeChange(Number(e.target.value))}
-          style={
-            {
-              '--pnds-volume-fill': `${Math.round(volumeDisplay)}%`,
-            } as CSSProperties
-          }
-          className="pnds-focus-ring pnds-volume-slider h-7 w-full rounded-full disabled:opacity-35"
-        />
-        <span
-          data-testid="volume-value"
-          className={cn(
-            'font-manrope w-7 shrink-0 text-end text-[11px] tabular-nums',
-            volumeEnabled ? 'text-(--pnds-text)/70' : 'text-(--pnds-text)/30'
-          )}
-        >
-          {Math.round(volumeDisplay)}
-        </span>
-      </div>
+            <button
+              type="button"
+              data-testid="mute-toggle"
+              onClick={handleMuteToggle}
+              disabled={!volumeEnabled}
+              aria-label={muted ? t('sidebar.unmute') : t('sidebar.mute')}
+              aria-pressed={muted}
+              className={cn(
+                'pnds-focus-ring -mx-2 flex size-7 items-center justify-center rounded-md',
+                'transition-transform active:scale-90'
+              )}
+            >
+              {muted ? <VolumeX size={14} /> : <Volume2 size={14} />}
+            </button>
+          </span>
+          <input
+            type="range"
+            dir="ltr"
+            aria-label={
+              fixedGain ? t('sidebar.volumeFixed') : t('sidebar.volume')
+            }
+            min={0}
+            max={100}
+            value={Math.round(volumeDisplay)}
+            disabled={!volumeEnabled}
+            onChange={e => handleVolumeChange(Number(e.target.value))}
+            style={
+              {
+                '--pnds-volume-fill': `${Math.round(volumeDisplay)}%`,
+              } as CSSProperties
+            }
+            className="pnds-focus-ring pnds-volume-slider h-7 w-full rounded-full disabled:opacity-35"
+          />
+          <span
+            data-testid="volume-value"
+            className={cn(
+              'font-manrope w-7 shrink-0 text-end text-[11px] tabular-nums',
+              volumeEnabled
+                ? 'text-(--pnds-text-secondary)'
+                : 'text-(--pnds-text)/30'
+            )}
+          >
+            {Math.round(volumeDisplay)}
+          </span>
+        </div>
+      )}
     </div>
   )
 }

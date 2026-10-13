@@ -4,9 +4,13 @@ App 开发的规则层：既定模式与系统做法，按问题检索——查�
 
 ## 已批准的版本规格
 
+v1.6.0 的 #150–#163 与 UI 收口 #195 已关闭；首批真实模块添加 #210 已接入，完整原生工作流与双架构发行验收仍由 #164 收口。
+
 - **v1.6.0 演出与创作模式的工作流、文件操作及测试窗口** → [正式规格](../plans/v1.6.0-creation-mode-spec.md)
 - **v1.6.1 标准技术模块整理与外部 PNDS Skills 重构** → [正式规格](../plans/v1.6.1-modules-skills-spec.md)
 - **v1.7.0 创作助手的读取、模型服务与交接边界** → [正式规格](../plans/v1.7.0-creation-assistant-spec.md)
+- **v1.6.0 跨票回归与真实环境验收** → [#164 验收记录](../acceptance/164-v1.6.0-workflows.md)
+- **r6-final 真实 App 的入口映射、实施及验收状态** → [desktop-1.6-implementation.md](./desktop-1.6-implementation.md)
 - **UI 定稿和逐轮交互记录** → [原型说明](../prototypes/README.md)
 
 以上规格记录已确认、尚待实现的行为；实现时同步更新下方对应规则篇。v1.6.0 交付首批五项模块文件添加与接线交接，v1.6.1 整理模块及外部 Skills；App 助手不安装 Skills 或实施移植。
@@ -33,6 +37,7 @@ App 开发的规则层：既定模式与系统做法，按问题检索——查�
 
 - **CSS 架构、颜色 token、shadcn/ui 用法** → [ui-patterns.md](./ui-patterns.md)
 - **封面标题拟合的测量、揭示与清理** → [ui-patterns.md](./ui-patterns.md#cover-title-fitting)
+- **独立 HTML 原型、双语文案同步与内存演示测试** → [prototypes.md](./prototypes.md)
 - **翻译系统、语言切换、RTL 支持** → [i18n-patterns.md](./i18n-patterns.md)
 - **toast 与原生通知** → [notifications.md](./notifications.md)
 

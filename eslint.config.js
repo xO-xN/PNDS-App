@@ -133,6 +133,9 @@ export default tseslint.config(
       // Unpacked utility tools staged for release bundling (npm run
       // utilities:fetch) — same standalone Node projects.
       'src-tauri/resources/utilities/**',
+      // Frozen upstream CommonJS/UMD; public exports and syntax checked by
+      // creation-module-assets.test.mjs without rewriting the source snapshot.
+      'src-tauri/resources/modules/**/*.js',
     ],
   }
 )

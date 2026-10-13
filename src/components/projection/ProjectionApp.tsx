@@ -256,10 +256,10 @@ function ProjectionStandby() {
     >
       {/* ps- compensates the tracking's trailing space so the wordmark
           optically centers. */}
-      <span className="ps-[0.35em] text-5xl font-semibold tracking-[0.35em] text-(--pnds-text)/35 select-none">
+      <span className="ps-[0.35em] text-5xl font-semibold tracking-[0.35em] text-(--pnds-text-secondary) select-none">
         PNDS
       </span>
-      <span className="text-sm text-(--pnds-text)/45">
+      <span className="text-sm text-(--pnds-text-secondary)">
         {t('projection.standby')}
       </span>
     </div>
@@ -417,7 +417,7 @@ function ProjectionIntro({
         // at the effective scale (crisp), unlike a transform on text.
         style={{ zoom: zoom / 100 }}
       >
-        <span className="max-w-full truncate text-center text-4xl font-semibold text-(--pnds-text)/45">
+        <span className="max-w-full truncate text-center text-4xl font-semibold text-(--pnds-text-secondary)">
           {content.projectName ?? 'PNDS'}
         </span>
       </div>

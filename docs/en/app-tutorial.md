@@ -25,12 +25,13 @@ The App's **left sidebar** is the main working area; it manages the full lifecyc
 
 ## 3. Audio and communication settings
 
-**Click** a Project card in the sidebar to select it; the panel at the bottom left expands with the Project's runtime settings:
+Clicking a sidebar card selects and preflights it without starting. The bottom bar contains transport, refresh, live gain, audio, network, projection and Settings. Settings uses category navigation for Audio, Node, HTTPS, DNS, Ports and About. Developer Tools is temporarily hidden; compilation and packaging remain available in creation mode.
 
-- **Audio Mode**: view or switch the Project's default DSP / synthesis engine mode; the differences between the three modes are covered in [audio-modes.md](../reference/audio-modes.md).
-- **Local network**: choose the global LAN address from the sidebar dropdown, shared with Settings → Node. A hand choice on the running card flags Change for an explicit restart; on another selection it only configures the next start. Choosing never retargets the running monitor immediately.
-- **Output & Volume**: choose output hardware in Settings → Audio, applying at the next start. The sidebar gain acts live on the selected running Project. The volume control only attenuates (maximum 0 dB); when a Project has multichannel output the App disables the control — adjust gain on your external audio interface instead. The speaker button mutes / restores in one click (`⌘ M`); mute lasts for the current performance only — reloading returns to the default 80%.
-- **OSC Port**: the UDP port used to send control signals to external hosts (Max, SuperCollider, Ableton Live, lighting consoles, …).
+- **Performance audio**: Load uses the manifest default. The performance interface offers no audio-mode selector; creation tests retain the saved manifest's allowed Internal / External / None choices. See [audio-modes.md](../reference/audio-modes.md).
+- **Local network**: the bottom network panel shares the global LAN choice with Settings → Node. Changing the running selection flags Change for an explicit restart; another selection only prepares its next start. Applied and next-start addresses are separate, and the monitor never retargets immediately.
+- **Device and sample rate**: the bottom audio panel and Settings → Audio share the existing preferences. Applied device and actual rate come from the run; editing preferences never restarts automatically.
+- **Live gain**: the bottom speaker and slider control running A even while browsing B. Internal mono/stereo allows attenuation; multichannel fixes gain at 100% / 0 dB. External / None disables gain. `⌘ M` mutes/restores, with the existing fresh-run defaults.
+- **OSC and Room**: a default-External project's target and a telematic project's Room remain in the network panel with their original next-start semantics. Node tokens stay masked.
 
 ---
 
@@ -67,7 +68,7 @@ PNDS evokes "many ponds, connected": several sites, each a Mac plus its local pe
 1. **Deploy the hub**: install [pnds-hub](https://github.com/xO-xN/pnds-hub), the cross-internet relay server, on a public VPS, following its repository's deployment guide (a systemd service behind a TLS reverse proxy; the shared token is generated at install time). The hub only relays control messages between sites — every site connects **outbound**, so no inbound port ever needs opening at a venue.
 2. **Configure the node on each site**: open the settings panel (`⌘ ,`) on each site's Mac and fill in the three **Node** rows — the **node name** (this Mac's name in the star diagram, e.g. `site-a`), the **hub address** (the full `wss://` URL) and the **token** (shown masked). The three are machine-global: enter them once and every Project shares them; changes take effect the next time a Project starts.
 3. **Verify the network (go / no-go)**: load the built-in **Telematic Diagnostics** (see [Built-in utilities](#4-built-in-utilities)) on every site — the App-injected node configuration is its connection configuration, connecting automatically with nothing to retype in the form; with any of the three rows empty the Load button becomes **Set up node**, prompting the configuration first. Every site's monitor then shows the same star-shaped **flower view**; a green / red banner gives the verdict and names the faulty site and leg.
-4. **The performance**: load the actual work (its manifest declares cross-internet capability and it implements the hub protocol — Telematic Diagnostics is the reference implementation). The App derives the room from the work automatically — sites running the same work in the same Room group (the sidebar Room dropdown, 1–3) land in one room, and a wrongly opened work cannot see in; performers join **their own site** by QR code as usual, and real-time audio between sites rides an external transport such as JackTrip.
+4. **The performance**: load the actual work (its manifest declares cross-internet capability and it implements the hub protocol — Telematic Diagnostics is the reference implementation). The App derives the room from the work automatically — sites running the same work in the same Room group (the bottom network panel’s Room dropdown, 1–3) land in one room, and a wrongly opened work cannot see in; performers join **their own site** by QR code as usual, and real-time audio between sites rides an external transport such as JackTrip.
 
 ---
 
@@ -77,33 +78,30 @@ During a performance or rehearsal, when you need to switch the audio output devi
 
 - **Edge hover**: move the pointer to the far left edge of the window and the settings sidebar glides in.
 - **Keyboard summon**: hold `⌘` to reveal the sidebar. It hides once the key is released and the pointer leaves. Dropdowns, dialogs, mode confirmation and startup/shutdown operations keep it visible until they finish. The sidebar overlays the full-window monitor; revealing or hiding it never resizes or reloads the page.
-- **One performance action**: the footer offers Load, Change or Close as one full-width button. Selecting another Project leaves the performance running; Load asks before replacing it. Apply audio-mode or External-target edits with Change; the error page keeps Retry.
-- **Projection and intro**: one header projection button opens the venue window, then the same button switches its intro/performance content. Start Projection reveals its monitor; Withdraw Projection restores the intro. Refresh reloads the monitor page; the menu and `⌘⏎` keep projection control. Help remains available from its menu and `⌘ ?`.
-- **Full-screen performance**: `⌃⌘ F`, the menu item or the sidebar button enters full screen; the monitor page adapts to the new size.
+- **One performance action**: the footer offers Load, Change or Close as one full-width button. Selecting another Project leaves the performance running; Load asks before replacing it. Apply network, device/rate or External-target edits with an explicit Change; the error page keeps Retry.
+- **Projection and intro**: one bottom-bar projection button opens the venue window, then the same button switches its intro/performance content. Start Projection reveals its monitor; Withdraw Projection restores the intro. Refresh reloads the monitor page; the menu and `⌘⏎` keep projection control. Help remains available from its menu and `⌘ ?`.
+- **Full-screen performance**: `⌃⌘ F`, the Window menu or the native green window control enters full screen; the monitor page adapts to the new size.
 
 ---
 
 ## 8. Creation reading workspace
 
-Hover or focus the mode button at the bottom of the performance sidebar
-to discover creation mode. Click once to see the consequence, then again to
-enter. With the button focused, Enter or Space performs the same two-step
+The same mode button stays at the bottom right. Hover/focus reveals the target; click once to arm, then again to switch. Only unsaved-content loss adds a consequence note above the button. With the button focused, Enter or Space performs the same two-step
 confirmation. Esc, clicking elsewhere or losing window focus cancels confirmation.
 Choose **Open folder project** or continue from **Recent creations**. In creation
 mode, `⌘ O` also selects a folder. Opening never starts the project.
 
-Hover or focus the project title to **Switch to another project**. The selector
+Use **Generate .pnds** at the top-right of the creation titlebar to open saved-file packaging. Open the project-title dropdown to switch/create a project, view/record handoff tasks, rescan files or open Finder. The selector
 explains why your folder can be edited externally and why installed `.pnds`
 bundles and built-in utilities retain a read-only source. Cancelling either
 selector preserves your current project. Reopening an installed directory or
 accessing it through a symbolic link does not make it an editable source project.
 
-Files are grouped by purpose; search and file buttons retain actual relative
-paths. Select text to read and find within the current file. PNG, JPEG, WebP and
+Manifest and the localized README are pinned. Other actual paths are grouped into runtime/dependencies, pages, sound sources, compiled artifacts, modules, assets and project support. Select text to read and find within the current file. PNG, JPEG, WebP and
 GIF preview only when selected; decoding failure leaves information and Finder
 access available. Audio and other binaries show name, type and size for use in
 an external application. The file column's single Finder button opens the
-project folder; the reader can reveal the selected file.
+project folder; the file toolbar’s action menu reloads disk content, reveals the current file and renames it. Root manifest rename remains disabled.
 
 Text is limited to 1 MiB, images to 4 MiB, and the file list to 4,096 entries and
 32 levels. `.git` and `node_modules` are omitted. Missing files, permissions,
@@ -114,8 +112,8 @@ dependencies or sound artifacts are built. Running and packing keep their own
 checks.
 
 The capsule uses a fixed slanted fill and 300ms name transition. It holds the
-new mode's resting appearance until the pointer leaves and returns; Brutal and
-reduced motion complete directly. Startup or shutdown disables switching. A
+new mode's resting appearance until the pointer leaves and returns; all four themes keep this transition, while
+system reduced motion completes directly. Startup or shutdown disables switching. A
 running editable folder takes precedence over another selected card and enters
 creation without restarting or reloading its monitor. A selected idle folder
 opens without starting. Installed bundles, tools and noneditable targets end the
@@ -123,9 +121,23 @@ old runtime and enter the creation home. Entering creation closes the projection
 Returning to performance ends testing, clears selection and temporary state, and
 returns to the idle home without auto-loading.
 
-This step provides file reading. Continue editing, file organization and asset
-processing in your external editor or Finder. Returning to performance mode
-closes the reader and returns to the idle home.
+Editable sources retain manual saving, drafts and disk-conflict protection.
+The SCD toolbar compiles the whole standard source set and sends results to the
+console. The bottom bar starts/restarts/closes tests and refreshes saved pages;
+the right pane keeps test audio, the same monitor and independent performer
+windows. The console starts closed and is available only from creation's bottom
+bar or Command + backtick. Expanding monitor changes layout only; Esc restores it.
+
+Use **Add PNDS module** beside the Modules heading in writable projects.
+Five frozen choices work offline: QR joining, client connection/identity
+recovery, monitor theme, monitor language and monitor view synchronization.
+Review real target files, source version and prerequisites before adding. Files
+go to `modules/pnds-<id>/` with a `pnds-module.json` source record; wiring tasks
+append to `docs/creator-handoff.md`. File addition does not mean wiring or
+performance verification. The App never changes entries/manifest, installs
+dependencies or Skills, or starts a project. Existing targets are preserved. A
+failed handoff lists files already added; fix the error, reload status and retry
+only the handoff. Upgrades, merges and removal belong to the external agent.
 
 ---
 
@@ -148,6 +160,9 @@ The shortcuts an App user reaches for (creators asking "which keys can my pages 
 | `⌘ O`                      | Import a Project                              |
 | `⌘ 1`–`⌘ 9`                | Select the Nth visible Project                |
 | `↓` / `↑` (inside sidebar) | Next / previous Project                       |
+| `⌘ S`                      | Save the current creation file                |
+| Command + backtick         | Toggle the creation console                   |
+| `⌘ ↑` / `⌘ ↓`              | Select previous / next visible Project        |
 | `⌘ R`                      | Rename the selected Project / folder          |
 | `Enter`                    | Load the Project / restart after a change     |
 | `Esc`                      | Cancel mode confirmation / dismiss an overlay |

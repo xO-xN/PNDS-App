@@ -21,7 +21,7 @@ export type ColorTheme = 'pond' | 'sand' | 'stage' | 'brutal'
 
 export interface ColorThemeOption {
   value: ColorTheme
-  /** Accent swatch shown next to the settings select (spec #36 story 11). */
+  /** Accent swatch shown on each visible theme option. */
   accent: string
 }
 
@@ -30,9 +30,9 @@ export interface ColorThemeOption {
  *  swatch cannot read the token (it must render before/independent of the
  *  root attribute), so keep the two in sync when adding a theme. */
 export const COLOR_THEME_OPTIONS: readonly ColorThemeOption[] = [
-  { value: 'pond', accent: '#5a4ff3' },
-  { value: 'sand', accent: '#d97706' },
-  { value: 'stage', accent: '#34d399' },
+  { value: 'pond', accent: '#1476cc' },
+  { value: 'sand', accent: '#93622e' },
+  { value: 'stage', accent: '#a5c8b6' },
   { value: 'brutal', accent: '#ff5722' },
 ]
 
@@ -72,8 +72,9 @@ export function setColorThemeAttribute(theme: ColorTheme): void {
 }
 
 /**
- * Brutal's window is square (#41): the native 16px corner mask
- * (window.rs) drops to 0 while that theme is active. Called BEFORE the
+ * Brutal's main frame is square: window.rs switches its native frame
+ * style and content mask on the UI thread, retaining AppKit controls.
+ * The command awaits completion. Called BEFORE the
  * root attribute lands so the mask never lags the CSS edge — switching
  * into Brutal squares the mask first, switching away rounds it first.
  * A failure is logged, never thrown: the CSS edge still renders (its

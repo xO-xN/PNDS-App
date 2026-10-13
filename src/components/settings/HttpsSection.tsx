@@ -109,9 +109,11 @@ export function HttpsSection({ section }: { section: SettingsSection }) {
   const statusTone =
     summary == null || !summaryCurrent
       ? ''
-      : summary.status === 'valid' || summary.status === 'expiringSoon'
-        ? 'text-(--pnds-accent-text)'
-        : 'text-(--pnds-danger)'
+      : summary.status === 'valid'
+        ? 'text-(--pnds-success)'
+        : summary.status === 'expiringSoon'
+          ? 'text-(--pnds-warning-text)'
+          : 'text-(--pnds-danger)'
 
   return (
     <section

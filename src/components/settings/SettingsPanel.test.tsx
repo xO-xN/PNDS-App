@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import userEvent from '@testing-library/user-event'
 import {
   render,
   screen,
@@ -60,39 +61,38 @@ describe('SettingsPanel (v1.2.0 issue #13)', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
-  it('renders the six sections of the single-page panel', () => {
+  it('offers categorized settings and preserves the general identity controls', async () => {
     useSettingsStore.getState().openSettings()
     render(<SettingsPanel />)
-
-    expect(screen.getByRole('dialog')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'General' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Audio' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Node' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Ports' })).toBeInTheDocument()
     expect(
-      screen.getByRole('heading', { name: 'Developer Tools' })
+      screen.getByRole('radiogroup', { name: 'Theme' })
     ).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'About' })).toBeInTheDocument()
-    // v1.4.0: the Appearance section is gone — its theme row lives in
-    // General now, one identity row beside the language.
-    expect(
-      screen.queryByRole('heading', { name: 'Appearance' })
-    ).not.toBeInTheDocument()
-    expect(screen.getByLabelText('Theme')).toBeInTheDocument()
-    // The Projects history section (#15) was removed after user review —
-    // history management lives in the sidebar alone.
+    for (const name of ['Audio', 'Node', 'Ports', 'About']) {
+      fireEvent.click(screen.getByRole('button', { name }))
+      expect(await screen.findByRole('heading', { name })).toBeInTheDocument()
+    }
     expect(
       screen.queryByRole('heading', { name: 'Projects' })
     ).not.toBeInTheDocument()
-    // The developer section packs .pnds bundles (issue #16) — its action is
-    // present even with no project selected.
     expect(
-      screen.getByRole('button', { name: 'Pack Bundle' })
-    ).toBeInTheDocument()
+      screen.queryByRole('button', { name: 'Developer Tools' })
+    ).not.toBeInTheDocument()
+  })
+
+  it('routes a legacy developer request to General while the category is temporarily hidden', () => {
+    useSettingsStore.getState().openSettings('developer')
+    render(<SettingsPanel />)
+    expect(screen.getByRole('heading', { name: 'General' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'General' })).toHaveAttribute(
+      'aria-current',
+      'page'
+    )
+    expect(screen.queryByTestId('developer-target')).not.toBeInTheDocument()
   })
 
   it('shows the app version in the About section', () => {
-    useSettingsStore.getState().openSettings()
+    useSettingsStore.getState().openSettings('about')
     render(<SettingsPanel />)
     expect(screen.getByText(`PNDS ${__APP_VERSION__}`)).toBeInTheDocument()
   })
@@ -101,9 +101,8 @@ describe('SettingsPanel (v1.2.0 issue #13)', () => {
     useSettingsStore.getState().openSettings()
     render(<SettingsPanel />)
 
-    fireEvent.change(screen.getByLabelText('Language'), {
-      target: { value: 'zh-CN' },
-    })
+    await userEvent.click(screen.getByLabelText('Language'))
+    await userEvent.click(screen.getByRole('option', { name: '简体中文' }))
 
     // UI switches without a restart (the menu rebuild rides the same
     // languageChanged event).
@@ -119,12 +118,12 @@ describe('SettingsPanel (v1.2.0 issue #13)', () => {
 
   it('switching back to Follow System persists language: null', async () => {
     vi.mocked(locale).mockResolvedValue('en-US')
+    useSettingsStore.setState({ languageSetting: 'zh-CN' })
     useSettingsStore.getState().openSettings()
     render(<SettingsPanel />)
 
-    fireEvent.change(screen.getByLabelText('Language'), {
-      target: { value: 'system' },
-    })
+    await userEvent.click(screen.getByLabelText('Language'))
+    await userEvent.click(screen.getByRole('option', { name: 'Follow System' }))
 
     await waitFor(() => {
       expect(commands.savePreferences).toHaveBeenCalledWith(
@@ -135,7 +134,7 @@ describe('SettingsPanel (v1.2.0 issue #13)', () => {
   })
 
   it('About buttons check for updates and reveal both directories', async () => {
-    useSettingsStore.getState().openSettings()
+    useSettingsStore.getState().openSettings('about')
     render(<SettingsPanel />)
 
     fireEvent.click(screen.getByRole('button', { name: /check for updates/i }))
@@ -190,11 +189,7 @@ describe('SettingsPanel (v1.2.0 issue #13)', () => {
   })
 })
 
-/** Issue #38 (v1.2.3 T2): the color theme — a NativeSelect offering the
- * shipped themes with the current accent swatch beside it; selecting one
- * applies the root data-color-theme attribute immediately and persists
- * the colorTheme preference. #40 added the two dark themes; v1.4.0
- * folded the row into the General section. */
+/** All four themes remain visible; pointer and keyboard picks apply and persist. */
 describe('SettingsPanel theme row (issues #38/#40)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -220,23 +215,36 @@ describe('SettingsPanel theme row (issues #38/#40)', () => {
     useSettingsStore.getState().openSettings()
     render(<SettingsPanel />)
 
-    const select = screen.getByLabelText('Theme')
-    const labels = within(select)
-      .getAllByRole('option')
-      .map(option => option.textContent)
+    const group = screen.getByRole('radiogroup', { name: 'Theme' })
+    const labels = within(group)
+      .getAllByRole('radio')
+      .map(option => document.querySelector(`label[for="${option.id}"]`))
+      .map(option => option?.textContent)
     // v1.3.3 (#90/#91): the default theme's display name is Pond, and
     // since #91 its id is 'pond' as well ('lavender' lives on only as a
     // legacy preference value mapped back to it).
     expect(labels).toEqual(['Pond', 'Sand', 'Stage', 'Brutal'])
-    expect(select).toHaveValue('pond')
+    expect(screen.getByRole('radio', { name: 'Pond' })).toBeChecked()
+    expect(
+      screen.queryByRole('combobox', { name: 'Theme' })
+    ).not.toBeInTheDocument()
   })
 
-  it('shows the accent swatch of the selected theme', () => {
+  it('shows every theme accent before selection', () => {
     useSettingsStore.getState().openSettings()
     render(<SettingsPanel />)
 
-    expect(screen.getByTestId('color-theme-accent')).toHaveStyle({
-      background: '#5a4ff3',
+    expect(screen.getByTestId('color-theme-accent-pond')).toHaveStyle({
+      background: '#1476cc',
+    })
+    expect(screen.getByTestId('color-theme-accent-sand')).toHaveStyle({
+      background: '#93622e',
+    })
+    expect(screen.getByTestId('color-theme-accent-stage')).toHaveStyle({
+      background: '#a5c8b6',
+    })
+    expect(screen.getByTestId('color-theme-accent-brutal')).toHaveStyle({
+      background: '#ff5722',
     })
   })
 
@@ -244,9 +252,7 @@ describe('SettingsPanel theme row (issues #38/#40)', () => {
     useSettingsStore.getState().openSettings()
     render(<SettingsPanel />)
 
-    fireEvent.change(screen.getByLabelText('Theme'), {
-      target: { value: 'sand' },
-    })
+    await userEvent.click(screen.getByRole('radio', { name: 'Sand' }))
 
     // #41: the root attribute lands after the window-corner sync (one
     // IPC tick) — the store stays same-tick, the attribute waits.
@@ -254,9 +260,7 @@ describe('SettingsPanel theme row (issues #38/#40)', () => {
       expect(document.documentElement.dataset.colorTheme).toBe('sand')
     })
     expect(useSettingsStore.getState().colorThemeSetting).toBe('sand')
-    expect(screen.getByTestId('color-theme-accent')).toHaveStyle({
-      background: '#d97706',
-    })
+    expect(screen.getByRole('radio', { name: 'Sand' })).toBeChecked()
     await waitFor(() => {
       expect(commands.savePreferences).toHaveBeenCalledWith(
         expect.objectContaining({ colorTheme: 'sand' })
@@ -269,9 +273,7 @@ describe('SettingsPanel theme row (issues #38/#40)', () => {
     useSettingsStore.getState().openSettings()
     render(<SettingsPanel />)
 
-    fireEvent.change(screen.getByLabelText('Theme'), {
-      target: { value: 'pond' },
-    })
+    await userEvent.click(screen.getByRole('radio', { name: 'Pond' }))
 
     await waitFor(() => {
       expect(document.documentElement.dataset.colorTheme).toBe('pond')
@@ -289,21 +291,34 @@ describe('SettingsPanel theme row (issues #38/#40)', () => {
     useSettingsStore.getState().openSettings()
     render(<SettingsPanel />)
 
-    fireEvent.change(screen.getByLabelText('Theme'), {
-      target: { value: 'brutal' },
-    })
+    await userEvent.click(screen.getByRole('radio', { name: 'Brutal' }))
 
     await waitFor(() => {
       expect(document.documentElement.dataset.colorTheme).toBe('brutal')
     })
-    expect(screen.getByTestId('color-theme-accent')).toHaveStyle({
-      background: '#ff5722',
-    })
+    expect(screen.getByRole('radio', { name: 'Brutal' })).toBeChecked()
     await waitFor(() => {
       expect(commands.savePreferences).toHaveBeenCalledWith(
         expect.objectContaining({ colorTheme: 'brutal' })
       )
     })
+  })
+
+  it('switches themes with arrow keys and persists the keyboard choice', async () => {
+    useSettingsStore.getState().openSettings()
+    render(<SettingsPanel />)
+    await userEvent.click(screen.getByRole('radio', { name: 'Pond' }))
+    // Radix defers roving focus to a timer; keep the key down until that
+    // focus arrives, as it does between physical keydown and keyup.
+    await userEvent.keyboard('{ArrowRight>}')
+    await waitFor(() => {
+      expect(screen.getByRole('radio', { name: 'Sand' })).toBeChecked()
+      expect(document.documentElement.dataset.colorTheme).toBe('sand')
+      expect(commands.savePreferences).toHaveBeenCalledWith(
+        expect.objectContaining({ colorTheme: 'sand' })
+      )
+    })
+    await userEvent.keyboard('{/ArrowRight}')
   })
 })
 
@@ -388,7 +403,7 @@ describe('SettingsPanel Ports section (v1.2.0 issue #14)', () => {
       currentProject: { path: '/Users/test/p', manifest: manifestCustomPorts },
       preflightStatus: 'ready',
     })
-    useSettingsStore.getState().openSettings()
+    useSettingsStore.getState().openSettings('ports')
     render(<SettingsPanel />)
 
     await waitFor(() => {
@@ -408,7 +423,7 @@ describe('SettingsPanel Ports section (v1.2.0 issue #14)', () => {
   })
 
   it('falls back to 6868/6869 with the hint when no project is selected', async () => {
-    useSettingsStore.getState().openSettings()
+    useSettingsStore.getState().openSettings('ports')
     render(<SettingsPanel />)
 
     await waitFor(() => {
@@ -439,7 +454,7 @@ describe('SettingsPanel Ports section (v1.2.0 issue #14)', () => {
       sessionStatus: 'ready',
       sessionProjectPath: '/Users/test/A',
     })
-    useSettingsStore.getState().openSettings()
+    useSettingsStore.getState().openSettings('ports')
     render(<SettingsPanel />)
 
     await waitFor(() => {
@@ -457,7 +472,7 @@ describe('SettingsPanel Ports section (v1.2.0 issue #14)', () => {
       failedPreflightPath: '/failed/B',
       preflightStatus: 'error',
     })
-    useSettingsStore.getState().openSettings()
+    useSettingsStore.getState().openSettings('ports')
     render(<SettingsPanel />)
     await waitFor(() => {
       expect(commands.checkPortStatus).toHaveBeenCalledWith(7000)
@@ -504,7 +519,7 @@ describe('SettingsPanel Ports section (v1.2.0 issue #14)', () => {
         },
       },
     })
-    useSettingsStore.getState().openSettings()
+    useSettingsStore.getState().openSettings('ports')
     render(<SettingsPanel />)
 
     expect(await screen.findByTestId('port-in-use')).toHaveTextContent('In use')
@@ -548,7 +563,7 @@ describe('SettingsPanel Ports section (v1.2.0 issue #14)', () => {
   })
 
   it('the Refresh button re-queries both ports on demand', async () => {
-    useSettingsStore.getState().openSettings()
+    useSettingsStore.getState().openSettings('ports')
     render(<SettingsPanel />)
 
     await waitFor(() => {
@@ -589,7 +604,7 @@ describe('SettingsPanel Ports section (v1.2.0 issue #14)', () => {
       })
     )
     useProjectStore.setState({ currentProject: { path: '/A', manifest } })
-    useSettingsStore.getState().openSettings()
+    useSettingsStore.getState().openSettings('ports')
     render(<SettingsPanel />)
     await waitFor(() => {
       expect(
@@ -642,7 +657,7 @@ describe('SettingsPanel Ports section (v1.2.0 issue #14)', () => {
       status: 'ok',
       data: { outcome: 'cancelled', status: managed },
     })
-    useSettingsStore.getState().openSettings()
+    useSettingsStore.getState().openSettings('ports')
     render(<SettingsPanel />)
     await screen.findByTestId('port-in-use')
     fireEvent.click(screen.getByRole('button', { name: 'Release' }))
@@ -686,7 +701,7 @@ describe('SettingsPanel Ports section (v1.2.0 issue #14)', () => {
       preflightStatus: 'ready',
     })
     useSessionStore.setState({ sessionStatus: 'ready' })
-    useSettingsStore.getState().openSettings()
+    useSettingsStore.getState().openSettings('ports')
     render(<SettingsPanel />)
 
     expect(await screen.findAllByTestId('port-running')).toHaveLength(2)
@@ -734,7 +749,7 @@ describe('SettingsPanel Audio section (issue #21)', () => {
   })
 
   const openPanel = () => {
-    useSettingsStore.getState().openSettings()
+    useSettingsStore.getState().openSettings('audio')
     render(<SettingsPanel />)
     return screen.getByLabelText('Sample rate')
   }
@@ -743,7 +758,7 @@ describe('SettingsPanel Audio section (issue #21)', () => {
     const select = openPanel()
 
     expect(screen.getByRole('heading', { name: 'Audio' })).toBeInTheDocument()
-    expect(select).toHaveValue('48000')
+    expect(select).toHaveTextContent('48 kHz')
     // One capability query per panel open, like the Ports section.
     await waitFor(() =>
       expect(commands.listSupportedSampleRates).toHaveBeenCalledTimes(1)
@@ -755,9 +770,10 @@ describe('SettingsPanel Audio section (issue #21)', () => {
       44100, 48000, 96000,
     ])
     const select = openPanel()
+    await userEvent.click(select)
 
     await waitFor(() => {
-      const labels = within(select)
+      const labels = screen
         .getAllByRole('option')
         .map(option => option.textContent)
       expect(labels).toEqual(['44.1 kHz', '48 kHz', '96 kHz'])
@@ -769,14 +785,15 @@ describe('SettingsPanel Audio section (issue #21)', () => {
       new Error('transport down')
     )
     const select = openPanel()
+    await userEvent.click(select)
 
     await waitFor(() => {
-      const labels = within(select)
+      const labels = screen
         .getAllByRole('option')
         .map(option => option.textContent)
       expect(labels).toEqual(['44.1 kHz', '48 kHz', '88.2 kHz', '96 kHz'])
     })
-    expect(select).toHaveValue('48000')
+    expect(select).toHaveTextContent('48 kHz')
   })
 
   it('selecting a rate updates the store and persists via the queued save', async () => {
@@ -785,7 +802,8 @@ describe('SettingsPanel Audio section (issue #21)', () => {
     ])
     const select = openPanel()
 
-    fireEvent.change(select, { target: { value: '96000' } })
+    await userEvent.click(select)
+    await userEvent.click(screen.getByRole('option', { name: '96 kHz' }))
 
     expect(useSettingsStore.getState().sampleRateSetting).toBe(96000)
     await waitFor(() => {
@@ -801,14 +819,15 @@ describe('SettingsPanel Audio section (issue #21)', () => {
       44100, 48000,
     ])
     const select = openPanel()
+    await userEvent.click(select)
 
     await waitFor(() => {
-      const labels = within(select)
+      const labels = screen
         .getAllByRole('option')
         .map(option => option.textContent)
       expect(labels).toEqual(['44.1 kHz', '48 kHz', '88.2 kHz'])
     })
-    expect(select).toHaveValue('88200')
+    expect(select).toHaveTextContent('88.2 kHz')
   })
 
   it('stays editable while a session runs, hinting the next-start semantics', async () => {

@@ -15,8 +15,10 @@ import {
 } from '@/store/project-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { useCreationStore } from '@/store/creation-store'
-import { useCreationChangesStore } from '@/store/creation-changes-store'
-import { isCreationWorkspacePath } from '@/store/creation-changes-store'
+import {
+  useCreationFilesStore,
+  isCreationWorkspacePath,
+} from '@/store/creation-files-store'
 import { trackCreationRestart } from '@/lib/creation-runtime-updates'
 import { isNodeConfigComplete, isValidOscTarget } from '@/lib/preferences'
 
@@ -365,7 +367,7 @@ async function dispatchStart(
   const proceed = needsChoice ? await openHttpsCompatChoice() : true
   if (!proceed || !owns()) return false
   const update = useCreationStore.getState().active
-    ? await useCreationChangesStore.getState().capture(plan.path)
+    ? await useCreationFilesStore.getState().capture(plan.path)
     : null
   if (!owns()) return false
   if (replace) {

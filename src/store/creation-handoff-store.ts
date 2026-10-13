@@ -9,8 +9,7 @@ import {
 import { isProjectReadme, projectReadmeLocale } from '@/lib/creation-readme'
 import type { CreationParticipant } from '@/lib/creation-lifecycle'
 import { creationTransportError, useCreationStore } from './creation-store'
-import { isDraftDirty, useCreationDraftsStore } from './creation-drafts-store'
-import { useCreationChangesStore } from './creation-changes-store'
+import { isDraftDirty, useCreationFilesStore } from './creation-files-store'
 
 export const HANDOFF_PATH = 'docs/creator-handoff.md'
 interface PendingTask {
@@ -133,7 +132,7 @@ export const useCreationHandoffStore = create<HandoffState>((set, get) => ({
     const workspace = useCreationStore.getState().workspace
     const item = state.pending.find(item => item.task.id === state.activeId)
     if (!workspace || !item || state.busy || !state.document) return
-    const draft = useCreationDraftsStore.getState().drafts[HANDOFF_PATH]
+    const draft = useCreationFilesStore.getState().drafts[HANDOFF_PATH]
     if (draft && (isDraftDirty(draft) || draft.saving || draft.renaming)) {
       set({
         error: {
@@ -176,7 +175,7 @@ export const useCreationHandoffStore = create<HandoffState>((set, get) => ({
         recorded: true,
       }))
       // Poll through the existing public workflow so tree and clean open drafts adopt the saved document.
-      await useCreationChangesStore.getState().poll()
+      await useCreationFilesStore.getState().poll()
     } catch (error) {
       if (owns(identity, captured))
         set({ error: creationTransportError(error), busy: false })

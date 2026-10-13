@@ -193,7 +193,7 @@ export function FolderSwitch({
                 key={editFolder.id}
                 testId="folder-name-input"
                 value={editFolder.name}
-                className="pnds-focus-ring h-8 w-full rounded-lg border border-(--pnds-text)/15 bg-(--pnds-text)/5 px-2.5 text-start text-[13px] outline-none"
+                className="pnds-focus-ring h-8 w-full rounded-lg border border-(--pnds-input) bg-(--pnds-pill) px-2.5 text-start text-[13px] outline-none"
                 onCommit={commitFolderName}
                 onCancel={cancelFolderName}
               />
@@ -203,7 +203,7 @@ export function FolderSwitch({
                 data-testid="folder-return"
                 onClick={() => setActiveFolderView(returnId)}
                 aria-label={t('sidebar.returnToFolder', { name: returnName })}
-                className="pnds-focus-ring flex h-8 w-full items-center gap-2 rounded-lg px-2.5 text-start text-[13px] hover:bg-(--pnds-text)/5"
+                className="pnds-focus-ring flex h-8 w-full items-center gap-2 rounded-lg px-2.5 text-start text-[13px] hover:bg-(--pnds-pill-hover)"
               >
                 <ArrowLeft
                   size={14}
@@ -230,7 +230,7 @@ export function FolderSwitch({
                   data-testid="folder-picker"
                   aria-label={t('sidebar.performanceFolder')}
                   title={t('sidebar.folderSwitchManageHint')}
-                  className="pnds-focus-ring h-8 w-full active:bg-(--pnds-text)/10 border-0 bg-(--pnds-text)/5 ps-2.5 pe-2 text-[13px] shadow-none [&_.lucide-chevron-up]:rotate-180"
+                  className="pnds-focus-ring h-8 w-full active:bg-(--pnds-text)/10 border-0 bg-(--pnds-pill) ps-2.5 pe-2 text-[13px] shadow-none [&_.lucide-chevron-up]:rotate-180"
                 >
                   {selectedInUse && (
                     <span
@@ -303,7 +303,7 @@ export function FolderSwitch({
                     <ContextMenuShortcut>⌘R</ContextMenuShortcut>
                   </span>
                   {menuFolderProtected && (
-                    <span className="ps-6 text-xs leading-snug font-normal text-(--pnds-text)/45">
+                    <span className="ps-6 text-xs leading-snug font-normal text-(--pnds-text-secondary)">
                       {t('sidebar.utilitiesProtected')}
                     </span>
                   )}
@@ -331,7 +331,7 @@ export function FolderSwitch({
                   </span>
                   {(menuFolderProtected ||
                     menuFolder.projectPaths.length === 0) && (
-                    <span className="ps-6 text-xs leading-snug font-normal text-(--pnds-text)/45">
+                    <span className="ps-6 text-xs leading-snug font-normal text-(--pnds-text-secondary)">
                       {menuFolderProtected
                         ? t('sidebar.setlistExportProtectedReason')
                         : t('sidebar.setlistExportEmptyReason')}
@@ -375,7 +375,7 @@ export function FolderSwitch({
                     {t('sidebar.deleteFolder')}
                   </span>
                   {menuFolderProtected && (
-                    <span className="ps-6 text-xs leading-snug font-normal text-(--pnds-text)/45">
+                    <span className="ps-6 text-xs leading-snug font-normal text-(--pnds-text-secondary)">
                       {t('sidebar.utilitiesProtected')}
                     </span>
                   )}
@@ -393,8 +393,8 @@ export function FolderSwitch({
         className={cn(
           'pnds-focus-ring flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-[12px] transition-colors active:bg-(--pnds-text)/10',
           toolsActive
-            ? 'bg-(--pnds-card) text-(--pnds-text) shadow-sm'
-            : 'text-(--pnds-text)/75 hover:bg-(--pnds-text)/5'
+            ? 'bg-(--pnds-selection) text-(--pnds-accent-text)'
+            : 'text-(--pnds-text-secondary) hover:bg-(--pnds-pill-hover)'
         )}
       >
         <Wrench size={14} aria-hidden="true" />
@@ -405,7 +405,7 @@ export function FolderSwitch({
           data-testid="folder-drop-choices"
           data-folder-drop-choices=""
           aria-label={t('sidebar.moveToFolder')}
-          className="absolute start-0 top-full z-50 mt-1 max-h-64 w-full overflow-y-auto rounded-lg border border-(--pnds-text)/10 bg-(--pnds-sidebar-bg) p-1 shadow-lg"
+          className="desktop-folder-drop-panel overflow-y-auto rounded-lg border border-(--pnds-border) bg-(--pnds-sidebar-bg) p-1 shadow-lg"
         >
           <div
             data-unfiled-drop=""
@@ -415,7 +415,7 @@ export function FolderSwitch({
                 ? 'true'
                 : undefined
             }
-            className="rounded-md px-2.5 py-2 text-[13px] data-[drop-active=true]:bg-(--pnds-accent)/15"
+            className="rounded-md px-2.5 py-2 text-[13px] data-[drop-active=true]:bg-(--pnds-selection)"
           >
             {t('sidebar.unfiled')}
           </div>
@@ -430,7 +430,7 @@ export function FolderSwitch({
                   ? 'true'
                   : undefined
               }
-              className="truncate rounded-md px-2.5 py-2 text-[13px] data-[drop-active=true]:bg-(--pnds-accent)/15"
+              className="truncate rounded-md px-2.5 py-2 text-[13px] data-[drop-active=true]:bg-(--pnds-selection)"
             >
               {folderDisplayName(folder)}
             </div>

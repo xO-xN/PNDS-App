@@ -85,14 +85,17 @@ export function applyCardSelectionPill(
     pill.style.opacity = '0'
     return
   }
-  const slide = anchorVisible && anchor !== card.dataset.projectPath
+  const anchorChanged = anchor !== card.dataset.projectPath
+  const slide = anchorVisible && anchorChanged
   if (slide) {
     // Also cancels a still-pending snap restore — this move animates.
     pill.style.transition = ''
-  } else {
+  } else if (anchorChanged) {
     pill.style.transition = 'none'
   }
-  if (anchor !== card.dataset.projectPath) {
+  // A preflight reply or other commit onto the same target must not
+  // cancel a slide that is still playing.
+  if (anchorChanged) {
     // #41 (Brutal): a NEW card became the selection — restart the theme's
     // one-shot rise animation so the card lifts off its black plane. The
     // reset-reflow-restore idiom re-triggers a CSS keyframe; in themes
@@ -104,7 +107,7 @@ export function applyCardSelectionPill(
   applyIndicatorGeometry(pill, card, 'y')
   pill.style.opacity = hidden ? '0' : '1'
   pill.dataset.anchor = card.dataset.projectPath
-  if (!slide) {
+  if (anchorChanged && !slide) {
     // Let the snapped geometry paint one frame before the class-owned
     // transition comes back.
     requestAnimationFrame(() => {

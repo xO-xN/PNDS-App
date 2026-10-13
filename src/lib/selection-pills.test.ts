@@ -153,6 +153,11 @@ describe('applyCardSelectionPill (anchor/slide protocol)', () => {
     expect(pill.style.transition).toBe('')
     expect(pill.style.transform).toBe('translateY(61px)')
     expect(pill.dataset.anchor).toBe('/b')
+
+    // A preflight result re-applies the same target while the slide is
+    // still playing; it must retain the transition instead of snapping.
+    applyCardSelectionPill(pill, container, '/b', false)
+    expect(pill.style.transition).toBe('')
   })
 
   it('reappears in place when the anchored card left the view', () => {
@@ -172,7 +177,7 @@ describe('applyCardSelectionPill (anchor/slide protocol)', () => {
     expect(pill.dataset.anchor).toBe('/c')
   })
 
-  it('re-selecting the anchored card re-snaps rather than slides', () => {
+  it('re-applying the initial anchor retains its first-frame snap', () => {
     const pill = document.createElement('div')
     const card = pinned({ 'data-project-path': '/a' }, { top: 0, height: 57 })
 

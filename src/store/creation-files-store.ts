@@ -1,9 +1,15 @@
 import { create } from 'zustand'
 import i18n from '@/i18n/config'
-import { commands, type CreationError } from '@/lib/tauri-bindings'
+import {
+  commands,
+  type CreationContent,
+  type CreationError,
+  type CreationFile,
+  type Result,
+} from '@/lib/tauri-bindings'
 import type { CreationParticipant } from '@/lib/creation-lifecycle'
 import { creationTransportError, useCreationStore } from './creation-store'
-import { useCreationChangesStore } from './creation-changes-store'
+import { useSessionStore } from './session-store'
 import { useCreationHandoffStore } from './creation-handoff-store'
 import {
   editReadmeCover,
@@ -14,10 +20,9 @@ import {
 } from '@/lib/creation-readme'
 
 /**
- * #154: per-file editing drafts for the creation workspace. Drafts live at
- * the store level so switching files (and later the console tab) never
- * drops them; each record remembers the exact disk version it was read
- * from so saves can detect external modification at write time.
+ * Project files own reads, drafts, watcher acknowledgements and directory
+ * commits together. The editor never manages operation generations or seeds
+ * drafts itself. Runtime prompts still describe saved disk facts only.
  */
 export interface CreationDraft {
   text: string
@@ -35,7 +40,21 @@ export interface CreationDraft {
   error: CreationError | null
 }
 
-interface CreationDraftsState {
+type UpdateKind = 'refresh' | 'restart' | 'compile'
+export interface CreationUpdateToken {
+  identity: string
+  revision: number
+}
+interface CreationFilesState {
+  revision: number
+  diskRevision: number
+  fileRevisions: Record<string, number>
+  pending: Record<UpdateKind, number>
+  error: CreationError | null
+  poll: () => Promise<boolean>
+  changed: (paths: string[]) => void
+  capture: (root: string) => Promise<CreationUpdateToken | null>
+  complete: (token: CreationUpdateToken | null, kind: UpdateKind) => void
   drafts: Record<string, CreationDraft>
   activePath: string | null
   readmeLocale: string | null
@@ -47,14 +66,17 @@ interface CreationDraftsState {
   dismissedConflict: { path: string; version: string } | null
   setActivePath: (path: string | null) => void
   setReadmeLocale: (locale: string) => void
-  loaded: (path: string, text: string, version: string) => void
+  /** Opens a current draft or saved preview. Text versions are the disk baseline; stale reads return null. */
+  read: (
+    identity: string,
+    path: string
+  ) => Promise<Result<CreationContent, CreationError> | null>
   edit: (path: string, text: string) => void
   editReadme: (path: string, field: CoverField, value: string) => void
   save: (path: string, overwriteVersion?: string) => Promise<void>
   /** Re-reads a clean draft from disk, adopting external changes that have
    * nothing unsaved to conflict with. */
   reload: (path: string) => Promise<void>
-  observeDisk: (path: string) => Promise<boolean>
   revert: (path: string) => void
   dismissConflict: (path: string) => void
   rename: (path: string, nextPath: string) => Promise<CreationError | null>
@@ -71,10 +93,10 @@ export function isDraftDirty(draft: CreationDraft): boolean {
 }
 
 function patch(
-  state: CreationDraftsState,
+  state: CreationFilesState,
   path: string,
   update: Partial<CreationDraft>
-): Partial<CreationDraftsState> {
+): Partial<CreationFilesState> {
   const draft = state.drafts[path]
   if (!draft) return {}
   return { drafts: { ...state.drafts, [path]: { ...draft, ...update } } }
@@ -85,10 +107,34 @@ function ownsWorkspace(identity: string): boolean {
   return useCreationStore.getState().workspace?.project.identity === identity
 }
 
+const initialChanges = () => ({
+  revision: 0,
+  diskRevision: 0,
+  fileRevisions: {},
+  pending: { refresh: 0, restart: 0, compile: 0 },
+  error: null,
+})
+let polling: {
+  identity: string
+  epoch: number
+  promise: Promise<boolean>
+} | null = null
+
+export function isCreationWorkspacePath(path: string | null): boolean {
+  const { workspace, runtimeProject } = useCreationStore.getState()
+  return (
+    !!workspace &&
+    !!path &&
+    (path === workspace.project.root ||
+      (runtimeProject?.root === workspace.project.root &&
+        runtimeProject.path === path))
+  )
+}
+
 let operationEpoch = 0
 const operations = new Map<string, number>()
 /** Read/write ownership within the same workspace; editing stays independent. */
-export function beginCreationFileOperation(path: string): () => boolean {
+function beginCreationFileOperation(path: string): () => boolean {
   const identity = useCreationStore.getState().workspace?.project.identity
   const epoch = operationEpoch
   const generation = (operations.get(path) ?? 0) + 1
@@ -100,8 +146,206 @@ export function beginCreationFileOperation(path: string): () => boolean {
     operations.get(path) === generation
 }
 
-export const useCreationDraftsStore = create<CreationDraftsState>(
-  (set, get) => ({
+/** All file actions share workspace ownership and commit the directory through this seam. */
+function commitFileList(
+  files: CreationFile[],
+  owns: () => boolean,
+  revision: number
+): boolean {
+  const workspace = useCreationStore.getState().workspace
+  if (
+    !owns() ||
+    !workspace ||
+    useCreationFilesStore.getState().revision !== revision
+  )
+    return false
+  useCreationStore.setState({
+    workspace: { project: workspace.project, files },
+  })
+  return true
+}
+
+export const useCreationFilesStore = create<CreationFilesState>((set, get) => {
+  const observeDisk = async (path: string): Promise<boolean> => {
+    const identity = useCreationStore.getState().workspace?.project.identity
+    if (!identity) return false
+    if (!get().drafts[path]) return true
+    if (get().drafts[path]?.saving || get().drafts[path]?.renaming) return false
+    const ownsOperation = beginCreationFileOperation(path)
+    try {
+      const result = await commands.readCreationFile(identity, path)
+      if (!ownsOperation()) return false
+      const draft = get().drafts[path]
+      if (!draft) return true
+      if (draft.saving || draft.renaming) return false
+      if (result.status === 'error') {
+        set(state =>
+          patch(state, path, { error: result.error, diskChanged: true })
+        )
+      } else if (result.data.kind === 'text') {
+        const disk = result.data
+        set(state =>
+          patch(
+            state,
+            path,
+            isDraftDirty(draft)
+              ? {
+                  conflict:
+                    disk.version === draft.diskVersion
+                      ? null
+                      : { text: disk.text, version: disk.version },
+                  diskChanged: disk.version !== draft.diskVersion,
+                  error: null,
+                }
+              : {
+                  text: disk.text,
+                  readme: isProjectReadme(path)
+                    ? inspectEditableReadme(disk.text)
+                    : undefined,
+                  diskText: disk.text,
+                  diskVersion: disk.version,
+                  diskChanged: false,
+                  error: null,
+                }
+          )
+        )
+      } else {
+        set(state =>
+          patch(state, path, {
+            error: creationTransportError(i18n.t('creation.noLongerText')),
+            diskChanged: true,
+          })
+        )
+      }
+      return true
+    } catch (error) {
+      if (ownsOperation())
+        set(state =>
+          patch(state, path, { error: creationTransportError(error) })
+        )
+      return ownsOperation()
+    }
+  }
+  return {
+    ...initialChanges(),
+    changed: paths => {
+      if (!paths.length) return
+      const workspace = useCreationStore.getState().workspace
+      if (!workspace) return
+      const session = useSessionStore.getState()
+      const running =
+        ['starting', 'ready'].includes(session.sessionStatus) &&
+        isCreationWorkspacePath(session.sessionProjectPath)
+      set(state => {
+        const revision = state.revision + 1
+        const fileRevisions = { ...state.fileRevisions }
+        const pending = { ...state.pending }
+        for (const path of paths) {
+          fileRevisions[path] = revision
+          if (path.endsWith('.scd')) pending.compile = revision
+          if (
+            !running ||
+            /^(README(?:\.(?:en|zh-CN))?\.md|AGENTS\.md|docs\/)/i.test(path)
+          )
+            continue
+          const audio =
+            /^(audio|supercollider)\//.test(path) ||
+            /\.(scd|scsyndef)$/.test(path)
+          const page =
+            !audio &&
+            (/^(public|performer|monitor)\//.test(path) ||
+              /\.(html|css)$/.test(path))
+          pending[page ? 'refresh' : 'restart'] = revision
+        }
+        return { revision, fileRevisions, pending }
+      })
+    },
+    poll: () => {
+      const workspace = useCreationStore.getState().workspace
+      if (!workspace) return Promise.resolve(false)
+      const identity = workspace.project.identity
+      if (polling?.identity === identity) return polling.promise
+      const epoch = operationEpoch
+      const owns = () => epoch === operationEpoch && ownsWorkspace(identity)
+      const promise = (async () => {
+        try {
+          const revision = get().revision
+          const result = await commands.pollCreationChanges(
+            identity,
+            get().diskRevision
+          )
+          if (!owns()) return false
+          if (result.status === 'error') {
+            set({ error: result.error })
+            return false
+          }
+          const change = result.data
+          const listed =
+            get().revision === revision &&
+            (!change.changed.length ||
+              commitFileList(change.files, owns, revision))
+          get().changed(change.changed)
+          set({ error: null })
+          const synchronized = await Promise.all(
+            change.changed.map(path => observeDisk(path))
+          )
+          if (!owns()) return false
+          // Retry the batch after an in-flight save settles; otherwise an
+          // external write racing that save could disappear from the watcher.
+          const complete = listed && synchronized.every(Boolean)
+          if (complete) set({ diskRevision: change.revision })
+          return complete
+        } catch (error) {
+          if (owns()) set({ error: creationTransportError(error) })
+          return false
+        } finally {
+          if (polling?.identity === identity && polling.epoch === epoch)
+            polling = null
+        }
+      })()
+      polling = { identity, epoch, promise }
+      return promise
+    },
+    capture: async root => {
+      const workspace = useCreationStore.getState().workspace
+      if (!workspace || !isCreationWorkspacePath(root)) return null
+      const identity = workspace.project.identity
+      if (
+        !(await get().poll()) ||
+        useCreationStore.getState().workspace?.project.identity !== identity
+      )
+        return null
+      return { identity, revision: get().revision }
+    },
+    complete: (token, kind) => {
+      if (
+        !token ||
+        useCreationStore.getState().workspace?.project.identity !==
+          token.identity
+      )
+        return
+      set(state => {
+        const pending = { ...state.pending }
+        for (const update of kind === 'restart'
+          ? (['restart', 'refresh'] as const)
+          : [kind]) {
+          if (pending[update] <= token.revision) pending[update] = 0
+        }
+        // Compilation changes disk artifacts; the running synths still need
+        // an explicit restart. Source edits during compilation remain pending.
+        const session = useSessionStore.getState()
+        if (
+          kind === 'compile' &&
+          ['starting', 'ready'].includes(session.sessionStatus) &&
+          isCreationWorkspacePath(session.sessionProjectPath)
+        )
+          pending.restart = state.revision + 1
+        return {
+          pending,
+          revision: kind === 'compile' ? state.revision + 1 : state.revision,
+        }
+      })
+    },
     drafts: {},
     activePath: null,
     readmeLocale: null,
@@ -109,11 +353,32 @@ export const useCreationDraftsStore = create<CreationDraftsState>(
     dismissedConflict: null,
     setActivePath: path => set({ activePath: path, renameNote: null }),
     setReadmeLocale: readmeLocale => set({ readmeLocale }),
-    loaded: (path, text, version) =>
-      set(state =>
-        path in state.drafts
-          ? {}
-          : {
+    read: async (identity, path) => {
+      const workspace = useCreationStore.getState().workspace
+      if (workspace?.project.identity !== identity) return null
+      const editable = workspace.project.source === 'folder'
+      const draft = get().drafts[path]
+      if (editable && draft)
+        return {
+          status: 'ok',
+          data: { kind: 'text', text: draft.text, version: draft.diskVersion },
+        }
+      const ownsOperation = beginCreationFileOperation(path)
+      try {
+        // A watcher change while the reply is in flight requires a fresh read,
+        // even when there was no draft for the watcher to synchronize yet.
+        while (ownsOperation()) {
+          const revision = get().fileRevisions[path] ?? 0
+          const result = await commands.readCreationFile(identity, path)
+          if (!ownsOperation()) return null
+          if ((get().fileRevisions[path] ?? 0) !== revision) continue
+          if (
+            editable &&
+            result.status === 'ok' &&
+            result.data.kind === 'text'
+          ) {
+            const { text, version } = result.data
+            set(state => ({
               drafts: {
                 ...state.drafts,
                 [path]: {
@@ -130,8 +395,16 @@ export const useCreationDraftsStore = create<CreationDraftsState>(
                   error: null,
                 },
               },
-            }
-      ),
+            }))
+          }
+          return result
+        }
+      } catch (error) {
+        if (ownsOperation())
+          return { status: 'error', error: creationTransportError(error) }
+      }
+      return null
+    },
     edit: (path, text) =>
       set(state => ({
         ...patch(state, path, {
@@ -232,7 +505,7 @@ export const useCreationDraftsStore = create<CreationDraftsState>(
           }),
           renameNote: state.renameNote === path ? null : state.renameNote,
         }))
-        useCreationChangesStore.getState().changed([path])
+        get().changed([path])
         useCreationHandoffStore
           .getState()
           .offerReadmeSync(path, result.data, locale)
@@ -246,71 +519,10 @@ export const useCreationDraftsStore = create<CreationDraftsState>(
           )
       }
     },
-    observeDisk: async path => {
-      const identity = useCreationStore.getState().workspace?.project.identity
-      if (!identity) return false
-      if (!get().drafts[path]) return true
-      if (get().drafts[path]?.saving || get().drafts[path]?.renaming)
-        return false
-      const ownsOperation = beginCreationFileOperation(path)
-      try {
-        const result = await commands.readCreationFile(identity, path)
-        if (!ownsOperation()) return false
-        const draft = get().drafts[path]
-        if (!draft) return true
-        if (draft.saving || draft.renaming) return false
-        if (result.status === 'error') {
-          set(state =>
-            patch(state, path, { error: result.error, diskChanged: true })
-          )
-        } else if (result.data.kind === 'text') {
-          const disk = result.data
-          set(state =>
-            patch(
-              state,
-              path,
-              isDraftDirty(draft)
-                ? {
-                    conflict:
-                      disk.version === draft.diskVersion
-                        ? null
-                        : { text: disk.text, version: disk.version },
-                    diskChanged: disk.version !== draft.diskVersion,
-                    error: null,
-                  }
-                : {
-                    text: disk.text,
-                    readme: isProjectReadme(path)
-                      ? inspectEditableReadme(disk.text)
-                      : undefined,
-                    diskText: disk.text,
-                    diskVersion: disk.version,
-                    diskChanged: false,
-                    error: null,
-                  }
-            )
-          )
-        } else {
-          set(state =>
-            patch(state, path, {
-              error: creationTransportError(i18n.t('creation.noLongerText')),
-              diskChanged: true,
-            })
-          )
-        }
-        return true
-      } catch (error) {
-        if (ownsOperation())
-          set(state =>
-            patch(state, path, { error: creationTransportError(error) })
-          )
-        return ownsOperation()
-      }
-    },
     reload: async path => {
       const draft = get().drafts[path]
       if (!draft || isDraftDirty(draft) || draft.saving) return
-      await get().observeDisk(path)
+      await observeDisk(path)
     },
     revert: path =>
       set(state => {
@@ -392,20 +604,12 @@ export const useCreationDraftsStore = create<CreationDraftsState>(
             : state.drafts
           return { drafts, activePath: canonical, renameNote: canonical }
         })
-        useCreationChangesStore.getState().changed([path, canonical])
-        const revision = useCreationChangesStore.getState().revision
+        get().changed([path, canonical])
+        const revision = get().revision
         const listed = await commands.listCreationFiles(identity)
         if (!ownsOperation()) return null
-        if (
-          listed.status === 'ok' &&
-          useCreationChangesStore.getState().revision === revision
-        ) {
-          const current = useCreationStore.getState().workspace
-          if (current?.project.identity === identity)
-            useCreationStore.setState({
-              workspace: { project: current.project, files: listed.data },
-            })
-        }
+        if (listed.status === 'ok')
+          commitFileList(listed.data, ownsOperation, revision)
         return null
       } catch (error) {
         if (ownsOperation()) {
@@ -419,7 +623,9 @@ export const useCreationDraftsStore = create<CreationDraftsState>(
     clear: () => {
       operationEpoch += 1
       operations.clear()
+      polling = null
       set({
+        ...initialChanges(),
         drafts: {},
         activePath: null,
         readmeLocale: null,
@@ -427,8 +633,8 @@ export const useCreationDraftsStore = create<CreationDraftsState>(
         dismissedConflict: null,
       })
     },
-  })
-)
+  }
+})
 
 export function selectUnsavedCount(state: {
   drafts: Record<string, CreationDraft>
@@ -466,18 +672,18 @@ export function selectDiskConflictPathKey(state: {
  */
 export const creationDraftsParticipant: CreationParticipant = {
   hasUnsavedChanges: () =>
-    selectUnsavedCount(useCreationDraftsStore.getState()) > 0,
-  unsavedCount: () => selectUnsavedCount(useCreationDraftsStore.getState()),
+    selectUnsavedCount(useCreationFilesStore.getState()) > 0,
+  unsavedCount: () => selectUnsavedCount(useCreationFilesStore.getState()),
   // The mode button's own two-click confirm is the whole approval there;
   // switching projects asks explicitly via confirmDiscardCreationDrafts.
   confirmDiscard: async () => true,
 }
 
-let draftWorkspaceIdentity: string | null = null
+let fileWorkspaceIdentity: string | null = null
 useCreationStore.subscribe(state => {
   const identity = state.workspace?.project.identity ?? null
-  if (identity !== draftWorkspaceIdentity) {
-    draftWorkspaceIdentity = identity
-    useCreationDraftsStore.getState().clear()
+  if (identity !== fileWorkspaceIdentity) {
+    fileWorkspaceIdentity = identity
+    useCreationFilesStore.getState().clear()
   }
 })

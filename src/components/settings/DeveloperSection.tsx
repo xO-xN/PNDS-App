@@ -119,7 +119,7 @@ export function DeveloperSection({ section }: { section: SettingsSection }) {
         {t('settings.developerTools')}
       </SectionTitle>
 
-      <div className="flex flex-col gap-2 rounded-lg border border-(--pnds-text)/10 px-3 py-2">
+      <div className="flex flex-col gap-2 rounded-lg border border-(--pnds-border) px-3 py-2">
         {/* Row 1: the target — label plus the path (or selection guidance).
             Row 2: the actions — a single line of path + three buttons used
             to cram everything into one wrapping row. */}

@@ -1,3 +1,9 @@
+import { seedCreationDraft } from '@/test/creation-files'
+import {
+  creationProjectAction,
+  creationFileButton,
+  creationFileAction,
+} from '@/test/desktop-actions'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { open } from '@tauri-apps/plugin-dialog'
 import { within } from '@testing-library/react'
@@ -12,9 +18,10 @@ import {
   type Result,
 } from '@/lib/tauri-bindings'
 import { useCreationStore } from '@/store/creation-store'
-import { useCreationDraftsStore } from '@/store/creation-drafts-store'
+import { useCreationFilesStore } from '@/store/creation-files-store'
 import { useSessionStore } from '@/store/session-store'
 import { CreationView } from './CreationView'
+import { DesktopBar } from '@/components/shell/DesktopBar'
 
 const first: CreationWorkspace = {
   project: {
@@ -46,7 +53,7 @@ describe('creation reading workspace', () => {
       request: null,
       error: null,
     })
-    useCreationDraftsStore.setState({
+    useCreationFilesStore.setState({
       drafts: {},
       activePath: null,
       renameNote: null,
@@ -63,7 +70,12 @@ describe('creation reading workspace', () => {
       status: 'ok',
       data: { kind: 'text', text: 'alpha beta alpha', version: 'v1' },
     })
-    render(<CreationView />)
+    render(
+      <>
+        <CreationView />
+        <DesktopBar />
+      </>
+    )
     fireEvent.click(screen.getByRole('button', { name: 'Open folder project' }))
     fireEvent.click(
       await screen.findByRole('button', { name: 'public/score.js' })
@@ -87,8 +99,59 @@ describe('creation reading workspace', () => {
     )
     expect(commands.startProject).not.toHaveBeenCalled()
     expect(
-      screen.queryByRole('button', { name: /new project|assistant|console/i })
+      screen.queryByRole('button', { name: /assistant/i })
     ).not.toBeInTheDocument()
+  })
+
+  it('removes a recent creation without opening or deleting the project', async () => {
+    useCreationStore.setState({ recentPaths: ['/draft', '/older'] })
+    render(<CreationView />)
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Remove draft from recent creations' })
+    )
+    expect(useCreationStore.getState().recentPaths).toEqual(['/older'])
+    expect(
+      screen.queryByRole('button', { name: 'draft' })
+    ).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'older' })).toBeInTheDocument()
+    await waitFor(() =>
+      expect(commands.savePreferences).toHaveBeenCalledWith(
+        expect.objectContaining({ recentCreationProjects: ['/older'] })
+      )
+    )
+    expect(commands.prepareCreationProject).not.toHaveBeenCalled()
+    expect(commands.closeCreationProject).not.toHaveBeenCalled()
+    expect(commands.stopProject).not.toHaveBeenCalled()
+  })
+
+  it('opens the existing project picker from the titlebar while retaining the file draft', async () => {
+    useCreationStore.setState({ workspace: first })
+    seedCreationDraft('public/score.js', 'saved', 'v1')
+    useCreationFilesStore.getState().edit('public/score.js', 'unsaved')
+    useCreationFilesStore.getState().setActivePath('public/score.js')
+    render(<CreationView />)
+    const topbar = document.querySelector<HTMLElement>('[data-creation-topbar]')
+    if (!topbar) throw new Error('Expected the creation titlebar')
+    expect(
+      within(topbar).getByRole('button', { name: 'Project actions' })
+    ).toBeEnabled()
+    expect(topbar).toHaveTextContent('Draft')
+    expect(
+      within(topbar).getByRole('button', { name: 'Generate .pnds' })
+    ).toBeEnabled()
+    const editor = await screen.findByDisplayValue('unsaved')
+    await creationProjectAction('Switch to another project')
+    const picker = await screen.findByRole('dialog', {
+      name: 'Switch to another project',
+    })
+    expect(
+      useCreationFilesStore.getState().drafts['public/score.js']?.text
+    ).toBe('unsaved')
+    fireEvent.click(within(picker).getByRole('button', { name: 'Cancel' }))
+    expect(screen.getByDisplayValue('unsaved')).toBe(editor)
+    expect(commands.prepareCreationProject).not.toHaveBeenCalled()
+    expect(commands.startProject).not.toHaveBeenCalled()
+    expect(commands.stopProject).not.toHaveBeenCalled()
   })
 
   it('watches external removal, keeps the draft accessible and explains the saved-disk runtime boundary', async () => {
@@ -97,8 +160,8 @@ describe('creation reading workspace', () => {
       sessionStatus: 'ready',
       sessionProjectPath: '/draft',
     })
-    useCreationDraftsStore.getState().loaded('public/score.js', 'my page', 'v1')
-    useCreationDraftsStore.getState().edit('public/score.js', 'my unsaved page')
+    seedCreationDraft('public/score.js', 'my page', 'v1')
+    useCreationFilesStore.getState().edit('public/score.js', 'my unsaved page')
     vi.mocked(commands.pollCreationChanges).mockResolvedValueOnce({
       status: 'ok',
       data: { files: [], changed: ['public/score.js'], revision: 1 },
@@ -107,10 +170,15 @@ describe('creation reading workspace', () => {
       status: 'error',
       error: { code: 'missing', detail: 'public/score.js' },
     })
-    render(<CreationView />)
+    render(
+      <>
+        <CreationView />
+        <DesktopBar />
+      </>
+    )
     await screen.findByText('Pages changed on disk · refresh pending')
     expect(screen.getByText(/unsaved drafts are excluded/i)).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'public/score.js' }))
+    fireEvent.click(creationFileButton('public/score.js'))
     await screen.findByDisplayValue('my unsaved page')
     expect(await screen.findByLabelText('Disk changed')).toBeInTheDocument()
     expect(commands.startProject).not.toHaveBeenCalled()
@@ -122,8 +190,13 @@ describe('creation reading workspace', () => {
       status: 'ok',
       data: { kind: 'text', text: 'original', version: 'v1' },
     })
-    render(<CreationView />)
-    fireEvent.click(screen.getByRole('button', { name: 'public/score.js' }))
+    render(
+      <>
+        <CreationView />
+        <DesktopBar />
+      </>
+    )
+    fireEvent.click(creationFileButton('public/score.js'))
     const editor = await screen.findByRole('textbox', {
       name: 'public/score.js',
     })
@@ -141,7 +214,9 @@ describe('creation reading workspace', () => {
         outputTail: ['[node] stopped unexpectedly'],
       },
     })
-    fireEvent.click(screen.getByRole('tab', { name: 'Console' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Console' }))
+    expect(editor).toBeVisible()
+    expect(editor).toHaveValue('unsaved text')
     await screen.findByText('[node] stopped unexpectedly')
     fireEvent.click(screen.getByRole('button', { name: 'Copy test details' }))
     await waitFor(() =>
@@ -149,7 +224,7 @@ describe('creation reading workspace', () => {
         expect.stringContaining('Node exited')
       )
     )
-    fireEvent.click(screen.getByRole('tab', { name: 'public/score.js' }))
+    fireEvent.click(creationFileButton('public/score.js'))
     expect(screen.getByRole('textbox', { name: 'public/score.js' })).toBe(
       editor
     )
@@ -170,10 +245,13 @@ describe('creation reading workspace', () => {
         },
       ],
     })
-    render(<CreationView />)
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Switch to another project' })
+    render(
+      <>
+        <CreationView />
+        <DesktopBar />
+      </>
     )
+    await creationProjectAction('Switch to another project')
     await screen.findByText('Read-only · installed .pnds bundle')
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(useCreationStore.getState().workspace).toEqual(first)
@@ -189,8 +267,13 @@ describe('creation reading workspace', () => {
         })
     )
     useCreationStore.setState({ workspace: first })
-    render(<CreationView />)
-    fireEvent.click(screen.getByRole('button', { name: 'public/score.js' }))
+    render(
+      <>
+        <CreationView />
+        <DesktopBar />
+      </>
+    )
+    fireEvent.click(creationFileButton('public/score.js'))
     await waitFor(() => expect(commands.readCreationFile).toHaveBeenCalled())
     fireEvent.change(
       screen.getByRole('textbox', { name: 'Search file paths' }),
@@ -211,7 +294,7 @@ describe('creation reading workspace', () => {
       status: 'ok',
       data: { kind: 'text', text: 'new contents', version: 'v2' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'public/score.js' }))
+    fireEvent.click(creationFileButton('public/score.js'))
     await screen.findByDisplayValue('new contents')
     await act(async () =>
       resolveRead({
@@ -243,16 +326,21 @@ describe('creation reading workspace', () => {
       status: 'ok',
       data: { kind: 'image', url: 'data:image/gif;base64,AA==' },
     })
-    render(<CreationView />)
+    render(
+      <>
+        <CreationView />
+        <DesktopBar />
+      </>
+    )
     expect(commands.readCreationFile).not.toHaveBeenCalled()
-    fireEvent.click(screen.getByRole('button', { name: 'image.gif' }))
+    fireEvent.click(creationFileButton('image.gif'))
     fireEvent.error(await screen.findByRole('img', { name: 'image.gif' }))
     await screen.findByText(/could not be decoded/)
     vi.mocked(commands.readCreationFile).mockResolvedValueOnce({
       status: 'ok',
       data: { kind: 'binary' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'audio.wav' }))
+    fireEvent.click(creationFileButton('audio.wav'))
     await screen.findByText('WAV · 100 bytes')
     expect(document.querySelector('audio')).toBeNull()
   })
@@ -283,7 +371,7 @@ describe('creation reading workspace', () => {
         request: null,
         error: null,
       })
-      useCreationDraftsStore.setState({
+      useCreationFilesStore.setState({
         drafts: {},
         activePath: null,
         renameNote: null,
@@ -300,8 +388,13 @@ describe('creation reading workspace', () => {
           status: 'ok',
           data: { kind: 'text', text: 'note contents', version: 'n1' },
         })
-      render(<CreationView />)
-      fireEvent.click(screen.getByRole('button', { name: 'public/score.js' }))
+      render(
+        <>
+          <CreationView />
+          <DesktopBar />
+        </>
+      )
+      fireEvent.click(creationFileButton('public/score.js'))
       const editor = (await screen.findByDisplayValue(
         'score contents'
       )) as HTMLTextAreaElement
@@ -310,10 +403,10 @@ describe('creation reading workspace', () => {
         document.querySelectorAll('.creation-file-row .creation-dirty-dot')
           .length
       ).toBe(1)
-      fireEvent.click(screen.getByRole('button', { name: 'public/notes.js' }))
+      fireEvent.click(creationFileButton('public/notes.js'))
       await screen.findByDisplayValue('note contents')
       // Switching back restores the draft exactly, without re-reading disk.
-      fireEvent.click(screen.getByRole('button', { name: 'public/score.js' }))
+      fireEvent.click(creationFileButton('public/score.js'))
       expect(
         (await screen.findByDisplayValue('score edited')) as HTMLTextAreaElement
       ).toBeTruthy()
@@ -335,7 +428,7 @@ describe('creation reading workspace', () => {
         expect(useCreationStore.getState().modePhase).toBe('idle')
       )
       expect(
-        useCreationDraftsStore.getState().drafts['public/score.js']?.text
+        useCreationFilesStore.getState().drafts['public/score.js']?.text
       ).toBe('score edited')
     })
 
@@ -344,8 +437,13 @@ describe('creation reading workspace', () => {
         status: 'ok',
         data: { kind: 'text', text: 'score contents', version: 'v1' },
       })
-      render(<CreationView />)
-      fireEvent.click(screen.getByRole('button', { name: 'public/score.js' }))
+      render(
+        <>
+          <CreationView />
+          <DesktopBar />
+        </>
+      )
+      fireEvent.click(creationFileButton('public/score.js'))
       fireEvent.change(await screen.findByDisplayValue('score contents'), {
         target: { value: 'score edited' },
       })
@@ -363,7 +461,7 @@ describe('creation reading workspace', () => {
       ).toBeInTheDocument()
       // The draft is untouched while the choice is open.
       expect(screen.getByDisplayValue('score edited')).toBeInTheDocument()
-      fireEvent.click(screen.getByRole('button', { name: 'Reload from disk' }))
+      await creationFileAction('Reload from disk')
       await screen.findByDisplayValue('external agent text')
       expect(
         screen.queryByText('The file changed on disk')
@@ -434,12 +532,17 @@ describe('creation reading workspace', () => {
         status: 'ok',
         data: { kind: 'text', text: 'score contents', version: 'v1' },
       })
-      render(<CreationView />)
-      fireEvent.click(screen.getByRole('button', { name: 'public/score.js' }))
+      render(
+        <>
+          <CreationView />
+          <DesktopBar />
+        </>
+      )
+      fireEvent.click(creationFileButton('public/score.js'))
       fireEvent.change(await screen.findByDisplayValue('score contents'), {
         target: { value: 'score edited' },
       })
-      fireEvent.click(screen.getByRole('button', { name: 'Rename' }))
+      await creationFileAction('Rename')
       const dialog = await screen.findByRole('dialog')
       expect(
         within(dialog).getByText(
@@ -475,19 +578,17 @@ describe('creation reading workspace', () => {
         'public/renamed.js',
         []
       )
-      expect(
-        screen.getByRole('button', { name: 'public/renamed.js' })
-      ).toBeInTheDocument()
+      expect(creationFileButton('public/renamed.js')).toBeInTheDocument()
       expect(
         screen.queryByRole('button', { name: 'public/score.js' })
       ).not.toBeInTheDocument()
       expect(screen.getByText(/File renamed\./)).toBeInTheDocument()
       expect(
-        useCreationDraftsStore.getState().drafts['public/renamed.js']?.text
+        useCreationFilesStore.getState().drafts['public/renamed.js']?.text
       ).toBe('score edited')
 
       // Existing targets surface readable failures without touching disk.
-      fireEvent.click(screen.getByRole('button', { name: 'Rename' }))
+      await creationFileAction('Rename')
       const retry = await screen.findByRole('dialog')
       fireEvent.change(
         within(retry).getByRole('textbox', { name: 'Path inside the project' }),
@@ -515,7 +616,7 @@ describe('creation reading workspace', () => {
         data: { kind: 'text', text: 'score contents', version: 'v1' },
       })
       const { rerender } = render(<KeyboardHarness />)
-      fireEvent.click(screen.getByRole('button', { name: 'public/score.js' }))
+      fireEvent.click(creationFileButton('public/score.js'))
       fireEvent.change(await screen.findByDisplayValue('score contents'), {
         target: { value: 'score edited' },
       })
@@ -546,7 +647,7 @@ describe('creation reading workspace', () => {
         status: 'ok',
         data: { kind: 'text', text: 'newer disk contents', version: 'v3' },
       })
-      fireEvent.click(screen.getByRole('button', { name: 'Reload from disk' }))
+      await creationFileAction('Reload from disk')
       await screen.findByDisplayValue('newer disk contents')
 
       useCreationStore.setState({
@@ -563,7 +664,7 @@ describe('creation reading workspace', () => {
         },
       })
       rerender(<KeyboardHarness />)
-      fireEvent.click(screen.getByRole('button', { name: 'public/score.js' }))
+      fireEvent.click(creationFileButton('public/score.js'))
       await screen.findByText('score contents')
       expect(
         screen.queryByRole('button', { name: 'Save' })
@@ -638,7 +739,7 @@ describe('creation reading workspace', () => {
         request: null,
         error: null,
       })
-      useCreationDraftsStore.setState({
+      useCreationFilesStore.setState({
         drafts: {},
         activePath: null,
         renameNote: null,
@@ -654,7 +755,12 @@ describe('creation reading workspace', () => {
         status: 'ok',
         data: 'v2',
       })
-      render(<CreationView />)
+      render(
+        <>
+          <CreationView />
+          <DesktopBar />
+        </>
+      )
       fireEvent.click(screen.getByRole('button', { name: 'manifest.json' }))
       const name = (await screen.findByLabelText(
         'Work title'
@@ -703,7 +809,12 @@ describe('creation reading workspace', () => {
             'audio.supportedModes must be a non-empty array of internal, external or none',
         },
       })
-      render(<CreationView />)
+      render(
+        <>
+          <CreationView />
+          <DesktopBar />
+        </>
+      )
       fireEvent.click(screen.getByRole('button', { name: 'manifest.json' }))
       await screen.findByLabelText('Work title')
       fireEvent.click(screen.getByRole('checkbox', { name: 'Internal' }))
@@ -716,7 +827,7 @@ describe('creation reading workspace', () => {
         screen.getByText(/non-empty array of internal/)
       ).toBeInTheDocument()
       expect(
-        useCreationDraftsStore.getState().drafts['manifest.json']?.text
+        useCreationFilesStore.getState().drafts['manifest.json']?.text
       ).toContain('"supportedModes": []')
     })
 
@@ -725,7 +836,12 @@ describe('creation reading workspace', () => {
         status: 'ok',
         data: { kind: 'text', text: '{ not json', version: 'v1' },
       })
-      render(<CreationView />)
+      render(
+        <>
+          <CreationView />
+          <DesktopBar />
+        </>
+      )
       fireEvent.click(screen.getByRole('button', { name: 'manifest.json' }))
       expect(
         await screen.findByText(/not an editable JSON object/i)
@@ -747,7 +863,12 @@ describe('creation reading workspace', () => {
         status: 'ok',
         data: { kind: 'text', text: diskManifest, version: 'v1' },
       })
-      render(<CreationView />)
+      render(
+        <>
+          <CreationView />
+          <DesktopBar />
+        </>
+      )
       fireEvent.click(screen.getByRole('button', { name: 'manifest.json' }))
       fireEvent.change(await screen.findByLabelText('Work title'), {
         target: { value: 'Form edit' },
@@ -790,18 +911,23 @@ describe('creation reading workspace', () => {
         status: 'error',
         error: { code: 'versionConflict', detail: 'manifest.json' },
       })
-      render(<CreationView />)
+      render(
+        <>
+          <CreationView />
+          <DesktopBar />
+        </>
+      )
       fireEvent.click(screen.getByRole('button', { name: 'manifest.json' }))
       fireEvent.change(await screen.findByLabelText('Work title'), {
         target: { value: 'Renamed III' },
       })
       fireEvent.click(screen.getByRole('button', { name: 'Save' }))
       await screen.findByText('The file changed on disk')
-      fireEvent.click(screen.getByRole('button', { name: 'Reload from disk' }))
+      await creationFileAction('Reload from disk')
       expect(
         ((await screen.findByLabelText('Work title')) as HTMLInputElement).value
       ).toBe('External edit')
-      const draft = useCreationDraftsStore.getState().drafts['manifest.json']
+      const draft = useCreationFilesStore.getState().drafts['manifest.json']
       expect(draft?.conflict).toBeNull()
       expect(draft?.diskVersion).toBe('v9')
       expect(draft?.text).toBe(draft?.diskText)
@@ -812,7 +938,12 @@ describe('creation reading workspace', () => {
         status: 'ok',
         data: { kind: 'text', text: diskManifest, version: 'v1' },
       })
-      render(<CreationView />)
+      render(
+        <>
+          <CreationView />
+          <DesktopBar />
+        </>
+      )
       fireEvent.click(screen.getByRole('button', { name: 'manifest.json' }))
       const port = (await screen.findByLabelText(
         'Performer port'
@@ -824,7 +955,7 @@ describe('creation reading workspace', () => {
         /whole number/i
       )
       expect(
-        useCreationDraftsStore.getState().drafts['manifest.json']?.text
+        useCreationFilesStore.getState().drafts['manifest.json']?.text
       ).not.toContain('performerPort')
       fireEvent.blur(port)
       expect(port.value).toBe('')

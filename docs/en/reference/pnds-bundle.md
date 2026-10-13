@@ -31,7 +31,7 @@ Rules:
 
 ## Packing
 
-Entry point: **Creation mode → Workspace → Generate .pnds**, using the native save dialog to choose the output location. **Settings (⌘,) → Developer Tools → Bundle Project** still packs the selected Project, or a folder picked through **Browse…**, beside that folder. Both entries share the same packer.
+Entry point: **Creation mode → Workspace titlebar right → Generate .pnds**, using the native save dialog to choose the output location. The Developer Tools settings category is temporarily hidden. Its retained commands/components share the same packer; the workspace titlebar-right action is the current accessible entry.
 
 The workspace packages saved files on disk; **unsaved drafts are excluded and are never automatically saved**. Drafts require confirmation of this boundary. Without a successful test record, the App recommends testing first but allows confirmation to continue. This in-memory record is created only when the current workspace reaches runtime readiness; closing the test retains it, while switching or reopening the workspace resets it. The record does not certify later edits.
 

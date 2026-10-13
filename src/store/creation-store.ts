@@ -55,6 +55,7 @@ interface CreationState {
   enter: () => Promise<void>
   leave: () => Promise<void>
   restoreRecent: (paths: string[]) => void
+  removeRecent: (path: string) => void
   open: (path: string, newProject?: NewProjectOptions) => Promise<boolean>
   create: (options: NewProjectOptions) => Promise<boolean>
   pick: () => Promise<boolean>
@@ -344,6 +345,13 @@ export const useCreationStore = create<CreationState>((set, get) => ({
     set(state => ({
       recentPaths: [...new Set([...state.recentPaths, ...paths])].slice(0, 20),
     })),
+  removeRecent: path => {
+    const recent = get().recentPaths
+    const next = recent.filter(item => item !== path)
+    if (next.length === recent.length) return
+    set({ recentPaths: next })
+    void updatePreferences({ recentCreationProjects: next })
+  },
   create: options =>
     get().open(`${options.parent}/${options.folderName}`, options),
   open: async (path, newProject) => {

@@ -1,11 +1,14 @@
+import { seedCreationDraft } from '@/test/creation-files'
+import userEvent from '@testing-library/user-event'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { confirm, save } from '@tauri-apps/plugin-dialog'
 import { render, screen, fireEvent, waitFor, act } from '@/test/test-utils'
 import { commands } from '@/lib/tauri-bindings'
 import { useCreationStore } from '@/store/creation-store'
-import { useCreationDraftsStore } from '@/store/creation-drafts-store'
+import { useCreationFilesStore } from '@/store/creation-files-store'
 import { useSessionStore } from '@/store/session-store'
 import { CreationView } from './CreationView'
+import { creationProjectAction } from '@/test/desktop-actions'
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -41,6 +44,12 @@ beforeEach(() => {
 
 it('allows cancelling the untested warning or the native save dialog without output', async () => {
   render(<CreationView />)
+  const topbar = document.querySelector<HTMLElement>('[data-creation-topbar]')
+  if (!topbar) throw new Error('Expected the creation titlebar')
+  expect(topbar).toContainElement(
+    screen.getByRole('button', { name: 'Generate .pnds' })
+  )
+  await creationProjectAction('Generate .pnds')
   fireEvent.click(screen.getByRole('button', { name: 'Generate .pnds' }))
   await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1))
   await waitFor(() =>
@@ -70,6 +79,7 @@ it('confirms the selected existing output and preserves it on cancellation, then
   vi.mocked(save).mockResolvedValue('/delivery/existing.pnds')
   vi.mocked(confirm).mockResolvedValueOnce(true).mockResolvedValueOnce(false)
   render(<CreationView />)
+  await creationProjectAction('Generate .pnds')
   fireEvent.click(screen.getByRole('button', { name: 'Generate .pnds' }))
   await waitFor(() => expect(confirm).toHaveBeenCalledTimes(2))
   await waitFor(() =>
@@ -98,6 +108,7 @@ it('reports a static validation failure and leaves the running project and draft
     error: 'audio.synthdefs[] not found: missing.scsyndef',
   })
   render(<CreationView />)
+  await creationProjectAction('Generate .pnds')
   fireEvent.click(screen.getByRole('button', { name: 'Generate .pnds' }))
   expect(await screen.findByRole('alert')).toHaveTextContent('missing.scsyndef')
   expect(save).not.toHaveBeenCalled()
@@ -120,6 +131,7 @@ it('does not count starting, failed or another project as a successful test', as
     sessionProjectPath: '/elsewhere',
   })
   render(<CreationView />)
+  await creationProjectAction('Generate .pnds')
   fireEvent.click(screen.getByRole('button', { name: 'Generate .pnds' }))
   await waitFor(() =>
     expect(confirm).toHaveBeenCalledWith(
@@ -140,6 +152,7 @@ it('ignores a late destination after switching projects and prevents duplicate c
       })
   )
   render(<CreationView />)
+  await creationProjectAction('Generate .pnds')
   const button = screen.getByRole('button', { name: 'Generate .pnds' })
   fireEvent.click(button)
   fireEvent.click(button)
@@ -162,10 +175,10 @@ it('ignores a late destination after switching projects and prevents duplicate c
   expect(
     screen.queryByText('/delivery/old-project.pnds')
   ).not.toBeInTheDocument()
-  expect(screen.getByRole('button', { name: 'Generate .pnds' })).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'Project actions' })).toBeEnabled()
 })
 
-it('offers packaging only for a writable source folder', () => {
+it('offers packaging only for a writable source folder', async () => {
   const workspace = useCreationStore.getState().workspace
   if (!workspace) throw new Error('Expected the source workspace')
   useCreationStore.setState({
@@ -178,6 +191,10 @@ it('offers packaging only for a writable source folder', () => {
   expect(
     screen.queryByRole('button', { name: 'Generate .pnds' })
   ).not.toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button', { name: 'Project actions' }))
+  expect(
+    screen.queryByRole('menuitem', { name: 'Generate .pnds' })
+  ).not.toBeInTheDocument()
 })
 
 it('remembers a successful ready test after closing it, but resets the record for another workspace', async () => {
@@ -187,6 +204,7 @@ it('remembers a successful ready test after closing it, but resets the record fo
   })
   useSessionStore.getState().resetSession()
   render(<CreationView />)
+  await creationProjectAction('Generate .pnds')
   fireEvent.click(screen.getByRole('button', { name: 'Generate .pnds' }))
   await waitFor(() => expect(save).toHaveBeenCalledTimes(1))
   expect(confirm).not.toHaveBeenCalled()
@@ -203,19 +221,19 @@ it('remembers a successful ready test after closing it, but resets the record fo
       },
     })
   })
+  await creationProjectAction('Generate .pnds')
   fireEvent.click(screen.getByRole('button', { name: 'Generate .pnds' }))
   await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1))
   expect(save).toHaveBeenCalledTimes(1)
 })
 
 it('packages only the saved project at a chosen destination while preserving unsaved drafts and the runtime', async () => {
-  useCreationDraftsStore
-    .getState()
-    .loaded('README.md', 'Saved introduction', 'v1')
-  useCreationDraftsStore.getState().edit('README.md', 'Unsaved introduction')
+  seedCreationDraft('README.md', 'Saved introduction', 'v1')
+  useCreationFilesStore.getState().edit('README.md', 'Unsaved introduction')
   vi.mocked(confirm).mockResolvedValueOnce(true)
   vi.mocked(save).mockResolvedValueOnce('/delivery/Score-1.0.0.pnds')
   render(<CreationView />)
+  await creationProjectAction('Generate .pnds')
   fireEvent.click(screen.getByRole('button', { name: 'Generate .pnds' }))
   await waitFor(() =>
     expect(commands.packProjectBundle).toHaveBeenCalledWith(
@@ -237,7 +255,7 @@ it('packages only the saved project at a chosen destination while preserving uns
   )
   expect(await screen.findByText('/delivery/Score-1.0.0.pnds')).toBeVisible()
   expect(screen.getByText('abc123')).toBeVisible()
-  expect(useCreationDraftsStore.getState().drafts['README.md']?.text).toBe(
+  expect(useCreationFilesStore.getState().drafts['README.md']?.text).toBe(
     'Unsaved introduction'
   )
   expect(commands.saveCreationFile).not.toHaveBeenCalled()

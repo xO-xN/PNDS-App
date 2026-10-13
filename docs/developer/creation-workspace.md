@@ -3,12 +3,30 @@
 Issues #150 and #151 provide file reading plus the confirmed mode handoff;
 #154 adds manual save, rename and disk-version conflict handling; #155 adds
 external disk tracking, and #156 adds manual testing, monitor and console.
-The visual baseline is the A layout and eighth interaction review in
-[the UI prototype](../prototypes/pnds-ui-prototype.html). Creation sidebars
-share the existing App's 320px container, margins and window controls; file
-categories, title switching and the bottom mode control follow that prototype.
-The PNDS file badge identifies known contract configuration files, not module
-provenance. #160 adds blank-project creation; unimplemented module controls stay absent.
+The visual baseline is the confirmed [r6-final desktop](../prototypes/desktop-1.6/README.md).
+The shared bottom bar keeps its mode control mounted across both workspaces;
+creation uses a compact file sidebar with manifest and the localized README
+pinned. The compact 32px titlebar puts the existing project menu beside the
+native traffic lights and a saved-file `.pnds` packaging button on the right.
+The packaging button is available only for a writable folder source and opens
+the existing packaging dialog, retaining destination/overwrite and draft/test
+warning behavior. The same menu and
+picker retain draft/discard and project-switch boundaries. It remains visible,
+but disabled, when the editing surface hides for expanded Monitor mode.
+See [the entry mapping and acceptance record](desktop-1.6-implementation.md).
+File grouping describes actual paths, not module provenance. #160 adds blank-project creation; the Modules heading adds the offline file workflow from #210.
+
+Recent creation rows reveal their named remove-history button on row hover or
+keyboard focus, reserving its space so the project name does not shift. The row
+owns one shared hover/focus background for the name and remove button. `removeRecent` updates
+only `recentCreationProjects` through the preference queue; it never deletes
+files, releases the current identity, clears drafts or stops a run. Removing a
+history item does not change the independent performance index. Opening a
+project again can add it back normally.
+
+The bottom transport and console controls remain visible on creation home and
+expanded preview, disabled when unavailable. The console shortcut likewise
+requires a workspace. Pane-only test controls retain their existing visibility.
 
 ## Blank-project creation (#160)
 
@@ -79,16 +97,16 @@ identities leave the current identity valid until explicit commit; cancellation
 releases only the preparation. Folder, bundle and utility origins still come
 from backend protection, not frontend classification.
 
-The mode control copies the prototype's fixed 56px slant and 300ms fill/name
+The r6-final bottom-bar mode control uses the prototype's fixed 44px slant and 300ms fill/name
 transition. A shared phase prevents duplicate submissions; startup/shutdown
 also disable it. Esc, an outside pointer press and window blur cancel preparation
 or confirmation. The performance overlay remains visible during confirmation.
 After completion, hover is paused until pointer exit/re-entry; keyboard focus
-is restored to the new control. Brutal and reduced motion complete directly.
+is restored to the new control. Brutal keeps the same fill and name transitions;
+only the system reduced-motion preference completes directly.
 The focused mode control owns native Enter/Space activation even when a selected
 project can Load; the global Enter session alias yields to `data-mode-switch`.
-Confirmation exposes its target in the accessible name and links the actual
-consequence with `aria-describedby`. A failed keyboard submission restores focus
+Confirmation exposes its target in the accessible name. Only actual unsaved-content loss adds a consequence note and `aria-describedby`. A failed keyboard submission restores focus
 to the same control so the error can be reviewed and the switch retried.
 
 Confirmation checks the runtime generation/status again before effects. An
@@ -170,7 +188,7 @@ button; the reader can also reveal the selected file.
 
 Editable folder projects get lightweight text editing; bundle, utility and
 read-only-folder sources keep the plain reader. Every opened text file keeps a
-draft in `creation-drafts-store.ts` keyed by project-relative path, holding the
+draft in `creation-files-store.ts` keyed by project-relative path, holding the
 working text, the disk text it was read from and that read's `version`
 fingerprint (content length plus hash, computed by the backend at read time).
 Switching files — and later the console tab — never drops drafts; only a
@@ -323,7 +341,7 @@ Failed scans retain the last baseline; changed paths remain pending until the
 frontend acknowledges their revision. Preparation cancellation keeps the active
 watch baseline. No filesystem scan belongs inside the runtime lifecycle lock.
 
-`creation-changes-store.ts` owns disk revisions, per-file reader revisions and
+`creation-files-store.ts` owns disk revisions, per-file reader revisions and
 pending refresh/restart/compile prompts. All polls share one in-flight request
 per identity; a successful identity change resets prompts and errors. Clean
 text drafts adopt new disk text. Dirty drafts retain their text and compare it
@@ -406,6 +424,37 @@ The recent tail remains available after stop, while copied runtime facts use
 current ownership/status. Details contain no preference/token dump. No log is
 created inside the project and no terminal is provided.
 
+## Project file ownership
+
+`creation-files-store.ts` is the shared project file module: reads, drafts,
+conflicts, renames, disk revisions and watcher acknowledgements use the same
+workspace epoch and per-file operation generation. These guards and the watcher
+draft synchronizer are private implementation. Editors call `read(identity,
+path)` and display its typed result; a stale read returns `null`. Editable text
+is retained as a versioned draft inside the module, while read-only text, images
+and binary metadata remain local previews. Reopening a draft uses its current
+text without a disk read. A watcher change arriving during the first read causes
+the module to reread before adopting the reply. Views only guard their own
+mounted preview lifetime, not project ownership.
+
+One workspace identity subscription clears drafts, selection, disk prompts and
+operation ownership together. Cancelled or failed project switches leave the
+identity unchanged and retain all of them. Saves retain typing made after
+dispatch while updating the disk baseline to the submitted text.
+
+Watcher and rename results commit `workspace.files` through one private path.
+The captured workspace epoch, file operation and local revision determine
+whether a returned list is still current. A stale watcher list cannot undo a
+completed rename; its disk revision remains unacknowledged for replay. A late
+rename list cannot erase files from a newer watcher result. Polls share one
+in-flight request, and a reset revokes it even if the identity string is reused.
+None of these file actions saves drafts or updates the runtime automatically.
+
+Regression tests use the file module's `read`, `save`, `rename` and `poll`
+interface with deferred typed-command replies to cover their actual ordering.
+`src/test/creation-files.ts` provides only already-opened draft fixtures for
+other workflows; draft seeding is not a production action.
+
 ## Frontend ownership
 
 `creation-store.ts` owns mode, active workspace, opening errors and recent
@@ -429,8 +478,9 @@ responses check the current identity before updating UI.
 
 ⌘O and Finder folder drops use creation opening while this view is active.
 Performance project navigation/rename shortcuts are inactive. The native picker
-selects directories only. Unimplemented new-file, editing, assistant, console
-and module-add controls are absent.
+selects directories only. General new-file/import/delete and assistant controls
+are absent. Manual editing, the creation console and the narrow five-module file
+addition workflow are implemented at their documented entries.
 
 Tests use the approved workflow/typed-command boundary in the frontend and the
 public creation access boundary over Rust temporary directories. See
@@ -556,15 +606,14 @@ it does not replace other real-device or multi-client identity acceptance checks
 
 ## Creator monitor and performer surfaces
 
-The creation preview follows the finalized A layout and review eight in
-[the prototype notes](../prototypes/README.md): a Live test heading with the
-saved audio-mode choices, a separate bordered monitor with an address/mode
-strip and expand action, then a compact performer list with a count and bottom
-add button. Runtime start/restart, close, refresh and live gain stay in a compact
-bar; saved-file/global-audio explanations use a keyboard-accessible disclosure.
-The running badge always shows the applied audio mode, separately from the
-selected next-start mode. Pending configuration and actionable errors remain visible. The right panel
-scrolls inside its own bounds when the window or client list is small.
+The creation preview follows r6-final: the right pane retains the applied
+runtime badge, saved audio-mode choices, real monitor with expand action and
+independent performer list. Manual start/restart, close, refresh and live gain
+move to the shared bottom bar. Packaging opens from the titlebar right button; handoff lives in the project menu;
+Save and Compile remain in the compact file toolbar, with Finder/reload/rename
+in its actions menu. The console starts closed and is creation-only, toggled by
+the bottom control or Command + backtick. Opening it docks the console below the same mounted editor and does not discard drafts.
+The right panel still scrolls inside its own bounds.
 
 The same monitor surface/viewport ancestry is used in both modes. The small preview renders the current main window’s full CSS viewport, uniformly
 scaled into the right panel. Its aspect follows window resize instead of a fixed
@@ -617,11 +666,12 @@ existing focus inside it and open overlays. Inputs, sliders and comboboxes keep
 their normal arrow keys; main/projection monitor input remains page-owned. The
 retired Cmd-arrow project/folder handlers no longer run globally.
 
-Committing an audio, LAN or room dropdown keeps a separate sidebar hold after
-the portal closes. The operator can inspect the new setting and use Change.
-Cancellation creates no hold. Physical leave after re-entry, window blur and
-session command/lifecycle changes release it; portal mouse events cannot clear
-or fake physical sidebar presence. See `HoverSidebar` and workflow regressions.
+Bottom control popovers hold the performance sidebar while they are open.
+Closing the final popover releases that hold if the pointer has left. The shared
+bar itself stays available while the sidebar retracts, so a live-gain gesture
+never loses its control. Sidebar-local drags, portals and rename focus retain
+their own independent holds. Native controls follow sidebar visibility without
+changing decorations or the monitor document.
 
 On 2026-10-12 the user confirmed in the restarted development App that hiding
 retains/restores the same performer, X deletion frees the Inarticulate III player
@@ -704,3 +754,35 @@ temporary-directory pack/install round trips cover output choice, source protect
 required files/dependencies/artifacts, containment, metadata and permission retention.
 The existing bilingual reference-manual paths remain unchanged. Native macOS save
 panels and theme rendering still require the user's normal App acceptance run.
+
+## Offline module files (#210)
+
+The Modules heading remains present for writable folders even before they have
+module files. Its Add control opens five frozen choices: QR, client identity and
+reconnect, monitor theme, monitor language and monitor view synchronization.
+The catalog and add commands accept only a backend-issued workspace identity;
+module IDs select embedded files, never frontend-supplied paths or content.
+
+Sources are pinned to PNDS Template revision
+`e3f4769537d6aeb2016b76610e80dea7b639384f` (package 0.5.1); delivery version
+0.1.0 is separate from the App version. Each `modules/pnds-<id>/` contains the
+actual sources, CommonJS package scope, bilingual wiring README and
+`pnds-module.json` with provenance, per-file SHA-256, and pending wiring /
+validation facts. The Template identity/seat/audio policy is an example for the
+external agent to adapt, not an App-wide musical rule. No entry, manifest or
+existing page is changed; dependencies, Skills and runtime stay untouched.
+
+The backend builds a complete flat staging directory through held no-follow
+directory handles and publishes it with exclusive rename. Existing targets
+without a matching source record conflict; recognized additions retain custom
+source bytes and agent task updates. The dialog echoes the displayed provenance
+and handoff versions; external changes require reloading and another explicit
+action. Unsaved module/handoff drafts block adding.
+
+After publication, the existing handoff writer appends one deterministic pending
+task. A failure returns the actual published paths and an error, not complete
+success. Retry uses the persisted record and stable task ID to append only the
+missing handoff. It never recopies or upgrades existing files. Disk polling
+refreshes the real tree and preserves the saved-versus-running distinction;
+late replies cannot update another workspace. Root `docs/` remains excluded
+from bundles, so the creator handoff stays in source.

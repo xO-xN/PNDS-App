@@ -9,7 +9,7 @@ import {
 import { startCreationTest } from '@/lib/session-flow'
 import { stopAndReset } from '@/lib/open-project'
 import { refreshMonitorFromDisk } from '@/lib/creation-runtime-updates'
-import { isCreationWorkspacePath } from './creation-changes-store'
+import { isCreationWorkspacePath } from './creation-files-store'
 import { useCreationStore, creationTransportError } from './creation-store'
 import { useSessionStore } from './session-store'
 

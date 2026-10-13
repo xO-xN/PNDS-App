@@ -1,8 +1,10 @@
 import {
   act,
+  fireEvent,
   render,
   screen,
   within,
+  waitFor,
   createFolderOrFail,
 } from '@/test/test-utils'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -10,7 +12,7 @@ import { useProjectStore, UTILITIES_FOLDER_ID } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 import { useKeyboardStore } from '@/store/keyboard-store'
 import { Sidebar } from './Sidebar'
-import type { Manifest } from '@/lib/tauri-bindings'
+import { commands, type Manifest } from '@/lib/tauri-bindings'
 
 vi.mock('@tauri-apps/plugin-opener', () => ({
   openUrl: vi.fn().mockResolvedValue(undefined),
@@ -65,6 +67,7 @@ describe('Sidebar project list (v1.2.2, issue #29)', () => {
       renameTarget: null,
       preflightStatus: 'idle',
       preflightError: null,
+      manifestProjectNames: {},
     })
     useSessionStore.getState().resetSession()
   })
@@ -140,7 +143,16 @@ describe('Sidebar project list (v1.2.2, issue #29)', () => {
       })
     }
 
-    it('slides to the selected card: translateY/height from its offsets', () => {
+    it('slides down and back up with sidebar arrow selection', async () => {
+      vi.mocked(commands.preflightProject)
+        .mockResolvedValueOnce({
+          status: 'ok',
+          data: { ...manifest, name: 'PNDS Score 1' },
+        })
+        .mockResolvedValueOnce({
+          status: 'ok',
+          data: manifest,
+        })
       useProjectStore.setState({
         currentProject: { path: FIRST_PATH, manifest },
         preflightStatus: 'ready',
@@ -153,11 +165,14 @@ describe('Sidebar project list (v1.2.2, issue #29)', () => {
       if (!secondCard) throw new Error('Expected a second project card')
       pinCardBox(secondCard, 87, 57)
 
-      // Selection moves to the second card — the layout effect re-applies.
-      act(() => {
-        useProjectStore.setState({
-          currentProject: { path: SECOND_PATH, manifest },
-        })
+      // Actual arrow navigation follows the same animated geometry as clicks.
+      const sidebar = screen.getByTestId('sidebar')
+      fireEvent.mouseEnter(sidebar)
+      fireEvent.keyDown(sidebar, { key: 'ArrowDown' })
+      await waitFor(() => {
+        expect(useProjectStore.getState().currentProject?.path).toBe(
+          SECOND_PATH
+        )
       })
 
       const pill = screen.getByTestId('card-selection-pill')
@@ -166,6 +181,12 @@ describe('Sidebar project list (v1.2.2, issue #29)', () => {
       expect(pill.style.opacity).toBe('1')
       // Both cards sit in this view — the move animates with the class
       // transition (no inline override).
+      expect(pill.style.transition).toBe('')
+      fireEvent.keyDown(sidebar, { key: 'ArrowUp' })
+      await waitFor(() => {
+        expect(useProjectStore.getState().currentProject?.path).toBe(FIRST_PATH)
+      })
+      expect(pill.style.transform).toBe('translateY(26px)')
       expect(pill.style.transition).toBe('')
     })
 

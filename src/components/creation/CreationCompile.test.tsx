@@ -1,13 +1,14 @@
+import { seedCreationDraft } from '@/test/creation-files'
 import { beforeEach, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor, act } from '@/test/test-utils'
 import { commands, type CreationWorkspace } from '@/lib/tauri-bindings'
 import { useCreationStore } from '@/store/creation-store'
-import { useCreationDraftsStore } from '@/store/creation-drafts-store'
+import { useCreationFilesStore } from '@/store/creation-files-store'
 import { useSessionStore } from '@/store/session-store'
 import { CreationFileEditor } from './CreationFileEditor'
 import { CreationConsole } from './CreationConsole'
 import { useCreationCompileStore } from '@/store/creation-compile-store'
-import { useCreationChangesStore } from '@/store/creation-changes-store'
+
 import { useCreationTestStore } from '@/store/creation-test-store'
 import { writeText } from '@tauri-apps/plugin-clipboard-manager'
 
@@ -31,7 +32,7 @@ beforeEach(() => {
   useCreationTestStore.setState({ tab: 'file' })
   useCreationStore.setState({ workspace: null })
   useCreationStore.setState({ workspace })
-  useCreationDraftsStore.getState().loaded(source.path, '// source', 'v1')
+  seedCreationDraft(source.path, '// source', 'v1')
   useSessionStore.setState({
     sessionStatus: 'ready',
     sessionProjectPath: '/score',
@@ -92,12 +93,12 @@ it('compiles from the SCD toolbar, reports all references and updates the tree w
   )
   expect(commands.startCreationProject).not.toHaveBeenCalled()
   expect(commands.stopProject).not.toHaveBeenCalled()
-  expect(useCreationChangesStore.getState().pending.restart).toBeGreaterThan(0)
+  expect(useCreationFilesStore.getState().pending.restart).toBeGreaterThan(0)
 })
 
 it('blocks SCD and manifest drafts with a reason while preserving them across the console tab', async () => {
-  useCreationDraftsStore.getState().loaded('manifest.json', '{}', 'manifest-v1')
-  useCreationDraftsStore.getState().edit('manifest.json', '{"audio":')
+  seedCreationDraft('manifest.json', '{}', 'manifest-v1')
+  useCreationFilesStore.getState().edit('manifest.json', '{"audio":')
   render(
     <>
       <CreationFileEditor
@@ -116,8 +117,8 @@ it('blocks SCD and manifest drafts with a reason while preserving them across th
   await act(async () => useCreationCompileStore.getState().run())
   expect(commands.compileCreationSynthdefs).not.toHaveBeenCalled()
   act(() => {
-    useCreationDraftsStore.getState().revert('manifest.json')
-    useCreationDraftsStore.getState().edit(source.path, '// unsaved voice')
+    useCreationFilesStore.getState().revert('manifest.json')
+    useCreationFilesStore.getState().edit(source.path, '// unsaved voice')
     useCreationTestStore.getState().setTab('console')
     useCreationTestStore.getState().setTab('file')
   })
@@ -182,7 +183,7 @@ it('prevents duplicate dispatch and discards a late result after switching proje
   expect(screen.queryByText('late compile')).not.toBeInTheDocument()
   expect(useCreationCompileStore.getState().report).toBeNull()
   expect(commands.pollCreationChanges).toHaveBeenCalledTimes(callsBeforeSwitch)
-  expect(useCreationChangesStore.getState().pending.restart).toBe(0)
+  expect(useCreationFilesStore.getState().pending.restart).toBe(0)
 })
 
 it('keeps a failed reference check visible and copyable without claiming verification', async () => {

@@ -3,8 +3,10 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { useProjectStore } from '@/store/project-store'
 import { useUpdaterStore } from '@/store/updater-store'
+import { useSettingsStore } from '@/store/settings-store'
 import { RELEASES_URL } from '@/lib/updater'
 import pndsIcon from '@/assets/pnds-icon.png'
+import octopus from '@/assets/octo-sidebar-2x.png'
 import { WelcomeScreen } from './WelcomeScreen'
 
 // The update notice's button funnels into lib/updater's
@@ -21,6 +23,7 @@ vi.mock('@tauri-apps/plugin-opener', () => ({
  */
 describe('WelcomeScreen', () => {
   beforeEach(() => {
+    useSettingsStore.setState({ colorThemeSetting: 'pond' })
     useUpdaterStore.setState({ available: null, failure: null })
     useProjectStore.setState({
       currentProject: null,
@@ -30,6 +33,26 @@ describe('WelcomeScreen', () => {
       preflightError: null,
     })
   })
+
+  it('puts the existing octopus illustration on the Brutal welcome page', () => {
+    useSettingsStore.setState({ colorThemeSetting: 'brutal' })
+    render(<WelcomeScreen />)
+
+    const art = screen.getByTestId('welcome-brutal-art')
+    expect(art).toHaveAttribute('src', octopus)
+    expect(art).toHaveAttribute('aria-hidden', 'true')
+    expect(art).toHaveAttribute('alt', '')
+    expect(art).toHaveAttribute('draggable', 'false')
+  })
+
+  it.each(['pond', 'sand', 'stage'] as const)(
+    'keeps the octopus exclusive to Brutal when %s is selected',
+    theme => {
+      useSettingsStore.setState({ colorThemeSetting: theme })
+      render(<WelcomeScreen />)
+      expect(screen.queryByTestId('welcome-brutal-art')).not.toBeInTheDocument()
+    }
+  )
 
   it('renders the three first-use tips and no add-project line (#69)', () => {
     render(<WelcomeScreen />)

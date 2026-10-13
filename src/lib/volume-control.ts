@@ -12,6 +12,17 @@ import { commands } from '@/lib/tauri-bindings'
 import { logger } from '@/lib/logger'
 import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
+import type { SessionSnapshot } from '@/lib/tauri-bindings'
+
+/** Pending start configuration cannot disable or retarget the running master. */
+export function appliedAudioMode(state: {
+  audioMode: string
+  latestSnapshot?: SessionSnapshot | null
+}): string {
+  return state.latestSnapshot?.status === 'ready'
+    ? (state.latestSnapshot.audioMode ?? state.audioMode)
+    : state.audioMode
+}
 
 /** Pure §7.5 core: internal mode with more than 2 output channels fixes
  * the master at 100% / 0 dB. The running channel plan leads once the
@@ -34,14 +45,15 @@ export function volumeAdjustableAt(
     sessionStatus: string
     audioMode: string
     channelPlan: { projectChannels: number } | null
+    latestSnapshot?: SessionSnapshot | null
   },
   projectChannels: number
 ): boolean {
   return (
     state.sessionStatus === 'ready' &&
-    state.audioMode === 'internal' &&
+    appliedAudioMode(state) === 'internal' &&
     !fixedGainFrom(
-      state.audioMode,
+      appliedAudioMode(state),
       state.channelPlan?.projectChannels,
       projectChannels
     )
@@ -58,9 +70,10 @@ function projectChannelsFromStores(): number {
 
 /** Store-reading §7.5 derivation for event handlers (menu, keyboard). */
 export function isFixedGain(): boolean {
-  const { audioMode, channelPlan } = useSessionStore.getState()
+  const state = useSessionStore.getState()
+  const { channelPlan } = state
   return fixedGainFrom(
-    audioMode,
+    appliedAudioMode(state),
     channelPlan?.projectChannels,
     projectChannelsFromStores()
   )

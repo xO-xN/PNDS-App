@@ -1,3 +1,4 @@
+import { ensureNetworkControls } from '@/test/desktop-actions'
 import { render, screen, fireEvent, waitFor, within } from '@/test/test-utils'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -190,6 +191,7 @@ describe('Sidebar ↑/↓ project navigation and Escape ownership (v1.1.2 T7)', 
       render(<AppShell />)
 
       // Text input (the OSC target field) swallows the shortcut.
+      ensureNetworkControls()
       const oscInput = screen.getByRole('textbox', { name: /osc target/i })
       fireEvent.keyDown(oscInput, { key: 'ArrowDown' })
       expect(commands.preflightProject).not.toHaveBeenCalledWith(FIRST_PATH)

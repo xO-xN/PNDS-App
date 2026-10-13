@@ -1,4 +1,10 @@
-import { render, screen, fireEvent, waitFor } from '@/test/test-utils'
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  mockBoundingClientRect,
+} from '@/test/test-utils'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { act } from '@testing-library/react'
@@ -9,7 +15,7 @@ import { useSettingsStore } from '@/store/settings-store'
 import { useCreationStore } from '@/store/creation-store'
 import { useWindowStore } from '@/store/window-store'
 import { commands, type Manifest } from '@/lib/tauri-bindings'
-import { HoverSidebar } from './HoverSidebar'
+import { HoverSidebarHarness as HoverSidebar } from '@/test/desktop-harness'
 
 vi.mock('@tauri-apps/plugin-opener', () => ({
   openUrl: vi.fn().mockResolvedValue(undefined),
@@ -66,6 +72,21 @@ describe('HoverSidebar ⌘-peek pointer latch', () => {
     useWindowStore.setState({ confirmCloseOpen: false, quitConfirmOpen: false })
   })
 
+  it('releases the pointer latch after a drop to the right of the physical sidebar', () => {
+    render(<HoverSidebar />)
+    const panel = screen.getByTestId('sidebar-popover')
+    mockBoundingClientRect(panel, {
+      left: 12,
+      top: 12,
+      width: 320,
+      height: 600,
+    })
+    fireEvent.mouseEnter(panel)
+    fireEvent.pointerDown(panel, { pointerId: 1, clientX: 100, clientY: 100 })
+    fireEvent.pointerUp(window, { pointerId: 1, clientX: 400, clientY: 100 })
+    expectHidden()
+  })
+
   const releaseCommandKey = () =>
     act(() => {
       useKeyboardStore.setState({ commandKeyPressed: false })
@@ -109,43 +130,41 @@ describe('HoverSidebar ⌘-peek pointer latch', () => {
     expectHidden()
   })
 
-  it('keeps an audio popup visible after leaving, then hides when it closes', async () => {
+  it('keeps bottom audio settings visible after leaving the sidebar, then hides the sidebar when closed', async () => {
     useProjectStore.setState({ currentProject: { path: '/p', manifest } })
-    useSessionStore.setState({ audioMode: 'none' })
     render(<HoverSidebar />)
-
     fireEvent.mouseEnter(screen.getByTestId('sidebar-popover'))
-    await userEvent.click(screen.getByRole('combobox', { name: 'Audio mode' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Audio' }))
     fireEvent.mouseLeave(screen.getByTestId('sidebar-popover'))
     expectVisible()
-
-    fireEvent.keyDown(screen.getByRole('listbox'), { key: 'Escape' })
+    expect(await screen.findByLabelText('Sample rate')).toBeInTheDocument()
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' })
     await waitFor(expectHidden)
   })
 
-  it('keeps a running sidebar visible after choosing a pending audio setting until the operator leaves again', async () => {
-    const base = await commands.getSessionState()
-    if (base.status !== 'ok') throw new Error('Missing session snapshot')
+  it('defers audio settings until explicit restart and keeps the bottom panel operable', async () => {
     useProjectStore.setState({
       currentProject: { path: '/p', manifest },
       preflightStatus: 'ready',
     })
-    useSessionStore.getState().applySnapshot({
-      ...base.data,
-      status: 'ready',
-      projectPath: '/p',
-      audioMode: 'none',
+    useSessionStore.setState({
+      sessionStatus: 'ready',
+      sessionProjectPath: '/p',
+      audioMode: 'internal',
     })
+    useSettingsStore.setState({ sampleRateSetting: 48000 })
     render(<HoverSidebar />)
-    fireEvent.mouseEnter(screen.getByTestId('sidebar-popover'))
-    await userEvent.click(screen.getByRole('combobox', { name: 'Audio mode' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Audio' }))
     fireEvent.mouseLeave(screen.getByTestId('sidebar-popover'))
-    await userEvent.click(screen.getByRole('option', { name: 'External' }))
-    await screen.findByRole('button', { name: 'Change' })
+    await userEvent.click(await screen.findByLabelText('Sample rate'))
+    await userEvent.click(screen.getByRole('option', { name: '44.1 kHz' }))
+    expect(
+      await screen.findByRole('button', { name: 'Change' })
+    ).toBeInTheDocument()
+    expect(commands.stopProject).not.toHaveBeenCalled()
     expectVisible()
-    fireEvent.mouseEnter(screen.getByTestId('sidebar-popover'))
-    fireEvent.mouseLeave(screen.getByTestId('sidebar-popover'))
-    expectHidden()
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' })
+    await waitFor(expectHidden)
   })
 
   it('holds the sidebar through replacement confirmation and hides on cancel', async () => {
@@ -198,10 +217,10 @@ describe('HoverSidebar ⌘-peek pointer latch', () => {
     } finally {
       await act(async () => finishStop())
     }
-    await waitFor(expectHidden)
+    await waitFor(expectVisible)
   })
 
-  it('keeps gain controls visible until a pointer gesture ends outside the sidebar', () => {
+  it('keeps bottom gain controls usable while the sidebar retracts during a gesture', () => {
     useProjectStore.setState({ currentProject: { path: '/p', manifest } })
     useSessionStore.setState({
       sessionProjectPath: '/p',
@@ -211,7 +230,8 @@ describe('HoverSidebar ⌘-peek pointer latch', () => {
     fireEvent.mouseEnter(screen.getByTestId('sidebar-popover'))
     fireEvent.pointerDown(screen.getByRole('slider'), { pointerId: 1 })
     fireEvent.mouseLeave(screen.getByTestId('sidebar-popover'))
-    expectVisible()
+    expectHidden()
+    expect(screen.getByRole('slider')).toBeEnabled()
 
     fireEvent.pointerUp(window, { pointerId: 1 })
     expectHidden()

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, fireEvent, render, screen } from '@/test/test-utils'
+import { act, fireEvent, render, screen, waitFor } from '@/test/test-utils'
 import { commands } from '@/lib/tauri-bindings'
 import { open } from '@tauri-apps/plugin-dialog'
 import userEvent from '@testing-library/user-event'
@@ -29,48 +29,50 @@ describe('prototype mode interaction', () => {
   })
   afterEach(() => vi.useRealTimers())
 
-  it('waits for the 300ms fill and suppresses reverse hover until the pointer leaves', async () => {
-    vi.useFakeTimers()
-    render(<CreationModeButton />)
-    const button = screen.getByRole('button', {
-      name: 'Switch to creation mode',
-    })
-    fireEvent.pointerEnter(button)
-    await act(async () => {
-      fireEvent.click(button)
-    })
-    expect(button).toHaveAttribute('aria-pressed', 'true')
-    await act(async () => {
-      fireEvent.click(button)
-    })
-    expect(button).toBeDisabled()
-    expect(useCreationStore.getState().active).toBe(false)
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(299)
-    })
-    expect(useCreationStore.getState().active).toBe(false)
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(1)
-    })
-    expect(useCreationStore.getState().active).toBe(true)
-    expect(button).toHaveAttribute('data-hover-paused', 'true')
-    expect(button).not.toBeDisabled()
-    fireEvent.pointerLeave(button)
-    expect(button).toHaveAttribute('data-hover-paused', 'false')
-    expect(commands.startProject).not.toHaveBeenCalled()
-  })
-
-  it.each(['brutal', 'reducedMotion'] as const)(
-    'completes directly under %s and leaves keyboard focus on the mode control',
-    async preference => {
+  it.each(['pond', 'brutal'] as const)(
+    'waits for the 300ms fill under %s and suppresses reverse hover until the pointer leaves',
+    async theme => {
       vi.useFakeTimers()
-      if (preference === 'brutal')
-        useSettingsStore.setState({ colorThemeSetting: 'brutal' })
-      else
-        vi.mocked(window.matchMedia).mockReturnValueOnce({
-          ...window.matchMedia('(prefers-reduced-motion: reduce)'),
-          matches: true,
-        })
+      useSettingsStore.setState({ colorThemeSetting: theme })
+      render(<CreationModeButton />)
+      const button = screen.getByRole('button', {
+        name: 'Switch to creation mode',
+      })
+      fireEvent.pointerEnter(button)
+      await act(async () => {
+        fireEvent.click(button)
+      })
+      expect(button).toHaveAttribute('aria-pressed', 'true')
+      await act(async () => {
+        fireEvent.click(button)
+      })
+      expect(button).toBeDisabled()
+      expect(useCreationStore.getState().active).toBe(false)
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(299)
+      })
+      expect(useCreationStore.getState().active).toBe(false)
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1)
+      })
+      expect(useCreationStore.getState().active).toBe(true)
+      expect(button).toHaveAttribute('data-hover-paused', 'true')
+      expect(button).not.toBeDisabled()
+      fireEvent.pointerLeave(button)
+      expect(button).toHaveAttribute('data-hover-paused', 'false')
+      expect(commands.startProject).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each(['pond', 'brutal'] as const)(
+    'completes directly with reduced motion under %s and leaves keyboard focus on the mode control',
+    async theme => {
+      vi.useFakeTimers()
+      useSettingsStore.setState({ colorThemeSetting: theme })
+      vi.mocked(window.matchMedia).mockReturnValueOnce({
+        ...window.matchMedia('(prefers-reduced-motion: reduce)'),
+        matches: true,
+      })
       render(<CreationModeButton />)
       const button = screen.getByRole('button', {
         name: 'Switch to creation mode',
@@ -197,7 +199,8 @@ describe('prototype mode interaction', () => {
     expect(button).toHaveAttribute('aria-pressed', 'true')
     expect(commands.startProject).not.toHaveBeenCalled()
     await user.keyboard('[Enter]')
-    expect(useCreationStore.getState().active).toBe(true)
+    expect(button).toHaveAttribute('data-phase', 'settling')
+    await waitFor(() => expect(useCreationStore.getState().active).toBe(true))
     expect(useCreationStore.getState().workspace?.project.root).toBe(
       '/selected'
     )
@@ -215,7 +218,7 @@ describe('prototype mode interaction', () => {
     expect(button).toHaveAccessibleName(
       'Click again to switch to Creation mode'
     )
-    expect(button).toHaveAccessibleDescription(/creation home/i)
+    expect(button).not.toHaveAttribute('aria-describedby')
   })
 
   it('returns keyboard focus to the mode control after a failed projection close', async () => {

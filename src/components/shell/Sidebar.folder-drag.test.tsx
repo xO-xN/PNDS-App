@@ -79,20 +79,20 @@ describe('Sidebar folder drags (v1.1.2 T5, folder switch)', () => {
     await dragCardTo(second, 60, 90)
     mockBoundingClientRect(screen.getByTestId('folder-drop-choices'), {
       top: 0,
-      left: 20,
-      width: 280,
-      height: 256,
+      left: 340,
+      width: 200,
+      height: 360,
     })
     const segment = screen.getByText('Set list', {
       selector: '[data-folder-drop-id]',
     })
     mockBoundingClientRect(segment, {
       top: 200,
-      left: 100,
-      width: 70,
+      left: 350,
+      width: 180,
       height: 32,
     })
-    fireEvent.pointerMove(window, { pointerId: 1, clientX: 135, clientY: 216 })
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 435, clientY: 216 })
 
     // Hovering the segment highlights it as the drop zone.
     expect(segment).toHaveAttribute('data-drop-active', 'true')
@@ -100,7 +100,7 @@ describe('Sidebar folder drags (v1.1.2 T5, folder switch)', () => {
     fireEvent.pointerMove(window, { pointerId: 1, clientX: 150, clientY: 30 })
     expect(segment).not.toHaveAttribute('data-drop-active')
 
-    fireEvent.pointerMove(window, { pointerId: 1, clientX: 135, clientY: 216 })
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 435, clientY: 216 })
     fireEvent.pointerUp(window, { pointerId: 1 })
 
     // SECOND joined the folder at its end; THIRD keeps its slot, the
@@ -165,6 +165,9 @@ describe('Sidebar folder drags (v1.1.2 T5, folder switch)', () => {
     fireEvent.pointerMove(window, { pointerId: 1, clientX: 130, clientY: 16 })
 
     expect(unfiled).toHaveAttribute('data-drop-active', 'true')
+    expect(screen.getByTestId('drag-project-order-number')).toHaveTextContent(
+      '02'
+    )
     fireEvent.pointerUp(window, { pointerId: 1 })
 
     // SECOND left the folder; the master list keeps every project.
@@ -192,6 +195,47 @@ describe('Sidebar folder drags (v1.1.2 T5, folder switch)', () => {
     // suppression the drop left behind.)
     await selectFolderInPicker('Home')
     expect(screen.getAllByTestId('project-entry')).toHaveLength(2)
+    const returnedCard = screen.getAllByTestId('project-entry')[1]
+    if (!returnedCard) throw new Error('Expected the returned project card')
+    expect(
+      within(returnedCard).getByTestId('project-order-number')
+    ).toHaveTextContent('02')
+  })
+
+  it('previews the destination folder ordinal before committing membership', async () => {
+    const folderId = createFolderOrFail('Set list')
+    useProjectStore.getState().moveProjectToFolder(folderId, THIRD_PATH)
+    render(<Sidebar variant="static" />)
+    const [source, second] = screen.getAllByTestId('project-entry')
+    if (!source || !second) throw new Error('Expected two cards')
+    mockBoundingClientRect(source, { top: 0 })
+    mockBoundingClientRect(second, { top: 61 })
+    await dragCardTo(source, 60, 20)
+    expect(screen.getByTestId('drag-project-order-number')).toHaveTextContent(
+      '01'
+    )
+    mockBoundingClientRect(screen.getByTestId('folder-drop-choices'), {
+      top: 0,
+      left: 340,
+      width: 200,
+      height: 360,
+    })
+    mockBoundingClientRect(
+      screen.getByText('Set list', { selector: '[data-folder-drop-id]' }),
+      { top: 200, left: 350, width: 180, height: 32 }
+    )
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 435, clientY: 216 })
+    expect(screen.getByTestId('drag-project-order-number')).toHaveTextContent(
+      '02'
+    )
+    expect(useProjectStore.getState().projectFolders[0]?.projectPaths).toEqual([
+      THIRD_PATH,
+    ])
+    fireEvent.pointerUp(window, { pointerId: 1 })
+    expect(useProjectStore.getState().projectFolders[0]?.projectPaths).toEqual([
+      THIRD_PATH,
+      FIRST_PATH,
+    ])
   })
 
   it('folder menu ordering persists without changing membership', async () => {

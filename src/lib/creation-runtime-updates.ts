@@ -1,8 +1,8 @@
 import {
-  useCreationChangesStore,
+  useCreationFilesStore,
   isCreationWorkspacePath,
   type CreationUpdateToken,
-} from '@/store/creation-changes-store'
+} from '@/store/creation-files-store'
 import { commands } from '@/lib/tauri-bindings'
 import { refreshCreationPages } from '@/lib/creation-lifecycle'
 import { logger } from '@/lib/logger'
@@ -35,7 +35,7 @@ export async function refreshMonitorFromDisk(): Promise<void> {
   try {
     const token =
       creation.active && isCreationWorkspacePath(root) && root
-        ? await useCreationChangesStore.getState().capture(root)
+        ? await useCreationFilesStore.getState().capture(root)
         : null
     const current = useSessionStore.getState()
     if (
@@ -77,7 +77,7 @@ export async function refreshMonitorFromDisk(): Promise<void> {
         return
       }
       if (pagesReady && state.monitorLoaded) {
-        useCreationChangesStore.getState().complete(token, 'refresh')
+        useCreationFilesStore.getState().complete(token, 'refresh')
         release()
       }
     }
@@ -182,7 +182,7 @@ export function trackCreationRestart(
         )
           useSessionStore.getState().applySnapshot(result.data.snapshot)
         if (useSessionStore.getState().sessionStatus === 'ready')
-          useCreationChangesStore.getState().complete(token, 'restart')
+          useCreationFilesStore.getState().complete(token, 'restart')
       })
       .catch(error =>
         logger.warn('Could not confirm creation runtime readiness', { error })

@@ -195,7 +195,7 @@ export function ErrorScreen() {
         (conflictStatus === null || conflictOccupant) && (
           <div
             data-testid="port-conflict-block"
-            className="w-full max-w-xl rounded-xl border border-(--pnds-text)/10 bg-(--pnds-card) p-4 text-sm"
+            className="w-full max-w-xl rounded-xl border border-(--pnds-border) bg-(--pnds-card) p-4 text-sm"
           >
             <p className="font-medium text-(--pnds-text)">
               {t('error.portConflictOccupant', { port: conflictPort })}
@@ -263,7 +263,7 @@ export function ErrorScreen() {
         </Button>
         <Button
           variant="outline"
-          className="border-(--pnds-text)/25 text-(--pnds-text)/80 hover:bg-(--pnds-text)/5"
+          className="border-(--pnds-border) text-(--pnds-text) hover:bg-(--pnds-text)/5"
           onClick={() => void handleBack()}
         >
           {t('error.back')}
@@ -301,7 +301,7 @@ export function ErrorScreen() {
         <Button
           variant="outline"
           size="sm"
-          className="mt-3 border-(--pnds-text)/25 text-(--pnds-text)/80 hover:bg-(--pnds-text)/5"
+          className="mt-3 border-(--pnds-border) text-(--pnds-text) hover:bg-(--pnds-text)/5"
           onClick={() => void handleCopy()}
         >
           {t('error.copy')}

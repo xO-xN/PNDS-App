@@ -8,6 +8,7 @@ pub fn generate_bindings() -> Builder<tauri::Wry> {
     crate::events::events_builder::<tauri::Wry>().commands(collect_commands![
         crate::window::toggle_fullscreen,
         crate::window::set_window_corners_square,
+        crate::window::set_main_controls_visible,
         crate::window::close_window_with_fade,
         crate::window::fade_in_window,
         crate::window::get_window_state,
@@ -30,6 +31,8 @@ pub fn generate_bindings() -> Builder<tauri::Wry> {
         creation::prepare_performer_window,
         creation::commit_creation_project,
         creation::describe_creation_projects,
+        creation::get_creation_modules,
+        creation::add_creation_module,
         creation::list_creation_files,
         creation::poll_creation_changes,
         creation::read_creation_file,

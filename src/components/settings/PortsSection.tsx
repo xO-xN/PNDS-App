@@ -188,7 +188,7 @@ export function PortsSection({ section }: { section: SettingsSection }) {
               key={label}
               data-testid="port-row"
               data-port={port}
-              className="flex flex-col gap-1 rounded-lg border border-(--pnds-text)/10 px-3 py-2"
+              className="flex flex-col gap-1 rounded-lg border border-(--pnds-border) px-3 py-2"
             >
               {/* Wrap (not overflow) when the status cluster can't fit —
                   the dialog pages vertically only. */}
@@ -201,7 +201,7 @@ export function PortsSection({ section }: { section: SettingsSection }) {
                   {sessionLive ? (
                     <span
                       data-testid="port-running"
-                      className="text-xs text-(--pnds-accent-text)"
+                      className="text-xs text-(--pnds-success)"
                     >
                       {status?.runningProject
                         ? t('settings.portRunningProject', {

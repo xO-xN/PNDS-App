@@ -157,16 +157,16 @@ export function ProjectReadme({ path }: { path: string }) {
         // UTF-8, unreadable) — a readable failure, never dressed up as
         // "there is none".
         <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col items-start justify-center">
-          <p className="text-[15px] text-(--pnds-text)/50">
+          <p className="text-[15px] text-(--pnds-text-secondary)">
             {t('projectReadme.readFailed')}
           </p>
-          <p className="font-manrope mt-2 max-w-full overflow-wrap-anywhere text-start text-sm whitespace-pre-wrap text-(--pnds-text)/70">
+          <p className="font-manrope mt-2 max-w-full overflow-wrap-anywhere text-start text-sm whitespace-pre-wrap text-(--pnds-text-secondary)">
             {read.error}
           </p>
         </div>
       ) : settled && read !== null && read.readme === null ? (
         <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col items-start justify-center">
-          <p className="text-[15px] text-(--pnds-text)/50">
+          <p className="text-[15px] text-(--pnds-text-secondary)">
             {t('projectReadme.empty')}
           </p>
           <Button

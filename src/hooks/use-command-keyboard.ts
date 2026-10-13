@@ -2,10 +2,10 @@ import { useEffect } from 'react'
 import { useKeyboardStore } from '@/store/keyboard-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { visibleProjectPaths, useProjectStore } from '@/store/project-store'
-import { selectProject } from '@/lib/project-select'
+import { selectProject, moveProjectSelection } from '@/lib/project-select'
 import { startRename } from '@/lib/project-rename'
 import { useCreationStore } from '@/store/creation-store'
-import { useCreationDraftsStore } from '@/store/creation-drafts-store'
+import { useCreationFilesStore } from '@/store/creation-files-store'
 import { useCreationTestStore } from '@/store/creation-test-store'
 import { useSessionStore } from '@/store/session-store'
 import { useWindowStore } from '@/store/window-store'
@@ -145,6 +145,22 @@ export function useCommandKeyboard(): void {
         useSettingsStore.getState().toggleSettings()
         return
       }
+      if (
+        (event.code === 'Backquote' || event.key === '`') &&
+        useCreationStore.getState().active
+      ) {
+        if (
+          useCreationStore.getState().modePhase !== 'idle' ||
+          !useCreationStore.getState().workspace ||
+          hasOpenOverlay() ||
+          useCreationTestStore.getState().expanded
+        )
+          return
+        event.preventDefault()
+        const tests = useCreationTestStore.getState()
+        tests.setTab(tests.tab === 'console' ? 'file' : 'console')
+        return
+      }
       // ⌘R must never fall through to the webview's page reload; in
       // creation ⌘S saves the active file draft (#154) — a version
       // conflict surfaces the reload-or-overwrite choice instead of
@@ -156,9 +172,25 @@ export function useCommandKeyboard(): void {
         if (event.code === 'KeyR') event.preventDefault()
         if (event.code === 'KeyS' && useCreationStore.getState().active) {
           event.preventDefault()
-          const path = useCreationDraftsStore.getState().activePath
-          if (path) void useCreationDraftsStore.getState().save(path)
+          const path = useCreationFilesStore.getState().activePath
+          if (path) void useCreationFilesStore.getState().save(path)
         }
+        return
+      }
+      if (
+        ['ArrowUp', 'ArrowDown'].includes(event.key) &&
+        !event.ctrlKey &&
+        !event.altKey &&
+        !event.shiftKey
+      ) {
+        if (
+          isEditableTarget(event.target) ||
+          hasOpenOverlay() ||
+          useSessionStore.getState().commandPending
+        )
+          return
+        event.preventDefault()
+        moveProjectSelection(event.key === 'ArrowDown' ? 1 : -1)
         return
       }
       if (event.code === 'KeyR') {

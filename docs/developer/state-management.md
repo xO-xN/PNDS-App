@@ -8,6 +8,10 @@ identity. Its final commit checks that generation under the lifecycle lock.
 command response must defer to newer events. Presentation/config resets leave
 these facts and the command owner's `commandPending` latch intact. Handoff keeps
 the monitor at one child/key and seeds applied configuration from runtime facts.
+The shared bottom bar also keeps the mode button mounted; fullscreen no longer
+keys the monitor. `appliedSampleRate` captures actual Internal spawn configuration,
+while next-start device/rate remain preferences. Master gain derives its mode
+from the ready runtime snapshot, independent of the selected card’s pending mode.
 
 ## The Two Layers
 
@@ -203,6 +207,7 @@ This app uses React Compiler which automatically handles memoization. You do **n
 The real stores in `src/store/` and what belongs in each:
 
 - **`project-store`** — project history, folders, selection, preflight state, rename target; structural actions persist the project index themselves
+- **`creation-files-store`** — project file reads, versioned drafts, conflicts, renames and disk change prompts; one ownership reset and directory commit path, documented in [creation-workspace.md](./creation-workspace.md#project-file-ownership)
 - **`session-store`** — mirror of the Rust SessionManager (status, volume, zoom) plus derived helpers (`shouldConfirmClose`, `isSessionBusy`)
 - **`settings-store`** — in-app settings panel (open/section) and the General (language + theme, since the v1.4.0 Appearance fold)/Audio/Node selections
 - **`window-store`** — mirror of Rust window state (fullscreen, traffic-light visibility) and the close/quit confirm dialogs

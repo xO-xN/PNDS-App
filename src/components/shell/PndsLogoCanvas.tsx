@@ -131,13 +131,13 @@ function randomBgPositions(): {
 // ── Canvas draw ─────────────────────────────────────────────────────────
 /** The animated logo's halo follows the color theme (issue #38) — canvas
  *  fillStyles cannot consume CSS custom properties, so resolve the token
- *  per draw (cheap: no layout involved). The Lavender literal is the
+ *  per draw (cheap: no layout involved). The Pond literal is the
  *  fallback for environments where the stylesheet is absent (jsdom). */
 function haloRgba(alpha: number): string {
   const hex =
     getComputedStyle(document.documentElement)
       .getPropertyValue('--pnds-logo-halo-animated')
-      .trim() || '#dee2ff'
+      .trim() || '#d9e9f5'
   const r = parseInt(hex.slice(1, 3), 16)
   const g = parseInt(hex.slice(3, 5), 16)
   const b = parseInt(hex.slice(5, 7), 16)

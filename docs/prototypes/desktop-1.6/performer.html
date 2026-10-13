@@ -1,0 +1,978 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="pond">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Performer · PNDS 原型</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --background: #ececf1;
+        --chrome: #f4f4f7;
+        --paper: #fafafd;
+        --text: #272732;
+        --muted: #646473;
+        --line: #d7d7e0;
+        --accent: #686188;
+        --soft: #e9e6f1;
+        --radius: 8px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        font-size: 12px;
+      }
+      :root[data-theme='sand'] {
+        --background: #eceae5;
+        --chrome: #f3f1eb;
+        --paper: #faf8f2;
+        --text: #33332f;
+        --muted: #6c6a60;
+        --line: #d8d5cb;
+        --accent: #736d4f;
+        --soft: #e8e3d4;
+      }
+      :root[data-theme='stage'] {
+        color-scheme: dark;
+        --background: #181a1f;
+        --chrome: #22242b;
+        --paper: #292b32;
+        --text: #e9e9ef;
+        --muted: #b0b1c0;
+        --line: #41444f;
+        --accent: #b8b0db;
+        --soft: #3b374d;
+      }
+      :root[data-theme='brutal'] {
+        --background: #deded8;
+        --chrome: #f5f5ee;
+        --paper: #fffef5;
+        --text: #171717;
+        --muted: #55554d;
+        --line: #171717;
+        --accent: #3333a8;
+        --soft: #e1e1ff;
+        --radius: 0px;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      body {
+        margin: 0;
+        height: 100dvh;
+        min-width: 300px;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        background: var(--background);
+        color: var(--text);
+      }
+      button,
+      select,
+      input {
+        font: inherit;
+        color: inherit;
+      }
+      button,
+      select {
+        min-height: 28px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--chrome);
+      }
+      button {
+        cursor: pointer;
+        padding: 5px 10px;
+      }
+      button:hover {
+        background: var(--soft);
+      }
+      button:disabled,
+      select:disabled {
+        cursor: default;
+        opacity: 0.45;
+      }
+      :focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 3px;
+      }
+      select {
+        padding: 3px 7px;
+      }
+      .titlebar {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-height: 44px;
+        flex-shrink: 0;
+        padding: 7px 12px;
+        background: var(--chrome);
+        border-bottom: 1px solid var(--line);
+      }
+      .traffic {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+      }
+      .traffic > span,
+      .traffic > button {
+        width: 12px;
+        height: 12px;
+        min-height: 12px;
+        padding: 0;
+        border: 1px solid #0002;
+        border-radius: 50%;
+      }
+      .traffic button {
+        background: #ee675f;
+        display: grid;
+        place-items: center;
+      }
+      .traffic svg {
+        width: 8px;
+        height: 8px;
+        color: #5d201c;
+        opacity: 0;
+      }
+      .traffic button:is(:hover, :focus-visible) svg {
+        opacity: 1;
+      }
+      .traffic > span {
+        background: var(--line);
+      }
+      .window-title {
+        font-weight: 550;
+        white-space: nowrap;
+      }
+      .prototype-label {
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .appearance {
+        margin-inline-start: auto;
+        display: flex;
+        gap: 5px;
+      }
+      .appearance select {
+        max-width: 78px;
+        border-color: transparent;
+        background: transparent;
+        font-size: 11px;
+      }
+      .toolbar {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px 16px;
+        padding: 9px 14px;
+        background: var(--chrome);
+        border-bottom: 1px solid var(--line);
+        flex-shrink: 0;
+      }
+      .field,
+      .toggle {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        color: var(--muted);
+      }
+      .field select {
+        color: var(--text);
+        font-size: 11px;
+      }
+      .toggle {
+        margin-inline-start: auto;
+        cursor: pointer;
+        user-select: none;
+        min-height: 28px;
+      }
+      .toggle input {
+        accent-color: var(--accent);
+        width: 13px;
+        height: 13px;
+        margin: 0;
+      }
+      .preview-area {
+        position: relative;
+        min-height: 0;
+        flex: 1;
+        display: grid;
+        place-items: center;
+        overflow: hidden;
+        padding: 24px;
+      }
+      .viewport {
+        position: relative;
+        flex-shrink: 0;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--paper);
+        box-shadow: 0 8px 24px #00000008;
+      }
+      .artboard {
+        position: absolute;
+        inset: 0 auto auto 0;
+        transform-origin: top left;
+        display: flex;
+        flex-direction: column;
+        padding: 28px;
+        background: var(--paper);
+      }
+      .score-heading,
+      .score-foot {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+      }
+      .score-heading {
+        flex-shrink: 0;
+        align-items: flex-start;
+      }
+      .score-heading h1 {
+        margin: 0;
+        font-size: 21px;
+        font-weight: 500;
+        letter-spacing: -0.025em;
+      }
+      .score-heading p {
+        margin: 7px 0 0;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .player-number {
+        font-size: 12px;
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+        padding-top: 4px;
+        white-space: nowrap;
+      }
+      .touch-area {
+        position: relative;
+        display: grid;
+        place-items: center;
+        min-height: 0;
+        flex: 1;
+        margin: 24px 0;
+      }
+      .touch-pad {
+        position: relative;
+        width: min(100%, 440px);
+        height: min(100%, 440px);
+        min-height: 100px;
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        color: var(--accent);
+        background: transparent;
+        touch-action: none;
+        -webkit-user-select: none;
+        user-select: none;
+        cursor: crosshair;
+      }
+      .touch-pad:hover,
+      .touch-pad:disabled {
+        background: transparent;
+      }
+      .touch-pad:disabled {
+        opacity: 0.4;
+      }
+      .rings {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        overflow: visible;
+      }
+      .rings circle {
+        vector-effect: non-scaling-stroke;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1;
+      }
+      .rings .faint {
+        opacity: 0.22;
+      }
+      .rings .outer {
+        opacity: 0.45;
+      }
+      .rings .pulse-ring {
+        stroke-width: 1.5;
+        opacity: 0.8;
+        transform-origin: center;
+        transition: transform 120ms ease-out;
+      }
+      .touch-point {
+        position: absolute;
+        width: 13px;
+        height: 13px;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        border-radius: 50%;
+        background: var(--accent);
+        opacity: 0.6;
+        box-shadow: 0 0 0 6px var(--soft);
+        pointer-events: none;
+      }
+      .touch-pad[data-active='true'] .touch-point {
+        opacity: 1;
+        box-shadow: 0 0 0 12px var(--soft);
+      }
+      .gesture-hint {
+        text-align: center;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.6;
+        margin: 0 0 24px;
+      }
+      .intensity-control {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+      }
+      .intensity-control label {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .intensity-control input {
+        min-width: 0;
+        flex: 1;
+        accent-color: var(--accent);
+        cursor: pointer;
+      }
+      .intensity-control output {
+        min-width: 3ch;
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+        text-align: end;
+      }
+      .score-foot {
+        flex-shrink: 0;
+        margin-top: 24px;
+        padding-top: 14px;
+        border-top: 1px solid var(--line);
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .coordinates {
+        font-variant-numeric: tabular-nums;
+      }
+      .state-message {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+        gap: 14px;
+        padding: 24px;
+        background: var(--paper);
+        color: var(--text);
+        text-align: center;
+      }
+      .state-message svg {
+        width: 28px;
+        height: 28px;
+        margin-bottom: 4px;
+        color: var(--muted);
+      }
+      .state-message h2 {
+        margin: 0;
+        font-weight: 500;
+        font-size: 17px;
+      }
+      .state-message p {
+        max-width: 28em;
+        color: var(--muted);
+        line-height: 1.7;
+        margin: 0;
+      }
+      .statusbar {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-height: 30px;
+        padding: 5px 14px;
+        border-top: 1px solid var(--line);
+        background: var(--chrome);
+        color: var(--muted);
+        font-size: 11px;
+        flex-shrink: 0;
+      }
+      .statusbar .dimensions {
+        margin-inline-start: auto;
+        white-space: nowrap;
+        font-variant-numeric: tabular-nums;
+      }
+      .hidden-window {
+        position: fixed;
+        inset: 0;
+        z-index: 10;
+        display: grid;
+        place-content: center;
+        justify-items: center;
+        gap: 15px;
+        padding: 24px;
+        background: var(--chrome);
+        text-align: center;
+      }
+      .hidden-window h2 {
+        font-size: 17px;
+        font-weight: 500;
+        margin: 0;
+      }
+      .hidden-window p {
+        max-width: 30em;
+        line-height: 1.7;
+        color: var(--muted);
+        margin: 0;
+      }
+      [data-theme='brutal'] .viewport {
+        border-width: 2px;
+        box-shadow: 5px 5px 0 var(--text);
+      }
+      [data-theme='brutal'] .pulse-ring {
+        transition: none;
+      }
+      @media (max-width: 500px) {
+        .prototype-label {
+          display: none;
+        }
+        .titlebar {
+          gap: 8px;
+        }
+        .toolbar {
+          gap: 6px 10px;
+          padding: 8px 10px;
+        }
+        .field > span {
+          display: none;
+        }
+        .toggle {
+          font-size: 11px;
+        }
+        .preview-area {
+          padding: 12px;
+        }
+        .statusbar {
+          padding-inline: 10px;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          transition: none !important;
+          animation: none !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Standalone, in-memory Performer UI prototype. No device or audio access. -->
+    <header class="titlebar">
+      <div class="traffic">
+        <button id="hide-window" data-label="hide" title="隐藏窗口">
+          <svg viewBox="0 0 10 10" aria-hidden="true">
+            <path d="m2 2 6 6m0-6L2 8" fill="none" stroke="currentColor" />
+          </svg>
+        </button>
+        <span aria-hidden="true"></span><span aria-hidden="true"></span>
+      </div>
+      <span class="window-title" id="window-title">Performer 01</span>
+      <span class="prototype-label" data-i18n="prototype">原型测试窗口</span>
+      <div class="appearance">
+        <select id="theme" data-label="theme">
+          <option value="pond">Pond</option>
+          <option value="sand">Sand</option>
+          <option value="stage">Stage</option>
+          <option value="brutal">Brutal</option>
+        </select>
+        <select id="language" data-label="language">
+          <option value="zh-CN">中文</option>
+          <option value="en">English</option>
+        </select>
+      </div>
+    </header>
+    <section class="toolbar" data-label="testControls">
+      <label class="field">
+        <span data-i18n="device">设备</span>
+        <select id="device" data-label="device">
+          <option value="phone" data-i18n="phone">手机</option>
+          <option value="tablet" data-i18n="tablet">平板</option>
+        </select>
+      </label>
+      <label class="field">
+        <span data-i18n="viewport">视口</span>
+        <select id="orientation" data-label="viewport">
+          <option value="portrait" data-i18n="portrait">竖屏</option>
+          <option value="landscape" data-i18n="landscape">横屏</option>
+          <option value="desktop" data-i18n="desktop">桌面</option>
+        </select>
+      </label>
+      <label class="toggle">
+        <input id="mouse-touch" type="checkbox" checked />
+        <span data-i18n="mouseTouch">鼠标模拟触摸</span>
+      </label>
+    </section>
+    <main class="preview-area" id="preview-area">
+      <div class="viewport" id="viewport">
+        <section class="artboard" id="artboard" data-label="scorePage">
+          <header class="score-heading">
+            <div>
+              <h1 data-i18n="workTitle">失语 III</h1>
+              <p data-i18n="workSubtitle">触点与共振</p>
+            </div>
+            <span class="player-number" id="player-number">Player 01</span>
+          </header>
+          <div class="touch-area">
+            <button class="touch-pad" id="touch-pad" data-label="touchPad">
+              <svg class="rings" viewBox="0 0 360 360" aria-hidden="true">
+                <circle class="outer" cx="180" cy="180" r="162" />
+                <circle class="faint" cx="180" cy="180" r="120" />
+                <circle class="faint" cx="180" cy="180" r="78" />
+                <circle
+                  class="pulse-ring"
+                  id="pulse-ring"
+                  cx="180"
+                  cy="180"
+                  r="120"
+                />
+                <path
+                  d="M180 9v9m0 324v9M9 180h9m324 0h9"
+                  stroke="currentColor"
+                  stroke-width="1"
+                  opacity="0.5"
+                />
+              </svg>
+              <span class="touch-point" id="touch-point"></span>
+            </button>
+          </div>
+          <p class="gesture-hint" id="gesture-hint"></p>
+          <div class="intensity-control">
+            <label for="intensity" data-i18n="intensity">力度</label>
+            <input id="intensity" type="range" min="0" max="100" value="35" />
+            <output id="intensity-output" for="intensity">35</output>
+          </div>
+          <footer class="score-foot">
+            <span id="gesture-state" role="status"></span>
+            <span class="coordinates" id="coordinates">x 0.50 / y 0.50</span>
+          </footer>
+          <div class="state-message" id="idle-message">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.3"
+              aria-hidden="true"
+            >
+              <rect x="5" y="2" width="14" height="20" rx="2" />
+              <path d="M10 18h4m-4-9 2 2 2-2m-2-3v5" />
+            </svg>
+            <h2 id="idle-title"></h2>
+            <p id="idle-description"></p>
+            <button id="local-demo" data-i18n="localDemo">开始本地演示</button>
+          </div>
+        </section>
+      </div>
+    </main>
+    <footer class="statusbar">
+      <span id="runtime-status" role="status"></span>
+      <span class="dimensions" id="dimensions"></span>
+    </footer>
+    <div class="hidden-window" id="hidden-window" hidden>
+      <h2 data-i18n="hiddenTitle">测试窗口已收起</h2>
+      <p data-i18n="hiddenDescription">
+        原型保留此窗口。浏览器页面仍打开，可以在这里恢复。
+      </p>
+      <button id="restore-window" data-i18n="restore">恢复窗口</button>
+    </div>
+    <script>
+      const params = new URLSearchParams(location.search)
+      const id = params.get('id') || '1'
+      const themes = ['pond', 'sand', 'stage', 'brutal']
+      const state = {
+        theme: themes.includes((params.get('theme') || '').toLowerCase())
+          ? params.get('theme').toLowerCase()
+          : 'pond',
+        language: params.get('lang') === 'en' ? 'en' : 'zh-CN',
+        running: false,
+        hidden: false,
+        device: 'phone',
+        orientation: 'portrait',
+        mouseTouch: true,
+        active: false,
+        intensity: 35,
+        x: 0.5,
+        y: 0.5,
+        sent: false,
+      }
+      const copy = {
+        'zh-CN': {
+          prototype: '原型测试窗口',
+          hide: '隐藏窗口',
+          theme: '主题',
+          language: '语言',
+          testControls: '测试窗口控制',
+          device: '设备',
+          viewport: '视口',
+          phone: '手机',
+          tablet: '平板',
+          portrait: '竖屏',
+          landscape: '横屏',
+          desktop: '桌面',
+          mouseTouch: '鼠标模拟触摸',
+          scorePage: '演示作品页面',
+          workTitle: '失语 III',
+          workSubtitle: '触点与共振',
+          touchPad: '触控区域；方向键移动，空格或回车触发',
+          intensity: '力度',
+          localDemo: '开始本地演示',
+          hiddenTitle: '测试窗口已收起',
+          hiddenDescription:
+            '原型保留此窗口。浏览器页面仍打开，可以在这里恢复。',
+          restore: '恢复窗口',
+          waiting: '等待主窗口启动测试',
+          waitingDescription:
+            '启动后，在圆环内按住并移动，观察 Monitor 的演示反馈。',
+          standalone: '独立窗口演示',
+          standaloneDescription: '当前没有主窗口。可在这里体验触控界面。',
+          hint: '按住并移动 · 方向键移动，空格触发',
+          touchHint: '触摸并移动 · 方向键移动，空格触发',
+          resting: '等待触发',
+          active: '触发中',
+          sent: '已发送演示手势',
+          localSent: '已触发本地演示',
+          ready: '原型联动 · 无实际连接',
+          idle: '原型待机',
+          local: '本地演示 · 无实际连接',
+          hiddenStatus: '原型窗口已收起',
+        },
+        en: {
+          prototype: 'Prototype test window',
+          hide: 'Hide window',
+          theme: 'Theme',
+          language: 'Language',
+          testControls: 'Test window controls',
+          device: 'Device',
+          viewport: 'Viewport',
+          phone: 'Phone',
+          tablet: 'Tablet',
+          portrait: 'Portrait',
+          landscape: 'Landscape',
+          desktop: 'Desktop',
+          mouseTouch: 'Mouse as touch',
+          scorePage: 'Demo score page',
+          workTitle: 'Inarticulate III',
+          workSubtitle: 'Touch and resonance',
+          touchPad:
+            'Touch surface; arrow keys to move, Space or Enter to trigger',
+          intensity: 'Intensity',
+          localDemo: 'Start local demo',
+          hiddenTitle: 'Test window hidden',
+          hiddenDescription:
+            'The prototype keeps this window. The browser page stays open; restore it here.',
+          restore: 'Restore window',
+          waiting: 'Waiting for the main window',
+          waitingDescription:
+            'Start a test, then hold and move inside the ring to see the Monitor respond.',
+          standalone: 'Standalone preview',
+          standaloneDescription:
+            'No main window is open. Try the touch interface locally.',
+          hint: 'Hold and move · Arrow keys to move, Space to trigger',
+          touchHint: 'Touch and move · Arrow keys to move, Space to trigger',
+          resting: 'Ready to trigger',
+          active: 'Touch active',
+          sent: 'Demo gesture sent',
+          localSent: 'Local gesture triggered',
+          ready: 'Prototype relay · No real connection',
+          idle: 'Prototype idle',
+          local: 'Local demo · No real connection',
+          hiddenStatus: 'Prototype window hidden',
+        },
+      }
+      const $ = name => document.getElementById(name)
+      const t = key => copy[state.language][key]
+      const hasOpener = () => !!window.opener && !window.opener.closed
+      const send = (action, value) => {
+        if (hasOpener())
+          window.opener.postMessage(
+            { type: 'pnds-performer', id, action, value },
+            '*'
+          )
+      }
+      function render() {
+        document.documentElement.lang = state.language
+        document.documentElement.dataset.theme = state.theme
+        document.title = `Performer ${id} · PNDS ${state.language === 'en' ? 'prototype' : '原型'}`
+        document.querySelectorAll('[data-i18n]').forEach(node => {
+          node.textContent = t(node.dataset.i18n)
+        })
+        document.querySelectorAll('[data-label]').forEach(node => {
+          node.setAttribute('aria-label', t(node.dataset.label))
+          if (node.tagName === 'BUTTON') node.title = t(node.dataset.label)
+        })
+        $('window-title').textContent = `Performer ${id.padStart(2, '0')}`
+        $('player-number').textContent = `Player ${id.padStart(2, '0')}`
+        $('theme').value = state.theme
+        $('language').value = state.language
+        $('device').disabled = state.orientation === 'desktop'
+        $('idle-message').hidden = state.running
+        $('local-demo').hidden = hasOpener()
+        $('idle-title').textContent = t(hasOpener() ? 'waiting' : 'standalone')
+        $('idle-description').textContent = t(
+          hasOpener() ? 'waitingDescription' : 'standaloneDescription'
+        )
+        $('gesture-hint').textContent = t(
+          state.mouseTouch ? 'hint' : 'touchHint'
+        )
+        $('touch-pad').disabled = !state.running || state.hidden
+        $('touch-pad').dataset.active = String(state.active)
+        $('touch-pad').setAttribute('aria-pressed', String(state.active))
+        $('intensity').disabled = !state.running || state.hidden
+        $('intensity').value = state.intensity
+        $('intensity-output').value = state.intensity
+        $('touch-point').style.left = `${state.x * 100}%`
+        $('touch-point').style.top = `${state.y * 100}%`
+        $('pulse-ring').style.transform =
+          `scale(${0.6 + (state.intensity / 100) * 0.6})`
+        $('coordinates').textContent =
+          `x ${state.x.toFixed(2)} / y ${state.y.toFixed(2)}`
+        $('gesture-state').textContent = t(
+          state.active
+            ? 'active'
+            : state.sent
+              ? hasOpener()
+                ? 'sent'
+                : 'localSent'
+              : 'resting'
+        )
+        $('runtime-status').textContent = t(
+          state.hidden
+            ? 'hiddenStatus'
+            : state.running
+              ? hasOpener()
+                ? 'ready'
+                : 'local'
+              : 'idle'
+        )
+        $('hidden-window').hidden = !state.hidden
+      }
+      function resize() {
+        const area = $('preview-area')
+        const padding = innerWidth <= 500 ? 24 : 48
+        const availableWidth = Math.max(180, area.clientWidth - padding)
+        const availableHeight = Math.max(120, area.clientHeight - padding)
+        let width = state.device === 'phone' ? 390 : 768
+        let height = state.device === 'phone' ? 740 : 1024
+        if (state.orientation === 'landscape') [width, height] = [height, width]
+        if (state.orientation === 'desktop')
+          [width, height] = [availableWidth, availableHeight]
+        const scale = Math.min(
+          1,
+          availableWidth / width,
+          availableHeight / height
+        )
+        $('viewport').style.width = `${width * scale}px`
+        $('viewport').style.height = `${height * scale}px`
+        $('artboard').style.width = `${width}px`
+        $('artboard').style.height = `${height}px`
+        $('artboard').style.transform = `scale(${scale})`
+        $('dimensions').textContent =
+          `${Math.round(width)} × ${Math.round(height)} · ${Math.round(scale * 100)}%`
+      }
+      function gesture(phase) {
+        if (!state.running || state.hidden) return
+        state.sent = true
+        // Coordinates and intensity are demo values, never a device-pressure reading.
+        send('gesture', {
+          x: state.x,
+          y: state.y,
+          intensity: state.intensity / 100,
+          phase,
+        })
+        render()
+      }
+      function point(event) {
+        const rect = $('touch-pad').getBoundingClientRect()
+        state.x = Math.min(
+          1,
+          Math.max(0, (event.clientX - rect.left) / rect.width)
+        )
+        state.y = Math.min(
+          1,
+          Math.max(0, (event.clientY - rect.top) / rect.height)
+        )
+      }
+      let pointer = null
+      $('touch-pad').addEventListener('pointerdown', event => {
+        if (
+          !state.running ||
+          state.hidden ||
+          (event.pointerType === 'mouse' && !state.mouseTouch)
+        )
+          return
+        event.preventDefault()
+        pointer = event.pointerId
+        $('touch-pad').setPointerCapture(pointer)
+        $('touch-pad').focus()
+        state.active = true
+        point(event)
+        gesture('start')
+      })
+      $('touch-pad').addEventListener('pointermove', event => {
+        if (pointer !== event.pointerId || !state.active) return
+        point(event)
+        gesture('move')
+      })
+      function endPointer(event) {
+        if (pointer !== event.pointerId) return
+        pointer = null
+        state.active = false
+        gesture('end')
+      }
+      $('touch-pad').addEventListener('pointerup', endPointer)
+      $('touch-pad').addEventListener('pointercancel', endPointer)
+      $('touch-pad').addEventListener('lostpointercapture', endPointer)
+      $('touch-pad').addEventListener('keydown', event => {
+        if (!state.running || state.hidden) return
+        const moves = {
+          ArrowLeft: [-0.05, 0],
+          ArrowRight: [0.05, 0],
+          ArrowUp: [0, -0.05],
+          ArrowDown: [0, 0.05],
+        }
+        if (moves[event.key]) {
+          event.preventDefault()
+          const [x, y] = moves[event.key]
+          state.x = Math.min(1, Math.max(0, state.x + x))
+          state.y = Math.min(1, Math.max(0, state.y + y))
+          gesture('move')
+        } else if (
+          (event.key === ' ' || event.key === 'Enter') &&
+          !event.repeat
+        ) {
+          event.preventDefault()
+          state.active = true
+          gesture('start')
+        }
+      })
+      $('touch-pad').addEventListener('keyup', event => {
+        if (event.key !== ' ' && event.key !== 'Enter') return
+        event.preventDefault()
+        state.active = false
+        gesture('end')
+      })
+      $('touch-pad').addEventListener('blur', () => {
+        if (!state.active) return
+        state.active = false
+        pointer = null
+        gesture('end')
+      })
+      $('intensity').addEventListener('input', event => {
+        state.intensity = Number(event.target.value)
+        gesture('intensity')
+      })
+      $('mouse-touch').addEventListener('change', event => {
+        state.mouseTouch = event.target.checked
+        state.active = false
+        pointer = null
+        render()
+      })
+      $('device').addEventListener('change', event => {
+        state.device = event.target.value
+        resize()
+      })
+      $('orientation').addEventListener('change', event => {
+        state.orientation = event.target.value
+        render()
+        resize()
+      })
+      $('theme').addEventListener('change', event => {
+        state.theme = event.target.value
+        render()
+      })
+      $('language').addEventListener('change', event => {
+        state.language = event.target.value
+        render()
+        resize()
+      })
+      $('local-demo').addEventListener('click', () => {
+        state.running = true
+        render()
+        $('touch-pad').focus()
+      })
+      function hide() {
+        if (state.hidden) return
+        state.active = false
+        pointer = null
+        state.hidden = true
+        send('hidden')
+        render()
+        $('restore-window').focus()
+      }
+      $('hide-window').addEventListener('click', hide)
+      function restore() {
+        if (!state.hidden) return
+        state.hidden = false
+        render()
+        resize()
+        send('ready')
+        $('hide-window').focus()
+      }
+      $('restore-window').addEventListener('click', restore)
+      window.addEventListener('message', event => {
+        if (
+          event.source !== window.opener ||
+          !event.data ||
+          event.data.type !== 'pnds-prototype'
+        )
+          return
+        const message = event.data
+        if (
+          !['runtime', 'refresh', 'theme', 'language', 'hide', 'show'].includes(
+            message.action
+          )
+        )
+          return
+        if (message.action === 'hide') {
+          hide()
+          return
+        }
+        if (message.action === 'show') {
+          if (state.hidden) restore()
+          else send('ready')
+          return
+        }
+        if (typeof message.running === 'boolean')
+          state.running = message.running
+        if (themes.includes(String(message.theme).toLowerCase()))
+          state.theme = message.theme.toLowerCase()
+        if (['en', 'zh-CN'].includes(message.language))
+          state.language = message.language
+        if (message.action === 'refresh') {
+          state.active = false
+          state.sent = false
+          state.x = 0.5
+          state.y = 0.5
+          pointer = null
+        }
+        if (!state.running) {
+          state.active = false
+          pointer = null
+        }
+        render()
+        resize()
+      })
+      // Focusing a retained browser window restores its prototype surface.
+      window.addEventListener('focus', restore)
+      window.addEventListener('beforeunload', () => send('hidden'))
+      new ResizeObserver(resize).observe($('preview-area'))
+      render()
+      resize()
+      send('ready')
+    </script>
+  </body>
+</html>

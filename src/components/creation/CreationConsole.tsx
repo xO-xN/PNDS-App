@@ -4,7 +4,7 @@ import { writeText } from '@tauri-apps/plugin-clipboard-manager'
 import { useCreationTestStore } from '@/store/creation-test-store'
 import { useSessionStore } from '@/store/session-store'
 import { useCreationStore } from '@/store/creation-store'
-import { isCreationWorkspacePath } from '@/store/creation-changes-store'
+import { isCreationWorkspacePath } from '@/store/creation-files-store'
 import { Button } from '@/components/ui/button'
 import { useCreationCompileStore } from '@/store/creation-compile-store'
 
@@ -99,7 +99,7 @@ export function CreationConsole() {
       {(compiling || compileReport || compileError) && (
         <section
           aria-label={t('creation.compile.console')}
-          className="my-3 space-y-2 rounded border border-(--pnds-text)/15 p-3"
+          className="my-3 space-y-2 rounded border border-(--pnds-border) p-3"
         >
           <h3 className="font-medium">{t('creation.compile.console')}</h3>
           {compiling && <p role="status">{t('creation.compile.busy')}</p>}

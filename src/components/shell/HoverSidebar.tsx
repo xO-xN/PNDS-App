@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Sidebar } from './Sidebar'
 import { useSessionStore } from '@/store/session-store'
 import { useKeyboardStore } from '@/store/keyboard-store'
@@ -7,6 +7,7 @@ import { useCreationStore } from '@/store/creation-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { useWindowStore } from '@/store/window-store'
 import { cn } from '@/lib/utils'
+import { syncNativeWindowControls } from '@/lib/native-window-controls'
 
 /**
  * Hover-revealed floating sidebar (§10.1): a left-edge hover zone pops
@@ -19,14 +20,36 @@ import { cn } from '@/lib/utils'
  * Cmd is released — unless a dialog or settings popup is open, or the
  * pointer is still hovering, in which case it stays.
  */
-export function HoverSidebar() {
+export function HoverSidebar({
+  held = false,
+  onShowReadme,
+}: {
+  held?: boolean
+  onShowReadme?: () => void
+}) {
+  const panel = useRef<HTMLDivElement>(null)
   const [hoverVisible, setHoverVisible] = useState(false)
   const [settingHold, setSettingHold] = useState(false)
   const [pointerActive, setPointerActive] = useState(false)
   useEffect(() => {
     // Gain and card drags may release outside this element, or be
     // canceled by the native window. Neither may strand a gesture hold.
-    const releasePointer = () => setPointerActive(false)
+    const releasePointer = (event: PointerEvent) => {
+      setPointerActive(false)
+      const rect = panel.current?.getBoundingClientRect()
+      // Folder drop targets extend to the right; after they disappear,
+      // pointer ownership must return to the physical sidebar bounds.
+      if (
+        rect &&
+        rect.width > 0 &&
+        rect.height > 0 &&
+        (event.clientX < rect.left ||
+          event.clientX > rect.right ||
+          event.clientY < rect.top ||
+          event.clientY > rect.bottom)
+      )
+        setHoverVisible(false)
+    }
     const releaseWindow = () => {
       setPointerActive(false)
       setSettingHold(false)
@@ -46,9 +69,11 @@ export function HoverSidebar() {
   // Same guard for sidebar dialogs (§8.3 switch confirm, folder delete).
   const [dialogOpen, setDialogOpen] = useState(false)
   const commandKeyPressed = useKeyboardStore(state => state.commandKeyPressed)
+  const status = useSessionStore(state => state.sessionStatus)
   const running = useSessionStore(state => state.sessionStatus === 'ready')
   const operationPending = useSessionStore(state => state.commandPending)
   const settingsOpen = useSettingsStore(state => state.settingsOpen)
+  const fullscreen = useWindowStore(state => state.fullscreen)
   const windowDialogOpen = useWindowStore(
     state => state.confirmCloseOpen || state.quitConfirmOpen
   )
@@ -65,8 +90,23 @@ export function HoverSidebar() {
     })
   }, [])
 
+  useEffect(
+    () =>
+      useWindowStore.subscribe((next, previous) => {
+        if (next.fullscreen !== previous.fullscreen) {
+          setHoverVisible(false)
+          setSettingHold(false)
+          setPointerActive(false)
+        }
+      }),
+    []
+  )
+
   const peeking = commandKeyPressed && running
   const sidebarVisible =
+    status === 'idle' ||
+    status === 'error' ||
+    held ||
     hoverVisible ||
     settingHold ||
     pointerActive ||
@@ -78,6 +118,33 @@ export function HoverSidebar() {
     peeking ||
     renaming ||
     modeConfirmation
+
+  useLayoutEffect(() => {
+    let frame = 0
+    const started = performance.now()
+    const reduced = window.matchMedia(
+      '(prefers-reduced-motion: reduce)'
+    ).matches
+    const update = () => {
+      const element = panel.current
+      if (!element) return
+      const rect = element.getBoundingClientRect()
+      const opacity = Number.parseFloat(getComputedStyle(element).opacity)
+      const alpha = Number.isFinite(opacity) ? opacity : sidebarVisible ? 1 : 0
+      void syncNativeWindowControls(
+        sidebarVisible || alpha > 0,
+        Math.max(-20, Math.min(20, rect.left - 12)),
+        alpha
+      )
+      if (!reduced && performance.now() - started < 240)
+        frame = requestAnimationFrame(update)
+    }
+    update()
+    return () => {
+      cancelAnimationFrame(frame)
+      void syncNativeWindowControls(true)
+    }
+  }, [sidebarVisible, fullscreen])
 
   return (
     <>
@@ -94,12 +161,13 @@ export function HoverSidebar() {
           ways. The host keys it by fullscreen so a popped-out sidebar is
           dropped instantly on toggle (fresh instance starts collapsed). */}
       <div
+        ref={panel}
         data-testid="sidebar-popover"
         data-sidebar-motion=""
         inert={!sidebarVisible}
         onPointerDownCapture={() => setPointerActive(true)}
         className={cn(
-          'absolute bottom-3 start-3 top-3 z-50 transition-all duration-200 ease-out motion-reduce:transition-none',
+          'desktop-sidebar-overlay absolute start-3 top-3 z-50 transition-all duration-200 ease-out motion-reduce:transition-none',
           sidebarVisible
             ? 'translate-x-0 opacity-100'
             : 'pointer-events-none -translate-x-5 opacity-0 rtl:translate-x-5'
@@ -126,6 +194,7 @@ export function HoverSidebar() {
       >
         <Sidebar
           variant="overlay"
+          onShowReadme={onShowReadme}
           onPopupOpenChange={setPopupOpen}
           onSettingCommitted={() => setSettingHold(true)}
           onDialogOpenChange={setDialogOpen}

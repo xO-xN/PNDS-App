@@ -37,6 +37,18 @@ async setWindowCornersSquare(square: boolean) : Promise<Result<null, string>> {
 }
 },
 /**
+ * The native controls follow the floating sidebar, without changing decorations
+ * or rebuilding the WKWebView. Fullscreen keeps the system titlebar controls.
+ */
+async setMainControlsVisible(visible: boolean, offset: number, opacity: number, top: number) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("set_main_controls_visible", { visible, offset, opacity, top }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * Fade-out then hide (red light / Close Window). Interruptible:
  * a newer request cancels the ramp and the terminal action still runs
  * from a deterministic state.
@@ -259,6 +271,22 @@ async commitCreationProject(identity: string | null, generation: string) : Promi
 async describeCreationProjects(paths: string[]) : Promise<Result<CreationOption[], CreationError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("describe_creation_projects", { paths }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async getCreationModules(identity: string) : Promise<Result<CreationModuleCatalog, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_creation_modules", { identity }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async addCreationModule(identity: string, moduleId: string, expectedRecord: string | null, expectedHandoff: string | null) : Promise<Result<CreationModuleAddResult, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("add_creation_module", { identity, moduleId, expectedRecord, expectedHandoff }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -1134,6 +1162,9 @@ export type CreationError = { code: CreationErrorCode; detail: string }
 export type CreationErrorCode = "missing" | "permission" | "invalidUtf8" | "tooLarge" | "invalidIdentity" | "pathEscape" | "invalidProject" | "manifestInvalid" | "testValidation" | "testStartup" | "versionConflict" | "targetExists" | "io"
 export type CreationFile = { path: string; size: number; kind: CreationFileKind; category: CreationCategory }
 export type CreationFileKind = "text" | "image" | "binary"
+export type CreationModule = { id: string; version: string; source: ModuleSource; files: string[]; state: ModuleState; recordVersion: string | null; error: CreationError | null }
+export type CreationModuleAddResult = { files: string[]; handoffRecorded: boolean; alreadyAdded: boolean; error: CreationError | null }
+export type CreationModuleCatalog = { modules: CreationModule[]; handoffVersion: string | null }
 export type CreationOption = { path: string; project: CreationProject | null; error: CreationError | null }
 export type CreationProject = { identity: string; root: string; name: string; source: CreationSource }
 export type CreationRuntime = { generation: string; snapshot: SessionSnapshot; projectRoot: string | null }
@@ -1396,6 +1427,8 @@ telematic?: boolean | null;
  * the same variable, zero project changes.
  */
 performerAddress?: string | null }
+export type ModuleSource = { repository: string; revision: string; version: string }
+export type ModuleState = "available" | "added" | "needsHandoff" | "conflict"
 export type NewProjectOptions = { parent: string; folderName: string; name: string; author: string; description: string; locale: string }
 /**
  * A queued `.pnds` bundle finished installing (formerly
@@ -1509,6 +1542,10 @@ channelPlan: ChannelPlan | null;
  * Final CoreAudio output device in use (internal sessions).
  */
 outputDevice: string | null; 
+/**
+ * Effective sample rate captured at Internal spawn, independent of pending preferences.
+ */
+appliedSampleRate?: number | null; 
 /**
  * #130: the projection start gate (投影开演) — true once the conductor
  * has revealed the monitor on the venue screen, false while it holds

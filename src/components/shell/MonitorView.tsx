@@ -29,14 +29,13 @@ import {
 } from '@/lib/monitor-reveal'
 import { cn } from '@/lib/utils'
 import { useGuestFocusGate } from '@/hooks/use-guest-focus-gate'
-import { HoverSidebar } from './HoverSidebar'
 import { useMonitorPreview } from '@/hooks/use-monitor-preview'
 import { MonitorScaleFrame } from './MonitorScaleFrame'
 
 /**
  * Performance view (§10.1): the project's monitor page fills the whole
- * window; the top-center title strip shows "PNDS - <project>" and is the
- * window drag region (§10.1, §9.3 reserves that area in the monitor).
+ * window above the shared bottom bar, with no title overlay over the score.
+ * Project identity stays on the accessible host and in the sidebar.
  * The floating sidebar pops in from the left edge (Zen-browser-style
  * slide + fade) and slides back out when the pointer leaves.
  */
@@ -196,12 +195,14 @@ export function MonitorView() {
       ref={hostRef}
       tabIndex={-1}
       data-testid="monitor-host"
+      role="region"
+      aria-label={displayOverride ?? projectName ?? undefined}
       className={cn(
         'overflow-hidden bg-black outline-none',
-        creationActive ? 'creation-monitor-host' : 'relative h-screen w-screen'
+        creationActive ? 'creation-monitor-host' : 'desktop-performance-monitor'
       )}
     >
-      {creationActive && <CreationTestControls />}
+      {creationActive && <CreationTestControls placement="pane" />}
       <div className="monitor-surface" style={surfaceStyle}>
         <div ref={viewportRef} className="monitor-page-viewport" dir="ltr">
           {/* §v1.1.1: browser-style zoom — the shared MonitorScaleFrame
@@ -255,64 +256,46 @@ export function MonitorView() {
             }
           />
         </div>
-        {/* Top-center title / window drag region (§10.1). Themed via the
-          monitor-bar tokens (v1.2.3 issue #38) — a scrim over the project
-          page, so light themes keep the dark value. */}
-        <div
-          data-tauri-drag-region
-          className={cn(
-            creationActive
-              ? 'creation-monitor-strip'
-              : 'absolute top-0 left-1/2 z-40 flex -translate-x-1/2 cursor-default select-none items-center rounded-b-xl bg-(--pnds-monitor-bar) px-5 py-1.5 text-xs font-medium tracking-wide text-(--pnds-monitor-bar-text) backdrop-blur-md'
-          )}
-        >
-          <span className="min-w-0 truncate">
-            {creationActive
-              ? 'monitor'
-              : `PNDS - ${displayOverride ?? projectName}`}
-            {creationActive && (
+        {creationActive && (
+          <div data-tauri-drag-region className="creation-monitor-strip">
+            <span className="min-w-0 truncate">
+              monitor
               <span className="creation-monitor-mode">
                 {t('creation.title')}
               </span>
-            )}
-          </span>
-          {creationActive && (
-            <>
-              <span className="creation-monitor-address" dir="ltr">
-                {monitorOrigin}
-              </span>
-              <button
-                disabled={layoutBlocked || pendingCommand}
-                data-tauri-drag-region="false"
-                aria-label={t(
-                  expanded
-                    ? 'creation.restoreWorkspace'
-                    : 'creation.expandMonitor'
-                )}
-                title={t(
-                  expanded
-                    ? 'creation.restoreWorkspace'
-                    : 'creation.expandMonitor'
-                )}
-                aria-pressed={expanded}
-                className="creation-icon-button pnds-focus-ring"
-                onClick={() =>
-                  useCreationTestStore.getState().setExpanded(!expanded)
-                }
-              >
-                {expanded ? (
-                  <Minimize2 size={14} aria-hidden="true" />
-                ) : (
-                  <Maximize2 size={14} aria-hidden="true" />
-                )}
-              </button>
-            </>
-          )}
-        </div>
+            </span>
+            <span className="creation-monitor-address" dir="ltr">
+              {monitorOrigin}
+            </span>
+            <button
+              disabled={layoutBlocked || pendingCommand}
+              data-tauri-drag-region="false"
+              aria-label={t(
+                expanded
+                  ? 'creation.restoreWorkspace'
+                  : 'creation.expandMonitor'
+              )}
+              title={t(
+                expanded
+                  ? 'creation.restoreWorkspace'
+                  : 'creation.expandMonitor'
+              )}
+              aria-pressed={expanded}
+              className="creation-icon-button pnds-focus-ring"
+              onClick={() =>
+                useCreationTestStore.getState().setExpanded(!expanded)
+              }
+            >
+              {expanded ? (
+                <Minimize2 size={14} aria-hidden="true" />
+              ) : (
+                <Maximize2 size={14} aria-hidden="true" />
+              )}
+            </button>
+          </div>
+        )}
       </div>
       {creationActive && <CreationPerformers />}
-
-      {!creationActive && <HoverSidebar />}
     </div>
   )
 }

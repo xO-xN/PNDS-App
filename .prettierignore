@@ -27,3 +27,6 @@ src/lib/bindings.ts
 # Standalone CommonJS example projects
 utilities/
 src-tauri/resources/utilities/
+
+# Frozen Template module sources retain their upstream bytes.
+src-tauri/resources/modules/**/*.js

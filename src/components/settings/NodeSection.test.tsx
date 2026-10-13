@@ -98,7 +98,7 @@ describe('NodeSection (#58)', () => {
   it('picking a LAN address updates the start config and persists the hand choice (#147)', async () => {
     const user = userEvent.setup()
     const addresses = ['192.168.1.10', '10.0.0.5']
-    // Every refresh (panel open AND the select's focus refresh, which
+    // Every refresh (panel open AND the address menu refresh, which
     // userEvent fires before picking) enumerates the fixture's two
     // addresses — a persistent override, not a one-shot.
     vi.mocked(commands.listLanAddresses).mockResolvedValue({
@@ -119,7 +119,8 @@ describe('NodeSection (#58)', () => {
     expect(commands.savePreferences).not.toHaveBeenCalled()
 
     const lan = screen.getByRole('combobox', { name: /network address/i })
-    await user.selectOptions(lan, '10.0.0.5')
+    await user.click(lan)
+    await user.click(screen.getByRole('option', { name: '10.0.0.5' }))
 
     expect(useSessionStore.getState().lanIp).toBe('10.0.0.5')
     await waitFor(() => {
@@ -129,7 +130,7 @@ describe('NodeSection (#58)', () => {
     })
   })
 
-  it('disables the LAN row and shows the placeholder option when no address is known', () => {
+  it('disables the LAN row and shows the placeholder when no address is known', () => {
     vi.mocked(commands.listLanAddresses).mockResolvedValueOnce({
       status: 'ok',
       data: [],
@@ -138,7 +139,7 @@ describe('NodeSection (#58)', () => {
     render(<NodeSection section="node" />)
     const lan = screen.getByRole('combobox', { name: /network address/i })
     expect(lan).toBeDisabled()
-    expect(lan).toHaveDisplayValue('Select…')
+    expect(lan).toHaveTextContent('Select…')
     // Nothing has been modified — the next-start note stays hidden.
     expect(screen.queryByTestId('node-hint')).not.toBeInTheDocument()
   })
@@ -156,7 +157,7 @@ describe('NodeSection (#58)', () => {
     await waitFor(() =>
       expect(useSessionStore.getState().lanIp).toBe('192.168.11.31')
     )
-    expect(lan).toHaveDisplayValue('192.168.11.31')
+    expect(lan).toHaveTextContent('192.168.11.31')
   })
 
   it('reveals the next-start note only after a row is modified', async () => {
@@ -185,10 +186,8 @@ describe('NodeSection (#58)', () => {
 
     expect(screen.queryByTestId('node-hint')).not.toBeInTheDocument()
 
-    await user.selectOptions(
-      screen.getByRole('combobox', { name: /network address/i }),
-      '10.0.0.5'
-    )
+    await user.click(screen.getByRole('combobox', { name: /network address/i }))
+    await user.click(screen.getByRole('option', { name: '10.0.0.5' }))
     expect(screen.getByTestId('node-hint')).toBeInTheDocument()
   })
 
@@ -209,7 +208,32 @@ describe('NodeSection (#58)', () => {
     expect(useSessionStore.getState().lanIp).toBe('192.168.1.10')
     expect(
       screen.getByRole('combobox', { name: /network address/i })
-    ).toHaveDisplayValue('192.168.1.10')
+    ).toHaveTextContent('192.168.1.10')
+  })
+
+  it('refreshes on each menu open, including reopening with focus still on the trigger', async () => {
+    const user = userEvent.setup()
+    vi.mocked(commands.listLanAddresses).mockResolvedValue({
+      status: 'ok',
+      data: ['192.168.1.10'],
+    })
+    render(<NodeSection section="node" />)
+    const lan = screen.getByRole('combobox', { name: /network address/i })
+    await waitFor(() => expect(lan).toBeEnabled())
+    expect(lan.tagName).toBe('BUTTON')
+    await user.click(lan)
+    expect(
+      screen.getByRole('option', { name: '192.168.1.10' })
+    ).toBeInTheDocument()
+    await waitFor(() =>
+      expect(commands.listLanAddresses).toHaveBeenCalledTimes(2)
+    )
+    await user.keyboard('{Escape}')
+    expect(lan).toHaveFocus()
+    await user.keyboard('{Enter}')
+    await waitFor(() =>
+      expect(commands.listLanAddresses).toHaveBeenCalledTimes(3)
+    )
   })
 
   it('selects the sole available address when the previous network disappears', async () => {
@@ -227,14 +251,14 @@ describe('NodeSection (#58)', () => {
     await waitFor(() => {
       expect(useSessionStore.getState().lanAddresses).toEqual(['192.168.1.10'])
     })
-    expect(lan).toHaveDisplayValue('192.168.1.10')
+    expect(lan).toHaveTextContent('192.168.1.10')
     expect(lan).toBeEnabled()
   })
 })
 
 describe('NodeSection LAN change — Change-button parity (#58)', () => {
   function seed(path: string, runningPath: string | null) {
-    // Persistent: the select's focus fires a second refresh during the
+    // Persistent: the menu opening fires a second refresh during the
     // pick — both enumerations return the fixture's two addresses.
     vi.mocked(commands.listLanAddresses).mockResolvedValue({
       status: 'ok',
@@ -282,7 +306,8 @@ describe('NodeSection LAN change — Change-button parity (#58)', () => {
     render(<NodeSection section="node" />)
 
     const lan = screen.getByRole('combobox', { name: /network address/i })
-    await user.selectOptions(lan, '10.0.0.5')
+    await user.click(lan)
+    await user.click(screen.getByRole('option', { name: '10.0.0.5' }))
 
     expect(useSessionStore.getState().lanIp).toBe('10.0.0.5')
     expect(useSessionStore.getState().pendingChanges).toBe(true)
@@ -294,7 +319,8 @@ describe('NodeSection LAN change — Change-button parity (#58)', () => {
     render(<NodeSection section="node" />)
 
     const lan = screen.getByRole('combobox', { name: /network address/i })
-    await user.selectOptions(lan, '10.0.0.5')
+    await user.click(lan)
+    await user.click(screen.getByRole('option', { name: '10.0.0.5' }))
 
     expect(useSessionStore.getState().pendingChanges).toBe(false)
   })

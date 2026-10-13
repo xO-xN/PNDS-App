@@ -14,7 +14,7 @@ import { useProjectStore, UTILITIES_FOLDER_ID } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 import { useCreationStore } from '@/store/creation-store'
 import { Sidebar } from './Sidebar'
-import { HoverSidebar } from './HoverSidebar'
+import { HoverSidebarHarness as HoverSidebar } from '@/test/desktop-harness'
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -84,6 +84,7 @@ describe('performance folders (#153)', () => {
   })
 
   it('keeps a dropdown open after the pointer leaves and hides after selection', async () => {
+    useSessionStore.setState({ sessionStatus: 'ready' })
     render(<HoverSidebar />)
     fireEvent.mouseEnter(screen.getByTestId('sidebar-hover-zone'))
     await userEvent.click(

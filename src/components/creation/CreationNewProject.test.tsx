@@ -1,9 +1,11 @@
+import { seedCreationDraft } from '@/test/creation-files'
+import { creationProjectAction } from '@/test/desktop-actions'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { open, confirm } from '@tauri-apps/plugin-dialog'
 import { act, fireEvent, render, screen, waitFor } from '@/test/test-utils'
 import { commands, type CreationWorkspace } from '@/lib/tauri-bindings'
 import { useCreationStore } from '@/store/creation-store'
-import { useCreationDraftsStore } from '@/store/creation-drafts-store'
+import { useCreationFilesStore } from '@/store/creation-files-store'
 import { useCreationHandoffStore } from '@/store/creation-handoff-store'
 import { useSessionStore } from '@/store/session-store'
 import { useCreationTestStore } from '@/store/creation-test-store'
@@ -33,7 +35,7 @@ beforeEach(async () => {
     modeError: null,
   })
   useSessionStore.setState({ sessionStatus: 'idle', commandPending: false })
-  useCreationDraftsStore.getState().clear()
+  useCreationFilesStore.getState().clear()
   useCreationHandoffStore.getState().clear()
   useCreationTestStore.setState({ tab: 'file', expanded: false })
   useProjectStore.setState({
@@ -58,12 +60,10 @@ it('offers creation in the project picker and preserves the live project on dire
     sessionStatus: 'ready',
     sessionProjectPath: '/old',
   })
-  useCreationDraftsStore.getState().loaded('README.md', 'Old intro', 'old-v1')
-  useCreationDraftsStore.getState().edit('README.md', 'Unsaved old intro')
+  seedCreationDraft('README.md', 'Old intro', 'old-v1')
+  useCreationFilesStore.getState().edit('README.md', 'Unsaved old intro')
   render(<CreationView />)
-  fireEvent.click(
-    screen.getByRole('button', { name: 'Switch to another project' })
-  )
+  await creationProjectAction('Switch to another project')
   fireEvent.click(
     await screen.findByRole('button', { name: 'New blank project' })
   )
@@ -100,7 +100,7 @@ it('offers creation in the project picker and preserves the live project on dire
   )
   fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
   expect(useCreationStore.getState().workspace).toEqual(old)
-  expect(useCreationDraftsStore.getState().drafts['README.md']?.text).toBe(
+  expect(useCreationFilesStore.getState().drafts['README.md']?.text).toBe(
     'Unsaved old intro'
   )
   expect(useSessionStore.getState().sessionStatus).toBe('ready')
@@ -137,9 +137,7 @@ it('reports creation failure before stopping the live project and keeps the form
     .mockResolvedValueOnce({ status: 'ok', data: live })
     .mockResolvedValueOnce({ status: 'ok', data: live })
   render(<CreationView />)
-  fireEvent.click(
-    screen.getByRole('button', { name: 'Switch to another project' })
-  )
+  await creationProjectAction('Switch to another project')
   fireEvent.click(
     await screen.findByRole('button', { name: 'New blank project' })
   )
@@ -257,12 +255,10 @@ it('names the completed directory and preserves the old drafts when generation s
     project: { ...created.project, identity: 'old', root: '/old', name: 'Old' },
   }
   useCreationStore.setState({ workspace: old })
-  useCreationDraftsStore.getState().loaded('README.md', 'Old intro', 'v1')
-  useCreationDraftsStore.getState().edit('README.md', 'Unsaved old intro')
+  seedCreationDraft('README.md', 'Old intro', 'v1')
+  useCreationFilesStore.getState().edit('README.md', 'Unsaved old intro')
   render(<CreationView />)
-  fireEvent.click(
-    screen.getByRole('button', { name: 'Switch to another project' })
-  )
+  await creationProjectAction('Switch to another project')
   fireEvent.click(
     await screen.findByRole('button', { name: 'New blank project' })
   )
@@ -283,7 +279,7 @@ it('names the completed directory and preserves the old drafts when generation s
     /The project was created at \/scores\/new-score; switching the workspace did not complete/
   )
   expect(useCreationStore.getState().workspace).toEqual(old)
-  expect(useCreationDraftsStore.getState().drafts['README.md']?.text).toBe(
+  expect(useCreationFilesStore.getState().drafts['README.md']?.text).toBe(
     'Unsaved old intro'
   )
   expect(commands.closeCreationProject).toHaveBeenCalledWith('new')

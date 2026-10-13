@@ -175,12 +175,12 @@ export function FolderReadme({ folderId }: { folderId: string }) {
           {folder.intro ? (
             <p
               dir="auto"
-              className="font-manrope mt-10 max-w-xl whitespace-pre-wrap text-start text-[15px] leading-7 text-(--pnds-text)/80"
+              className="font-manrope mt-10 max-w-xl whitespace-pre-wrap text-start text-[15px] leading-7 text-(--pnds-text)"
             >
               {folder.intro}
             </p>
           ) : (
-            <p className="mt-10 max-w-xl text-center text-[15px] leading-7 text-(--pnds-text)/80">
+            <p className="mt-10 max-w-xl text-center text-[15px] leading-7 text-(--pnds-text)">
               {/* The protected Utilities folder carries a fixed App
                   description (not the editable empty hint) — one line
                   saying what lives here (v1.5.0 polish, user copy). */}

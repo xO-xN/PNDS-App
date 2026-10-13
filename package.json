@@ -1,7 +1,7 @@
 {
   "name": "pnds-app",
   "private": true,
-  "version": "1.5.2",
+  "version": "1.6.0",
   "type": "module",
   "description": "PNDS App — 在演出现场运行 PNDS 数字乐谱工程的 macOS 桌面 Host 应用",
   "author": "xO-xN",
@@ -24,6 +24,7 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "prototype:locales": "node scripts/sync-prototype-locales.mjs",
     "test": "vitest",
     "test:run": "vitest run",
     "test:ui": "vitest --ui",

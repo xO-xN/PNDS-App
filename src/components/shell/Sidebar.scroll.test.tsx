@@ -12,7 +12,7 @@ import { commands } from '@/lib/tauri-bindings'
 import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 import { useKeyboardStore } from '@/store/keyboard-store'
-import { Sidebar } from './Sidebar'
+import { PerformanceSidebarHarness as Sidebar } from '@/test/desktop-harness'
 import { AppShell } from './AppShell'
 import type { Manifest } from '@/lib/tauri-bindings'
 
@@ -189,7 +189,9 @@ describe('Sidebar project-list scrolling (issue #25)', () => {
       }
       expect(scroller).not.toContainElement(screen.getByTestId('folder-picker'))
       expect(scroller).not.toContainElement(screen.getByTestId('folder-picker'))
-      expect(scroller).not.toContainElement(screen.getByTestId('settings-card'))
+      expect(scroller).not.toContainElement(
+        screen.getByRole('button', { name: 'Audio' })
+      )
     })
 
     it('the overlay variant shares the same scrolling layout', async () => {
@@ -202,7 +204,9 @@ describe('Sidebar project-list scrolling (issue #25)', () => {
       const firstEntry = entries[0]
       if (!firstEntry) throw new Error('Expected a project card')
       expect(scroller).toContainElement(firstEntry)
-      expect(scroller).not.toContainElement(screen.getByTestId('settings-card'))
+      expect(scroller).not.toContainElement(
+        screen.getByRole('button', { name: 'Audio' })
+      )
     })
 
     it('the folder switch still renders under many projects', async () => {
@@ -223,7 +227,9 @@ describe('Sidebar project-list scrolling (issue #25)', () => {
       const scroller = screen.getByTestId('project-list-scroll')
       expect(scroller).toContainElement(screen.getByTestId('project-entry'))
       expect(scroller).not.toContainElement(screen.getByTestId('folder-picker'))
-      expect(scroller).not.toContainElement(screen.getByTestId('settings-card'))
+      expect(scroller).not.toContainElement(
+        screen.getByRole('button', { name: 'Audio' })
+      )
     })
   })
 

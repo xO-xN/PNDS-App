@@ -8,7 +8,7 @@ export function CreationTestIdle() {
   const { viewportRef, surfaceStyle } = useMonitorPreview(true)
   return (
     <aside data-creation-test-idle="" className="creation-monitor-host">
-      <CreationTestControls />
+      <CreationTestControls placement="pane" />
       <div className="monitor-surface" style={surfaceStyle}>
         <div className="creation-monitor-strip">
           <span>

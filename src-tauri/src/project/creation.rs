@@ -20,8 +20,12 @@ mod compile;
 #[cfg(test)]
 mod compile_tests;
 mod handoff;
+mod modules;
+#[cfg(test)]
+mod modules_tests;
 pub use blank::NewProjectOptions;
 pub use compile::{SynthdefCompileReport, SynthdefCompiler};
+pub use modules::{CreationModuleAddResult, CreationModuleCatalog};
 
 pub const TEXT_MAX_BYTES: u64 = 1024 * 1024;
 pub const IMAGE_MAX_BYTES: u64 = 4 * 1024 * 1024;

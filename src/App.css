@@ -2,6 +2,7 @@
 @import 'tw-animate-css';
 @import './theme-variables.css';
 @import './components/creation/creation.css';
+@import './components/shell/desktop.css';
 
 /* PNDS brand fonts (bundled locally; the app must work offline) */
 @font-face {
@@ -201,6 +202,41 @@
     -webkit-user-drag: none;
   }
 
+  .welcome-brutal-art-frame {
+    position: relative;
+    z-index: 1;
+    flex-shrink: 0;
+    inline-size: min(320px, 32vw, calc(24vh * 560 / 342));
+    /* The 560 × 342 artwork's body ends at y=318. Reserve only that
+       height: hands and tentacle tips overlap the panel below by 24px
+       at source scale. Both dimensions scale together without cropping. */
+    aspect-ratio: 560 / 318;
+    min-block-size: 0;
+  }
+
+  .welcome-brutal-art {
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline-start: 0;
+    display: block;
+    inline-size: 100%;
+    block-size: auto;
+    -webkit-user-drag: none;
+  }
+
+  [data-color-theme='brutal'] .welcome-title-panel {
+    max-inline-size: 100%;
+    padding: 22px 16px 24px;
+    border: 2px solid var(--pnds-text);
+    background: var(--pnds-card);
+    box-shadow: var(--pnds-card-shadow);
+  }
+
+  [data-color-theme='brutal'] .welcome-title-panel h1 {
+    font-size: 40px;
+    text-wrap: balance;
+  }
+
   @keyframes dissolve-out {
     from {
       opacity: 1;
@@ -285,7 +321,7 @@
    components keep their design-system ring). :focus-visible only — mouse
    clicks never show a ring; Tab navigation always does. */
 .pnds-focus-ring:focus-visible {
-  outline: 2px solid var(--pnds-accent);
+  outline: 2px solid var(--pnds-accent-text);
   outline-offset: 1px;
 }
 
@@ -359,7 +395,27 @@
      (text-tinted in light themes, black-based in dark — see
      --pnds-knob-shadow). */
   background: var(--pnds-card);
+  border: 1px solid var(--pnds-input);
   /* (4px trough − 14px knob) / 2 */
   margin-top: -5px;
   box-shadow: var(--pnds-knob-shadow);
+}
+
+/* AppShell supplies Sonner's palette variables on the toaster itself. */
+[data-sonner-toaster] [data-sonner-toast][data-styled='true'] {
+  box-shadow: var(--pnds-popover-shadow);
+}
+[data-sonner-toaster]
+  [data-sonner-toast][data-styled='true']
+  [data-description] {
+  color: var(--pnds-text-secondary);
+}
+
+[data-sonner-toaster] [data-sonner-toast][data-styled='true'] [data-button] {
+  background: var(--pnds-accent);
+  color: var(--pnds-accent-foreground);
+}
+[data-sonner-toaster] [data-sonner-toast][data-styled='true'] [data-cancel] {
+  background: var(--pnds-pill);
+  color: var(--pnds-text);
 }

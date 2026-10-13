@@ -24,6 +24,8 @@
 
 use serde::{Deserialize, Serialize};
 use specta::Type;
+#[cfg(target_os = "macos")]
+use std::sync::atomic::AtomicU64;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -36,6 +38,11 @@ use tauri_specta::Event as _;
 const FADE_DURATION: Duration = Duration::from_millis(160);
 /// Poll cadence for the opacity ramp (~60 fps).
 const FADE_STEP: Duration = Duration::from_millis(16);
+/// Preserve the active chrome inset through native resize/layout updates.
+#[cfg(target_os = "macos")]
+static MAIN_CONTROLS_TOP: AtomicU32 = AtomicU32::new(34);
+#[cfg(target_os = "macos")]
+static MAIN_CONTROLS_OFFSET: AtomicU64 = AtomicU64::new(0);
 /// v1.3.0 (#51): grace period for the cold-start reveal. The main window
 /// is created hidden (`visible: false` in tauri.conf.json) and the
 /// frontend reveals it with `fade_in_window` once the saved theme has
@@ -47,11 +54,14 @@ pub const COLD_START_REVEAL_BACKSTOP: Duration = Duration::from_secs(4);
 /// v1.3.0 (#51): persisted window state must NOT include VISIBLE — the
 /// window-state plugin's restore path shows the window itself when that
 /// flag is set, which would bypass the hidden-create reveal gate (the
-/// theme-gated first frame). Visibility is exclusively ours: the
-/// cold-start reveal (`fade_in_window`) and the dock-reopen path.
+/// theme-gated first frame). DECORATIONS is also product-owned: old
+/// borderless records must not override the native overlay shell.
+/// Visibility is exclusively ours: the cold-start reveal (`fade_in_window`) and the dock-reopen path.
 pub fn persisted_state_flags() -> tauri_plugin_window_state::StateFlags {
-    tauri_plugin_window_state::StateFlags::all()
-        .difference(tauri_plugin_window_state::StateFlags::VISIBLE)
+    tauri_plugin_window_state::StateFlags::all().difference(
+        tauri_plugin_window_state::StateFlags::VISIBLE
+            | tauri_plugin_window_state::StateFlags::DECORATIONS,
+    )
 }
 /// How long the macOS native fullscreen transition takes. The window is
 /// transparent during it, so we fade in again only after it settles —
@@ -603,10 +613,157 @@ pub async fn set_window_corners_square(app: AppHandle, square: bool) -> Result<(
     let window = app
         .get_webview_window("main")
         .ok_or("main window not found")?;
+    let (done, completion) = tokio::sync::oneshot::channel();
     app.run_on_main_thread(move || {
-        sync_corner_radius(&window, square);
+        let _ = done.send(apply_corner_shape(&window, square));
     })
-    .map_err(|e| format!("Failed to schedule the corner task: {e}"))
+    .map_err(|e| format!("Failed to schedule the corner task: {e}"))?;
+    completion
+        .await
+        .map_err(|e| format!("Window corner task did not finish: {e}"))?
+}
+
+/// Establish the native overlay before the first visible frame. Previous
+/// window-state records must not restore a borderless shell.
+#[cfg(target_os = "macos")]
+pub fn configure_main_chrome<R: Runtime>(window: &WebviewWindow<R>) {
+    if let Err(error) = window.set_decorations(true) {
+        log::warn!("Unable to enable native window decorations: {error}");
+    }
+    if let Err(error) = window.set_title_bar_style(tauri::TitleBarStyle::Overlay) {
+        log::warn!("Unable to apply the overlay titlebar: {error}");
+    }
+    if let Ok(pointer) = window.ns_window() {
+        use objc2_app_kit::{NSWindow, NSWindowStyleMask, NSWindowTitleVisibility};
+        // SAFETY: called from AppKit's setup/UI thread, with Tauri-owned views.
+        unsafe {
+            let native = &*pointer.cast::<NSWindow>();
+            native.setStyleMask(
+                native.styleMask()
+                    | NSWindowStyleMask::Titled
+                    | NSWindowStyleMask::Closable
+                    | NSWindowStyleMask::Miniaturizable
+                    | NSWindowStyleMask::FullSizeContentView,
+            );
+            native.setTitlebarAppearsTransparent(true);
+            native.setTitleVisibility(NSWindowTitleVisibility::Hidden);
+        }
+    }
+}
+
+/// AppKit owns the buttons. Repositioning their titlebar container neither
+/// reparents the project page nor changes its navigation/lifecycle.
+#[cfg(target_os = "macos")]
+unsafe fn position_main_controls(native: &objc2_app_kit::NSWindow, offset: f64) {
+    use objc2_app_kit::NSWindowButton;
+    let overlay = native.styleMask() | objc2_app_kit::NSWindowStyleMask::FullSizeContentView;
+    if native.styleMask() != overlay {
+        native.setStyleMask(overlay);
+    }
+    let Some(close) = square_chrome::button(native, NSWindowButton::CloseButton) else {
+        return;
+    };
+    let Some(mini) = square_chrome::button(native, NSWindowButton::MiniaturizeButton) else {
+        return;
+    };
+    let Some(parent) = square_chrome::container(&close) else {
+        return;
+    };
+    let close_frame = close.frame();
+    let spacing = mini.frame().origin.x - close_frame.origin.x;
+    let mut frame = parent.frame();
+    frame.size.height =
+        close_frame.size.height + f64::from(MAIN_CONTROLS_TOP.load(Ordering::Relaxed));
+    frame.origin.y = native.frame().size.height - frame.size.height;
+    parent.setFrame(frame);
+    for (index, kind) in [
+        NSWindowButton::CloseButton,
+        NSWindowButton::MiniaturizeButton,
+        NSWindowButton::ZoomButton,
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        if let Some(button) = square_chrome::button(native, kind) {
+            let mut origin = button.frame().origin;
+            origin.x = 28.0 + offset + index as f64 * spacing;
+            button.setFrameOrigin(origin);
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+pub fn sync_main_control_position<R: Runtime>(window: &WebviewWindow<R>) {
+    if window.is_fullscreen().unwrap_or(false) {
+        return;
+    }
+    if let Ok(pointer) = window.ns_window() {
+        // SAFETY: invoked only on the AppKit event/setup thread.
+        unsafe {
+            position_main_controls(
+                &*pointer.cast::<objc2_app_kit::NSWindow>(),
+                f64::from_bits(MAIN_CONTROLS_OFFSET.load(Ordering::Relaxed)),
+            );
+        }
+    }
+}
+
+/// The native controls follow the floating sidebar, without changing decorations
+/// or rebuilding the WKWebView. Fullscreen keeps the system titlebar controls.
+#[tauri::command]
+#[specta::specta]
+pub async fn set_main_controls_visible(
+    app: AppHandle,
+    visible: bool,
+    offset: f64,
+    opacity: f64,
+    top: f64,
+) -> Result<(), String> {
+    if !offset.is_finite() || !opacity.is_finite() || !top.is_finite() {
+        return Err("Invalid native control motion".into());
+    }
+    let offset = offset.clamp(-20.0, 20.0);
+    let opacity = opacity.clamp(0.0, 1.0);
+    let top = top.clamp(8.0, 34.0).round() as u32;
+    let window = app
+        .get_webview_window("main")
+        .ok_or("main window not found")?;
+    app.run_on_main_thread(move || {
+        #[cfg(target_os = "macos")]
+        if let Ok(pointer) = window.ns_window() {
+            use objc2::msg_send;
+            use objc2_app_kit::{NSWindow, NSWindowButton};
+            // SAFETY: Tauri owns this NSWindow; AppKit access stays on its UI thread.
+            unsafe {
+                let native = &*pointer.cast::<NSWindow>();
+                MAIN_CONTROLS_TOP.store(top, Ordering::Relaxed);
+                MAIN_CONTROLS_OFFSET.store(offset.to_bits(), Ordering::Relaxed);
+                let fullscreen = window.is_fullscreen().unwrap_or(false);
+                let hidden = !visible && !fullscreen;
+                for kind in [
+                    NSWindowButton::CloseButton,
+                    NSWindowButton::MiniaturizeButton,
+                    NSWindowButton::ZoomButton,
+                ] {
+                    if let Some(button) = square_chrome::button(native, kind) {
+                        let _: () = msg_send![&*button, setHidden: hidden];
+                        let _: () = msg_send![&*button, setAlphaValue: if fullscreen { 1.0 } else { opacity }];
+                    }
+                }
+                // Hiding/showing AppKit buttons may lay out their titlebar;
+                // apply the product inset after that native work.
+                native
+                    .contentView()
+                    .inspect(|view| view.layoutSubtreeIfNeeded());
+                if !fullscreen {
+                    position_main_controls(native, offset);
+                }
+            }
+        }
+        #[cfg(not(target_os = "macos"))]
+        let _ = (window, visible, offset, opacity, top);
+    })
+    .map_err(|error| format!("Failed to update native window controls: {error}"))
 }
 
 /// Re-applies the native window corner radius for the current window
@@ -615,11 +772,26 @@ pub async fn set_window_corners_square(app: AppHandle, square: bool) -> Result<(
 /// startup, on every fullscreen transition (native green button or
 /// ⌃⌘F), and on every theme change so the radius survives them all.
 pub fn sync_corner_radius<R: Runtime>(window: &WebviewWindow<R>, square_corners: bool) {
+    let target = window.clone();
+    if let Err(error) = window.run_on_main_thread(move || {
+        if let Err(error) = apply_corner_shape(&target, square_corners) {
+            log::warn!("Unable to apply window corner shape: {error}");
+        }
+    }) {
+        log::warn!("Unable to schedule window corner shape: {error}");
+    }
+}
+
+fn apply_corner_shape<R: Runtime>(
+    window: &WebviewWindow<R>,
+    square_corners: bool,
+) -> Result<(), String> {
     let is_fullscreen = window.is_fullscreen().unwrap_or(false);
     let radius = window_corner_radius(is_fullscreen, square_corners);
-    if let Err(e) = set_corner_radius(window, radius) {
-        log::warn!("setCornerRadius({radius}) failed: {e}");
-    }
+    set_corner_radius(window, radius, square_corners && !is_fullscreen)?;
+    #[cfg(target_os = "macos")]
+    sync_main_control_position(window);
+    Ok(())
 }
 
 /// The context-menu suppression script (see `suppress_default_context_menu`
@@ -1200,15 +1372,16 @@ fn window_corner_radius(is_fullscreen: bool, square_corners: bool) -> f64 {
     }
 }
 
-/// Rounds the window by clipping its content view's backing layer
-/// (CALayer.cornerRadius + masksToBounds) — the modern AppKit approach.
-/// NSWindow.cornerRadius is deprecated and absent on TaoWindow at runtime
-/// ("unrecognized selector"), so we cannot use it. masksToBounds clips every
-/// subview (including the WKWebView) to the rounded shape, so the monitor
-/// background reaches the window's real edge instead of leaking the white
-/// webview background at the corners. Fullscreen passes radius 0 (square).
+/// Match the native frame AND the content layer to the theme. A titled
+/// NSWindow has system-rounded corners even when contentView.cornerRadius
+/// is zero. Brutal therefore uses a borderless frame with the existing
+/// AppKit controls retained; other themes restore the native overlay.
 #[cfg(target_os = "macos")]
-fn set_corner_radius<R: Runtime>(window: &WebviewWindow<R>, radius: f64) -> Result<(), String> {
+fn set_corner_radius<R: Runtime>(
+    window: &WebviewWindow<R>,
+    radius: f64,
+    square_window: bool,
+) -> Result<(), String> {
     use objc2::msg_send;
     use objc2_app_kit::NSView;
     use objc2_app_kit::NSWindow;
@@ -1220,6 +1393,7 @@ fn set_corner_radius<R: Runtime>(window: &WebviewWindow<R>, radius: f64) -> Resu
     // Tauri (same lifetime contract as set_alpha above); msg_send only.
     unsafe {
         let win: *mut NSWindow = ns_window.cast();
+        square_chrome::apply(window, &*win, square_window)?;
         let content_view: *mut NSView = msg_send![win, contentView];
         // Ensure the view is layer-backed so `layer` is non-nil.
         let _: () = msg_send![content_view, setWantsLayer: true];
@@ -1231,16 +1405,245 @@ fn set_corner_radius<R: Runtime>(window: &WebviewWindow<R>, radius: f64) -> Resu
 }
 
 #[cfg(not(target_os = "macos"))]
-fn set_corner_radius<R: Runtime>(_window: &WebviewWindow<R>, _radius: f64) -> Result<(), String> {
+fn set_corner_radius<R: Runtime>(
+    _window: &WebviewWindow<R>,
+    _radius: f64,
+    _square_window: bool,
+) -> Result<(), String> {
     Ok(())
+}
+
+/// Native-only ownership for Brutal's rectangular main frame. AppKit creates
+/// the standard NSButtons; their overlay survives theme changes. Fullscreen
+/// uses the system titlebar and its controls instead.
+#[cfg(target_os = "macos")]
+mod square_chrome {
+    use std::cell::RefCell;
+
+    use objc2::rc::Retained;
+    use objc2::runtime::{AnyObject, NSObject};
+    use objc2::{define_class, msg_send, sel, DeclaredClass, MainThreadOnly};
+    use objc2_app_kit::{NSButton, NSView, NSWindow, NSWindowButton, NSWindowStyleMask};
+    use objc2_foundation::NSPoint;
+    use tauri::{Runtime, WebviewWindow};
+
+    struct FullscreenAction(Box<dyn Fn()>);
+
+    define_class!(
+        #[unsafe(super(NSObject))]
+        #[name = "PNDSSquareFullscreenTarget"]
+        #[thread_kind = MainThreadOnly]
+        #[ivars = FullscreenAction]
+        struct FullscreenTarget;
+
+        impl FullscreenTarget {
+            #[unsafe(method(toggleFullscreen:))]
+            fn toggle_fullscreen(&self, _sender: *mut AnyObject) {
+                (self.ivars().0)();
+            }
+        }
+    );
+
+    define_class!(
+        #[unsafe(super(NSView))]
+        #[name = "PNDSSquareControlsView"]
+        struct ControlsView;
+
+        impl ControlsView {
+            #[unsafe(method(hitTest:))]
+            fn hit_test(&self, point: NSPoint) -> *mut NSView {
+                // Empty titlebar space still reaches the webview's drag
+                // regions and project menu; only actual buttons take input.
+                let hit: *mut NSView = unsafe { msg_send![super(self), hitTest: point] };
+                if std::ptr::eq(hit, self as *const Self as *const NSView) {
+                    std::ptr::null_mut()
+                } else {
+                    hit
+                }
+            }
+        }
+    );
+
+    struct SquareChrome {
+        buttons: [Retained<NSButton>; 3],
+        titlebar: Retained<NSView>,
+        // AppKit control targets are not retained by the buttons.
+        _fullscreen_target: Retained<FullscreenTarget>,
+    }
+
+    thread_local! {
+        static CHROME: RefCell<Option<SquareChrome>> = const { RefCell::new(None) };
+    }
+
+    pub(super) fn frame_style(mask: NSWindowStyleMask, square: bool) -> NSWindowStyleMask {
+        if square {
+            mask & !NSWindowStyleMask::Titled
+        } else {
+            mask | NSWindowStyleMask::Titled
+        }
+    }
+
+    pub(super) unsafe fn button(
+        native: &NSWindow,
+        kind: NSWindowButton,
+    ) -> Option<Retained<NSButton>> {
+        if native.styleMask().contains(NSWindowStyleMask::FullScreen) {
+            return native.standardWindowButton(kind);
+        }
+        let index = match kind {
+            NSWindowButton::CloseButton => Some(0),
+            NSWindowButton::MiniaturizeButton => Some(1),
+            NSWindowButton::ZoomButton => Some(2),
+            _ => None,
+        };
+        CHROME
+            .with(|chrome| {
+                let chrome = chrome.borrow();
+                Some(chrome.as_ref()?.buttons[index?].clone())
+            })
+            .or_else(|| native.standardWindowButton(kind))
+    }
+
+    pub(super) unsafe fn container(close: &NSButton) -> Option<Retained<NSView>> {
+        CHROME
+            .with(|chrome| {
+                chrome
+                    .borrow()
+                    .as_ref()
+                    .map(|chrome| chrome.titlebar.clone())
+            })
+            .or_else(|| close.superview().and_then(|view| view.superview()))
+    }
+
+    pub(super) unsafe fn apply<R: Runtime>(
+        window: &WebviewWindow<R>,
+        native: &NSWindow,
+        square: bool,
+    ) -> Result<(), String> {
+        let fullscreen = window.is_fullscreen().unwrap_or(false);
+        if square && CHROME.with(|chrome| chrome.borrow().is_none()) {
+            let originals = [
+                native.standardWindowButton(NSWindowButton::CloseButton),
+                native.standardWindowButton(NSWindowButton::MiniaturizeButton),
+                native.standardWindowButton(NSWindowButton::ZoomButton),
+            ];
+            let [Some(original_close), Some(original_mini), Some(original_zoom)] = originals else {
+                return Err("Native window controls are missing".into());
+            };
+            let original_parent = original_close
+                .superview()
+                .and_then(|view| view.superview())
+                .ok_or("Native titlebar container is missing")?;
+            let mtm = objc2::MainThreadMarker::new().ok_or("AppKit requires the main thread")?;
+            let titlebar: Retained<ControlsView> =
+                msg_send![ControlsView::alloc(mtm), initWithFrame: original_parent.frame()];
+            let titlebar: Retained<NSView> = titlebar.into_super();
+            let buttons = [
+                NSWindow::standardWindowButton_forStyleMask(
+                    NSWindowButton::CloseButton,
+                    native.styleMask(),
+                    mtm,
+                ),
+                NSWindow::standardWindowButton_forStyleMask(
+                    NSWindowButton::MiniaturizeButton,
+                    native.styleMask(),
+                    mtm,
+                ),
+                NSWindow::standardWindowButton_forStyleMask(
+                    NSWindowButton::ZoomButton,
+                    native.styleMask(),
+                    mtm,
+                ),
+            ];
+            let [Some(close), Some(mini), Some(zoom)] = buttons else {
+                return Err("AppKit could not create the standard window controls".into());
+            };
+            for (button, original) in [&close, &mini, &zoom].into_iter().zip([
+                &original_close,
+                &original_mini,
+                &original_zoom,
+            ]) {
+                button.setFrame(original.frame());
+                button.setHidden(original.isHidden());
+                button.setAlphaValue(original.alphaValue());
+                titlebar.addSubview(button);
+            }
+            let _: () = msg_send![&*close, setTarget: native];
+            let _: () = msg_send![&*close, setAction: sel!(performClose:)];
+            let _: () = msg_send![&*mini, setTarget: native];
+            let _: () = msg_send![&*mini, setAction: sel!(performMiniaturize:)];
+            let fullscreen_window = window.clone();
+            let target =
+                FullscreenTarget::alloc(mtm).set_ivars(FullscreenAction(Box::new(move || {
+                    // Tao's set_fullscreen prepares and restores a borderless
+                    // style mask. Calling NSWindow.toggleFullScreen directly
+                    // would bypass that preparation after removing Titled.
+                    let next = !fullscreen_window.is_fullscreen().unwrap_or(false);
+                    if let Err(error) = fullscreen_window.set_fullscreen(next) {
+                        log::warn!("Unable to toggle square-window fullscreen: {error}");
+                    }
+                })));
+            let target: Retained<FullscreenTarget> = msg_send![super(target), init];
+            let _: () = msg_send![&*zoom, setTarget: &*target];
+            let _: () = msg_send![&*zoom, setAction: sel!(toggleFullscreen:)];
+            // Publish ownership before changing style: AppKit may deliver
+            // resize/layout callbacks synchronously during setStyleMask.
+            CHROME.with(|chrome| {
+                *chrome.borrow_mut() = Some(SquareChrome {
+                    buttons: [close, mini, zoom],
+                    titlebar: titlebar.clone(),
+                    _fullscreen_target: target,
+                });
+            });
+        }
+        let titlebar = CHROME.with(|chrome| {
+            chrome
+                .borrow()
+                .as_ref()
+                .map(|chrome| chrome.titlebar.clone())
+        });
+        if let Some(titlebar) = titlebar {
+            let mask = frame_style(native.styleMask(), square);
+            if native.styleMask() != mask {
+                native.setStyleMask(mask);
+            }
+            native.setTitlebarAppearsTransparent(true);
+            let content = native
+                .contentView()
+                .ok_or("Window content view is missing")?;
+            content.addSubview(&titlebar);
+            titlebar.setHidden(fullscreen);
+            for kind in [
+                NSWindowButton::CloseButton,
+                NSWindowButton::MiniaturizeButton,
+                NSWindowButton::ZoomButton,
+            ] {
+                if let Some(button) = native.standardWindowButton(kind) {
+                    button.setHidden(!fullscreen);
+                    if fullscreen {
+                        button.setAlphaValue(1.0);
+                    }
+                }
+            }
+        }
+        native.invalidateShadow();
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// The fade-generation machine: bumping supersedes in-flight ramps,
-    /// and is_current tracks the latest generation.
+    #[test]
+    fn restore_keeps_geometry_but_cannot_restore_old_borderless_decorations() {
+        use tauri_plugin_window_state::StateFlags;
+        let flags = persisted_state_flags();
+        assert!(flags.contains(StateFlags::SIZE | StateFlags::POSITION));
+        assert!(!flags.contains(StateFlags::DECORATIONS));
+        assert!(!flags.contains(StateFlags::VISIBLE));
+    }
+
     #[test]
     fn fade_generation_cancels_older_ramps() {
         let gen = FadeGen::default();
@@ -1423,5 +1826,20 @@ mod tests {
         assert_eq!(window_corner_radius(true, false), 0.0);
         assert_eq!(window_corner_radius(false, true), 0.0);
         assert_eq!(window_corner_radius(true, true), 0.0);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn square_frame_removes_system_rounding_without_losing_window_operations() {
+        use objc2_app_kit::NSWindowStyleMask;
+        let operations = NSWindowStyleMask::Closable
+            | NSWindowStyleMask::Miniaturizable
+            | NSWindowStyleMask::Resizable
+            | NSWindowStyleMask::FullSizeContentView;
+        let rounded = operations | NSWindowStyleMask::Titled;
+        let square = square_chrome::frame_style(rounded, true);
+        assert_eq!(square, operations);
+        assert!(!square.contains(NSWindowStyleMask::Titled));
+        assert_eq!(square_chrome::frame_style(square, false), rounded);
     }
 }

@@ -13,7 +13,7 @@ import { useSessionStore } from '@/store/session-store'
 import { useCreationStore } from '@/store/creation-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { Sidebar } from './Sidebar'
-import { MonitorView } from './MonitorView'
+import { MonitorHarness as MonitorView } from '@/test/desktop-harness'
 
 beforeEach(async () => {
   vi.clearAllMocks()

@@ -19,7 +19,7 @@ import {
   registerCreationParticipant,
   type CreationPageRefresh,
 } from '@/lib/creation-lifecycle'
-import { isCreationWorkspacePath } from '@/store/creation-changes-store'
+import { isCreationWorkspacePath } from '@/store/creation-files-store'
 import { useCreationStore } from '@/store/creation-store'
 import {
   useSessionStore,

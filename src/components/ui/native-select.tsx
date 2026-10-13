@@ -74,7 +74,7 @@ function NativeSelect({
           BOX_METRICS,
           // After BOX_METRICS: the visible border survives the merge over
           // the sizer's border-transparent (see BOX_METRICS above).
-          'border-input rounded-md border bg-transparent shadow-xs',
+          'border-input rounded-md border bg-(--pnds-pill) shadow-xs',
           'focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]',
           'aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive',
           className

@@ -2,13 +2,12 @@ import { create } from 'zustand'
 import i18n from '@/i18n/config'
 import { commands, type SynthdefCompileReport } from '@/lib/tauri-bindings'
 import { useCreationStore, creationTransportError } from './creation-store'
-import { isDraftDirty, useCreationDraftsStore } from './creation-drafts-store'
-import { useCreationChangesStore } from './creation-changes-store'
+import { isDraftDirty, useCreationFilesStore } from './creation-files-store'
 import { useCreationTestStore } from './creation-test-store'
 import { useSessionStore } from './session-store'
 
 export function selectCompileDraftPaths(
-  state: ReturnType<typeof useCreationDraftsStore.getState>
+  state: ReturnType<typeof useCreationFilesStore.getState>
 ): string {
   return Object.entries(state.drafts)
     .filter(
@@ -31,7 +30,7 @@ interface CreationCompileState {
 function blocked(): boolean {
   const session = useSessionStore.getState()
   return (
-    !!selectCompileDraftPaths(useCreationDraftsStore.getState()) ||
+    !!selectCompileDraftPaths(useCreationFilesStore.getState()) ||
     session.commandPending ||
     ['starting', 'stopping'].includes(session.sessionStatus)
   )
@@ -57,20 +56,20 @@ export const useCreationCompileStore = create<CreationCompileState>(
       set({ busy: true, report: null, error: null })
       useCreationTestStore.getState().setTab('console')
       try {
-        const update = await useCreationChangesStore.getState().capture(root)
+        const update = await useCreationFilesStore.getState().capture(root)
         if (!owns()) return
         if (!update)
           throw (
-            useCreationChangesStore.getState().error ??
+            useCreationFilesStore.getState().error ??
             new Error(i18n.t('creation.compile.syncFailed'))
           )
         // The watcher and any keystrokes while it was awaited must settle before dispatch.
         if (blocked()) {
           set({
-            error: selectCompileDraftPaths(useCreationDraftsStore.getState())
+            error: selectCompileDraftPaths(useCreationFilesStore.getState())
               ? i18n.t('creation.compile.unsaved', {
                   paths: selectCompileDraftPaths(
-                    useCreationDraftsStore.getState()
+                    useCreationFilesStore.getState()
                   ),
                 })
               : i18n.t('creation.compile.runtimeBusy'),
@@ -82,9 +81,9 @@ export const useCreationCompileStore = create<CreationCompileState>(
         if (result.status === 'error') throw result.error
         set({ report: result.data })
         if (!result.data.error)
-          useCreationChangesStore.getState().complete(update, 'compile')
+          useCreationFilesStore.getState().complete(update, 'compile')
         if (result.data.produced.length)
-          await useCreationChangesStore.getState().poll()
+          await useCreationFilesStore.getState().poll()
       } catch (error) {
         if (owns()) {
           const failure = creationTransportError(error)

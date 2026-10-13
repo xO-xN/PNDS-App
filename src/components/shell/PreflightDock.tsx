@@ -24,7 +24,7 @@ export function PreflightDock({ children }: { children?: ReactNode }) {
       {preflightStatus === 'checking' && (
         <div
           data-testid="welcome-checking"
-          className="font-manrope max-w-xl rounded-xl border border-(--pnds-text)/10 bg-(--pnds-pill) p-4 text-sm text-(--pnds-text)/60"
+          className="font-manrope max-w-xl rounded-xl border border-(--pnds-border) bg-(--pnds-pill) p-4 text-sm text-(--pnds-text-secondary)"
         >
           {t('welcome.checking')}
         </div>

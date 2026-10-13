@@ -1,3 +1,4 @@
+import { ensureNetworkControls } from '@/test/desktop-actions'
 import {
   render,
   screen,
@@ -175,11 +176,28 @@ describe('Cmd keyboard layer (v1.1.2)', () => {
     expect(frameKey.defaultPrevented).toBe(false)
     expect(commands.preflightProject).not.toHaveBeenCalled()
     fireEvent.mouseEnter(screen.getByTestId('sidebar-popover'))
-    const select = screen.getByRole('combobox', { name: 'Audio mode' })
+    const select = screen.getByRole('combobox', { name: 'Performance folder' })
     fireEvent.keyDown(select, { key: 'ArrowDown' })
     expect(screen.getByRole('listbox')).toBeInTheDocument()
     expect(commands.preflightProject).not.toHaveBeenCalled()
     fireEvent.keyDown(screen.getByRole('listbox'), { key: 'Escape' })
+  })
+
+  it('uses Cmd Up/Down to select the same projects while Cmd keeps the sidebar visible', async () => {
+    seedRunningSession(FIRST_PATH)
+    render(<AppShell />)
+    fireEvent.keyDown(window, { key: 'Meta' })
+    fireEvent.keyDown(window, { key: 'ArrowDown', metaKey: true })
+    await waitFor(() =>
+      expect(useProjectStore.getState().currentProject?.path).toBe(SECOND_PATH)
+    )
+    expect(screen.getByTestId('sidebar-popover')).toHaveClass('opacity-100')
+    fireEvent.keyDown(window, { key: 'ArrowUp', metaKey: true })
+    await waitFor(() =>
+      expect(useProjectStore.getState().currentProject?.path).toBe(FIRST_PATH)
+    )
+    expect(commands.startProject).not.toHaveBeenCalled()
+    expect(commands.stopProject).not.toHaveBeenCalled()
   })
 
   describe('number badges', () => {
@@ -485,6 +503,7 @@ describe('Cmd keyboard layer (v1.1.2)', () => {
       useSessionStore.setState({ audioMode: 'external' })
       render(<AppShell />)
 
+      ensureNetworkControls()
       const oscInput = screen.getByRole('textbox', { name: /osc target/i })
       fireEvent.keyDown(oscInput, { key: 'Enter' })
 

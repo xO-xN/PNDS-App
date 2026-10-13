@@ -12,8 +12,8 @@ import { useCreationStore } from '@/store/creation-store'
 import { useCreationTestStore } from '@/store/creation-test-store'
 import {
   selectDirtyPathKey,
-  useCreationDraftsStore,
-} from '@/store/creation-drafts-store'
+  useCreationFilesStore,
+} from '@/store/creation-files-store'
 import { Button } from '@/components/ui/button'
 
 /** Explicitly packages saved disk content; editing and the live run are independent. */
@@ -23,7 +23,7 @@ export function CreationBundle({ project }: { project: CreationProject }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<PackResult | null>(null)
-  const dirty = useCreationDraftsStore(selectDirtyPathKey)
+  const dirty = useCreationFilesStore(selectDirtyPathKey)
   const hasSuccessfulTest = useCreationTestStore(
     state => state.hasSuccessfulTest
   )
@@ -104,7 +104,7 @@ export function CreationBundle({ project }: { project: CreationProject }) {
   }
   return (
     <section
-      className="shrink-0 border-b border-(--pnds-text)/15 p-4 text-start text-xs"
+      className="shrink-0 border-b border-(--pnds-border) p-4 text-start text-xs"
       aria-label={t('creation.bundle.action')}
     >
       <div className="flex flex-wrap items-center gap-3">

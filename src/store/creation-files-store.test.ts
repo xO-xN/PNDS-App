@@ -1,3 +1,4 @@
+import { seedCreationDraft } from '@/test/creation-files'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { confirm } from '@tauri-apps/plugin-dialog'
 import { commands } from '@/lib/tauri-bindings'
@@ -6,15 +7,15 @@ import {
   creationDraftsParticipant,
   isDraftDirty,
   selectUnsavedCount,
-  useCreationDraftsStore,
-} from './creation-drafts-store'
+  useCreationFilesStore,
+} from './creation-files-store'
 import {
   registerCreationParticipant,
   creationUnsavedCount,
 } from '@/lib/creation-lifecycle'
 
 function draftOf(path: string) {
-  const draft = useCreationDraftsStore.getState().drafts[path]
+  const draft = useCreationFilesStore.getState().drafts[path]
   if (!draft) throw new Error(`missing draft: ${path}`)
   return draft
 }
@@ -53,7 +54,7 @@ describe('creation drafts (#154)', () => {
       error: null,
       modePhase: 'idle',
     })
-    useCreationDraftsStore.setState({
+    useCreationFilesStore.setState({
       drafts: {},
       activePath: null,
       renameNote: null,
@@ -62,17 +63,17 @@ describe('creation drafts (#154)', () => {
   })
 
   it('edits mark a draft dirty and saving writes only the current file with the read version', async () => {
-    const store = useCreationDraftsStore.getState()
-    store.loaded('server.js', 'original', 'v1')
+    const store = useCreationFilesStore.getState()
+    seedCreationDraft('server.js', 'original', 'v1')
     store.edit('server.js', 'edited')
     const draft = draftOf('server.js')
     expect(isDraftDirty(draft)).toBe(true)
-    expect(selectUnsavedCount(useCreationDraftsStore.getState())).toBe(1)
+    expect(selectUnsavedCount(useCreationFilesStore.getState())).toBe(1)
     vi.mocked(commands.saveCreationFile).mockResolvedValueOnce({
       status: 'ok',
       data: 'v2',
     })
-    await useCreationDraftsStore.getState().save('server.js')
+    await useCreationFilesStore.getState().save('server.js')
     expect(commands.saveCreationFile).toHaveBeenCalledWith(
       'first',
       'server.js',
@@ -91,8 +92,8 @@ describe('creation drafts (#154)', () => {
   })
 
   it('keeps the draft and fetches the disk version when an external change refuses the save', async () => {
-    useCreationDraftsStore.getState().loaded('server.js', 'mine', 'v1')
-    useCreationDraftsStore.getState().edit('server.js', 'mine edited')
+    seedCreationDraft('server.js', 'mine', 'v1')
+    useCreationFilesStore.getState().edit('server.js', 'mine edited')
     vi.mocked(commands.saveCreationFile).mockResolvedValueOnce({
       status: 'error',
       error: { code: 'versionConflict', detail: 'server.js' },
@@ -101,25 +102,23 @@ describe('creation drafts (#154)', () => {
       status: 'ok',
       data: { kind: 'text', text: 'external agent text', version: 'v2' },
     })
-    await useCreationDraftsStore.getState().save('server.js')
-    const conflicted = useCreationDraftsStore.getState().drafts['server.js']
+    await useCreationFilesStore.getState().save('server.js')
+    const conflicted = useCreationFilesStore.getState().drafts['server.js']
     expect(conflicted).toMatchObject({
       text: 'mine edited',
       conflict: { text: 'external agent text', version: 'v2' },
     })
 
     // Reverting adopts the displayed disk version and clears the conflict.
-    useCreationDraftsStore.getState().revert('server.js')
-    expect(useCreationDraftsStore.getState().drafts['server.js']).toMatchObject(
-      {
-        text: 'external agent text',
-        diskVersion: 'v2',
-        conflict: null,
-      }
-    )
+    useCreationFilesStore.getState().revert('server.js')
+    expect(useCreationFilesStore.getState().drafts['server.js']).toMatchObject({
+      text: 'external agent text',
+      diskVersion: 'v2',
+      conflict: null,
+    })
 
     // An explicit overwrite binds to the displayed conflict version…
-    useCreationDraftsStore.getState().edit('server.js', 'mine again')
+    useCreationFilesStore.getState().edit('server.js', 'mine again')
     vi.mocked(commands.saveCreationFile).mockResolvedValueOnce({
       status: 'error',
       error: { code: 'versionConflict', detail: 'server.js' },
@@ -128,8 +127,8 @@ describe('creation drafts (#154)', () => {
       status: 'ok',
       data: { kind: 'text', text: 'newer external', version: 'v3' },
     })
-    await useCreationDraftsStore.getState().save('server.js')
-    const rebound = useCreationDraftsStore.getState().drafts['server.js']
+    await useCreationFilesStore.getState().save('server.js')
+    const rebound = useCreationFilesStore.getState().drafts['server.js']
     expect(rebound?.conflict).toEqual({
       text: 'newer external',
       version: 'v3',
@@ -145,15 +144,15 @@ describe('creation drafts (#154)', () => {
       status: 'ok',
       data: 'v4',
     })
-    await useCreationDraftsStore.getState().save('server.js', 'v3')
+    await useCreationFilesStore.getState().save('server.js', 'v3')
     expect(
-      useCreationDraftsStore.getState().drafts['server.js']?.conflict
+      useCreationFilesStore.getState().drafts['server.js']?.conflict
     ).toBeNull()
   })
 
   it('a conflicted save without an explicit overwrite opens the choice instead of writing', async () => {
-    useCreationDraftsStore.getState().loaded('server.js', 'mine', 'v1')
-    useCreationDraftsStore.getState().edit('server.js', 'mine edited')
+    seedCreationDraft('server.js', 'mine', 'v1')
+    useCreationFilesStore.getState().edit('server.js', 'mine edited')
     vi.mocked(commands.saveCreationFile).mockResolvedValueOnce({
       status: 'error',
       error: { code: 'versionConflict', detail: 'server.js' },
@@ -162,47 +161,45 @@ describe('creation drafts (#154)', () => {
       status: 'ok',
       data: { kind: 'text', text: 'external', version: 'v2' },
     })
-    await useCreationDraftsStore.getState().save('server.js')
+    await useCreationFilesStore.getState().save('server.js')
     expect(vi.mocked(commands.saveCreationFile)).toHaveBeenCalledTimes(1)
     // Dismissing the choice hides it; the draft and conflict survive.
-    useCreationDraftsStore.getState().dismissConflict('server.js')
-    expect(useCreationDraftsStore.getState().dismissedConflict).toEqual({
+    useCreationFilesStore.getState().dismissConflict('server.js')
+    expect(useCreationFilesStore.getState().dismissedConflict).toEqual({
       path: 'server.js',
       version: 'v2',
     })
     // The ⌘S path re-arms the choice rather than writing through it.
-    await useCreationDraftsStore.getState().save('server.js')
+    await useCreationFilesStore.getState().save('server.js')
     expect(vi.mocked(commands.saveCreationFile)).toHaveBeenCalledTimes(1)
-    expect(useCreationDraftsStore.getState().dismissedConflict).toBeNull()
+    expect(useCreationFilesStore.getState().dismissedConflict).toBeNull()
   })
 
   it('reloads a clean draft from disk to adopt external changes without a conflict', async () => {
-    useCreationDraftsStore.getState().loaded('server.js', 'old contents', 'v1')
+    seedCreationDraft('server.js', 'old contents', 'v1')
     vi.mocked(commands.readCreationFile).mockResolvedValueOnce({
       status: 'ok',
       data: { kind: 'text', text: 'new disk contents', version: 'v2' },
     })
-    await useCreationDraftsStore.getState().reload('server.js')
-    expect(useCreationDraftsStore.getState().drafts['server.js']).toMatchObject(
-      {
-        text: 'new disk contents',
-        diskText: 'new disk contents',
-        diskVersion: 'v2',
-        conflict: null,
-      }
-    )
+    await useCreationFilesStore.getState().reload('server.js')
+    expect(useCreationFilesStore.getState().drafts['server.js']).toMatchObject({
+      text: 'new disk contents',
+      diskText: 'new disk contents',
+      diskVersion: 'v2',
+      conflict: null,
+    })
     // A dirty draft is never silently replaced by a reload.
     vi.mocked(commands.readCreationFile).mockClear()
-    useCreationDraftsStore.getState().edit('server.js', 'my edit')
-    await useCreationDraftsStore.getState().reload('server.js')
+    useCreationFilesStore.getState().edit('server.js', 'my edit')
+    await useCreationFilesStore.getState().reload('server.js')
     expect(commands.readCreationFile).not.toHaveBeenCalled()
-    expect(useCreationDraftsStore.getState().drafts['server.js']?.text).toBe(
+    expect(useCreationFilesStore.getState().drafts['server.js']?.text).toBe(
       'my edit'
     )
   })
 
   it('keeps typing made during a reload and ignores an older disk read in the same workspace', async () => {
-    useCreationDraftsStore.getState().loaded('server.js', 'original', 'v1')
+    seedCreationDraft('server.js', 'original', 'v1')
     let resolveOld!: (
       value: Awaited<ReturnType<typeof commands.readCreationFile>>
     ) => void
@@ -212,13 +209,17 @@ describe('creation drafts (#154)', () => {
           resolveOld = resolve
         })
     )
-    const oldRead = useCreationDraftsStore.getState().reload('server.js')
-    useCreationDraftsStore.getState().edit('server.js', 'typing during reload')
+    const oldRead = useCreationFilesStore.getState().reload('server.js')
+    useCreationFilesStore.getState().edit('server.js', 'typing during reload')
     vi.mocked(commands.readCreationFile).mockResolvedValueOnce({
       status: 'ok',
       data: { kind: 'text', text: 'newest disk', version: 'v3' },
     })
-    await useCreationDraftsStore.getState().observeDisk('server.js')
+    vi.mocked(commands.pollCreationChanges).mockResolvedValueOnce({
+      status: 'ok',
+      data: { files: first.files, changed: ['server.js'], revision: 1 },
+    })
+    await useCreationFilesStore.getState().poll()
     resolveOld({
       status: 'ok',
       data: { kind: 'text', text: 'older disk', version: 'v2' },
@@ -231,8 +232,8 @@ describe('creation drafts (#154)', () => {
   })
 
   it('a late save returning after a project switch cannot touch the new workspace', async () => {
-    useCreationDraftsStore.getState().loaded('server.js', 'draft', 'v1')
-    useCreationDraftsStore.getState().edit('server.js', 'draft edited')
+    seedCreationDraft('server.js', 'draft', 'v1')
+    useCreationFilesStore.getState().edit('server.js', 'draft edited')
     let resolveSave!: (result: { status: 'ok'; data: string }) => void
     vi.mocked(commands.saveCreationFile).mockImplementationOnce(
       () =>
@@ -240,7 +241,7 @@ describe('creation drafts (#154)', () => {
           resolveSave = resolve
         })
     )
-    const saving = useCreationDraftsStore.getState().save('server.js')
+    const saving = useCreationFilesStore.getState().save('server.js')
     // The switch succeeds while the save is in flight: drafts of the old
     // identity are cleared and the new workspace owns the store.
     useCreationStore.setState({
@@ -249,16 +250,16 @@ describe('creation drafts (#154)', () => {
         files: [],
       },
     })
-    expect(useCreationDraftsStore.getState().drafts).toEqual({})
+    expect(useCreationFilesStore.getState().drafts).toEqual({})
     resolveSave({ status: 'ok', data: 'late' })
     await saving
-    expect(useCreationDraftsStore.getState().drafts).toEqual({})
+    expect(useCreationFilesStore.getState().drafts).toEqual({})
   })
 
   it('renames move the draft and refresh the tree through the trusted identity', async () => {
-    useCreationDraftsStore.getState().loaded('server.js', 'draft', 'v1')
-    useCreationDraftsStore.getState().edit('server.js', 'draft edited')
-    useCreationDraftsStore.getState().setActivePath('server.js')
+    seedCreationDraft('server.js', 'draft', 'v1')
+    useCreationFilesStore.getState().edit('server.js', 'draft edited')
+    useCreationFilesStore.getState().setActivePath('server.js')
     vi.mocked(commands.renameCreationFile).mockResolvedValueOnce({
       status: 'ok',
       data: 'renamed/server.js',
@@ -274,11 +275,11 @@ describe('creation drafts (#154)', () => {
         },
       ],
     })
-    const failure = await useCreationDraftsStore
+    const failure = await useCreationFilesStore
       .getState()
       .rename('server.js', 'renamed/server.js')
     expect(failure).toBeNull()
-    const state = useCreationDraftsStore.getState()
+    const state = useCreationFilesStore.getState()
     expect(state.drafts['server.js']).toBeUndefined()
     expect(state.drafts['renamed/server.js']).toMatchObject({
       text: 'draft edited',
@@ -298,19 +299,19 @@ describe('creation drafts (#154)', () => {
       status: 'error',
       error: { code: 'targetExists', detail: 'taken.js' },
     })
-    const rejected = await useCreationDraftsStore
+    const rejected = await useCreationFilesStore
       .getState()
       .rename('renamed/server.js', 'taken.js')
     expect(rejected).toMatchObject({ code: 'targetExists' })
     expect(
-      useCreationDraftsStore.getState().drafts['renamed/server.js']
+      useCreationFilesStore.getState().drafts['renamed/server.js']
     ).toBeDefined()
   })
 
   it('a refused rename cannot invalidate another file save or overwrite its recoverable draft', async () => {
-    const drafts = useCreationDraftsStore.getState()
-    drafts.loaded('server.js', 'a', 'a1')
-    drafts.loaded('target.js', 'b', 'b1')
+    const drafts = useCreationFilesStore.getState()
+    seedCreationDraft('server.js', 'a', 'a1')
+    seedCreationDraft('target.js', 'b', 'b1')
     drafts.edit('target.js', 'saved b')
     let resolve!: (
       result: Awaited<ReturnType<typeof commands.saveCreationFile>>
@@ -339,10 +340,10 @@ describe('creation drafts (#154)', () => {
   })
 
   it('passes recoverable destination drafts through the typed rename boundary even when the entered path is an alias', async () => {
-    const drafts = useCreationDraftsStore.getState()
-    drafts.loaded('server.js', 'source', 's1')
+    const drafts = useCreationFilesStore.getState()
+    seedCreationDraft('server.js', 'source', 's1')
     drafts.edit('server.js', 'source draft')
-    drafts.loaded('real/target.js', 'old target', 't1')
+    seedCreationDraft('real/target.js', 'old target', 't1')
     drafts.edit('real/target.js', 'recoverable target draft')
     vi.mocked(commands.renameCreationFile).mockResolvedValueOnce({
       status: 'error',
@@ -362,8 +363,8 @@ describe('creation drafts (#154)', () => {
   })
 
   it('preserves both drafts if a canonical destination draft arrives after rename dispatch', async () => {
-    const drafts = useCreationDraftsStore.getState()
-    drafts.loaded('server.js', 'source', 's1')
+    const drafts = useCreationFilesStore.getState()
+    seedCreationDraft('server.js', 'source', 's1')
     drafts.edit('server.js', 'source draft')
     let resolve!: (
       result: Awaited<ReturnType<typeof commands.renameCreationFile>>
@@ -375,7 +376,7 @@ describe('creation drafts (#154)', () => {
         })
     )
     const renamed = drafts.rename('server.js', 'alias/target.js')
-    drafts.loaded('real/target.js', 'old target', 't1')
+    seedCreationDraft('real/target.js', 'old target', 't1')
     drafts.edit('real/target.js', 'newly opened target draft')
     resolve({ status: 'ok', data: 'real/target.js' })
     await renamed
@@ -397,8 +398,8 @@ describe('creation drafts (#154)', () => {
 
     // The real drafts participant drives the project-switch gate through
     // the store's open() flow: cancelling keeps the drafts.
-    useCreationDraftsStore.getState().loaded('server.js', 'draft', 'v1')
-    useCreationDraftsStore.getState().edit('server.js', 'draft edited')
+    seedCreationDraft('server.js', 'draft', 'v1')
+    useCreationFilesStore.getState().edit('server.js', 'draft edited')
     const unregisterDrafts = registerCreationParticipant(
       creationDraftsParticipant
     )
@@ -413,7 +414,7 @@ describe('creation drafts (#154)', () => {
     const cancelled = await useCreationStore.getState().open('/next')
     expect(cancelled).toBe(false)
     expect(commands.commitCreationProject).not.toHaveBeenCalled()
-    expect(useCreationDraftsStore.getState().drafts['server.js']?.text).toBe(
+    expect(useCreationFilesStore.getState().drafts['server.js']?.text).toBe(
       'draft edited'
     )
     expect(useCreationStore.getState().workspace).toEqual(first)
@@ -430,7 +431,7 @@ describe('creation drafts (#154)', () => {
     expect(switched).toBe(true)
     expect(confirm).toHaveBeenCalledTimes(2)
     // A successful switch wipes the old drafts and errors.
-    expect(useCreationDraftsStore.getState().drafts).toEqual({})
+    expect(useCreationFilesStore.getState().drafts).toEqual({})
     unregisterDrafts()
   })
 })

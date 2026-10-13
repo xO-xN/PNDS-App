@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeAll } from 'vitest'
 import { commands } from '@/lib/tauri-bindings'
 import type { Manifest } from '@/lib/tauri-bindings'
 import { useProjectStore } from '@/store/project-store'
-import { Sidebar } from './Sidebar'
+import { PerformanceSidebarHarness as Sidebar } from '@/test/desktop-harness'
 import userEvent from '@testing-library/user-event'
 
 /**
@@ -54,36 +54,8 @@ describe('Load button after selecting a card (regression)', () => {
     const card = await screen.findByText('Inarticulate III')
     await user.click(card)
 
-    // Debug: what did the footer render, and what does the gate see?
-    const footer = await screen.findByTestId('settings-footer')
-    console.log(
-      'FOOTER BUTTONS:',
-      Array.from(footer.querySelectorAll('button')).map(b => b.textContent)
-    )
-    const project = useProjectStore.getState()
-    const session = await import('@/store/session-store')
-    console.log('GATE INPUTS:', {
-      currentProject: project.currentProject?.path ?? null,
-      preflightStatus: project.preflightStatus,
-      sessionStatus: session.useSessionStore.getState().sessionStatus,
-      lanIp: session.useSessionStore.getState().lanIp,
-      audioMode: session.useSessionStore.getState().audioMode,
-    })
-
-    // The button must end up enabled (lit) — and clicking it must submit
-    // a start, not swallow the click.
-    const footerEl = screen.getByTestId('settings-footer')
-    const button = await vi.waitFor(() => {
-      const el = Array.from(footerEl.querySelectorAll('button')).find(
-        b => b.textContent === 'Load'
-      )
-      expect(el).toBeDefined()
-      expect(el).toBeEnabled()
-      return el as HTMLButtonElement
-    })
-    await vi.waitFor(() => {
-      expect(button).toBeEnabled()
-    })
+    const button = await screen.findByRole('button', { name: 'Load' })
+    await vi.waitFor(() => expect(button).toBeEnabled())
     await user.click(button)
     await vi.waitFor(() => {
       expect(commands.startProject).toHaveBeenCalled()

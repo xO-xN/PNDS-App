@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ArrowLeft } from 'lucide-react'
 import i18n from '@/i18n/config'
@@ -27,27 +27,22 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
-import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
-import { Separator } from '@/components/ui/separator'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { SectionTitle } from './SectionTitle'
-import { DeveloperSection } from './DeveloperSection'
 import { PortsSection } from './PortsSection'
 import { AudioSection } from './AudioSection'
 import { DnsSection } from './DnsSection'
 import { HttpsSection } from './HttpsSection'
 import { NodeSection } from './NodeSection'
 
-/**
- * v1.2.0 (issue #13): the in-app settings panel — a single scrolling page
- * with six sections (spec issue #12). General (language and, since the
- * v1.4.0 fold, the color theme — the Appearance section is gone), Audio
- * (issue #21), Node (#58), Ports (issue #14), Developer Tools (issue #16)
- * and About are live; the Projects history section (#15) was removed
- * after user review — history management lives in the sidebar alone.
- * Opened by ⌘, / the menu item, closed by Esc or ⌘, again. The About
- * menu item routes here with `focusSection` — and so does the「设置节点」
- * gate button (#58), routed to the Node section.
- */
+/** Categorized r6 settings reuse existing sections, retaining visited operation state. */
 export function SettingsPanel() {
   const { t } = useTranslation()
   const settingsOpen = useSettingsStore(state => state.settingsOpen)
@@ -59,16 +54,37 @@ export function SettingsPanel() {
   // the store is authoritative — applyLanguageSetting / applyColorThemeSetting
   // update it on change.
 
-  // Reveal the routed section (About menu item) after the portal mounts.
+  const activeSection =
+    focusSection === 'developer' ? 'general' : (focusSection ?? 'general')
+  const [visited, setVisited] = useState<SettingsSection[]>(['general'])
+  useEffect(
+    () =>
+      useSettingsStore.subscribe(state => {
+        const section =
+          state.focusSection === 'developer'
+            ? 'general'
+            : (state.focusSection ?? 'general')
+        setVisited(current =>
+          state.settingsOpen
+            ? current.includes(section)
+              ? current
+              : [...current, section]
+            : ['general']
+        )
+      }),
+    []
+  )
+
+  // Reveal the routed section after its category has mounted.
   useEffect(() => {
     if (!settingsOpen || !focusSection) return
     const raf = requestAnimationFrame(() => {
       document
-        .getElementById(sectionId(focusSection))
+        .getElementById(sectionId(activeSection))
         ?.scrollIntoView({ block: 'start' })
     })
     return () => cancelAnimationFrame(raf)
-  }, [settingsOpen, focusSection])
+  }, [settingsOpen, focusSection, activeSection])
 
   return (
     <Dialog
@@ -80,23 +96,12 @@ export function SettingsPanel() {
       <DialogContent
         data-settings-panel
         showCloseButton={false}
-        // Don't auto-focus the first control on open — no highlight frame
-        // around the back button when the panel appears. Keyboard focus is
-        // still available by Tabbing into the dialog.
-        onOpenAutoFocus={event => event.preventDefault()}
-        // Vertical paging only: overflow-y forces overflow-x to compute to
-        // auto (a stray wide child would enable horizontal panning), so
-        // clamp it. The single grid column must be minmax(0,1fr): a plain
-        // auto track sizes to the largest item's intrinsic min-content,
-        // and one nowrap `truncate` path row was demanding ~656px inside
-        // the 576px panel — min-w-0 chains do not lower intrinsic
-        // contributions, only the track floor does.
-        className="top-[50%] max-h-[85vh] gap-0 grid-cols-[minmax(0,1fr)] overflow-x-hidden overflow-y-auto sm:max-w-xl"
+        className="desktop-settings gap-0 overflow-hidden p-0"
       >
         {/* Back-arrow close, inline to the left of the title. The ring is
             focus-visible only, so deliberate keyboard navigation still
             shows it but entry never does. */}
-        <DialogHeader className="text-start">
+        <DialogHeader className="desktop-settings-header text-start">
           <div className="flex items-center gap-2">
             <DialogClose className="ring-offset-background focus-visible:ring-ring rounded-xs opacity-70 transition-opacity hover:opacity-100 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-hidden disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4">
               <ArrowLeft />
@@ -106,124 +111,171 @@ export function SettingsPanel() {
           </div>
         </DialogHeader>
 
-        <Separator className="mt-4" />
-
-        {/* ── General ── */}
-        <section
-          id={sectionId('general')}
-          aria-labelledby="settings-general-title"
-          className="flex flex-col gap-3 py-4"
-        >
-          <SectionTitle id="settings-general-title">
-            {t('settings.general')}
-          </SectionTitle>
-          <div className="flex items-center justify-between gap-4">
-            <Label htmlFor="settings-language">{t('settings.language')}</Label>
-            <NativeSelect
-              id="settings-language"
-              value={languageSetting}
-              onChange={event =>
-                void applyLanguageSetting(event.target.value as LanguageSetting)
-              }
-            >
-              <NativeSelectOption value="system">
-                {t('settings.languageSystem')}
-              </NativeSelectOption>
-              <NativeSelectOption value="en">English</NativeSelectOption>
-              <NativeSelectOption value="zh-CN">简体中文</NativeSelectOption>
-            </NativeSelect>
-          </div>
-          {/* v1.2.3 (issue #38): the color theme; folded into General
-              (v1.4.0) — one identity row beside the language, not a
-              section of its own. The accent swatch previews the theme. */}
-          <div className="flex items-center justify-between gap-4">
-            <Label htmlFor="settings-color-theme">
-              {t('settings.colorTheme')}
-            </Label>
-            <div className="flex items-center gap-2">
-              <span
-                data-testid="color-theme-accent"
-                aria-hidden="true"
-                className="size-2.5 shrink-0 rounded-full"
-                style={{
-                  background: accentOf(colorThemeSetting),
-                }}
-              />
-              <NativeSelect
-                id="settings-color-theme"
-                value={colorThemeSetting}
-                onChange={event =>
-                  void applyColorThemeSetting(event.target.value as ColorTheme)
+        <div className="desktop-settings-body">
+          <nav
+            aria-label={t('settings.title')}
+            className="desktop-settings-nav"
+          >
+            {(
+              [
+                'general',
+                'audio',
+                'node',
+                'https',
+                'dns',
+                'ports',
+                'about',
+              ] as const
+            ).map(section => (
+              <button
+                type="button"
+                key={section}
+                className="pnds-focus-ring"
+                aria-current={activeSection === section ? 'page' : undefined}
+                onClick={() =>
+                  useSettingsStore.getState().openSettings(section)
                 }
               >
-                {COLOR_THEME_OPTIONS.map(option => (
-                  <NativeSelectOption key={option.value} value={option.value}>
-                    {t(`settings.theme.${option.value}`)}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
-            </div>
-          </div>
-        </section>
-
-        <Separator />
-
-        {/* ── Audio / Node / Ports / Developer Tools ── */}
-        <AudioSection section="audio" />
-        <Separator />
-        <NodeSection section="node" />
-        <Separator />
-        <HttpsSection section="https" />
-        <Separator />
-        <DnsSection section="dns" />
-        <Separator />
-        <PortsSection section="ports" />
-        <Separator />
-        <DeveloperSection section="developer" />
-        <Separator />
-
-        {/* ── About ── */}
-        <section
-          id={sectionId('about')}
-          aria-labelledby="settings-about-title"
-          className="flex flex-col gap-3 py-4"
-        >
-          <SectionTitle id="settings-about-title">
-            {t('settings.about')}
-          </SectionTitle>
-          <div className="flex items-center justify-between gap-4">
-            <Label>{t('settings.version')}</Label>
-            <span className="text-muted-foreground text-sm">
-              PNDS {__APP_VERSION__}
-            </span>
-          </div>
-          <div className="flex flex-wrap justify-end gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              // v1.4.3 (#121): check-only — the available toast points at
-              // Releases; a check failure opens the App-styled failure
-              // dialog.
-              onClick={() => void checkForUpdates(manualCheckRenderer)}
+                {t(
+                  section === 'https'
+                    ? 'settings.https'
+                    : section === 'dns'
+                      ? 'settings.dns.title'
+                      : `settings.${section}`
+                )}
+              </button>
+            ))}
+          </nav>
+          <div className="desktop-settings-content">
+            {/* ── General ── */}
+            <section
+              id={sectionId('general')}
+              aria-labelledby="settings-general-title"
+              hidden={activeSection !== 'general'}
+              className="flex flex-col gap-3 py-4"
             >
-              {t('menu.checkForUpdates')}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void revealDirectory('openAppDataDir')}
+              <SectionTitle id="settings-general-title">
+                {t('settings.general')}
+              </SectionTitle>
+              <div className="flex items-center justify-between gap-4">
+                <Label htmlFor="settings-language">
+                  {t('settings.language')}
+                </Label>
+                <Select
+                  value={languageSetting}
+                  onValueChange={value =>
+                    void applyLanguageSetting(value as LanguageSetting)
+                  }
+                >
+                  <SelectTrigger id="settings-language">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="system">
+                      {t('settings.languageSystem')}
+                    </SelectItem>
+                    <SelectItem value="en">English</SelectItem>
+                    <SelectItem value="zh-CN">简体中文</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {/* Keep all four identities visible, with a swatch per option. */}
+              <div className="flex items-center justify-between gap-4">
+                <Label id="settings-color-theme-label">
+                  {t('settings.colorTheme')}
+                </Label>
+                <RadioGroup
+                  aria-labelledby="settings-color-theme-label"
+                  className="desktop-theme-options"
+                  orientation="horizontal"
+                  value={colorThemeSetting}
+                  onValueChange={value =>
+                    void applyColorThemeSetting(value as ColorTheme)
+                  }
+                >
+                  {COLOR_THEME_OPTIONS.map(option => (
+                    <div key={option.value} className="desktop-theme-option">
+                      <RadioGroupItem
+                        id={`settings-theme-${option.value}`}
+                        value={option.value}
+                        className="sr-only"
+                      />
+                      <Label htmlFor={`settings-theme-${option.value}`}>
+                        <span
+                          data-testid={`color-theme-accent-${option.value}`}
+                          aria-hidden="true"
+                          className="size-2.5 shrink-0 rounded-full"
+                          style={{ background: option.accent }}
+                        />
+                        {t(`settings.theme.${option.value}`)}
+                      </Label>
+                    </div>
+                  ))}
+                </RadioGroup>
+              </div>
+            </section>
+
+            {(
+              [
+                ['audio', AudioSection],
+                ['node', NodeSection],
+                ['https', HttpsSection],
+                ['dns', DnsSection],
+                ['ports', PortsSection],
+              ] as const
+            ).map(([section, Section]) =>
+              visited.includes(section) || activeSection === section ? (
+                <div key={section} hidden={activeSection !== section}>
+                  <Section section={section} />
+                </div>
+              ) : null
+            )}
+
+            {/* ── About ── */}
+            <section
+              hidden={activeSection !== 'about'}
+              id={sectionId('about')}
+              aria-labelledby="settings-about-title"
+              className="flex flex-col gap-3 py-4"
             >
-              {t('settings.openDataDir')}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void revealDirectory('openAppLogDir')}
-            >
-              {t('settings.openLogDir')}
-            </Button>
+              <SectionTitle id="settings-about-title">
+                {t('settings.about')}
+              </SectionTitle>
+              <div className="flex items-center justify-between gap-4">
+                <Label>{t('settings.version')}</Label>
+                <span className="text-muted-foreground text-sm">
+                  PNDS {__APP_VERSION__}
+                </span>
+              </div>
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  // v1.4.3 (#121): check-only — the available toast points at
+                  // Releases; a check failure opens the App-styled failure
+                  // dialog.
+                  onClick={() => void checkForUpdates(manualCheckRenderer)}
+                >
+                  {t('menu.checkForUpdates')}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void revealDirectory('openAppDataDir')}
+                >
+                  {t('settings.openDataDir')}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void revealDirectory('openAppLogDir')}
+                >
+                  {t('settings.openLogDir')}
+                </Button>
+              </div>
+            </section>
           </div>
-        </section>
+        </div>
       </DialogContent>
     </Dialog>
   )
@@ -231,13 +283,6 @@ export function SettingsPanel() {
 
 function sectionId(section: SettingsSection): string {
   return `settings-section-${section}`
-}
-
-/** The accent swatch colour shown for a theme selection. */
-function accentOf(theme: ColorTheme): string {
-  return (
-    COLOR_THEME_OPTIONS.find(option => option.value === theme)?.accent ?? ''
-  )
 }
 
 /** Reveal a managed directory in Finder; surface failures as a toast. */

@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 import { useWindowStore } from '@/store/window-store'
-import { Sidebar } from './Sidebar'
+import { PerformanceSidebarHarness as Sidebar } from '@/test/desktop-harness'
 import type { Manifest } from '@/lib/tauri-bindings'
 
 vi.mock('@tauri-apps/plugin-opener', () => ({
@@ -118,16 +118,18 @@ describe('interaction consistency (v1.2.2, issue #32)', () => {
     ).toContain('focus-visible:opacity-100')
   })
 
-  it('presses: cards and browsing controls darken, plain buttons micro-shrink', () => {
+  it('keeps card feedback on one surface, browsing controls darken and plain buttons micro-shrink', () => {
     const { container } = render(<Sidebar variant="static" />)
 
-    // Cards: press-darkening on both card states (they carry inline drag
-    // transforms, so scale is out).
+    // Cards no longer paint hover/press layers above a moving selection.
     const current = screen.getByTestId('current-project-card')
-    expect(current.className).toContain('active:bg-(--pnds-bg)')
+    expect(current).toHaveAttribute('data-selected-card')
     const other = screen.getAllByTestId('project-entry')[0]
     if (!other) throw new Error('Expected a second, non-current project card')
-    expect(other.className).toContain('active:bg-(--pnds-text)/10')
+    for (const card of [current, other]) {
+      expect(card.className).toContain('pnds-project-card')
+      expect(card.className).not.toMatch(/(?:hover|active):bg-/)
+    }
 
     // Folder browsing controls darken too.
     for (const tab of [
@@ -144,11 +146,11 @@ describe('interaction consistency (v1.2.2, issue #32)', () => {
     )
     for (const name of NAMED_CONTROLS) {
       expect(screen.getByRole('button', { name }).className).toContain(
-        'active:scale-90'
+        name === 'Remove from history' ? 'active:scale-90' : 'active:opacity-70'
       )
     }
     expect(screen.getByTestId('mute-toggle').className).toContain(
-      'active:scale-90'
+      'desktop-icon-button'
     )
 
     // No hand cursor anywhere in the rendered sidebar.

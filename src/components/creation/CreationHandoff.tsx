@@ -12,7 +12,7 @@ import {
   HANDOFF_PATH,
   useCreationHandoffStore,
 } from '@/store/creation-handoff-store'
-import { useCreationDraftsStore } from '@/store/creation-drafts-store'
+import { useCreationFilesStore } from '@/store/creation-files-store'
 import { useCreationTestStore } from '@/store/creation-test-store'
 import { CreationErrorNotice } from './CreationErrorNotice'
 import { cn } from '@/lib/utils'
@@ -21,10 +21,12 @@ export function CreationHandoff({
   editable,
   exists,
   className,
+  menuOnly = false,
 }: {
   editable: boolean
   exists: boolean
   className?: string
+  menuOnly?: boolean
 }) {
   const { t } = useTranslation()
   const pending = useCreationHandoffStore(state => state.pending)
@@ -38,17 +40,18 @@ export function CreationHandoff({
   return (
     <div
       className={cn(
-        'space-y-2 border-b border-(--pnds-text)/15 p-4 text-start text-xs',
+        !menuOnly &&
+          'space-y-2 border-b border-(--pnds-border) p-4 text-start text-xs',
         className
       )}
     >
-      <div className="flex flex-wrap items-center gap-2">
+      <div hidden={menuOnly} className="flex flex-wrap items-center gap-2">
         {exists && (
           <Button
             size="sm"
             variant="outline"
             onClick={() => {
-              useCreationDraftsStore.getState().setActivePath(HANDOFF_PATH)
+              useCreationFilesStore.getState().setActivePath(HANDOFF_PATH)
               useCreationTestStore.getState().setTab('file')
             }}
           >

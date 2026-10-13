@@ -8,7 +8,7 @@ import { MONITOR_REVEAL_TIMEOUT_MS } from '@/lib/monitor-reveal'
 import { commands } from '@/lib/tauri-bindings'
 import { logger } from '@/lib/logger'
 import i18n from '@/i18n/config'
-import { MonitorView } from './MonitorView'
+import { MonitorHarness as MonitorView } from '@/test/desktop-harness'
 
 /** The health block MonitorView needs to render a ready session. */
 const readyHealth = {
@@ -726,7 +726,7 @@ describe('MonitorView reveal gate (#50)', () => {
  * session's manifest name is the fallback. A running tool must read the
  * same name as its sidebar card.
  */
-describe('MonitorView title strip (#84)', () => {
+describe('MonitorView accessible project identity (#84)', () => {
   const TOOL_PATH =
     '/Applications/PNDS.app/Contents/Resources/utilities/multichannel-signal-generator'
 
@@ -755,7 +755,9 @@ describe('MonitorView title strip (#84)', () => {
 
     render(<MonitorView />)
 
-    expect(screen.getByText('PNDS - Multichannel Gen')).toBeTruthy()
+    expect(screen.getByTestId('monitor-host')).toHaveAccessibleName(
+      'Multichannel Gen'
+    )
   })
 
   it('keeps a user display-name override above the alias', () => {
@@ -766,7 +768,7 @@ describe('MonitorView title strip (#84)', () => {
 
     render(<MonitorView />)
 
-    expect(screen.getByText('PNDS - My MSG')).toBeTruthy()
+    expect(screen.getByTestId('monitor-host')).toHaveAccessibleName('My MSG')
   })
 
   it('falls back to the session-reported manifest name', () => {
@@ -779,7 +781,9 @@ describe('MonitorView title strip (#84)', () => {
 
     render(<MonitorView />)
 
-    expect(screen.getByText('PNDS - Inarticulate III')).toBeTruthy()
+    expect(screen.getByTestId('monitor-host')).toHaveAccessibleName(
+      'Inarticulate III'
+    )
   })
 })
 
@@ -846,8 +850,7 @@ describe('MonitorView projection gate button (#130)', () => {
     // The ungated light: system-orange blink — its rest state (and the
     // reduce-motion clamp) is the static orange highlight, distinct
     // from both the strip text and the started green.
-    expect(button.className).toContain('projection-start-blink')
-    expect(button.className).toContain('text-[#ff9f0a]')
+    expect(button).toHaveAttribute('data-projection-state', 'standby')
     expect(button).toBeEnabled()
     expect(button.getAttribute('aria-label')).toBe('Start Projection')
 
@@ -865,16 +868,16 @@ describe('MonitorView projection gate button (#130)', () => {
     const host = screen.getByTestId('monitor-host')
 
     fireEvent.mouseEnter(screen.getByTestId('sidebar-hover-zone'))
-    expect(screen.getByTestId('sidebar')).toContainElement(
+    expect(screen.getByRole('contentinfo')).toContainElement(
       screen.getByRole('button', { name: 'Start Projection' })
     )
     act(() => useSessionStore.setState({ projectionStarted: true }))
-    expect(screen.getByTestId('sidebar')).toContainElement(
+    expect(screen.getByRole('contentinfo')).toContainElement(
       screen.getByRole('button', { name: 'Withdraw Projection' })
     )
     fireEvent.mouseLeave(screen.getByTestId('sidebar-popover'))
 
-    expect(host).toHaveClass('h-screen', 'w-screen')
+    expect(host).toHaveClass('desktop-performance-monitor')
     expect(screen.getByTitle('Project monitor')).toBe(frame)
     expect(frame).toHaveAttribute('src', address)
   })
@@ -886,8 +889,7 @@ describe('MonitorView projection gate button (#130)', () => {
     render(<MonitorView />)
 
     const button = screen.getByTestId('open-projection-button')
-    expect(button.className).not.toContain('projection-start-blink')
-    expect(button.className).toContain('text-[#34c759]')
+    expect(button).toHaveAttribute('data-projection-state', 'active')
     expect(button.getAttribute('aria-label')).toBe('Withdraw Projection')
   })
 

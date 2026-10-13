@@ -230,3 +230,20 @@ commands: {
 | Use `vi.mocked()` for type-safe mock overrides | Use untyped mock assertions   |
 | Test user-visible behavior                     | Test implementation details   |
 | Use `tempfile` for Rust file tests             | Write to real file system     |
+
+## v1.6 cross-ticket acceptance
+
+The approved seams remain user-driven creation/performance workflows, typed
+commands, real temporary project files and controlled processes.
+`CreationModules.test.tsx` exercises the actual workspace entry, cancellation,
+version parameters, unsaved handoff protection, partial retry, read-only sources
+and late replies. Rust `project::creation::modules_tests` validates the five
+embedded file groups, source records, no-clobber and protected paths, external
+versions, permission-induced partial failure, retry and a real bundle round trip.
+`creation-module-assets.test.mjs` exercises frozen module exports and parses every
+shipped JS file under Node; it does not certify physical phones or sound.
+
+Real macOS and Apple Silicon/Intel release evidence belongs in
+[#164 acceptance](../acceptance/164-v1.6.0-workflows.md). A sandbox listener EPERM
+or compiler startup failure stays a failed check until an ordinary-terminal run
+passes; tests are not skipped or weakened to turn it green.

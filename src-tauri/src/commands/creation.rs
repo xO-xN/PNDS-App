@@ -339,6 +339,41 @@ pub async fn describe_creation_projects(
 
 #[tauri::command]
 #[specta::specta]
+pub async fn get_creation_modules(
+    app: AppHandle,
+    state: State<'_, CreationState>,
+    identity: String,
+) -> Result<crate::project::creation::CreationModuleCatalog, CreationError> {
+    state
+        .run(move |access| access.module_catalog(&identity, &protection(&app)?))
+        .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn add_creation_module(
+    app: AppHandle,
+    state: State<'_, CreationState>,
+    identity: String,
+    module_id: String,
+    expected_record: Option<String>,
+    expected_handoff: Option<String>,
+) -> Result<crate::project::creation::CreationModuleAddResult, CreationError> {
+    state
+        .run(move |access| {
+            access.add_module(
+                &identity,
+                &module_id,
+                expected_record.as_deref(),
+                expected_handoff.as_deref(),
+                &protection(&app)?,
+            )
+        })
+        .await
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn list_creation_files(
     app: AppHandle,
     state: State<'_, CreationState>,

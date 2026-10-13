@@ -12,7 +12,7 @@
         "fullscreen": false,
         "maximized": false,
         "center": true,
-        "decorations": false,
+        "decorations": true,
         "alwaysOnTop": false,
         "transparent": true,
         "shadow": true,
@@ -21,6 +21,12 @@
           "effects": ["windowBackground"],
           "radius": 16.0,
           "state": "active"
+        },
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "trafficLightPosition": {
+          "x": 28,
+          "y": 34
         }
       }
     ]

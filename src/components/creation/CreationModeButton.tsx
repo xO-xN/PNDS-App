@@ -3,28 +3,25 @@ import { useTranslation } from 'react-i18next'
 import { useCreationStore } from '@/store/creation-store'
 import {
   selectUnsavedCount,
-  useCreationDraftsStore,
-} from '@/store/creation-drafts-store'
+  useCreationFilesStore,
+} from '@/store/creation-files-store'
 import { isSessionBusy, useSessionStore } from '@/store/session-store'
-import { useSettingsStore } from '@/store/settings-store'
 import { creationHasUnsavedChanges } from '@/lib/creation-lifecycle'
 import { CreationErrorNotice } from './CreationErrorNotice'
 
-/** The #151 control mirrors the prototype's eighth-round mode interaction. */
+/** Persistent bottom-right control; switching still uses the #151 workflow. */
 export function CreationModeButton() {
   const { t } = useTranslation()
   const active = useCreationStore(state => state.active)
   const phase = useCreationStore(state => state.modePhase)
-  const plan = useCreationStore(state => state.modePlan)
   const error = useCreationStore(state => state.modeError)
   const paused = useCreationStore(state => state.hoverPaused)
   const restoreFocus = useCreationStore(state => state.restoreModeFocus)
   const opening = useCreationStore(state => state.opening)
-  const unsaved = useCreationDraftsStore(selectUnsavedCount)
+  const unsaved = useCreationFilesStore(selectUnsavedCount)
   const busy = useSessionStore(
     state => isSessionBusy(state.sessionStatus) || state.commandPending
   )
-  const brutal = useSettingsStore(state => state.colorThemeSetting === 'brutal')
   const root = useRef<HTMLDivElement>(null)
   const button = useRef<HTMLButtonElement>(null)
   const consequenceId = useId()
@@ -56,22 +53,20 @@ export function CreationModeButton() {
       useCreationStore.setState({ restoreModeFocus: false })
     }
   }, [restoreFocus, phase])
-  const warning = plan?.targetCreation
-    ? plan.preservesRun
-      ? t('creation.keepRunningHint')
-      : plan.workspace?.project.source === 'folder'
-        ? t('creation.selectedHint')
-        : plan.runtime.snapshot.status === 'idle'
-          ? t('creation.enterHint')
-          : t('creation.stopToHomeHint')
+  const warning = !active
+    ? null
     : unsaved > 0
       ? t('creation.discardHintCount', { count: unsaved })
       : creationHasUnsavedChanges()
         ? t('creation.discardHint')
-        : t('creation.leaveHint')
+        : null
   return (
-    <div ref={root} className="creation-mode-footer">
-      {phase === 'armed' && (
+    <div
+      ref={root}
+      className="creation-mode-footer"
+      data-tauri-drag-region="false"
+    >
+      {phase === 'armed' && warning && (
         <p id={consequenceId} role="status" className="creation-mode-note">
           {warning}
         </p>
@@ -92,7 +87,9 @@ export function CreationModeButton() {
               ? t('creation.confirmSwitch', { mode: targetLabel })
               : t(active ? 'creation.leave' : 'creation.enter')
         }
-        aria-describedby={phase === 'armed' ? consequenceId : undefined}
+        aria-describedby={
+          phase === 'armed' && warning ? consequenceId : undefined
+        }
         aria-pressed={phase === 'armed'}
         disabled={busy || phase === 'settling' || opening}
         onPointerEnter={() =>
@@ -113,9 +110,9 @@ export function CreationModeButton() {
         }}
         onClick={event => {
           if (phase === 'armed') {
-            const immediate =
-              brutal ||
-              window.matchMedia('(prefers-reduced-motion: reduce)').matches
+            const immediate = window.matchMedia(
+              '(prefers-reduced-motion: reduce)'
+            ).matches
             void useCreationStore
               .getState()
               .commitModeSwitch(immediate ? 0 : 300, event.detail === 0)
@@ -139,7 +136,11 @@ export function CreationModeButton() {
               aria-hidden="true"
               className="creation-mode-label creation-mode-next"
             >
-              {t(active ? 'creation.leave' : 'creation.enter')}
+              {t(
+                active
+                  ? 'desktop.switchToPerformance'
+                  : 'desktop.switchToCreation'
+              )}
             </span>
           </>
         )}

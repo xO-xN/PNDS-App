@@ -1,15 +1,13 @@
-/*
- * Theme Variables (shadcn/ui compatible)
- *
- * To customize the theme, visit https://ui.shadcn.com/themes and use the
- * theme builder. You can copy and paste the generated CSS blocks directly
- * into this file, replacing the @theme inline, :root, and .dark sections.
+/* PNDS color palettes. Edit colors here; component styles use roles only.
+ * Pond is the startup fallback. data-color-theme selects the other palettes.
+ * Text roles pass 4.5:1 on every UI surface, including hover and selection;
+ * button labels pass at rest and hover. See theme-palette.test.mjs.
  */
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
+  --font-sans: var(--pnds-font-ui);
   --font-mono: var(--font-geist-mono);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -28,6 +26,8 @@
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--pnds-danger-foreground);
+  --color-destructive-hover: var(--pnds-danger-hover);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -36,6 +36,8 @@
   --color-secondary: var(--secondary);
   --color-primary-foreground: var(--primary-foreground);
   --color-primary: var(--primary);
+  --color-primary-hover: var(--pnds-accent-hover);
+  --color-primary-text: var(--pnds-accent-text);
   --color-popover-foreground: var(--popover-foreground);
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
@@ -49,178 +51,19 @@
   --radius-4xl: calc(var(--radius) + 16px);
 }
 
+/* Pond / 池塘 — cool grey, lake blue; the logo and water are the reference. */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.58 0.22 27);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.809 0.105 251.813);
-  --chart-2: oklch(0.623 0.214 259.815);
-  --chart-3: oklch(0.546 0.245 262.881);
-  --chart-4: oklch(0.488 0.243 264.376);
-  --chart-5: oklch(0.424 0.199 265.638);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
-}
-
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.87 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.371 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.809 0.105 251.813);
-  --chart-2: oklch(0.623 0.214 259.815);
-  --chart-3: oklch(0.546 0.245 262.881);
-  --chart-4: oklch(0.488 0.243 264.376);
-  --chart-5: oklch(0.424 0.199 265.638);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
-}
-
-/*
- * Color themes (v1.2.3, issues #38/#40 / spec #36)
- *
- * A theme is one complete token set selected by the root node's
- * `data-color-theme` attribute (applied by src/lib/color-theme.ts). The
- * `:root` blocks above double as the Lavender theme: Lavender is defined as
- * "the current look", and :root is also the pre-JavaScript fallback — until
- * startup applies the saved theme, the app renders Lavender, which is the
- * default. (v1.3.3 #90: this theme's DISPLAY name is 池塘 / Pond; #91
- * renamed the id to match — 'pond' — while 'lavender' lives on as a
- * legacy preference value mapped back to it in color-theme.ts.) Every
- * further theme is a single `[data-color-theme='…']` block
- * overriding both the PNDS tokens and the shadcn semantic mapping; the
- * blocks below :root win the cascade at equal specificity by order, and
- * each block is self-contained so themes cannot leak values from each
- * other.
- *
- * Contrast: every text/background pair in each solid theme is checked
- * ≥4.5:1 (spec #36 user story 9) — text & text-secondary against bg,
- * sidebar and card; accent/danger/warning against their own label token.
- * Dark themes lighten the status colors one step (spec #36) and carry
- * dark labels on those lighter fills; recessed pills sit *below* the card
- * (darker, where in light themes they are darker too — the ladder simply
- * inverts with the palette).
- */
-
-:root {
-  /* PNDS design tokens (from Figma "PNDS UI Design", 2026-07) */
-
-  /* Per-theme type (#41): the UI face (body default) and the text face
-     (errors, details — the .font-manrope role) are tokens so a theme can
-     ship its own voice. Bundled woff2 faces only (offline); see App.css
-     for the @font-face declarations. */
-  --pnds-font-ui: 'Comfortaa', -apple-system, 'Segoe UI', 'Roboto', sans-serif;
-  --pnds-font-text: 'Manrope', -apple-system, 'Segoe UI', sans-serif;
-
-  --pnds-bg: #eef0f8;
-  /* Creation file categories from the approved UI prototype. */
-  --pnds-file-system: #437768;
-  --pnds-file-pages: #4d60b6;
-  --pnds-file-audio: #996413;
-  --pnds-file-modules: #7a4baa;
-  --pnds-sidebar-bg: #e2e5f3;
-  --pnds-card: #ffffff;
-  /* Controls are recessed fields inside the white card, so the pill is a
-     tint *below* the card. What makes a field read as live is the value
-     being at full text strength — not the fill. */
-  --pnds-pill: #e8ebf7;
-  --pnds-pill-hover: #dee2f2;
-  --pnds-accent: #5a4ff3;
-  --pnds-accent-hover: #4a3fe0;
-  --pnds-accent-foreground: #ffffff;
-  /* The accent as *text* on card/bg surfaces (≥4.5:1). The fill value
-     itself is tuned for large fields, not 12px labels — Sand's amber
-     reads ~3.1:1 as text, hence the darker twin (issue #38). */
-  --pnds-accent-text: #5a4ff3;
-  --pnds-text: #171a2b;
-  --pnds-text-secondary: #5d6484;
-  /* Elevation of card-level surfaces (sidebar cards, folder pills). */
-  --pnds-card-shadow: 0 1px 3px rgb(23 26 43 / 10%);
-  /* The volume knob's own shadow — a text-tinted drop in light themes. */
-  --pnds-knob-shadow:
-    0 1px 2px rgb(23 26 43 / 20%), 0 2px 6px rgb(23 26 43 / 15%);
-  /* Logo background halos — the one part of the logo lockup that follows
-     the theme (the dots are brand colours). The animated canvas resolves
-     its own pair from the -animated token. */
-  --pnds-logo-halo: #b8ccf0;
-  --pnds-logo-halo-core: #cdbff2;
-  --pnds-logo-halo-animated: #dee2ff;
-  /* Monitor title strip: a scrim over the project page — light themes
-     keep the current dark scrim so any monitor content stays legible. */
-  --pnds-monitor-bar: rgb(0 0 0 / 30%);
-  --pnds-monitor-bar-text: rgb(255 255 255 / 85%);
-  /* Projection status colors keep their dark backing in every sidebar theme. */
-  --pnds-projection-control-bg: #111827;
-
-  /* Session action states. Each is checked for >=4.5:1 against its own
-     label color, so don't lighten them without rechecking. */
-  --pnds-danger: #e11d48;
-  --pnds-danger-hover: #c2143c;
-  --pnds-danger-foreground: #ffffff;
-  --pnds-warning: #ffb020; /* dark label, not white */
-  --pnds-warning-hover: #f0a20c;
-  --pnds-warning-foreground: var(--pnds-text);
-}
-
-/* Sand — 暖沙: warm MEDIUM-depth theme — deliberately between the light
-   and dark themes (v1.2.3 T2 #38, palette retuned on #41's request).
-   Warm-white text on dim warm-taupe surfaces; amber accent unchanged. */
-[data-color-theme='sand'] {
-  /* shadcn semantic mapping — the settings panel, its popovers and the
-     confirm dialogs are shadcn surfaces, so they follow the theme too.
-     Structure mirrors the dark themes: primary is the strong text colour
-     (warm white here), ring is the accent, matching the app-wide accent
-     focus-ring language of v1.2.2. */
+  color-scheme: light;
+  /* Shared component mapping. Resolve on the same root as the palette so
+     dialogs, menus, native inputs and PNDS controls always switch together. */
   --background: var(--pnds-card);
   --foreground: var(--pnds-text);
   --card: var(--pnds-card);
   --card-foreground: var(--pnds-text);
   --popover: var(--pnds-card);
   --popover-foreground: var(--pnds-text);
-  --primary: var(--pnds-text);
-  --primary-foreground: var(--pnds-card);
+  --primary: var(--pnds-accent);
+  --primary-foreground: var(--pnds-accent-foreground);
   --secondary: var(--pnds-pill);
   --secondary-foreground: var(--pnds-text);
   --muted: var(--pnds-pill);
@@ -228,233 +71,197 @@
   --accent: var(--pnds-pill-hover);
   --accent-foreground: var(--pnds-text);
   --destructive: var(--pnds-danger);
-  --border: #cfc4ae;
-  --input: #cfc4ae;
-  --ring: var(--pnds-accent);
+  --border: var(--pnds-border);
+  --input: var(--pnds-input);
+  --ring: var(--pnds-accent-text);
   --sidebar: var(--pnds-sidebar-bg);
   --sidebar-foreground: var(--pnds-text);
-  --sidebar-primary: var(--pnds-text);
-  --sidebar-primary-foreground: var(--pnds-card);
-  --sidebar-accent: var(--pnds-pill-hover);
+  --sidebar-primary: var(--pnds-accent);
+  --sidebar-primary-foreground: var(--pnds-accent-foreground);
+  --sidebar-accent: var(--pnds-selection);
   --sidebar-accent-foreground: var(--pnds-text);
-  --sidebar-border: #cfc4ae;
-  --sidebar-ring: var(--pnds-accent);
+  --sidebar-border: var(--pnds-border);
+  --sidebar-ring: var(--pnds-accent-text);
+  --chart-1: var(--pnds-file-pages);
+  --chart-2: var(--pnds-file-system);
+  --chart-3: var(--pnds-file-audio);
+  --chart-4: var(--pnds-file-modules);
+  --chart-5: var(--pnds-accent-text);
+  --radius: 0.625rem;
+  /* Site nav-card language: paper, readable ink, a small accent rail. */
+  --pnds-project-selection: var(--pnds-card);
+  --pnds-project-selection-foreground: var(--pnds-text);
+  --pnds-project-selection-marker: var(--pnds-accent);
+  --pnds-project-selection-border: color-mix(
+    in srgb,
+    var(--pnds-text) 10%,
+    transparent
+  );
+  --pnds-project-selection-shadow:
+    0 1px 3px rgb(41 53 65 / 10%), 0 2px 8px rgb(41 53 65 / 6%);
+  --pnds-font-ui:
+    -apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'PingFang SC',
+    sans-serif;
+  --pnds-font-text: var(--pnds-font-ui);
 
-  /* PNDS design tokens. Amber's luminance is high, so the accent carries
-     a dark label; that same label is why accent-hover *lightens* — a
-     darker amber would fall below 4.5:1 against it (rest 5.2:1, hover
-     6.3:1). The accent-text twin inverts on this mid-dark ladder: it is
-     the LIGHTER amber (#fbbf24), ≥4.5:1 on every surface. Ladder keeps
-     bg < sidebar < pill < card. Text 7.2-9.7:1, secondary 5.6-7.5:1. */
-  --pnds-bg: #474036;
-  --pnds-file-system: #b1dec6;
-  --pnds-file-pages: #bdcaff;
-  --pnds-file-audio: #ffdb8a;
-  --pnds-file-modules: #e4c4fa;
-  --pnds-sidebar-bg: #4e463b;
-  --pnds-card: #5c5344;
-  --pnds-pill: #544a3e;
-  --pnds-pill-hover: #655a4c;
-  --pnds-accent: #d97706;
-  --pnds-accent-hover: #e8871a;
-  --pnds-accent-foreground: #241d12;
-  --pnds-accent-text: #fbbf24;
-  --pnds-text: #fff8ec;
-  --pnds-text-secondary: #e5dcca;
-  --pnds-card-shadow: 0 1px 3px rgb(0 0 0 / 40%);
-  --pnds-knob-shadow: 0 1px 2px rgb(0 0 0 / 45%), 0 2px 6px rgb(0 0 0 / 35%);
-  /* Logo halos warm with the theme — mid amber rings for the dim base. */
-  --pnds-logo-halo: #6e5325;
-  --pnds-logo-halo-core: #8a6a2e;
-  --pnds-logo-halo-animated: #a8823c;
+  --pnds-bg: #f1f5f8;
+  --pnds-sidebar-bg: #d2d8de;
+  --pnds-card: #fcfdff;
+  --pnds-pill: #e6edf3;
+  --pnds-pill-hover: #dbe5ed;
+  --pnds-selection: #d4e3f0;
+  --pnds-accent: #1476cc;
+  --pnds-accent-hover: #1065b5;
+  --pnds-accent-foreground: #ffffff;
+  --pnds-accent-text: #285a8d;
+  --pnds-text: #293541;
+  --pnds-text-secondary: #495b68;
+  --pnds-border: #bdcbd6;
+  --pnds-input: #617789;
+  --pnds-danger: #9d3043;
+  --pnds-danger-hover: #962e3f;
+  --pnds-danger-foreground: #ffffff;
+  --pnds-warning: #ebd098;
+  --pnds-warning-hover: #dfbf80;
+  --pnds-warning-foreground: #4c3818;
+  --pnds-warning-text: #755015;
+  --pnds-success: #30634f;
+  --pnds-file-system: #335d4d;
+  --pnds-file-pages: #355b85;
+  --pnds-file-audio: #714f17;
+  --pnds-file-modules: #655080;
+  --pnds-logo-halo: #c5dcec;
+  --pnds-logo-halo-core: #d9e8f3;
+  --pnds-logo-halo-animated: #d9e9f5;
+  --pnds-card-shadow: 0 1px 3px rgb(41 53 65 / 10%);
+  --pnds-knob-shadow:
+    0 1px 2px rgb(41 53 65 / 20%), 0 2px 6px rgb(41 53 65 / 15%);
+  --pnds-popover-shadow: 0 8px 24px rgb(41 53 65 / 16%);
+  /* Scrims sit over arbitrary project artwork, independent of chrome. */
   --pnds-monitor-bar: rgb(0 0 0 / 35%);
   --pnds-monitor-bar-text: rgb(255 255 255 / 90%);
-
-  /* On the mid-dark card a red deep enough for a white label can't also
-     pass 4.5:1 as text — so danger lightens past the text floor and
-     takes a near-black label (11.0:1 on the fill, 4.8:1 as text on
-     card). Warning follows with the same dark-label pattern (10.6:1). */
-  --pnds-danger: #ffbcc0;
-  --pnds-danger-hover: #ffada1;
-  --pnds-danger-foreground: #2b1210;
-  --pnds-warning: #ffc46b;
-  --pnds-warning-hover: #f5b455;
-  --pnds-warning-foreground: #241d12;
+  --pnds-projection-control-bg: #111827;
 }
 
-/* Stage — 暗场: near-black high-contrast theme for dark-stage
-   performance (v1.2.3 T4, issue #40). Base palette from spec #36: bg
-   #0b0c10, sidebar #101218, card #16181f, accent #34d399. Status colors
-   lighten one step (spec #36) with dark labels; danger-as-text reads
-   4.8:1 on the card. Emerald is bright enough that accent-hover can
-   darken (6.2:1 vs its label) like the light themes do. */
+/* Sand / 暖沙 — sand paper, warm brown; quiet light surfaces. */
+[data-color-theme='sand'] {
+  --pnds-project-selection-shadow:
+    0 1px 3px rgb(53 46 36 / 10%), 0 2px 8px rgb(53 46 36 / 6%);
+  --pnds-bg: #e6ddcd;
+  --pnds-sidebar-bg: #d8cfbf;
+  --pnds-card: #f1eadf;
+  --pnds-pill: #e5daca;
+  --pnds-pill-hover: #daceba;
+  --pnds-selection: #ddc6a5;
+  --pnds-accent: #93622e;
+  --pnds-accent-hover: #7e5124;
+  --pnds-accent-foreground: #ffffff;
+  --pnds-accent-text: #6f481e;
+  --pnds-text: #352e24;
+  --pnds-text-secondary: #60523f;
+  --pnds-border: #b8aa92;
+  --pnds-input: #7c6d57;
+  --pnds-danger: #93332b;
+  --pnds-danger-hover: #852c24;
+  --pnds-danger-foreground: #ffffff;
+  --pnds-warning: #e7c181;
+  --pnds-warning-hover: #dbb26d;
+  --pnds-warning-foreground: #4c3517;
+  --pnds-warning-text: #6b4918;
+  --pnds-success: #315943;
+  --pnds-file-system: #315943;
+  --pnds-file-pages: #445384;
+  --pnds-file-audio: #6e4c16;
+  --pnds-file-modules: #704764;
+  --pnds-logo-halo: #e3caa5;
+  --pnds-logo-halo-core: #edddc1;
+  --pnds-logo-halo-animated: #ead6b4;
+  --pnds-card-shadow: 0 1px 3px rgb(53 46 36 / 12%);
+  --pnds-knob-shadow:
+    0 1px 2px rgb(53 46 36 / 20%), 0 2px 6px rgb(53 46 36 / 15%);
+  --pnds-popover-shadow: 0 8px 24px rgb(53 46 36 / 18%);
+}
+
+/* Stage / 暗场 — charcoal, sage green; low-light performance. */
 [data-color-theme='stage'] {
-  /* shadcn semantic mapping — same structure as every theme: primary is
-     the strong text colour (light here), ring is the accent. Borders are
-     light-alpha so separators stay visible on near-black. */
-  --background: var(--pnds-card);
-  --foreground: var(--pnds-text);
-  --card: var(--pnds-card);
-  --card-foreground: var(--pnds-text);
-  --popover: var(--pnds-card);
-  --popover-foreground: var(--pnds-text);
-  --primary: var(--pnds-text);
-  --primary-foreground: var(--pnds-card);
-  --secondary: var(--pnds-pill);
-  --secondary-foreground: var(--pnds-text);
-  --muted: var(--pnds-pill);
-  --muted-foreground: var(--pnds-text-secondary);
-  --accent: var(--pnds-pill-hover);
-  --accent-foreground: var(--pnds-text);
-  --destructive: var(--pnds-danger);
-  --border: rgb(236 238 245 / 15%);
-  --input: rgb(236 238 245 / 15%);
-  --ring: var(--pnds-accent);
-  --sidebar: var(--pnds-sidebar-bg);
-  --sidebar-foreground: var(--pnds-text);
-  --sidebar-primary: var(--pnds-text);
-  --sidebar-primary-foreground: var(--pnds-card);
-  --sidebar-accent: var(--pnds-pill-hover);
-  --sidebar-accent-foreground: var(--pnds-text);
-  --sidebar-border: rgb(236 238 245 / 15%);
-  --sidebar-ring: var(--pnds-accent);
-
-  /* PNDS design tokens. The recessed pill sits below the card (darker);
-     the surface ladder inverts with the palette: bg < sidebar < pill <
-     card. */
-  --pnds-bg: #0b0c10;
-  --pnds-file-system: #8bcdb7;
-  --pnds-file-pages: #a9baff;
-  --pnds-file-audio: #f4cc80;
-  --pnds-file-modules: #d6b1ee;
-  --pnds-sidebar-bg: #101218;
-  --pnds-card: #16181f;
-  --pnds-pill: #12151d;
-  --pnds-pill-hover: #1b1f2a;
-  --pnds-accent: #34d399;
-  --pnds-accent-hover: #10b981;
-  --pnds-accent-foreground: #06281a;
-  --pnds-accent-text: #34d399;
-  --pnds-text: #eceef5;
-  --pnds-text-secondary: #99a1b5;
-  /* Elevation: black-based — a light-tinted shadow would glow on
-     near-black surfaces. */
-  --pnds-card-shadow: 0 1px 3px rgb(0 0 0 / 50%);
-  --pnds-knob-shadow: 0 1px 2px rgb(0 0 0 / 60%), 0 2px 6px rgb(0 0 0 / 50%);
-  /* Logo halos: dim emerald glows on near-black. */
-  --pnds-logo-halo: #14352a;
-  --pnds-logo-halo-core: #174233;
-  --pnds-logo-halo-animated: #0f231b;
-  /* Monitor title strip: the dark scrim works over any project page and
-     blends with the dark chrome. */
-  --pnds-monitor-bar: rgb(0 0 0 / 30%);
-  --pnds-monitor-bar-text: rgb(255 255 255 / 85%);
-
-  /* Lightened one step (rose-600→500); dark labels on the lighter fills
-     (4.95:1 / 6.76:1 on hover). */
-  --pnds-danger: #f43f5e;
-  --pnds-danger-hover: #fb7185;
-  --pnds-danger-foreground: #2b0a12;
-  /* Amber-300/200 with the dark label (11.7:1 / 13.6:1). */
-  --pnds-warning: #fcd34d;
-  --pnds-warning-hover: #fde68a;
-  --pnds-warning-foreground: #241c06;
+  color-scheme: dark;
+  --pnds-project-selection: #2f3e37;
+  --pnds-project-selection-shadow:
+    0 1px 3px rgb(0 0 0 / 35%), 0 2px 8px rgb(0 0 0 / 20%);
+  --pnds-bg: #171b1c;
+  --pnds-sidebar-bg: #1c2222;
+  --pnds-card: #232a29;
+  --pnds-pill: #2c3432;
+  --pnds-pill-hover: #35403b;
+  --pnds-selection: #354d41;
+  --pnds-accent: #a5c8b6;
+  --pnds-accent-hover: #b7d8c6;
+  --pnds-accent-foreground: #15231b;
+  --pnds-accent-text: #b7d8c6;
+  --pnds-text: #e7ece9;
+  --pnds-text-secondary: #adbbb4;
+  --pnds-border: #46554e;
+  --pnds-input: #7c8f84;
+  --pnds-danger: #f4a3ac;
+  --pnds-danger-hover: #f5b0b7;
+  --pnds-danger-foreground: #31141a;
+  --pnds-warning: #dfbd7d;
+  --pnds-warning-hover: #ebcc93;
+  --pnds-warning-foreground: #2c2211;
+  --pnds-warning-text: #e4c388;
+  --pnds-success: #a5c8b6;
+  --pnds-file-system: #a5ccb4;
+  --pnds-file-pages: #acbee6;
+  --pnds-file-audio: #e1bd80;
+  --pnds-file-modules: #ccafd9;
+  --pnds-logo-halo: #30483b;
+  --pnds-logo-halo-core: #385646;
+  --pnds-logo-halo-animated: #24372c;
+  --pnds-card-shadow: 0 1px 3px rgb(0 0 0 / 35%);
+  --pnds-knob-shadow: 0 1px 2px rgb(0 0 0 / 50%), 0 2px 6px rgb(0 0 0 / 40%);
+  --pnds-popover-shadow: 0 8px 24px rgb(0 0 0 / 45%);
 }
 
-/* Midnight — 午夜: deep-blue daily dark theme (v1.2.3 T4, issue #40).
-   Base palette from spec #36: bg #0d1220, sidebar #111828, card #1a2333,
-   accent #818cf8. Danger sits one step brighter than Stage's (rose-400)
-   because this card is lighter — rose-500 as text reads 4.3:1 on it.
-   Indigo sits mid-luminance: the dark label passes at rest (6.3:1) but a
-   darkened hover would drop below 4.5:1 against it, so accent-hover
-   lightens (8.0:1) like Sand's amber. */
-/* Brutal — 粗野: Neo-brutalism theme, renamed from "midnight" (issue #41,
-   second redirect; reference set: hand-drawn brutalism templates and
-   neobrutalism covers). Cream base, pure black text, white cards with
-   black hard-offset shadows, orange accent, and a flat multi-color
-   block collage for the sidebar (below). Legacy `midnight` preferences
-   render this theme (mapped in color-theme.ts). */
+/* Brutal / 粗野 — v1.5.2 amber/orange/black, with a deeper honey-gold base. */
 [data-color-theme='brutal'] {
-  /* shadcn semantic mapping — primary is pure black (the strong text
-     colour, like the other light themes); ring is the accent. Borders
-     are full black — visible structure is the point. */
-  --background: var(--pnds-card);
-  --foreground: var(--pnds-text);
-  --card: var(--pnds-card);
-  --card-foreground: var(--pnds-text);
-  --popover: var(--pnds-card);
-  --popover-foreground: var(--pnds-text);
-  --primary: var(--pnds-text);
-  --primary-foreground: #ffffff;
-  --secondary: var(--pnds-pill);
-  --secondary-foreground: var(--pnds-text);
-  --muted: var(--pnds-pill);
-  --muted-foreground: var(--pnds-text-secondary);
-  --accent: var(--pnds-pill-hover);
-  --accent-foreground: var(--pnds-text);
-  --destructive: var(--pnds-danger);
-  --border: #000000;
-  --input: #000000;
-  --ring: var(--pnds-accent);
-  --sidebar: var(--pnds-sidebar-bg);
-  --sidebar-foreground: var(--pnds-text);
-  --sidebar-primary: var(--pnds-text);
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: var(--pnds-pill-hover);
-  --sidebar-accent-foreground: var(--pnds-text);
-  --sidebar-border: #000000;
-  --sidebar-ring: var(--pnds-accent);
-
-  /* PNDS design tokens. Contrast: text 17-21:1 everywhere, secondary
-     8-10:1, accent-text ≥4.8:1 on every surface (the darker orange
-     twin — the fill orange cannot pass as text on cream). Hard offset
-     shadows only; the soft-elevation vocabulary is banned here. */
-
-  /* The theme's voice: Archivo — a square, sturdy grotesk; the rounded
-     Comfortaa fights the brutalist language. Both faces go Archivo (the
-     Manrope text-role distinction is not part of this vocabulary). */
-  --pnds-font-ui: 'Archivo', -apple-system, 'Segoe UI', 'Roboto', sans-serif;
-  --pnds-font-text: 'Archivo', -apple-system, 'Segoe UI', 'Roboto', sans-serif;
-
-  --pnds-bg: #fff1c9;
-  --pnds-file-system: #8bcdb7;
-  --pnds-file-pages: #a9baff;
-  --pnds-file-audio: #f4cc80;
-  --pnds-file-modules: #d6b1ee;
-  /* Amber — the third attempt at the shadowless panel: white clashed
-     with the white cards/audio surfaces below it, pale cream with the
-     bg. Amber is the theme's own yellow at panel strength: same warm
-     family as the bg (harmony), unmistakably distinct from every white
-     surface (cards, audio area), black text at 12.9:1. */
+  --app-corner-radius: 0px;
+  --pnds-project-selection: var(--pnds-card);
+  --pnds-project-selection-foreground: var(--pnds-text);
+  --pnds-project-selection-marker: var(--pnds-accent-text);
+  --pnds-project-selection-border: var(--pnds-border);
+  --pnds-project-selection-shadow: var(--pnds-card-shadow);
+  --pnds-bg: #ebb847;
   --pnds-sidebar-bg: #ffc107;
   --pnds-card: #ffffff;
   --pnds-pill: #ffe58f;
   --pnds-pill-hover: #ffd966;
+  --pnds-selection: #ffedb3;
   --pnds-accent: #ff5722;
   --pnds-accent-hover: #e64a19;
   --pnds-accent-foreground: #000000;
-  --pnds-accent-text: #b23a0a;
+  --pnds-accent-text: #842708;
   --pnds-text: #000000;
   --pnds-text-secondary: #4a4028;
-  --pnds-card-shadow: 4px 4px 0 #000000;
-  --pnds-knob-shadow: 2px 2px 0 #000000;
-  /* Logo halos: the theme's own block colors as flat rings. */
-  --pnds-logo-halo: #7fd8ce;
-  --pnds-logo-halo-core: #ffd966;
-  --pnds-logo-halo-animated: #ff9ec4;
-  --pnds-monitor-bar: rgb(0 0 0 / 35%);
-  --pnds-monitor-bar-text: rgb(255 255 255 / 90%);
-
-  /* Deepened light-theme red: the shared #e11d48 would read 4.2:1 as
-     text on the cream bg — this one passes both roles (6.1:1 white
-     label, 6.1:1 as text on card). Warning keeps the light-theme amber
-     with a black label (11.5:1). */
-  --pnds-danger: #c2103c;
-  --pnds-danger-hover: #a80d33;
+  --pnds-border: #000000;
+  --pnds-input: #000000;
+  --pnds-danger: #8e1530;
+  --pnds-danger-hover: #790f28;
   --pnds-danger-foreground: #ffffff;
   --pnds-warning: #ffb020;
   --pnds-warning-hover: #f0a20c;
-  --pnds-warning-foreground: var(--pnds-text);
+  --pnds-warning-foreground: #000000;
+  --pnds-warning-text: #5a3e0b;
+  --pnds-success: #1c4c36;
+  --pnds-file-system: #1c4c36;
+  --pnds-file-pages: #2a417c;
+  --pnds-file-audio: #5a3e0b;
+  --pnds-file-modules: #60386d;
+  --pnds-logo-halo: #7fd8ce;
+  --pnds-logo-halo-core: #ffd966;
+  --pnds-logo-halo-animated: #ff9ec4;
+  --pnds-card-shadow: 4px 4px 0 var(--pnds-text);
+  --pnds-knob-shadow: 2px 2px 0 var(--pnds-text);
+  --pnds-popover-shadow: 4px 4px 0 var(--pnds-text);
 }
 
 /* ── Brutal surface behavior (issue #41) ───────────────────────────────
@@ -510,11 +317,11 @@
 @keyframes pnds-brutal-card-rise {
   from {
     translate: 0 0;
-    box-shadow: 0 0 0 #000000;
+    box-shadow: 0 0 0 var(--pnds-text);
   }
   to {
     translate: 0 -2px;
-    box-shadow: 3px 3px 0 #000000;
+    box-shadow: 3px 3px 0 var(--pnds-text);
   }
 }
 
@@ -529,126 +336,14 @@
   transition-timing-function: cubic-bezier(0.4, 0.1, 0.2, 1);
 }
 
-/* The sidebar: a solid white panel (#ffffff above, separated from the
-   cream bg by color itself — the panel-level hard shadow is gone on
-   feedback) with a 1px black outline defining the edge. The variant's
-   soft shadow utilities are overridden to none so nothing floats the
-   whole panel. */
+/* The amber sidebar keeps a hard ink outline, without a panel shadow. */
 [data-color-theme='brutal'] [data-sidebar-surface] {
-  border-color: #000000;
+  border-color: var(--pnds-border);
   box-shadow: none;
 }
 
-/* ────────────────────────────────────────────────────────────────────
-   v1.3.3 (#88, user request — yzrt's pure-CSS liquid glass 纯CSS液态玻璃,
-   ported STRICTLY first, then FROSTED on the user's direction: the pane
-   is more opaque and every effect is defocused — blur radii up, specular
-   alphas down — so the pill reads as frosted glass, not crisp glints.
-   Layer by layer: the fill rises 4% → 10% (then walks back down to 4%
-   on the user's opacity-only follow-ups); the six-layer inset stack
-   softens (0.9/0.55 corner pairs → 0.55/0.35 with doubled blur radii,
-   the dark inner rim 2px → 4px of blur); the drop shadow widens and
-   lifts (0 4px 8px → 0 6px 16px); ::before's refracted dark ring
-   blooms wider (blur 8px → 14px, top 35% as before); ::after's corner
-   sheen melts (blur 3px → 8px, whites 0.8 → 0.6); the child-span ring
-   (the reference's .circle-overlay) dissolves (blur 1px → 4px). Two
-   deviations forced by the app's DOM, not taste, survive from the
-   strict port: (1) the reference's contrast(3)/brightness(0.9) demo
-   shell is not carried — it would have to wrap the whole sidebar and
-   wreck its text, and the reference's own fx-layer filter equally
-   voids its backdrop blur (the look never depended on it); (2) the
-   card pill carries no backdrop-filter: its backdrop root is the
-   masked project scroller (Sidebar, v1.2.2 #29), so a blur samples
-   only empty scroller content — the folder pill keeps a backdrop blur
-   (2px → 6px with the frosting), which does sample its unmasked
-   track. Scoped to Stage only: light themes keep their solid card
-   pill, Brutal keeps its hard plane. Frosting follow-up (user): the
-   pane's opacity walks down as directed — 10% → 6% → 4% → 3% — and the
-   FOLDER pill's white highlights sit one step weaker than the card
-   pill's (the segment pill is smaller, so equal whites read hotter
-   there). Every blur radius stays as frosted. */
-[data-color-theme='stage'] [data-folder-pill],
-[data-color-theme='stage'] [data-selection-pill] {
-  background: rgb(255 255 255 / 3%);
-  border: 1px double rgb(51 51 51 / 8%);
-  box-shadow:
-    inset 2px -2px 2px -1px rgb(255 255 255 / 55%),
-    inset -2px 2px 2px -1px rgb(255 255 255 / 55%),
-    inset 6px -6px 2px -6px rgb(255 255 255 / 35%),
-    inset -6px 6px 2px -6px rgb(255 255 255 / 35%),
-    inset 0 0 4px rgb(0 0 0 / 80%),
-    0 6px 16px rgb(0 0 0 / 35%);
-}
-
-[data-color-theme='stage'] [data-folder-pill] {
-  -webkit-backdrop-filter: blur(6px);
-  backdrop-filter: blur(6px);
-  /* One step weaker whites than the card pill (user): corner pairs
-     55/35 → 40/25 — box-shadow re-declared whole, it does not merge. */
-  box-shadow:
-    inset 2px -2px 2px -1px rgb(255 255 255 / 40%),
-    inset -2px 2px 2px -1px rgb(255 255 255 / 40%),
-    inset 6px -6px 2px -6px rgb(255 255 255 / 25%),
-    inset -6px 6px 2px -6px rgb(255 255 255 / 25%),
-    inset 0 0 4px rgb(0 0 0 / 80%),
-    0 6px 16px rgb(0 0 0 / 35%);
-}
-
-[data-color-theme='stage'] [data-folder-pill]::before,
-[data-color-theme='stage'] [data-selection-pill]::before {
-  content: '';
-  position: absolute;
-  z-index: 1;
-  top: 35%;
-  left: 50%;
-  transform: translateX(-50%);
-  width: calc(100% - 16px);
-  height: calc(100% - 16px);
-  border-radius: inherit;
-  border: 1px solid rgb(0 0 0 / 80%);
-  filter: blur(14px);
-}
-
-[data-color-theme='stage'] [data-folder-pill]::after,
-[data-color-theme='stage'] [data-selection-pill]::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  filter: blur(8px);
-  background: linear-gradient(
-    45deg,
-    rgb(255 255 255 / 60%) 0%,
-    transparent 25%,
-    transparent 75%,
-    rgb(255 255 255 / 60%) 100%
-  );
-}
-
-/* The folder pill's sheen joins its weaker-whites step: 60 → 45 (the
-   full declaration again — gradients do not merge either). */
-[data-color-theme='stage'] [data-folder-pill]::after {
-  background: linear-gradient(
-    45deg,
-    rgb(255 255 255 / 45%) 0%,
-    transparent 25%,
-    transparent 75%,
-    rgb(255 255 255 / 45%) 100%
-  );
-}
-
-/* The reference's .circle-overlay — a real DOM child in the demo, so a
-   real span child here (the pills carry no other children). Inert and
-   unstyled in every other theme. */
-[data-color-theme='stage'] [data-folder-pill] > span,
-[data-color-theme='stage'] [data-selection-pill] > span {
-  position: absolute;
-  inset: 4.5px;
-  border-radius: inherit;
-  border: 1px solid rgb(255 255 255 / 20%);
-  filter: blur(4px);
-}
-
+/* Stage uses the same flat folder/project selection surfaces as Pond and
+   Sand. The retired liquid-glass layers must not survive the r6 layout. */
 /* v1.3.3 (#87, user call): Brutal does not show the welcome logo stage
    at all — the ripples, halo and float are soft-glow language and this
    theme's plane is hard lines and no halos. The hero copy carries the

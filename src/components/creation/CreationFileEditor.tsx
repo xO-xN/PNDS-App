@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Pencil } from 'lucide-react'
+import { Pencil, MoreHorizontal } from 'lucide-react'
 import {
   commands,
   type CreationContent,
@@ -13,10 +13,8 @@ import {
 } from '@/store/creation-store'
 import {
   isDraftDirty,
-  beginCreationFileOperation,
-  useCreationDraftsStore,
-} from '@/store/creation-drafts-store'
-import { useCreationChangesStore } from '@/store/creation-changes-store'
+  useCreationFilesStore,
+} from '@/store/creation-files-store'
 import {
   useCreationCompileStore,
   selectCompileDraftPaths,
@@ -32,6 +30,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from '@/components/ui/dropdown-menu'
 import { CreationErrorNotice } from './CreationErrorNotice'
 import { CreationManifestForm } from './CreationManifestForm'
 import { CreationReadme } from './CreationReadme'
@@ -58,9 +62,9 @@ export function CreationFileEditor({
   editable: boolean
 }) {
   const { t, i18n } = useTranslation()
-  const draft = useCreationDraftsStore(state => state.drafts[file.path])
+  const draft = useCreationFilesStore(state => state.drafts[file.path])
   const compileBusy = useCreationCompileStore(state => state.busy)
-  const compileDraftPaths = useCreationDraftsStore(selectCompileDraftPaths)
+  const compileDraftPaths = useCreationFilesStore(selectCompileDraftPaths)
   const runtimeBusy = useSessionStore(
     state =>
       state.commandPending ||
@@ -72,12 +76,12 @@ export function CreationFileEditor({
     : runtimeBusy
       ? t('creation.compile.runtimeBusy')
       : null
-  const renameNote = useCreationDraftsStore(state => state.renameNote)
+  const renameNote = useCreationFilesStore(state => state.renameNote)
   const [manifestView, setManifestView] = useState<'form' | 'text'>('form')
   const [readmeView, setReadmeView] = useState<'preview' | 'text'>('preview')
   const workspace = useCreationStore(state => state.workspace)
   const readmeLocale =
-    useCreationDraftsStore(state => state.readmeLocale) ??
+    useCreationFilesStore(state => state.readmeLocale) ??
     i18n.resolvedLanguage ??
     'en'
   const [content, setContent] = useState<CreationContent | null>(null)
@@ -89,44 +93,28 @@ export function CreationFileEditor({
   const [renameValue, setRenameValue] = useState('')
   const [renameBusy, setRenameBusy] = useState(false)
   const [renameError, setRenameError] = useState<CreationError | null>(null)
+  const menuAction = useRef<(() => void) | null>(null)
   const editorRef = useRef<HTMLTextAreaElement>(null)
   const match = useRef<HTMLElement>(null)
   const editableText = editable && file.kind === 'text'
   const isManifest = editableText && file.path === 'manifest.json'
-  const diskRevision = useCreationChangesStore(
+  const diskRevision = useCreationFilesStore(
     state => state.fileRevisions[file.path] ?? 0
   )
   useEffect(() => {
-    if (editableText && file.path in useCreationDraftsStore.getState().drafts)
-      return
     let live = true
-    const ownsOperation = beginCreationFileOperation(file.path)
-    void commands
-      .readCreationFile(identity, file.path)
+    void useCreationFilesStore
+      .getState()
+      .read(identity, file.path)
       .then(result => {
-        if (!live || !ownsOperation()) return
-        // A late read may only seed drafts while this workspace is shown.
-        if (
-          editableText &&
-          useCreationStore.getState().workspace?.project.identity !== identity
-        )
-          return
+        if (!live || !result) return
         if (result.status === 'error') {
           setError(result.error)
           return
         }
         setError(null)
         setImageFailed(false)
-        if (editableText) {
-          if (result.data.kind === 'text')
-            useCreationDraftsStore
-              .getState()
-              .loaded(file.path, result.data.text, result.data.version)
-          else setContent(result.data)
-        } else setContent(result.data)
-      })
-      .catch(transport => {
-        if (live && ownsOperation()) setError(creationTransportError(transport))
+        setContent(result.data)
       })
     return () => {
       live = false
@@ -157,7 +145,7 @@ export function CreationFileEditor({
   // The choice opens on arrival and after every refused overwrite — the
   // store re-arms it whenever the conflict version moves past the one the
   // user explicitly dismissed (⌘S included).
-  const dismissedConflict = useCreationDraftsStore(
+  const dismissedConflict = useCreationFilesStore(
     state => state.dismissedConflict
   )
   const conflictOpen =
@@ -167,7 +155,7 @@ export function CreationFileEditor({
   const dirty = draft ? isDraftDirty(draft) : false
   const saveCurrent = () => {
     if (!draft || !dirty || draft.saving) return
-    void useCreationDraftsStore.getState().save(file.path)
+    void useCreationFilesStore.getState().save(file.path)
   }
   const openRename = () => {
     setRenameValue(file.path)
@@ -182,7 +170,7 @@ export function CreationFileEditor({
     }
     setRenameBusy(true)
     setRenameError(null)
-    const failure = await useCreationDraftsStore
+    const failure = await useCreationFilesStore
       .getState()
       .rename(file.path, next)
     setRenameBusy(false)
@@ -200,7 +188,7 @@ export function CreationFileEditor({
     : t('creation.saved')
   return (
     <section className="flex min-h-0 flex-1 flex-col" aria-label={file.path}>
-      <header className="space-y-3 border-b border-(--pnds-text)/15 p-4">
+      <header className="desktop-file-header space-y-2 border-b border-(--pnds-border) p-3">
         <div className="flex min-w-0 items-center gap-2">
           <h2 className="break-all font-medium">{file.path}</h2>
           {dirty && (
@@ -220,7 +208,7 @@ export function CreationFileEditor({
                   className="pnds-focus-ring rounded border bg-(--pnds-card) p-1"
                   value={projectReadmeLocale(file.path) ?? readmeLocale}
                   onChange={event => {
-                    useCreationDraftsStore
+                    useCreationFilesStore
                       .getState()
                       .setReadmeLocale(event.target.value)
                     const next = resolveCreationReadme(
@@ -228,7 +216,7 @@ export function CreationFileEditor({
                       event.target.value
                     )
                     if (next)
-                      useCreationDraftsStore.getState().setActivePath(next)
+                      useCreationFilesStore.getState().setActivePath(next)
                   }}
                 >
                   <option value="en">English</option>
@@ -301,17 +289,6 @@ export function CreationFileEditor({
               >
                 {t('creation.save')}
               </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={dirty || draft?.saving}
-                title={t('creation.reloadHint')}
-                onClick={() =>
-                  void useCreationDraftsStore.getState().reload(file.path)
-                }
-              >
-                {t('creation.conflictReload')}
-              </Button>
             </>
           )}
           {isScd && (
@@ -327,20 +304,53 @@ export function CreationFileEditor({
                 : t('creation.compile.action')}
             </Button>
           )}
-          <Button size="sm" variant="outline" onClick={() => void reveal()}>
-            {t('creation.revealFile')}
-          </Button>
-          {editable && (
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={file.path === 'manifest.json'}
-              onClick={openRename}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="creation-icon-button pnds-focus-ring"
+                aria-label={t('desktop.fileActions')}
+              >
+                <MoreHorizontal aria-hidden="true" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              onCloseAutoFocus={event => {
+                const action = menuAction.current
+                menuAction.current = null
+                if (action) {
+                  event.preventDefault()
+                  action()
+                }
+              }}
             >
-              <Pencil aria-hidden="true" />
-              {t('creation.rename')}
-            </Button>
-          )}
+              {editableText && (
+                <DropdownMenuItem
+                  disabled={dirty || draft?.saving}
+                  onSelect={() =>
+                    void useCreationFilesStore.getState().reload(file.path)
+                  }
+                >
+                  {t('creation.conflictReload')}
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem onSelect={() => void reveal()}>
+                {t('creation.revealFile')}
+              </DropdownMenuItem>
+              {editable && (
+                <DropdownMenuItem
+                  disabled={file.path === 'manifest.json'}
+                  onSelect={() => {
+                    menuAction.current = openRename
+                  }}
+                >
+                  <Pencil aria-hidden="true" />
+                  {t('creation.rename')}
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
         {!editable && <p className="text-xs">{t('creation.readOnly')}</p>}
         {isScd && (
@@ -404,7 +414,7 @@ export function CreationFileEditor({
             size="sm"
             variant="outline"
             onClick={() =>
-              useCreationDraftsStore.getState().dismissError(file.path)
+              useCreationFilesStore.getState().dismissError(file.path)
             }
           >
             {t('creation.dismissError')}
@@ -422,7 +432,7 @@ export function CreationFileEditor({
             document={draft?.readme}
             editable={editableText}
             onChange={(field, value) =>
-              useCreationDraftsStore
+              useCreationFilesStore
                 .getState()
                 .editReadme(file.path, field, value)
             }
@@ -433,7 +443,7 @@ export function CreationFileEditor({
               <CreationManifestForm
                 text={draft.text}
                 onChange={next =>
-                  useCreationDraftsStore.getState().edit(file.path, next)
+                  useCreationFilesStore.getState().edit(file.path, next)
                 }
               />
             ) : (
@@ -445,7 +455,7 @@ export function CreationFileEditor({
                 value={draft.text}
                 spellCheck={false}
                 onChange={event =>
-                  useCreationDraftsStore
+                  useCreationFilesStore
                     .getState()
                     .edit(file.path, event.target.value)
                 }
@@ -501,8 +511,7 @@ export function CreationFileEditor({
       <Dialog
         open={conflictOpen}
         onOpenChange={open => {
-          if (!open)
-            useCreationDraftsStore.getState().dismissConflict(file.path)
+          if (!open) useCreationFilesStore.getState().dismissConflict(file.path)
         }}
       >
         <DialogContent showCloseButton={false}>
@@ -526,7 +535,7 @@ export function CreationFileEditor({
             <Button
               variant="outline"
               onClick={() =>
-                useCreationDraftsStore.getState().dismissConflict(file.path)
+                useCreationFilesStore.getState().dismissConflict(file.path)
               }
             >
               {t('creation.cancel')}
@@ -534,9 +543,7 @@ export function CreationFileEditor({
             <Button
               variant="outline"
               disabled={draft?.saving}
-              onClick={() =>
-                useCreationDraftsStore.getState().revert(file.path)
-              }
+              onClick={() => useCreationFilesStore.getState().revert(file.path)}
             >
               {t('creation.conflictReload')}
             </Button>
@@ -545,7 +552,7 @@ export function CreationFileEditor({
               onClick={() => {
                 const version = draft?.conflict?.version
                 if (!version) return
-                void useCreationDraftsStore.getState().save(file.path, version)
+                void useCreationFilesStore.getState().save(file.path, version)
               }}
             >
               {t('creation.conflictOverwrite')}

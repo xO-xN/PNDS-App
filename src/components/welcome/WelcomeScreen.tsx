@@ -1,9 +1,11 @@
 import { useTranslation } from 'react-i18next'
 import { useUpdaterStore } from '@/store/updater-store'
+import { useSettingsStore } from '@/store/settings-store'
 import { openReleasesPage } from '@/lib/updater'
 import { Button } from '@/components/ui/button'
 import { PreflightDock } from '@/components/shell/PreflightDock'
 import pndsIcon from '@/assets/pnds-icon.png'
+import octopus from '@/assets/octo-sidebar-2x.png'
 
 /**
  * Welcome main area (§10.4; Figma "Starting Page"): hero text plus the
@@ -21,9 +23,24 @@ import pndsIcon from '@/assets/pnds-icon.png'
 export function WelcomeScreen() {
   const { t } = useTranslation()
   const updateVersion = useUpdaterStore(state => state.available)
+  const brutal = useSettingsStore(state => state.colorThemeSetting === 'brutal')
 
   return (
     <div className="relative flex min-h-full flex-col items-center justify-center bg-(--pnds-bg) p-8 animate-[fade-in_0.8s_ease-in]">
+      {brutal && (
+        <div className="welcome-brutal-art-frame" aria-hidden="true">
+          <img
+            data-testid="welcome-brutal-art"
+            aria-hidden="true"
+            src={octopus}
+            alt=""
+            width={560}
+            height={342}
+            draggable={false}
+            className="welcome-brutal-art"
+          />
+        </div>
+      )}
       {/* v1.3.3 (#86, ported from the site's welcome page): the app icon
           on a rippling halo stage — three rings phased a third of a cycle
           apart (negative delays, so a wave is already travelling at first
@@ -70,28 +87,28 @@ export function WelcomeScreen() {
              WebKit enforcement half (-webkit-user-drag) lives in
              App.css. */
           draggable={false}
-          className="relative z-[1] size-[84px] rounded-[18px] shadow-[0_10px_30px_rgba(16,24,40,0.16),0_2px_6px_rgba(16,24,40,0.08)]"
+          className="relative z-[1] size-[84px] rounded-[18px] shadow-(--pnds-popover-shadow)"
         />
       </div>
-      <header className="text-center">
+      <header className="welcome-title-panel text-center">
         <h1 className="text-[44px] font-light leading-tight tracking-wide text-(--pnds-text)">
           {t('welcome.title')}
         </h1>
-        <p className="mt-3 text-[16px] text-(--pnds-text)/60">
+        <p className="mt-3 text-[16px] text-(--pnds-text-secondary)">
           {t('welcome.subtitle')}
         </p>
       </header>
 
-      <p className="mt-[10vh] max-w-2xl text-center text-[15px] leading-8 text-(--pnds-text)/80">
+      <p className="mt-[10vh] max-w-2xl text-center text-[15px] leading-8 text-(--pnds-text)">
         <span className="block">{t('welcome.hintOpenProject')}</span>
       </p>
 
       {/* ⌘ is a keyboard affordance — select-none; the Help tip is
           documentation copy and stays selectable. */}
-      <p className="mt-6 text-sm text-(--pnds-text)/80 select-none">
+      <p className="mt-6 text-sm text-(--pnds-text) select-none">
         <span className="block">{t('welcome.cmdHint')}</span>
       </p>
-      <p className="mt-2 text-sm text-(--pnds-text)/80">
+      <p className="mt-2 text-sm text-(--pnds-text)">
         <span className="block">{t('welcome.hintHelp')}</span>
       </p>
 
@@ -109,7 +126,7 @@ export function WelcomeScreen() {
         {updateVersion && (
           <div
             data-testid="welcome-update-notice"
-            className="font-manrope flex items-center gap-3 rounded-xl border border-(--pnds-accent)/30 bg-(--pnds-pill) px-4 py-2.5 text-sm text-(--pnds-text)/70"
+            className="font-manrope flex items-center gap-3 rounded-xl border border-(--pnds-accent)/30 bg-(--pnds-pill) px-4 py-2.5 text-sm text-(--pnds-text-secondary)"
           >
             <span>{t('updater.noticeLine', { version: updateVersion })}</span>
             <Button

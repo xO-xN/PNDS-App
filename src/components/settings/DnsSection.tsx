@@ -148,7 +148,7 @@ export function DnsSection({ section }: { section: SettingsSection }) {
             )}
             {mapping ? (
               <p
-                className="text-(--pnds-accent-text) text-xs"
+                className="text-(--pnds-success) text-xs"
                 data-testid="dns-mapping"
                 dir="ltr"
               >

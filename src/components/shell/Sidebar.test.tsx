@@ -1,3 +1,4 @@
+import { ensureNetworkControls } from '@/test/desktop-actions'
 import {
   fireEvent,
   render,
@@ -14,7 +15,7 @@ import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { useWindowStore } from '@/store/window-store'
-import { Sidebar } from './Sidebar'
+import { PerformanceSidebarHarness as Sidebar } from '@/test/desktop-harness'
 import type { Manifest, SessionSnapshot } from '@/lib/tauri-bindings'
 
 vi.mock('@tauri-apps/plugin-opener', () => ({
@@ -141,7 +142,9 @@ describe('Sidebar', () => {
 
   it('shows the folder switch row, the header buttons and the settings card', () => {
     render(<Sidebar variant="static" />)
-    expect(screen.getByTestId('settings-card')).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Local network' })
+    ).toBeInTheDocument()
 
     // The folder switch always renders: the unfiled segment carries the
     // default view; folder management lives in the context menu (issue
@@ -154,32 +157,77 @@ describe('Sidebar', () => {
     expect(screen.queryByText('Open')).not.toBeInTheDocument()
   })
 
-  it('shows custom traffic lights and top-right action buttons', () => {
+  it('keeps native window controls out of the DOM and provides bottom actions', () => {
     render(<Sidebar variant="static" />)
     expect(
-      screen.getByRole('button', { name: /close window/i })
-    ).toBeInTheDocument()
+      screen.queryByRole('button', { name: /close window/i })
+    ).not.toBeInTheDocument()
     expect(
-      screen.getByRole('button', { name: /minimize window/i })
-    ).toBeInTheDocument()
+      screen.queryByRole('button', { name: /minimize window/i })
+    ).not.toBeInTheDocument()
     expect(
-      screen.getByRole('button', { name: /toggle full screen/i })
-    ).toBeInTheDocument()
+      screen.queryByRole('button', { name: /toggle full screen/i })
+    ).not.toBeInTheDocument()
     expect(
       screen.getByRole('button', { name: /open projection window/i })
     ).toBeInTheDocument()
     expect(
       screen.getByRole('button', { name: /reload monitor/i })
     ).toBeInTheDocument()
+    expect(screen.queryByText('Performance projects')).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Project actions' })
+    ).not.toBeInTheDocument()
   })
 
-  it('the green traffic light calls the single fullscreen action (§7.4)', async () => {
-    const user = userEvent.setup()
-    render(<Sidebar variant="static" />)
-    await user.click(
-      screen.getByRole('button', { name: /toggle full screen/i })
+  it('opens card actions for the right-clicked selection without changing the running project', async () => {
+    seedLoadedProject()
+    useProjectStore.setState({ recentProjectPaths: [PROJECT_PATH, OTHER_PATH] })
+    useSessionStore.setState({
+      sessionStatus: 'ready',
+      sessionProjectPath: PROJECT_PATH,
+    })
+    const showReadme = vi.fn()
+    const popup = vi.fn()
+    vi.mocked(commands.preflightProject).mockResolvedValue({
+      status: 'ok',
+      data: { ...manifest, id: 'score-1', name: 'PNDS Score 1' },
+    })
+    render(
+      <Sidebar
+        variant="overlay"
+        onShowReadme={showReadme}
+        onPopupOpenChange={popup}
+      />
     )
-    expect(commands.toggleFullscreen).toHaveBeenCalledTimes(1)
+    const card = document.querySelector(`[data-project-path="${OTHER_PATH}"]`)
+    if (!card) throw new Error('Expected the other project card')
+    fireEvent.contextMenu(card)
+    await waitFor(() =>
+      expect(useProjectStore.getState().currentProject?.path).toBe(OTHER_PATH)
+    )
+    expect(popup).toHaveBeenCalledWith(true)
+    expect(screen.getByRole('menuitem', { name: 'Rename' })).toBeEnabled()
+    await userEvent.click(
+      screen.getByRole('menuitem', { name: 'About the selected project' })
+    )
+    expect(showReadme).toHaveBeenCalledTimes(1)
+    expect(popup).toHaveBeenCalledWith(false)
+    expect(useSessionStore.getState().sessionProjectPath).toBe(PROJECT_PATH)
+    expect(commands.startProject).not.toHaveBeenCalled()
+    expect(commands.stopProject).not.toHaveBeenCalled()
+  })
+
+  it('focuses inline rename after the card context menu closes', async () => {
+    seedLoadedProject()
+    useProjectStore.setState({ renameTarget: null })
+    render(<Sidebar variant="static" />)
+    fireEvent.contextMenu(screen.getByTestId('current-project-card'))
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Rename' }))
+    const input = await screen.findByTestId('project-name-input')
+    expect(input).toHaveFocus()
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    fireEvent.keyDown(input, { key: 'Escape' })
   })
 
   // v1.5.0 (#129): the projection entry — always available (the window
@@ -297,7 +345,7 @@ describe('Sidebar', () => {
     expect(screen.getByTestId('project-entry')).toBeInTheDocument()
   })
 
-  it('defers mode changes: Change button appears, clicks restarts (§8.3)', async () => {
+  it('defers LAN changes: Change button appears, clicks restarts (§8.3)', async () => {
     const user = userEvent.setup()
     seedLoadedProject()
     useSessionStore.setState({
@@ -306,9 +354,17 @@ describe('Sidebar', () => {
     })
     render(<Sidebar variant="overlay" />)
 
-    // Switching mode does NOT restart immediately — it shows the Change button
-    await user.click(screen.getByRole('combobox', { name: /audio mode/i }))
-    await user.click(await screen.findByRole('option', { name: 'None' }))
+    vi.mocked(commands.listLanAddresses).mockResolvedValue({
+      status: 'ok',
+      data: ['192.168.1.10', '10.0.0.5'],
+    })
+    useSessionStore.getState().setLanAddresses(['192.168.1.10', '10.0.0.5'])
+    ensureNetworkControls()
+    expect(
+      screen.queryByRole('combobox', { name: /audio mode/i })
+    ).not.toBeInTheDocument()
+    await user.click(screen.getByRole('combobox', { name: 'Local network' }))
+    await user.click(await screen.findByRole('option', { name: '10.0.0.5' }))
     expect(commands.stopProject).not.toHaveBeenCalled()
     expect(
       screen.getByRole('button', { name: /^change$/i })
@@ -320,8 +376,8 @@ describe('Sidebar', () => {
     })
     expect(commands.startProject).toHaveBeenCalledWith(
       PROJECT_PATH,
-      'none',
-      '192.168.1.10',
+      'internal',
+      '10.0.0.5',
       null
     )
   })
@@ -414,6 +470,7 @@ describe('Sidebar', () => {
     })
 
     render(<Sidebar variant="overlay" />)
+    ensureNetworkControls()
     const oscInput = screen.getByRole('textbox', { name: /osc target/i })
     await user.clear(oscInput)
     await user.type(oscInput, '127.0.0.1:57120')
@@ -494,6 +551,12 @@ describe('Sidebar', () => {
     const sourceEntry = screen.getAllByTestId('project-entry')[0]
     if (!sourceEntry) throw new Error('Expected a draggable project entry')
     const targetCard = screen.getByTestId('current-project-card')
+    expect(
+      within(targetCard).getByTestId('project-order-number')
+    ).toHaveTextContent('01')
+    expect(
+      within(sourceEntry).getByTestId('project-order-number')
+    ).toHaveTextContent('02')
 
     // jsdom lays out nothing: pin the rects the drag derives geometry from
     // (cards pitch 61px apart — the top card at 0, the source at 61). The
@@ -512,6 +575,11 @@ describe('Sidebar', () => {
     })
     fireEvent.pointerMove(window, { pointerId: 1, clientX: 44, clientY: 76 })
     const clone = await waitFor(() => screen.getByTestId('drag-clone'))
+    expect(screen.getByTestId('sidebar')).toHaveAttribute(
+      'data-project-dragging'
+    )
+    expect(clone.firstElementChild).toHaveClass('desktop-project-index')
+    expect(clone.firstElementChild).toHaveTextContent('02')
     // The 1px indicator is gone; the source card hides behind its clone.
     expect(
       screen.queryByTestId('project-drop-indicator')
@@ -522,6 +590,16 @@ describe('Sidebar', () => {
     // full-card gap (the pointer sits in its top half → drop before).
     const initialTransform = clone.style.transform
     fireEvent.pointerMove(window, { pointerId: 1, clientX: 45, clientY: 10 })
+    expect(clone.firstElementChild).toHaveTextContent('01')
+    expect(
+      within(targetCard).getByTestId('project-order-number')
+    ).toHaveTextContent('02')
+    // Preview changes the visual ordinals; the saved order waits for release.
+    expect(useProjectStore.getState().recentProjectPaths).toEqual([
+      PROJECT_PATH,
+      OTHER_PATH,
+      THIRD_PATH,
+    ])
     expect(clone.style.transform).not.toBe(initialTransform)
     expect(targetCard.style.transform).toMatch(
       /^translateY\(-?\d+(\.\d+)?px\)$/
@@ -529,11 +607,21 @@ describe('Sidebar', () => {
 
     fireEvent.pointerUp(window, { pointerId: 1 })
 
+    expect(screen.getByTestId('sidebar')).not.toHaveAttribute(
+      'data-project-dragging'
+    )
+
     expect(useProjectStore.getState().recentProjectPaths).toEqual([
       OTHER_PATH,
       PROJECT_PATH,
       THIRD_PATH,
     ])
+    expect(
+      within(sourceEntry).getByTestId('project-order-number')
+    ).toHaveTextContent('01')
+    expect(
+      within(targetCard).getByTestId('project-order-number')
+    ).toHaveTextContent('02')
     // The DOM reorder and the clearing of the yield transforms share one
     // commit: for that frame the card that yielded must not animate from
     // its stale offset (the wrong-way slide) — transitions are paused...
@@ -553,6 +641,53 @@ describe('Sidebar', () => {
         })
       )
     })
+  })
+
+  it('previews downward ordinals and restores them when the drag is cancelled', async () => {
+    seedLoadedProject()
+    useProjectStore.setState({
+      recentProjectPaths: [PROJECT_PATH, OTHER_PATH, THIRD_PATH],
+    })
+    render(<Sidebar variant="static" />)
+    const source = screen.getByTestId('current-project-card')
+    const [second, third] = screen.getAllByTestId('project-entry')
+    if (!second || !third) throw new Error('Expected three cards')
+    mockBoundingClientRect(source, { top: 0 })
+    mockBoundingClientRect(second, { top: 61 })
+    mockBoundingClientRect(third, { top: 122 })
+    fireEvent.pointerDown(source, { pointerId: 1, clientX: 40, clientY: 20 })
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 50, clientY: 20 })
+    const clone = await screen.findByTestId('drag-clone')
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 50, clientY: 165 })
+    expect(
+      within(clone).getByTestId('drag-project-order-number')
+    ).toHaveTextContent('03')
+    expect(
+      within(second).getByTestId('project-order-number')
+    ).toHaveTextContent('01')
+    expect(within(third).getByTestId('project-order-number')).toHaveTextContent(
+      '02'
+    )
+
+    fireEvent.pointerCancel(window, { pointerId: 1 })
+    expect(screen.queryByTestId('drag-clone')).not.toBeInTheDocument()
+    expect(screen.getByTestId('sidebar')).not.toHaveAttribute(
+      'data-project-dragging'
+    )
+    expect(
+      within(source).getByTestId('project-order-number')
+    ).toHaveTextContent('01')
+    expect(
+      within(second).getByTestId('project-order-number')
+    ).toHaveTextContent('02')
+    expect(within(third).getByTestId('project-order-number')).toHaveTextContent(
+      '03'
+    )
+    expect(useProjectStore.getState().recentProjectPaths).toEqual([
+      PROJECT_PATH,
+      OTHER_PATH,
+      THIRD_PATH,
+    ])
   })
 
   it('the click that follows a drag drop is not a selection', async () => {
@@ -683,6 +818,7 @@ describe('Sidebar', () => {
 
     useSessionStore.setState({ audioMode: 'external' })
     rerender(<Sidebar variant="static" />)
+    ensureNetworkControls()
     expect(screen.getByLabelText(/osc target/i)).toBeInTheDocument()
   })
 })
@@ -727,7 +863,7 @@ describe('settings footer follows the selection (#39/T4)', () => {
     // another card is selected.
     expect(
       screen.getByRole('slider', { name: /^master volume$/i })
-    ).toBeDisabled()
+    ).toBeEnabled()
   })
 
   it('keeps Close on the running card, with volume live', () => {
@@ -980,6 +1116,7 @@ describe('Room dropdown (#58)', () => {
       currentProject: { path: PROJECT_PATH, manifest: manifestTelematic },
     })
     rerender(<Sidebar variant="static" />)
+    ensureNetworkControls()
     const room = screen.getByRole('combobox', { name: /^room$/i })
     expect(room).toHaveTextContent('1')
 
@@ -996,6 +1133,7 @@ describe('Room dropdown (#58)', () => {
     seedTelematic(manifestTelematic, PROJECT_PATH)
     render(<Sidebar variant="static" />)
 
+    ensureNetworkControls()
     await user.click(screen.getByRole('combobox', { name: /^room$/i }))
     await user.click(await screen.findByRole('option', { name: '3' }))
 
@@ -1057,6 +1195,7 @@ describe('Room dropdown (#58)', () => {
     })
     render(<Sidebar variant="overlay" />)
 
+    ensureNetworkControls()
     await user.click(screen.getByRole('combobox', { name: /^room$/i }))
     await user.click(await screen.findByRole('option', { name: '2' }))
 

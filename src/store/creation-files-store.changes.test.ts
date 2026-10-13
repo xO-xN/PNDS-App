@@ -1,8 +1,9 @@
+import { seedCreationDraft } from '@/test/creation-files'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { commands } from '@/lib/tauri-bindings'
 import { useCreationStore } from './creation-store'
-import { useCreationDraftsStore } from './creation-drafts-store'
-import { useCreationChangesStore } from './creation-changes-store'
+import { useCreationFilesStore } from './creation-files-store'
+
 import { useSessionStore } from './session-store'
 
 const workspace = {
@@ -34,9 +35,9 @@ describe('external disk changes (#155)', () => {
   })
 
   it('updates the tree and clean disk text, preserves a dirty draft, and never updates the running version automatically', async () => {
-    const drafts = useCreationDraftsStore.getState()
-    drafts.loaded('public/page.js', 'old', 'v1')
-    drafts.loaded('server.js', 'old server', 's1')
+    const drafts = useCreationFilesStore.getState()
+    seedCreationDraft('public/page.js', 'old', 'v1')
+    seedCreationDraft('server.js', 'old server', 's1')
     drafts.edit('server.js', 'my server draft')
     vi.mocked(commands.pollCreationChanges).mockResolvedValueOnce({
       status: 'ok',
@@ -59,74 +60,58 @@ describe('external disk changes (#155)', () => {
         },
       })
     )
-    await useCreationChangesStore.getState().poll()
+    await useCreationFilesStore.getState().poll()
     expect(useCreationStore.getState().workspace?.files).toHaveLength(2)
     expect(
-      useCreationDraftsStore.getState().drafts['public/page.js']?.text
+      useCreationFilesStore.getState().drafts['public/page.js']?.text
     ).toBe('new page')
-    expect(useCreationDraftsStore.getState().drafts['server.js']).toMatchObject(
-      {
-        text: 'my server draft',
-        conflict: { text: 'agent server', version: 'v2' },
-      }
-    )
-    expect(useCreationChangesStore.getState().pending.refresh).toBeGreaterThan(
-      0
-    )
-    expect(useCreationChangesStore.getState().pending.restart).toBeGreaterThan(
-      0
-    )
+    expect(useCreationFilesStore.getState().drafts['server.js']).toMatchObject({
+      text: 'my server draft',
+      conflict: { text: 'agent server', version: 'v2' },
+    })
+    expect(useCreationFilesStore.getState().pending.refresh).toBeGreaterThan(0)
+    expect(useCreationFilesStore.getState().pending.restart).toBeGreaterThan(0)
     expect(commands.startProject).not.toHaveBeenCalled()
     expect(commands.compileCreationSynthdefs).not.toHaveBeenCalled()
     expect(useSessionStore.getState().sessionStatus).toBe('ready')
   })
 
   it('clears only the captured update kinds and retains newer edits and all draft text', async () => {
-    const changes = useCreationChangesStore.getState()
+    const changes = useCreationFilesStore.getState()
     changes.changed(['public/page.js', 'supercollider/source/synth.scd'])
     const token = await changes.capture('/draft')
     changes.complete(token, 'refresh')
-    expect(useCreationChangesStore.getState().pending.refresh).toBe(0)
-    expect(useCreationChangesStore.getState().pending.restart).toBeGreaterThan(
-      0
-    )
+    expect(useCreationFilesStore.getState().pending.refresh).toBe(0)
+    expect(useCreationFilesStore.getState().pending.restart).toBeGreaterThan(0)
     changes.changed(['server.js'])
     changes.complete(token, 'restart')
-    expect(useCreationChangesStore.getState().pending.restart).toBeGreaterThan(
-      0
-    )
+    expect(useCreationFilesStore.getState().pending.restart).toBeGreaterThan(0)
     changes.complete(token, 'compile')
-    expect(useCreationChangesStore.getState().pending.compile).toBe(0)
-    expect(useCreationChangesStore.getState().pending.restart).toBeGreaterThan(
-      0
-    )
+    expect(useCreationFilesStore.getState().pending.compile).toBe(0)
+    expect(useCreationFilesStore.getState().pending.restart).toBeGreaterThan(0)
   })
 
   it('uses trusted canonical runtime identity for a preserved alias and ignores localized README edits', async () => {
     useCreationStore.setState({
       runtimeProject: { path: '/alias', root: '/draft' },
     })
-    useCreationChangesStore
+    useCreationFilesStore
       .getState()
       .changed(['README.en.md', 'README.zh-CN.md'])
-    expect(useCreationChangesStore.getState().pending.restart).toBe(0)
+    expect(useCreationFilesStore.getState().pending.restart).toBe(0)
     useSessionStore.setState({ sessionProjectPath: '/alias' })
-    useCreationChangesStore.getState().changed(['public/page.js', 'server.js'])
-    expect(useCreationChangesStore.getState().pending.refresh).toBeGreaterThan(
-      0
-    )
-    expect(useCreationChangesStore.getState().pending.restart).toBeGreaterThan(
-      0
-    )
+    useCreationFilesStore.getState().changed(['public/page.js', 'server.js'])
+    expect(useCreationFilesStore.getState().pending.refresh).toBeGreaterThan(0)
+    expect(useCreationFilesStore.getState().pending.restart).toBeGreaterThan(0)
     expect(
-      await useCreationChangesStore.getState().capture('/alias')
+      await useCreationFilesStore.getState().capture('/alias')
     ).not.toBeNull()
     useCreationStore.setState({ runtimeProject: null })
   })
 
   it('replays a watcher batch that races a rename and keeps the draft attached to the renamed file', async () => {
-    useCreationDraftsStore.getState().loaded('public/page.js', 'old', 'v1')
-    useCreationDraftsStore.getState().edit('public/page.js', 'my draft')
+    seedCreationDraft('public/page.js', 'old', 'v1')
+    useCreationFilesStore.getState().edit('public/page.js', 'my draft')
     let resolveRename!: (
       value: Awaited<ReturnType<typeof commands.renameCreationFile>>
     ) => void
@@ -136,7 +121,7 @@ describe('external disk changes (#155)', () => {
           resolveRename = resolve
         })
     )
-    const renamed = useCreationDraftsStore
+    const renamed = useCreationFilesStore
       .getState()
       .rename('public/page.js', 'public/new.js')
     vi.mocked(commands.pollCreationChanges).mockResolvedValueOnce({
@@ -151,14 +136,14 @@ describe('external disk changes (#155)', () => {
       status: 'error',
       error: { code: 'missing', detail: 'public/page.js' },
     })
-    expect(await useCreationChangesStore.getState().poll()).toBe(false)
+    expect(await useCreationFilesStore.getState().poll()).toBe(false)
     resolveRename({ status: 'ok', data: 'public/new.js' })
     await renamed
+    expect(useCreationFilesStore.getState().drafts['public/new.js']?.text).toBe(
+      'my draft'
+    )
     expect(
-      useCreationDraftsStore.getState().drafts['public/new.js']?.text
-    ).toBe('my draft')
-    expect(
-      useCreationDraftsStore.getState().drafts['public/page.js']
+      useCreationFilesStore.getState().drafts['public/page.js']
     ).toBeUndefined()
     vi.mocked(commands.readCreationFile)
       .mockReset()
@@ -169,7 +154,7 @@ describe('external disk changes (#155)', () => {
   })
 
   it('rejects old-project watcher results and errors while a successful switch clears old prompts', async () => {
-    const changes = useCreationChangesStore.getState()
+    const changes = useCreationFilesStore.getState()
     changes.changed(['server.js'])
     let resolve!: (
       value: Awaited<ReturnType<typeof commands.pollCreationChanges>>
@@ -192,12 +177,12 @@ describe('external disk changes (#155)', () => {
       error: { code: 'missing', detail: 'old error' },
     })
     await old
-    expect(useCreationChangesStore.getState().pending).toEqual({
+    expect(useCreationFilesStore.getState().pending).toEqual({
       refresh: 0,
       restart: 0,
       compile: 0,
     })
-    expect(useCreationChangesStore.getState().error).toBeNull()
+    expect(useCreationFilesStore.getState().error).toBeNull()
     expect(useCreationStore.getState().workspace?.project.identity).toBe('next')
   })
 })

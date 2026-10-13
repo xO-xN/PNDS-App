@@ -136,6 +136,9 @@ describe('AppShell', () => {
     expect(useCreationStore.getState().active).toBe(false)
     fireEvent.click(entry)
     await screen.findByRole('heading', { name: 'Creation mode' })
+    expect(document.querySelector('[data-creation-topbar]')).toHaveAttribute(
+      'data-tauri-drag-region'
+    )
     expect(
       screen.getByRole('button', { name: 'Open folder project' })
     ).toBeInTheDocument()
@@ -152,6 +155,7 @@ describe('AppShell', () => {
     )
     expect(useCreationStore.getState().active).toBe(false)
     expect(useCreationStore.getState().workspace).toBeNull()
+    expect(document.querySelector('[data-creation-topbar]')).toBeNull()
     expect(commands.startProject).not.toHaveBeenCalled()
     expect(commands.stopProject).not.toHaveBeenCalled()
   })
@@ -200,10 +204,13 @@ describe('AppShell', () => {
       await useCreationStore.getState().enter()
     })
     expect(
-      screen.getByRole('heading', { name: 'Creation workspace' })
+      screen.getByRole('button', { name: 'Project actions' })
     ).toBeInTheDocument()
     expect(screen.getByTitle('Project monitor')).toBe(monitor)
     expect(monitor.getAttribute('src')).toBe(src)
+    expect(document.querySelector('[data-creation-topbar]')).toHaveTextContent(
+      'Inarticulate III'
+    )
     expect(commands.prepareCreationProject).toHaveBeenCalledWith('/p')
     expect(commands.stopProject).not.toHaveBeenCalled()
     expect(commands.startProject).not.toHaveBeenCalled()
@@ -240,10 +247,13 @@ describe('AppShell', () => {
       render(<AppShell />)
       const monitor = await screen.findByTitle('Project monitor')
       const src = monitor.getAttribute('src')
+      const topbar = document.querySelector('[data-creation-topbar]')
       fireEvent.click(screen.getByRole('button', { name: 'Expand monitor' }))
+      expect(topbar).toBeVisible()
+      expect(document.querySelector('[data-creation-topbar]')).toBe(topbar)
       expect(
-        screen.queryByRole('heading', { name: 'Creation workspace' })
-      ).not.toBeInTheDocument()
+        screen.getByRole('button', { name: 'Project actions' })
+      ).toBeDisabled()
       expect(screen.getByTitle('Project monitor')).toBe(monitor)
       expect(monitor.getAttribute('src')).toBe(src)
       act(() => {
@@ -257,8 +267,8 @@ describe('AppShell', () => {
       })
       fireEvent.keyDown(window, { key: 'Escape' })
       expect(
-        screen.queryByRole('heading', { name: 'Creation workspace' })
-      ).not.toBeInTheDocument()
+        screen.getByRole('button', { name: 'Project actions' })
+      ).toBeDisabled()
       expect(screen.getByTitle('Project monitor')).toBe(monitor)
       expect(monitor.getAttribute('src')).toBe(src)
       act(() => {
@@ -267,8 +277,8 @@ describe('AppShell', () => {
       })
       fireEvent.keyDown(window, { key: 'Escape' })
       expect(
-        screen.getByRole('heading', { name: 'Creation workspace' })
-      ).toBeInTheDocument()
+        screen.getByRole('button', { name: 'Project actions' })
+      ).toBeEnabled()
       expect(screen.getByTitle('Project monitor')).toBe(monitor)
       expect(monitor.getAttribute('src')).toBe(src)
       expect(commands.stopProject).not.toHaveBeenCalled()
@@ -372,7 +382,7 @@ describe('AppShell', () => {
     expect(commands.stopProject).toHaveBeenCalled()
   })
 
-  it('shows the monitor with drag title and hover zone when running (§10.1)', () => {
+  it('shows the monitor and hover zone without a title overlay when running', () => {
     useSessionStore.setState({
       sessionStatus: 'ready',
       projectName: 'Inarticulate III',
@@ -394,7 +404,14 @@ describe('AppShell', () => {
       'src',
       'http://192.168.1.10:6869/?theme=pond&lang=en'
     )
-    expect(screen.getByText('PNDS - Inarticulate III')).toBeInTheDocument()
+    expect(screen.getByTestId('monitor-host')).toHaveAccessibleName(
+      'Inarticulate III'
+    )
+    expect(
+      screen
+        .getByTestId('monitor-host')
+        .querySelector('[data-tauri-drag-region]')
+    ).toBeNull()
     expect(screen.getByTestId('sidebar-hover-zone')).toBeInTheDocument()
     // Sidebar stays mounted for the slide animation but is visually hidden
     const popover = screen.getByTestId('sidebar-popover')

@@ -138,6 +138,23 @@ vi.mock('@/lib/tauri-bindings', async () => {
       performerVisibilityEvent: makeEvent('performer-visibility-event'),
     },
     commands: {
+      getCreationModules: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: {
+          code: 'invalidProject',
+          detail: 'getCreationModules not mocked',
+        },
+      }),
+      addCreationModule: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: {
+          code: 'invalidProject',
+          detail: 'addCreationModule not mocked',
+        },
+      }),
+      setMainControlsVisible: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
       startCreationProject: vi.fn().mockResolvedValue({
         status: 'error',
         error: {

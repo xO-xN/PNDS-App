@@ -12,7 +12,10 @@ export function useMonitorPreview(active: boolean, expanded = false) {
     if (!active) return
     const update = () => {
       const width = window.innerWidth
-      const height = window.innerHeight
+      const height =
+        window.innerHeight -
+        (document.querySelector('.desktop-bar')?.getBoundingClientRect()
+          .height ?? 0)
       const previewWidth = viewportRef.current?.clientWidth ?? 0
       setBounds(previous =>
         previous.width === width &&

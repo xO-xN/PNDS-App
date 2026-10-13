@@ -6,10 +6,9 @@ This app uses a modern CSS stack optimized for Tauri desktop applications:
 
 - **Tailwind CSS v4** with CSS-based configuration
 - **shadcn/ui v4** component library
-- **CSS custom-property color tokens** — the stock shadcn `:root`/`.dark`
-  values are OKLCH; the PNDS/theme tokens are hex (they come from the
-  Figma palette and the reviewed spec tables, and every value is
-  contrast-audited, so the space matters less than the single source)
+- **CSS custom-property color tokens** — PNDS palettes use hex values;
+  shadcn semantic roles resolve from the same palette. Color and contrast
+  live in one source, `src/theme-variables.css`.
 - **Desktop-specific defaults** for native app feel
 
 ## Built-in utility instrument panels
@@ -92,16 +91,116 @@ before reporting visibility. App settings and window confirmation stores hold
 it directly; `commandPending` covers the interval before the backend publishes
 starting/stopping. The hidden panel is inert, so its controls leave keyboard
 navigation. The overlay uses logical insets and a mirrored RTL exit offset.
+During a project drag, folder targets expand to the sidebar's right, not over
+its first card. The sidebar temporarily allows that child to overflow; the
+project scroller keeps its own clipping and its captured list geometry. The
+targets remain in the same nav subtree for live hit-testing and independent
+scrolling. Pointer release outside the physical sidebar clears the hover latch,
+so removal of the external target pane cannot strand the sidebar open.
 
-Keep performance controls in the sidebar: its header owns one projection control
-and refresh. That same control opens the window, then switches intro/performance
-while it exists. Its footer owns audio mode, editable LAN, live gain and one
-session action. LAN shares the Node section’s global next-start choice through
-`lan-settings.ts`; choosing it on the running card flags Change without navigating
-the monitor. Audio mode, LAN and Room use the same end-aligned value gutter. Existing
-OSC, Room and HTTPS feedback stay conditional. Sidebar visibility never enters
-the monitor URL, iframe key or size derivation. Use workflow tests with deferred
-typed commands and real portal interactions to verify these boundaries.
+Performance project cards have a permanent two-digit ordinal on the left,
+derived from the current visible order (01, 02, …). It updates after drag
+reordering and appears on the drag clone. Utility/error markers, the running
+bar and Cmd-number hints remain independent of that presentation number.
+
+Settings temporarily hides the Developer Tools category. Its component and
+commands are retained, and creation's compile/package entries remain available.
+A legacy `developer` category request falls back to General instead of an empty
+panel.
+
+The r6-final shared bottom bar owns transport, refresh, running-session gain,
+audio/network popovers, projection, Settings and the persistent mode control.
+Fullscreen uses native window controls and the Window menu/shortcut; the bottom
+bar has no fullscreen button.
+Performance uses the manifest default audio mode; creation retains saved-file
+mode selection in its test pane. Popovers reuse the existing setting components
+and the typed command boundary. Its transport column has a fixed 190px width. Creation transport and console
+controls stay mounted on home, workspace and expanded-preview layouts; missing
+workspace or expansion disables them rather than changing the bar contents.
+The audio entry uses Speaker. The bottom bar is a native deep drag region;
+its blank surface and spacer move the window in either mode. Transport/gain/mode
+groups and every local button/input explicitly opt out, so drag does not steal
+interactive presses. Live gain reads applied runtime audio even when
+another project is selected or its pending mode differs. Applied device/rate and
+LAN remain separate from next-start preferences. OSC, Room and HTTPS feedback
+remain conditional. Sidebar visibility never enters the monitor URL, iframe key
+or viewport derivation. Use deferred-command workflow and real portal tests.
+
+The creation titlebar is 32px high, following the Zed layout: native controls
+on the left, the existing project menu immediately beside them, and a dedicated saved-file `.pnds` packaging entry on the right. Read-only
+projects and the empty workspace do not offer packaging. `CreationView` keeps the titlebar outside the
+hidden editing surface; `ReadingWorkspace` portals its existing menu into the
+stable titlebar slot, retaining menu actions, draft owners and dialogs. The menu
+is disabled while the Monitor is expanded or a mode/session operation is
+pending. The native container padding is 18px in creation and 34px in performance; the
+backend retains padding and horizontal offset across resize/layout updates. Actual AppKit geometry showed
+a 9px button origin and 14px button height: 18px container padding puts the
+buttons at a 9px visible inset, centered in the 32px creation bar. Creation uses a -12px horizontal offset
+(x=16px); performance keeps the original x=28px baseline. Fullscreen
+leaves the actual native titlebar controls to macOS. The titlebar trigger has
+its own styles, with primary text, transparent rest, an 8% neutral hover tint
+and a 12% open/pressed tint. Retired sidebar-title hover/fade rules are removed.
+The packaging button opens the existing `CreationBundle` dialog, with draft/test
+warnings, native destination and overwrite confirmation unchanged. Packaging
+has moved out of the project dropdown; project-switch/new/Finder/rescan/handoff
+entries remain in that dropdown.
+
+The network trigger uses Globe. Its popover keeps LAN, OSC, Room and HTTPS
+feedback in `SettingsCard`, and reuses compact `NodeSection` identity inputs for
+Node name and Hub address. Values align at the end, including the LTR OSC target.
+Compact Node fields share the full settings store and blur-save queue; the
+next-start hint appears after editing, and the applied session stays untouched.
+Token remains its separate masked field in Node settings.
+
+Performance has no top-center title/drag overlay over the score. Its accessible
+Monitor identity still resolves the running project's display name, with drag
+regions retained in the sidebar. Performance sidebar headings and the generic
+three-dot trigger are removed; project actions use the card context menu.
+Right-click selects an unselected card but never toggles off the current
+selection or changes the live session. Focus-changing actions run after the
+menu closes.
+
+Settings are 768 × 560px, centered in the viewport area above the 50px bottom
+bar. Width and height clamp to that available area with 24px gutters; category
+content scrolls inside the fixed body. Settings use the App's Radix Select menus
+for language, output device, sample rate and LAN address; no OS-native select
+menus are used there. The four color themes are always visible as a horizontal
+radio group with individual accent swatches (two columns on narrow windows).
+Selection applies and persists immediately; arrow keys follow radio-group
+navigation. The LAN list refreshes on panel mount and each address-menu open.
+Selected files, settings categories and help navigation share the softer
+`--pnds-selection` fill. Performance project cards adapt the local website's
+`.nav-card` / `.nav-pill` design in [`site/styles.css`](../../site/styles.css):
+a raised paper-colored selection, a thin accent rail, 10px corners, semibold
+13px titles and muted ordinals. Pond and Sand use their card surface; Stage
+uses a raised dark surface, and Brutal uses white on amber, square corners and a hard
+shadow. All themes use the shared sliding selection pill, including plain ↑/↓
+navigation. The selected row stays transparent on hover/press, so it cannot
+cover or compete with the moving highlight. The selection rail moves with the
+pill, except when the selected project already has the fixed live-session rail.
+Preflight-result commits onto the same target preserve an in-flight slide.
+Reduced motion retains immediate selection. Drag geometry,
+keyboard navigation, project ordinals and error/removal controls stay intact.
+Neutral controls use `--pnds-pill`.
+
+During a project drag, the sidebar's `data-project-dragging` suppresses row
+hover/press paint and removal affordances. Row pointer events pause while
+window-level drag tracking, folder drop choices and yield transforms stay
+active; background fades stop immediately. The body-portaled clone shares the
+row's left ordinal and left-aligned title. In-list preview ordinals use
+`reorderedList`, the same calculation as the drop commit, and update only when
+the landing target changes. Folder/Home targets preview the destination
+ordinal as well. Cancelling restores the original ordinals without saving.
+
+Native macOS traffic lights occupy the empty sidebar chrome slot; no DOM
+imitation is rendered, including under Brutal. Window restoration excludes
+`DECORATIONS` as well as `VISIBLE`, so old borderless state cannot override the
+fixed overlay shell. AppKit positioning runs on the UI thread and follows main
+window resize; fullscreen leaves visibility to the system titlebar. The main
+monitor's component is no longer keyed by fullscreen. During the bounded sidebar transition, its real rectangle/opacity drive native
+button offset/alpha through coalesced typed commands. Reduced motion takes its
+actual immediate CSS state; fullscreen retains system control opacity. Native painting and
+physical window input remain real macOS acceptance items.
 
 ## User Folder Dropdown
 
@@ -109,7 +208,7 @@ typed commands and real portal interactions to verify these boundaries.
 folder menu and a separate Utilities toggle. While tools are active the picker
 becomes a return button; folder create/rename temporarily uses the same inline
 name editor. Select and context-menu visibility are ORed before reporting to
-HoverSidebar. Menu actions that change focus run from close-auto-focus after
+HoverSidebar. Creation project/file menus and sidebar rename use the same convention: actions that change focus run from close-auto-focus after
 the portal's trapped scope is gone. The hover latch checks DOM containment:
 React portal mouse events also bubble through the component tree, even though
 the pointer never entered the physical sidebar.
@@ -170,7 +269,7 @@ src/
 }
 ```
 
-The `:root` and `.dark` blocks above are the stock shadcn values kept in `theme-variables.css`; the app never applies the `.dark` class (see [The Light/Dark Axis](#the-lightdark-axis) and [Color Token Formats](#color-token-formats)).
+The examples above illustrate shadcn conventions. The actual App maps these roles to the PNDS palette in `theme-variables.css`; it never applies `.dark` (see [The Light/Dark Axis](#the-lightdark-axis)).
 
 ### Key Concepts
 
@@ -200,145 +299,122 @@ Then use with Tailwind: `bg-success text-success-foreground`
 
 ## Color Themes
 
-The app's color themes are NOT the `.dark` axis: the shadcn `.dark` class
-is never applied (see [The Light/Dark Axis](#the-lightdark-axis)), and a
-color theme is one complete palette — light or dark — swapped via the root
-node's `data-color-theme` attribute:
+`src/theme-variables.css` is the color source for all App windows. `:root`
+contains Pond (the startup fallback), common font tokens and the shared shadcn
+mapping. Sand, Stage and Brutal override complete PNDS color palettes through
+`data-color-theme`. `src/lib/color-theme.ts` owns the attribute and persistence;
+unknown values fall back to Pond, `lavender` migrates to Pond and `midnight` to
+Brutal. The settings preview accents mirror `--pnds-accent` and are checked by
+`src/lib/theme-palette.test.mjs`.
 
-- Each theme is **one complete token set** in `theme-variables.css` — a
-  `[data-color-theme='…']` block overriding both the `--pnds-*` design
-  tokens and the shadcn semantic mapping (`--background`, `--primary`, …).
-  Blocks after `:root` win at equal specificity by order, so a block never
-  needs `!important` and themes cannot leak values into each other.
-- The `:root` token sets **double as Lavender**, the default theme — it is
-  defined as "the current look" and doubles as the pre-JavaScript fallback
-  (until startup applies the saved attribute, the app renders Lavender).
-- `src/lib/color-theme.ts` owns the attribute: the startup preferences read
-  applies the saved theme (unknown or not-yet-shipped values fall back to
-  Lavender), and the settings panel's General-section theme row (v1.4.0
-  fold; the Appearance section is gone) applies changes
-  immediately and persists `colorTheme` (enum-validated in Rust:
-  lavender/sand/stage/brutal, plus the legacy `midnight`/`glass` values
-  which the frontend maps at render).
-- **Brutal is the Neo-brutalism theme** (renamed from `midnight`; the
-  persisted legacy value maps to `brutal` in color-theme.ts and stays
-  valid in the Rust enum): a cream base
-  (`#fff1c9`), pure black text, white cards with black hard-offset
-  shadows (`4px 4px 0 #000`, no blur), an orange accent (`#ff5722`, black
-  labels), full black borders, and a solid amber sidebar panel
-  (`#ffc107` — same warm family as the cream bg, distinct from every
-  white surface; 1px black outline, no panel-level shadow; via a scoped
-  `[data-sidebar-surface]` rule — Sidebar's aside carries the
-  attribute; a pixel-font PNDS wordmark, a hard panel shadow, and a
-  white panel were tried here and removed on feedback).
-  Two structural rules scope to it in theme-variables.css: every corner
-  flattens to 0 and every transition snaps to 0s — hover tints, the
-  selection pill, and reveals are instant in this theme (a deliberate
-  trade against the sliding-pill motion). One motion survives: the
-  sidebar's enter/exit slide (`data-sidebar-motion`, restored at 200ms);
-  everything else snaps. The
-  selected project card RISES off the black plane — a one-shot keyframe
-  lifts pill and row 2px in sync while the hard shadow grows beneath
-  (`data-selection-pill` + `data-selected-card`; the keyframe restarts
-  from applyCardSelectionPill on every selection change). The
-  window itself squares too: `set_window_corners_square` (window.rs)
-  drops the native 16px mask while the theme is active — synced before
-  the root attribute lands so neither edge lags the other — and the
-  traffic-light dots (`data-os-circle`, set in TrafficLights.tsx) stay
-  circular. Other themes keep the rounded window and the
-  `data-app-frame` rounding untouched. Type is per-theme: `--pnds-font-ui`
-  / `--pnds-font-text` tokens (defined per theme block, read by `body`
-  and `.font-manrope`) — Brutal swaps both to Archivo (bundled woff2 in
-  public/fonts, OFL), everything else keeps Comfortaa/Manrope. The
-  PndsLogo canvas wordmark stays brand (not themed), like the logo
-  dots. Brutal also carries the sidebar's one illustration (#71): the
-  shelf octopus riding the settings footer — rendered only when
-  `colorThemeSetting === 'brutal'` (same component-level gate as the
-  traffic-light ✕ in TrafficLights.tsx), `absolute` inside the footer
-  wrapper (which is `relative`) so it follows the settings card's
-  height changes in pure CSS while staying outside the project
-  scroller, `pointer-events-none` and `z-0` — over the card, under the
-  project column (the masked scroller is itself a stacking context, so
-  it carries `z-10` to keep its cards above the octopus). The bundled
-  `src/assets/octo-sidebar-2x.png` (2× the footer content width;
-  design master in `assets/mascot/octo-sidebar.png`) is pinned onto
-  the card's top edge by `OCTO_SHELF_OVERHANG_PX` in Sidebar.tsx,
-  calibrated per asset. Card legibility works by reservation, not
-  background (#71 v2): the scroll column surrenders the art's zone
-  (`OCTO_COLUMN_RESERVE_PX`) so cards page above the tentacles with
-  their transparent rest intact in every theme; the import button
-  keeps its column-tail seat clear of the art — solid card-colored
-  with the theme border and hard shadow under Brutal, the translucent
-  chip elsewhere.
-- **Sand is the medium-depth theme**: warm-white text on dim warm-taupe
-  surfaces — deliberately between the light and dark themes. Its
-  accent-text twin inverts direction: the accent-as-text is the LIGHTER
-  amber (`#fbbf24`), because a darker amber can't reach 4.5:1 on the
-  mid-dark card. Danger follows the same physics — light enough to pass
-  as text on the card, labeled near-black (the theme set spans light /
-  medium / dark / brutalist, so the "lighten vs darken the status color"
-  rule is per-theme, not per-lightness-class).
-- Components consume tokens via Tailwind arbitrary values — `bg-(--pnds-bg)`,
-  `text-(--pnds-text)/60`, `shadow-(--pnds-card-shadow)` — never literal
-  colors. Status fills carry their own label token
-  (`text-(--pnds-accent-foreground)`, `text-(--pnds-warning-foreground)`),
-  because the label that passes 4.5:1 differs per theme (white on
-  Lavender's accent, dark on Sand's amber, dark on the lightened status
-  colors of the dark themes — those lighten one step in the dark and take
-  dark labels). The accent used **as small text** goes
-  through `--pnds-accent-text`, the darker twin tuned for ≥4.5:1 on card
-  surfaces (Sand's fill amber reads ~3.1:1 as text).
-- Every text/background pair in each solid theme is checked ≥4.5:1 against
-  its own label/surface; recheck when touching theme values.
-- Intentionally NOT themed: the traffic-light glyphs, the PndsLogo's
-  brand-color dots (the halo rings behind them ARE tokens), the shadcn
-  vendored scrims (`bg-black/50`), the theme row's accent
-  swatch — it previews each theme's accent by definition, so it cannot be
-  one token — and the performance sidebar's combined projection-control light
-  (v1.5.0 #130, moved in #152): a STATUS light on its dedicated dark
-  `--pnds-projection-control-bg` surface (orange ≥8.6:1, green ≥7.9:1), like the
-  traffic lights — ungated blinks Apple system orange `#ff9f0a` (its
-  reduce-motion clamp rests there as the static highlight), 开演'd holds
-  Apple system green `#34c759` (the logo palette's green). Green/orange
-  mean the same thing in every theme; a per-theme accent would not.
+### Palette direction
+
+The October 2026 correction preserves the four themes' identities and the
+system fonts and compact layout of r6-final. Pond follows the logo and the pond
+image through cool grey and blue, not the retired lavender palette.
+
+| Theme         | Background | Sidebar   | Card      | Action               | Selection        |
+| ------------- | ---------- | --------- | --------- | -------------------- | ---------------- |
+| Pond / 池塘   | `#f1f5f8`  | `#d2d8de` | `#fcfdff` | Lake blue `#1476cc`  | `#d4e3f0`        |
+| Sand / 暖沙   | `#e6ddcd`  | `#d8cfbf` | `#f1eadf` | Warm brown `#93622e` | `#ddc6a5`        |
+| Stage / 暗场  | `#171b1c`  | `#1c2222` | `#232a29` | Sage `#a5c8b6`       | `#354d41`        |
+| Brutal / 粗野 | `#ebb847`  | `#ffc107` | `#ffffff` | Orange `#ff5722`     | Yellow `#ffedb3` |
+
+Brutal takes the amber sidebar, orange-red actions, white cards and pure-black
+ink from the `v1.5.2` palette. Its honey-gold background is deeper than that
+version's cream base, clearly separating it from Sand's pale taupe. Status and
+category text use deeper ink colors to remain readable on the stronger yellow.
+
+### Component roles
+
+Pond's sidebar uses a low-saturation cool grey. It remains deep enough to
+separate pale folder controls, white project cards and native traffic-light
+highlights, while blue is reserved for actions and selection markers.
+
+- `--pnds-pill` is a neutral control or badge surface; `--pnds-pill-hover` is
+  its hover surface. `--pnds-selection` is the soft navigation fill.
+  `--pnds-project-selection` and `--pnds-project-selection-foreground` are
+  the paper-colored performance-project selection and its normal text.
+  `--pnds-project-selection-marker` is the contrasting 3px rail; it stays visible
+  on both selected cards and the sidebar. Border/shadow tokens provide the
+  website's subtle elevation, with per-theme tint and Brutal's hard edges.
+  Secondary and status icons retain their own colors on selected cards.
+- `--pnds-text` and `--pnds-text-secondary` define readable text levels. Use
+  these directly instead of lowering normal text opacity. Disabled controls
+  may reduce opacity; decorative artwork may still use alpha.
+- Filled actions use `--pnds-accent` / `--pnds-accent-hover` with
+  `--pnds-accent-foreground`. Small accent text and focus outlines use
+  `--pnds-accent-text`; Brutal's orange fill needs a darker text twin.
+- Errors use `--pnds-danger` and buttons pair it with its own foreground and
+  hover tokens. Warnings similarly pair their fill and foreground; use
+  `--pnds-warning-text` for text. `--pnds-success` identifies readiness.
+- `--pnds-border` separates surfaces; `--pnds-input` defines stronger form
+  control boundaries. `--pnds-popover-shadow` also themes dialogs and menus:
+  tinted soft shadows in light themes, black shadows in Stage, hard ink
+  shadows in Brutal. Sonner receives the palette through inline custom
+  properties on the toaster, overriding its own light/dark defaults.
+- File categories keep green (system), blue (pages), ochre (audio) and plum
+  (modules), with dark colors on light themes and light colors on Stage.
+- shadcn `primary` maps to the App action color and its matching label;
+  `secondary` maps to neutral controls, `accent` to hover, `sidebar-accent`
+  to selection, and `ring` to the accessible accent text color. Shared
+  destructive buttons and badges use `text-destructive-foreground`, so
+  Stage's light rose fill carries a dark label.
+
+The contrast suite checks primary/secondary/status/category text on background,
+sidebar, card, controls, hover and selection (≥4.5:1), action labels at rest and
+hover (≥4.5:1), selected-card labels (≥4.5:1), and input boundaries/focus outlines
+and selection rails (≥3:1). It also checks theme
+preview synchronization and the existing Monitor palette subset. Theme bridges
+continue to read computed root values; no second runtime palette is maintained.
+
+Brutal retains square corners, hard shadows and immediate state changes.
+The sidebar slide, Brutal selected-card rise and reveal-fade exemptions stay
+in place. The mode switch also retains its 300ms slanted fill, label fade/slide
+and settling entry animation, with the system reduced-motion override respected.
+The main window's outer shape also becomes rectangular: `window.rs`
+removes the native `Titled` style in windowed Brutal, rather than only setting
+contentView's layer radius to zero. It preserves resize/close/minimize flags.
+AppKit's public standard-button factory supplies the native controls in an
+input-transparent NSView overlay, positioned by the existing sidebar/titlebar
+motion machinery. Once installed, that overlay persists across windowed theme
+changes; native titled rounding returns in other themes and the system controls
+take over in fullscreen. The green overlay button goes through Tao's fullscreen
+setter, which prepares/restores borderless window styles. All AppKit corner work
+runs on the UI thread; the theme command awaits its completion before CSS changes.
+The WKWebView and score iframe stay mounted. Native corner/controls/fullscreen
+acceptance still requires a real App run; pure policy tests and clippy do not
+establish that physical behavior.
+
+Welcome's soft logo stage stays hidden in Brutal. Its existing
+`src/assets/octo-sidebar-2x.png` illustration now appears above the hero, instead
+of occupying project-list space. It is decorative, non-draggable and sized to
+fit the welcome area's height. Brutal's title and subtitle share one white
+paper rectangle with an ink outline and hard shadow. The image frame reserves
+560:318 of the 560×342 source: the body baseline meets the rectangle's top
+edge, while hands and tentacle tips extend over it. The artwork remains intact
+and scales uniformly; the other three themes retain the logo stage and plain copy.
+
+Brand logo colors, creator-owned README artwork and Monitor/Performer content
+keep their own color intent. Monitor scrims use an independent dark backing
+because they can sit over arbitrary project artwork; optional theme following
+still runs through the existing bridge.
 
 ## The Light/Dark Axis
 
-The app is **fixed light**. `ThemeProvider` (`src/components/ThemeProvider.tsx`)
-pins the `light` class on `<html>` and never applies `.dark`, regardless of
-OS appearance: the app's own `--pnds-*` palette has no dark variant, and the
-stock shadcn `.dark` block in `theme-variables.css` would repaint the
-remaining shadcn surfaces (popover menus) black while the rest stayed light.
-
-The provider's context (`src/lib/theme-context.ts`) keeps a `setTheme`
-no-op so the shadcn ecosystem's `useTheme` shape is satisfied; there is no
-theme-switching hook. Dark palettes are color themes — a dark color theme
-(stage) remaps the same light-variant tokens via `data-color-theme`, not
-via the `.dark` class. See [Color Themes](#color-themes).
+`ThemeProvider` pins `light` on `<html>`; it never applies `.dark`. Stage is a
+complete color palette selected by `data-color-theme`, rather than a second
+light/dark axis. The unused stock shadcn palettes are removed so they cannot
+become a second source of colors. Stage sets native `color-scheme: dark`;
+the other themes set `color-scheme: light` so native option menus and scrollbars
+match the selected App palette.
 
 ## Color Token Formats
 
-Two token families live in `theme-variables.css`:
-
-- **Stock shadcn semantic tokens** (`:root` and the unused `.dark` block)
-  use OKLCH — `oklch(0.145 0 0)` — as shipped by the shadcn theme builder.
-- **PNDS tokens** (`--pnds-*`, the shadcn mapping overrides inside each
-  `[data-color-theme]` block) use hex values from the Figma palette. Every
-  value is contrast-audited, so the color space matters less than the
-  single source.
-
-### Semantic Palette Structure
-
-| Token                                    | Purpose                   |
-| ---------------------------------------- | ------------------------- |
-| `--background` / `--foreground`          | Page background and text  |
-| `--card` / `--card-foreground`           | Card surfaces             |
-| `--primary` / `--primary-foreground`     | Primary actions           |
-| `--secondary` / `--secondary-foreground` | Secondary actions         |
-| `--muted` / `--muted-foreground`         | Subdued elements          |
-| `--accent` / `--accent-foreground`       | Highlights                |
-| `--destructive`                          | Destructive actions (red) |
-| `--border` / `--input` / `--ring`        | Borders and focus rings   |
+PNDS color values are six-digit hex. Common shadcn roles reference them with
+`var()`, and shadows/scrims use RGB alpha where transparency has a visual role.
+Components use Tailwind token utilities such as `bg-(--pnds-pill)` and
+`text-(--pnds-text-secondary)`; do not add literal UI colors in components.
 
 ## Desktop-Specific Styles
 

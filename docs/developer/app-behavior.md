@@ -4,6 +4,10 @@ PNDS App 的产品行为、测试覆盖与 Definition of Done 的权威文档（
 
 本文下方描述现有发布行为。已批准的后续变更以 [v1.6.0 演出与创作模式规格](../plans/v1.6.0-creation-mode-spec.md) 和 [v1.7.0 创作助手规格](../plans/v1.7.0-creation-assistant-spec.md) 为开发验收基线，完成实现后再将行为合流到本文。模式接续遵守更新后的 [ADR-0007](../adr/0007-mode-switch-ends-performance.md)，交接边界遵守 [ADR-0008](../adr/0008-creator-handoff-as-agent-seam.md)；标准模块文件添加与接线交接归 v1.6.0，模块整理与外部 Skills 按 [v1.6.1 规格](../plans/v1.6.1-modules-skills-spec.md) 交付，Skills 安装自愿且由创作者在外部环境完成。
 
+2026-10-12 的[版本更新规划](../plans/releases-through-v1.7.0.md)补充 v1.6.0 末期 UI 修订、v1.6.2 单一较新共享库及三作品发行验收、v1.6.3 上下选卡快捷键、v1.6.4–v1.6.5 确定性检查，以及 v1.7.0 按钮授权的单文件修改。规划和旧 Issue 的同步不能当作这些行为已经实现；本页现有实现记录继续按实际交付维护。
+
+2026-10-13 的 [r6-final](../prototypes/desktop-1.6/README.md) 覆盖旧原型的同项 UI 决策：系统字体与四主题统一布局、原生红绿灯、共享底栏、右下角持久模式按钮和紧凑创作导航。旧票历史中的自绘按钮、顶部投影／刷新、侧栏模式／音量与装饰插画不作为当前入口要求；业务与运行契约仍保留。实际实施和尚待实机确认的项目见 [验收记录](./desktop-1.6-implementation.md)。
+
 规范分工与冲突裁决：
 
 - 工程静态格式（manifest / 目录 / 资产）→ [`manifest.md`](../zh-CN/reference/manifest.md)、[`structure.md`](../zh-CN/reference/structure.md)
@@ -15,9 +19,9 @@ PNDS App 的产品行为、测试覆盖与 Definition of Done 的权威文档（
 
 ### 创作阅读与模式接续（#150 / #151）
 
-演出侧栏底部持续提供两次点击确认的定稿模式按钮；每次启动仍从空闲演出首页开始。按钮使用固定斜切、300ms 填充和名称淡入，完成后暂停反向悬浮；Brutal 与减少动态效果直接完成，启动／关停提交期间禁止切换。创作首页可选择已有文件夹工程及最近创作，工作台标题悬浮或聚焦显示切换入口。原生目录选择和工程选择器取消均保留当前工程，打开失败显示原因。
+右下角共享底栏持续提供同一个两次点击确认的定稿模式按钮；每次启动仍从空闲演出首页开始。按钮使用固定 44px 斜切、300ms 填充和名称淡入，完成后暂停反向悬浮；四主题均保留模式过渡，系统减少动态效果直接完成，启动／关停提交期间禁止切换。创作首页可选择已有文件夹工程及最近创作，工作台标题悬浮或聚焦显示切换入口。原生目录选择和工程选择器取消均保留当前工程，打开失败显示原因。
 
-运行中的可编辑工程优先于另一张选中卡片，进入创作接续实际运行、已应用配置和同一个 monitor 页面实例；已选但未运行的文件夹直接打开而不启动。工程包、工具和无可编辑目标进入创作首页并结束旧运行。进入创作关闭投影；返回演出结束测试，调用草稿／测试窗口清理接缝并清空选择，不自动载入。创作侧栏按定稿 A 原型沿用侧栏容器、工程标题切换、分类色点与文件图标。
+运行中的可编辑工程优先于另一张选中卡片，进入创作接续实际运行、已应用配置和同一个 monitor 页面实例；已选但未运行的文件夹直接打开而不启动。工程包、工具和无可编辑目标进入创作首页并结束旧运行。进入创作关闭投影；返回演出结束测试，调用草稿／测试窗口清理接缝并清空选择，不自动载入。创作侧栏按 r6-final 置顶 manifest 与本地化 README，其余文件保留实际路径并按用途分组；工程标题下拉承载切换、新建和交接；创作顶栏右侧提供保存版打包按钮。
 
 本任务提供文件分类、实际路径搜索、限量文本阅读和查找、PNG/JPEG/WebP/GIF 按需预览及 Finder 打开／定位。图片解码失败保留文件信息；音频和其他二进制只显示信息。后端签发并验证工程身份，安装工程包和注册表内置工具保持只读来源；目录重开或符号链接不能将其变为可编辑工程。
 
@@ -92,7 +96,7 @@ App 不是：
 - 点击历史条目重新 preflight；
 - 支持拖拽排序和移除历史记录；
 - 失效路径显示可读错误；
-- App 启动进入 Welcome，不自动运行历史工程。Welcome 标题上方是涟漪 logo 舞台（v1.3.3 #86，用户要求自 site welcome 页移植）：App icon（`src/assets/pnds-icon.png`，与 site 同图）浮在 172px 圆形舞台上，三道错相水纹环扩散消散、整台缓浮——涟漪与光环取 `--pnds-accent`（各主题自有色），icon 保持自身配色（如 macOS 图标之于暗色模式）；icon 不可拖出 App（#122：`draggable=false` + App.css `-webkit-user-drag: none`，拖出去会存出裸图片文件）；`prefers-reduced-motion` 下水纹环整体隐藏、只余静态 halo + 图标（#122 修正 #115 的错误表述：fill-mode 默认 none，0.01ms 播完回退基础样式会定格满尺寸静止圈，环带 `data-welcome-ring` 钩子供该规则命中）；纯装饰（`aria-hidden`）。Brutal 下整个舞台不渲染（#87 用户要求：柔光语言不属于硬线条平面，`[data-color-theme='brutal'] [data-welcome-logo]` 隐藏，hero 文案独立承载页面）。
+- App 启动进入 Welcome，不自动运行历史工程。Welcome 标题上方是涟漪 logo 舞台（v1.3.3 #86，用户要求自 site welcome 页移植）：App icon（`src/assets/pnds-icon.png`，与 site 同图）浮在 172px 圆形舞台上，三道错相水纹环扩散消散、整台缓浮——涟漪与光环取 `--pnds-accent`（各主题自有色），icon 保持自身配色（如 macOS 图标之于暗色模式）；icon 不可拖出 App（#122：`draggable=false` + App.css `-webkit-user-drag: none`，拖出去会存出裸图片文件）；`prefers-reduced-motion` 下水纹环整体隐藏、只余静态 halo + 图标（#122 修正 #115 的错误表述：fill-mode 默认 none，0.01ms 播完回退基础样式会定格满尺寸静止圈，环带 `data-welcome-ring` 钩子供该规则命中）；纯装饰（`aria-hidden`）。Brutal 下整个舞台不渲染（#87 用户要求：柔光语言不属于硬线条平面，`[data-color-theme='brutal'] [data-welcome-logo]` 隐藏，hero 上方显示原侧栏的章鱼插画 `src/assets/octo-sidebar-2x.png`；插画为装饰，不可拖出，不占侧栏工程列表空间）。
 
 打开路径不弹信任确认：PNDS App 是「操作者即机主」的演出工具，打开的工程由操作者本人放入本机，运行前再弹一次本地代码确认是纯摩擦。工程历史的增删与数据格式（`recentProjects`）保持不变。
 
@@ -108,8 +112,8 @@ App 不是：
 - 内置工具在侧栏 / 设置列表 / 运行标题显示 App 提供的简洁别名（v1.3.3 #84 用户报告：320px 侧栏下长名截断）：Multichannel Gen / Local Diagnostics / Telematic Diagnostics / Sensor Meter。别名是解析层事实（builtin-utilities.ts → `projectDisplayName`，MonitorView 运行标题同序），排在「preflight 学到的 manifest 名」之上——选中卡片触发的 preflight 会照常把正式 manifest 名学进 `manifestProjectNames`（#16 的通用机制），但显示不再被它顶回长名（#84 首版把别名启动时学习进 store，恰被这条学习覆盖，用户报告后改为解析层）；manifest 与工具仓库的正式名不变，用户改名层对工具仍然禁用；
 - 内置工具卡左侧定轴槽显示示意 icon（v1.3.3 #85 用户要求）：multichannel → 波形（AudioWaveform）、local → 网络节点（Network）、telematic → 地球（Globe）、mobile-sensor-meter → 仪表（Gauge），未映射的未来工具回退扳手；按路径形状 `…/utilities/<id>` 解析 id（与别名同键），槽宽与居中标题光轴不变，普通工程卡保持裸 spacer；glyph 相对行几何中心上移 1px——15px 标题的光轴（小写字面质量）在中心线上方，正中放置的 icon 读起来偏低（#85 用户反馈）；
 - 工程卡继续拖动排序；拖动时出现可滚动的临时编组落点，释放后加入目标用户文件夹末尾，拖到主页则回到未分组。工具不出现在用户入夹落点，也不成为拖动源。编组顺序调整不改变成员顺序。
-- 正在运行的工程卡片左缘有 accent 竖条；空闲选中仅白底。Brutal 下工程列为章鱼插画预留底部整段净空（#71 v2 用户反馈：卡片翻页止于插画上方、永不压图，卡片在所有主题保持透明静止底）；「+ 导入工程」留在列表尾部（随列表滚动，不压插画），Brutal 下为实体按钮（卡色底、黑框、硬投影，按下压入投影），其余主题维持半透明 chip。
-- 暗场（stage）工程卡选择 pill（`data-selection-pill`，几何引擎按选中卡全盒定尺寸）继续使用磨砂液态玻璃：3% 白填充、角部高光与六层虚化 inset 阴影，静态无动态背景；因项目滚动容器的渐隐 mask 形成 backdrop root，卡 pill 不带 backdrop blur。用户编组下拉沿用主题 token，原分段 folder pill 不再渲染。
+- 正在运行的工程卡片左缘保留 accent 竖条，选择高亮独立；四主题使用同一紧凑列表结构。「+ 导入工程」仍在可滚动列表尾部，r6-final 不再为旧插画占用列表空间。
+- 演出工程卡参考本地官网 `site/styles.css` 的 `.nav-card` / `.nav-pill`：选中卡使用纸面色、细边框和轻阴影，标题为 13px 半粗，序号为次文字，左侧 3px 主题色条标识选择。池塘／暖沙使用各自卡片底色，暗场用稍亮的深色卡面；粗野保留黄色、方角、硬阴影与升起动画。细色条相对卡面和侧栏达到 3:1 对比度，选中标签保持 4.5:1。已带运行竖条的选中卡不重复画第二条选择竖线，错误图标保留状态色。前三主题不恢复滑动 pill，悬浮／按下只影响未选中卡片；工程选择、拖拽与键盘导航语义不变。
 
 默认主题的 id 为 `pond`（v1.3.3 #91，语汇与显示名 池塘/Pond 对齐；#90 先改的显示名）：`ColorTheme` 联合、`DEFAULT_COLOR_THEME`、主题表、设置面板选项、`data-color-theme` 属性与主题桥（§11 的 `theme` 值 / `?theme=`）全部用 `pond`。`lavender` 与 `midnight` 同入 `LEGACY_THEME_NAMES` 静默迁移（存量偏好 `lavender` → `pond`）；Rust `validate_color_theme` 白名单同时容纳新旧值。改名对页面跟随是视觉无操作：页面（Template `theme-follow`）不认识的 id 会被忽略并保持自身默认配色——恰与 pond 同款；Template 仓的 `THEME_PALETTES` 以 `pond` 为主键、`lavender` 为同调色板别名（双向版本偏斜保险，老 App 推 `lavender` 新页面仍跟随）。唯一实质影响：显式分支 `onTheme('lavender')` 的自定义页面在 pond 主题下不再触发回调。
 
@@ -150,13 +154,13 @@ idle | starting | ready | stopping | error
 更改 External OSC target
 ```
 
-（输出设备自 v1.4.0 #58 起是设置面板「音频」栏的全局偏好：随时可改、下次启动生效，不再走 Change/restart；运行中的会话保持其启动时的音频配置。）
+（输出设备与采样率仍是全局偏好，底栏音频面板与设置共用；随时可改，运行保持已应用配置。运行卡选中时可通过「更改」手动重启应用，创作通过手动重启测试应用，不自动重启。）
 
 运行中选卡完全自由：
 
 - 点击工程卡、⌘1..9、⌘O、Finder 拖放与双击 `.pnds` 五条路径统一为「选中 + preflight」：不弹确认框、不重置 session、主视图不从监视页掉回欢迎页；
 - 卡片左缘运行竖线与文件夹「使用中」圆点跟随 session 所属工程（与选中无关），白色选中 pill 独立跟随选中，二者可并存于不同卡；被选工程的 preflight 结果（校验中/错误）当场显示在卡上；
-- 底部设置卡完全跟随选中卡：选中运行卡时维持 Close/Change 与实时音量；选中其他卡时显示该卡的启动配置（音频模式/OSC，声明工程另有 Room 下拉）与 Load 按钮，音量行等待（调音量需切回运行卡）；输出设备与 LAN 地址自 v1.4.0 #58 起迁入设置面板（音频 / 节点栏）；
+- 底栏加载／更改／关闭跟随所选卡，音量始终控制实际运行工程。选中 B 不改变运行 A 的 Monitor、已应用配置或 gain；演出按 manifest 默认模式启动，底栏网络面板保留适用的 OSC、Room、LAN 与入口反馈。
 - 「切换工程必须确认」的契约保留，确认时机在启动动作：按下 Load（或 Enter）且存在 live session 时确认「将先关闭正在运行的工程」，确认后停旧工程并自动启动新工程（选择保持）；上一个工程处于 error 状态时直接启动、不弹确认；
 - restart 过程中必须保留当前工程选中状态和待应用设置，不得让侧栏无故取消选择；停止运行工程时若选中的是另一张卡则保持选中。
 - **待应用设置与确认**：HTTPS 兼容确认等待中及取消后保留设置值与黄色 Change 动作，不发 Stop/Start；只有全部确认通过、实际派发 Stop→Start 时才清除待应用标记。同一工程的 ready→ready 快照（焦点恢复、投影开演、入口/DNS 更新等）继续同步运行事实，但不得清掉待应用标记或覆盖待应用音频模式；进入真实停止/启动等生命周期变更或换为另一工程的快照时清除。
@@ -185,7 +189,7 @@ Rust session manager 是运行状态真源。React 不得用本地 reset 伪造�
 - 设置面板「节点」栏（常显，非网络化用户可忽略）：节点名（App 全局一份，占位符提示本机主机名，必须显式填定才算设定过）、hub 地址（完整 URL）、token（独立字段存储、UI 遮蔽显示、永不拼入 URL、永不出现在日志）、LAN 地址（自侧栏设置卡迁入）；三项节点配置与 LAN 均在下次启动工程时生效，运行中会话的 env 不变；
 - LAN 地址的默认与持久化（#147 真机验收用户报告）：手选地址持久化进偏好（`lanIp`），启动时播种回会话 store——修复前选择只活在内存里，每次启动都归零、Load 按钮灰且无提示；无选择时地址列表落地即**自动选第一项**（会话级默认、不写盘），持久化值永远优先；持久化地址若已不在当前列表，在首次地址刷新前保持可见，刷新即由第一个当前地址接管——绝不让会话绑定到已消失的地址启动；若机器完全没有可用地址（列表为空），Load 按钮保持灰但在按钮下给出可见原因（`sidebar.lanMissingHint`）；
 - 「设置节点」门：选中工程声明了能力且三项（节点名 / hub 地址 / token）任一为空 → 会话按钮变「设置节点」，点击打开设置面板并定位到节点栏；填齐后恢复 Load/Change；Close 不受门影响（运行中会话永远可关）；未声明能力的工程永不拦；门只验齐全、不验连通；Enter 别名同样被门拦截；
-- Room 下拉：侧栏设置卡内、仅声明工程显示；分组号 1 / 2 / 3 按工程持久化（默认 1，崩溃恢复不换组，绝不重置）；App 界面只显示序号，不显示派生房间全名（完整房间名由工程侧 monitor 展示，作为排障护栏）；改动下次启动生效，不 flag Change；
+- Room 下拉：底栏网络面板内、仅声明工程显示；分组号 1 / 2 / 3 按工程持久化（默认 1，崩溃恢复不换组，绝不重置）；App 界面只显示序号，不显示派生房间全名（完整房间名由工程侧 monitor 展示，作为排障护栏）；改动下次启动生效，不 flag Change；
 - 注入契约（四变量、齐全才注入、房间派生 `{manifest.id}_{分组号}`）→ 运行契约 §3；偏好在「节点」栏三项齐全时按 manifest id 记住分组号。
 
 ## 可信 HTTPS 准备行为（#139）
@@ -261,15 +265,15 @@ scsynth 瞬态启动崩溃的自动重试（issue #92；2026-08-30 实测修订�
 
 窗口模式保持无装饰 PNDS 壳层：
 
-- 自绘 traffic lights；
+- 原生 macOS traffic lights，侧栏顶行无其他按钮；旧窗口状态不得恢复无装饰配置；
 - Welcome/Error 使用常开侧栏；ready monitor 使用左边缘 hover 浮出侧栏；
-- 顶部中央显示 `PNDS - <project>` 并作为 drag region；
+- 演出模式无 App 顶栏或顶部 PNDS 字样；创作模式使用 32px 顶部拖动栏，原生红绿灯右侧为工程切换／操作菜单，右侧为可编辑源工程的「Generate .pnds」按钮，打开既有打包面板；Monitor 展开时保留顶栏并禁用工程切换；演出 monitor 移除顶部中间的覆盖元素，运行工程身份保留在无障碍区域名称和作品卡片，拖动使用侧栏留白或底栏空白区域，底栏控件明确排除拖动；控件集中到底栏；
 - 侧栏覆盖 monitor，不改变 monitor 布局；
 - 右下角隐形 resize grip（v1.3.3 #80，用户报告）：无边框透明圆角窗口的角外像素全透明，macOS 把点击穿给下层 app，而系统的斜向 resize 光标恰好显示在角上——用户被引导去点一个点不到的角。grip 是弧内侧约 20px 的隐形命中区（`cursor: nwse-resize`），主键按下走 `startResizeDragging('SouthEast')`；全屏隐藏，其余三角不处理（上两角属标题栏拖拽区）。
 
-全屏入口共三处——macOS Window 菜单项、`⌃⌘F`、侧栏按钮——所有入口必须调用同一 action。全屏切换不 reload monitor。
+全屏由原生窗口按钮、macOS Window 菜单项及 `⌃⌘F` 提供，底栏不再显示全屏按钮。菜单与快捷键沿用既有 action，原生状态统一镜像到 App；全屏切换不 reload monitor。
 
-全屏 title bar：首选实现是进入全屏时动态启用 native decorations/title bar，鼠标靠近顶部时由 macOS 显示原生 unified title bar 和 traffic lights；全屏时侧栏自绘 traffic lights 隐藏；顶部热区优先于左侧 sidebar hover；native title bar 与侧栏不同时显示；退出全屏恢复无装饰窗口。必须先在 macOS release-like 环境验证动态 decorations、透明度、styleMask 与 WKWebView 没有抖动或布局错误。若 Tauri/macOS 无法可靠动态切换，则 fallback：保持无装饰窗口，在顶部 hover 显示自绘 title bar——fallback 仍须满足互斥与三个全屏入口。
+全屏与窗口化使用同一个原生 Overlay shell；fullscreen 保留系统窗口按钮行为，演出侧栏按钮随其显隐。全屏、模式和布局变化不重挂 Monitor。窗口尺寸和位置仍持久化，但 `VISIBLE` 与 `DECORATIONS` 不作为用户偏好恢复；后者避免旧无装饰状态覆盖新界面。
 
 整窗淡入淡出使用 macOS 原生窗口 opacity，而非只给 React 内容加 CSS：
 
@@ -295,7 +299,7 @@ v1.3.0（#56）帮助中心窗口——第二个 webview 窗口（label `help`�
 
 ### 生命周期与单实例
 
-- 入口是侧栏右上角的「打开投影窗口」按钮（原「用默认浏览器打开」位置，浏览器入口与 `sidebar.share`/`shareHint` 文案已彻底移除）；按钮不随会话状态禁用——无演出时窗口自己进入待机。
+- 入口是底栏的「打开投影窗口」按钮（原「用默认浏览器打开」位置，浏览器入口与 `sidebar.share`/`shareHint` 文案已彻底移除）；按钮不随会话状态禁用——无演出时窗口自己进入待机。
 - 单实例：已开再点 = 聚焦（或卡隐藏态时重跑揭示）；不重建。**切换工程窗口不重建、全屏与位置保持**（窗口生命周期与 session 完全解耦），内容随快照过渡。
 - **全屏落定后的 webview 重排抖动（Intel / macOS 13 实测报告；复测仍偶发、退出再进全屏时好时坏）**：WKWebView 的布局间歇性跟不上原生全屏过渡，窗口底部留一条未绘制区（上游 [tauri#14264](https://github.com/tauri-apps/tauri/issues/14264)，open；issue 自述对策即「再 resize 一次」）。App 侧双对策：①Rust 观察投影窗口的 `Resized` 事件做全屏**边沿检测**，落定 **1 秒**后（复测表明白条在过渡**落定**时出现，抖早了没用）把 **webview**（非窗口——全屏画面永不动）边界 +2px 保持 150ms 再弹回、**两轮**（`window.rs::jog_webview_layout`；快速弹回可能赶在丢失的重排看到增长之前）——两次以上真实 setFrame 强制重排；绿钮/⌃⌘F/菜单所有入口都汇到同一事件，全覆盖。②`body` 全局铺 `var(--pnds-bg)` 主题底色：布局迟滞露出的底不再是 UA 默认白条，而是与页面无缝的主题色延续（迟滞仍可能发生，但不可见）。
 - 打开时落在 **App 当前所在显示器**（`currentMonitor()` 居中落位，查询失败回退系统居中）；window-state 插件 denylist 掉 `projection`——跨启动几何持久化不在 v1.5 范围（spec #128），恢复的旧位置会与落位规则打架（帮助窗口仍被跟踪）。
@@ -374,11 +378,13 @@ v1.3.0（#56）帮助中心窗口——第二个 webview 窗口（label `help`�
 
 ## Sidebar
 
-演出侧栏顶部紧凑显示窗口控制、单一投影按钮和手动 monitor Refresh；投影按钮先打开窗口，之后原位切换简介／演出内容，不另设开始按钮；底部保留定稿模式按钮。工程身份由列表与既有 monitor 标题表达，不增加重复工程身份／运行状态行，也不增加 monitor 上下控制栏。帮助通过既有菜单、快捷键与欢迎页入口访问，侧栏无帮助按钮。
+演出工程卡左侧显示当前列表顺序的两位序号（01、02…），随排序更新；运行标记、工具图标、预检错误及 Cmd 数字提示保持独立。设置暂时隐藏开发者工具分类，旧 developer 定位回到通用；创作中的编译与打包入口、原有组件及命令保留。
+
+演出侧栏顶行仅为原生窗口控制留位，不显示 Performance projects 标题或三点按钮；原有作品简介、重命名和移除操作位于作品卡片右键菜单，文件夹和工具管理保持可达。共享底栏包含单一演出动作、Refresh、运行音量、使用音箱图标的音频与网络面板、投影、设置和右下角模式按钮。投影先打开原有单实例窗口，之后同一按钮切换简介／演出；网络触发图标使用 Globe；网络面板包含 LAN、右对齐的 OSC 目标、条件 Room／HTTPS 和与节点设置共用的 Name／Hub Address 输入，编辑仍按下次启动生效并在 blur 保存；Token 仍在节点设置中遮罩显示。设置改为分类导航，面板固定为 768 × 560 CSS px，在 50px 底栏上方的可用区域居中，四周至少留出 24px；小窗口按该区域钳制尺寸，分类内容独立滚动，保留所有原有服务与恢复能力。
 
 演出卡按音频模式、网络、增益排序，音频模式／Local network／Room 的值统一靠逻辑末端对齐，只有一个满宽 Load／Change／Close 动作；External 目标、适用的 Room 分组与可信 HTTPS 入口反馈仍保留。选中与运行分离、替换运行确认、启动门控、错误 Retry 和同步提交锁沿用既有流程；提交尚未收到后端状态时按钮已禁用。输出设备与通道能力在设置「音频」，LAN、节点名、hub 地址与遮罩 token 在设置「节点」，两种模式共用；演出卡的 Local network 下拉编辑同一个全局 LAN 选择。手选地址持久化，当前运行卡选择新地址后标记 Change；其他选择只是下次启动配置，均不即时改变正在运行的 monitor 地址。Room 按工程与分组形成，节点配置与分组在下次启动生效。
 
-运行时侧栏覆盖满窗口 monitor；边缘悬停或按住 Cmd 唤出，指针离开且所有保留条件结束后自动收起。菜单、替换／关停确认、全局设置与退出确认、模式确认及启动／关停命令保持侧栏显示。指针状态独立于这些保留条件，避免弹出层关闭后仍锁定旧 hover。隐藏侧栏使用 inert，退出键盘遍历；显隐只改变覆盖层，不改变 monitor 尺寸、页面实例或导航。
+运行时侧栏覆盖满窗口 monitor；边缘悬停或按住 Cmd 唤出，指针离开且所有保留条件结束后自动收起。菜单、替换／关停确认、全局设置与退出确认、模式确认及启动／关停命令保持侧栏显示。指针状态独立于这些保留条件，避免弹出层关闭后仍锁定旧 hover。隐藏侧栏使用 inert，退出键盘遍历；显隐只改变覆盖层，不改变 monitor 尺寸、页面实例或导航。 拖拽工程时，文件夹投放目标在侧栏右侧展开，不覆盖首张工程卡，也不推动工程列表；命中检测仍使用同一 nav 内的实时目标矩形。拖拽结束后若指针位于实体侧栏外，清除悬停保持。
 
 正常演出不显示常驻 Node/scsynth 技术状态面板。侧栏字体和 App icon 属于发行前人工视觉调整，不是实现任务的阻塞项。
 
@@ -510,3 +516,20 @@ including a prompt before a project chooses its performer ID. A labelled mouse
 single-touch option is enabled for new clients and can be changed per client
 without reloading; it produces untrusted DOM touch events while preserving native
 form controls. This is input simulation, not mobile browser/hardware emulation.
+
+## Offline module addition (#210)
+
+Writable creation workspaces offer five actual module groups at the Modules
+heading. The dialog lists frozen source/version, file targets and prerequisites.
+Adding copies only embedded sources into `modules/pnds-<id>/`, records provenance
+and a pending external-agent wiring/validation task, and refreshes the real tree.
+Wiring/verification are never inferred from copying. Existing targets conflict,
+recognized additions preserve customization, and partial handoff failure can
+retry without recopying or duplicating tasks. Bundle/utility/read-only sources,
+escaping links and obsolete identities cannot write. Entry files, manifest,
+dependency/Skills installation and runtime are unchanged. See
+[creation-workspace.md](./creation-workspace.md#offline-module-files-210).
+
+Release acceptance, including user-reported native evidence and the still
+required Apple Silicon/Intel clean-environment runs, is tracked separately in
+[#164 acceptance](../acceptance/164-v1.6.0-workflows.md).

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { onWindowState } from '@/lib/events'
 import { Toaster } from 'sonner'
 import { useSessionStore } from '@/store/session-store'
@@ -13,7 +13,9 @@ import { loadPreferences } from '@/lib/preferences'
 import { ensureUtilitiesFolder } from '@/lib/utilities-folder'
 import { cn } from '@/lib/utils'
 import { ReadmePanel } from '@/components/readme'
-import { Sidebar } from './Sidebar'
+import { DesktopBar } from './DesktopBar'
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
+import { useTranslation } from 'react-i18next'
 import { MonitorView } from './MonitorView'
 import { HoverSidebar } from './HoverSidebar'
 import { ResizeGrip } from './ResizeGrip'
@@ -40,6 +42,9 @@ import {
  * iframe can flash between the two layers.
  */
 export function AppShell() {
+  const { t } = useTranslation()
+  const [controlsOpen, setControlsOpen] = useState(false)
+  const [introOpen, setIntroOpen] = useState(false)
   const sessionMirror = useRef<SessionSnapshotMirror | null>(null)
   const sessionStatus = useSessionStore(state => state.sessionStatus)
   // §9.3: identifies the current loading session; a Retry bumps it so the
@@ -175,146 +180,81 @@ export function AppShell() {
     return () => clearInterval(id)
   }, [sessionStatus])
 
-  // ── Loading / Running / Stopping (the splash overlays the monitor
-  //    until the reveal gate releases — #50). ONE branch covers the
-  //    three states so the splash instance SURVIVES the transitions:
-  //    the children keep fixed positions (monitor / splash / sidebar),
-  //    and a remounted splash would replay its entrance right when the
-  //    held composition should hand over to the closure. A stopping
-  //    session keeps the just-live monitor mounted so the StopCover
-  //    dissolves the outgoing page instead of cutting it. ──
-  if (
-    creationActive ||
-    sessionStatus === 'starting' ||
+  const monitorVisible =
     sessionStatus === 'ready' ||
-    sessionStatus === 'stopping'
-  ) {
-    return (
-      <>
-        <div
-          data-app-frame=""
-          className={cn(
-            'relative h-screen w-screen overflow-hidden bg-(--pnds-bg)',
-            creationActive && creationWorkspace && 'creation-runtime-frame',
-            creationActive && monitorExpanded && 'creation-monitor-expanded',
-            !fullscreen && 'rounded-[var(--app-corner-radius)]'
-          )}
-        >
-          {/* §7.4: fullscreen toggles dissolve at the NSWindow layer
-              (Rust fades the whole window out, macOS switches, window
-              fades in). MonitorView is keyed by fullscreen so a
-              popped-out overlay sidebar is dropped instantly. Mounts
-              once ready — #50: its iframe loads beneath the splash,
-              and its own load event releases the gate — and LINGERS
-              through stopping so the fading cover dissolves the old
-              page (its frozen iframe paints long after the server is
-              gone; a mid-stop address fallback can at worst navigate
-              the dying page, already hidden under the cover). */}
-          {(sessionStatus === 'ready' ||
-            (sessionStatus === 'stopping' && health !== null)) && (
-            <MonitorView key={fullscreen ? 'fullscreen' : 'windowed'} />
-          )}
-          {creationActive &&
-            creationWorkspace &&
-            sessionStatus !== 'ready' &&
-            !(sessionStatus === 'stopping' && health !== null) && (
-              <CreationTestIdle />
-            )}
-          {creationActive && <CreationView />}
-          {/* #50: the splash sits over the already-mounting monitor and
-              cross-fades away (LoadingScreen owns the release gating)
-              once the iframe beneath is ready — the monitor's first
-              paint shows through the fade instead of flashing in
-              blank. Same child position in the starting-only frames,
-              so the transition never remounts it. Stopping swaps in
-              the plain StopCover (user report): the outgoing monitor
-              fades under it, and the next state supersedes it. */}
-          {/* The splash has precedence while it is up (a stop confirmed
-              from under it keeps it — no monitor swap mid-splash); the
-              StopCover only takes over when the outgoing monitor is
-              actually showing. */}
-          {!creationActive && !loadingDone ? (
-            <div className="absolute inset-0 z-50">
-              <LoadingScreen
-                key={runId}
-                onDissolveEnd={() => setLoadingDone(true)}
-              />
-            </div>
-          ) : (
-            !creationActive &&
-            sessionStatus === 'stopping' &&
-            health !== null && <StopCover phase="in" />
-          )}
-          {/* §10.1: hover-revealed sidebar stays reachable during
-              loading, including fullscreen. Ready frames drop it here —
-              MonitorView brings its own; stopping keeps MonitorView's. */}
-          {!creationActive && sessionStatus === 'starting' && <HoverSidebar />}
-          {/* #80: the rounded-corner resize grip — windowed frames only
-              (fullscreen has square corners and no resize affordance). */}
-          {!fullscreen && <ResizeGrip />}
-        </div>
-        <Toaster position="bottom-right" />
-      </>
-    )
-  }
-
-  // ── Error ──
-  if (sessionStatus === 'error') {
-    return (
-      <>
-        <div
-          data-app-frame=""
-          className={cn(
-            'flex h-screen w-screen overflow-hidden bg-(--pnds-bg)',
-            !fullscreen && 'rounded-[var(--app-corner-radius)]'
-          )}
-        >
-          {/* §7.4: fullscreen drops the sidebar instantly (no transition);
-              the overlay sidebar in MonitorView still pops in on hover. */}
-          {!fullscreen && <Sidebar variant="static" />}
-          <main className="flex-1 overflow-auto">
-            <ErrorScreen />
-          </main>
-          {!fullscreen && <ResizeGrip />}
-        </div>
-        <Toaster position="bottom-right" />
-      </>
-    )
-  }
-
-  // ── Welcome (sidebar always open, full height) ──
+    (sessionStatus === 'stopping' && health !== null)
+  const preparing = sessionStatus === 'starting' || sessionStatus === 'stopping'
   return (
     <>
       <div
         data-app-frame=""
         className={cn(
-          'relative flex h-screen w-screen overflow-hidden bg-(--pnds-bg)',
+          'desktop-frame relative h-screen w-screen overflow-hidden bg-(--pnds-bg)',
+          creationActive && 'creation-shell-frame',
+          creationActive && creationWorkspace && 'creation-runtime-frame',
+          creationActive && monitorExpanded && 'creation-monitor-expanded',
           !fullscreen && 'rounded-[var(--app-corner-radius)]'
         )}
       >
-        {/* Start page: the sidebar stays PERMANENTLY visible, including in
-          fullscreen — only loaded sessions retract it on fullscreen. */}
-        <Sidebar variant="static" />
-        {/* relative: the cover README's edge-anchored root pins to this
-            box — its geometry must survive every engine's flex quirks. */}
-        <main className="relative flex-1 overflow-auto">
-          {/* v1.5.0 (#125): the main area's README display routing — a
-              selected card shows the project's README.md, a drilled-in
-              folder its 自述; the starting page is the home fallback. */}
-          <ReadmePanel />
-        </main>
-        {/* #user-report: a stop that lands on Welcome (close project)
-            uncovers it — the cover fades out over the freshly mounted
-            start page instead of cutting to it. */}
-        {stopUncoverPending && (
+        {/* Fixed sibling and key: chrome, layout and fullscreen never remount the runtime page. */}
+        {monitorVisible && <MonitorView />}
+        {creationActive && creationWorkspace && !monitorVisible && (
+          <CreationTestIdle />
+        )}
+        {creationActive && <CreationView />}
+        {!creationActive && !monitorVisible && !preparing && (
+          <main className="desktop-performance-main">
+            {sessionStatus === 'error' ? <ErrorScreen /> : <ReadmePanel />}
+          </main>
+        )}
+        {!creationActive &&
+          !loadingDone &&
+          (preparing || sessionStatus === 'ready') && (
+            <div className="desktop-runtime-cover absolute inset-0 z-50">
+              <LoadingScreen
+                key={runId}
+                onDissolveEnd={() => setLoadingDone(true)}
+              />
+            </div>
+          )}
+        {!creationActive &&
+          loadingDone &&
+          sessionStatus === 'stopping' &&
+          health !== null && <StopCover phase="in" />}
+        {!creationActive && !preparing && stopUncoverPending && (
           <StopCover
             phase="out"
             onFadedOut={() => useSessionStore.getState().clearStopUncover()}
           />
         )}
+        {!creationActive && (
+          <HoverSidebar
+            held={controlsOpen || introOpen}
+            onShowReadme={() => setIntroOpen(true)}
+          />
+        )}
+        <DesktopBar onPopupOpenChange={setControlsOpen} />
         {!fullscreen && <ResizeGrip />}
       </div>
-      <Toaster position="bottom-right" />
+      <Dialog open={introOpen && !creationActive} onOpenChange={setIntroOpen}>
+        <DialogContent className="desktop-intro-dialog">
+          <DialogTitle>{t('desktop.projectAbout')}</DialogTitle>
+          <div className="relative min-h-0 flex-1 overflow-auto">
+            <ReadmePanel />
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Toaster
+        position="bottom-right"
+        style={
+          {
+            '--normal-bg': 'var(--pnds-card)',
+            '--normal-bg-hover': 'var(--pnds-pill-hover)',
+            '--normal-text': 'var(--pnds-text)',
+            '--normal-border': 'var(--pnds-border)',
+          } as CSSProperties
+        }
+      />
     </>
   )
 }
