@@ -23,6 +23,13 @@ import { useSessionStore } from '@/store/session-store'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -204,24 +211,29 @@ export function CreationFileEditor({
             <>
               <label className="flex items-center gap-2 text-sm">
                 {t('creation.readme.language')}
-                <select
-                  className="pnds-focus-ring rounded border bg-(--pnds-card) p-1"
+                <Select
                   value={projectReadmeLocale(file.path) ?? readmeLocale}
-                  onChange={event => {
-                    useCreationFilesStore
-                      .getState()
-                      .setReadmeLocale(event.target.value)
+                  onValueChange={locale => {
+                    useCreationFilesStore.getState().setReadmeLocale(locale)
                     const next = resolveCreationReadme(
                       workspace?.files.map(file => file.path) ?? [],
-                      event.target.value
+                      locale
                     )
                     if (next)
                       useCreationFilesStore.getState().setActivePath(next)
                   }}
                 >
-                  <option value="en">English</option>
-                  <option value="zh-CN">简体中文</option>
-                </select>
+                  <SelectTrigger
+                    aria-label={t('creation.readme.language')}
+                    size="sm"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="en">English</SelectItem>
+                    <SelectItem value="zh-CN">简体中文</SelectItem>
+                  </SelectContent>
+                </Select>
               </label>
               <p className="text-xs">
                 {t('creation.readme.resolvedFile', { path: file.path })}

@@ -1,5 +1,11 @@
 # Player Identity and Seats
 
+## v1.6.1 standard module
+
+Offline release 0.2.0 is added to `modules/pnds-players/`, with sources, compatibility and bilingual README of the same version. Standard server `attachPlayers` accepts project-owned admission, release, control/action and snapshot policy. Browser `PNDSPlayers.connectPlayer` and `connectObserver` separate performer identity from observation. Identities can be shared and need not map to seats, output channels or voices. `continuousFilter` is opt-in; repeated discrete payloads use `sendAction` and remain separate. `players.js` and `seats-store.js` are optional helpers only for projects explicitly choosing Template seat policy. Use the added README for complete inputs/outputs, wiring and cleanup. Sources belong to the project; file addition does not establish wiring or runtime acceptance.
+
+## Template example implementation
+
 How does a performer's phone end up back in the same seat, on the same output channel, after a screen lock, a dropped connection, even a Project restart? The answer is spread across four files; this chapter tells it as one story:
 
 | File                 | Role                                                             |

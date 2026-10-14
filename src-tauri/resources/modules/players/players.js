@@ -1,3 +1,5 @@
+// OPTIONAL Template exclusive-seat policy helper, not a module requirement.
+// A work may instead issue arbitrary/shared identities in policy.join.
 // Client identity registry.
 //
 // Reusable PNDS core: allocates a numeric client id for every joined
@@ -118,6 +120,7 @@ class PlayerRegistry {
 
     this.assignments.delete(id);
     this.assignments.set(toId, assignment);
+    this.byToken.set(assignment.claimToken, toId);
 
     return true;
   }

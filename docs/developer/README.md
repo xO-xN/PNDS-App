@@ -22,6 +22,7 @@ v1.6.0 的 #150–#163 与 UI 收口 #195 已关闭；首批真实模块添加 #
 - **useState / Zustand / 持久化怎么选，selector 语法与 getState** → [state-management.md](./state-management.md)
 - **两窗口快照恢复、请求交错与卸载清理** → [state-management.md](./state-management.md#session-snapshot-mirrors)
 - **工程预检归属、迟到结果与配置准备** → [state-management.md](./state-management.md#project-preflight-ownership)
+- **离线标准模块、旧版来源保护与外部 Skills 分发** → [standard-modules.md](./standard-modules.md)
 - **创作阅读、可信工程身份、文件限制与异步切换** → [creation-workspace.md](./creation-workspace.md)
 - **创作草稿、手动保存、重命名与磁盘版本冲突** → [creation-workspace.md](./creation-workspace.md#manual-save-rename-and-disk-conflicts-154)
 - **错误如何传播、用户反馈与重试模式** → [error-handling.md](./error-handling.md)

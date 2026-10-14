@@ -1,5 +1,11 @@
 # Theme Following
 
+## v1.6.1 standard module
+
+Offline release 0.2.0 is added to `modules/pnds-theme-follow/`, with sources, compatibility and bilingual README of the same version. The standard release preserves first-frame delivery and Host protocol 1, with CSS mapping, custom drawing callbacks and `PNDS_THEME.dispose()`. Change callbacks are idempotent; reloading releases old listeners and malformed messages are ignored. Load it only in monitor pages; performers do not adopt it automatically. Use the added README for complete inputs/outputs, wiring and cleanup. Sources belong to the project; file addition does not establish wiring or runtime acceptance.
+
+## Template example implementation
+
 The App ships four themes (pond / sand / stage / brutal; pond's id was `lavender` before v1.3.3 (#91) — a page that does not recognize an id keeps its own default palette, which is exactly the pond look, so the rename is visually a no-op). Theme following recolours the monitor page to match the App's current theme, while performer pages keep the Project's own colours.
 
 ## Load it on the monitor page only

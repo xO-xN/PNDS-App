@@ -1,0 +1,6 @@
+id: no-native-select
+valid:
+  - '<Select value={mode}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">None</SelectItem></SelectContent></Select>'
+invalid:
+  - '<select value={mode} onChange={change}><option value="none">None</option></select>'
+  - '<select aria-label="Audio mode" />'

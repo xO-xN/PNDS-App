@@ -17,6 +17,7 @@ import modulesLocaleFollow from '../../docs/zh-CN/modules/locale-follow.md?raw'
 import modulesProjectionSurface from '../../docs/zh-CN/modules/projection-surface.md?raw'
 import modulesMonitorState from '../../docs/zh-CN/modules/monitor-state.md?raw'
 import modulesAudio from '../../docs/zh-CN/modules/audio.md?raw'
+import modulesHub from '../../docs/zh-CN/modules/hub.md?raw'
 import referenceReadme from '../../docs/zh-CN/reference/README.md?raw'
 import referenceDigitalScore from '../../docs/zh-CN/reference/digital-score.md?raw'
 import referenceNetwork from '../../docs/zh-CN/reference/network.md?raw'
@@ -55,6 +56,7 @@ const RAW_CORPUS: Record<string, string> = {
   'modules-projection-surface': modulesProjectionSurface,
   'modules-monitor-state': modulesMonitorState,
   'modules-audio': modulesAudio,
+  'modules-hub': modulesHub,
   'reference-readme': referenceReadme,
   'reference-digital-score': referenceDigitalScore,
   'reference-network': referenceNetwork,
@@ -84,6 +86,7 @@ const DOC_PATHS: Record<string, string> = {
   'modules-projection-surface': 'modules/projection-surface.md',
   'modules-monitor-state': 'modules/monitor-state.md',
   'modules-audio': 'modules/audio.md',
+  'modules-hub': 'modules/hub.md',
   'reference-readme': 'reference/README.md',
   'reference-digital-score': 'reference/digital-score.md',
   'reference-network': 'reference/network.md',
@@ -116,7 +119,7 @@ describe('help corpus at real scale (#53)', () => {
   const index = buildHelpIndex(corpus)
 
   it('places every shipped document and derives its own title', () => {
-    expect(corpus).toHaveLength(25)
+    expect(corpus).toHaveLength(26)
     expect(corpus[0]?.title).toBe('PNDS App 使用教程')
     expect(corpus[1]?.title).toBe('PNDS Template 创作指南')
     expect(corpus[2]?.title).toBe('给工程写 README')

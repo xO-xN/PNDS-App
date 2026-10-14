@@ -1,5 +1,11 @@
 # Language Following
 
+## v1.6.1 standard module
+
+Offline release 0.2.0 is added to `modules/pnds-locale-follow/`, with sources, compatibility and bilingual README of the same version. The standard release preserves first-frame delivery and Host protocol 1, with language resolution, project-supported language/fallback options, callbacks and `PNDS_LOCALE.dispose()`. The project owns translations; repeated resolved values do not repeat callbacks. Load it only in monitor pages. Use the added README for complete inputs/outputs, wiring and cleanup. Sources belong to the project; file addition does not establish wiring or runtime acceptance.
+
+## Template example implementation
+
 When the App's interface language switches, the monitor page follows into the matching language; performer pages keep the Project's own language.
 
 ## Load it on the monitor page only

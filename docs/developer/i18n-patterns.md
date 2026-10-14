@@ -161,7 +161,7 @@ const rtlLanguages = ['ar', 'he', 'fa', 'ur'] // Add your RTL language
 
 ### Step 4: Add It to the Settings Panel
 
-The General section of the settings panel (`/src/components/settings/SettingsPanel.tsx`) lists the selectable languages. Add a `<NativeSelectOption>` and extend the `LanguageSetting` union in `/src/store/settings-store.ts`.
+The General section of the settings panel (`/src/components/settings/SettingsPanel.tsx`) lists the selectable languages. Add a `<SelectItem>` and extend the `LanguageSetting` union in `/src/store/settings-store.ts`.
 
 ## Runtime Language Switching
 
@@ -232,7 +232,7 @@ See `/src/i18n/language-init.ts` for the implementation.
 
 ## Language Selector
 
-The language selector lives in the settings panel's General section (Settings → General, `/src/components/settings/SettingsPanel.tsx`). It is a `NativeSelect` whose options are the `LanguageSetting` values (`system`, `en`, `zh-CN`); choosing one calls `applyLanguageSetting()` — the single entry point described in [Runtime Language Switching](#runtime-language-switching). There is no separate per-component switcher.
+The language selector lives in the settings panel's General section (Settings → General, `/src/components/settings/SettingsPanel.tsx`). It uses the App `Select` popup with the `LanguageSetting` values (`system`, `en`, `zh-CN`); choosing one calls `applyLanguageSetting()` — the single entry point described in [Runtime Language Switching](#runtime-language-switching). README language selects the project's document variant through the same App popup.
 
 ## TypeScript Support
 

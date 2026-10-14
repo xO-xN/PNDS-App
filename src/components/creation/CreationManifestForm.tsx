@@ -11,7 +11,13 @@ import {
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 /**
  * #158: the manifest declaration form — a pure view over the shared
@@ -91,20 +97,26 @@ export function CreationManifestForm({
           <Label htmlFor="manifest-form-default-mode">
             {t('creation.manifest.defaultMode')}
           </Label>
-          <NativeSelect
-            id="manifest-form-default-mode"
-            value={model.defaultMode}
-            onChange={event => write('defaultMode', event.target.value)}
+          <Select
+            value={model.defaultMode || 'undeclared'}
+            onValueChange={value =>
+              write('defaultMode', value === 'undeclared' ? '' : value)
+            }
           >
-            <NativeSelectOption value="">
-              {t('creation.manifest.modePlaceholder')}
-            </NativeSelectOption>
-            {MANIFEST_MODES.map(mode => (
-              <NativeSelectOption key={mode} value={mode}>
-                {t(`creation.testMode.${mode}`)}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
+            <SelectTrigger id="manifest-form-default-mode">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="undeclared">
+                {t('creation.manifest.modePlaceholder')}
+              </SelectItem>
+              {MANIFEST_MODES.map(mode => (
+                <SelectItem key={mode} value={mode}>
+                  {t(`creation.testMode.${mode}`)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         <div className="creation-manifest-field">
           <span className="creation-manifest-span-label">

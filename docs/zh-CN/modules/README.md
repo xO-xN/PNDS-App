@@ -4,6 +4,12 @@
 
 术语沿用 App 的统一叫法：座位（代码里是 seat）、claim token（中英文都不译）、performer / monitor（两种页面角色，直接用英文）。
 
+## v1.6.1 离线标准模块
+
+App 提供 QR、客户端连接与身份恢复、monitor 主题、monitor 语言、monitor 视图状态，以及可选 hub 六个独立条目。通过创作模式添加到 `modules/pnds-<id>/`；每项附带实际源码、双语 README、`compatibility.json` 和 `pnds-module.json`。兼容声明分别列出模块版本、Host 协议、运行依赖与作品适配条件，模块版本不同于 App 版本。接线以已加入目录的同版本 README 为准。
+
+首批旧版来源记录继续可读，App 展示实际已加入版本并保留作者源码和原交接任务。不会自动升级、布线、安装依赖或启动工程。来源不明或文件冲突交给外部 agent；文件存在不代表已接线、已验证或可分发。下文对 Template 独占座位、声道和页面的说明仅描述示例作品策略。投影、诊断与音频仍沿用既有基础设施，不增加为可添加模块。
+
 ## 篇章
 
 | 篇章                                   | 覆盖文件                                                                      | 一句话                            |
@@ -15,6 +21,7 @@
 | [投影面](./projection-surface.md)      | 页面入口（如 `public/monitor.js`）                                            | monitor 页为场地屏分支渲染        |
 | [monitor 视图状态](./monitor-state.md) | `lib/monitor-state.js`、`public/client.js`（monitor 侧）                      | monitor 页多副本视图一致          |
 | [音频：三模式与作品层](./audio.md)     | `audio/controller.js`                                                         | 创作者改得最多的文件              |
+| [hub](./hub.md)                        | `modules/pnds-hub/`                                                           | 可选远程节点与事件                |
 
 ## 与其他文档的分工
 

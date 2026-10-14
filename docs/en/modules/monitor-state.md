@@ -1,5 +1,11 @@
 # Monitor View State
 
+## v1.6.1 standard module
+
+Offline release 0.2.0 is added to `modules/pnds-monitor-state/`, with sources, compatibility and bilingual README of the same version. The standard release uses independent `monitor-client.js` and `PNDSMonitorState.connectMonitorState` rather than copying a mixed performer client. Attach `attachMonitorState` to a dedicated monitor namespace with declared keys, defaults, event names and optional validators. Snapshots live only for the server session; unknown/invalid updates preserve state. Use the added README for complete inputs/outputs, wiring and cleanup. Sources belong to the project; file addition does not establish wiring or runtime acceptance.
+
+## Template example implementation
+
 One monitor URL lives as several copies: the App's main-window iframe, the App's projection-window iframe, the fresh copy a ⌘⇧R reload produces, a browser tab opened in rehearsal. With view state (view toggles, debug picks) held page-locally, every copy starts from its own defaults — what the conductor tuned in the App's monitor has to be re-tuned with a mouse on the projection copy, and an explicit reload throws the tuning back to the defaults.
 
 The monitor view state moves that state to **the work's own server** as the single source of truth: any copy connecting receives the current snapshot, any copy's adjustment is broadcast to all of them at once; pages render from the server state and report adjustments instead of mutating. Every copy stays consistent, and a reload loses nothing.

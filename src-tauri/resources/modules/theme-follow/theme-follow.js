@@ -17,7 +17,7 @@
 // offline and the App never installs dependencies). UMD-shaped like
 // the template family's shared.js: a browser global
 // (window.PNDS_THEME) that self-wires on load, and a Node module for
-// tests. It lives in lib/ (reusable core) and is served to the browser
+// tests. The original lives in lib/; this release lives in modules/ (reusable core) and is served to the browser
 // by the score server at GET /__pnds/theme-follow.js — the App-contract
 // namespace it shares with /__pnds/health. Load it in the monitor page
 // only; performer-facing pages never load it.
@@ -44,36 +44,11 @@
     return
   }
 
-  root.PNDS_THEME = api
-
-  // Self-wiring (monitor page): paint the first frame from ?theme=<name>
-  // when present, then follow every theme message. One listener, values
-  // applied idempotently — re-delivery lands on the same state.
-  const options = root.PNDS_THEME_OPTIONS || {}
-  const applyVariables = options.applyVariables !== false
-
-  const deliver = (name, palette) => {
-    if (applyVariables) {
-      const variables = api.variablesFromPalette(palette, options)
-      for (const key of Object.keys(variables)) {
-        root.document.documentElement.style.setProperty(key, variables[key])
-      }
-    }
-    if (typeof options.onTheme === 'function') {
-      options.onTheme(name, palette)
-    }
+  if (root.PNDS_THEME && typeof root.PNDS_THEME.dispose === 'function') {
+    root.PNDS_THEME.dispose()
   }
-
-  const initialName = api.initialTheme(root.location.search)
-  if (initialName) {
-    deliver(initialName, api.THEME_PALETTES[initialName])
-  }
-
-  root.addEventListener('message', (event) => {
-    const received = api.themeFromMessage(event.data)
-    if (received) {
-      deliver(received.theme, received.palette)
-    }
+  root.PNDS_THEME = Object.assign({}, api, {
+    dispose: api.attach(root, root.PNDS_THEME_OPTIONS || {}),
   })
 })(typeof self !== 'undefined' ? self : this, () => {
   // The message protocol (spec §5.3).
@@ -144,6 +119,10 @@
       return null
     }
     if (data.palette === null || typeof data.palette !== 'object' || Array.isArray(data.palette)) {
+      return null
+    }
+
+    if (!Object.keys(data.palette).length || Object.values(data.palette).some(value => typeof value !== 'string' || !value.trim())) {
       return null
     }
 
@@ -279,7 +258,7 @@
   THEME_PALETTES.lavender = THEME_PALETTES.pond
 
   function initialTheme(search) {
-    const match = /[?&]theme=([a-z0-9-]+)/i.exec(search || '')
+    const match = /[?&]theme=([a-z0-9-]+)(?=&|$)/i.exec(search || '')
     // Theme names are lowercase; tolerate any casing a future sender
     // might carry.
     const name = match && match[1].toLowerCase()
@@ -291,7 +270,33 @@
     return name ? variablesFromPalette(THEME_PALETTES[name], options) : null
   }
 
+  // Returns an idempotent disposer; callbacks receive each changed value once.
+  function attach(root, options = {}) {
+    let last = null
+    const deliver = (name, palette) => {
+      const key = JSON.stringify([name, Object.keys(palette).sort().map(key => [key, palette[key]])])
+      if (key === last) return
+      last = key
+      if (options.applyVariables !== false) {
+        const variables = variablesFromPalette(palette, options)
+        for (const key of Object.keys(variables)) {
+          root.document.documentElement.style.setProperty(key, variables[key])
+        }
+      }
+      if (typeof options.onTheme === 'function') options.onTheme(name, palette)
+    }
+    const receive = (event) => {
+      const received = themeFromMessage(event && event.data)
+      if (received) deliver(received.theme, received.palette)
+    }
+    const initial = initialTheme(root.location.search)
+    if (initial) deliver(initial, THEME_PALETTES[initial])
+    root.addEventListener('message', receive)
+    return () => root.removeEventListener('message', receive)
+  }
+
   return {
+    attach,
     THEME_PALETTES,
     DEFAULT_VARIABLES,
     themeFromMessage,

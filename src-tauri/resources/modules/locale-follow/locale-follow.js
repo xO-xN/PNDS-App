@@ -17,7 +17,7 @@
 // copied between PNDS projects (no shared package: performances run
 // offline and the App never installs dependencies). UMD-shaped like
 // lib/theme-follow.js: a browser global (window.PNDS_LOCALE) that
-// self-wires on load, and a Node module for tests. It lives in lib/
+// self-wires on load, and a Node module for tests. The original lives in lib/; this release lives in modules/
 // (reusable core) and is served to the browser by the score server at
 // GET /__pnds/locale-follow.js — the App-contract namespace it shares
 // with /__pnds/health and /__pnds/theme-follow.js. Load it in the
@@ -45,37 +45,11 @@
     return
   }
 
-  root.PNDS_LOCALE = api
-
-  // Self-wiring (monitor page): resolve the ?lang=<code> first frame
-  // when present, then follow every locale message. One listener,
-  // values applied idempotently — re-delivery lands on the same state.
-  const options = root.PNDS_LOCALE_OPTIONS || {}
-  const applyLang = options.applyLang !== false
-
-  const deliver = (code) => {
-    const resolved = api.resolveLocale(code, options)
-    if (resolved === null) {
-      return
-    }
-    if (applyLang) {
-      root.document.documentElement.lang = resolved
-    }
-    if (typeof options.onLocale === 'function') {
-      options.onLocale(resolved, code)
-    }
+  if (root.PNDS_LOCALE && typeof root.PNDS_LOCALE.dispose === 'function') {
+    root.PNDS_LOCALE.dispose()
   }
-
-  const initialCode = api.initialLocale(root.location.search)
-  if (initialCode) {
-    deliver(initialCode)
-  }
-
-  root.addEventListener('message', (event) => {
-    const received = api.localeFromMessage(event.data)
-    if (received) {
-      deliver(received.locale)
-    }
+  root.PNDS_LOCALE = Object.assign({}, api, {
+    dispose: api.attach(root, root.PNDS_LOCALE_OPTIONS || {}),
   })
 })(typeof self !== 'undefined' ? self : this, () => {
   // The message protocol. Field naming follows the theme bridge
@@ -97,7 +71,7 @@
     if (data.type !== MESSAGE_TYPE || data.version !== MESSAGE_VERSION) {
       return null
     }
-    if (typeof data.locale !== 'string' || data.locale === '') {
+    if (typeof data.locale !== 'string' || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/i.test(data.locale)) {
       return null
     }
 
@@ -109,7 +83,7 @@
   // never throw on malformed input; casing is passed through and
   // normalized by resolveLocale.
   function initialLocale(search) {
-    const match = /[?&]lang=([a-z0-9-]+)/i.exec(search || '')
+    const match = /[?&]lang=([a-z0-9]+(?:-[a-z0-9]+)*)(?=&|$)/i.exec(search || '')
     return match ? match[1] : null
   }
 
@@ -124,12 +98,11 @@
       return null
     }
 
-    const locales =
-      options && Array.isArray(options.locales) ? options.locales : DEFAULT_LOCALES
-    const fallback =
-      options && typeof options.fallback === 'string' && options.fallback !== ''
-        ? options.fallback
-        : DEFAULT_FALLBACK
+    const supplied = options && Array.isArray(options.locales) ? options.locales : DEFAULT_LOCALES
+    const valid = supplied.filter(locale => typeof locale === 'string' && /^[a-z0-9]+(?:-[a-z0-9]+)*$/i.test(locale))
+    const locales = valid.length ? valid : DEFAULT_LOCALES
+    const preferred = options && typeof options.fallback === 'string' ? options.fallback : DEFAULT_FALLBACK
+    const fallback = locales.find(locale => locale.toLowerCase() === preferred.toLowerCase()) || locales[0]
     const wanted = code.toLowerCase()
 
     let resolved = null
@@ -156,7 +129,28 @@
     return resolved !== null ? resolved : fallback
   }
 
+  // Returns an idempotent disposer; changed resolved languages notify once.
+  function attach(root, options = {}) {
+    let last = null
+    const deliver = (code) => {
+      const resolved = resolveLocale(code, options)
+      if (resolved === null || resolved === last) return
+      last = resolved
+      if (options.applyLang !== false) root.document.documentElement.lang = resolved
+      if (typeof options.onLocale === 'function') options.onLocale(resolved, code)
+    }
+    const receive = (event) => {
+      const received = localeFromMessage(event && event.data)
+      if (received) deliver(received.locale)
+    }
+    const initial = initialLocale(root.location.search)
+    if (initial) deliver(initial)
+    root.addEventListener('message', receive)
+    return () => root.removeEventListener('message', receive)
+  }
+
   return {
+    attach,
     DEFAULT_LOCALES,
     DEFAULT_FALLBACK,
     localeFromMessage,

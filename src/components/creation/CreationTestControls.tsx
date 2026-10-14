@@ -8,7 +8,13 @@ import {
   fixedGainFrom,
   setMasterVolumeTo,
 } from '@/lib/volume-control'
-import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import type { AudioMode } from '@/lib/tauri-bindings'
 import { Info, Play, RefreshCw, RotateCcw, Square } from 'lucide-react'
@@ -87,22 +93,27 @@ export function CreationTestControls({
             <h2>{t('creation.liveTest')}</h2>
             <label className="creation-test-mode">
               <span>{t('creation.testAudioLabel')}</span>
-              <NativeSelect
-                aria-label={t('creation.testAudioMode')}
+              <Select
                 value={mode}
                 disabled={busy || loading || !manifest}
-                onChange={event =>
-                  useCreationTestStore
-                    .getState()
-                    .setMode(event.target.value as AudioMode)
+                onValueChange={value =>
+                  useCreationTestStore.getState().setMode(value as AudioMode)
                 }
               >
-                {manifest?.audio.supportedModes.map(option => (
-                  <NativeSelectOption key={option} value={option}>
-                    {t(`creation.testMode.${option}`)}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
+                <SelectTrigger
+                  aria-label={t('creation.testAudioMode')}
+                  size="sm"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {manifest?.audio.supportedModes.map(option => (
+                    <SelectItem key={option} value={option}>
+                      {t(`creation.testMode.${option}`)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </label>
             <span
               role="status"
