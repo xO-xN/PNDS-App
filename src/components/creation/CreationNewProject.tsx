@@ -110,7 +110,7 @@ export function CreationNewProject({
               {(['blank', 'classic'] as const).map(item => (
                 <label
                   key={item}
-                  className="grid cursor-pointer gap-1 rounded-md border border-border p-3 text-sm has-[:checked]:border-primary"
+                  className="grid gap-1 rounded-md border border-border p-3 text-sm has-[:checked]:border-primary"
                 >
                   <span className="flex items-center gap-2">
                     <input

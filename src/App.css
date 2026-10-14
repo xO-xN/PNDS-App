@@ -294,12 +294,12 @@
     color: inherit;
   }
 
-  /* Allow text selection in specific areas. Range inputs are excluded at
-     the source: a slider is a control, not a text field, and this layered
+  /* Allow text selection in specific areas. Range and radio inputs are excluded
+     at the source: these are controls, not text fields, and this layered
      cursor:text !important beats any unlayered !important (the layer
      comparison inverts for important declarations), so excluding here is
      the only fix that actually holds (#30 feedback, re-fixed). */
-  input:not([type='range']),
+  input:not([type='range']):not([type='radio']),
   textarea,
   [contenteditable='true'] {
     user-select: text !important;

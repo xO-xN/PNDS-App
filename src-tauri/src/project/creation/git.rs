@@ -430,9 +430,9 @@ fn decode(bytes: Vec<u8>) -> GitResult<String> {
 
 impl GitReader {
     fn isolated(&self, directory: &File) -> GitResult<Self> {
-        // Status and worktree diff can invoke clean/process filters as well as
-        // fsmonitor. Discover config keys without running any helpers, then
-        // neutralize every configured driver for the entire inspection job.
+        // Object reads can hydrate partial clones even on Git versions that
+        // ignore GIT_NO_LAZY_FETCH. Reject their configuration before any
+        // status/diff read; discover and neutralize filters without helpers.
         let (exit, bytes) = self.run(
             directory,
             &[
@@ -441,7 +441,7 @@ impl GitReader {
                 "--null",
                 "--name-only",
                 "--get-regexp",
-                "^filter\\.",
+                "^(filter\\.|extensions\\.partialclone$|remote\\..*\\.(promisor|partialclonefilter)$)",
             ],
         )?;
         if !exit.success() && exit.code() != Some(1) {
@@ -450,7 +450,12 @@ impl GitReader {
         let mut drivers = std::collections::BTreeSet::new();
         for key in bytes.split(|byte| *byte == 0).filter(|key| !key.is_empty()) {
             let key = std::str::from_utf8(key)
-                .map_err(|_| unreadable("Git filter configuration is not UTF-8"))?;
+                .map_err(|_| unreadable("Git inspection configuration is not UTF-8"))?;
+            if key == "extensions.partialclone" || key.starts_with("remote.") {
+                return Err(unreadable(
+                    "Read-only inspection cannot read partial clone repositories with potentially missing objects. Complete the repository using an external Git tool first.",
+                ));
+            }
             if let Some((driver, _)) = key
                 .strip_prefix("filter.")
                 .and_then(|key| key.rsplit_once('.'))
@@ -494,6 +499,10 @@ impl GitReader {
             .env("GIT_CONFIG_GLOBAL", "/dev/null")
             .env("GIT_TERMINAL_PROMPT", "0")
             .env("GIT_ATTR_NOSYSTEM", "1")
+            .env("GIT_NO_LAZY_FETCH", "1")
+            // Deny every transport, including local files and external helpers,
+            // even if configuration changes after the partial-clone probe.
+            .env("GIT_ALLOW_PROTOCOL", "")
             .args([
                 "--no-optional-locks",
                 "--no-pager",

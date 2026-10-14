@@ -114,6 +114,10 @@ new manifest ID. AGENTS, start and implementation docs state that initialization
 already happened; the agent entry retains ADR-0003's installed-contract pointers.
 `docs/template-source.json` records the starting template separately from module
 addition records. Blank records its original v1.6.0 starting source too.
+Generated AGENTS and implementation publication instructions point at the App's
+saved-file `.pnds` workflow and exact shared references. The frozen upstream
+release-workflow and preinstalled-dependency claims are replaced only during
+generation; provenance and frozen source bytes remain unchanged.
 The included tree excludes Git history, local dependencies, seat caches, logs and
 device records; Classic does not adopt the upstream cover as the new project's
 cover. Ordinary opening preserves the existing identity, client key and Git
@@ -854,6 +858,15 @@ creation workspaces. Git children get a cleared environment, disabled system/glo
 configuration, prompts, optional locks, hooks and fsmonitor. Configured clean,
 smudge and process filter drivers are discovered by a read-only config query and
 neutralized for the inspection; diffs also disable external diff and textconv.
+Every child disables lazy fetching and all transports. A read-only config probe
+rejects repositories declaring `extensions.partialClone`, remote `promisor` or
+`partialCloneFilter` before object inspection, returning an explicit unreadable
+detail. This conservative boundary also works with older installed Git versions
+that ignore `GIT_NO_LAZY_FETCH`; creators complete such repositories in their
+external Git tool. Ordinary diff can otherwise download missing objects and
+write the object database even without an explicit fetch action; see Git's
+[partial-clone contract](https://git-scm.com/docs/partial-clone) and
+[transport/lazy-fetch guards](https://git-scm.com/docs/git/2.56.0.html).
 No Git initialization, login, network, commit, branch switch, merge or push command
 is exposed. Each child has a five-second deadline, a separate process group and
 1 MiB caps on stdout and stderr; status stops at 4,096 paths. Binary, non-UTF-8,
@@ -869,10 +882,15 @@ Dialog/workspace/request ownership prevents old status or diff results from
 replacing a newer request or another project's inspection. Close restores focus
 to the project menu. Text stays in a keyboard-scrollable plain-text preview and
 uses the existing theme tokens and translated labels.
+Loading, errors and results share a reserved scrolling body inside a bounded
+fixed-height shell, so delayed status or diff reads retain the dialog's position.
 
 Tests use the public trusted project workflow with real temporary Git repositories,
 including larger repositories, separate index/disk changes, missing/unborn/detached
 Git, deleted/binary/invalid text, literal filenames and helper-execution markers.
+The partial-clone fixture deliberately omits blobs and compares the entire
+repository file inventory and bytes before/after status and diff, covering the
+object store, config, index and working files plus a transport-helper marker.
 Controlled child processes prove timeout and both output bounds. UI workflow tests
 exercise the project-menu entry, stale/refresh and late-result behavior, and retain
 drafts plus a running session. Native visual/focus and user-started App validation

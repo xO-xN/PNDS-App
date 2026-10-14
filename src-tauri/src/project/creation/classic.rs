@@ -70,12 +70,22 @@ fn write_classic(root: &File, options: &NewProjectOptions) -> Result<(), Creatio
             "public/index.html" => text(bytes).replace("<title>PNDS Template</title>", &format!("<title>{}</title>", blank::html(name))).into_bytes(),
             "README.md" | "README.zh-CN.md" => readme(text(bytes), options, *path == "README.zh-CN.md", &initialized).into_bytes(),
             "AGENTS.md" => {
-                let source = text(bytes).replacen("PNDS Template：", &format!("{name}："), 1);
+                let source = text(bytes)
+                    .replacen("PNDS Template：", &format!("{name}："), 1)
+                    .replace(
+                        "- 发布包由 `.github/workflows/package.yml` 按 ALLOWLIST 组装（docs / test / 源码不进演出包，`node_modules` 预装）。",
+                        "- 发布打包：按指针表读取 `reference/pnds-bundle.md`，按 `docs/implementation.md` 的「发布」节在 PNDS App 生成 `.pnds`；本工程的 `sharedLibraries` 引用要求接收方 App 提供声明的确切共享版本。",
+                    );
                 format!("# Initialized project / 已初始化工程\n\n{initialized}\n{AGENT_ENTRY}\n\n{source}").into_bytes()
             }
             "docs/start.md" => format!("# Continuing creation / 接续创作\n\n{initialized}\nRead AGENTS.md and docs/creator-handoff.md, then update docs/implementation.md with the creator's intentions.\n先读 AGENTS.md 与 docs/creator-handoff.md，再按创作者意图更新 docs/implementation.md。\n").into_bytes(),
             "docs/implementation.md" => {
-                let source = text(bytes).replacen("# PNDS Template —", &format!("# {name} —"), 1);
+                let source = text(bytes)
+                    .replacen("# PNDS Template —", &format!("# {name} —"), 1)
+                    .replace(
+                        "带生产依赖的发布包由 `.github/workflows/package.yml` 构建（ALLOWLIST 裁剪，`node_modules` 预装，docs / test / 源码不进演出包）。完整的发布流程与发布前检查清单见 PNDS App 的[创作指南第 4 节](https://github.com/xO-xN/PNDS-App/blob/main/docs/zh-CN/template-guide.md)。",
+                        "在 PNDS App 创作模式保存并手动测试本工程，再从工作台顶栏选择「生成 .pnds」。工程的 `sharedLibraries` 引用随包分发，共享库仍由接收方 App 提供，必须具备 manifest 声明的确切版本；只打包磁盘保存版，未保存草稿不入包。打包与安装规则按 AGENTS.md 指针表读取 `reference/pnds-bundle.md`，创作发布工作流读取 `template-guide.md`。",
+                    );
                 format!("# Creation source / 创建来源\n\n{initialized}\nThe inherited reference behavior below is the initial implementation, not a constraint on the new project. Source provenance is in template-source.json.\n继承的参考行为是初始实现，不约束新工程的创作方向。来源记录见 template-source.json。\n\n{source}").into_bytes()
             }
             _ => bytes.to_vec(),

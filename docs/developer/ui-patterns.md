@@ -571,6 +571,8 @@ The first visible dialog frame must already have its intended layout. The
 module browser reads its catalog before opening and shows loading on its trigger.
 The creation project picker reserves a bounded list area for loading, errors,
 empty results and project choices; only that area scrolls as content arrives.
+Git inspection likewise keeps loading, errors and results in a reserved scrolling
+body inside one bounded fixed-height shell, including delayed diff previews.
 Settings and project introduction use fixed shells with scrolling content.
 Do not initially render a short centered loading dialog and expand it when an
 async read returns: changing the height moves its top edge abruptly.
