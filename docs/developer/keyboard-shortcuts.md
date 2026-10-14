@@ -38,6 +38,19 @@ shortcut registration. Native delivery works independently of the main web
 keyboard layer: the action may run while a monitor or an editable control has
 focus, and it does not move that focus.
 
+AppKit asks the key window's view hierarchy to handle a key equivalent before
+trying the main menu. In the Tauri/Wry WK first-responder route, WK's original
+`performKeyEquivalent:` consumes these vertical chords even though direct
+native menu dispatch works. `install_cmd_arrow_webview_passthrough` binds the
+main shell's native NSWindow identity at startup and tries the existing native
+menu first for Command+Option+Up/Down in that window. It returns handled only
+when an enabled menu item and its submenu parents match; AppKit can report a
+disabled equivalent as handled without firing an action, so the hook checks
+native enabled/key-equivalent state first. Missing/disabled items retain the
+original WK route. Shift/Control variants and secondary windows retain that route even
+with stale enabled menu state. Function/numeric-pad arrow flags do not change
+the intent. The existing exactly-Command horizontal passthrough stays separate.
+
 `performance-selection.ts` resolves the focused window through the typed
 `focusedWindowLabel` command. Only `main` in performance mode may act; creation,
 performer, projection, help and unknown windows leave performance selection
@@ -63,7 +76,10 @@ new action or accelerator.
 
 Automated menu callbacks and AppShell workflows verify selection and runtime
 facts; jsdom does not prove macOS accelerator delivery, real guest focus or
-viewport dimensions. Native acceptance is user-run with the App dev server:
+viewport dimensions. The opt-in native routing fixture in
+[testing.md](./testing.md#native-performance-selection-202) verifies the actual
+Tauri/Wry/Muda dispatch boundary. Full App acceptance is user-run after restarting
+the App with the changed Rust build:
 
 - Run A, focus its monitor and then an editable page/App input, and use both
   chords to select B. The sidebar and selected card appear; A continues running

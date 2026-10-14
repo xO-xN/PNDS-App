@@ -27,6 +27,7 @@
     "prototype:locales": "node scripts/sync-prototype-locales.mjs",
     "test": "vitest",
     "test:run": "vitest run",
+    "native:selection:verify": "node scripts/verify-native-selection.mjs",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage",
     "rust:fmt": "source ~/.cargo/env && cd src-tauri && cargo fmt",

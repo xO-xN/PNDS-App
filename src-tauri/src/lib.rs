@@ -193,10 +193,11 @@ pub fn run() {
             // v1.3.3 (#89): WKWebView claims exactly-⌘ horizontal arrows
             // as its back/forward equivalents before the page can see
             // them — reroute that pair into the normal keyDown path so
-            // the app's ⌘←/⌘→ folder navigation works again. Class-level,
-            // every window; call once at startup.
+            // project pages retain their ordinary keyDown behavior. Class-level,
+            // every window; #202 also preserves native main-window Cmd+Opt+up/down
+            // menu delivery while WK holds focus. Call once at startup.
             #[cfg(target_os = "macos")]
-            crate::window::install_cmd_arrow_webview_passthrough();
+            crate::window::install_cmd_arrow_webview_passthrough(app.handle());
 
             // v1.3.0 (#51): cold-start reveal backstop. The main window is
             // created hidden and the frontend reveals it (fade_in_window)

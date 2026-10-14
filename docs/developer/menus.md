@@ -145,6 +145,17 @@ Menu content that mirrors store state (the Window menu's Performer/Conductor add
 
 `buildAppMenu()` and both listeners are called during app startup in `src/App.tsx`. Menu item actions read live values via `getState()`; the address items instead capture their URL at build time, so the label shown and the URL copied can never disagree.
 
+### WK key-equivalent delivery
+
+The main performance window's Command+Option+Up/Down equivalents pass through
+`window.rs` before WK consumes them. This native hook dispatches the same
+registered main menu, preserving its enabled state and the existing JS action.
+It binds the main NSWindow identity at startup; a stale enabled menu cannot
+steal these keys from help, projection or performer windows. An unmatched or
+disabled item falls through to WK's original implementation. The JS callback
+still owns current mode, focus, submission and overlay gates, selection and
+sidebar reveal. No global shortcut or second DOM selection handler is installed.
+
 ## Menu Item Types
 
 ### Custom Menu Items

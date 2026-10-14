@@ -26,7 +26,7 @@ use serde::{Deserialize, Serialize};
 use specta::Type;
 #[cfg(target_os = "macos")]
 use std::sync::atomic::AtomicU64;
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tauri::{
@@ -998,6 +998,9 @@ static CMD_ARROW_GUARD_INSTALLED: AtomicBool = AtomicBool::new(false);
 /// Shadow mode for the ⌘-arrow guard (see NATIVE_MENU_GUARD_SHADOWS).
 #[cfg(target_os = "macos")]
 static CMD_ARROW_GUARD_SHADOWS: AtomicBool = AtomicBool::new(false);
+/// Stable native identity of the single main shell; compare only, never dereference.
+#[cfg(target_os = "macos")]
+static MAIN_NATIVE_SELECTION_WINDOW: AtomicUsize = AtomicUsize::new(0);
 
 /// v1.3.3 (#79): the NATIVE belt of the context-menu suppression. The
 /// three JS layers (main.tsx, help-main.tsx, and the all-frames
@@ -1173,12 +1176,20 @@ const NSEVENT_MODIFIERS_SHIFT_OPTION_CONTROL: usize = 0x000E_0000;
 const KVK_LEFT_ARROW: u16 = 0x7B;
 #[cfg(target_os = "macos")]
 const KVK_RIGHT_ARROW: u16 = 0x7C;
+#[cfg(target_os = "macos")]
+const KVK_DOWN_ARROW: u16 = 0x7D;
+#[cfg(target_os = "macos")]
+const KVK_UP_ARROW: u16 = 0x7E;
+#[cfg(target_os = "macos")]
+const NSEVENT_MODIFIER_OPTION: usize = 0x0008_0000;
+#[cfg(target_os = "macos")]
+const NSEVENT_MODIFIERS_SHIFT_CONTROL: usize = 0x0006_0000;
 
 /// True for exactly-Command horizontal arrows: command held, none of
 /// shift/option/control, keyCode left/right. That is the pair WKWebView
 /// claims as its back/forward equivalents — and the pair the app's ⌘
-/// layer owns (folder views, v1.3.1). Everything else (⌘↓/⌘↑ project
-/// navigation included) must keep WKWebView's original routing.
+/// layer has historically owned. Other chords use native menu or original
+/// WKWebView routing below; this predicate does not add horizontal navigation.
 #[cfg(target_os = "macos")]
 fn is_exactly_command_horizontal_arrow(modifier_flags: usize, key_code: u16) -> bool {
     modifier_flags & NSEVENT_MODIFIER_COMMAND != 0
@@ -1194,11 +1205,12 @@ fn is_exactly_command_horizontal_arrow(modifier_flags: usize, key_code: u16) -> 
 /// history to navigate). This guard reroutes that pair into the NORMAL
 /// keyDown path, where the page's web-layer ⌘ handling — the same one
 /// since v1.3.1, guards for text fields and overlays included — owns
-/// them again. Every other key equivalent keeps WKWebView's original
-/// implementation untouched. Class-level like the menu guard; main
-/// thread only; call once at startup.
+/// them again. #202 additionally routes main-window Cmd+Opt+vertical
+/// arrows to the enabled native menu before WK can consume them. Every
+/// unmatched or disabled equivalent keeps WKWebView's original routing.
+/// Class-level like the menu guard; main thread only; call once at startup.
 #[cfg(target_os = "macos")]
-pub fn install_cmd_arrow_webview_passthrough() {
+pub fn install_cmd_arrow_webview_passthrough(app: &AppHandle) {
     use objc2::ffi::{
         class_addMethod, class_getInstanceMethod, method_exchangeImplementations,
         method_getTypeEncoding,
@@ -1208,8 +1220,16 @@ pub fn install_cmd_arrow_webview_passthrough() {
     if CMD_ARROW_GUARD_INSTALLED.swap(true, Ordering::SeqCst) {
         return;
     }
+    if let Some(main) = app
+        .get_webview_window("main")
+        .and_then(|window| window.ns_window().ok())
+    {
+        MAIN_NATIVE_SELECTION_WINDOW.store(main as usize, Ordering::Relaxed);
+    } else {
+        log::warn!("Main window not found — native performance selection routing unavailable");
+    }
     // SAFETY: mirrors the context-menu guard's class-structure mutation —
-    // once per process, at startup, before any WKWebView exists.
+    // once per process on the main thread, before user key dispatch.
     unsafe {
         let Some(wk) = AnyClass::get(c"WKWebView") else {
             log::warn!("WKWebView class not found — ⌘-arrow reroute not installed");
@@ -1285,7 +1305,8 @@ pub fn install_cmd_arrow_webview_passthrough() {
     }
 }
 
-/// The reroute's `performKeyEquivalent:` implementation: exactly-Command
+/// The reroute's `performKeyEquivalent:` implementation: main-window
+/// Cmd+Opt+vertical arrows first try the native menu; exactly-Command
 /// horizontal arrows are delivered through the NORMAL keyDown path (the
 /// page's web layer then owns them, exactly as before WKWebView started
 /// claiming the pair) and reported handled; every other equivalent
@@ -1307,6 +1328,37 @@ unsafe extern "C-unwind" fn pnds_perform_key_equivalent(
         // SAFETY: the runtime hands this hook a live NSEvent pointer.
         let flags: usize = unsafe { msg_send![event, modifierFlags] };
         let key_code: u16 = unsafe { msg_send![event, keyCode] };
+        // #202: WK's original implementation returns YES for these chords,
+        // preventing AppKit from reaching the enabled native menu accelerator.
+        // Resolve the main shell by native window identity, so secondary windows
+        // keep their keys even while a focus-driven menu rebuild is still pending.
+        if flags & NSEVENT_MODIFIER_COMMAND != 0
+            && flags & NSEVENT_MODIFIER_OPTION != 0
+            && flags & NSEVENT_MODIFIERS_SHIFT_CONTROL == 0
+            && (key_code == KVK_UP_ARROW || key_code == KVK_DOWN_ARROW)
+        {
+            let target = MAIN_NATIVE_SELECTION_WINDOW.load(Ordering::Relaxed);
+            // SAFETY: AppKit invokes this method on a live view and event.
+            let window: *mut objc2::runtime::AnyObject = unsafe { msg_send![this, window] };
+            if target != 0 && window as usize == target {
+                let app: *mut objc2::runtime::AnyObject =
+                    unsafe { msg_send![objc2::class!(NSApplication), sharedApplication] };
+                let menu: *mut objc2::runtime::AnyObject = unsafe { msg_send![app, mainMenu] };
+                if !menu.is_null() {
+                    // SAFETY: NSApplication owns this live main NSMenu.
+                    let native_menu: &objc2_app_kit::NSMenu = unsafe { &*menu.cast() };
+                    // A disabled NSMenuItem can consume an equivalent without
+                    // firing its action. Keep it on the original WK route.
+                    if menu_has_enabled_selection_equivalent(native_menu, key_code, 0) {
+                        // The JS callback still owns live business gates/selection.
+                        let matched: bool = unsafe { msg_send![menu, performKeyEquivalent: event] };
+                        if matched {
+                            return objc2::runtime::Bool::YES;
+                        }
+                    }
+                }
+            }
+        }
         if is_exactly_command_horizontal_arrow(flags, key_code) {
             // SAFETY: same receiver, same event pointer — delivered as a
             // plain keyDown, the ordinary (non-equivalent) event path.
@@ -1329,6 +1381,38 @@ unsafe extern "C-unwind" fn pnds_perform_key_equivalent(
         return result;
     }
     objc2::runtime::Bool::NO
+}
+
+/// Native enabled-state check, including submenu parents. A disabled item's
+/// key equivalent may otherwise be consumed without running its action.
+#[cfg(target_os = "macos")]
+fn menu_has_enabled_selection_equivalent(
+    menu: &objc2_app_kit::NSMenu,
+    key_code: u16,
+    depth: u8,
+) -> bool {
+    if depth >= 16 {
+        return false;
+    }
+    let equivalent = objc2_foundation::NSString::from_str(if key_code == KVK_UP_ARROW {
+        "\u{f700}"
+    } else {
+        "\u{f701}"
+    });
+    let items = menu.itemArray();
+    (0..items.count()).any(|index| {
+        let item = items.objectAtIndex(index);
+        if !item.isEnabled() {
+            return false;
+        }
+        let modifiers = item.keyEquivalentModifierMask().bits();
+        (modifiers & (NSEVENT_MODIFIER_COMMAND | NSEVENT_MODIFIERS_SHIFT_OPTION_CONTROL)
+            == NSEVENT_MODIFIER_COMMAND | NSEVENT_MODIFIER_OPTION
+            && item.keyEquivalent().isEqualToString(&equivalent))
+            || item.submenu().is_some_and(|submenu| {
+                menu_has_enabled_selection_equivalent(&submenu, key_code, depth + 1)
+            })
+    })
 }
 
 /// Depth-bounded walk for the first view of an exact class — AppKit
