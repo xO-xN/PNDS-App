@@ -35,6 +35,16 @@ Ranges, different versions and unshared packages still require local dependencie
 Browser-only `p5`/`ml5` declarations are covered for their browser distributions;
 this does not make their entries valid server-side modules.
 
+## Fixed creation templates
+
+PNDS Classic creation uses the same exact shared-resource gate as packing and
+installation. Its embedded Template 0.7.0 source declares Express 5.3.0,
+Socket.IO 4.8.4, osc-min 2.1.2, qrcode 1.5.4 and p5 2.3.4. Generation publishes
+only after those bytes pass verification; a missing resource leaves no new
+project directory and never requests npm or a network fallback. Blank has no
+production dependencies. See [creation-workspace.md](./creation-workspace.md)
+for fixed-source provenance and independent project/client initialization.
+
 ## Runtime boundary
 
 The resolver checks the exact reference against the shipped catalog and checks

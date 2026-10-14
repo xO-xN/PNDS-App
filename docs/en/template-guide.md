@@ -4,36 +4,53 @@ This guide walks you through creating, developing and publishing a PNDS Project 
 
 ---
 
-## Creating a blank project in the App
+## Creating from Blank or PNDS Classic in the App
 
-Creation home and Switch to another project both offer New blank project. Enter
-the work name, new folder name/project ID and optional creator/description, then
-choose an existing parent through the native directory picker. The App creates
-one new project folder and never replaces an existing file or directory.
-Cancelling the picker, form or discard confirmation preserves the old workspace
-and running test.
+Creation home and Switch to another project offer **New project**. Select a
+starting template, enter the work name, folder name and optional creator and
+description, then choose an existing parent folder. The App creates one new
+editable folder and never replaces an existing file or directory.
 
-Success enters an editable workspace **without starting**.
-The project also appears first in performance Home under its work name. After
-returning to performance, select its card and load it manually; the entry is
-remembered across App restarts.
+- **Blank** — the original PNDS App v1.6.0 minimal runnable structure, with no
+  artistic preset or production dependencies. Internal writes zeros to the
+  injected private buses; External sends no piece messages. SCD source and its
+  matching compiled SynthDef are included.
+- **PNDS Classic** — a fixed verified PNDS Template 0.7.0 source snapshot. It
+  keeps the full two-fader reference: networking, seats/reconnection, monitor,
+  theme/language following and one sine voice per client with 16-channel output.
+  Source, implementation manual and regression tests are included. It uses the
+  App's exact shared versions of Express 5.3.0, Socket.IO 4.8.4, osc-min 2.1.2,
+  qrcode 1.5.4 and p5 2.3.4. This starting point is separate from Add module.
 
-Test manually in Internal, External or None. The blank project has no piece sounds or production
-dependencies: Internal writes only zeros to the injected private buses, while
-External sends no music messages until a piece protocol is implemented. Technical
-audio code, SCD source and its matching precompiled SynthDef are included, so
-creation requires neither local sclang nor an npm installation.
+Both create offline with no npm installation or local sclang required. If
+Classic's exact shared resources are missing or fail verification, creation
+fails explicitly; the App does not choose another version. Test Internal,
+External or None **manually after creation**. Real sound and phone behavior
+still need your own device verification.
 
-The initial README uses the creation-time App language, with the other language
-recorded as a pending task in `docs/creator-handoff.md`. Root AGENTS points an
-external agent to that document and the installed App's platform contracts for
-continuing the score, interaction and sound. Handoffs remain in source and are
-excluded from `.pnds`. After changing the SCD, use the App compiler and follow its
-local SuperCollider setup guidance.
+Each creation receives an independent project ID, even for equal folder names
+under different parents. Classic also receives its own client storage key.
+Manifest, package/lock, both Classic READMEs and agent guidance describe the new
+project at version 0.1.0; Git history, seats and device caches are not inherited.
+The source is recorded in `docs/template-source.json`. Opening an existing
+project preserves its identity/history, and a template update does not rewrite
+projects already created. **App-created projects are already initialized**;
+external agents should continue through AGENTS and the creator handoff, without
+rerunning `docs/start.md` initialization.
 
-Permission, destination and creation failures show their actual reason. If the
-complete project was created but workspace switching failed, the message names
-the directory; open it later through Open folder project.
+Blank's initial README uses the creation-time App language; its other language
+is a pending task in `docs/creator-handoff.md`. AGENTS points to that handoff
+and the installed App's contracts. Handoffs and provenance stay in source;
+root docs are excluded from `.pnds`. After editing SCD, compile it in the App
+with the required local SuperCollider setup.
+
+Cancelling the picker, form or draft-discard confirmation preserves the old
+workspace and running test. Directory conflicts, permissions and partial
+creation failures publish no incomplete project. If the complete folder was
+created but workspace adoption failed, the error names its location so you can
+open it later. Success enters the workbench **without starting** and places the
+project first in performance Home. Returning to performance requires manual
+selection and load; the entry is remembered across App restarts.
 
 ## Prerequisites
 
@@ -72,7 +89,7 @@ Starting from the template is not the only way: if you already have a work in Op
 PNDS recommends a twin-track iteration loop: **AI-assisted generation and editing, plus manual test updates in PNDS App**:
 
 - **AI-driven development**
-  Import the Project directory into your AI coding agent. Guide the AI through conversation to understand the score's interaction logic, audio and visual rendering rules, and communication protocols, and let it write or refactor code quickly. The Project's built-in `AGENTS.md` routes the agent to the platform contracts and module manuals — no manual doc feeding needed. For a freshly created Project, just tell the agent the canonical trigger — **"start a new piece"** in English, **「开始新作品」** in Chinese; whichever you say sets the working language — and it follows the Project's built-in `docs/start.md` to initialise (work name / author / description in place, version reset, install and tests green).
+  Import the Project directory into your AI coding agent. Guide the AI through conversation to understand the score's interaction logic, audio and visual rendering rules, and communication protocols, and let it write or refactor code quickly. The Project's built-in `AGENTS.md` routes the agent to the platform contracts and module manuals — no manual doc feeding needed. For an uninitialized template cloned outside the App, just tell the agent the canonical trigger — **"start a new piece"** in English, **「开始新作品」** in Chinese; whichever you say sets the working language — and it follows the Project's built-in `docs/start.md` to initialise (work name / author / description in place, version reset, install and tests green).
 - **Live loading and preview**
   While authoring, load the local Project directory in PNDS App at any time to test interaction response, audio-visual behaviour and multi-device sync on the spot; the **Open in default browser** and **Refresh the monitor view** buttons at the top right of the sidebar help during development.
 - **Continuous verification and fine-tuning**

@@ -28,14 +28,16 @@ The bottom transport and console controls remain visible on creation home and
 expanded preview, disabled when unavailable. The console shortcut likewise
 requires a workspace. Pane-only test controls retain their existing visibility.
 
-## Blank-project creation (#160)
+## Template-project creation (#160, #200)
 
 The home and project picker open the same `CreationNewProject` form. Native
-selection chooses an existing parent; the single kebab-case folder name also
-becomes the project ID. Cancelling the native picker or form preserves the
+selection chooses an existing parent and a single kebab-case folder name.
+Blank is selected initially; PNDS Classic is the fixed second starting point.
+Each creation generates a random 128-bit suffix for an independent manifest ID,
+even when identical folder names are used under different parents. Cancelling the native picker or form preserves the
 workspace and runtime. The existing serialized project-switch flow confirms
-discard **before** calling `createBlankProject`; a declined discard creates no
-directory. Filesystem creation completes before any old runtime is stopped.
+discard **before** calling `createBlankProject` or `createClassicProject`;
+a declined discard creates no directory. Filesystem creation completes before any old runtime is stopped.
 Success adopts a prepared identity through the ordinary commit command, without
 starting. A later switch failure reports the complete directory already created
 so a retry never silently overwrites it.
@@ -49,7 +51,8 @@ already at its manual-addition cap, like loading an existing over-limit index.
 Manual imports retain their existing cap. Cancellation and failed adoption do
 not register a performance card.
 
-`CreationAccess::create_blank` validates the target against backend bundle and
+`CreationAccess::create_blank` and `create_classic` share the same generator
+and publication boundary. It validates the target against backend bundle and
 utility protection. It writes fixed assets and localized metadata into a private
 sibling staging directory, using held directory descriptors and no-follow,
 exclusive file creation. Parent/staging identities are checked before publication;
@@ -87,6 +90,43 @@ real HTTP and controlled OSC replies. The mode matrix starts and restarts each
 mode, checks private-bus routing/absence of External messages and graceful process
 and port cleanup. These are protocol evidence; native App/device acceptance
 remains with the user-started development App.
+
+## Fixed Classic source and initialization (#200)
+
+Classic embeds the verified PNDS Template 0.7.0 candidate source under
+`src-tauri/resources/classic-project/`. It is a clean included-file snapshot,
+not a live checkout or a claim of a published Template release. The provenance
+record pins all 95 files, the source inventory and the previously accepted
+runtime bundle. Normal Cargo builds verify every source hash and the inventory
+pin. No network, runtime npm installer or alternative source lookup exists.
+
+The full two-fader reference remains: networking, seats/reconnect, monitor
+state, theme/language following, 16-channel sine example, source SynthDef,
+compiled artifact, module examples and regression tests. Its exact shared
+requirements are Express 5.3.0, Socket.IO 4.8.4, osc-min 2.1.2, qrcode 1.5.4
+and p5 2.3.4. Before publication, the existing bundle gate checks those actual
+App resources and bytes. Missing or corrupted resources abort staging with the
+required versions in the error; no substitute version is used.
+
+Generation initializes manifest/package/lock identity and version 0.1.0, creator,
+description, page title and both READMEs. The client token key derives from the
+new manifest ID. AGENTS, start and implementation docs state that initialization
+already happened; the agent entry retains ADR-0003's installed-contract pointers.
+`docs/template-source.json` records the starting template separately from module
+addition records. Blank records its original v1.6.0 starting source too.
+The included tree excludes Git history, local dependencies, seat caches, logs and
+device records; Classic does not adopt the upstream cover as the new project's
+cover. Ordinary opening preserves the existing identity, client key and Git
+history. Updating the App's template never rewrites already-created projects.
+
+The actual creation commands, temporary directories and bundle install workflows
+are the test seams. A controlled Node/HTTP/Socket.IO/OSC test starts two new
+Classic projects and one installed copy in None, External and Internal, reuses
+the same origin, verifies independent client storage and reconnect identity,
+and checks graceful shutdown. Fake OSC replies prove the protocol boundary,
+not real scsynth output, devices or sound. The frozen Template's own
+`npm run check` and `npm test` also run on a temporary copy; no check mutates its
+source repository. Native App and phone/audio acceptance remain user-owned.
 
 ## Confirmed mode handoff
 

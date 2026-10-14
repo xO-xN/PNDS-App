@@ -14,14 +14,14 @@ impl Drop for ScoreProcess {
     }
 }
 
-struct OscServer {
-    port: u16,
-    messages: Arc<Mutex<Vec<OscMessage>>>,
+pub(super) struct OscServer {
+    pub(super) port: u16,
+    pub(super) messages: Arc<Mutex<Vec<OscMessage>>>,
     running: Arc<std::sync::atomic::AtomicBool>,
     thread: Option<std::thread::JoinHandle<()>>,
 }
 impl OscServer {
-    fn new() -> Self {
+    pub(super) fn new() -> Self {
         let socket = UdpSocket::bind("127.0.0.1:0").unwrap();
         let port = socket.local_addr().unwrap().port();
         socket
@@ -43,6 +43,22 @@ impl OscServer {
                     panic!("expected OSC message")
                 };
                 let reply = match message.addr.as_str() {
+                    "/status" => Some(OscMessage {
+                        addr: "/status.reply".into(),
+                        args: vec![],
+                    }),
+                    "/d_load" => Some(OscMessage {
+                        addr: "/done".into(),
+                        args: vec![OscType::String("/d_load".into())],
+                    }),
+                    "/s_get" => Some(OscMessage {
+                        addr: "/n_set".into(),
+                        args: vec![
+                            message.args[0].clone(),
+                            message.args[1].clone(),
+                            OscType::Float(0.0),
+                        ],
+                    }),
                     "/d_recv" => Some(OscMessage {
                         addr: "/done".into(),
                         args: vec![OscType::String("/d_recv".into())],
@@ -336,7 +352,7 @@ fn blank_artifact_starts_restarts_and_releases_resources_in_all_three_audio_mode
                 assert!(Instant::now() < deadline, "{mode} never ready");
                 std::thread::sleep(Duration::from_millis(20));
             };
-            assert_eq!(health["projectId"], "silent-score");
+            assert_eq!(health["projectId"], manifest["id"]);
             assert_eq!(health["audioMode"], mode);
             assert_eq!(
                 health["audio"]["status"],

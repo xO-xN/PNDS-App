@@ -195,6 +195,22 @@ pub async fn create_blank_project(
 
 #[tauri::command]
 #[specta::specta]
+pub async fn create_classic_project(
+    app: AppHandle,
+    state: State<'_, CreationState>,
+    options: crate::project::creation::NewProjectOptions,
+) -> Result<CreationWorkspace, CreationError> {
+    state
+        .run(move |access| {
+            let resources = crate::project::shared_libraries::shipped_root(&app)
+                .map_err(|detail| CreationError::new(CreationErrorCode::TestValidation, detail))?;
+            access.create_classic(&options, &resources, &protection(&app)?)
+        })
+        .await
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn prepare_creation_project(
     app: AppHandle,
     state: State<'_, CreationState>,

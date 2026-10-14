@@ -16,6 +16,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 mod blank;
 #[cfg(test)]
 mod blank_runtime;
+mod classic;
+#[cfg(test)]
+mod classic_tests;
 mod compile;
 #[cfg(test)]
 mod compile_tests;

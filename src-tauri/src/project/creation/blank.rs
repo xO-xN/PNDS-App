@@ -1,5 +1,6 @@
 use super::*;
 use crate::project::handoff::{append_task, initial_document, HandoffTask, AGENT_ENTRY};
+use ring::rand::{SecureRandom, SystemRandom};
 use serde::Deserialize;
 
 #[derive(Debug, Clone, Deserialize, Serialize, Type)]
@@ -42,6 +43,16 @@ impl CreationAccess {
         options: &NewProjectOptions,
         protection: &Protection,
     ) -> Result<CreationWorkspace, CreationError> {
+        self.create_generated(options, protection, None, write_project)
+    }
+
+    pub(super) fn create_generated(
+        &mut self,
+        options: &NewProjectOptions,
+        protection: &Protection,
+        libraries: Option<&Path>,
+        generate: impl FnOnce(&File, &NewProjectOptions) -> Result<(), CreationError>,
+    ) -> Result<CreationWorkspace, CreationError> {
         validate(options)?;
         let parent = fs::canonicalize(&options.parent).map_err(io_error)?;
         let held = File::options()
@@ -79,9 +90,9 @@ impl CreationAccess {
             .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW)
             .open(staging.path())
             .map_err(io_error)?;
-        write_project(&staged, options)?;
+        generate(&staged, options)?;
         check_directory_identity(staging.path(), &staged)?;
-        crate::project::bundle::validate_packable(staging.path())
+        crate::project::bundle::validate_packable_with_libraries(staging.path(), libraries)
             .map_err(|detail| CreationError::new(CreationErrorCode::InvalidProject, detail))?;
         check_directory_identity(&parent, &held)?;
         check_directory_identity(staging.path(), &staged)?;
@@ -148,7 +159,7 @@ fn validate(options: &NewProjectOptions) -> Result<(), CreationError> {
         || options.description.chars().count() > 4096
         || !["en", "zh-CN"].contains(&options.locale.as_str())
     {
-        return Err(CreationError::new(CreationErrorCode::InvalidProject, "Enter a name, a single kebab-case folder/ID, an optional author/description, and a supported language"));
+        return Err(CreationError::new(CreationErrorCode::InvalidProject, "Enter a name, a single kebab-case folder name, an optional author/description, and a supported language"));
     }
     Ok(())
 }
@@ -175,7 +186,7 @@ fn check_directory_identity(path: &Path, held: &File) -> Result<(), CreationErro
     Ok(())
 }
 
-fn write(root: &File, path: &str, bytes: &[u8]) -> Result<(), CreationError> {
+pub(super) fn write(root: &File, path: &str, bytes: &[u8]) -> Result<(), CreationError> {
     let parts: Vec<_> = path.split('/').collect();
     let mut directory = root.try_clone().map_err(io_error)?;
     for part in &parts[..parts.len() - 1] {
@@ -216,7 +227,7 @@ fn write(root: &File, path: &str, bytes: &[u8]) -> Result<(), CreationError> {
     file.sync_all().map_err(io_error)
 }
 
-fn html(text: &str) -> String {
+pub(super) fn html(text: &str) -> String {
     text.replace('&', "&amp;")
         .replace('<', "&lt;")
         .replace('>', "&gt;")
@@ -224,10 +235,23 @@ fn html(text: &str) -> String {
         .replace('\'', "&#39;")
 }
 
+pub(super) fn project_id(folder: &str) -> Result<String, CreationError> {
+    let mut random = [0u8; 16];
+    SystemRandom::new().fill(&mut random).map_err(|_| {
+        CreationError::new(
+            CreationErrorCode::Io,
+            "Could not generate an independent project identity",
+        )
+    })?;
+    let suffix: String = random.iter().map(|byte| format!("{byte:02x}")).collect();
+    Ok(format!("{folder}-{suffix}"))
+}
+
 fn write_project(root: &File, options: &NewProjectOptions) -> Result<(), CreationError> {
+    let id = project_id(&options.folder_name)?;
     let name = options.name.trim();
     let author = options.author.trim();
-    let manifest = serde_json::json!({ "schemaVersion": 1, "id": options.folder_name, "name": name, "version": "0.1.0", "description": options.description, "scoreServer": { "entry": "server.js", "workingDirectory": ".", "performerPort": 6868, "monitorPort": 6869 }, "audio": { "defaultMode": "internal", "supportedModes": ["internal", "external", "none"], "outputChannels": 2, "synthdefs": ["supercollider/synthdefs/pndsBlank.scsyndef"], "scsynth": { "blockSize": 64, "audioBusChannels": 128 } } });
+    let manifest = serde_json::json!({ "schemaVersion": 1, "id": id, "name": name, "version": "0.1.0", "description": options.description, "scoreServer": { "entry": "server.js", "workingDirectory": ".", "performerPort": 6868, "monitorPort": 6869 }, "audio": { "defaultMode": "internal", "supportedModes": ["internal", "external", "none"], "outputChannels": 2, "synthdefs": ["supercollider/synthdefs/pndsBlank.scsyndef"], "scsynth": { "blockSize": 64, "audioBusChannels": 128 } } });
     write(
         root,
         "manifest.json",
@@ -237,7 +261,7 @@ fn write_project(root: &File, options: &NewProjectOptions) -> Result<(), Creatio
         )
         .as_bytes(),
     )?;
-    let package = serde_json::json!({ "name": options.folder_name, "version": "0.1.0", "private": true, "type": "module", "author": author, "description": options.description, "engines": { "node": ">=24 <25" }, "scripts": { "start": "node server.js" } });
+    let package = serde_json::json!({ "name": id, "version": "0.1.0", "private": true, "type": "module", "author": author, "description": options.description, "engines": { "node": ">=24 <25" }, "scripts": { "start": "node server.js" } });
     write(
         root,
         "package.json",
@@ -308,5 +332,6 @@ fn write_project(root: &File, options: &NewProjectOptions) -> Result<(), Creatio
         .replace("{{message}}", page_message)
         .replace("{{name}}", &html(name));
     write(root, "public/monitor.html", page.as_bytes())?;
-    write(root, "public/performer.html", page.as_bytes())
+    write(root, "public/performer.html", page.as_bytes())?;
+    write(root, "docs/template-source.json", b"{\n  \"template\": \"Blank\",\n  \"version\": \"1.6.0\",\n  \"source\": \"PNDS App embedded blank-project\"\n}\n")
 }

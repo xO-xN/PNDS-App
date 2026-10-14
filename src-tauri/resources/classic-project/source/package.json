@@ -1,0 +1,27 @@
+{
+  "name": "pnds-template",
+  "version": "0.7.0",
+  "private": true,
+  "description": "PNDS score project template: two-fader touch performer driving one sine voice per client with 16-channel output.",
+  "main": "server.js",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js --audio-mode internal",
+    "dev:none": "node server.js --audio-mode none",
+    "check": "node --check server.js && node --check lib/config.js && node --check lib/network.js && node --check lib/health.js && node --check lib/osc-transport.js && node --check lib/audio-engine.js && node --check lib/players.js && node --check lib/protocol.js && node --check lib/monitor-state.js && node --check lib/lifecycle.js && node --check lib/theme-follow.js && node --check lib/locale-follow.js && node --check audio/controller.js && node --check public/shared.js && node --check public/client.js && node --check public/performer.js && node --check public/monitor.js && node --check fixtures/modules/display-server.cjs && node --check fixtures/modules/hub-node.cjs && node --check fixtures/modules/hub/hub.cjs && node --check modules/hub/hub.js && node --check modules/locale-follow/locale-follow.js && node --check modules/monitor-state/monitor-client.js && node --check modules/monitor-state/monitor-state.js && node --check modules/players/client.js && node --check modules/players/players.js && node --check modules/players/protocol.js && node --check modules/players/seats-store.js && node --check modules/qr/qr.js && node --check modules/theme-follow/theme-follow.js && node --check test/modules-clients.test.js && node --check test/modules-display.test.js && node --check test/modules-hub.test.js && node --check test/modules-monitor-state.test.js && node --check lib/shared-libraries.js && node --check scripts/shared-env.cjs && node --check scripts/verify-shared-browser.mjs",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "express": "5.3.0",
+    "osc-min": "2.1.2",
+    "qrcode": "1.5.4",
+    "socket.io": "4.8.4",
+    "p5": "2.3.4"
+  },
+  "devDependencies": {
+    "socket.io-client": "4.8.4"
+  }
+}
