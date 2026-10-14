@@ -9,6 +9,22 @@ the final native installer acceptance passed on both Macs as recorded there.
 
 ## Project requirements and adoption
 
+The creation sidebar's Modules heading offers an "Add shared package" entry
+beside PNDS module addition. Both use the same two-column card browser and
+detail layout, with a single column in narrow windows. Package cards show
+purpose, exact shipped version, runtime kind and the saved reference state.
+"Referenced" only describes the manifest; it does not certify source wiring
+or project compatibility. A differing reference remains visible, and the
+detail explicitly explains replacement before adoption.
+
+Read the catalog before opening the dialog and show waiting on the trigger.
+The title and actions stay outside the scrolling body. Entering details focuses
+the title, returning restores the selected card, and closing restores the entry
+button. Source URL and integrity live in a disclosure. The new project version
+is entered in details and cleared when selecting another package; an already
+adopted exact reference cannot be added again. Read failures keep a reload action,
+and replies from a previous project cannot open or update the current dialog.
+
 Self-contained projects keep manifest schema 1. Projects with `sharedLibraries`
 use schema 2 so an older Host rejects the unsupported contract rather than
 ignoring a new optional field. Each reference is an `{id, version}` pair; ranges,

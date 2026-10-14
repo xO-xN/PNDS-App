@@ -1130,6 +1130,7 @@
 }
 .creation-modules-badge:is(
   [data-state='conflict'],
+  [data-state='different'],
   [data-state='needsHandoff']
 ) {
   background: var(--pnds-warning);

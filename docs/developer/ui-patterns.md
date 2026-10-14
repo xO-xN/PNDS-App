@@ -568,7 +568,9 @@ keyboard input; native change events do not exercise the App menu.
 ### Async dialog geometry
 
 The first visible dialog frame must already have its intended layout. The
-module browser reads its catalog before opening and shows loading on its trigger.
+module and shared-package browsers read their catalogs before opening and show
+loading on their triggers. They share the card/detail shell, fixed title and
+footer, scrolling body, and title/card/trigger focus restoration.
 The creation project picker reserves a bounded list area for loading, errors,
 empty results and project choices; only that area scrolls as content arrives.
 Settings and project introduction use fixed shells with scrolling content.
