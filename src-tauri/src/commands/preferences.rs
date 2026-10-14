@@ -11,8 +11,9 @@ use std::sync::Mutex;
 use tauri::{AppHandle, Manager};
 
 use crate::types::{
-    validate_color_theme, validate_https_domain_field, validate_https_port_field,
-    validate_hub_rooms, validate_sample_rate, validate_theme, AppPreferences,
+    validate_color_theme, validate_creation_parent_field, validate_https_domain_field,
+    validate_https_port_field, validate_hub_rooms, validate_sample_rate, validate_theme,
+    AppPreferences,
 };
 
 /// In-memory cache of the preferences file. Managed by Tauri.
@@ -98,6 +99,7 @@ pub async fn save_preferences(app: AppHandle, preferences: AppPreferences) -> Re
     validate_sample_rate(preferences.sample_rate)?;
     // #58: telematic room groups stay within the「Room」dropdown's 1..=3.
     validate_hub_rooms(&preferences.hub_rooms)?;
+    validate_creation_parent_field(preferences.last_creation_parent.as_deref())?;
     // #139: the HTTPS entry's plain config validates at the same
     // boundary — the certificate MATERIAL (which must never ride this
     // struct) lives in https.rs's protected storage.

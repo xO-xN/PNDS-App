@@ -997,6 +997,11 @@ recentProjects?: string[];
  */
 recentCreationProjects?: string[]; 
 /**
+ * Last owned native parent selection for new-project creation. It may
+ * no longer exist; creation reports that failure without replacing it.
+ */
+lastCreationParent?: string | null;
+/**
  * v1.1.2: one-level performance folders (set lists). Membership only —
  * the trusted list above stays the master list, so deleting a folder
  * merely returns its projects to the ungrouped section.

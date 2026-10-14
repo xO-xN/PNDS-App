@@ -304,3 +304,17 @@ useEffect(() => {
 - Run migrations at app startup before managing database state
 - Use `IF NOT EXISTS` / `IF EXISTS` for idempotent migrations
 - For complex apps, consider a version table to track applied migrations
+
+## New-project parent directory
+
+`AppPreferences.lastCreationParent` is a nullable, serde-defaulted absolute path.
+Old files load with no remembered directory. The creation store mirrors the most
+recent owned native selection, and saves only through `updatePreferences` so the
+parent choice cannot clobber other preference fields. Startup restoration adopts
+a loaded parent only before any current-run choice; open forms observe the mirror
+through a selector. Cancellation and stale picker results do not replace it.
+
+Save-boundary validation rejects relative paths and NUL, without checking whether
+the directory currently exists or is writable. The creation command owns those
+filesystem failures and retry. Preference save failures follow the shared queue's
+existing logging and no automatic rollback contract.

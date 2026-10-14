@@ -39,6 +39,7 @@ interface CreationState {
   /** Canonical runtime identity supplied by the backend, including raw aliases. */
   runtimeProject: { path: string; root: string } | null
   recentPaths: string[]
+  lastCreationParent: string | null
   opening: boolean
   request: CreationRequest | null
   error: CreationError | null
@@ -57,6 +58,8 @@ interface CreationState {
   enter: () => Promise<void>
   leave: () => Promise<void>
   restoreRecent: (paths: string[]) => void
+  restoreCreationParent: (parent: string | null) => void
+  rememberCreationParent: (parent: string) => void
   removeRecent: (path: string) => void
   open: (path: string, newProject?: NewProjectRequest) => Promise<boolean>
   create: (options: NewProjectRequest) => Promise<boolean>
@@ -167,6 +170,7 @@ export const useCreationStore = create<CreationState>((set, get) => ({
   workspace: null,
   runtimeProject: null,
   recentPaths: [],
+  lastCreationParent: null,
   opening: false,
   request: null,
   error: null,
@@ -347,6 +351,14 @@ export const useCreationStore = create<CreationState>((set, get) => ({
     set(state => ({
       recentPaths: [...new Set([...state.recentPaths, ...paths])].slice(0, 20),
     })),
+  restoreCreationParent: parent => {
+    // A late startup load cannot overwrite a parent already chosen this run.
+    if (get().lastCreationParent === null) set({ lastCreationParent: parent })
+  },
+  rememberCreationParent: parent => {
+    set({ lastCreationParent: parent })
+    void updatePreferences({ lastCreationParent: parent })
+  },
   removeRecent: path => {
     const recent = get().recentPaths
     const next = recent.filter(item => item !== path)

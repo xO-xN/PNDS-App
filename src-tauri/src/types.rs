@@ -118,6 +118,10 @@ pub struct AppPreferences {
     /// Creation folder history, independent of performance selection.
     #[serde(default)]
     pub recent_creation_projects: Vec<String>,
+    /// Last owned native parent selection for new-project creation. It may
+    /// no longer exist; creation reports that failure without replacing it.
+    #[serde(default)]
+    pub last_creation_parent: Option<String>,
     /// v1.1.2: one-level performance folders (set lists). Membership only —
     /// the trusted list above stays the master list, so deleting a folder
     /// merely returns its projects to the ungrouped section.
@@ -252,6 +256,7 @@ impl Default for AppPreferences {
             osc_targets: HashMap::new(),
             recent_projects: Vec::new(),
             recent_creation_projects: Vec::new(),
+            last_creation_parent: None,
             project_folders: Vec::new(),
             project_display_names: HashMap::new(),
             project_manifest_names: HashMap::new(),
@@ -277,6 +282,15 @@ impl AppPreferences {
     pub fn effective_sample_rate(&self) -> u32 {
         self.sample_rate.unwrap_or(DEFAULT_SAMPLE_RATE)
     }
+}
+
+/// New-project parent is an absolute native path, not a filesystem lease.
+/// A removed or inaccessible directory remains a valid remembered preference.
+pub fn validate_creation_parent_field(parent: Option<&str>) -> Result<(), String> {
+    if parent.is_some_and(|path| !std::path::Path::new(path).is_absolute() || path.contains('\0')) {
+        return Err("Invalid creation parent: choose an absolute folder path".into());
+    }
+    Ok(())
 }
 
 /// Issue #20: the rate an unset sample-rate preference resolves to. Also
@@ -370,6 +384,28 @@ pub fn validate_https_port_field(port: Option<u16>) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn creation_parent_preferences_keep_legacy_defaults_and_roundtrip_missing_directories() {
+        let legacy: AppPreferences = serde_json::from_str(r#"{ "theme": "dark" }"#).unwrap();
+        assert_eq!(legacy.last_creation_parent, None);
+        let modern: AppPreferences = serde_json::from_str(
+            r#"{ "theme": "dark", "lastCreationParent": "/no-longer-existing/工程" }"#,
+        )
+        .unwrap();
+        assert_eq!(
+            modern.last_creation_parent.as_deref(),
+            Some("/no-longer-existing/工程")
+        );
+        let restored: AppPreferences =
+            serde_json::from_str(&serde_json::to_string(&modern).unwrap()).unwrap();
+        assert_eq!(restored.last_creation_parent, modern.last_creation_parent);
+        assert!(validate_creation_parent_field(None).is_ok());
+        assert!(validate_creation_parent_field(Some("/no-longer-existing/工程")).is_ok());
+        for invalid in ["", "relative/folder", "/nul\0path"] {
+            assert!(validate_creation_parent_field(Some(invalid)).is_err());
+        }
+    }
 
     /// v1.1.2: preference files written before `projectFolders` existed must
     /// load losslessly (serde defaults fill the field in).

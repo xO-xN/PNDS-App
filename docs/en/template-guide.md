@@ -11,6 +11,17 @@ starting template, enter the work name, folder name and optional creator and
 description, then choose an existing parent folder. The App creates one new
 editable folder and never replaces an existing file or directory.
 
+Uppercase English letters in the folder name become lowercase automatically;
+the preview shows the directory that will be created. The work name keeps its
+own spelling. Empty names, unsupported characters and leading/trailing hyphens
+show an inline explanation; fix the folder to enable creation. Folder names are
+limited to 64 characters.
+
+The next new-project form remembers your last selected parent, including after
+an App restart. Cancelling the form or native picker keeps that choice. If the
+remembered folder was removed or is no longer accessible, creation reports the
+actual error; choose a new parent to retry.
+
 - **Blank** — the original PNDS App v1.6.0 minimal runnable structure, with no
   artistic preset or production dependencies. Internal writes zeros to the
   injected private buses; External sends no piece messages. SCD source and its

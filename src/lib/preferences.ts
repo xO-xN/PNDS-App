@@ -89,6 +89,7 @@ export type PreferencesPatch = Partial<
     | 'outputDevice'
     | 'recentProjects'
     | 'recentCreationProjects'
+    | 'lastCreationParent'
     | 'projectFolders'
     | 'projectDisplayNames'
     | 'projectManifestNames'
