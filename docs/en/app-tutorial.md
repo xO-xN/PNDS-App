@@ -114,6 +114,8 @@ checks.
 
 Open **Git status and differences** in the project-title menu to inspect the current project's branch, Git HEAD and uncommitted files. A project inside a larger repository still shows only its own paths. Choose **Staged: HEAD → index**, **Unstaged: index → disk**, or an untracked saved-disk preview. Binary, unreadable and oversized files explain why text cannot be shown; missing Git or a repository does not prevent creation. The inspection is read-only and needs no login. Commit, branch switching, merge and push stay in external tools.
 
+Partial clone repositories report that inspection is unavailable because required objects may be missing. Complete the repository in your external Git tool first; the App never downloads missing objects or modifies the Git object store.
+
 Unsaved drafts, saved disk files, Git HEAD and running content are separate facts. Viewing Git does not save drafts, refresh pages, restart testing or prove which content is running. Disk changes, returning from another tool and snapshots open for 30 seconds mark the result potentially stale; use **Refresh Git** to read again. Changing projects or closing the panel discards the inspection, and late responses cannot appear in another project.
 
 The capsule uses a fixed slanted fill and 300ms name transition. It holds the

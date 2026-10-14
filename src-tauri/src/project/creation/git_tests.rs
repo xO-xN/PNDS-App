@@ -75,6 +75,131 @@ fn git_status_reads_only_the_open_project_inside_a_larger_repository() {
 }
 
 #[test]
+fn git_inspection_keeps_partial_clone_objects_index_and_working_files_unchanged() {
+    use std::os::unix::fs::PermissionsExt;
+
+    fn snapshot(root: &Path) -> std::collections::BTreeMap<PathBuf, Vec<u8>> {
+        fn collect(
+            root: &Path,
+            directory: &Path,
+            files: &mut std::collections::BTreeMap<PathBuf, Vec<u8>>,
+        ) {
+            for entry in fs::read_dir(directory).unwrap() {
+                let entry = entry.unwrap();
+                let path = entry.path();
+                if entry.file_type().unwrap().is_dir() {
+                    collect(root, &path, files);
+                } else {
+                    files.insert(
+                        path.strip_prefix(root).unwrap().to_owned(),
+                        fs::read(path).unwrap(),
+                    );
+                }
+            }
+        }
+        let mut files = std::collections::BTreeMap::new();
+        collect(root, root, &mut files);
+        files
+    }
+
+    let temp = tempfile::tempdir().unwrap();
+    let source = temp.path().join("source");
+    fs::create_dir(&source).unwrap();
+    let source_project = project(&source, "score");
+    fs::write(source_project.join("server.js"), "original\n").unwrap();
+    git(&source, &["init", "-b", "main"]);
+    git(&source, &["add", "."]);
+    git(
+        &source,
+        &[
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "commit",
+            "-m",
+            "base",
+        ],
+    );
+    git(&source, &["config", "uploadpack.allowFilter", "true"]);
+    let remote = format!("file://{}", source.display());
+    git(
+        temp.path(),
+        &[
+            "clone",
+            "--filter=blob:none",
+            "--no-checkout",
+            &remote,
+            "clone",
+        ],
+    );
+    let repository = temp.path().join("clone");
+    // Populate the index and ordinary project files without asking Git to
+    // checkout/hydrate the deliberately missing blobs.
+    git(&repository, &["read-tree", "HEAD"]);
+    let root = project(&repository, "score");
+    fs::write(root.join("server.js"), "modified\n").unwrap();
+    assert_eq!(
+        git(&repository, &["config", "remote.origin.promisor"]),
+        b"true\n"
+    );
+    let missing = git(
+        &repository,
+        &["rev-list", "--objects", "--all", "--missing=print"],
+    );
+    assert!(missing
+        .split(|byte| *byte == b'\n')
+        .any(|line| line.starts_with(b"?")));
+    let marker = temp.path().join("transport-helper-ran");
+    let helper = temp.path().join("upload-pack-helper");
+    fs::write(
+        &helper,
+        format!(
+            "#!/bin/sh\ntouch '{}'\nexec '{}' upload-pack \"$@\"\n",
+            marker.display(),
+            GitReader::default().executable.display(),
+        ),
+    )
+    .unwrap();
+    fs::set_permissions(&helper, fs::Permissions::from_mode(0o755)).unwrap();
+    git(
+        &repository,
+        &[
+            "config",
+            "remote.origin.uploadpack",
+            helper.to_str().unwrap(),
+        ],
+    );
+    let before = snapshot(&repository);
+    let mut access = CreationAccess::default();
+    let protection = Protection::default();
+    let identity = access.open(&root, &protection).unwrap().project.identity;
+    let output = access
+        .prepare_git_status(&identity, &protection)
+        .unwrap()
+        .run(&GitReader::default());
+    let status = access.finish_git_status(output, &protection).unwrap();
+    let output = access
+        .prepare_git_diff(&identity, "server.js", GitDiffLayer::Unstaged, &protection)
+        .unwrap()
+        .run(&GitReader::default());
+    let diff = access.finish_git_diff(output, &protection).unwrap();
+    let after = snapshot(&repository);
+    assert_eq!(
+        after.keys().collect::<Vec<_>>(),
+        before.keys().collect::<Vec<_>>()
+    );
+    for (path, bytes) in before {
+        assert!(after[&path] == bytes, "Git inspection changed {path:?}");
+    }
+    assert!(!marker.exists(), "Git inspection ran the transport helper");
+    assert_eq!(status.state, GitState::Unreadable);
+    assert_eq!(diff.state, GitDiffState::Unreadable);
+    assert!(status.detail.as_deref().unwrap().contains("partial clone"));
+    assert!(diff.detail.as_deref().unwrap().contains("partial clone"));
+}
+
+#[test]
 fn git_diff_separates_head_index_and_disk_without_returning_outside_content() {
     let temp = tempfile::tempdir().unwrap();
     let root = project(temp.path(), "score");
@@ -385,6 +510,124 @@ fn git_inspection_never_executes_repository_filters_fsmonitor_or_diff_helpers() 
         .unwrap();
     assert!(text.contains("+disk text"));
     assert!(!temp.path().join("helper-ran").exists());
+}
+
+#[test]
+fn git_inspection_isolates_included_and_linked_worktree_filters() {
+    use std::os::unix::fs::PermissionsExt;
+
+    for scope in ["included", "worktree"] {
+        let temp = tempfile::tempdir().unwrap();
+        let source = temp.path().join("source");
+        fs::create_dir(&source).unwrap();
+        let root = project(&source, "score");
+        git(&source, &["init", "-b", "main"]);
+        fs::write(root.join("server.js"), "base text\n").unwrap();
+        fs::write(root.join(".gitattributes"), "server.js filter=agent\n").unwrap();
+        git(&source, &["add", "."]);
+        git(
+            &source,
+            &[
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@example.invalid",
+                "commit",
+                "-m",
+                "base",
+            ],
+        );
+        let linked = temp.path().join("linked");
+        git(
+            &source,
+            &[
+                "worktree",
+                "add",
+                "--detach",
+                linked.to_str().unwrap(),
+                "HEAD",
+            ],
+        );
+        let root = linked.join("score");
+        let marker = temp.path().join("filter-ran");
+        let helper = temp.path().join("filter-helper");
+        fs::write(
+            &helper,
+            format!("#!/bin/sh\ntouch '{}'\ncat\n", marker.display()),
+        )
+        .unwrap();
+        fs::set_permissions(&helper, fs::Permissions::from_mode(0o755)).unwrap();
+        if scope == "included" {
+            let included = temp.path().join("included-config");
+            fs::write(
+                &included,
+                format!(
+                    "[filter \"agent\"]\nclean = {}\nrequired = true\n",
+                    helper.display()
+                ),
+            )
+            .unwrap();
+            git(
+                &linked,
+                &["config", "include.path", included.to_str().unwrap()],
+            );
+        } else {
+            git(&source, &["config", "extensions.worktreeConfig", "true"]);
+            git(
+                &linked,
+                &[
+                    "config",
+                    "--worktree",
+                    "filter.agent.clean",
+                    helper.to_str().unwrap(),
+                ],
+            );
+            git(
+                &linked,
+                &["config", "--worktree", "filter.agent.required", "true"],
+            );
+        }
+        fs::write(root.join("server.js"), "disk text\n").unwrap();
+        let index = PathBuf::from(
+            String::from_utf8(git(
+                &linked,
+                &["rev-parse", "--path-format=absolute", "--git-path", "index"],
+            ))
+            .unwrap()
+            .trim(),
+        );
+        let before = fs::read(&index).unwrap();
+        let mut access = CreationAccess::default();
+        let protection = Protection::default();
+        let identity = access.open(&root, &protection).unwrap().project.identity;
+        let output = access
+            .prepare_git_status(&identity, &protection)
+            .unwrap()
+            .run(&GitReader::default());
+        assert_eq!(
+            access.finish_git_status(output, &protection).unwrap().state,
+            GitState::Available,
+            "{scope}"
+        );
+        let output = access
+            .prepare_git_diff(&identity, "server.js", GitDiffLayer::Unstaged, &protection)
+            .unwrap()
+            .run(&GitReader::default());
+        let diff = access.finish_git_diff(output, &protection).unwrap();
+        assert_eq!(diff.state, GitDiffState::Text, "{scope}: {:?}", diff.detail);
+        let text = diff.text.unwrap();
+        assert!(
+            text.contains("-base text") && text.contains("+disk text"),
+            "{scope}"
+        );
+        assert!(!marker.exists(), "{scope} filter executed");
+        assert_eq!(fs::read(index).unwrap(), before, "{scope}");
+        assert_eq!(
+            fs::read(root.join("server.js")).unwrap(),
+            b"disk text\n",
+            "{scope}"
+        );
+    }
 }
 
 #[test]

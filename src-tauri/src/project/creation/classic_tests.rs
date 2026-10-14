@@ -68,6 +68,36 @@ fn classic_creation_keeps_the_reference_implementation_and_initializes_an_editab
 }
 
 #[test]
+fn classic_creator_documents_describe_saved_file_bundles_with_app_shared_dependencies() {
+    let temp = tempfile::tempdir().unwrap();
+    let created = CreationAccess::default()
+        .create_classic(&options(temp.path()), &resources(), &Protection::default())
+        .unwrap();
+    let root = Path::new(&created.project.root);
+    assert!(!root.join(".github/workflows/package.yml").exists());
+    assert!(!root.join("node_modules").exists());
+    for path in [
+        "AGENTS.md",
+        "docs/implementation.md",
+        "docs/start.md",
+        "README.md",
+        "README.zh-CN.md",
+    ] {
+        let document = fs::read_to_string(root.join(path)).unwrap();
+        assert!(
+            !document.contains(".github/workflows/package.yml"),
+            "{path}"
+        );
+        assert!(!document.contains("`node_modules` 预装"), "{path}");
+        if matches!(path, "AGENTS.md" | "docs/implementation.md") {
+            assert!(document.contains(".pnds"), "{path}");
+            assert!(document.contains("sharedLibraries"), "{path}");
+            assert!(document.contains("reference/pnds-bundle.md"), "{path}");
+        }
+    }
+}
+
+#[test]
 fn repeated_creation_at_different_locations_has_independent_project_and_client_identities() {
     let temp = tempfile::tempdir().unwrap();
     for classic in [false, true] {
