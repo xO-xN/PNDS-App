@@ -79,6 +79,7 @@ During a performance or rehearsal, when you need to switch the audio output devi
 - **Edge hover**: move the pointer to the far left edge of the window and the settings sidebar glides in.
 - **Keyboard summon**: hold `⌘` to reveal the sidebar. It hides once the key is released and the pointer leaves. Dropdowns, dialogs, mode confirmation and startup/shutdown operations keep it visible until they finish. The sidebar overlays the full-window monitor; revealing or hiding it never resizes or reloads the page.
 - **One performance action**: the footer offers Load, Change or Close as one full-width button. Selecting another Project leaves the performance running; Load asks before replacing it. Apply network, device/rate or External-target edits with an explicit Change; the error page keeps Retry.
+- **Native selection**: `⌘ ⌥ ↑` / `⌘ ⌥ ↓` selects the previous/next visible Project and reveals the sidebar even while the monitor or a text control has focus. Only the performance main window acts; the active list never wraps and selection never loads a Project. Confirmations, App popups, startup/shutdown and their pending submissions block it. Creation, performer, projection and help windows retain their own keys. Left/right has no new navigation.
 - **Projection and intro**: one bottom-bar projection button opens the venue window, then the same button switches its intro/performance content. Start Projection reveals its monitor; Withdraw Projection restores the intro. Refresh reloads the monitor page; the menu and `⌘⏎` keep projection control. Help remains available from its menu and `⌘ ?`.
 - **Full-screen performance**: `⌃⌘ F`, the Window menu or the native green window control enters full screen; the monitor page adapts to the new size.
 
@@ -159,23 +160,24 @@ Ports held by this App show their actual running project and ask you to close th
 
 The shortcuts an App user reaches for (creators asking "which keys can my pages get?" — see [page interaction](../reference/page-interaction.md)):
 
-| Shortcut                   | Action                                        |
-| -------------------------- | --------------------------------------------- |
-| `⌘ O`                      | Import a Project                              |
-| `⌘ 1`–`⌘ 9`                | Select the Nth visible Project                |
-| `↓` / `↑` (inside sidebar) | Next / previous Project                       |
-| `⌘ S`                      | Save the current creation file                |
-| Command + backtick         | Toggle the creation console                   |
-| `⌘ ↑` / `⌘ ↓`              | Select previous / next visible Project        |
-| `⌘ R`                      | Rename the selected Project / folder          |
-| `Enter`                    | Load the Project / restart after a change     |
-| `Esc`                      | Cancel mode confirmation / dismiss an overlay |
-| `⌘` (hold)                 | Summon the sidebar + number badges            |
-| `⌃ ⌘ F`                    | Enter / leave full screen                     |
-| `⌘ M`                      | Master mute / restore                         |
-| `⌘ =` / `⌘ -` / `⌘ 0`      | Monitor zoom in / out / actual size           |
-| `⌘ ⇧ R`                    | Reload the monitor page                       |
-| `⌘ ,`                      | Open / close the settings panel               |
-| `⌘ ?`                      | Open the help center                          |
-| `⌘ W`                      | Close window (confirm flow while running)     |
-| `⌘ Q`                      | Quit the App (confirm flow while running)     |
+| Shortcut                   | Action                                                                                 |
+| -------------------------- | -------------------------------------------------------------------------------------- |
+| `⌘ O`                      | Import a Project                                                                       |
+| `⌘ 1`–`⌘ 9`                | Select the Nth visible Project                                                         |
+| `↓` / `↑` (inside sidebar) | Next / previous Project                                                                |
+| `⌘ S`                      | Save the current creation file                                                         |
+| Command + backtick         | Toggle the creation console                                                            |
+| `⌘ ⌥ ↑` / `⌘ ⌥ ↓`          | Native previous/next selection; performance main window, including monitor/input focus |
+| `⌘ ↑` / `⌘ ↓`              | Select previous / next visible Project                                                 |
+| `⌘ R`                      | Rename the selected Project / folder                                                   |
+| `Enter`                    | Load the Project / restart after a change                                              |
+| `Esc`                      | Cancel mode confirmation / dismiss an overlay                                          |
+| `⌘` (hold)                 | Summon the sidebar + number badges                                                     |
+| `⌃ ⌘ F`                    | Enter / leave full screen                                                              |
+| `⌘ M`                      | Master mute / restore                                                                  |
+| `⌘ =` / `⌘ -` / `⌘ 0`      | Monitor zoom in / out / actual size                                                    |
+| `⌘ ⇧ R`                    | Reload the monitor page                                                                |
+| `⌘ ,`                      | Open / close the settings panel                                                        |
+| `⌘ ?`                      | Open the help center                                                                   |
+| `⌘ W`                      | Close window (confirm flow while running)                                              |
+| `⌘ Q`                      | Quit the App (confirm flow while running)                                              |

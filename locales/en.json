@@ -11,6 +11,8 @@
   "menu.view": "View",
   "menu.window": "Window",
   "menu.closeWindow": "Close Window",
+  "menu.selectPreviousProject": "Select Previous Project",
+  "menu.selectNextProject": "Select Next Project",
   "menu.zoomIn": "Zoom In",
   "menu.zoomOut": "Zoom Out",
   "menu.actualSize": "Actual Size",

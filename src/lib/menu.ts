@@ -59,7 +59,7 @@ import { useProjectStore } from '@/store/project-store'
 import { useCreationStore } from '@/store/creation-store'
 import { useProjectionStore } from '@/store/projection-store'
 import { useSettingsStore } from '@/store/settings-store'
-import { useSessionStore } from '@/store/session-store'
+import { isSessionBusy, useSessionStore } from '@/store/session-store'
 import {
   requestClose,
   requestQuit,
@@ -73,6 +73,10 @@ import {
   isEditableTarget,
 } from '@/hooks/use-command-keyboard'
 import { toggleMasterMute } from '@/lib/volume-control'
+import {
+  canSelectFocusedPerformanceProject,
+  selectPerformanceProject,
+} from '@/lib/performance-selection'
 
 const APP_NAME = 'PNDS'
 
@@ -325,9 +329,25 @@ export async function buildAppMenu(): Promise<Menu> {
 
     // §v1.1.1: browser-style monitor controls. Zoom only acts while the
     // session is ready (the store actions no-op otherwise).
+    const selectionEnabled = await canSelectFocusedPerformanceProject()
     const viewSubmenu = await Submenu.new({
       text: t('menu.view'),
       items: [
+        await MenuItem.new({
+          id: 'select-previous-project',
+          text: t('menu.selectPreviousProject'),
+          accelerator: 'Cmd+Alt+ArrowUp',
+          enabled: selectionEnabled,
+          action: () => void selectPerformanceProject(-1),
+        }),
+        await MenuItem.new({
+          id: 'select-next-project',
+          text: t('menu.selectNextProject'),
+          accelerator: 'Cmd+Alt+ArrowDown',
+          enabled: selectionEnabled,
+          action: () => void selectPerformanceProject(1),
+        }),
+        await PredefinedMenuItem.new({ item: 'Separator' }),
         await MenuItem.new({
           id: 'zoom-in',
           text: t('menu.zoomIn'),
@@ -601,6 +621,26 @@ export function setupMenuStateListener(): () => void {
     state => state.active,
     rebuild
   )
+  const unsubModePhase = subscribeIfChanged(
+    useCreationStore,
+    state => state.modePhase,
+    rebuild
+  )
+  const unsubOpening = subscribeIfChanged(
+    useCreationStore,
+    state => state.opening,
+    rebuild
+  )
+  const unsubBusy = subscribeIfChanged(
+    useSessionStore,
+    state => isSessionBusy(state.sessionStatus),
+    rebuild
+  )
+  const unsubProjectDialog = subscribeIfChanged(
+    useProjectStore,
+    state => state.confirmCloseProjectOpen,
+    rebuild
+  )
   const unsubExpanded = subscribeIfChanged(
     useCreationTestStore,
     state => state.expanded,
@@ -663,6 +703,10 @@ export function setupMenuStateListener(): () => void {
     unsubCommand()
     unsubWindowDialogs()
     unsubCreation()
+    unsubModePhase()
+    unsubOpening()
+    unsubBusy()
+    unsubProjectDialog()
     unsubExpanded()
     unsubSettings()
     unsubProject()
