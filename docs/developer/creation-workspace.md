@@ -786,3 +786,54 @@ missing handoff. It never recopies or upgrades existing files. Disk polling
 refreshes the real tree and preserves the saved-versus-running distinction;
 late replies cannot update another workspace. Root `docs/` remains excluded
 from bundles, so the creator handoff stays in source.
+
+## Read-only Git inspection (#201)
+
+The project-title menu opens `CreationGit`. Its local snapshot names branch and
+Git HEAD separately (including unborn and detached HEAD), then lists project-relative
+staged, unstaged and untracked paths. Staged compares HEAD with the Git index;
+unstaged compares the index with saved disk; untracked files have a bounded saved
+text preview. Unsaved draft count and current runtime facts remain separate.
+A clean Git result or a commit never implies that drafts are saved, pages are
+refreshed, the server restarted or the current content tested.
+
+`getCreationGitStatus` and `readCreationGitDiff` accept an issued creation identity;
+the latter also accepts a literal relative path and one comparison layer.
+`project/creation/git.rs` prepares a held-root job under the access lock, runs
+outside that lock and checks identity/root/source again on completion. Child
+`fchdir` uses the held directory, so root replacement cannot redirect the process.
+Git's repository-root paths are stripped through its exact project prefix; status
+has a project pathspec and diff disables rename pairing, so a project nested in a
+larger repository never returns other projects' paths or cross-boundary rename
+headers. Existing and untracked files use the ordinary containment check;
+untracked previews refuse symbolic links and nonregular files.
+
+The reader probes installed Git binaries directly instead of the macOS
+`/usr/bin/git` install shim. Missing Git and nonrepository folders remain normal
+creation workspaces. Git children get a cleared environment, disabled system/global
+configuration, prompts, optional locks, hooks and fsmonitor. Configured clean,
+smudge and process filter drivers are discovered by a read-only config query and
+neutralized for the inspection; diffs also disable external diff and textconv.
+No Git initialization, login, network, commit, branch switch, merge or push command
+is exposed. Each child has a five-second deadline, a separate process group and
+1 MiB caps on stdout and stderr; status stops at 4,096 paths. Binary, non-UTF-8,
+unreadable, oversize, timeout and no-longer-changed comparisons have explicit
+results without silently truncating text.
+
+The file workflow revision makes a displayed result stale after disk changes,
+including changes during an in-flight read. Returning focus from another tool or
+keeping a snapshot open for 30 seconds also marks it stale, covering Git-only
+changes that the file watcher cannot observe. Refresh clears the old comparison
+and reads fresh Git facts; it never edits drafts or refreshes a running project.
+Dialog/workspace/request ownership prevents old status or diff results from
+replacing a newer request or another project's inspection. Close restores focus
+to the project menu. Text stays in a keyboard-scrollable plain-text preview and
+uses the existing theme tokens and translated labels.
+
+Tests use the public trusted project workflow with real temporary Git repositories,
+including larger repositories, separate index/disk changes, missing/unborn/detached
+Git, deleted/binary/invalid text, literal filenames and helper-execution markers.
+Controlled child processes prove timeout and both output bounds. UI workflow tests
+exercise the project-menu entry, stale/refresh and late-result behavior, and retain
+drafts plus a running session. Native visual/focus and user-started App validation
+remain separate acceptance evidence.

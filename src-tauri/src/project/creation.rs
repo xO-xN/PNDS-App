@@ -19,7 +19,11 @@ mod blank_runtime;
 mod compile;
 #[cfg(test)]
 mod compile_tests;
+mod git;
 mod handoff;
+pub use git::{CreationGitDiff, CreationGitStatus, GitDiffLayer, GitReader};
+#[cfg(test)]
+mod git_tests;
 mod libraries;
 #[cfg(test)]
 mod libraries_tests;

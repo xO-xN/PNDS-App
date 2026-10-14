@@ -316,6 +316,22 @@ async listCreationFiles(identity: string) : Promise<Result<CreationFile[], Creat
     else return { status: "error", error: e  as any };
 }
 },
+async getCreationGitStatus(identity: string) : Promise<Result<CreationGitStatus, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_creation_git_status", { identity }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async readCreationGitDiff(identity: string, path: string, layer: GitDiffLayer) : Promise<Result<CreationGitDiff, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("read_creation_git_diff", { identity, path, layer }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async pollCreationChanges(identity: string, since: number) : Promise<Result<CreationChanges, CreationError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("poll_creation_changes", { identity, since }) };
@@ -1178,6 +1194,9 @@ export type CreationError = { code: CreationErrorCode; detail: string }
 export type CreationErrorCode = "missing" | "permission" | "invalidUtf8" | "tooLarge" | "invalidIdentity" | "pathEscape" | "invalidProject" | "manifestInvalid" | "testValidation" | "testStartup" | "versionConflict" | "targetExists" | "io"
 export type CreationFile = { path: string; size: number; kind: CreationFileKind; category: CreationCategory }
 export type CreationFileKind = "text" | "image" | "binary"
+export type CreationGitChange = { path: string; staged: boolean; unstaged: boolean; untracked: boolean; indexStatus: string; diskStatus: string }
+export type CreationGitDiff = { state: GitDiffState; text: string | null; detail: string | null }
+export type CreationGitStatus = { state: GitState; branch: string | null; head: string | null; changes: CreationGitChange[]; detail: string | null }
 export type CreationLibrary = { id: string; version: string; kind: SharedLibraryKind; source: SharedLibrarySource; referencedVersion: string | null }
 export type CreationLibraryAdoption = { id: string; version: string; projectVersion: string; manifestVersion: string }
 export type CreationLibraryCatalog = { libraries: CreationLibrary[]; manifestVersion: string; projectVersion: string }
@@ -1263,6 +1282,9 @@ daemon: boolean;
  * enabling requires the installed, bundled App).
  */
 plistPresent: boolean; listeners: DnsListeners | null; bindError: string | null; upstreams: string[]; mapping: DnsMappingFacts | null; knownDomains: string[]; stats: JsonValue | null }
+export type GitDiffLayer = "staged" | "unstaged" | "untracked"
+export type GitDiffState = "text" | "binary" | "unreadable" | "tooLarge" | "unavailable" | "timeout" | "noChange"
+export type GitState = "available" | "gitUnavailable" | "notRepository" | "unreadable" | "tooLarge" | "timeout"
 export type HandoffDocument = { text: string; version: string | null }
 export type HandoffTask = { id: string; intent: string; files: string[]; acceptance: string; status: string }
 export type HealthAudio = { 

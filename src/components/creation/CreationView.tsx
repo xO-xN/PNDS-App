@@ -50,6 +50,7 @@ import { CreationHandoff } from './CreationHandoff'
 import { CreationBundle } from './CreationBundle'
 import { CreationModules } from './CreationModules'
 import { CreationLibraries } from './CreationLibraries'
+import { CreationGit } from './CreationGit'
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -87,6 +88,7 @@ function ReadingWorkspace({
   const [search, setSearch] = useState('')
   const menuAction = useRef<(() => void) | null>(null)
   const [bundleOpen, setBundleOpen] = useState(false)
+  const [gitOpen, setGitOpen] = useState(false)
   const [closedGroups, setClosedGroups] = useState<string[]>([
     'artifacts',
     'modules',
@@ -242,6 +244,13 @@ function ReadingWorkspace({
                 onSelect={() => void refresh()}
               >
                 {t('creation.refreshFiles')}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => {
+                  menuAction.current = () => setGitOpen(true)
+                }}
+              >
+                {t('creation.git.action')}
               </DropdownMenuItem>
               {editable && (
                 <>
@@ -474,6 +483,13 @@ function ReadingWorkspace({
         aria-label={t('creation.workspace')}
         className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
       >
+        {gitOpen && (
+          <CreationGit
+            key={project.identity}
+            identity={project.identity}
+            onClose={() => setGitOpen(false)}
+          />
+        )}
         {error && <CreationErrorNotice error={error} />}
         <Dialog open={bundleOpen} onOpenChange={setBundleOpen}>
           <DialogContent>
