@@ -8,6 +8,7 @@ import {
   restart,
   start,
   startReplacing,
+  submitSelectedProjectLoad,
   useStartGateInputs,
 } from '@/lib/session-flow'
 import { useProjectStore } from '@/store/project-store'
@@ -18,6 +19,7 @@ import {
   selectionIsRunningCard,
   useSessionStore,
 } from '@/store/session-store'
+import { onPerformanceLoadRequest } from '@/lib/performance-selection'
 import { projectDisplayName } from '@/lib/display-names'
 import { hasOpenOverlay, isEditableTarget } from '@/hooks/use-command-keyboard'
 import { cn } from '@/lib/utils'
@@ -126,13 +128,16 @@ export function SessionActionButton({
 
   /** Load/Enter submit: confirm-and-replace over a live session, plain
    * start otherwise (idle, or a dead `error` the Retry semantics cover). */
-  const submitLoad = () => {
-    if (live && !runningCardSelected) {
-      setConfirmSwitchOpen(true)
-      return
-    }
-    void start()
-  }
+  const submitLoad = () =>
+    submitSelectedProjectLoad(() => setConfirmSwitchOpen(true))
+
+  useEffect(
+    () =>
+      onPerformanceLoadRequest(() => {
+        submitSelectedProjectLoad(() => setConfirmSwitchOpen(true))
+      }),
+    []
+  )
 
   const confirmSwitch = async () => {
     setConfirmSwitchOpen(false)

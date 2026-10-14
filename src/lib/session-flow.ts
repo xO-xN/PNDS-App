@@ -7,7 +7,12 @@ import {
   type SessionStatus,
 } from '@/lib/tauri-bindings'
 import { logger } from '@/lib/logger'
-import { selectionIsRunningCard, useSessionStore } from '@/store/session-store'
+import {
+  isSessionBusy,
+  isSessionLive,
+  selectionIsRunningCard,
+  useSessionStore,
+} from '@/store/session-store'
 import {
   useProjectStore,
   type CurrentProject,
@@ -326,6 +331,38 @@ export function lanAddressMissingFrom(inputs: StartGateInputs): boolean {
  */
 export function canStartNow(): boolean {
   return canStartNowFrom(readStartGateInputs())
+}
+
+/** The native Load entry follows the visibly selected, fully prepared card.
+ * A running card with no pending changes never turns Load into Close. */
+export function canLoadSelectedProject(): boolean {
+  const project = useProjectStore.getState()
+  const session = useSessionStore.getState()
+  if (project.pendingPreflightPath || isSessionBusy(session.sessionStatus))
+    return false
+  const inputs = readStartGateInputs()
+  if (!resolveStartPlanFrom('replace', inputs)) return false
+  return (
+    !selectionIsRunningCard(session, project.currentProject?.path) ||
+    session.pendingChanges
+  )
+}
+
+/** One submission path shared by the native Load request and the button.
+ * The component retains ownership of the existing replacement confirmation. */
+export function submitSelectedProjectLoad(
+  confirmReplacement: () => void
+): void {
+  if (!canLoadSelectedProject()) return
+  const project = useProjectStore.getState().currentProject
+  const session = useSessionStore.getState()
+  if (selectionIsRunningCard(session, project?.path)) {
+    void restart()
+  } else if (isSessionLive(session.sessionStatus)) {
+    confirmReplacement()
+  } else {
+    void start()
+  }
 }
 
 /** The OSC target parameter for startProject (null unless external). */

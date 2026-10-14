@@ -39,6 +39,7 @@ Edit
 View
 ├── Select Previous Project  (Cmd+Opt+↑ — performance main window only)
 ├── Select Next Project      (Cmd+Opt+↓ — same scope)
+├── Load Selected Project    (Cmd+Opt+Enter — prepared performance selection)
 ├── ────────────────────
 ├── Zoom In                  (Cmd+=)
 ├── Zoom Out                 (Cmd+-)
@@ -141,7 +142,7 @@ export function setupMenuLanguageListener(): () => void {
 
 ### Store-Driven Rebuilds (address segment)
 
-Menu content that mirrors store state (the Window menu's Performer/Conductor addresses) rebuilds through `setupMenuStateListener()` — the same whole-menu rebuild, subscribed to the watched slices (`project-store`'s `currentProject`, `session-store`'s `lanIp`, `sessionHostAddress` and — v1.5.0 #130 — `projectionStarted`, plus `projection-store`'s `windowExists` for the ⌘⏎ entry). Selection availability additionally watches creation opening/mode phase, session busy state and `commandPending`, project-close/close/quit confirms, settings and main-window focus. These stores are plain Zustand creates (no `subscribeWithSelector`), so the subscription filters by hand inside the module: the rebuild fires only when a watched value actually changed, never on the session store's unrelated churn (volume drags, health snapshots).
+Menu content that mirrors store state (the Window menu's Performer/Conductor addresses) rebuilds through `setupMenuStateListener()` — the same whole-menu rebuild, subscribed to the watched slices (`project-store`'s `currentProject`, `session-store`'s `lanIp`, `sessionHostAddress` and — v1.5.0 #130 — `projectionStarted`, plus `projection-store`'s `windowExists` for the ⌘⏎ entry). Load availability watches preflight/pending preparation, session lifecycle/project/pending changes/audio/OSC, LAN and node configuration. Selection availability additionally watches creation opening/mode phase, session busy state and `commandPending`, project-close/close/quit confirms, settings and main-window focus. These stores are plain Zustand creates (no `subscribeWithSelector`), so the subscription filters by hand inside the module: the rebuild fires only when a watched value actually changed, never on the session store's unrelated churn (volume drags, health snapshots).
 
 `buildAppMenu()` and both listeners are called during app startup in `src/App.tsx`. Menu item actions read live values via `getState()`; the address items instead capture their URL at build time, so the label shown and the URL copied can never disagree.
 
@@ -158,6 +159,15 @@ or performer windows. An unmatched or
 disabled item falls through to WK's original implementation. The JS callback
 still owns current mode, focus, submission and overlay gates, selection and
 sidebar reveal. No global shortcut or second DOM selection handler is installed.
+
+The native Load entry uses `Cmd+Alt+Enter`, the supported Muda spelling for macOS
+Return. It requests the mounted session button's real confirmation/submission
+flow. Exact Command+Option+Return keeps AppKit's existing menu route. The WK hook
+only prevents an extra Shift/Control Return variant from matching that Load item
+in the owning performance main window: an enabled matching item is required,
+and the variant receives one ordinary document keyDown while only that retained
+item is temporarily disabled, then restored to its prior state. Other windows, modes,
+missing items and disabled equivalents retain their original path.
 
 ## Menu Item Types
 

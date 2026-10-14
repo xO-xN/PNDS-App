@@ -259,6 +259,13 @@ delayed native focus replies, creation scope and focus failures. Load and Close
 use their real UI submit paths with controlled typed-command replies to verify
 `commandPending` blocks selection before any backend lifecycle snapshot changes.
 Menu-state tests verify mode/project-close and starting/stopping disablement.
+The native Load item follows the actual button's confirmation and shared session
+flow. Tests cover idle/error, editable focus, duplicate submission, replacement
+without an early stop, unchanged running-card no-op, pending-change restart,
+preflight/LAN/OSC/node gates, stale focus/selection/mode replies, and default
+input Enter/projection accelerator preservation. A deferred Down focus reply
+followed by Load must never submit the previous card; a pending preflight needs a
+fresh Load after it settles, without an automatically queued start.
 
 On macOS, `npm run native:selection:verify` builds an isolated opt-in Tauri
 fixture from cached Cargo dependencies (`--offline`). A warm cache can be cloned
@@ -274,8 +281,10 @@ The runner extracts the production WK hook verbatim, asserts its exact bytes,
 and saves the full source, hook and generated-module SHA-256 values alongside
 `native-results.json`, `native-route.log` and `cargo-build.log` in a temporary
 `pnds-native-selection-*` directory. Its frontend imports the actual menu,
-selection and preflight modules; only project/native command result data are
-fixtures. Own AppKit `NSEvent` instances reach `NSApplication.sendEvent`, with
+selection/preflight modules and the real `SessionActionButton`/session flow,
+built with the same React Compiler preset. Only typed IPC result data and
+project/runtime facts are fixtures; actual replacement authorization goes
+through its rendered dialog. Own AppKit `NSEvent` instances reach `NSApplication.sendEvent`, with
 active/key/event-window assertions, plus a direct `NSMenu.performKeyEquivalent`
 positive control. This is native Tauri/Wry/Muda routing evidence, without
 synthesizing OS input. A fixture-only observer forwards the original WK method
@@ -286,7 +295,7 @@ ownership command reply. It verifies revocation before creation publication,
 restoration after performance publication, the settling lock during the reply,
 rejected overlap, cancellation, and failure reporting in both directions.
 
-The 44-case matrix covers both arrows with host body, editable and cross-origin
+The original 44-case selection matrix covers both arrows with host body, editable and cross-origin
 guest focus, ordinary and Function/NumericPad modifier flags, exactly one native
 menu action per matching chord, both boundaries, independent business gates
 under stale enabled items, and secondary-window ownership. Creation exclusion
@@ -300,6 +309,23 @@ original WK route. Failed active/key ownership is reported separately;
 a delivery mismatch is never retried. Both completion assertions and clean native
 process exit are required. This check remains opt-in because it requires a
 foreground macOS AppKit session; it is not a Cargo worker or jsdom test.
+
+The additional 30-case Load matrix drives direct menu and window Return with host body,
+input and cross-origin guest focus, Down then Load, real replacement confirmation,
+unchanged/pending running cards, readiness/submission/overlay gates, real creation
+and performance return, secondary windows and other modifiers. Missing/disabled
+items keep their document key. Host/guest listeners observe actual document
+keydown arrival: creation and secondary windows must receive exactly one
+original Return key and have no start/stop/confirmation side effects even under
+stale enabled native items. Shift/Control variants exercise all three focus
+surfaces: exactly one original keyDown and no load/stop/confirmation. Their
+missing/disabled equivalents keep the original native route. The exact chord
+immediately following a modifier variant must still load through the same
+installed menu item, without a rebuild or manual re-enable. Unlike the arrow route, Return can consult the native
+menu after WK; a rejected native callback alone is not evidence of lost keys.
+Preserve the actual document input and workflow, not a guessed original-route
+call count. `--load-only` narrows this opt-in loop during diagnosis; the normal
+command still runs both matrices.
 
 The jsdom workflows described above exercise user workflows and typed commands;
 they do not prove macOS accelerator delivery. Physical keystrokes in the complete

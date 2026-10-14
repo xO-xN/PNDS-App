@@ -21,6 +21,7 @@ Keyboard input reaches the app through two layers: native menu accelerators
 | Cmd+S         | Save the active creation draft (#154; creation mode only — a version conflict opens the reload-or-overwrite choice instead of writing)                                                                                                                                                     | Web (`use-command-keyboard.ts`)                            |
 | Ctrl+Cmd+F    | Toggle fullscreen of the FOCUSED window (v1.5.0 #131; native controls and Window menu)                                                                                                                                                                                                     | Menu (`menu.ts`)                                           |
 | Cmd+Return    | Projection start gate 开演/撤回 (v1.5.0 #130; enabled with a venue screen + ready session)                                                                                                                                                                                                 | Menu (`menu.ts`)                                           |
+| Cmd+Opt+Enter | Load the prepared selected project; confirm replacement of a live show; apply pending changes on its running card; unchanged running card is a no-op                                                                                                                                       | Menu (`menu.ts`)                                           |
 | Cmd+Opt+↑ / ↓ | Select previous/next visible project and reveal the sidebar; performance main window only, including monitor/input focus; no automatic load                                                                                                                                                | Menu (`menu.ts`)                                           |
 | Cmd (hold)    | Number badges + sidebar peek while running                                                                                                                                                                                                                                                 | Web (`use-command-keyboard.ts`)                            |
 | Cmd+1..9      | Select the Nth visible project (v1.1.2)                                                                                                                                                                                                                                                    | Web (`use-command-keyboard.ts`)                            |
@@ -29,6 +30,40 @@ Keyboard input reaches the app through two layers: native menu accelerators
 | Esc           | Cancel pending mode confirmation in the main shell (#151); monitor pages keep their own Esc behavior                                                                                                                                                                                       | Web (`CreationModeButton.tsx`) / page                      |
 
 Cmd+↑ / Cmd+↓ select the same previous/next visible project as sidebar arrows, including while Cmd peeks the sidebar; inputs and App overlays retain their keys. Plain page arrows remain page-owned.
+
+## Native performance Load (#202)
+
+The View menu's `load-selected-project` item registers `Cmd+Alt+Enter`.
+Muda's accelerator parser recognizes `Enter` as the macOS Return key (`\r`);
+`Return` falls back to a literal character string and must not be used for this
+new item. The existing projection `Cmd+Return` declaration is unchanged.
+
+The menu action resolves main-window focus, checks the current mode epoch and
+prepared selection again after the reply, and submits a local request to the
+mounted `SessionActionButton`. It shares the button's session-flow gate and
+replacement dialog: idle/error loads; another card over a live show asks before
+stopping; a selected running card applies pending settings with Change/restart;
+an unchanged running card is a no-op, never Close. Preflight, LAN, external OSC
+and node completeness remain the normal load gates.
+
+A pending native selection request blocks Load while its focus query is still
+outstanding. A selected card still checking preflight also blocks Load. Neither
+queues a future start: after preparation settles, press Load again. Submission
+uses the existing synchronous latch, so repeated requests cannot duplicate a
+start. Mode/overlay/busy/submission/window gates match native selection; monitor
+or host editable focus does not prevent this deliberate chord. Plain Enter and
+the projection start gate keep their existing ownership.
+
+Exact Command+Option+Return uses the ordinary native menu path. AppKit can
+match Return even with an extra Shift/Control modifier, which would incorrectly
+load a project. The WK hook prevents only that broader match in the native-owned
+performance main window while an enabled matching Load item exists: it forwards
+the variant through one ordinary document keyDown instead, temporarily disabling
+only that retained menu item during delegation and restoring its original enabled
+state. WK keyDown can otherwise attempt the broader menu match itself. Creation/secondary
+windows and missing/disabled items keep their original routing. Native fixture
+observations of their actual key delivery determine preservation; a rejected
+menu callback alone does not mean an input key was lost.
 
 ## Native performance selection (#202)
 

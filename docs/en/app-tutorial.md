@@ -162,24 +162,27 @@ Ports held by this App show their actual running project and ask you to close th
 
 The shortcuts an App user reaches for (creators asking "which keys can my pages get?" — see [page interaction](../reference/page-interaction.md)):
 
-| Shortcut                   | Action                                                                                 |
-| -------------------------- | -------------------------------------------------------------------------------------- |
-| `⌘ O`                      | Import a Project                                                                       |
-| `⌘ 1`–`⌘ 9`                | Select the Nth visible Project                                                         |
-| `↓` / `↑` (inside sidebar) | Next / previous Project                                                                |
-| `⌘ S`                      | Save the current creation file                                                         |
-| Command + backtick         | Toggle the creation console                                                            |
-| `⌘ ⌥ ↑` / `⌘ ⌥ ↓`          | Native previous/next selection; performance main window, including monitor/input focus |
-| `⌘ ↑` / `⌘ ↓`              | Select previous / next visible Project                                                 |
-| `⌘ R`                      | Rename the selected Project / folder                                                   |
-| `Enter`                    | Load the Project / restart after a change                                              |
-| `Esc`                      | Cancel mode confirmation / dismiss an overlay                                          |
-| `⌘` (hold)                 | Summon the sidebar + number badges                                                     |
-| `⌃ ⌘ F`                    | Enter / leave full screen                                                              |
-| `⌘ M`                      | Master mute / restore                                                                  |
-| `⌘ =` / `⌘ -` / `⌘ 0`      | Monitor zoom in / out / actual size                                                    |
-| `⌘ ⇧ R`                    | Reload the monitor page                                                                |
-| `⌘ ,`                      | Open / close the settings panel                                                        |
-| `⌘ ?`                      | Open the help center                                                                   |
-| `⌘ W`                      | Close window (confirm flow while running)                                              |
-| `⌘ Q`                      | Quit the App (confirm flow while running)                                              |
+| Shortcut                   | Action                                                                                                              |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `⌘ O`                      | Import a Project                                                                                                    |
+| `⌘ 1`–`⌘ 9`                | Select the Nth visible Project                                                                                      |
+| `↓` / `↑` (inside sidebar) | Next / previous Project                                                                                             |
+| `⌘ S`                      | Save the current creation file                                                                                      |
+| Command + backtick         | Toggle the creation console                                                                                         |
+| `⌘ ⌥ ↑` / `⌘ ⌥ ↓`          | Native previous/next selection; performance main window, including monitor/input focus                              |
+| `⌘ ⌥ Enter`                | Load the prepared selection; confirm a live replacement; restart pending changes; unchanged running card is a no-op |
+| `⌘ ↑` / `⌘ ↓`              | Select previous / next visible Project                                                                              |
+| `⌘ R`                      | Rename the selected Project / folder                                                                                |
+| `Enter`                    | Load the Project / restart after a change                                                                           |
+| `Esc`                      | Cancel mode confirmation / dismiss an overlay                                                                       |
+| `⌘` (hold)                 | Summon the sidebar + number badges                                                                                  |
+| `⌃ ⌘ F`                    | Enter / leave full screen                                                                                           |
+| `⌘ M`                      | Master mute / restore                                                                                               |
+| `⌘ =` / `⌘ -` / `⌘ 0`      | Monitor zoom in / out / actual size                                                                                 |
+| `⌘ ⇧ R`                    | Reload the monitor page                                                                                             |
+| `⌘ ,`                      | Open / close the settings panel                                                                                     |
+| `⌘ ?`                      | Open the help center                                                                                                |
+| `⌘ W`                      | Close window (confirm flow while running)                                                                           |
+| `⌘ Q`                      | Quit the App (confirm flow while running)                                                                           |
+
+In the performance main window, `⌘ ⌥ Enter` loads the prepared selected Project even with monitor/input focus. Replacing a live show still asks for confirmation; its running card applies pending settings through Change/restart, and an unchanged running card is a no-op. Preflight, LAN, node configuration and overlay/busy gates remain. A request made before preflight finishes is not queued: press again once ready. Creation and secondary windows retain their keys; plain Enter and the projection start gate keep their existing behavior.

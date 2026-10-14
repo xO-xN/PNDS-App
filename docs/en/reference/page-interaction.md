@@ -12,20 +12,21 @@ This page is for **Project creators**: it states precisely which interaction eve
 
 ### Table A: retained by the native layer in their enabled window scope
 
-| Chord             | App action                                                  |
-| ----------------- | ----------------------------------------------------------- |
-| `⌘ W`             | Close window (confirm flow while a session runs)            |
-| `⌘ Q`             | Quit the App (confirm flow while a session runs)            |
-| `⌘ M`             | Master mute / restore                                       |
-| `⌘ O`             | Import a Project                                            |
-| `⌘ R`             | Rename the selected Project / folder                        |
-| `⌘ ,`             | Open / close the settings panel                             |
-| `⌘ ?` (⇧⌘/)       | Open the help center                                        |
-| `⌘ 0`             | Monitor zoom: actual size (per focused window)              |
-| `⌘ =` / `⌘ -`     | Monitor zoom in / out (per focused window)                  |
-| `⌘ ⇧ R`           | Reload BOTH windows' monitor pages                          |
-| `⌘ ⌥ ↑` / `⌘ ⌥ ↓` | Previous/next visible Project; performance main window only |
-| `⌃ ⌘ F`           | Focused window: enter / leave full screen                   |
+| Chord             | App action                                                                                                          |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `⌘ W`             | Close window (confirm flow while a session runs)                                                                    |
+| `⌘ Q`             | Quit the App (confirm flow while a session runs)                                                                    |
+| `⌘ M`             | Master mute / restore                                                                                               |
+| `⌘ O`             | Import a Project                                                                                                    |
+| `⌘ R`             | Rename the selected Project / folder                                                                                |
+| `⌘ ,`             | Open / close the settings panel                                                                                     |
+| `⌘ ?` (⇧⌘/)       | Open the help center                                                                                                |
+| `⌘ 0`             | Monitor zoom: actual size (per focused window)                                                                      |
+| `⌘ =` / `⌘ -`     | Monitor zoom in / out (per focused window)                                                                          |
+| `⌘ ⇧ R`           | Reload BOTH windows' monitor pages                                                                                  |
+| `⌘ ⌥ ↑` / `⌘ ⌥ ↓` | Previous/next visible Project; performance main window only                                                         |
+| `⌘ ⌥ Enter`       | Load the prepared selection; confirm a live replacement; restart pending changes; unchanged running card is a no-op |
+| `⌃ ⌘ F`           | Focused window: enter / leave full screen                                                                           |
 
 The enabled rows are macOS menu-bar accelerators: the chord is consumed by the App before it reaches the page, and they **keep working during page interaction**. A work's key plan must route around them.
 
@@ -39,6 +40,8 @@ mode preparation and startup/shutdown (including pending submission before a
 snapshot arrives) block selection. Creation, performer, projection and help
 windows retain their own key handling and cannot select a background performance
 card. No system-global shortcut or new left/right navigation is registered.
+
+In the performance main window, `⌘ ⌥ Enter` loads the prepared selected Project even with monitor/input focus. Replacing a live show still asks for confirmation; its running card applies pending settings through Change/restart, and an unchanged running card is a no-op. Preflight, LAN, node configuration and overlay/busy gates remain. A request made before preflight finishes is not queued: press again once ready. Creation and secondary windows retain their keys; plain Enter and the projection start gate keep their existing behavior.
 
 ### Table B: conditionally available — belong to the page while the user interacts with it
 
