@@ -125,6 +125,9 @@ export function AppShell() {
       useCreationStore
         .getState()
         .restoreRecent(prefs?.recentCreationProjects ?? [])
+      useCreationStore
+        .getState()
+        .restoreCreationParent(prefs?.lastCreationParent ?? null)
       const folders = prefs?.projectFolders ?? []
       if (paths.length > 0 || folders.length > 0) {
         useProjectStore.getState().restoreProjectIndex(paths, folders)

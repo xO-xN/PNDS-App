@@ -596,7 +596,7 @@
   "creation.newProject.defaultName": "Untitled score",
   "creation.newProject.name": "Work name",
   "creation.newProject.folderName": "Folder name",
-  "creation.newProject.folderHint": "Lowercase letters, digits and hyphens; at most 64 characters. An independent project ID is generated automatically.",
+  "creation.newProject.folderHint": "Uppercase English letters become lowercase automatically; use letters, digits and hyphens, up to 64 characters. An independent project ID is generated automatically.",
   "creation.newProject.author": "Creator (optional)",
   "creation.newProject.description": "Description (optional)",
   "creation.newProject.parent": "Parent folder",
@@ -798,5 +798,9 @@
   "creation.newProject.classic.name": "PNDS Classic",
   "creation.newProject.classic.description": "Two-fader example with networking, client seats and one sine voice per client.",
   "creation.newProject.classic.source": "Source: PNDS Template 0.7.0 · fixed verified snapshot",
-  "creation.newProject.classic.audioHint": "Classic uses exact App shared packages offline and includes a 16-channel sine example. Create first, then start manually; no npm install is needed."
+  "creation.newProject.classic.audioHint": "Classic uses exact App shared packages offline and includes a 16-channel sine example. Create first, then start manually; no npm install is needed.",
+  "creation.newProject.folderError.required": "Enter a folder name.",
+  "creation.newProject.folderError.length": "Use at most 64 characters for the folder name.",
+  "creation.newProject.folderError.characters": "Use only English letters, digits and hyphens; spaces and other characters are not allowed.",
+  "creation.newProject.folderError.boundary": "Start and end the folder name with a letter or digit."
 }

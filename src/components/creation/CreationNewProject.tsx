@@ -31,7 +31,9 @@ export function CreationNewProject({
   const [folderName, setFolderName] = useState('untitled-score')
   const [author, setAuthor] = useState('')
   const [description, setDescription] = useState('')
-  const [parent, setParent] = useState('')
+  const lastParent = useCreationStore(state => state.lastCreationParent)
+  const [selectedParent, setSelectedParent] = useState<string | null>(null)
+  const parent = selectedParent ?? lastParent ?? ''
   const [template, setTemplate] = useState<'blank' | 'classic'>('blank')
   const [picking, setPicking] = useState(false)
   const [error, setError] = useState<CreationError | null>(null)
@@ -60,14 +62,26 @@ export function CreationNewProject({
         multiple: false,
         title: t('creation.newProject.chooseParent'),
       })
-      if (owns() && typeof selected === 'string') setParent(selected)
+      if (owns() && typeof selected === 'string') {
+        setSelectedParent(selected)
+        useCreationStore.getState().rememberCreationParent(selected)
+      }
     } catch (error) {
       if (owns()) setError(creationTransportError(error))
     } finally {
       if (live.current) setPicking(false)
     }
   }
-  const validFolder = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(folderName)
+  const folderError = !folderName
+    ? 'creation.newProject.folderError.required'
+    : folderName.length > 64
+      ? 'creation.newProject.folderError.length'
+      : !/^[a-z0-9-]+$/.test(folderName)
+        ? 'creation.newProject.folderError.characters'
+        : folderName.startsWith('-') || folderName.endsWith('-')
+          ? 'creation.newProject.folderError.boundary'
+          : null
+  const validFolder = folderError === null
   const locked = busy || picking
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -150,12 +164,31 @@ export function CreationNewProject({
                 maxLength={64}
                 value={folderName}
                 aria-invalid={!validFolder}
-                aria-describedby="creation-folder-name-hint"
-                onChange={event => setFolderName(event.target.value)}
+                aria-describedby={
+                  folderError
+                    ? 'creation-folder-name-hint creation-folder-name-error'
+                    : 'creation-folder-name-hint'
+                }
+                onChange={event =>
+                  setFolderName(
+                    event.target.value.replace(/[A-Z]/g, letter =>
+                      letter.toLowerCase()
+                    )
+                  )
+                }
               />
               <small id="creation-folder-name-hint">
                 {t('creation.newProject.folderHint')}
               </small>
+              {folderError && (
+                <small
+                  id="creation-folder-name-error"
+                  role="alert"
+                  className="text-(--pnds-danger)"
+                >
+                  {t(folderError)}
+                </small>
+              )}
             </label>
             <label className="grid gap-1 text-sm">
               <span>{t('creation.newProject.author')}</span>

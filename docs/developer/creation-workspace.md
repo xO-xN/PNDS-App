@@ -33,6 +33,26 @@ requires a workspace. Pane-only test controls retain their existing visibility.
 The home and project picker open the same `CreationNewProject` form. Native
 selection chooses an existing parent and a single kebab-case folder name.
 Blank is selected initially; PNDS Classic is the fixed second starting point.
+The folder input normalizes ASCII uppercase letters to lowercase as the user
+edits it; the actual target preview and typed command use that same value.
+Work names are never transformed or used to derive a folder slug. Empty names,
+invalid characters and leading/trailing hyphens expose a localized inline reason
+through `aria-describedby`; correcting the folder clears that error. The input
+retains its 64-character maximum and the backend's lowercase ASCII contract.
+
+`lastCreationParent` is an optional App preference, mirrored in `creation-store`.
+An owned, non-cancelled native selection updates the mirror and writes through
+`updatePreferences`' serialized queue. Cancelling the form retains the selection
+for the next form. Picker cancellation and replies from an old workspace/epoch
+update neither mirror nor preference. `AppShell` restores the field on startup
+only while no parent has been picked in this run, so a delayed preference load
+cannot replace a new user choice. The form reads the mirror with a selector;
+an already-open form without its own selection also receives startup restoration.
+Save failures retain the existing preference queue's logging/no-rollback behavior.
+Path validation checks absolute shape and rejects NUL without probing existence;
+a removed or inaccessible remembered directory remains visible and the existing
+creation command reports the failure for manual retry, with no automatic fallback.
+
 Each creation generates a random 128-bit suffix for an independent manifest ID,
 even when identical folder names are used under different parents. Cancelling the native picker or form preserves the
 workspace and runtime. The existing serialized project-switch flow confirms

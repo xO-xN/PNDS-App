@@ -1,6 +1,9 @@
 import { render, screen, act, fireEvent, waitFor } from '@/test/test-utils'
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { listen } from '@tauri-apps/api/event'
+import { open } from '@tauri-apps/plugin-dialog'
+import userEvent from '@testing-library/user-event'
+import i18n from '@/i18n/config'
 import { commands } from '@/lib/tauri-bindings'
 import { logger } from '@/lib/logger'
 import { useProjectStore } from '@/store/project-store'
@@ -73,6 +76,7 @@ describe('AppShell', () => {
       active: false,
       workspace: null,
       recentPaths: [],
+      lastCreationParent: null,
       opening: false,
       request: null,
       error: null,
@@ -1049,4 +1053,70 @@ describe('AppShell', () => {
       expect(screen.getByTitle('Project monitor')).toBeInTheDocument()
     })
   })
+})
+
+describe('creation parent startup restoration', () => {
+  beforeEach(async () => {
+    vi.clearAllMocks()
+    await i18n.changeLanguage('en')
+  })
+
+  it.each([false, true])(
+    'restores the saved creation parent into an open form while preserving a newer native pick: %s',
+    async newerPick => {
+      const preferences = await commands.loadPreferences()
+      if (preferences.status === 'error') throw preferences.error
+      let resolveLoad!: (result: typeof preferences) => void
+      vi.mocked(commands.loadPreferences).mockImplementationOnce(
+        () =>
+          new Promise(resolve => {
+            resolveLoad = resolve
+          })
+      )
+      useCreationStore.setState({
+        active: true,
+        workspace: null,
+        lastCreationParent: null,
+        opening: false,
+        request: null,
+        modePhase: 'idle',
+        error: null,
+      })
+      useSessionStore.setState({ sessionStatus: 'idle', commandPending: false })
+      const user = userEvent.setup()
+      render(<AppShell />)
+      await user.click(screen.getByRole('button', { name: 'New project' }))
+      expect(
+        screen.getByRole('textbox', { name: 'Parent folder' })
+      ).toHaveValue('')
+      if (newerPick) {
+        vi.mocked(open).mockResolvedValueOnce('/new-selection')
+        await user.click(
+          screen.getByRole('button', { name: 'Choose parent folder' })
+        )
+        await screen.findByDisplayValue('/new-selection')
+        await waitFor(() =>
+          expect(commands.savePreferences).toHaveBeenCalledWith(
+            expect.objectContaining({ lastCreationParent: '/new-selection' })
+          )
+        )
+      }
+      await act(async () =>
+        resolveLoad({
+          status: 'ok',
+          data: { ...preferences.data, lastCreationParent: '/saved-parent' },
+        })
+      )
+      const expected = newerPick ? '/new-selection' : '/saved-parent'
+      expect(
+        screen.getByRole('textbox', { name: 'Parent folder' })
+      ).toHaveValue(expected)
+      expect(useCreationStore.getState().lastCreationParent).toBe(expected)
+      await user.click(screen.getByRole('button', { name: 'Cancel' }))
+      await user.click(screen.getByRole('button', { name: 'New project' }))
+      expect(
+        screen.getByRole('textbox', { name: 'Parent folder' })
+      ).toHaveValue(expected)
+    }
+  )
 })

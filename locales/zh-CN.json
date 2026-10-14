@@ -594,7 +594,7 @@
   "creation.newProject.defaultName": "未命名作品",
   "creation.newProject.name": "作品名称",
   "creation.newProject.folderName": "文件夹名称",
-  "creation.newProject.folderHint": "小写字母、数字与连字符，最多 64 字符；工程 ID 会自动独立生成。",
+  "creation.newProject.folderHint": "英文大写字母会自动转为小写；使用字母、数字与连字符，最多 64 字符。工程 ID 会自动独立生成。",
   "creation.newProject.author": "创作者（可选）",
   "creation.newProject.description": "简介（可选）",
   "creation.newProject.parent": "父目录",
@@ -796,5 +796,9 @@
   "creation.newProject.classic.name": "PNDS Classic",
   "creation.newProject.classic.description": "完整双推子示例，包含网络、客户端座位与每位客户端的正弦声音。",
   "creation.newProject.classic.source": "来源：PNDS Template 0.7.0 · 已验证固定快照",
-  "creation.newProject.classic.audioHint": "Classic 离线使用确切的 App 共享包，保留 16 通道正弦声音示例。创建后请手动启动，无需 npm 安装。"
+  "creation.newProject.classic.audioHint": "Classic 离线使用确切的 App 共享包，保留 16 通道正弦声音示例。创建后请手动启动，无需 npm 安装。",
+  "creation.newProject.folderError.required": "请输入文件夹名称。",
+  "creation.newProject.folderError.length": "文件夹名称最多 64 个字符。",
+  "creation.newProject.folderError.characters": "只能使用英文字母、数字和连字符，不能包含空格或其他字符。",
+  "creation.newProject.folderError.boundary": "文件夹名称须以英文字母或数字开头和结尾。"
 }
