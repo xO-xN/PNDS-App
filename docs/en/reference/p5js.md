@@ -9,7 +9,7 @@ How to write sketches, and the template Project's structure, are maintained in t
 ## Load p5 from an App shared package through the project's origin
 
 In creation mode, use “Add shared package” in the Modules heading, choose this
-App's p5 candidate, and enter a new project version. The reference follows
+App's fixed p5 version, and enter a new project version. The reference follows
 [manifest.md](./manifest.md); resources remain in the App. Author server wiring:
 
 ```js
@@ -33,7 +33,7 @@ example lives at `examples/shared-p5/` in the App source. Phones cannot read a
 Mac's absolute filesystem path; do not use `file://` or a CDN. The trusted HTTPS
 entry proxies the same route, and pages retain the relative address.
 
-p5 2.3.4 is a validation candidate. Authors must validate and adapt older sketches'
+p5 2.3.4 is the fixed App 1.6.2 input. Authors must validate and adapt older sketches'
 loading, image, input and timing behavior; adoption never rewrites sketches.
 After a cold offline open, confirm actual circle rendering and input, then test
 refresh, restart, shutdown and bundle installation. HTTP 200 or health ready

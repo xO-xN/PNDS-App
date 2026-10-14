@@ -33,8 +33,17 @@ another version automatically.
 Preflight and each start verify the exact local resources. Missing, damaged or
 mismatched resources fail clearly, without version substitution. Models, scores
 and audio stay in the project. See [p5js.md](./p5js.md) for same-origin wiring and
-[runtime-contract.md](./runtime-contract.md) §3 for injection. The example's 2.3.4
-is a validation candidate; final release versions follow work acceptance.
+[runtime-contract.md](./runtime-contract.md) §3 for injection. App 1.6.2 fixes these inputs:
+
+| Shared package   | Version |
+| ---------------- | ------- |
+| p5               | 2.3.4   |
+| ml5              | 1.4.0   |
+| express          | 5.3.0   |
+| qrcode           | 1.5.4   |
+| socket.io        | 4.8.4   |
+| socket.io-client | 4.8.4   |
+| osc-min          | 2.1.2   |
 
 ## Example
 
