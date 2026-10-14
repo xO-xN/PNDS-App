@@ -68,6 +68,9 @@ export function HoverSidebar({
   const [popupOpen, setPopupOpen] = useState(false)
   // Same guard for sidebar dialogs (§8.3 switch confirm, folder delete).
   const [dialogOpen, setDialogOpen] = useState(false)
+  const projectSelectionRevealed = useKeyboardStore(
+    state => state.projectSelectionRevealed
+  )
   const commandKeyPressed = useKeyboardStore(state => state.commandKeyPressed)
   const status = useSessionStore(state => state.sessionStatus)
   const running = useSessionStore(state => state.sessionStatus === 'ready')
@@ -94,6 +97,7 @@ export function HoverSidebar({
     () =>
       useWindowStore.subscribe((next, previous) => {
         if (next.fullscreen !== previous.fullscreen) {
+          useKeyboardStore.getState().setProjectSelectionRevealed(false)
           setHoverVisible(false)
           setSettingHold(false)
           setPointerActive(false)
@@ -116,6 +120,7 @@ export function HoverSidebar({
     settingsOpen ||
     windowDialogOpen ||
     peeking ||
+    projectSelectionRevealed ||
     renaming ||
     modeConfirmation
 

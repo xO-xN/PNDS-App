@@ -9,9 +9,15 @@ interface KeyboardState {
    */
   commandKeyPressed: boolean
   setCommandKeyPressed: (pressed: boolean) => void
+  /** Native selection can reveal without a main-frame Meta keydown. */
+  projectSelectionRevealed: boolean
+  setProjectSelectionRevealed: (revealed: boolean) => void
 }
 
 export const useKeyboardStore = create<KeyboardState>()(set => ({
+  projectSelectionRevealed: false,
+  setProjectSelectionRevealed: revealed =>
+    set({ projectSelectionRevealed: revealed }),
   commandKeyPressed: false,
   setCommandKeyPressed: pressed => set({ commandKeyPressed: pressed }),
 }))
