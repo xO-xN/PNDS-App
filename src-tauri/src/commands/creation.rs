@@ -563,3 +563,58 @@ pub async fn close_creation_project(
         })
         .await
 }
+
+#[tauri::command]
+#[specta::specta]
+pub async fn get_creation_git_status(
+    app: AppHandle,
+    state: State<'_, CreationState>,
+    identity: String,
+) -> Result<crate::project::creation::CreationGitStatus, CreationError> {
+    let access = state.access.clone();
+    run_blocking(move || {
+        let protection = protection(&app)?;
+        let lock_error =
+            |_| CreationError::new(CreationErrorCode::Io, "Creation workspace lock failed");
+        let job = access
+            .lock()
+            .map_err(lock_error)?
+            .prepare_git_status(&identity, &protection)?;
+        let output = job.run(&crate::project::creation::GitReader::default());
+        let result = access
+            .lock()
+            .map_err(lock_error)?
+            .finish_git_status(output, &protection);
+        result
+    })
+    .await
+}
+#[tauri::command]
+#[specta::specta]
+pub async fn read_creation_git_diff(
+    app: AppHandle,
+    state: State<'_, CreationState>,
+    identity: String,
+    path: String,
+    layer: crate::project::creation::GitDiffLayer,
+) -> Result<crate::project::creation::CreationGitDiff, CreationError> {
+    let access = state.access.clone();
+    run_blocking(move || {
+        let protection = protection(&app)?;
+        let lock_error =
+            |_| CreationError::new(CreationErrorCode::Io, "Creation workspace lock failed");
+        let job = access.lock().map_err(lock_error)?.prepare_git_diff(
+            &identity,
+            &path,
+            layer,
+            &protection,
+        )?;
+        let output = job.run(&crate::project::creation::GitReader::default());
+        let result = access
+            .lock()
+            .map_err(lock_error)?
+            .finish_git_diff(output, &protection);
+        result
+    })
+    .await
+}

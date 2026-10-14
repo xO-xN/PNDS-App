@@ -229,6 +229,20 @@ vi.mock('@/lib/tauri-bindings', async () => {
       describeCreationProjects: vi
         .fn()
         .mockResolvedValue({ status: 'ok', data: [] }),
+      getCreationGitStatus: vi.fn().mockResolvedValue({
+        status: 'ok',
+        data: {
+          state: 'notRepository',
+          branch: null,
+          head: null,
+          changes: [],
+          detail: null,
+        },
+      }),
+      readCreationGitDiff: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: { code: 'io', detail: 'readCreationGitDiff not mocked' },
+      }),
       listCreationFiles: vi.fn().mockResolvedValue({ status: 'ok', data: [] }),
       pollCreationChanges: vi.fn().mockImplementation(async () => {
         const { useCreationStore } = await import('@/store/creation-store')

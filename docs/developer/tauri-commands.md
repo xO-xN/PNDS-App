@@ -31,7 +31,8 @@ controls. The ready session snapshot additionally exposes
 
 Creation commands (`openCreationProject`, `describeCreationProjects`,
 `listCreationFiles`, `pollCreationChanges`, `readCreationFile`, `saveCreationFile`,
-`renameCreationFile`, `revealCreationPath`, `closeCreationProject`) use a
+`renameCreationFile`, `getCreationGitStatus`, `readCreationGitDiff`,
+`revealCreationPath`, `closeCreationProject`) use a
 backend-issued identity after opening. Source
 protection and error codes are described in
 [creation-workspace.md](./creation-workspace.md); never substitute a raw frontend

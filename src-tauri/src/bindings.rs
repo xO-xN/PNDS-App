@@ -36,6 +36,8 @@ pub fn generate_bindings() -> Builder<tauri::Wry> {
         creation::get_creation_modules,
         creation::add_creation_module,
         creation::list_creation_files,
+        creation::get_creation_git_status,
+        creation::read_creation_git_diff,
         creation::poll_creation_changes,
         creation::read_creation_file,
         creation::save_creation_file,
