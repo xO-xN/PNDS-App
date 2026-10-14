@@ -260,7 +260,39 @@ use their real UI submit paths with controlled typed-command replies to verify
 `commandPending` blocks selection before any backend lifecycle snapshot changes.
 Menu-state tests verify mode/project-close and starting/stopping disablement.
 
-These are user-workflow and typed-command seams, not macOS accelerator evidence.
-Real monitor/input focus, fullscreen, layout size and independent-window key
-ownership remain user-run native acceptance; use the checklist in
+On macOS, `npm run native:selection:verify` builds an isolated opt-in Tauri
+fixture from cached Cargo dependencies (`--offline`). A warm cache can be cloned
+into a distinct writable target and supplied with
+`npm run native:selection:verify -- --target-dir /private/tmp/pnds-native-target`.
+The target must belong exclusively to this fixture run; never point it at an
+App checkout's active target. The fixture briefly activates its own windows,
+uses disposable WebView data and an ephemeral loopback guest page, then exits.
+It starts no App dev server, audio/session process or score server and writes no
+user projects. The default fresh target can take longer to compile.
+
+The runner extracts the production WK hook verbatim, asserts its exact bytes,
+and saves the full source, hook and generated-module SHA-256 values alongside
+`native-results.json`, `native-route.log` and `cargo-build.log` in a temporary
+`pnds-native-selection-*` directory. Its frontend imports the actual menu,
+selection and preflight modules; only project/native command result data are
+fixtures. Own AppKit `NSEvent` instances reach `NSApplication.sendEvent`, with
+active/key/event-window assertions, plus a direct `NSMenu.performKeyEquivalent`
+positive control. This is native Tauri/Wry/Muda routing evidence, without
+synthesizing OS input. A fixture-only observer forwards the original WK method
+unchanged and counts fallback calls without duplicating production dispatch.
+
+The 37-case matrix covers both arrows with host body, editable and cross-origin
+guest focus, ordinary and Function/NumericPad modifier flags, exactly one native
+menu action per matching chord, both boundaries, independent business gates
+under stale enabled items, and secondary-window ownership. Missing/disabled
+items and disabled submenu parents, Shift/Control/plain-Command variants and Option horizontal arrows must
+reach the original WK route. Failed active/key ownership is reported separately;
+a delivery mismatch is never retried. Both completion assertions and clean native
+process exit are required. This check remains opt-in because it requires a
+foreground macOS AppKit session; it is not a Cargo worker or jsdom test.
+
+The jsdom workflows described above exercise user workflows and typed commands;
+they do not prove macOS accelerator delivery. Physical keystrokes in the complete
+App, fullscreen, actual score-monitor identity/layout and runtime preservation
+remain user-run native acceptance; use the checklist in
 [keyboard-shortcuts.md](./keyboard-shortcuts.md#native-performance-selection-202).
