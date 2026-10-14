@@ -102,6 +102,7 @@ export const HELP_BOOKS: readonly {
       'modules-projection-surface',
       'modules-monitor-state',
       'modules-audio',
+      'modules-hub',
     ],
   },
 ]

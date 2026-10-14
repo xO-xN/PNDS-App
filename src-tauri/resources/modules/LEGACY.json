@@ -1,0 +1,22 @@
+{
+  "LICENSE.md": "95ae07227ad3397787ebc718275eae3a3b9b8ba5cbcf3cc1be8781769c1417ed",
+  "locale-follow/README.md": "2b96086009e0904bbb5754a90d223a315adc200d19e2a4ddb426eabcfb86a194",
+  "locale-follow/locale-follow.js": "93efa6647331bc742f4452ee8247463c1eeba070e365baa0553e1f87aa3da0df",
+  "locale-follow/package.json": "a51bff776fdd53226e2e67d8f654d17dadfe3decc8bf8bf869cba3aff9813826",
+  "monitor-state/README.md": "bb6b3f4cc4d0c689dd3c718fe6c13cd388a441431e0656e3486dcbce3d501470",
+  "monitor-state/client.js": "5b4fe52936a63e42097ead6eae553a555c0731a4f8a6f7b5e7eb972ae3484201",
+  "monitor-state/monitor-state.js": "692617af7b326319e74a10ba4e33e1fbc238178ce719ea18f0a6a6e06196191f",
+  "monitor-state/package.json": "a51bff776fdd53226e2e67d8f654d17dadfe3decc8bf8bf869cba3aff9813826",
+  "players/README.md": "6b253fa72a2c71b7dd40f09e6d6c95312a6e9d507c33035aa38feac00c34cccc",
+  "players/client.js": "5b4fe52936a63e42097ead6eae553a555c0731a4f8a6f7b5e7eb972ae3484201",
+  "players/package.json": "a51bff776fdd53226e2e67d8f654d17dadfe3decc8bf8bf869cba3aff9813826",
+  "players/players.js": "0fdcb6353cc4fe06d3dbcff6f1be6acd3958f5ce543277e145e9a77b20101b95",
+  "players/protocol.js": "ece54ada3248303f5f068e945dcedd95972333c4ac8a1b3a35f72241b27ecb9f",
+  "players/seats-store.js": "4f4731ab4198f643a4ed84152d1fdea44d536c6499468eda26edd60be66387d3",
+  "qr/README.md": "2cd78f8a39ed9ba24a83837a3dd1c3f097d77d37e80251482673277dc94fd449",
+  "qr/package.json": "a51bff776fdd53226e2e67d8f654d17dadfe3decc8bf8bf869cba3aff9813826",
+  "qr/qr.js": "da2a3a90ae6998b53ebcdedeffeff72a5cd56517a85fb904ba6da81650198e41",
+  "theme-follow/README.md": "ea8067f3543de45411b89d88cf6d727bb54532af9bcf485a9a7299e856bbcbfd",
+  "theme-follow/package.json": "a51bff776fdd53226e2e67d8f654d17dadfe3decc8bf8bf869cba3aff9813826",
+  "theme-follow/theme-follow.js": "cfa523b3d8f4090e3613fd110e971caf044ffab061c4c4957ff6bc059cf17300"
+}

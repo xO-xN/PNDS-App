@@ -1,5 +1,11 @@
 # 乐手身份与座位
 
+## v1.6.1 标准模块
+
+离线发布版 0.2.0 加入 `modules/pnds-players/`，带同版本源码、兼容声明与双语 README。标准服务端 `attachPlayers` 接受工程自己的入场、释放、控制/离散动作与快照政策；浏览器 `PNDSPlayers.connectPlayer` 和 `connectObserver` 分开身份与观察。身份可共享，不要求座位、输出通道或 voice 一一对应。连续值过滤通过 `continuousFilter` 显式启用；离散动作走 `sendAction`，重复载荷逐次发送。`players.js` 和 `seats-store.js` 仅为明确选择 Template 座位策略时的可选 helper。 完整输入/输出、接线和清理步骤以已加入目录的 README 为准；源码归工程维护，文件加入不代表接线或运行验收。
+
+## Template 示例实现
+
 一个乐手的手机凭什么在锁屏、掉线、甚至工程重启之后，还坐回同一个座位、走同一个输出通道？答案散在四个文件里，这一篇把它们当一个故事讲完：
 
 | 文件                 | 角色                                                 |

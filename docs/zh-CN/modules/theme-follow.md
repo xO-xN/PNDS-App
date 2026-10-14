@@ -1,5 +1,11 @@
 # 主题跟随
 
+## v1.6.1 标准模块
+
+离线发布版 0.2.0 加入 `modules/pnds-theme-follow/`，带同版本源码、兼容声明与双语 README。标准版保留首帧和 Host 协议 1，提供 CSS 映射、自定义绘制回调与 `PNDS_THEME.dispose()`。变化回调幂等、重载释放旧监听，畸形消息忽略；仅在 monitor 加载，performer 不自动采用。 完整输入/输出、接线和清理步骤以已加入目录的 README 为准；源码归工程维护，文件加入不代表接线或运行验收。
+
+## Template 示例实现
+
 App 有四台主题（pond / sand / stage / brutal；pond 的 id 在 v1.3.3（#91）前叫 lavender，老页面收不到认识的 id 时保持自身默认配色——恰与 pond 同款，视觉无差）。主题跟随让 monitor 页跟着 App 当前主题换色，而 performer 页保持工程自己的配色。
 
 ## 只在 monitor 页加载

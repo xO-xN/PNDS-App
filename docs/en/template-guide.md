@@ -118,3 +118,9 @@ Pre-release checklist:
 6. Packaging succeeded — note the artifact path and sha256 and distribute them alongside the file.
 
 Performer test windows support the Project's normal JavaScript dialogs, including player-number prompts. **Mouse simulates one touch** is visibly enabled for new test clients; drag with the left button to simulate one contact, or turn it off for the page's original mouse behavior. Switching this option does not reload the page. These are untrusted synthetic touch events; native text/form controls remain usable, and real multitouch, pressure, sensors and mobile-browser behavior still require a device.
+
+## External PNDS Skills
+
+Skills are optional creation aids. Resources: [pnds-agent-skills](https://github.com/xO-xN/pnds-agent-skills). Follow the resource directory instructions to choose the unified creation entry or an independent capability, and install the complete directory in your external coding agent environment with its declared supporting resources. The App does not perform installation. The general entry supports creation, modification and assessment of arbitrary source projects; the author confirms a porting plan before implementation. CM1 remains an explicitly selected course entry. Prefer the installed App's local reference corpus; remote latest documents do not establish local capabilities.
+
+Ordinary tasks deliver editable source with decisions, verification and creator handoff records; package only when distribution is requested. Course tasks deliver both. Record structure readiness, wiring, runtime, sound and device checks, and distribution readiness separately. Reading, editing, module addition and manual testing in the App do not require installed Skills.

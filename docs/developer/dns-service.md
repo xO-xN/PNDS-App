@@ -12,6 +12,8 @@
 - **`src-tauri/src/dns/`** —— App 侧接缝：`service.rs` SMAppService 封装（objc2-service-management，register/unregister/status/openSystemSettings）；`client.rs` 控制 socket 客户端（每请求一连接，纯 JSON，无 shell）；`mod.rs` 编排注册与状态；`mapping.rs` 的 `MappingLease` 集中演出映射的安装、验证、续租、失败回滚与撤销；
 - **plist**：`src-tauri/launchd/com.xo-xn.pnds-app.dnsd.plist`，经 `bundle.macOS.files` 放进 `Contents/Library/LaunchDaemons/`；二进制经 `externalBin`（`binaries/pnds-dnsd`）进 `Contents/MacOS/`；plist 用 `BundleProgram`（bundle 相对路径）——App 移动不断链。
 
+`BundleProgram` 只负责定位可执行文件；参数使用标准 `ProgramArguments`，数组首项是 `argv[0]`，随后才是 `--state` / `--control`。`BundleProgramArgs` 不是 launchd 参数字段，不能用它传参。
+
 ## 接线约定
 
 - **生命周期**：安装点在 `session.rs` `start_generation` 的入口绑定之后（与 #140 入口同 seam，一次偏好读取同时决策两者——`resolve_dns_mapping` 纯函数，矩阵测试锁定）；撤销在 `teardown_children` 内紧跟入口关闭；租约监督线程 generation-guarded，20s 续期；
@@ -28,7 +30,19 @@
 
 测试通过 `client::call_on` / `request_on` 的既有 socket seam 连接临时 Unix listener，并执行真实 dnsd 控制与查询 implementation；注入 set 应答丢失、verify 失败、首次撤销拒绝和关停期间的迟到结果。断言既检查 App 状态，也检查 daemon 映射和真实 NXDOMAIN。测试不接触系统控制 socket、不监听 53、不提权；App 仅在 dev-dependencies 引用 dnsd，发行 App 与 daemon 的链接关系不变。
 
+控制面成功响应是 `{id, ok: true, data: {...}}`。App 的状态查询、启用前就绪检查与配置后的端口绑定检查统一通过 `client::call_on` 校验 `ok` 并读取 `data`；拒绝响应不能被当成已就绪，`bindError` 必须阻止启用成功。`status_tests.rs` 使用真实控制协议覆盖完整状态、dev 无 plist 时读取已有服务、daemon 不可达、拒绝响应与绑定失败。
+
+监听地址变更由 `config.set` 保存配置并请求进程自重启。`run()` 必须先设置所有工作线程共用的 `stop`，再 join UDP/TCP 与租约巡检线程；只设置 `restart` 会让旧进程永远等在 join，launchd 无法拉起采用新地址的进程。`dnsd/tests/restart.rs` 在临时路径与高端口运行真实 daemon 子进程，覆盖正常监听和旧地址绑定失败后的配置重启。
+
 ## 发行与验证边界
 
 - `npm run dnsd:build`（当前架构）/ `dnsd:build:all`（双架构）产出 `src-tauri/binaries/pnds-dnsd-<triple>`；
 - **未完成、也不得用开发环境冒充**（#174 验收条）：真机签名后的 LaunchDaemon 注册流程、系统授权弹窗、升级/重启恢复、TL-WR800N 真机验收。开发环境（未打包 bundle）里 `plist_path()` 为 `None`，`dns_service_enable` 如实报错——这是设计行为，不是 bug。
+
+普通 dev App 可以通过固定控制 socket 使用安装版已注册且健康的 daemon。系统显示已有登记不等于 daemon 已运行：分别核对 SMAppService 注册事实、控制面、UDP/TCP 53 与当前映射。若 launchd 在 `copy_bundle_path` 阶段失败且持有的 BTM UUID 已不存在，应由安装版 App 经 SMAppService 注销并重新注册；不要用删除 socket 或全量重置 BTM 代替登记恢复。恢复后由用户启动 dev 和工程，手机域名解析、HTTPS、实时连接与 sensor 权限仍需真机验收。
+
+### 本机恢复记录（2026-10-14）
+
+本机旧任务仍引用 1.5.2 的失效 BTM UUID，安装包产品版本为 1.6.0。注销后更新安装包内的 daemon 与 plist，并保留原 ad-hoc 签名的权限、重新签名及验证整个 bundle。同版本替换后仍复用了无法定位程序的登记；仅刷新该 App 的 LaunchServices 记录未解决。本地修复包将 `CFBundleVersion` 更新为构建号 `1601`（产品版本仍为 1.6.0），再次注册后获得新 UUID，真实配置自重启完成，UDP/TCP 53 均已绑定且 `bindError` 为空。
+
+已使用用户配置的演出域名与所选 LAN 地址验证真实 UDP/TCP 53、映射自证、续租、撤销后的 NXDOMAIN；临时映射已清理，DNS 启用偏好保持开启，安装版退出后控制面继续服务。原安装包备份位于 `/private/tmp/pnds-dns-repair-nivnzr0c/backup/PNDS.app`。用户随后反馈 Sensor 测试没有问题；这些结果不替代正式签名的双架构发行、系统重启恢复与路由器验收。

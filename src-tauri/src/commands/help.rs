@@ -69,6 +69,7 @@ const HELP_DOCUMENTS: &[(&str, &str)] = &[
     ),
     ("modules-monitor-state", "modules/monitor-state.md"),
     ("modules-audio", "modules/audio.md"),
+    ("modules-hub", "modules/hub.md"),
     ("reference-readme", "reference/README.md"),
     ("reference-digital-score", "reference/digital-score.md"),
     ("reference-network", "reference/network.md"),

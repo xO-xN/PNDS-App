@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { readdirSync, readFileSync } from 'node:fs'
@@ -13,6 +14,44 @@ const root = path.resolve(
 const require = createRequire(import.meta.url)
 
 describe('the actual offline module sources', () => {
+  it('pins every delivered source, compatibility document and README to one content revision', () => {
+    const source = JSON.parse(
+      readFileSync(path.join(root, 'SOURCE.json'), 'utf8')
+    )
+    const hash = bytes => createHash('sha256').update(bytes).digest('hex')
+    expect(source.moduleVersion).toBe('0.2.0')
+    expect(source.revision).toBe(`sha256:${hash(JSON.stringify(source.files))}`)
+    const files = readdirSync(root, { withFileTypes: true }).flatMap(entry =>
+      entry.isDirectory()
+        ? readdirSync(path.join(root, entry.name)).map(
+            name => `${entry.name}/${name}`
+          )
+        : entry.name === 'SOURCE.json'
+          ? []
+          : [entry.name]
+    )
+    expect(files.sort()).toEqual(Object.keys(source.files).sort())
+    for (const [name, digest] of Object.entries(source.files)) {
+      expect(hash(readFileSync(path.join(root, name)))).toBe(digest)
+    }
+    for (const id of [
+      'qr',
+      'players',
+      'theme-follow',
+      'locale-follow',
+      'monitor-state',
+      'hub',
+    ]) {
+      const compatibility = JSON.parse(
+        readFileSync(path.join(root, id, 'compatibility.json'), 'utf8')
+      )
+      expect(compatibility.version).toBe('0.2.0')
+      expect(compatibility.hostProtocol).toBe(1)
+      expect(compatibility.runtime.length).toBeGreaterThan(0)
+      expect(compatibility.adaptation.length).toBeGreaterThan(0)
+    }
+  })
+
   it('are self-contained CommonJS/UMD files that parse under the project Node baseline', () => {
     for (const id of [
       'qr',
@@ -20,6 +59,7 @@ describe('the actual offline module sources', () => {
       'theme-follow',
       'locale-follow',
       'monitor-state',
+      'hub',
     ]) {
       expect(
         JSON.parse(readFileSync(path.join(root, id, 'package.json'), 'utf8'))
@@ -117,9 +157,10 @@ describe('the actual offline module sources', () => {
         return encoder
       },
       console,
+      URL,
     })
     const response = { type: vi.fn().mockReturnThis(), send: vi.fn() }
-    module.exports.qrHandler('https://stage.example/join?room=one')(
+    await module.exports.qrHandler('https://stage.example/join?room=one')(
       {},
       response
     )

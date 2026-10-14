@@ -1162,7 +1162,7 @@ export type CreationError = { code: CreationErrorCode; detail: string }
 export type CreationErrorCode = "missing" | "permission" | "invalidUtf8" | "tooLarge" | "invalidIdentity" | "pathEscape" | "invalidProject" | "manifestInvalid" | "testValidation" | "testStartup" | "versionConflict" | "targetExists" | "io"
 export type CreationFile = { path: string; size: number; kind: CreationFileKind; category: CreationCategory }
 export type CreationFileKind = "text" | "image" | "binary"
-export type CreationModule = { id: string; version: string; source: ModuleSource; files: string[]; state: ModuleState; recordVersion: string | null; error: CreationError | null }
+export type CreationModule = { id: string; version: string; source: ModuleSource; shippedVersion: string; compatibility: ModuleCompatibility | null; files: string[]; state: ModuleState; recordVersion: string | null; error: CreationError | null }
 export type CreationModuleAddResult = { files: string[]; handoffRecorded: boolean; alreadyAdded: boolean; error: CreationError | null }
 export type CreationModuleCatalog = { modules: CreationModule[]; handoffVersion: string | null }
 export type CreationOption = { path: string; project: CreationProject | null; error: CreationError | null }
@@ -1427,6 +1427,7 @@ telematic?: boolean | null;
  * the same variable, zero project changes.
  */
 performerAddress?: string | null }
+export type ModuleCompatibility = { version: string; hostProtocol: number; runtime: string[]; adaptation: string[] }
 export type ModuleSource = { repository: string; revision: string; version: string }
 export type ModuleState = "available" | "added" | "needsHandoff" | "conflict"
 export type NewProjectOptions = { parent: string; folderName: string; name: string; author: string; description: string; locale: string }

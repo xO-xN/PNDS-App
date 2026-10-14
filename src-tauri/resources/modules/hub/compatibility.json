@@ -1,0 +1,13 @@
+{
+  "version": "0.2.0",
+  "hostProtocol": 1,
+  "runtime": [
+    "Node 24",
+    "socket.io-client 4.8.x",
+    "Existing PNDS hub relay protocol"
+  ],
+  "adaptation": [
+    "Declare telematic capability and keep the Host configuration gate; read PNDS_NODE_ID and PNDS_HUB_URL/TOKEN/ROOM. / 声明 telematic 能力并保留 Host 配置门；读取 PNDS_NODE_ID 与 PNDS_HUB_URL/TOKEN/ROOM。",
+    "Provide event and summary adapters; local performer control remains independent of remote connection. / 提供事件与摘要适配器；本地 performer 控制保持独立。"
+  ]
+}

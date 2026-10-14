@@ -133,6 +133,15 @@ export function createFolderOrFail(name: string): string {
 export * from '@testing-library/react'
 export { customRender as render }
 
+/** Exercise the App select's popup instead of dispatching a native change event. */
+export async function chooseSelectOption(
+  label: string,
+  option: string
+): Promise<void> {
+  await userEvent.click(screen.getByRole('combobox', { name: label }))
+  await userEvent.click(await screen.findByRole('option', { name: option }))
+}
+
 /** Select a browsing folder using the same dropdown interaction as the app. */
 export async function selectFolderInPicker(name: string): Promise<void> {
   await userEvent.click(

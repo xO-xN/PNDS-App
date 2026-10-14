@@ -1,6 +1,13 @@
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -121,23 +128,26 @@ export function CreationHandoff({
               ))}
               <label className="grid gap-1 text-sm">
                 <span>{t('creation.handoff.status')}</span>
-                <select
-                  className="pnds-focus-ring rounded border bg-(--pnds-card) p-2"
+                <Select
                   value={task.status}
-                  onChange={event =>
-                    useCreationHandoffStore
-                      .getState()
-                      .edit({ status: event.target.value })
+                  disabled={busy}
+                  onValueChange={status =>
+                    useCreationHandoffStore.getState().edit({ status })
                   }
                 >
-                  {['pending', 'in-progress', 'blocked'].map(status => (
-                    <option key={status} value={status}>
-                      {t(
-                        `creation.handoff.status.${status === 'in-progress' ? 'inProgress' : status}`
-                      )}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger aria-label={t('creation.handoff.status')}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {['pending', 'in-progress', 'blocked'].map(status => (
+                      <SelectItem key={status} value={status}>
+                        {t(
+                          `creation.handoff.status.${status === 'in-progress' ? 'inProgress' : status}`
+                        )}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </label>
             </fieldset>
           )}

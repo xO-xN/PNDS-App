@@ -59,13 +59,19 @@ export function CreationProjectPicker({
         if (!open && !opening) onClose()
       }}
     >
-      <DialogContent showCloseButton={false}>
+      <DialogContent
+        showCloseButton={false}
+        className="creation-project-picker"
+      >
         <DialogTitle>{t('creation.switchProject')}</DialogTitle>
         <DialogDescription>{t('creation.selectorHint')}</DialogDescription>
-        {error && <CreationErrorNotice error={error} />}
-        {openingError && <CreationErrorNotice error={openingError} />}
-        {!options && !error && <p role="status">{t('creation.loading')}</p>}
-        <div className="max-h-72 space-y-2 overflow-auto">
+        <div
+          className="creation-project-picker-list space-y-2"
+          aria-busy={!options && !error}
+        >
+          {error && <CreationErrorNotice error={error} />}
+          {openingError && <CreationErrorNotice error={openingError} />}
+          {!options && !error && <p role="status">{t('creation.loading')}</p>}
           {options?.map(option => (
             <Button
               key={option.path}

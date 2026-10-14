@@ -547,6 +547,40 @@ const buttonVariants = cva('...', {
 
 This app includes commonly needed components. Run `npx shadcn@latest add [component]` to add more from [ui.shadcn.com](https://ui.shadcn.com/docs/components).
 
+### App dropdowns
+
+App selectors use `Select`, `SelectTrigger`, `SelectValue`, `SelectContent` and
+`SelectItem` from `src/components/ui/select.tsx`. Their popup follows the App
+palette, focus styling and keyboard interaction. Do not use HTML `select` or
+the retired `NativeSelect`; `no-native-select` enforces this in App JSX. Radix's
+hidden native control remains available for form semantics.
+
+Use `onValueChange` for string values and label the trigger with `htmlFor`,
+`aria-label` or `aria-labelledby`. Pass `disabled` to the Select root when the
+operation is locked. Preserve a selected label's natural width rather than
+sizing the trigger to the longest option. An undeclared manifest mode uses the
+UI value `undeclared`, mapped back to an empty string; it must remain possible
+to clear the selection. SelectItem values cannot be empty strings.
+
+Tests open the popup and choose its option through `chooseSelectOption`, or use
+keyboard input; native change events do not exercise the App menu.
+
+### Async dialog geometry
+
+The first visible dialog frame must already have its intended layout. The
+module browser reads its catalog before opening and shows loading on its trigger.
+The creation project picker reserves a bounded list area for loading, errors,
+empty results and project choices; only that area scrolls as content arrives.
+Settings and project introduction use fixed shells with scrolling content.
+Do not initially render a short centered loading dialog and expand it when an
+async read returns: changing the height moves its top edge abruptly.
+
+Check real browser frames with a delayed command response. jsdom does not
+measure layout. The October 2026 audit reproduced a 123px frame jump in the
+project picker and fixed it by keeping loading and results in the same region.
+Handoff, new project, settings, port confirmation and initial bundle dialogs
+had no async jump in the same audit; normal entrance scaling stays centered.
+
 ## The `cn()` Utility
 
 All components use the `cn()` utility for conditional classes:

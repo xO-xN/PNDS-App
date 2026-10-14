@@ -1,0 +1,16 @@
+id: no-native-select
+message: Use the App Select components from @/components/ui/select for dropdowns.
+severity: error
+language: Tsx
+files:
+  - 'src/**/*.tsx'
+rule:
+  any:
+    - pattern: <select $$$ATTRS>$$$CHILDREN</select>
+    - pattern: <select $$$ATTRS />
+note: |
+  HTML select opens an operating-system popup that does not follow App themes.
+  Use Select, SelectTrigger, SelectValue, SelectContent and SelectItem instead.
+  Radix owns the hidden native form control; do not replace its accessible popup.
+
+  See: docs/developer/ui-patterns.md

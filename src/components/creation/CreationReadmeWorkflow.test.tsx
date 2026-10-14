@@ -3,7 +3,14 @@ import {
   creationFileButton,
 } from '@/test/desktop-actions'
 import { beforeEach, expect, it, vi } from 'vitest'
-import { act, fireEvent, render, screen, waitFor } from '@/test/test-utils'
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  chooseSelectOption,
+} from '@/test/test-utils'
 import { commands, type CreationWorkspace } from '@/lib/tauri-bindings'
 import { useCreationStore } from '@/store/creation-store'
 import { useCreationFilesStore } from '@/store/creation-files-store'
@@ -73,13 +80,9 @@ it('selects the App language variant, retains edits across language switches and
   fireEvent.change(screen.getByRole('textbox', { name: '封面标题' }), {
     target: { value: '中文作品' },
   })
-  fireEvent.change(screen.getByRole('combobox', { name: 'README 语言' }), {
-    target: { value: 'en' },
-  })
+  await chooseSelectOption('README 语言', 'English')
   await screen.findByDisplayValue('Original')
-  fireEvent.change(screen.getByRole('combobox', { name: 'README 语言' }), {
-    target: { value: 'zh-CN' },
-  })
+  await chooseSelectOption('README 语言', '简体中文')
   expect(await screen.findByRole('textbox', { name: '封面标题' })).toHaveValue(
     '中文作品'
   )
@@ -279,10 +282,7 @@ it('keeps a manual task when cancelled or when the creator declines switching pr
       },
     }
   )
-  fireEvent.change(
-    within(dialog).getByRole('combobox', { name: 'Status supplied by you' }),
-    { target: { value: 'in-progress' } }
-  )
+  await chooseSelectOption('Status supplied by you', 'In progress')
   await waitFor(() =>
     expect(
       within(dialog).getByRole('button', { name: 'Add to handoff' })
@@ -462,12 +462,10 @@ it('reads a plain README with safe links, edits text, and keeps the chosen langu
   const clicked = new MouseEvent('click', { bubbles: true, cancelable: true })
   relative.dispatchEvent(clicked)
   expect(clicked.defaultPrevented).toBe(true)
-  fireEvent.change(screen.getByRole('combobox', { name: 'README language' }), {
-    target: { value: 'zh-CN' },
-  })
-  expect(screen.getByRole('combobox', { name: 'README language' })).toHaveValue(
-    'zh-CN'
-  )
+  await chooseSelectOption('README language', '简体中文')
+  expect(
+    screen.getByRole('combobox', { name: 'README language' })
+  ).toHaveTextContent('简体中文')
   fireEvent.click(screen.getByRole('button', { name: 'Edit text' }))
   fireEvent.change(screen.getByRole('textbox', { name: 'README.md' }), {
     target: { value: plain + '\nNew paragraph.\n' },

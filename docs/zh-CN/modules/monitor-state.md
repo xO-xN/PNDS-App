@@ -1,5 +1,11 @@
 # monitor 视图状态
 
+## v1.6.1 标准模块
+
+离线发布版 0.2.0 加入 `modules/pnds-monitor-state/`，带同版本源码、兼容声明与双语 README。标准版用独立的 `monitor-client.js` 和全局 `PNDSMonitorState.connectMonitorState`，不再复制混合 performer 客户端。工程在专用 monitor namespace 上接入 `attachMonitorState`，声明键、默认值、事件名和可选 validator；快照只活在本次 server 生命周期，未知/非法更新不改变状态。 完整输入/输出、接线和清理步骤以已加入目录的 README 为准；源码归工程维护，文件加入不代表接线或运行验收。
+
+## Template 示例实现
+
 同一个 monitor URL 会以多个副本活着：App 主窗 iframe、App 投影窗口 iframe、⌘⇧R 重载出的新副本、排练时打开的浏览器标签页。视图状态（视图开关、调试选择）放在页面本地时，每个副本各自从默认值起步——指挥在 App 端 monitor 里调好的内容，投影端要用鼠标重新调一遍；显式重载也会把调好的状态丢回默认。
 
 monitor 视图状态把这份状态搬到**工程自己的 server** 单一持有：任何副本连接即收到当前快照，任一副本的变更即时广播给全部副本；页面从 server 状态渲染、用户调整改为上报。所有副本自然一致，重载不丢状态。

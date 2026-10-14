@@ -13,21 +13,10 @@ pub fn control_socket_path() -> PathBuf {
     PathBuf::from("/Library/Application Support/PNDS/dnsd/control.sock")
 }
 
-/// Sends one request and reads one response line.
-/// `Err("connection refused")`-style transport errors surface verbatim;
-/// a JSON `{"ok": false}` body is returned AS the object for the caller
-/// to inspect (refusals carry codes the App maps to settings text).
-pub fn request(
-    op: &str,
-    payload: serde_json::Value,
-    timeout: Duration,
-) -> Result<serde_json::Value, String> {
-    request_on(&control_socket_path(), op, payload, timeout)
-}
-
-/// [`request`] against an explicit socket — the test seam that keeps
-/// tests off the machine-global fixed path (a dev box with the service
-/// enabled has a LIVE control socket there).
+/// Raw line-JSON exchange against an explicit socket. Transport errors
+/// surface verbatim; protocol refusals stay inside the envelope. App
+/// callers use `call` / `call_on` to check `ok` and unwrap `data`.
+/// This seam keeps tests off the live machine-global control socket.
 pub fn request_on(
     socket: &std::path::Path,
     op: &str,

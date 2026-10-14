@@ -1,5 +1,11 @@
 # QR Code
 
+## v1.6.1 standard module
+
+Offline release 0.2.0 is added to `modules/pnds-qr/`, with sources, compatibility and bilingual README of the same version. The standard `qrHandler(performerUrl, options)` supports PNG/SVG, width, margin and correction options. Missing/invalid full HTTP(S) URLs return 400; encoding failures return 500. The project resolves the URL against the runtime contract, preserving scheme, port, path, query and necessary parts. Use the added README for complete inputs/outputs, wiring and cleanup. Sources belong to the project; file addition does not establish wiring or runtime acceptance.
+
+## Template example implementation
+
 The QR code on the monitor page is not a static image — it is an endpoint the score server renders on the fly. Performers scan it with a phone and land straight on the performer page; nobody types LAN URLs.
 
 ## The endpoint: GET /qr (monitor side only)

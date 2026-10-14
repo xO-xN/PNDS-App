@@ -28,5 +28,5 @@ src/lib/bindings.ts
 utilities/
 src-tauri/resources/utilities/
 
-# Frozen Template module sources retain their upstream bytes.
-src-tauri/resources/modules/**/*.js
+# Frozen module sources, documentation and provenance retain upstream bytes.
+src-tauri/resources/modules/**

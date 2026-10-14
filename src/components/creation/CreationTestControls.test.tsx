@@ -6,7 +6,9 @@ import {
   screen,
   waitFor,
   within,
+  chooseSelectOption,
 } from '@/test/test-utils'
+import userEvent from '@testing-library/user-event'
 import { commands, type Manifest } from '@/lib/tauri-bindings'
 import { useCreationStore } from '@/store/creation-store'
 import { useCreationTestStore } from '@/store/creation-test-store'
@@ -97,9 +99,7 @@ it('stages audio changes independently of applied facts and restarts only after 
     data: manifest,
   })
   render(<CreationTestControls />)
-  fireEvent.change(screen.getByRole('combobox', { name: 'Test audio mode' }), {
-    target: { value: 'external' },
-  })
+  await chooseSelectOption('Test audio mode', 'External')
   expect(screen.getByText('Running · Internal')).toBeInTheDocument()
   expect(
     screen.getByText('Configuration pending · restart to apply')
@@ -150,11 +150,13 @@ it('inherits the actual external target on adoption and only offers saved suppor
   await act(async () => {
     await useCreationTestStore.getState().loadManifest()
   })
+  await userEvent.click(
+    screen.getByRole('combobox', { name: 'Test audio mode' })
+  )
   expect(
-    within(
-      screen.getByRole('combobox', { name: 'Test audio mode' })
-    ).getAllByRole('option')
+    within(screen.getByRole('listbox')).getAllByRole('option')
   ).toHaveLength(1)
+  await userEvent.keyboard('{Escape}')
   expect(screen.getByText('Running · External')).toBeInTheDocument()
   expect(commands.startCreationProject).not.toHaveBeenCalled()
 })

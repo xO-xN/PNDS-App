@@ -1,317 +1,131 @@
-// Score-server client for the browser pages.
-//
-// Works as a plain browser global (window.PNDSClient) and as a Node
-// module (tests). Everything the pages used to inline lives here: the
-// performer's same-origin connection, socket reconnection, the
-// join-with-persisted-token / rejoin-on-reconnect flow, my-voice
-// tracking from state broadcasts, the send-only-if-changed deadband,
-// and the monitor's view-state channel (server-held state: snapshot on
-// connect, set on adjust). Pages keep drawing and input.
-//
-// Like lib/protocol.js on the server side, this module holds no work
-// vocabulary: control payloads pass through the deadband and the wire
-// opaquely, and event names come from shared.js via the caller.
-//
-// All ambient dependencies are injected ({ io, storage }), so tests
-// drive the same code with a fake socket factory and a fake storage —
-// no browser needed.
-
+// Independent browser/Node connector. No seat, voice or output assumptions.
 (function (root, factory) {
-  if (typeof module !== "undefined" && module.exports) {
-    module.exports = factory();
-  } else {
-    root.PNDSClient = factory();
-  }
+  if (typeof module !== "undefined" && module.exports) module.exports = factory();
+  else root.PNDSPlayers = factory();
 })(typeof self !== "undefined" ? self : this, function () {
-  // The performer server's INTERNAL origin (plain HTTP on the LAN) —
-  // what the monitor page's cross-port connection and its socket.io
-  // script tag are built from. The performer page itself connects
-  // same-origin instead (see connectPerformer): under the App's HTTPS
-  // entry the browser origin is the entry's, and the socket must
-  // follow the page, not the manifest ports (#138).
-  function socketOrigin({ hostname, port }) {
-    return "http://" + hostname + ":" + port;
-  }
-
-  // True when any field of `next` differs from `previous`: numeric
-  // fields compare against the deadband threshold, everything else
-  // strictly. Work-agnostic — the field names are the caller's.
   function changedBeyond(previous, next, threshold) {
-    const before = previous || {};
-    const keys = new Set([...Object.keys(before), ...Object.keys(next)]);
-
-    for (const key of keys) {
-      const a = before[key];
-      const b = next[key];
-
-      if (typeof a === "number" && typeof b === "number") {
-        if (Math.abs(a - b) >= threshold) {
-          return true;
-        }
-      } else if (!Object.is(a, b)) {
-        return true;
-      }
+    if (!previous || !next || typeof next !== "object" || Array.isArray(next)) return true;
+    for (const key of new Set([...Object.keys(previous), ...Object.keys(next)])) {
+      const before = previous[key];
+      const after = next[key];
+      if (Object.is(before, after)) continue;
+      if (Number.isFinite(before) && Number.isFinite(after)) {
+        if (Math.abs(before - after) >= threshold) return true;
+      } else return true;
     }
-
     return false;
   }
-
-  // `namespace` appends a Socket.IO namespace to the origin ("" = the
-  // main namespace) — the monitor's view-state channel lives on one.
-  function connectSocket({
-    io,
-    origin,
-    reconnectionDelay = 1000,
-    namespace = "",
+  function connectPlayer({
+    io, origin, events, tokenKey, storage,
+    socketOptions = {},
+    makeJoin = (token) => ({ token }),
+    readJoined = (payload) => payload,
+    readRejected = (payload) => payload && payload.reason,
+    continuousFilter = null,
   }) {
-    return io(origin + namespace, {
-      reconnection: true,
-      reconnectionDelay,
-    });
-  }
-
-  // The performer page's connection: SAME-ORIGIN — whatever origin
-  // served the page also serves its Socket.IO, so the page passes
-  // location.origin (the LAN performer port in HTTP mode, the App's
-  // HTTPS entry behind it; #138). It joins with the persisted claim
-  // token (re-emitting it on every reconnect, so the server hands back
-  // the same client id and the restored voice state), tracks this
-  // voice's output channel from state broadcasts, and sends controls
-  // only when they changed. The claim token lives in localStorage,
-  // scoped per origin — a reconnect reuses it only on the same origin
-  // the join was made from.
-  function connectPerformer({
-    io,
-    origin,
-    events,
-    tokenKey,
-    storage,
-    reconnectionDelay,
-    sendThreshold = 0.002,
-  }) {
-    if (!storage) {
-      throw new Error("connectPerformer needs a storage (localStorage in the browser)");
+    if (!storage || typeof tokenKey !== "string" || !tokenKey) {
+      throw new Error("connectPlayer needs a work-specific tokenKey and storage");
     }
-
-    const socket = connectSocket({ io, origin, reconnectionDelay });
-
-    const state = {
-      joined: false,
-      myId: null,
-      myOut: null, // arrives with the first state broadcast
-      rejectedReason: null,
-    };
-
-    socket.on(events.joined, (data) => {
-      state.joined = true;
-      state.myId = data.id;
-      state.myOut = null;
-      state.rejectedReason = null;
-      storage.setItem(tokenKey, data.token);
-    });
-
-    socket.on(events.rejected, (data) => {
-      state.joined = false;
-      state.myId = null;
-      state.myOut = null;
-      state.rejectedReason = (data && data.reason) || "Rejected";
-    });
-
-    // Track this voice's output channel from the state broadcasts, so
-    // the status line follows channel reassignments made on the monitor
-    // page.
-    socket.on(events.state, (data) => {
-      if (state.myId === null) {
-        return;
-      }
-
-      const mine = ((data && data.clients) || []).find(
-        (client) => client.id === state.myId,
-      );
-
-      state.myOut = mine ? mine.out : null;
-    });
-
-    socket.on("connect", () => {
-      // Fires on first connect and after every reconnect: (re)join with
-      // the persisted token so the server hands back the same client id.
-      socket.emit(events.join, {
-        token: storage.getItem(tokenKey) || null,
-      });
-    });
-
-    socket.on("disconnect", () => {
-      state.joined = false;
-    });
-
+    if (continuousFilter && (!Number.isFinite(continuousFilter.threshold) || continuousFilter.threshold < 0)) {
+      throw new Error("continuousFilter.threshold must be a finite nonnegative number");
+    }
+    const socket = io(origin, { reconnection: true, ...socketOptions, autoConnect: false });
+    const listeners = new Set();
+    const handlers = [];
+    const state = { connected: false, joined: false, identity: null, rejectedReason: null, recovered: false, restore: null, error: null };
+    let closed = false;
     let lastSent = null;
-
+    let claimToken = null;
+    function notify() { for (const listener of listeners) listener({ ...state }); }
+    function listen(event, handler) { socket.on(event, handler); handlers.push([event, handler]); }
+    listen("connect", () => {
+      state.connected = true;
+      state.joined = false;
+      lastSent = null;
+      notify();
+      try { claimToken = storage.getItem(tokenKey) || claimToken; }
+      catch (error) { state.error = `Claim storage unavailable: ${error.message}`; notify(); }
+      try { socket.emit(events.join, makeJoin(claimToken)); }
+      catch (error) { state.error = `Join payload failed: ${error.message}`; notify(); }
+    });
+    listen(events.joined, (payload) => {
+      let assignment;
+      try { assignment = readJoined(payload); }
+      catch (error) { state.error = `Joined payload failed: ${error.message}`; notify(); return; }
+      if (!assignment || typeof assignment.token !== "string" || assignment.identity === undefined) return;
+      claimToken = assignment.token;
+      Object.assign(state, { joined: true, identity: assignment.identity, rejectedReason: null, recovered: Boolean(assignment.recovered), restore: assignment.restore ?? null, error: null });
+      try { storage.setItem(tokenKey, claimToken); }
+      catch (error) { state.error = `Claim storage unavailable: ${error.message}`; }
+      notify();
+    });
+    listen(events.rejected, (payload) => {
+      let reason = "Rejected";
+      try { reason = readRejected(payload) || reason; }
+      catch (error) { state.error = `Rejected payload failed: ${error.message}`; }
+      Object.assign(state, { joined: false, identity: null, rejectedReason: reason, recovered: false, restore: null });
+      notify();
+    });
+    listen("disconnect", () => {
+      Object.assign(state, { connected: false, joined: false, identity: null, restore: null });
+      lastSent = null;
+      notify();
+    });
+    listen("connect_error", (error) => { state.error = error.message; notify(); });
+    socket.connect();
     return {
-      get connected() {
-        return socket.connected;
-      },
-      get joined() {
-        return state.joined;
-      },
-      get myId() {
-        return state.myId;
-      },
-      get myOut() {
-        return state.myOut;
-      },
-      get rejectedReason() {
-        return state.rejectedReason;
-      },
-
-      // Deadband-deduped control send. Returns whether the payload went
-      // out; no-ops while not joined.
+      get connected() { return state.connected; },
+      get joined() { return state.joined; },
+      get identity() { return state.identity; },
+      get rejectedReason() { return state.rejectedReason; },
+      get recovered() { return state.recovered; },
+      get restore() { return state.restore; },
+      get error() { return state.error; },
+      onChange(listener) { listeners.add(listener); listener({ ...state }); return () => listeners.delete(listener); },
       sendControls(payload) {
-        if (!state.joined) {
-          return false;
-        }
-
-        if (!changedBeyond(lastSent, payload, sendThreshold)) {
-          return false;
-        }
-
-        lastSent = { ...payload };
+        if (closed || !state.joined || !socket.connected || !events.control) return false;
+        if (continuousFilter && !changedBeyond(lastSent, payload, continuousFilter.threshold)) return false;
         socket.emit(events.control, payload);
+        lastSent = payload && typeof payload === "object" && !Array.isArray(payload) ? { ...payload } : null;
         return true;
       },
-
-      // Ends the connection (page unload; tests release the socket).
+      sendAction(payload) {
+        if (closed || !state.joined || !socket.connected || !events.action) return false;
+        socket.emit(events.action, payload);
+        return true;
+      },
+      reconnect() {
+        if (closed) return false;
+        socket.disconnect();
+        socket.connect();
+        return true;
+      },
       close() {
+        if (closed) return;
+        closed = true;
+        for (const [event, handler] of handlers) socket.off(event, handler);
         socket.close();
+        Object.assign(state, { connected: false, joined: false, identity: null, restore: null });
+        notify();
+        listeners.clear();
       },
     };
   }
 
-  // The monitor page's connection: an observer that never joins — it
-  // sees every state broadcast and can reassign a client's output
-  // channel by naming the id. It stays INTERNAL (plain HTTP, cross-port
-  // to the performer server): the monitor page is served on the
-  // monitor port and never travels through the App's external entry
-  // (#138), so its connection keeps the LAN origin shape it always had.
-  //
-  // `monitorNamespace` (from shared.js) additionally opens the
-  // view-state channel: a second socket on that Socket.IO namespace,
-  // where the server is the single source of truth for the monitor
-  // page's view (every copy — App main window, projection window,
-  // reload, browser tab — converges there). viewState reads null until
-  // the first snapshot lands, so a fresh page can hold its
-  // view-dependent rendering back instead of flashing defaults;
-  // adjustments go out through setViewState and re-render from the
-  // broadcast, never from local mutation.
-  function connectMonitor({
-    io,
-    port,
-    events,
-    hostname,
-    reconnectionDelay,
-    monitorNamespace,
-  }) {
-    const origin = socketOrigin({ hostname, port });
-    const socket = connectSocket({ io, origin, reconnectionDelay });
-    const listeners = [];
-    let clients = [];
-
-    socket.on(events.state, (data) => {
-      clients = (data && data.clients) || [];
-
-      for (const listener of listeners) {
-        listener(clients);
-      }
-    });
-
-    const viewSocket = monitorNamespace
-      ? connectSocket({
-          io,
-          origin,
-          reconnectionDelay,
-          namespace: monitorNamespace,
-        })
-      : null;
-    const viewListeners = [];
-    let viewState = null;
-
-    if (viewSocket) {
-      const deliverViewState = (data) => {
-        // A malformed payload is not a snapshot of defaults — ignore it
-        // and keep whatever the last good delivery left (null until one
-        // lands, so pre-snapshot rendering still waits).
-        if (!data || typeof data !== "object") {
-          return;
-        }
-
-        viewState = data;
-
-        for (const listener of viewListeners) {
-          listener(viewState);
-        }
-      };
-
-      // Snapshot on (re)connect and every broadcast after a set — one
-      // delivery path, so a reconnect heals a missed broadcast.
-      viewSocket.on(events.monitorSnapshot, deliverViewState);
-      viewSocket.on(events.monitorState, deliverViewState);
-    }
-
+  function connectObserver({ io, origin, events, socketOptions = {} }) {
+    const socket = io(origin, { reconnection: true, ...socketOptions, autoConnect: false });
+    const listeners = new Set();
+    let state = null;
+    let closed = false;
+    const receive = (payload) => { state = payload; for (const listener of listeners) listener(payload); };
+    socket.on(events.state, receive);
+    socket.connect();
     return {
-      get connected() {
-        return socket.connected;
-      },
-      get clients() {
-        return clients;
-      },
-      get viewState() {
-        return viewState;
-      },
-
-      onClients(listener) {
-        listeners.push(listener);
-      },
-
-      onViewState(listener) {
-        viewListeners.push(listener);
-      },
-
-      setOut(id, out) {
-        socket.emit(events.setOut, { id, out });
-      },
-
-      // The monitor's seat move: the server reassigns the device to the
-      // target seat number (must be free of live devices).
-      setSeat(id, to) {
-        socket.emit(events.setSeat, { id, to });
-      },
-
-      // The monitor's reset button: the server wipes every seat record
-      // and bounces the performers, who rejoin with fresh ids.
-      resetIds() {
-        socket.emit(events.resetIds);
-      },
-
-      // Reports a view adjustment; the server's broadcast (including
-      // back to this copy) is what changes viewState.
-      setViewState(key, value) {
-        if (viewSocket) {
-          viewSocket.emit(events.monitorSet, { key, value });
-        }
-      },
-
-      close() {
-        socket.close();
-
-        if (viewSocket) {
-          viewSocket.close();
-        }
-      },
+      get connected() { return socket.connected; },
+      get state() { return state; },
+      onState(listener) { listeners.add(listener); if (state !== null) listener(state); return () => listeners.delete(listener); },
+      close() { if (closed) return; closed = true; socket.off(events.state, receive); socket.close(); listeners.clear(); },
     };
   }
-
-  return {
-    connectPerformer,
-    connectMonitor,
-    socketOrigin,
-  };
+  return { connectPlayer, connectObserver };
 });

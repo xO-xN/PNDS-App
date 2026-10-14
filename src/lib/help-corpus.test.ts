@@ -56,6 +56,7 @@ const FIXTURES: RawHelpDocument[] = [
     'modules-projection-surface',
     'modules-monitor-state',
     'modules-audio',
+    'modules-hub',
   ].map(id => ({
     id,
     path: `modules/${id.replace('modules-', '')}.md`,
@@ -85,7 +86,7 @@ describe('help-corpus (#53)', () => {
   it('builds the corpus in manifest order with books, titles and sections', () => {
     const corpus = buildHelpCorpus(FIXTURES)
 
-    expect(corpus).toHaveLength(25)
+    expect(corpus).toHaveLength(26)
     expect(
       corpus.slice(0, 4).map(doc => [doc.id, doc.book, doc.title])
     ).toEqual([
@@ -99,6 +100,7 @@ describe('help-corpus (#53)', () => {
       ['modules-projection-surface', 'modules', 'modules-projection-surface'],
       ['modules-monitor-state', 'modules', 'modules-monitor-state'],
       ['modules-audio', 'modules', 'modules-audio'],
+      ['modules-hub', 'modules', 'modules-hub'],
     ])
     expect(corpus[0]?.sections.map(s => s.id)).toEqual([
       'pnds-app-使用教程',
@@ -166,6 +168,7 @@ describe('help-corpus (#53)', () => {
         'modules-projection-surface',
         'modules-monitor-state',
         'modules-audio',
+        'modules-hub',
       ],
     ])
   })

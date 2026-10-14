@@ -1,3 +1,4 @@
+// OPTIONAL Template seat/output record helper, not a module requirement.
 // Persistent seat assignments: claim token -> { id, out }.
 //
 // The claim token a performer page keeps in localStorage is the device's

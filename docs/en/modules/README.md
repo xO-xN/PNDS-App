@@ -4,6 +4,12 @@ What each PNDS Template built-in module is for and how to use it, written for cr
 
 The wording follows the App's shared vocabulary: seat (the code says `seat`), claim token (never translated), and performer / monitor (the two page roles, kept in English everywhere).
 
+## v1.6.1 offline standard modules
+
+The App offers six independent entries: QR joining, client connection and identity recovery, monitor theme, monitor language, monitor view state, and optional hub connection. Creation mode adds them to `modules/pnds-<id>/`, with actual sources, a bilingual README, `compatibility.json` and `pnds-module.json`. Compatibility separates module version, Host protocol, runtime dependencies and project adaptation; the module version differs from the App version. Wire against the README of the actual added version.
+
+Legacy provenance remains readable. The App shows the installed version and preserves author sources and the original handoff. Upgrades, wiring, dependency installation and startup remain explicit external work. Ask an external agent to handle unknown provenance or conflicting files. File presence does not establish wiring, validation or distribution readiness. Template seat, channel and page descriptions below describe its example work policy. Projection, diagnostics and audio continue using existing infrastructure rather than becoming additional catalog entries.
+
 ## Chapters
 
 | Chapter                                             | Files covered                                                                 | In one line                                    |
@@ -15,6 +21,7 @@ The wording follows the App's shared vocabulary: seat (the code says `seat`), cl
 | [Projection Surface](./projection-surface.md)       | the page entry point (e.g. `public/monitor.js`)                               | the monitor page branches for the venue screen |
 | [Monitor View State](./monitor-state.md)            | `lib/monitor-state.js`, `public/client.js` (monitor side)                     | every monitor copy renders the same view       |
 | [Audio: Three Modes and the Work Layer](./audio.md) | `audio/controller.js`                                                         | the file creators edit most                    |
+| [hub](./hub.md)                                     | `modules/pnds-hub/`                                                           | Optional remote nodes and events               |
 
 ## Division of labour with the other documentation
 

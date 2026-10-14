@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "PNDS",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "identifier": "com.xo-xn.pnds-app",
   "build": {
     "removeUnusedCommands": true,
@@ -108,7 +108,9 @@
       "../docs/en/reference/p5js.md": "help/en/reference/p5js.md",
       "../docs/en/reference/page-interaction.md": "help/en/reference/page-interaction.md",
       "../docs/zh-CN/reference/dns.md": "help/zh-CN/reference/dns.md",
-      "../docs/en/reference/dns.md": "help/en/reference/dns.md"
+      "../docs/en/reference/dns.md": "help/en/reference/dns.md",
+      "../docs/en/modules/hub.md": "help/en/modules/hub.md",
+      "../docs/zh-CN/modules/hub.md": "help/zh-CN/modules/hub.md"
     },
     "icon": [
       "icons/32x32.png",
