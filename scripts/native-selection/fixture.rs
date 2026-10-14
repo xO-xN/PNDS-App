@@ -1,10 +1,16 @@
 mod window_hook;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{
+    atomic::{AtomicUsize, Ordering},
+    Mutex,
+};
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 #[derive(Default)]
 struct Counts {
     menu: AtomicUsize,
     preflight: AtomicUsize,
+    starts: Mutex<Vec<String>>,
+    stop: AtomicUsize,
+    keys: Mutex<std::collections::HashMap<String, usize>>,
 }
 use serde_json::{json, Value};
 
@@ -67,6 +73,21 @@ fn preflight_project(app: AppHandle, path: String) -> Value {
     println!("[PNDS-native-selection-fixture] preflight {path}");
     json!({"schemaVersion":1,"id":"native-fixture","name":"Native fixture","version":"1.0.0","description":null,"scoreServer":{"entry":"server.js","workingDirectory":".","performerPort":6868,"monitorPort":6869},"audio":{"defaultMode":"none","supportedModes":["none"],"synthdefs":[],"scsynth":{"sampleRate":48000,"blockSize":64,"audioBusChannels":128},"standaloneTarget":null}})
 }
+#[tauri::command]
+fn record_fixture_key(app: AppHandle, label: String) {
+    let counts = app.state::<Counts>();
+    *counts.keys.lock().unwrap().entry(label).or_default() += 1;
+}
+
+#[tauri::command]
+fn start_project(app: AppHandle, path: String) {
+    app.state::<Counts>().starts.lock().unwrap().push(path);
+}
+#[tauri::command]
+fn stop_project(app: AppHandle) {
+    app.state::<Counts>().stop.fetch_add(1, Ordering::Relaxed);
+}
+
 // Controlled runtime replies allow the actual frontend mode workflow to run;
 // no runtime or score process is created by this fixture.
 fn idle_creation_runtime() -> Value {
@@ -116,6 +137,7 @@ async fn probe_native_route(
         let nsapp = NSApplication::sharedApplication(mtm);
         let window = handle.get_webview_window(&label).unwrap().ns_window().unwrap().cast::<AnyObject>();
         let code = NSString::from_str(match key_code {
+            36 => "\r",
             126 => "\u{f700}",
             125 => "\u{f701}",
             123 => "\u{f702}",
@@ -181,7 +203,7 @@ fn finish_probe(app: AppHandle, success: bool, evidence: Value) {
 #[tauri::command]
 fn fixture_counts(app: AppHandle) -> Value {
     let counts = app.state::<Counts>();
-    json!({"menu":counts.menu.load(Ordering::Relaxed),"preflight":counts.preflight.load(Ordering::Relaxed),"original":ORIGINAL_WK_ROUTES.load(Ordering::Relaxed)})
+    json!({"menu":counts.menu.load(Ordering::Relaxed),"preflight":counts.preflight.load(Ordering::Relaxed),"original":ORIGINAL_WK_ROUTES.load(Ordering::Relaxed),"starts":counts.starts.lock().unwrap().clone(),"stop":counts.stop.load(Ordering::Relaxed),"keys":counts.keys.lock().unwrap().clone()})
 }
 #[tauri::command]
 fn prepare_fixture_window(app: AppHandle, label: String) -> Result<(), String> {
@@ -235,11 +257,16 @@ fn set_fixture_menu_enabled(
             items.extend(children);
         }
         let id = item.id().as_ref();
-        if matches!(id, "select-previous-project" | "select-next-project") {
+        if matches!(
+            id,
+            "select-previous-project" | "select-next-project" | "load-selected-project"
+        ) {
             let accelerator = if !matching {
                 "Cmd+Alt+J"
             } else if id == "select-previous-project" {
                 "Cmd+Alt+ArrowUp"
+            } else if id == "load-selected-project" {
+                "Cmd+Alt+Enter"
             } else {
                 "Cmd+Alt+ArrowDown"
             };
@@ -253,7 +280,7 @@ fn set_fixture_menu_enabled(
             found += 1;
         }
     }
-    if found == 2 {
+    if found == 3 {
         Ok(())
     } else {
         Err("Selection items missing".into())
@@ -271,6 +298,9 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             focused_window_label,
             preflight_project,
+            start_project,
+            record_fixture_key,
+            stop_project,
             get_creation_runtime,
             prepare_creation_project,
             commit_creation_project,
@@ -289,7 +319,7 @@ fn main() {
         .on_menu_event(|app, event| {
             if matches!(
                 event.id().as_ref(),
-                "select-previous-project" | "select-next-project"
+                "select-previous-project" | "select-next-project" | "load-selected-project"
             ) {
                 app.state::<Counts>().menu.fetch_add(1, Ordering::Relaxed);
             }

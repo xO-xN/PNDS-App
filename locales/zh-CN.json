@@ -11,6 +11,7 @@
   "menu.view": "显示",
   "menu.window": "窗口",
   "menu.closeWindow": "关闭窗口",
+  "menu.loadSelectedProject": "加载选中的工程",
   "menu.selectPreviousProject": "选择上一个工程",
   "menu.selectNextProject": "选择下一个工程",
   "menu.zoomIn": "放大",

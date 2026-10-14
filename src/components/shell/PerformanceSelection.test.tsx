@@ -118,7 +118,12 @@ describe('performance selection from the native menu (#202)', () => {
     })
     useSessionStore.getState().resetSession()
     useSessionStore.getState().applySnapshot(runningSnapshot)
-    useSessionStore.setState({ commandPending: false })
+    useSessionStore.setState({
+      commandPending: false,
+      lanIp: '192.168.1.10',
+      audioMode: 'none',
+      oscTargetInput: '127.0.0.1:57120',
+    })
     useCreationStore.setState({
       active: false,
       opening: false,
@@ -253,6 +258,346 @@ describe('performance selection from the native menu (#202)', () => {
       expect(menuItem('select-previous-project').enabled).toBe(false)
     }
   )
+
+  it('Cmd+Opt+Return loads the newly selected card through the existing replacement confirmation', async () => {
+    render(<AppShell />)
+    await act(async () => {
+      await buildAppMenu()
+    })
+    const monitor = screen.getByTitle('Project monitor')
+    await selectFromMenu('next')
+    await waitFor(() =>
+      expect(useProjectStore.getState().currentProject?.path).toBe('/second')
+    )
+    await act(async () => {
+      await buildAppMenu()
+    })
+    expect(menuItem('load-selected-project')).toMatchObject({
+      text: 'Load Selected Project',
+      accelerator: 'Cmd+Alt+Enter',
+      enabled: true,
+    })
+    await act(async () => menuItem('load-selected-project').action?.())
+    const confirm = await screen.findByRole('alertdialog')
+    expect(commands.startProject).not.toHaveBeenCalled()
+    expect(commands.stopProject).not.toHaveBeenCalled()
+    expect(useSessionStore.getState().sessionProjectPath).toBe('/first')
+    expect(screen.getByTitle('Project monitor')).toBe(monitor)
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Start' }))
+    await waitFor(() =>
+      expect(commands.startProject).toHaveBeenCalledWith(
+        '/second',
+        'none',
+        '192.168.1.10',
+        null
+      )
+    )
+    expect(commands.stopProject).toHaveBeenCalledTimes(1)
+    expect(commands.startProject).toHaveBeenCalledTimes(1)
+  })
+
+  it.each(['idle', 'error'] as const)(
+    'native Load starts once from %s while an input is focused',
+    async status => {
+      const snapshot = {
+        ...runningSnapshot,
+        status,
+        projectPath: null,
+        health: null,
+      }
+      useSessionStore.getState().applySnapshot(snapshot)
+      vi.mocked(commands.getSessionState).mockResolvedValue({
+        status: 'ok',
+        data: snapshot,
+      })
+      let finishStart!: (
+        result: Awaited<ReturnType<typeof commands.startProject>>
+      ) => void
+      vi.mocked(commands.startProject).mockReturnValueOnce(
+        new Promise(resolve => {
+          finishStart = resolve
+        })
+      )
+      render(
+        <>
+          <AppShell />
+          <input aria-label="Native load input" />
+        </>
+      )
+      const input = screen.getByRole('textbox', { name: 'Native load input' })
+      act(() => input.focus())
+      await act(async () => {
+        await buildAppMenu()
+      })
+      await act(async () => menuItem('load-selected-project').action?.())
+      await act(async () => menuItem('load-selected-project').action?.())
+      try {
+        expect(commands.startProject).toHaveBeenCalledExactlyOnceWith(
+          '/first',
+          'none',
+          '192.168.1.10',
+          null
+        )
+        expect(commands.stopProject).not.toHaveBeenCalled()
+        expect(useSessionStore.getState().commandPending).toBe(true)
+        expect(document.activeElement).toBe(input)
+      } finally {
+        await act(async () => finishStart({ status: 'ok', data: null }))
+      }
+    }
+  )
+
+  it('native Load never closes the unchanged running card and applies pending changes through restart', async () => {
+    render(<AppShell />)
+    await act(async () => {
+      await buildAppMenu()
+    })
+    expect(menuItem('load-selected-project').enabled).toBe(false)
+    await act(async () => menuItem('load-selected-project').action?.())
+    expect(commands.stopProject).not.toHaveBeenCalled()
+    expect(commands.startProject).not.toHaveBeenCalled()
+    act(() => useSessionStore.setState({ pendingChanges: true }))
+    await act(async () => {
+      await buildAppMenu()
+    })
+    expect(menuItem('load-selected-project').enabled).toBe(true)
+    await act(async () => menuItem('load-selected-project').action?.())
+    await waitFor(() =>
+      expect(commands.startProject).toHaveBeenCalledExactlyOnceWith(
+        '/first',
+        'none',
+        '192.168.1.10',
+        null
+      )
+    )
+    expect(commands.stopProject).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+  })
+
+  it('does not load the previous card while Down awaits native focus', async () => {
+    const snapshot = {
+      ...runningSnapshot,
+      status: 'idle' as const,
+      projectPath: null,
+      health: null,
+    }
+    useSessionStore.getState().applySnapshot(snapshot)
+    vi.mocked(commands.getSessionState).mockResolvedValue({
+      status: 'ok',
+      data: snapshot,
+    })
+    render(<AppShell />)
+    await act(async () => {
+      await buildAppMenu()
+    })
+    let finishFocus!: (
+      result: Awaited<ReturnType<typeof commands.focusedWindowLabel>>
+    ) => void
+    vi.mocked(commands.focusedWindowLabel).mockReturnValueOnce(
+      new Promise(resolve => {
+        finishFocus = resolve
+      })
+    )
+    await selectFromMenu('next')
+    await act(async () => menuItem('load-selected-project').action?.())
+    expect(commands.startProject).not.toHaveBeenCalled()
+    await act(async () => finishFocus({ status: 'ok', data: 'main' }))
+    await waitFor(() =>
+      expect(useProjectStore.getState().currentProject?.path).toBe('/second')
+    )
+    expect(commands.startProject).not.toHaveBeenCalled()
+    await act(async () => menuItem('load-selected-project').action?.())
+    await waitFor(() =>
+      expect(commands.startProject).toHaveBeenCalledExactlyOnceWith(
+        '/second',
+        'none',
+        '192.168.1.10',
+        null
+      )
+    )
+  })
+
+  it('requires a new Load after selected-card preflight finishes instead of loading the previous running card', async () => {
+    render(<AppShell />)
+    await act(async () => {
+      await buildAppMenu()
+    })
+    let finishPreflight!: (
+      result: Awaited<ReturnType<typeof commands.preflightProject>>
+    ) => void
+    vi.mocked(commands.preflightProject).mockReturnValueOnce(
+      new Promise(resolve => {
+        finishPreflight = resolve
+      })
+    )
+    await selectFromMenu('next')
+    expect(useProjectStore.getState().pendingPreflightPath).toBe('/second')
+    await act(async () => menuItem('load-selected-project').action?.())
+    expect(commands.startProject).not.toHaveBeenCalled()
+    expect(commands.stopProject).not.toHaveBeenCalled()
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    await act(async () => finishPreflight({ status: 'ok', data: manifest }))
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    await act(async () => menuItem('load-selected-project').action?.())
+    expect(await screen.findByRole('alertdialog')).toBeInTheDocument()
+    expect(useSessionStore.getState().sessionProjectPath).toBe('/first')
+  })
+
+  it.each([
+    'preflight',
+    'lan',
+    'node',
+    'target',
+    'command',
+    'mode',
+    'settings',
+    'quit',
+    'secondary',
+  ] as const)(
+    'rebuilds native Load availability and ignores stale callbacks behind the %s gate',
+    async gate => {
+      const snapshot = {
+        ...runningSnapshot,
+        status: 'idle' as const,
+        projectPath: null,
+        health: null,
+      }
+      useSessionStore.getState().applySnapshot(snapshot)
+      vi.mocked(commands.getSessionState).mockResolvedValue({
+        status: 'ok',
+        data: snapshot,
+      })
+      if (gate === 'node') {
+        useProjectStore.setState({
+          currentProject: {
+            path: '/first',
+            manifest: { ...manifest, telematic: true },
+          },
+        })
+        useSettingsStore.setState({
+          nodeNameSetting: 'load-fixture',
+          hubUrlSetting: 'wss://hub.example.com',
+          hubTokenSetting: 'fixture-token',
+        })
+      }
+      render(<AppShell />)
+      await act(async () => {
+        await buildAppMenu()
+      })
+      expect(menuItem('load-selected-project').enabled).toBe(true)
+      const action = menuItem('load-selected-project').action
+      const off = setupMenuStateListener()
+      try {
+        act(() => {
+          if (gate === 'preflight')
+            useProjectStore.setState({
+              preflightStatus: 'checking',
+              pendingPreflightPath: '/second',
+            })
+          if (gate === 'lan') useSessionStore.setState({ lanIp: null })
+          if (gate === 'node')
+            useSettingsStore.setState({ nodeNameSetting: '' })
+          if (gate === 'target')
+            useSessionStore.setState({
+              audioMode: 'external',
+              oscTargetInput: 'bad-target',
+            })
+          if (gate === 'command')
+            useSessionStore.setState({ commandPending: true })
+          if (gate === 'mode') useCreationStore.setState({ modePhase: 'armed' })
+          if (gate === 'settings')
+            useSettingsStore.setState({ settingsOpen: true })
+          if (gate === 'quit')
+            useWindowStore.setState({ quitConfirmOpen: true })
+          if (gate === 'secondary')
+            vi.mocked(commands.focusedWindowLabel).mockResolvedValue({
+              status: 'ok',
+              data: 'projection',
+            })
+        })
+        if (gate === 'secondary')
+          await act(async () => {
+            await buildAppMenu()
+          })
+        await waitFor(() =>
+          expect(menuItem('load-selected-project').enabled).toBe(false)
+        )
+        await act(async () => action?.())
+        expect(commands.startProject).not.toHaveBeenCalled()
+        expect(commands.stopProject).not.toHaveBeenCalled()
+      } finally {
+        off()
+      }
+    }
+  )
+
+  it.each(['selection', 'mode', 'overlay'] as const)(
+    'rejects native Load when %s changes before a late focus reply',
+    async gate => {
+      useProjectStore.setState({
+        currentProject: { path: '/second', manifest },
+      })
+      render(<AppShell />)
+      await act(async () => {
+        await buildAppMenu()
+      })
+      let finishFocus!: (
+        result: Awaited<ReturnType<typeof commands.focusedWindowLabel>>
+      ) => void
+      vi.mocked(commands.focusedWindowLabel).mockReturnValueOnce(
+        new Promise(resolve => {
+          finishFocus = resolve
+        })
+      )
+      await act(async () => menuItem('load-selected-project').action?.())
+      act(() => {
+        if (gate === 'selection')
+          useProjectStore.setState({
+            currentProject: { path: '/third', manifest },
+          })
+        if (gate === 'mode')
+          useCreationStore.setState({
+            epoch: useCreationStore.getState().epoch + 1,
+          })
+        if (gate === 'overlay')
+          useWindowStore.setState({ confirmCloseOpen: true })
+      })
+      await act(async () => finishFocus({ status: 'ok', data: 'main' }))
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+      expect(commands.startProject).not.toHaveBeenCalled()
+      expect(commands.stopProject).not.toHaveBeenCalled()
+    }
+  )
+
+  it('keeps plain input Enter and the existing projection accelerator separate from native Load', async () => {
+    const snapshot = {
+      ...runningSnapshot,
+      status: 'idle' as const,
+      projectPath: null,
+      health: null,
+    }
+    useSessionStore.getState().applySnapshot(snapshot)
+    vi.mocked(commands.getSessionState).mockResolvedValue({
+      status: 'ok',
+      data: snapshot,
+    })
+    render(
+      <>
+        <AppShell />
+        <input aria-label="Normal Enter input" />
+      </>
+    )
+    await act(async () => {
+      await buildAppMenu()
+    })
+    expect(menuItem('projection-start').accelerator).toBe('Cmd+Return')
+    const input = screen.getByRole('textbox', { name: 'Normal Enter input' })
+    act(() => input.focus())
+    expect(fireEvent.keyDown(input, { key: 'Enter' })).toBe(true)
+    expect(commands.startProject).not.toHaveBeenCalled()
+    expect(commands.stopProject).not.toHaveBeenCalled()
+    expect(document.activeElement).toBe(input)
+  })
 
   it('keeps the replacement confirmation in control of selection and the running show', async () => {
     render(<AppShell />)

@@ -11,6 +11,7 @@
   "menu.view": "View",
   "menu.window": "Window",
   "menu.closeWindow": "Close Window",
+  "menu.loadSelectedProject": "Load Selected Project",
   "menu.selectPreviousProject": "Select Previous Project",
   "menu.selectNextProject": "Select Next Project",
   "menu.zoomIn": "Zoom In",

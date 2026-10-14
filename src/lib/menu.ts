@@ -74,6 +74,8 @@ import {
 } from '@/hooks/use-command-keyboard'
 import { toggleMasterMute } from '@/lib/volume-control'
 import {
+  canLoadFocusedPerformanceProject,
+  loadPerformanceProject,
   canSelectFocusedPerformanceProject,
   selectPerformanceProject,
 } from '@/lib/performance-selection'
@@ -330,6 +332,7 @@ export async function buildAppMenu(): Promise<Menu> {
     // §v1.1.1: browser-style monitor controls. Zoom only acts while the
     // session is ready (the store actions no-op otherwise).
     const selectionEnabled = await canSelectFocusedPerformanceProject()
+    const loadEnabled = await canLoadFocusedPerformanceProject()
     const viewSubmenu = await Submenu.new({
       text: t('menu.view'),
       items: [
@@ -346,6 +349,13 @@ export async function buildAppMenu(): Promise<Menu> {
           accelerator: 'Cmd+Alt+ArrowDown',
           enabled: selectionEnabled,
           action: () => void selectPerformanceProject(1),
+        }),
+        await MenuItem.new({
+          id: 'load-selected-project',
+          text: t('menu.loadSelectedProject'),
+          accelerator: 'Cmd+Alt+Enter',
+          enabled: loadEnabled,
+          action: () => void loadPerformanceProject(),
         }),
         await PredefinedMenuItem.new({ item: 'Separator' }),
         await MenuItem.new({
@@ -616,6 +626,34 @@ export function setupMenuStateListener(): () => void {
     state => state.currentProject,
     rebuild
   )
+  const unsubLoadGate = subscribeIfChanged(
+    useProjectStore,
+    state =>
+      JSON.stringify([state.preflightStatus, state.pendingPreflightPath]),
+    rebuild
+  )
+  const unsubLoadSession = subscribeIfChanged(
+    useSessionStore,
+    state =>
+      JSON.stringify([
+        state.sessionStatus,
+        state.sessionProjectPath,
+        state.pendingChanges,
+        state.audioMode,
+        state.oscTargetInput,
+      ]),
+    rebuild
+  )
+  const unsubLoadNode = subscribeIfChanged(
+    useSettingsStore,
+    state =>
+      JSON.stringify([
+        state.nodeNameSetting,
+        state.hubUrlSetting,
+        state.hubTokenSetting,
+      ]),
+    rebuild
+  )
   const unsubCreation = subscribeIfChanged(
     useCreationStore,
     state => state.active,
@@ -700,6 +738,9 @@ export function setupMenuStateListener(): () => void {
   return () => {
     disposed = true
     offFocus?.()
+    unsubLoadGate()
+    unsubLoadSession()
+    unsubLoadNode()
     unsubCommand()
     unsubWindowDialogs()
     unsubCreation()

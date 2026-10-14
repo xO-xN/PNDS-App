@@ -1206,6 +1206,8 @@ const KVK_DOWN_ARROW: u16 = 0x7D;
 #[cfg(target_os = "macos")]
 const KVK_UP_ARROW: u16 = 0x7E;
 #[cfg(target_os = "macos")]
+const KVK_RETURN: u16 = 0x24;
+#[cfg(target_os = "macos")]
 const NSEVENT_MODIFIER_OPTION: usize = 0x0008_0000;
 #[cfg(target_os = "macos")]
 const NSEVENT_MODIFIERS_SHIFT_CONTROL: usize = 0x0006_0000;
@@ -1357,10 +1359,14 @@ unsafe extern "C-unwind" fn pnds_perform_key_equivalent(
         // preventing AppKit from reaching the enabled native menu accelerator.
         // Resolve the main shell by native window identity, so secondary windows
         // keep their keys even while a focus-driven menu rebuild is still pending.
+        let selection_arrow = flags & NSEVENT_MODIFIERS_SHIFT_CONTROL == 0
+            && (key_code == KVK_UP_ARROW || key_code == KVK_DOWN_ARROW);
+        // NSMenu can match Return while ignoring an extra Shift/Control.
+        // That must not turn a different chord into the native Load action.
+        let modified_load = key_code == KVK_RETURN && flags & NSEVENT_MODIFIERS_SHIFT_CONTROL != 0;
         if flags & NSEVENT_MODIFIER_COMMAND != 0
             && flags & NSEVENT_MODIFIER_OPTION != 0
-            && flags & NSEVENT_MODIFIERS_SHIFT_CONTROL == 0
-            && (key_code == KVK_UP_ARROW || key_code == KVK_DOWN_ARROW)
+            && (selection_arrow || modified_load)
         {
             let target = MAIN_NATIVE_SELECTION_WINDOW.load(Ordering::Relaxed);
             // SAFETY: AppKit invokes this method on a live view and event.
@@ -1378,7 +1384,21 @@ unsafe extern "C-unwind" fn pnds_perform_key_equivalent(
                     let native_menu: &objc2_app_kit::NSMenu = unsafe { &*menu.cast() };
                     // A disabled NSMenuItem can consume an equivalent without
                     // firing its action. Keep it on the original WK route.
-                    if menu_has_enabled_selection_equivalent(native_menu, key_code, 0) {
+                    if let Some(item) = enabled_selection_equivalent(native_menu, key_code, 0) {
+                        if modified_load {
+                            // SAFETY: same live receiver/event. Preserve one ordinary
+                            // document key instead of NSMenu's broader Return match.
+                            // WK keyDown can itself try the same broad Return
+                            // menu match. Disable only this retained item during
+                            // synchronous delegation, then restore its enabled state.
+                            let enabled = item.isEnabled();
+                            item.setEnabled(false);
+                            unsafe {
+                                let _: () = msg_send![this, keyDown: event];
+                            }
+                            item.setEnabled(enabled);
+                            return objc2::runtime::Bool::YES;
+                        }
                         // The JS callback still owns live business gates/selection.
                         let matched: bool = unsafe { msg_send![menu, performKeyEquivalent: event] };
                         if matched {
@@ -1415,33 +1435,41 @@ unsafe extern "C-unwind" fn pnds_perform_key_equivalent(
 /// Native enabled-state check, including submenu parents. A disabled item's
 /// key equivalent may otherwise be consumed without running its action.
 #[cfg(target_os = "macos")]
-fn menu_has_enabled_selection_equivalent(
+fn enabled_selection_equivalent(
     menu: &objc2_app_kit::NSMenu,
     key_code: u16,
     depth: u8,
-) -> bool {
+) -> Option<objc2::rc::Retained<objc2_app_kit::NSMenuItem>> {
     if depth >= 16 {
-        return false;
+        return None;
     }
-    let equivalent = objc2_foundation::NSString::from_str(if key_code == KVK_UP_ARROW {
-        "\u{f700}"
-    } else {
-        "\u{f701}"
+    let equivalent = objc2_foundation::NSString::from_str(match key_code {
+        KVK_UP_ARROW => "\u{f700}",
+        KVK_DOWN_ARROW => "\u{f701}",
+        KVK_RETURN => "\r",
+        _ => return None,
     });
     let items = menu.itemArray();
-    (0..items.count()).any(|index| {
+    for index in 0..items.count() {
         let item = items.objectAtIndex(index);
         if !item.isEnabled() {
-            return false;
+            continue;
         }
         let modifiers = item.keyEquivalentModifierMask().bits();
-        (modifiers & (NSEVENT_MODIFIER_COMMAND | NSEVENT_MODIFIERS_SHIFT_OPTION_CONTROL)
+        if modifiers & (NSEVENT_MODIFIER_COMMAND | NSEVENT_MODIFIERS_SHIFT_OPTION_CONTROL)
             == NSEVENT_MODIFIER_COMMAND | NSEVENT_MODIFIER_OPTION
-            && item.keyEquivalent().isEqualToString(&equivalent))
-            || item.submenu().is_some_and(|submenu| {
-                menu_has_enabled_selection_equivalent(&submenu, key_code, depth + 1)
-            })
-    })
+            && item.keyEquivalent().isEqualToString(&equivalent)
+        {
+            return Some(item);
+        }
+        if let Some(found) = item
+            .submenu()
+            .and_then(|submenu| enabled_selection_equivalent(&submenu, key_code, depth + 1))
+        {
+            return Some(found);
+        }
+    }
+    None
 }
 
 /// Depth-bounded walk for the first view of an exact class — AppKit

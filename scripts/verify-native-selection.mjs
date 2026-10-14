@@ -151,7 +151,7 @@ const server = http.createServer((_req, res) => {
     'Cache-Control': 'no-store',
   })
   res.end(
-    '<textarea id="field">Native guest input</textarea><script>addEventListener("message",e=>{if(e.data==="fixture-focus"){document.getElementById("field").focus();parent.postMessage("fixture-focused","*")}})</script>'
+    '<textarea id="field">Native guest input</textarea><script>addEventListener("message",e=>{if(e.data==="fixture-focus"){document.getElementById("field").focus();parent.postMessage("fixture-focused","*")}});addEventListener("keydown",e=>{if(e.key==="Enter"&&e.metaKey&&e.altKey)parent.postMessage("fixture-keydown","*")})</script>'
   )
 })
 await new Promise((resolve, reject) => {
@@ -184,17 +184,24 @@ async function command(binary, args, timeout) {
   }
 }
 try {
+  const { default: react, reactCompilerPreset } =
+    await import('@vitejs/plugin-react')
+  const { default: babel } = await import('@rolldown/plugin-babel')
   const { build } = await import(
     pathToFileURL(path.join(root, 'node_modules/vite/dist/node/index.js'))
   )
   await build({
     configFile: false,
+    plugins: [react(), babel({ presets: [reactCompilerPreset()] })],
     root: fixture,
     publicDir: false,
     resolve: { alias: { '@': path.join(root, 'src') } },
     define: {
       __APP_VERSION__: JSON.stringify('native-selection-fixture'),
       __NATIVE_FIXTURE_GUEST_URL__: JSON.stringify(guestUrl),
+      __NATIVE_FIXTURE_LOAD_ONLY__: JSON.stringify(
+        argumentsList.includes('--load-only')
+      ),
     },
     build: { outDir: 'dist', emptyOutDir: true, chunkSizeWarningLimit: 1000 },
   })
