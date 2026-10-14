@@ -249,7 +249,12 @@ export const useCreationStore = create<CreationState>((set, get) => ({
       useSessionStore.getState().commandPending
     )
       return false
+    const epoch = get().epoch
     set({ modePhase: 'settling', modeError: null })
+    const owns = () =>
+      get().epoch === epoch &&
+      get().modePlan === plan &&
+      get().modePhase === 'settling'
     let timer: ReturnType<typeof setTimeout> | undefined
     const settled =
       duration > 0
@@ -294,6 +299,11 @@ export const useCreationStore = create<CreationState>((set, get) => ({
         newestSnapshot(adopted, revision).status !== 'idle'
       )
         throw new Error(i18n.t('creation.switchStale'))
+      if (!owns()) return false
+      // Native ownership must be revoked before creation becomes observable.
+      if (plan.targetCreation)
+        expectOk(await commands.setMainPerformanceKeyOwner(epoch, false))
+      if (!owns()) return false
       committed = !!workspace
       if (oldIdentity && oldIdentity !== workspace?.project.identity)
         await releaseIdentity(oldIdentity)
@@ -316,12 +326,17 @@ export const useCreationStore = create<CreationState>((set, get) => ({
           : state.recentPaths,
         hoverPaused: true,
         restoreModeFocus: restoreFocus,
-        modePhase: 'idle',
-        modePlan: null,
+        modePhase: 'settling',
       }))
+      // Performance is published first; retain the transition lock until the
+      // native acknowledgment so creation can never lose its original keys.
+      if (!plan.targetCreation)
+        expectOk(await commands.setMainPerformanceKeyOwner(epoch, true))
+      if (!owns()) return false
+      set({ modePhase: 'idle', modePlan: null })
       return true
     } catch (error) {
-      set({ modeError: creationTransportError(error) })
+      if (owns()) set({ modeError: creationTransportError(error) })
       return false
     } finally {
       clearTimeout(timer)

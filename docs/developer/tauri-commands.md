@@ -17,6 +17,13 @@ commit checks the runtime generation, and `closeCreationProjection` closes only
 the fixed projection label. See [creation-workspace.md](./creation-workspace.md)
 for confirmation, cancellation and registered cleanup.
 
+`setMainPerformanceKeyOwner(epoch, owns)` is a narrow main-shell mode acknowledgment
+for native selection keys. The real mode transaction revokes before creation
+publication and restores after performance publication, remaining in settling
+until the acknowledgment. Rust rejects non-main callers and older mode epochs;
+the original WK route remains available whenever native ownership is revoked.
+It does not mirror runtime/overlay business gates or alter selection/session state.
+
 `setMainControlsVisible` targets only the main window’s AppKit controls. The
 frontend serializes and coalesces visibility, horizontal offset, opacity and
 vertical container-padding requests; it never recreates the window or changes a runtime

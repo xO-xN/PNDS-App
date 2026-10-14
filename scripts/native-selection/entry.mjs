@@ -46,14 +46,20 @@ window.fixtureFocus = focus
 if (label === 'main') {
   try {
     const manifest = (await commands.preflightProject('/first')).data
-    const seed = path => {
+    const seed = async path => {
       useCreationStore.setState({
-        active: false,
         opening: false,
         modePhase: 'idle',
       })
       useSessionStore.getState().resetSession()
       useSessionStore.setState({ commandPending: false })
+      if (useCreationStore.getState().active) {
+        await useCreationStore.getState().leave()
+        if (useCreationStore.getState().active)
+          throw new Error(
+            `Real performance return failed: ${JSON.stringify(useCreationStore.getState().modeError)}`
+          )
+      }
       useProjectStore.setState({
         currentProject: { path, manifest },
         recentProjectPaths: ['/first', '/second'],
@@ -65,19 +71,48 @@ if (label === 'main') {
       })
       document.querySelector('[data-fixture-overlay]')?.remove()
     }
-    seed('/first')
+    await seed('/first')
     await buildAppMenu()
     await guestLoaded
 
     async function run(test) {
       const down = test.keyCode !== 126
       const initial = down ? '/first' : '/second'
-      seed(test.initial ?? initial)
+      await seed(test.initial ?? initial)
       if (test.gate === 'command')
         useSessionStore.setState({ commandPending: true })
       if (test.gate === 'starting' || test.gate === 'stopping')
         useSessionStore.setState({ sessionStatus: test.gate })
-      if (test.gate === 'creation') useCreationStore.setState({ active: true })
+      if (test.gate === 'creation') {
+        await useCreationStore.getState().enter()
+        if (!useCreationStore.getState().active)
+          throw new Error(
+            `Real creation transition failed: ${JSON.stringify(useCreationStore.getState().modeError)}`
+          )
+      }
+      if (test.realReturn) {
+        await useCreationStore.getState().enter()
+        await useCreationStore.getState().leave()
+        if (
+          useCreationStore.getState().active ||
+          useCreationStore.getState().modePhase !== 'idle'
+        )
+          throw new Error('Real performance return did not complete')
+        useProjectStore.setState({
+          currentProject: { path: initial, manifest },
+          preflightStatus: 'ready',
+        })
+      }
+      if (test.staleOwner !== undefined) {
+        const stale = await commands.setMainPerformanceKeyOwner(
+          useCreationStore.getState().epoch - 1,
+          test.staleOwner
+        )
+        if (stale.status !== 'error' || !stale.error.includes('Stale'))
+          throw new Error(
+            `Stale ownership request was accepted: ${JSON.stringify(stale)}`
+          )
+      }
       if (test.gate === 'overlay') {
         const overlay = document.createElement('div')
         overlay.dataset.fixtureOverlay = ''
@@ -94,6 +129,8 @@ if (label === 'main') {
         matching: !test.noMatch,
         parentDisabled: Boolean(test.parentDisabled),
       })
+      const selectedBefore =
+        useProjectStore.getState().currentProject?.path ?? null
       const before = await invoke('fixture_counts')
       const guestPage = guest
       const guestUrl = guest.src
@@ -117,13 +154,9 @@ if (label === 'main') {
       }
       await wait(250)
       const after = await invoke('fixture_counts')
-      const selected = useProjectStore.getState().currentProject?.path
+      const selected = useProjectStore.getState().currentProject?.path ?? null
       const expected =
-        test.moves === false
-          ? (test.initial ?? initial)
-          : down
-            ? '/second'
-            : '/first'
+        test.moves === false ? selectedBefore : down ? '/second' : '/first'
       const actions = after.menu - before.menu
       const preflights = after.preflight - before.preflight
       const originalRoutes = after.original - before.original
@@ -210,14 +243,28 @@ if (label === 'main') {
         actions: 0,
         originalRoutes: 1,
       })
-    for (const gate of [
-      'command',
-      'starting',
-      'stopping',
-      'creation',
-      'overlay',
-    ])
+    for (const gate of ['command', 'starting', 'stopping', 'overlay'])
       await run({ name: 'stale-enabled-business-gate', gate, moves: false })
+    for (const keyCode of [125, 126]) {
+      for (const surface of ['body', 'input', 'guest'])
+        await run({
+          name: 'stale-enabled-real-creation-transition',
+          gate: 'creation',
+          staleOwner: true,
+          keyCode,
+          focus: surface,
+          moves: false,
+          actions: 0,
+          originalRoutes: 1,
+        })
+    }
+    for (const keyCode of [125, 126])
+      await run({
+        name: 'native-performance-return-after-late-revocation',
+        keyCode,
+        realReturn: true,
+        staleOwner: false,
+      })
     for (const secondary of [
       'help',
       'projection',

@@ -67,6 +67,27 @@ fn preflight_project(app: AppHandle, path: String) -> Value {
     println!("[PNDS-native-selection-fixture] preflight {path}");
     json!({"schemaVersion":1,"id":"native-fixture","name":"Native fixture","version":"1.0.0","description":null,"scoreServer":{"entry":"server.js","workingDirectory":".","performerPort":6868,"monitorPort":6869},"audio":{"defaultMode":"none","supportedModes":["none"],"synthdefs":[],"scsynth":{"sampleRate":48000,"blockSize":64,"audioBusChannels":128},"standaloneTarget":null}})
 }
+// Controlled runtime replies allow the actual frontend mode workflow to run;
+// no runtime or score process is created by this fixture.
+fn idle_creation_runtime() -> Value {
+    json!({"generation":"0","projectRoot":null,"snapshot":{"status":"idle","projectPath":null,"projectName":null,"audioMode":null,"lanIp":null,"hostAddress":null,"oscTarget":null,"health":null,"error":null,"outputTail":[],"volume":80,"startupStage":0,"channelPlan":null,"outputDevice":null,"projectionStarted":false,"httpsEntry":{"status":"off","url":null,"error":null},"dnsMapping":{"status":"off","domain":null,"ip":null,"error":null}}})
+}
+#[tauri::command]
+fn get_creation_runtime() -> Value {
+    idle_creation_runtime()
+}
+#[tauri::command]
+fn prepare_creation_project(path: String) -> Value {
+    json!({"project":{"identity":"fixture-workspace","root":path,"name":"Native fixture","source":"folder"},"files":[]})
+}
+#[tauri::command]
+fn commit_creation_project() -> Value {
+    idle_creation_runtime()
+}
+#[tauri::command]
+fn close_creation_project() {}
+#[tauri::command]
+fn close_creation_projection() {}
 #[tauri::command]
 fn load_preferences() -> Value {
     json!({})
@@ -250,12 +271,18 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             focused_window_label,
             preflight_project,
+            get_creation_runtime,
+            prepare_creation_project,
+            commit_creation_project,
+            close_creation_project,
+            close_creation_projection,
             load_preferences,
             save_preferences,
             list_lan_addresses,
             probe_native_route,
             finish_probe,
             fixture_counts,
+            window_hook::set_main_performance_key_owner,
             prepare_fixture_window,
             set_fixture_menu_enabled
         ])

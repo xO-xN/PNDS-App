@@ -13,6 +13,12 @@ import { CreationModeButton } from './CreationModeButton'
 describe('prototype mode interaction', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(commands.setMainPerformanceKeyOwner)
+      .mockReset()
+      .mockResolvedValue({
+        status: 'ok',
+        data: null,
+      })
     useSessionStore.getState().resetSession()
     useProjectStore.getState().clearProject()
     useCreationStore.setState({
@@ -28,6 +34,117 @@ describe('prototype mode interaction', () => {
     useSettingsStore.setState({ colorThemeSetting: 'pond' })
   })
   afterEach(() => vi.useRealTimers())
+
+  it('acknowledges native keyboard ownership before creation publication and after performance publication', async () => {
+    vi.mocked(window.matchMedia).mockReturnValueOnce({
+      ...window.matchMedia('(prefers-reduced-motion: reduce)'),
+      matches: true,
+    })
+    let acknowledge!: () => void
+    vi.mocked(commands.setMainPerformanceKeyOwner).mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          acknowledge = () => resolve({ status: 'ok', data: null })
+        })
+    )
+    render(<CreationModeButton />)
+    const button = screen.getByRole('button', {
+      name: 'Switch to creation mode',
+    })
+    fireEvent.click(button, { detail: 0 })
+    await waitFor(() => expect(button).toHaveAttribute('data-phase', 'armed'))
+    fireEvent.click(button, { detail: 0 })
+    await waitFor(() =>
+      expect(commands.setMainPerformanceKeyOwner).toHaveBeenCalledWith(
+        expect.any(Number),
+        false
+      )
+    )
+    expect(useCreationStore.getState().active).toBe(false)
+    expect(button).toBeDisabled()
+    expect(button).toHaveAttribute('data-phase', 'settling')
+    await act(async () => {
+      await useCreationStore.getState().prepareModeSwitch()
+      expect(await useCreationStore.getState().commitModeSwitch()).toBe(false)
+    })
+    expect(commands.setMainPerformanceKeyOwner).toHaveBeenCalledTimes(1)
+    await act(async () => acknowledge())
+    await waitFor(() => expect(useCreationStore.getState().active).toBe(true))
+    expect(button).toHaveAttribute('data-phase', 'idle')
+    vi.mocked(commands.setMainPerformanceKeyOwner).mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          acknowledge = () => resolve({ status: 'ok', data: null })
+        })
+    )
+    fireEvent.click(button, { detail: 0 })
+    await waitFor(() => expect(button).toHaveAttribute('data-phase', 'armed'))
+    fireEvent.click(button, { detail: 0 })
+    await waitFor(() =>
+      expect(commands.setMainPerformanceKeyOwner).toHaveBeenLastCalledWith(
+        expect.any(Number),
+        true
+      )
+    )
+    expect(useCreationStore.getState().active).toBe(false)
+    expect(button).toBeDisabled()
+    expect(button).toHaveAttribute('data-phase', 'settling')
+    await act(async () => acknowledge())
+    await waitFor(() => expect(button).toHaveAttribute('data-phase', 'idle'))
+    expect(button).not.toBeDisabled()
+  })
+
+  it('keeps performance published when native keyboard revocation fails', async () => {
+    vi.mocked(window.matchMedia).mockReturnValueOnce({
+      ...window.matchMedia('(prefers-reduced-motion: reduce)'),
+      matches: true,
+    })
+    vi.mocked(commands.setMainPerformanceKeyOwner).mockResolvedValueOnce({
+      status: 'error',
+      error: 'Native key owner unavailable',
+    })
+    render(<CreationModeButton />)
+    const button = screen.getByRole('button', {
+      name: 'Switch to creation mode',
+    })
+    fireEvent.click(button, { detail: 0 })
+    await waitFor(() => expect(button).toHaveAttribute('data-phase', 'armed'))
+    fireEvent.click(button, { detail: 0 })
+    await waitFor(() =>
+      expect(useCreationStore.getState().modeError?.detail).toBe(
+        'Native key owner unavailable'
+      )
+    )
+    expect(useCreationStore.getState().active).toBe(false)
+    expect(button).toHaveAttribute('data-phase', 'idle')
+  })
+
+  it('reports failed native restoration on the already-published performance side without reopening creation', async () => {
+    vi.mocked(window.matchMedia).mockReturnValueOnce({
+      ...window.matchMedia('(prefers-reduced-motion: reduce)'),
+      matches: true,
+    })
+    await useCreationStore.getState().enter()
+    vi.mocked(commands.setMainPerformanceKeyOwner).mockResolvedValueOnce({
+      status: 'error',
+      error: 'Native key owner unavailable',
+    })
+    render(<CreationModeButton />)
+    const button = screen.getByRole('button', {
+      name: 'Return to performance mode',
+    })
+    fireEvent.click(button, { detail: 0 })
+    await waitFor(() => expect(button).toHaveAttribute('data-phase', 'armed'))
+    fireEvent.click(button, { detail: 0 })
+    await waitFor(() =>
+      expect(useCreationStore.getState().modeError?.detail).toBe(
+        'Native key owner unavailable'
+      )
+    )
+    expect(useCreationStore.getState().active).toBe(false)
+    expect(button).toHaveAttribute('data-phase', 'idle')
+    expect(useSessionStore.getState().sessionStatus).toBe('idle')
+  })
 
   it.each(['pond', 'brutal'] as const)(
     'waits for the 300ms fill under %s and suppresses reverse hover until the pointer leaves',
@@ -108,6 +225,7 @@ describe('prototype mode interaction', () => {
       expect(commands.stopProject).not.toHaveBeenCalled()
       expect(commands.closeCreationProjection).not.toHaveBeenCalled()
       expect(commands.commitCreationProject).not.toHaveBeenCalled()
+      expect(commands.setMainPerformanceKeyOwner).not.toHaveBeenCalled()
     }
   )
 

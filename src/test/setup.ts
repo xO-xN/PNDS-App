@@ -166,6 +166,9 @@ vi.mock('@/lib/tauri-bindings', async () => {
           detail: 'addCreationModule not mocked',
         },
       }),
+      setMainPerformanceKeyOwner: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
       setMainControlsVisible: vi
         .fn()
         .mockResolvedValue({ status: 'ok', data: null }),
