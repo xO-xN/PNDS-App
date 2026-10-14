@@ -22,7 +22,7 @@ fn blank_project_is_complete_localized_and_prepared_without_replacing_the_old_wo
     assert!(access.read(&old_identity, "server.js", &protection).is_ok());
     let root = temp.path().join("new-score");
     let manifest = crate::project::manifest::load_manifest(&root).unwrap();
-    assert_eq!(manifest.id, "new-score");
+    assert!(manifest.id.starts_with("new-score-"));
     assert_eq!(
         manifest.audio.default_mode,
         crate::types::AudioMode::Internal

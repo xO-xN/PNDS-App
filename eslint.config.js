@@ -138,6 +138,8 @@ export default tseslint.config(
       // Frozen upstream CommonJS/UMD; public exports and syntax checked by
       // creation-module-assets.test.mjs without rewriting the source snapshot.
       'src-tauri/resources/modules/**/*.js',
+      // Immutable verified Template source runs its own npm check/test.
+      'src-tauri/resources/classic-project/**',
     ],
   }
 )

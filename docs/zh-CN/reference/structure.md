@@ -117,3 +117,8 @@ ASBS 2.1.0 仅引用共享 Express 5.3.0、qrcode 1.5.4 和 Socket.IO／client 4
 在预编译页面入口前从工程同源服务加载客户端浏览器文件，音频模式仍为 `none`。
 共享引用不会引入 p5、ml5、osc-min 或安全上下文需求。打包安装后仍须验证真实页面
 和控制行为，不能用 health 通过代替作品验收。
+
+## App 新建工程的来源
+
+Blank 与 PNDS Classic 是固定起点。两种起点均初始化独立 manifest 身份和版本 0.1.0，Classic 同时初始化独立客户端存储键。`docs/template-source.json` 记录起点来源与版本，和可选模块加入记录分开；它属于创作资料，不是运行 manifest 字段，根 docs 不进入 `.pnds`。
+打开已有工程保留原身份与 Git 历史，Host 升级不会自动改写已创建工程的模板来源。创建与离线要求见[创作指南](../template-guide.md)。

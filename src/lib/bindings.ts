@@ -180,6 +180,14 @@ async createBlankProject(options: NewProjectOptions) : Promise<Result<CreationWo
     else return { status: "error", error: e  as any };
 }
 },
+async createClassicProject(options: NewProjectOptions) : Promise<Result<CreationWorkspace, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("create_classic_project", { options }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async compileCreationSynthdefs(identity: string) : Promise<Result<SynthdefCompileReport, CreationError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("compile_creation_synthdefs", { identity }) };

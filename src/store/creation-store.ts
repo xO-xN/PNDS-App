@@ -21,6 +21,8 @@ import {
 import { isSessionBusy, useSessionStore } from './session-store'
 import { useProjectStore } from './project-store'
 
+type NewProjectRequest = NewProjectOptions & { template?: 'blank' | 'classic' }
+
 interface CreationRequest {
   readonly path: string
 }
@@ -56,8 +58,8 @@ interface CreationState {
   leave: () => Promise<void>
   restoreRecent: (paths: string[]) => void
   removeRecent: (path: string) => void
-  open: (path: string, newProject?: NewProjectOptions) => Promise<boolean>
-  create: (options: NewProjectOptions) => Promise<boolean>
+  open: (path: string, newProject?: NewProjectRequest) => Promise<boolean>
+  create: (options: NewProjectRequest) => Promise<boolean>
   pick: () => Promise<boolean>
 }
 let openQueue: Promise<unknown> = Promise.resolve()
@@ -378,7 +380,12 @@ export const useCreationStore = create<CreationState>((set, get) => ({
           if (!(await confirmDiscardCreationDrafts())) return false
           if (!owns()) return false
           assertGeneration(unwrap(await commands.getCreationRuntime()), runtime)
-          prepared = unwrap(await commands.createBlankProject(newProject))
+          const { template, ...options } = newProject
+          prepared = unwrap(
+            await (template === 'classic'
+              ? commands.createClassicProject(options)
+              : commands.createBlankProject(options))
+          )
         } else prepared = unwrap(await commands.prepareCreationProject(path))
         if (!owns()) return false
         if (!newProject && !(await approveCreationDiscard())) return false

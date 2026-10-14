@@ -1,0 +1,11 @@
+{
+  "version": "0.2.0",
+  "hostProtocol": 1,
+  "runtime": [
+    "Browser DOM",
+    "No npm dependency"
+  ],
+  "adaptation": [
+    "Load only in monitor; declare supported locales, fallback and project string-table callback. / 仅在 monitor 加载；声明支持语言、回退与作品字符串表回调。"
+  ]
+}

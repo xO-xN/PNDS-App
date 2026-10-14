@@ -1,0 +1,11 @@
+{
+  "version": "0.2.0",
+  "hostProtocol": 1,
+  "runtime": [
+    "Browser DOM",
+    "No npm dependency"
+  ],
+  "adaptation": [
+    "Load only in monitor; provide CSS mapping or drawing callback and preserve early delivery until page initialization. / 仅在 monitor 加载；提供 CSS 映射或绘制回调，页面初始化前暂存首帧。"
+  ]
+}

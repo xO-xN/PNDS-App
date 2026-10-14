@@ -1,0 +1,12 @@
+{
+  "version": "0.2.0",
+  "hostProtocol": 1,
+  "runtime": [
+    "Node 24",
+    "qrcode 1.5.x",
+    "Express 4.x or compatible HTTP response"
+  ],
+  "adaptation": [
+    "Pass the project-resolved full performer URL; wire the HTTP route and your own display. / 传入工程解析的完整 performer 地址，接入 HTTP 路由和自定显示。"
+  ]
+}

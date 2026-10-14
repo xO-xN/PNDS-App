@@ -1,0 +1,11 @@
+{
+  "version": "0.2.0",
+  "hostProtocol": 1,
+  "runtime": ["Node 24", "Socket.IO 4.x", "Browser Socket.IO 4.x client"],
+  "adaptation": [
+    "Work declares low-frequency view keys, defaults and optional value validators",
+    "Work mounts a dedicated monitor namespace; performers do not connect to it",
+    "State is session-local and resets when the server module is recreated",
+    "No dependency on players, theme-follow or locale-follow modules"
+  ]
+}

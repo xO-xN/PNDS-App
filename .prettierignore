@@ -34,3 +34,6 @@ src-tauri/resources/modules/**
 # Verified upstream npm bytes and generated completeness catalog
 src-tauri/resources/shared-libraries/**
 shared-libraries/package-lock.json
+
+# Frozen verified Template source keeps upstream bytes and provenance.
+src-tauri/resources/classic-project/**

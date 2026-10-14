@@ -1,0 +1,11 @@
+{
+  "version": "0.2.0",
+  "hostProtocol": 1,
+  "runtime": ["Node 24", "Socket.IO 4.x", "Browser Socket.IO 4.x client"],
+  "adaptation": [
+    "Work supplies admission, claim persistence, identity and sound recovery policy",
+    "Performer uses the page origin; storage and tokenKey are scoped to the work and browser origin",
+    "Continuous filtering is opt-in; discrete actions use a separate event",
+    "Monitor view synchronization is an independent module with distinct files"
+  ]
+}

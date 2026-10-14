@@ -126,3 +126,14 @@ file through a same-origin score-server route before the compiled page entry.
 Its audio mode remains `none`. Adding shared references does not introduce p5,
 ml5, osc-min or a secure-context requirement. Validate real pages and controls
 again after packaging and installation; health alone is insufficient.
+
+## App-created project sources
+
+Blank and PNDS Classic are fixed creation starting points. Both initialize an
+independent manifest identity and version 0.1.0; Classic initializes its client
+storage key too. `docs/template-source.json` records the starting source and
+version separately from optional module addition records. This authoring record
+is not a runtime manifest field and root docs are excluded from `.pnds`.
+Opening an existing project preserves its identity and Git history. A Host
+update never automatically updates a project's original template source.
+See [the creator guide](../template-guide.md) for creation and offline requirements.
