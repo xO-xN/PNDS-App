@@ -1,0 +1,780 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-14",
+  "status": "passed: user confirmed both final native DMGs on 2026-10-14",
+  "appSourceCommit": "d84d823347e2d0ef08d871b572965fd3ccb5e135",
+  "baselineCommit": "bfd761b38e6a27b24bf933e961ad7cc863b81777",
+  "appChangesSinceSourceCommit": "fixed public utility registry and four bilingual help files; runtime code unchanged",
+  "build": {
+    "ciMode": true,
+    "updaterArtifacts": false,
+    "signing": "adhoc",
+    "notarized": false,
+    "intelScsynthOverride": true,
+    "cargoTarget": "PNDS-App-main/src-tauri/target"
+  },
+  "inputHashes": {
+    "utilities.json": "80ce062fbc5b3d729a4f5180fe4c79fd73ea396cb6289c6dbc0954ff5c00d990",
+    "shared-libraries/browser-sources.json": "57f4e964f9c4a4a203ea786c89a5b81be0cbb6221c20815e6d1ddb34128eae74",
+    "shared-libraries/package.json": "254d32c7010a5e0eeacda4c524f0db24130b4e2e516eb9aca8aed892f1908651",
+    "shared-libraries/package-lock.json": "7f446f391ff28d2771ec39c758048910a58bb3190bb549739dc8d412b34c2c9e",
+    "src-tauri/resources/shared-libraries/catalog.json": "697283b4e3f4a10a0cb6a32c7b8e1ed0a44230842573f07e6781937557f41cbe",
+    "docs/en/reference/manifest.md": "3021213160a41e8cba85c12231116c36913a609c39d8a869fb82f96cc6bcdf51",
+    "docs/zh-CN/reference/manifest.md": "eb8975a37e1e793c005b84fbb53d85253c1ae1ecd442f04811c3e09fdd33e782",
+    "docs/en/reference/p5js.md": "1cf31403a3516c28d986c212e692c1ef0358880e0d4cdb2c88325fabc6297be3",
+    "docs/zh-CN/reference/p5js.md": "c1e999d421e14037638d3414f69fa9310b719e4d543151762fc4d207a7eb975a"
+  },
+  "sharedLibraries": {
+    "catalogSha256": "697283b4e3f4a10a0cb6a32c7b8e1ed0a44230842573f07e6781937557f41cbe",
+    "sourceFingerprint": "b77148f2651d6e32061d7ef4e87b16727e76d995ca9189a4bfa47efe86fc77f0",
+    "versions": {
+      "p5": "2.3.4",
+      "ml5": "1.4.0",
+      "express": "5.3.0",
+      "osc-min": "2.1.2",
+      "qrcode": "1.5.4",
+      "socket.io": "4.8.4",
+      "socket.io-client": "4.8.4"
+    },
+    "uniqueFiles": 1453,
+    "sizes": {
+      "files": 1454,
+      "logicalBytes": 18506478,
+      "allocatedKiB": 21952
+    }
+  },
+  "utilities": [
+    {
+      "id": "local-network-diagnostics",
+      "version": "0.7.0",
+      "repo": "xO-xN/Local-Network-Diagnostics",
+      "tag": "v0.7.0",
+      "sourceCommit": "d74211b5aa1817ee41a7f2b348b39329347086d8",
+      "publishedSha256": "0729a146f9a650d1ad5aa9d03deaa7f469f434f44ed017473dcb94b15a170c53",
+      "publishedBytes": 41050,
+      "runUrl": "https://github.com/xO-xN/Local-Network-Diagnostics/actions/runs/38537476628",
+      "releaseUrl": "https://github.com/xO-xN/Local-Network-Diagnostics/releases/tag/v0.7.0",
+      "pipelineOmittedNonRuntimeFiles": ["Local Network Diagnostics/LICENSE"]
+    },
+    {
+      "id": "telematic-network-diagnostics",
+      "version": "0.7.0",
+      "repo": "xO-xN/Telematic-Network-Diagnostics",
+      "tag": "v0.7.0",
+      "sourceCommit": "f1e698f34ed31d02f49218cd56f520671c0a51f9",
+      "publishedSha256": "031ab145e8314a839969bf47f10fcc998f0103ba8c6f7454575352fe31a80a57",
+      "publishedBytes": 68219,
+      "runUrl": "https://github.com/xO-xN/Telematic-Network-Diagnostics/actions/runs/38537499778",
+      "releaseUrl": "https://github.com/xO-xN/Telematic-Network-Diagnostics/releases/tag/v0.7.0",
+      "pipelineOmittedNonRuntimeFiles": [
+        "Telematic Network Diagnostics/LICENSE"
+      ]
+    },
+    {
+      "id": "multichannel-signal-generator",
+      "version": "1.3.0",
+      "repo": "xO-xN/Multichannel-Signal-Generator",
+      "tag": "v1.3.0",
+      "sourceCommit": "811d32b09b006ef8ce50bedd5fcf1df2dafeb5fc",
+      "publishedSha256": "467b1b009651f63ff4a33155319637206b804b74caf43d8f06013afdd71c9038",
+      "publishedBytes": 30975,
+      "runUrl": "https://github.com/xO-xN/Multichannel-Signal-Generator/actions/runs/38537535721",
+      "releaseUrl": "https://github.com/xO-xN/Multichannel-Signal-Generator/releases/tag/v1.3.0",
+      "pipelineOmittedNonRuntimeFiles": [
+        "Multichannel Signal Generator/LICENSE"
+      ]
+    },
+    {
+      "id": "mobile-sensor-meter",
+      "version": "0.4.2",
+      "repo": "xO-xN/Mobile-Sensor-Meter",
+      "tag": "v0.4.2",
+      "sourceCommit": "45994fd80a0bceb8cf9c9521168277d378a325d1",
+      "publishedSha256": "85ce969a639448a7b1b479c1d43ff1a96795aefbd16ab4d1f47d843f63c89099",
+      "publishedBytes": 3639234,
+      "runUrl": "https://github.com/xO-xN/Mobile-Sensor-Meter/actions/runs/38539939327",
+      "releaseUrl": "https://github.com/xO-xN/Mobile-Sensor-Meter/releases/tag/v0.4.2",
+      "pipelineOmittedNonRuntimeFiles": ["Mobile Sensor Meter/LICENSE"]
+    }
+  ],
+  "acceptedLocalProjects": [
+    {
+      "id": "pnds-template",
+      "version": "0.7.0",
+      "sha256": "a062b2c9f2adde3ca7f37b40509ea58d1e06caaf4e0a60bce2b7071c033af1fe",
+      "sharedLibraries": [
+        {
+          "id": "express",
+          "version": "5.3.0"
+        },
+        {
+          "id": "osc-min",
+          "version": "2.1.2"
+        },
+        {
+          "id": "qrcode",
+          "version": "1.5.4"
+        },
+        {
+          "id": "socket.io",
+          "version": "4.8.4"
+        },
+        {
+          "id": "p5",
+          "version": "2.3.4"
+        }
+      ],
+      "published": false
+    },
+    {
+      "id": "inarticulate-iii",
+      "version": "1.4.0",
+      "sha256": "337ddc64cca3e59df09ee23f44bc9988b1ab5d7f5557a26c54c3b530bfc105c9",
+      "sharedLibraries": [
+        {
+          "id": "p5",
+          "version": "2.3.4"
+        },
+        {
+          "id": "express",
+          "version": "5.3.0"
+        },
+        {
+          "id": "qrcode",
+          "version": "1.5.4"
+        },
+        {
+          "id": "socket.io",
+          "version": "4.8.4"
+        },
+        {
+          "id": "osc-min",
+          "version": "2.1.2"
+        }
+      ],
+      "published": false
+    },
+    {
+      "id": "inarticulate-iv",
+      "version": "0.2.0",
+      "sha256": "2ac42fafab5e1a2c7f8e8ea0157d9903195a25ee13f88951188b1c2c67de43e9",
+      "sharedLibraries": [
+        {
+          "id": "p5",
+          "version": "2.3.4"
+        },
+        {
+          "id": "express",
+          "version": "5.3.0"
+        },
+        {
+          "id": "qrcode",
+          "version": "1.5.4"
+        },
+        {
+          "id": "socket.io",
+          "version": "4.8.4"
+        }
+      ],
+      "published": false
+    },
+    {
+      "id": "all-sentient-being-sounds",
+      "version": "2.1.0",
+      "sha256": "0749367141821947d4e5bb34f67da76c0a20a41c36794d8924731aafcaac18f4",
+      "sharedLibraries": [
+        {
+          "id": "express",
+          "version": "5.3.0"
+        },
+        {
+          "id": "qrcode",
+          "version": "1.5.4"
+        },
+        {
+          "id": "socket.io",
+          "version": "4.8.4"
+        },
+        {
+          "id": "socket.io-client",
+          "version": "4.8.4"
+        }
+      ],
+      "published": false
+    }
+  ],
+  "lanes": {
+    "arm64": {
+      "baseline": {
+        "phase": "baseline",
+        "lane": "arm64",
+        "version": "1.6.1",
+        "minimumSystemVersion": "13.5",
+        "dmg": {
+          "filename": "PNDS_1.6.1_aarch64.dmg",
+          "bytes": 61299929,
+          "sha256": "16ae2e7c8f24b8e9846e60eef5b50bb1d253c93f53fd1568ae1b25ab45338ad5"
+        },
+        "app": {
+          "files": 4534,
+          "logicalBytes": 183372895,
+          "allocatedKiB": 191108
+        },
+        "resources": {
+          "files": 4527,
+          "logicalBytes": 47507584,
+          "allocatedKiB": 58412
+        },
+        "utilities": [
+          {
+            "id": "multichannel-signal-generator",
+            "version": "1.2.1",
+            "schemaVersion": 1,
+            "sizes": {
+              "files": 317,
+              "logicalBytes": 1788702,
+              "allocatedKiB": 2572
+            },
+            "sharedLibraries": []
+          },
+          {
+            "id": "local-network-diagnostics",
+            "version": "0.6.1",
+            "schemaVersion": 1,
+            "sizes": {
+              "files": 1303,
+              "logicalBytes": 8920264,
+              "allocatedKiB": 12196
+            },
+            "sharedLibraries": []
+          },
+          {
+            "id": "telematic-network-diagnostics",
+            "version": "0.6.1",
+            "schemaVersion": 1,
+            "sizes": {
+              "files": 1507,
+              "logicalBytes": 11415210,
+              "allocatedKiB": 15180
+            },
+            "sharedLibraries": []
+          },
+          {
+            "id": "mobile-sensor-meter",
+            "version": "0.3.1",
+            "schemaVersion": 1,
+            "sizes": {
+              "files": 1316,
+              "logicalBytes": 17770756,
+              "allocatedKiB": 20856
+            },
+            "sharedLibraries": []
+          }
+        ],
+        "binaries": {
+          "Contents/MacOS/pnds-app": {
+            "architecture": "arm64",
+            "sha256": "814920eff6595f3f5c47d12939bd29dbe79ea7d4a89b8a3aea35f1ffb6ee0de2",
+            "bytes": 7668000
+          },
+          "Contents/MacOS/node": {
+            "architecture": "arm64",
+            "sha256": "5801bd2ed9787c7368bd1c05a45ce4dfde49310b074675946b733672384209c6",
+            "bytes": 120236992
+          },
+          "Contents/MacOS/pnds-dnsd": {
+            "architecture": "arm64",
+            "sha256": "8e1d06bcd88cd9a838635dde7382dbddbf361499dad3b876cba5b83614f764d0",
+            "bytes": 1259776
+          },
+          "Contents/Resources/scsynth": {
+            "architecture": "arm64",
+            "sha256": "4c5729fee5b651749c49356dc845e407aa665f37a317d4c561399f836c7ce199",
+            "bytes": 763216
+          }
+        },
+        "sharedLibraries": null,
+        "verification": {
+          "hdiutil": true,
+          "readonlyMounted": true,
+          "codesignDeepStrict": true,
+          "architecture": true,
+          "fullCatalogAndToolPayload": false
+        }
+      },
+      "final": {
+        "phase": "final",
+        "lane": "arm64",
+        "version": "1.6.2",
+        "minimumSystemVersion": "13.5",
+        "dmg": {
+          "filename": "PNDS_1.6.2_aarch64.dmg",
+          "bytes": 56957983,
+          "sha256": "a2fda08045e3f49dc1ee8f5fea4bbcc776081b91f781c466af524fbe717ee6e9"
+        },
+        "app": {
+          "files": 1634,
+          "logicalBytes": 165723864,
+          "allocatedKiB": 166100
+        },
+        "resources": {
+          "files": 1627,
+          "logicalBytes": 30851281,
+          "allocatedKiB": 34372
+        },
+        "utilities": [
+          {
+            "id": "multichannel-signal-generator",
+            "version": "1.3.0",
+            "schemaVersion": 2,
+            "sizes": {
+              "files": 16,
+              "logicalBytes": 73717,
+              "allocatedKiB": 112
+            },
+            "sharedLibraries": [
+              {
+                "id": "qrcode",
+                "version": "1.5.4"
+              }
+            ]
+          },
+          {
+            "id": "local-network-diagnostics",
+            "version": "0.7.0",
+            "schemaVersion": 2,
+            "sizes": {
+              "files": 20,
+              "logicalBytes": 108807,
+              "allocatedKiB": 156
+            },
+            "sharedLibraries": [
+              {
+                "id": "express",
+                "version": "5.3.0"
+              },
+              {
+                "id": "qrcode",
+                "version": "1.5.4"
+              },
+              {
+                "id": "socket.io",
+                "version": "4.8.4"
+              }
+            ]
+          },
+          {
+            "id": "telematic-network-diagnostics",
+            "version": "0.7.0",
+            "schemaVersion": 2,
+            "sizes": {
+              "files": 23,
+              "logicalBytes": 187195,
+              "allocatedKiB": 232
+            },
+            "sharedLibraries": [
+              {
+                "id": "express",
+                "version": "5.3.0"
+              },
+              {
+                "id": "qrcode",
+                "version": "1.5.4"
+              },
+              {
+                "id": "socket.io",
+                "version": "4.8.4"
+              },
+              {
+                "id": "socket.io-client",
+                "version": "4.8.4"
+              }
+            ]
+          },
+          {
+            "id": "mobile-sensor-meter",
+            "version": "0.4.2",
+            "schemaVersion": 2,
+            "sizes": {
+              "files": 30,
+              "logicalBytes": 4339885,
+              "allocatedKiB": 4296
+            },
+            "sharedLibraries": [
+              {
+                "id": "express",
+                "version": "5.3.0"
+              },
+              {
+                "id": "qrcode",
+                "version": "1.5.4"
+              },
+              {
+                "id": "socket.io",
+                "version": "4.8.4"
+              },
+              {
+                "id": "ml5",
+                "version": "1.4.0"
+              }
+            ]
+          }
+        ],
+        "binaries": {
+          "Contents/MacOS/pnds-app": {
+            "architecture": "arm64",
+            "sha256": "80a12e954a5aa6fbfcbb711674f7ad02bab9e6e09e4b1377d1b402bc6d7f3748",
+            "bytes": 7750352
+          },
+          "Contents/MacOS/node": {
+            "architecture": "arm64",
+            "sha256": "5801bd2ed9787c7368bd1c05a45ce4dfde49310b074675946b733672384209c6",
+            "bytes": 120236992
+          },
+          "Contents/MacOS/pnds-dnsd": {
+            "architecture": "arm64",
+            "sha256": "8e1d06bcd88cd9a838635dde7382dbddbf361499dad3b876cba5b83614f764d0",
+            "bytes": 1259776
+          },
+          "Contents/Resources/scsynth": {
+            "architecture": "arm64",
+            "sha256": "4c5729fee5b651749c49356dc845e407aa665f37a317d4c561399f836c7ce199",
+            "bytes": 763216
+          }
+        },
+        "sharedLibraries": {
+          "catalogSha256": "697283b4e3f4a10a0cb6a32c7b8e1ed0a44230842573f07e6781937557f41cbe",
+          "sourceFingerprint": "b77148f2651d6e32061d7ef4e87b16727e76d995ca9189a4bfa47efe86fc77f0",
+          "versions": {
+            "p5": "2.3.4",
+            "ml5": "1.4.0",
+            "express": "5.3.0",
+            "osc-min": "2.1.2",
+            "qrcode": "1.5.4",
+            "socket.io": "4.8.4",
+            "socket.io-client": "4.8.4"
+          },
+          "uniqueFiles": 1453,
+          "sizes": {
+            "files": 1454,
+            "logicalBytes": 18506478,
+            "allocatedKiB": 21952
+          }
+        },
+        "verification": {
+          "hdiutil": true,
+          "readonlyMounted": true,
+          "codesignDeepStrict": true,
+          "architecture": true,
+          "fullCatalogAndToolPayload": true
+        }
+      }
+    },
+    "x64": {
+      "baseline": {
+        "phase": "baseline",
+        "lane": "x64",
+        "version": "1.6.1",
+        "minimumSystemVersion": "13.5",
+        "dmg": {
+          "filename": "PNDS_1.6.1_x64.dmg",
+          "bytes": 63657085,
+          "sha256": "5f7a890b688ec2976a16b797275574d20f3a61e317b3466b7d85dc3f41d0e50a"
+        },
+        "app": {
+          "files": 4534,
+          "logicalBytes": 187621039,
+          "allocatedKiB": 195252
+        },
+        "resources": {
+          "files": 4527,
+          "logicalBytes": 47516864,
+          "allocatedKiB": 58420
+        },
+        "utilities": [
+          {
+            "id": "multichannel-signal-generator",
+            "version": "1.2.1",
+            "schemaVersion": 1,
+            "sizes": {
+              "files": 317,
+              "logicalBytes": 1788702,
+              "allocatedKiB": 2572
+            },
+            "sharedLibraries": []
+          },
+          {
+            "id": "local-network-diagnostics",
+            "version": "0.6.1",
+            "schemaVersion": 1,
+            "sizes": {
+              "files": 1303,
+              "logicalBytes": 8920264,
+              "allocatedKiB": 12196
+            },
+            "sharedLibraries": []
+          },
+          {
+            "id": "telematic-network-diagnostics",
+            "version": "0.6.1",
+            "schemaVersion": 1,
+            "sizes": {
+              "files": 1507,
+              "logicalBytes": 11415210,
+              "allocatedKiB": 15180
+            },
+            "sharedLibraries": []
+          },
+          {
+            "id": "mobile-sensor-meter",
+            "version": "0.3.1",
+            "schemaVersion": 1,
+            "sizes": {
+              "files": 1316,
+              "logicalBytes": 17770756,
+              "allocatedKiB": 20856
+            },
+            "sharedLibraries": []
+          }
+        ],
+        "binaries": {
+          "Contents/MacOS/pnds-app": {
+            "architecture": "x86_64",
+            "sha256": "e89a06d1d175147dcc5b4a307363924ec47d134ae4d670e82640a6763824c3e0",
+            "bytes": 8691696
+          },
+          "Contents/MacOS/node": {
+            "architecture": "x86_64",
+            "sha256": "47384233ad561524807118b59e34f5d1b0ad529dc8800ba2d56be39cbac5811c",
+            "bytes": 123298864
+          },
+          "Contents/MacOS/pnds-dnsd": {
+            "architecture": "x86_64",
+            "sha256": "ebd915626f5689d3969ee8afdac1f7674c13f99e678210a4beb794c7631b65ec",
+            "bytes": 1413072
+          },
+          "Contents/Resources/scsynth": {
+            "architecture": "x86_64",
+            "sha256": "b7899f871383506d37ce4034f8736cc0c4409459f926f79075fdcb5791cee316",
+            "bytes": 772496
+          }
+        },
+        "sharedLibraries": null,
+        "verification": {
+          "hdiutil": true,
+          "readonlyMounted": true,
+          "codesignDeepStrict": true,
+          "architecture": true,
+          "fullCatalogAndToolPayload": false
+        }
+      },
+      "final": {
+        "phase": "final",
+        "lane": "x64",
+        "version": "1.6.2",
+        "minimumSystemVersion": "13.5",
+        "dmg": {
+          "filename": "PNDS_1.6.2_x64.dmg",
+          "bytes": 59336559,
+          "sha256": "0e10f6b48605904b2458b11da3383821613b629d09e123d5210705be85be37e5"
+        },
+        "app": {
+          "files": 1634,
+          "logicalBytes": 170001432,
+          "allocatedKiB": 170276
+        },
+        "resources": {
+          "files": 1627,
+          "logicalBytes": 30860561,
+          "allocatedKiB": 34380
+        },
+        "utilities": [
+          {
+            "id": "multichannel-signal-generator",
+            "version": "1.3.0",
+            "schemaVersion": 2,
+            "sizes": {
+              "files": 16,
+              "logicalBytes": 73717,
+              "allocatedKiB": 112
+            },
+            "sharedLibraries": [
+              {
+                "id": "qrcode",
+                "version": "1.5.4"
+              }
+            ]
+          },
+          {
+            "id": "local-network-diagnostics",
+            "version": "0.7.0",
+            "schemaVersion": 2,
+            "sizes": {
+              "files": 20,
+              "logicalBytes": 108807,
+              "allocatedKiB": 156
+            },
+            "sharedLibraries": [
+              {
+                "id": "express",
+                "version": "5.3.0"
+              },
+              {
+                "id": "qrcode",
+                "version": "1.5.4"
+              },
+              {
+                "id": "socket.io",
+                "version": "4.8.4"
+              }
+            ]
+          },
+          {
+            "id": "telematic-network-diagnostics",
+            "version": "0.7.0",
+            "schemaVersion": 2,
+            "sizes": {
+              "files": 23,
+              "logicalBytes": 187195,
+              "allocatedKiB": 232
+            },
+            "sharedLibraries": [
+              {
+                "id": "express",
+                "version": "5.3.0"
+              },
+              {
+                "id": "qrcode",
+                "version": "1.5.4"
+              },
+              {
+                "id": "socket.io",
+                "version": "4.8.4"
+              },
+              {
+                "id": "socket.io-client",
+                "version": "4.8.4"
+              }
+            ]
+          },
+          {
+            "id": "mobile-sensor-meter",
+            "version": "0.4.2",
+            "schemaVersion": 2,
+            "sizes": {
+              "files": 30,
+              "logicalBytes": 4339885,
+              "allocatedKiB": 4296
+            },
+            "sharedLibraries": [
+              {
+                "id": "express",
+                "version": "5.3.0"
+              },
+              {
+                "id": "qrcode",
+                "version": "1.5.4"
+              },
+              {
+                "id": "socket.io",
+                "version": "4.8.4"
+              },
+              {
+                "id": "ml5",
+                "version": "1.4.0"
+              }
+            ]
+          }
+        ],
+        "binaries": {
+          "Contents/MacOS/pnds-app": {
+            "architecture": "x86_64",
+            "sha256": "3d433f33f6533790c18f8d351d61011499e742e313e195f512ef39cded65b401",
+            "bytes": 8803472
+          },
+          "Contents/MacOS/node": {
+            "architecture": "x86_64",
+            "sha256": "47384233ad561524807118b59e34f5d1b0ad529dc8800ba2d56be39cbac5811c",
+            "bytes": 123298864
+          },
+          "Contents/MacOS/pnds-dnsd": {
+            "architecture": "x86_64",
+            "sha256": "ebd915626f5689d3969ee8afdac1f7674c13f99e678210a4beb794c7631b65ec",
+            "bytes": 1413072
+          },
+          "Contents/Resources/scsynth": {
+            "architecture": "x86_64",
+            "sha256": "b7899f871383506d37ce4034f8736cc0c4409459f926f79075fdcb5791cee316",
+            "bytes": 772496
+          }
+        },
+        "sharedLibraries": {
+          "catalogSha256": "697283b4e3f4a10a0cb6a32c7b8e1ed0a44230842573f07e6781937557f41cbe",
+          "sourceFingerprint": "b77148f2651d6e32061d7ef4e87b16727e76d995ca9189a4bfa47efe86fc77f0",
+          "versions": {
+            "p5": "2.3.4",
+            "ml5": "1.4.0",
+            "express": "5.3.0",
+            "osc-min": "2.1.2",
+            "qrcode": "1.5.4",
+            "socket.io": "4.8.4",
+            "socket.io-client": "4.8.4"
+          },
+          "uniqueFiles": 1453,
+          "sizes": {
+            "files": 1454,
+            "logicalBytes": 18506478,
+            "allocatedKiB": 21952
+          }
+        },
+        "verification": {
+          "hdiutil": true,
+          "readonlyMounted": true,
+          "codesignDeepStrict": true,
+          "architecture": true,
+          "fullCatalogAndToolPayload": true
+        }
+      }
+    }
+  },
+  "projectOwnedModels": [
+    {
+      "path": "detector/group1-shard1of1.bin",
+      "sha256": "8ba46d2152f48320cdb8835854f53d469dc6a33933099ff89929755ca1a88d51",
+      "bytes": 1919420
+    },
+    {
+      "path": "detector/model.json",
+      "sha256": "2de2e139e240169c9794c21676b8ca94da2bbc0146a3e0664133ce66e021b1a5",
+      "bytes": 108902
+    },
+    {
+      "path": "landmark/group1-shard1of1.bin",
+      "sha256": "444bee1c7d6d330991bd3ce840a95d0c0afcc3a3fcec47c0c3b7f66a3f3533b0",
+      "bytes": 2023432
+    },
+    {
+      "path": "landmark/model.json",
+      "sha256": "2d6bd4d3b34a684e96293ff71e31f9fbc1b4922e0a88d82184cb584055ff3783",
+      "bytes": 81452
+    }
+  ],
+  "nativeAcceptance": {
+    "date": "2026-10-14",
+    "source": "direct user response to exact final DMG checklist",
+    "response": "双端运行完成，没有问题",
+    "scope": "Apple Silicon and Intel native installation, offline cold start, schema 1 self-contained and accepted shared projects/tools, per the final DMG checklist; existing device/audio evidence reused",
+    "deviceDetails": "not supplied; not inferred"
+  },
+  "checks": {
+    "checkAll": "passed exit 0",
+    "frontendFiles": 134,
+    "frontendTests": 1548,
+    "appRustTests": 392,
+    "dnsRustTests": 39,
+    "dnsRestartTests": 2,
+    "explicitlyIgnoredRustTests": 5,
+    "standardsFindings": 0,
+    "specUnresolvedRequirements": 0
+  }
+}

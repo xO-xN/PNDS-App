@@ -3,9 +3,9 @@
 App shared packages are an explicit project runtime requirement. App-owned browser
 files and a complete production npm lock tree stay in the App; the project owns
 its routes, source wiring, model files, audio and score assets. Each public
-library ID has one exact candidate version. The candidate becomes a release
-version only after the evidence required by [#191](../plans/v1.6.2-shared-libraries-spec.md)
-is complete.
+library ID has one exact selected version. The App 1.6.2 inputs are fixed in the
+manifest reference and the [#199 build evidence](../acceptance/199-v1.6.2-release.md);
+the final native installer acceptance passed on both Macs as recorded there.
 
 ## Project requirements and adoption
 

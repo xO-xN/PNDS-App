@@ -174,8 +174,8 @@ lives only in CI):
 cp src-tauri/tauri.x86_64.conf.json /tmp/tauri.x86_64.local.json
 # …and add "createUpdaterArtifacts": false to its bundle object —
 # see the macOS 27 section below for why this override is required.
-npm run tauri build -- --target x86_64-apple-darwin \
-  --config /tmp/tauri.x86_64.local.json --bundles app,dmg
+CI=true npm run tauri -- build --target x86_64-apple-darwin \
+  --config /tmp/tauri.x86_64.local.json --bundles app,dmg --ci
 ```
 
 `tauri.x86_64.conf.json` swaps only the scsynth resource slice; the
@@ -215,6 +215,38 @@ false` — host-only proc-macro artifacts stay unstripped (they are
    merge the key into the copied x86_64 config as shown above). The
    updater artifacts and their signatures remain CI's job with the real
    key.
+
+### Local DMG verification without an App draft (#199)
+
+Use the direct npm CLI form, `npm run tauri -- build`, when passing bundler
+arguments. The nested `tauri:build` script does not forward `--bundles app,dmg`
+correctly. Stage both dnsd slices and the normal runtime resources first. The
+build still runs `beforeBuildCommand`, including the fixed public utility fetch
+and shared-library fetch; local source checkouts are not substitutes.
+
+If Finder layout automation times out with AppleEvent `-1712`, `CI=true` and
+`--ci` use the supported bundler mode that skips Finder prettification. The DMG
+is still created, mounted, compressed and verified normally. For resource-only
+changes after a successful compile, `npm run tauri -- bundle --bundles app,dmg`
+with the same lane/config can rebuild the bundle; it does not rerun the build
+preparation steps. Keep those inputs verified. A DMG-only bundle command can
+remove its intermediate `.app`; obtain the installed App from a read-only mount.
+
+Local acceptance builds set `bundle.createUpdaterArtifacts: false`, preserve the
+Intel scsynth override, and use ad hoc signing. Verify each actual DMG with
+`hdiutil verify`, mount it read-only, check the installed version and architecture
+of App, Node, dnsd and scsynth, verify the deep signature, and check the complete
+catalog and utility payload against the fixed inputs. Record byte sizes and the
+comparison source/config. Cross compilation and controlled browser tests do not
+prove native Intel execution. Both real Macs must pass before closing the dual
+architecture gate. No App release or tag is needed for these local tests.
+
+The shared browser harness uses Express `sendFile`, whose default policy blocks
+hidden path segments such as an evidence folder named `.cache`. Keep unpacked
+App test copies outside the repository so ESLint does not scan their embedded
+projects or third-party JavaScript. Test an identical
+App copy in a normal temporary installation path, verify the copied resource
+hashes, and keep production routes unchanged.
 
 ### Manual Method
 

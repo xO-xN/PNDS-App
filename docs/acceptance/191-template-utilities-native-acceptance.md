@@ -4,13 +4,13 @@
 
 ## 已确认输入
 
-| 工程                          | 版本  | 对应 issue | 结论                                                      |
-| ----------------------------- | ----- | ---------- | --------------------------------------------------------- |
-| PNDS Template                 | 0.7.0 | #198       | 用户确认测试完成、无问题；#198 已关闭                     |
-| Multichannel Signal Generator | 1.3.0 | #214       | 用户确认测试完成、无问题；仍待固定发布产物和正式 registry |
-| Local Network Diagnostics     | 0.7.0 | #215       | 用户确认测试完成、无问题；仍待固定发布产物和正式 registry |
-| Telematic Network Diagnostics | 0.7.0 | #216       | 用户确认测试完成、无问题；仍待固定发布产物和正式 registry |
-| Mobile Sensor Meter           | 0.4.1 | #217       | 用户确认测试完成、无问题；仍待固定发布产物和正式 registry |
+| 工程                          | 版本  | 对应 issue | 结论                                                               |
+| ----------------------------- | ----- | ---------- | ------------------------------------------------------------------ |
+| PNDS Template                 | 0.7.0 | #198       | 用户确认测试完成、无问题；#198 已关闭                              |
+| Multichannel Signal Generator | 1.3.0 | #214       | 用户确认测试完成、无问题；正式产物与 registry 已接入；见 #199 记录 |
+| Local Network Diagnostics     | 0.7.0 | #215       | 用户确认测试完成、无问题；正式产物与 registry 已接入；见 #199 记录 |
+| Telematic Network Diagnostics | 0.7.0 | #216       | 用户确认测试完成、无问题；正式产物与 registry 已接入；见 #199 记录 |
+| Mobile Sensor Meter           | 0.4.1 | #217       | 用户确认测试完成、无问题；正式产物与 registry 已接入；见 #199 记录 |
 
 输入对应 App 工作树 `.cache/v1.6.2-candidates/inventory.json` 与 `staged-development-utilities.json`。包哈希和已执行的所属仓库检查见 [实施记录](191-v1.6.2-shared-libraries.md) 与 [入口更新](http-default-performer-entry.md)。用户的整体实测确认补齐前次列出的设备与运行条件；没有另外提供设备型号、测试时长或逐步操作日志，不自行补写这些细节。
 
@@ -22,6 +22,6 @@ App 集成分支 `codex/v1.6.2-shared-libraries` 已合入 `codex/v1.6.1-modules
 
 ## 保留的发行条件
 
-#214–217 仍需已有发布流水线生成真实固定工具产物，核对 ID、版本与 SHA-256 后更新正式 `utilities.json`。目前正式清单仍指向旧的已发布工具，`utilities:fetch`／`tauri:build` 会恢复这些输入，因此用户测过的本地暂存不能冒充正式发行接入。
+#214–217 的正式输入现已补齐：四工具经过所属仓库检查与双轴审查，使用原发布流水线生成固定产物，并按用户后续授权发布为 prerelease。App 正式 `utilities.json` 已接入实际公开产物哈希；正常 fetch 与安装／回打包通过。Mobile 0.4.2 修复 CI 安装阶段，运行源码与四份模型字节保持已验收的 0.4.1 输入。确切来源和验证见 [#199 记录](199-v1.6.2-release.md)。
 
-#199 与父票 #191 保持开放：待工具正式输入齐备后冻结唯一共享版本集，核对最终组合，完成 Apple Silicon／Intel 离线安装运行和实际资源／DMG 相对基线的容量比较。本轮不创建 App 或工具 draft release。
+#199 的固定输入、最终双架构资源和实际容量已记录；用户收到两份确切 DMG 与清单后明确回复「双端运行完成，没有问题」，Apple Silicon／Intel 原生安装、断公网冷启动与工程运行门槛通过，#199 与父票 #191 可闭合。初次不发布工具的约束已由用户后续明确授权工具发布替代；App 仍不创建 draft release。
