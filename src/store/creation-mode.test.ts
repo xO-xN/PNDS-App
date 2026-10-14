@@ -217,6 +217,7 @@ describe('confirmed mode handoff', () => {
       /runtime changed/i
     )
     expect(commands.commitCreationProject).not.toHaveBeenCalled()
+    expect(commands.setMainPerformanceKeyOwner).not.toHaveBeenCalled()
     expect(commands.stopProject).not.toHaveBeenCalled()
   })
 

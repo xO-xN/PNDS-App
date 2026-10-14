@@ -9,6 +9,7 @@ pub fn generate_bindings() -> Builder<tauri::Wry> {
         crate::window::toggle_fullscreen,
         crate::window::set_window_corners_square,
         crate::window::set_main_controls_visible,
+        crate::window::set_main_performance_key_owner,
         crate::window::close_window_with_fade,
         crate::window::fade_in_window,
         crate::window::get_window_state,

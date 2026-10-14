@@ -207,6 +207,18 @@ announcement during committed handoff. Cancelling confirmation leaves the pendin
 window intact. A delayed open cannot leave a venue window after a mode handoff;
 new projection opens are accepted only in idle-phase performance mode.
 
+The mode transaction also acknowledges native performance-key ownership through
+`setMainPerformanceKeyOwner(epoch, owns)`. Creation awaits revocation before its
+`active=true` publication. Performance publishes `active=false` while retaining
+`modePhase=settling`, then awaits restoration before ending the transaction. The
+main-window-only command rejects old epochs, so late requests cannot reclaim
+creation keys or disable a newer performance visit. No session/overlay business
+state is mirrored into Rust. Cancelled and generation-rejected switches never
+submit an ownership change. A failed entry acknowledgment leaves performance
+published; a failed return acknowledgment reports `modeError` on the already
+published performance side, preserving the ordering and authoritative stopped
+runtime rather than reopening creation with uncertain native ownership.
+
 Before committing, Rust checks the runtime generation under the lifecycle lock;
 only the already-validated in-memory identity activation happens inside that
 critical section. Filesystem work stays outside it. Frontend command adoption

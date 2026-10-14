@@ -49,6 +49,19 @@ async setMainControlsVisible(visible: boolean, offset: number, opacity: number, 
 }
 },
 /**
+ * Acknowledge only the main shell's mode-owned performance key boundary.
+ * The mode transaction revokes before creation publication and restores after
+ * performance publication; old epoch replies cannot reverse newer ownership.
+ */
+async setMainPerformanceKeyOwner(epoch: number, owns: boolean) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("set_main_performance_key_owner", { epoch, owns }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * Fade-out then hide (red light / Close Window). Interruptible:
  * a newer request cancels the ramp and the terminal action still runs
  * from a deterministic state.

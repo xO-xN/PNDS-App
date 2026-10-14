@@ -27,7 +27,7 @@ use specta::Type;
 #[cfg(target_os = "macos")]
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tauri::{
     AppHandle, LogicalSize, Manager, PhysicalSize, Rect, Runtime, Size, Webview, WebviewWindow,
@@ -1001,6 +1001,8 @@ static CMD_ARROW_GUARD_SHADOWS: AtomicBool = AtomicBool::new(false);
 /// Stable native identity of the single main shell; compare only, never dereference.
 #[cfg(target_os = "macos")]
 static MAIN_NATIVE_SELECTION_WINDOW: AtomicUsize = AtomicUsize::new(0);
+/// Latest main-shell mode epoch and its native performance key ownership.
+static MAIN_NATIVE_SELECTION_OWNER: Mutex<(u32, bool)> = Mutex::new((0, true));
 
 /// v1.3.3 (#79): the NATIVE belt of the context-menu suppression. The
 /// three JS layers (main.tsx, help-main.tsx, and the all-frames
@@ -1160,6 +1162,29 @@ unsafe extern "C-unwind" fn pnds_will_open_menu(
             let _: () = msg_send![this, willOpenMenu: menu, withEvent: event];
         }
     }
+}
+
+/// Acknowledge only the main shell's mode-owned performance key boundary.
+/// The mode transaction revokes before creation publication and restores after
+/// performance publication; old epoch replies cannot reverse newer ownership.
+#[tauri::command]
+#[specta::specta]
+pub fn set_main_performance_key_owner(
+    window: tauri::WebviewWindow,
+    epoch: u32,
+    owns: bool,
+) -> Result<(), String> {
+    if window.label() != "main" {
+        return Err("Only the main shell owns performance selection keys".into());
+    }
+    let mut current = MAIN_NATIVE_SELECTION_OWNER
+        .lock()
+        .map_err(|_| "Main keyboard ownership lock failed")?;
+    if epoch < current.0 {
+        return Err("Stale main keyboard ownership epoch".into());
+    }
+    *current = (epoch, owns);
+    Ok(())
 }
 
 // NSEvent modifier constants (device-independent bits) and the arrow
@@ -1340,7 +1365,11 @@ unsafe extern "C-unwind" fn pnds_perform_key_equivalent(
             let target = MAIN_NATIVE_SELECTION_WINDOW.load(Ordering::Relaxed);
             // SAFETY: AppKit invokes this method on a live view and event.
             let window: *mut objc2::runtime::AnyObject = unsafe { msg_send![this, window] };
-            if target != 0 && window as usize == target {
+            let owns = MAIN_NATIVE_SELECTION_OWNER
+                .lock()
+                .map(|current| current.1)
+                .unwrap_or(false);
+            if owns && target != 0 && window as usize == target {
                 let app: *mut objc2::runtime::AnyObject =
                     unsafe { msg_send![objc2::class!(NSApplication), sharedApplication] };
                 let menu: *mut objc2::runtime::AnyObject = unsafe { msg_send![app, mainMenu] };

@@ -51,6 +51,16 @@ original WK route. Shift/Control variants and secondary windows retain that rout
 with stale enabled menu state. Function/numeric-pad arrow flags do not change
 the intent. The existing exactly-Command horizontal passthrough stays separate.
 
+Mode ownership is acknowledged through the narrow typed
+`setMainPerformanceKeyOwner(epoch, owns)` command during the real mode handoff.
+Entering creation awaits revocation before publishing `active=true`. Returning
+to performance publishes `active=false` first and retains `modePhase=settling`
+until restoration is acknowledged. Rust accepts only the main shell and a
+current/newer mode epoch; stale re-enable or revocation requests cannot reverse
+a newer handoff. The hook checks this owner before menu dispatch, so creation
+retains its original WK keys even while an old enabled menu is still installed.
+Runtime/submission/overlay business gates remain in the existing JS workflow.
+
 `performance-selection.ts` resolves the focused window through the typed
 `focusedWindowLabel` command. Only `main` in performance mode may act; creation,
 performer, projection, help and unknown windows leave performance selection

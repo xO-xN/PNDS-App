@@ -281,12 +281,22 @@ positive control. This is native Tauri/Wry/Muda routing evidence, without
 synthesizing OS input. A fixture-only observer forwards the original WK method
 unchanged and counts fallback calls without duplicating production dispatch.
 
-The 37-case matrix covers both arrows with host body, editable and cross-origin
+`CreationModeButton.test.tsx` drives the real confirmation control and holds the
+ownership command reply. It verifies revocation before creation publication,
+restoration after performance publication, the settling lock during the reply,
+rejected overlap, cancellation, and failure reporting in both directions.
+
+The 44-case matrix covers both arrows with host body, editable and cross-origin
 guest focus, ordinary and Function/NumericPad modifier flags, exactly one native
 menu action per matching chord, both boundaries, independent business gates
-under stale enabled items, and secondary-window ownership. Missing/disabled
-items and disabled submenu parents, Shift/Control/plain-Command variants and Option horizontal arrows must
-reach the original WK route. Failed active/key ownership is reported separately;
+under stale enabled items, and secondary-window ownership. Creation exclusion
+uses real `enter()`/`leave()` transitions, with the verbatim production ownership
+command registered in the fixture. Both arrows across all three focus surfaces
+must reach original WK exactly once with no menu action in creation. Late stale
+epoch grants cannot steal creation keys; late revocations cannot disable a real
+return to performance. Missing/disabled items and disabled submenu parents,
+Shift/Control/plain-Command variants and Option horizontal arrows must reach the
+original WK route. Failed active/key ownership is reported separately;
 a delivery mismatch is never retried. Both completion assertions and clean native
 process exit are required. This check remains opt-in because it requires a
 foreground macOS AppKit session; it is not a Cargo worker or jsdom test.

@@ -150,8 +150,11 @@ Menu content that mirrors store state (the Window menu's Performer/Conductor add
 The main performance window's Command+Option+Up/Down equivalents pass through
 `window.rs` before WK consumes them. This native hook dispatches the same
 registered main menu, preserving its enabled state and the existing JS action.
-It binds the main NSWindow identity at startup; a stale enabled menu cannot
-steal these keys from help, projection or performer windows. An unmatched or
+It binds the main NSWindow identity at startup and reads the mode transaction's
+acknowledged native key ownership. Creation revokes ownership before publication;
+performance restores it after publication, with epoch rejection for late writes.
+Thus a stale enabled menu cannot steal these keys from creation, help, projection
+or performer windows. An unmatched or
 disabled item falls through to WK's original implementation. The JS callback
 still owns current mode, focus, submission and overlay gates, selection and
 sidebar reveal. No global shortcut or second DOM selection handler is installed.
