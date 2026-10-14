@@ -1,6 +1,7 @@
 import {
   useProjectStore,
   visibleProjectPaths,
+  selectSelectedPath,
   UTILITIES_FOLDER_ID,
   previousUserFolderId,
 } from '@/store/project-store'
@@ -68,7 +69,7 @@ export function setActiveFolderView(folderId: string | null): void {
  */
 export function moveProjectSelection(direction: 1 | -1): void {
   const project = useProjectStore.getState()
-  const currentPath = project.currentProject?.path ?? null
+  const currentPath = selectSelectedPath(project)
 
   // v1.2.3 (user feedback on #39): the move acts on the CURRENT view —
   // never auto-drills back into the selected project's folder. Switching

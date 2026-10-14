@@ -71,12 +71,18 @@ export function hasOpenOverlayBesidesSettings(): boolean {
  * at release — no main-frame keyup arrives, and the iframe's blur never
  * fires either — leaving `commandKeyPressed` stuck at true: badges that
  * won't clear and a sidebar peek that won't quit. Every heal below acts
- * only on that stuck-true state; a real hold never trips it.
+ * only on that stuck-true state; a real hold never trips it. Native
+ * selection reveal follows the same release/self-heal path (#202).
  */
 function healStuckCommandKey(): void {
-  const { commandKeyPressed, setCommandKeyPressed } =
-    useKeyboardStore.getState()
+  const {
+    commandKeyPressed,
+    setCommandKeyPressed,
+    projectSelectionRevealed,
+    setProjectSelectionRevealed,
+  } = useKeyboardStore.getState()
   if (commandKeyPressed) setCommandKeyPressed(false)
+  if (projectSelectionRevealed) setProjectSelectionRevealed(false)
 }
 
 /** The pointer half of the self-heal: a mousemove/pointerdown whose
@@ -96,7 +102,8 @@ function healIfPointerReportsMetaUp(event: MouseEvent): void {
  * - ⌘R → rename the selected project (folder name inside a folder view
  *   with nothing selected) via the same entry as the Edit-menu item
  * - plain up/down project navigation is owned by Sidebar's capture boundary;
- *   monitor/projection arrows stay page-owned. Cmd-arrow navigation is retired.
+ *   monitor/projection arrows stay page-owned. Cmd+up/down remains a web
+ *   alias; Cmd+Opt+up/down selection uses the native menu (#202).
  * - ⌘1..9 → select the Nth visible project via the same entry as a click,
  *   folder-aware (a drilled-in view numbers only the folder's members);
  *   pressing the selected project's number deselects it (v1.2.0, same
@@ -214,12 +221,12 @@ export function useCommandKeyboard(): void {
 
     const handleKeyUp = (event: KeyboardEvent) => {
       if (event.key === 'Meta') {
-        useKeyboardStore.getState().setCommandKeyPressed(false)
+        healStuckCommandKey()
       }
     }
 
     const handleBlur = () => {
-      useKeyboardStore.getState().setCommandKeyPressed(false)
+      healStuckCommandKey()
     }
 
     window.addEventListener('keydown', handleEscape, true)

@@ -247,3 +247,20 @@ Real macOS and Apple Silicon/Intel release evidence belongs in
 [#164 acceptance](../acceptance/164-v1.6.0-workflows.md). A sandbox listener EPERM
 or compiler startup failure stays a failed check until an ordinary-terminal run
 passes; tests are not skipped or weakened to turn it green.
+
+## Native performance selection (#202)
+
+`PerformanceSelection.test.tsx` builds the real menu and invokes its callback
+through the Tauri menu boundary mock, then observes the actual AppShell/card and
+preflight workflow. It covers active-folder order and both boundaries, monitor
+identity/address and running-project preservation, editable focus, reveal
+release, independent windows, slow/late preflights, confirmation ownership,
+delayed native focus replies, creation scope and focus failures. Load and Close
+use their real UI submit paths with controlled typed-command replies to verify
+`commandPending` blocks selection before any backend lifecycle snapshot changes.
+Menu-state tests verify mode/project-close and starting/stopping disablement.
+
+These are user-workflow and typed-command seams, not macOS accelerator evidence.
+Real monitor/input focus, fullscreen, layout size and independent-window key
+ownership remain user-run native acceptance; use the checklist in
+[keyboard-shortcuts.md](./keyboard-shortcuts.md#native-performance-selection-202).

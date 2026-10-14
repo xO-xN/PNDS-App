@@ -179,6 +179,8 @@ describe('moveProjectSelection', () => {
     moveProjectSelection(1)
     expect(commands.preflightProject).toHaveBeenCalledWith('/a')
 
+    // The first move already selected /a, even while preflight is pending.
+    useProjectStore.getState().clearProject()
     moveProjectSelection(-1)
     expect(commands.preflightProject).toHaveBeenCalledWith('/c')
   })

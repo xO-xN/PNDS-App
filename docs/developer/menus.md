@@ -37,6 +37,9 @@ Edit
 └── Rename Project           (Cmd+R — custom; inline rename)
 
 View
+├── Select Previous Project  (Cmd+Opt+↑ — performance main window only)
+├── Select Next Project      (Cmd+Opt+↓ — same scope)
+├── ────────────────────
 ├── Zoom In                  (Cmd+=)
 ├── Zoom Out                 (Cmd+-)
 ├── Actual Size              (Cmd+0)
@@ -57,6 +60,15 @@ Help                        (v1.3.0, #56 — macOS's last submenu)
 ├── Creator Guide           (…on the creator guide)
 └── Reference Manual        (…on the reference manual's index page)
 ```
+
+The two selection items use `performance-selection.ts`, the same visible-order
+selection workflow as the cards. Their enablement follows main-window focus,
+performance mode, mode/close/quit confirmation and session submission/busy gates.
+Actions read the gates again after the native focus reply. They reveal the overlay
+sidebar without loading the selected project or moving monitor/input focus.
+App menus are the only registration layer; no system-global shortcuts are added.
+See [keyboard-shortcuts.md](./keyboard-shortcuts.md#native-performance-selection-202)
+for window scope, release behavior and the required native acceptance checklist.
 
 The ⌘M item's accelerator exists to claim the key from macOS's native hide action, like ⌘Q. Mute is a pure audio mutation — no UI opens — so it carries no text-input/overlay guards and works under any dialog. Its action is `toggleMasterMute()` from `@/lib/volume-control`, a no-op unless the volume can act.
 
@@ -129,7 +141,7 @@ export function setupMenuLanguageListener(): () => void {
 
 ### Store-Driven Rebuilds (address segment)
 
-Menu content that mirrors store state (the Window menu's Performer/Conductor addresses) rebuilds through `setupMenuStateListener()` — the same whole-menu rebuild, subscribed to the watched slices (`project-store`'s `currentProject`, `session-store`'s `lanIp`, `sessionHostAddress` and — v1.5.0 #130 — `projectionStarted`, plus `projection-store`'s `windowExists` for the ⌘⏎ entry). These stores are plain Zustand creates (no `subscribeWithSelector`), so the subscription filters by hand inside the module: the rebuild fires only when a watched value actually changed, never on the session store's unrelated churn (volume drags, health snapshots).
+Menu content that mirrors store state (the Window menu's Performer/Conductor addresses) rebuilds through `setupMenuStateListener()` — the same whole-menu rebuild, subscribed to the watched slices (`project-store`'s `currentProject`, `session-store`'s `lanIp`, `sessionHostAddress` and — v1.5.0 #130 — `projectionStarted`, plus `projection-store`'s `windowExists` for the ⌘⏎ entry). Selection availability additionally watches creation opening/mode phase, session busy state and `commandPending`, project-close/close/quit confirms, settings and main-window focus. These stores are plain Zustand creates (no `subscribeWithSelector`), so the subscription filters by hand inside the module: the rebuild fires only when a watched value actually changed, never on the session store's unrelated churn (volume drags, health snapshots).
 
 `buildAppMenu()` and both listeners are called during app startup in `src/App.tsx`. Menu item actions read live values via `getState()`; the address items instead capture their URL at build time, so the label shown and the URL copied can never disagree.
 

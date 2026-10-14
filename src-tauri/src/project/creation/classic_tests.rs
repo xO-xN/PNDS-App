@@ -151,42 +151,58 @@ fn classic_failure_never_publishes_an_incomplete_project_or_replaces_the_active_
 }
 
 #[test]
-fn classic_source_and_client_identity_survive_the_public_bundle_install_roundtrip() {
-    let temp = tempfile::tempdir().unwrap();
-    let workspace = CreationAccess::default()
-        .create_classic(&options(temp.path()), &resources(), &Protection::default())
+fn created_template_identity_and_runtime_files_survive_the_public_bundle_install_roundtrip() {
+    for classic in [false, true] {
+        let temp = tempfile::tempdir().unwrap();
+        let mut access = CreationAccess::default();
+        let workspace = if classic {
+            access.create_classic(&options(temp.path()), &resources(), &Protection::default())
+        } else {
+            access.create_blank(&options(temp.path()), &Protection::default())
+        }
         .unwrap();
-    let root = Path::new(&workspace.project.root);
-    let package = temp.path().join("created.pnds");
-    crate::project::bundle::pack_project_at_with_libraries(
-        root,
-        Some(&package),
-        false,
-        "test",
-        Some(&resources()),
-    )
-    .unwrap();
-    let installed = crate::project::bundle::install_bundle_with_libraries(
-        &temp.path().join("installed"),
-        &package,
-        Some(&resources()),
-    )
-    .unwrap();
-    for path in [
-        "manifest.json",
-        "public/shared.js",
-        "server.js",
-        "supercollider/synthdefs/template-sine.scsyndef",
-    ] {
-        assert_eq!(
-            fs::read(root.join(path)).unwrap(),
-            fs::read(installed.join(path)).unwrap()
-        );
+        let root = Path::new(&workspace.project.root);
+        let package = temp.path().join("created.pnds");
+        crate::project::bundle::pack_project_at_with_libraries(
+            root,
+            Some(&package),
+            false,
+            "test",
+            Some(&resources()),
+        )
+        .unwrap();
+        let installed = crate::project::bundle::install_bundle_with_libraries(
+            &temp.path().join("installed"),
+            &package,
+            Some(&resources()),
+        )
+        .unwrap();
+        let paths = if classic {
+            [
+                "manifest.json",
+                "public/shared.js",
+                "server.js",
+                "supercollider/synthdefs/template-sine.scsyndef",
+            ]
+        } else {
+            [
+                "manifest.json",
+                "public/performer.html",
+                "server.js",
+                "supercollider/synthdefs/pndsBlank.scsyndef",
+            ]
+        };
+        for path in paths {
+            assert_eq!(
+                fs::read(root.join(path)).unwrap(),
+                fs::read(installed.join(path)).unwrap()
+            );
+        }
+        assert!(!installed.join(".git").exists());
+        assert!(!installed.join("node_modules").exists());
+        crate::project::bundle::validate_packable_with_libraries(&installed, Some(&resources()))
+            .unwrap();
     }
-    assert!(!installed.join(".git").exists());
-    assert!(!installed.join("node_modules").exists());
-    crate::project::bundle::validate_packable_with_libraries(&installed, Some(&resources()))
-        .unwrap();
 }
 
 #[test]
