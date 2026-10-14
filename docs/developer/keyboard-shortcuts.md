@@ -21,6 +21,7 @@ Keyboard input reaches the app through two layers: native menu accelerators
 | Cmd+S         | Save the active creation draft (#154; creation mode only — a version conflict opens the reload-or-overwrite choice instead of writing)                                                                                                                                                     | Web (`use-command-keyboard.ts`)                            |
 | Ctrl+Cmd+F    | Toggle fullscreen of the FOCUSED window (v1.5.0 #131; native controls and Window menu)                                                                                                                                                                                                     | Menu (`menu.ts`)                                           |
 | Cmd+Return    | Projection start gate 开演/撤回 (v1.5.0 #130; enabled with a venue screen + ready session)                                                                                                                                                                                                 | Menu (`menu.ts`)                                           |
+| Cmd+Opt+↑ / ↓ | Select previous/next visible project and reveal the sidebar; performance main window only, including monitor/input focus; no automatic load                                                                                                                                                | Menu (`menu.ts`)                                           |
 | Cmd (hold)    | Number badges + sidebar peek while running                                                                                                                                                                                                                                                 | Web (`use-command-keyboard.ts`)                            |
 | Cmd+1..9      | Select the Nth visible project (v1.1.2)                                                                                                                                                                                                                                                    | Web (`use-command-keyboard.ts`)                            |
 | ↑ / ↓         | Select previous/next project while operating the performance sidebar; editable controls and popups retain their keys                                                                                                                                                                       | Sidebar capture                                            |
@@ -28,6 +29,57 @@ Keyboard input reaches the app through two layers: native menu accelerators
 | Esc           | Cancel pending mode confirmation in the main shell (#151); monitor pages keep their own Esc behavior                                                                                                                                                                                       | Web (`CreationModeButton.tsx`) / page                      |
 
 Cmd+↑ / Cmd+↓ select the same previous/next visible project as sidebar arrows, including while Cmd peeks the sidebar; inputs and App overlays retain their keys. Plain page arrows remain page-owned.
+
+## Native performance selection (#202)
+
+The View menu registers only `Cmd+Alt+ArrowUp` and `Cmd+Alt+ArrowDown` for
+performance-card selection. It uses App menu accelerators, with no OS-global
+shortcut registration. Native delivery works independently of the main web
+keyboard layer: the action may run while a monitor or an editable control has
+focus, and it does not move that focus.
+
+`performance-selection.ts` resolves the focused window through the typed
+`focusedWindowLabel` command. Only `main` in performance mode may act; creation,
+performer, projection, help and unknown windows leave performance selection
+alone. Focus errors disable selection while preserving the rest of the menu.
+The callback rechecks mode epoch and eligibility after the asynchronous reply.
+Mode preparation/confirmation, project/close/quit confirmation, settings and
+other App overlays block the action. `commandPending` blocks immediately on
+Load/Close submission, before a backend snapshot arrives; starting/stopping
+snapshots also block. Menu rebuilds watch these store gates and window focus;
+a stale menu callback still checks their current values.
+
+The action reuses `moveProjectSelection` and `selectProject`: it follows the
+active folder's visible order, enters an unselected list from the matching end,
+clamps at the ends, and never changes folders or starts/stops the runtime.
+Navigation uses `selectSelectedPath`, the same current/pending/error selection
+that the sidebar displays, so a slow preflight does not strand repeated moves.
+The native callback sets `keyboard-store.projectSelectionRevealed`; the existing
+Meta-release, blur and pointer self-heal paths release that reveal. Sidebar
+hover and confirmation holds continue to apply. Fullscreen clears the native
+reveal hold. Visibility changes only the overlay, preserving monitor identity,
+viewport and navigation; it does not reclaim page focus. Left/right gains no
+new action or accelerator.
+
+Automated menu callbacks and AppShell workflows verify selection and runtime
+facts; jsdom does not prove macOS accelerator delivery, real guest focus or
+viewport dimensions. Native acceptance is user-run with the App dev server:
+
+- Run A, focus its monitor and then an editable page/App input, and use both
+  chords to select B. The sidebar and selected card appear; A continues running
+  with the same page, address and viewport.
+- Repeat in fullscreen and with sidebar initially hidden. Releasing Meta or
+  returning to pointer interaction releases the reveal; normal hover holds work.
+- Reorder a folder, move both ways and stop at each end without wrapping. Test
+  an empty list and a view with no current selection.
+- Open replacement, project-close, quit and mode confirmations, plus settings
+  or a selector; the chords must leave selection and each confirmation intact.
+- Press during Load/Close submission and starting/stopping; no queued selection
+  may run around the synchronous gate.
+- Focus creation, performer, projection and help windows; neither chord changes
+  the background performance selection. Their existing page/editing keys remain.
+- Check plain page arrows and left/right chords retain their existing behavior;
+  no new left/right navigation is present.
 
 Command + backtick toggles the console only in an idle-phase, unexpanded creation workspace with no App overlay. Performance and guest pages retain that key. The persistent mode button keeps native Enter/Space activation at its bottom-right position.
 

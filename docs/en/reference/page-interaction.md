@@ -6,29 +6,39 @@ This page is for **Project creators**: it states precisely which interaction eve
 
 - The **monitor page** is embedded as an iframe in the App's main window, filling the whole main area except the sidebar and the top title strip. The App does not read, inject into or call the cross-origin page DOM ([runtime-contract.md](./runtime-contract.md) §10); the page receives standard web input events. The labelled performer input simulation below is a narrow native input exception, with no page-DOM inspection or music relay.
 - The **performer page** normally opens in performers' browsers against the Project server. Creation mode can also embed real performer pages in multiple independent native test windows; messages still travel directly through that server.
-- Keyboard input passes through **two layers** before the page: the **native menu-accelerator layer** (the macOS menu bar, app-wide, never yields) and the **App web layer** (the ⌘-shortcut layer of the App's own UI, which yields during page interaction). Which layer a chord belongs to decides whether the page can never see it, or may use it while the user interacts — see the two tables below.
+- Keyboard input passes through **two layers** before the page: the **native menu-accelerator layer** (the macOS menu bar, scoped to eligible App windows) and the **App web layer** (the ⌘-shortcut layer of the App's own UI, which yields during page interaction). Which layer a chord belongs to decides whether the page can never see it, or may use it while the user interacts — see the two tables below.
 
 ## The monitor page's keyboard
 
-### Table A: permanently retained by the native layer — the page never sees them
+### Table A: retained by the native layer in their enabled window scope
 
-| Chord         | App action                                       |
-| ------------- | ------------------------------------------------ |
-| `⌘ W`         | Close window (confirm flow while a session runs) |
-| `⌘ Q`         | Quit the App (confirm flow while a session runs) |
-| `⌘ M`         | Master mute / restore                            |
-| `⌘ O`         | Import a Project                                 |
-| `⌘ R`         | Rename the selected Project / folder             |
-| `⌘ ,`         | Open / close the settings panel                  |
-| `⌘ ?` (⇧⌘/)   | Open the help center                             |
-| `⌘ 0`         | Monitor zoom: actual size (per focused window)   |
-| `⌘ =` / `⌘ -` | Monitor zoom in / out (per focused window)       |
-| `⌘ ⇧ R`       | Reload BOTH windows' monitor pages               |
-| `⌃ ⌘ F`       | Focused window: enter / leave full screen        |
+| Chord             | App action                                                  |
+| ----------------- | ----------------------------------------------------------- |
+| `⌘ W`             | Close window (confirm flow while a session runs)            |
+| `⌘ Q`             | Quit the App (confirm flow while a session runs)            |
+| `⌘ M`             | Master mute / restore                                       |
+| `⌘ O`             | Import a Project                                            |
+| `⌘ R`             | Rename the selected Project / folder                        |
+| `⌘ ,`             | Open / close the settings panel                             |
+| `⌘ ?` (⇧⌘/)       | Open the help center                                        |
+| `⌘ 0`             | Monitor zoom: actual size (per focused window)              |
+| `⌘ =` / `⌘ -`     | Monitor zoom in / out (per focused window)                  |
+| `⌘ ⇧ R`           | Reload BOTH windows' monitor pages                          |
+| `⌘ ⌥ ↑` / `⌘ ⌥ ↓` | Previous/next visible Project; performance main window only |
+| `⌃ ⌘ F`           | Focused window: enter / leave full screen                   |
 
-These are macOS menu-bar accelerators: the chord is consumed by the App before it reaches the page, and they **keep working during page interaction**. A work's key plan must route around them.
+The enabled rows are macOS menu-bar accelerators: the chord is consumed by the App before it reaches the page, and they **keep working during page interaction**. A work's key plan must route around them.
 
-Since v1.5.0 (#131) a monitor page can appear in **two windows** — the main window and the projection window (the venue-screen display). The accelerators stay app-wide, but their effect dispatches on the **focused window**: `⌘ 0`/`⌘ =`/`⌘ -` adjust only the focused window's own monitor zoom (each window holds an independent value; the projection window's zoom also scales its intro screen and is remembered in preferences); `⌃ ⌘ F` toggles only the focused window's fullscreen; `⌘ ⇧ R` is the exception — one chord reloads **both** windows' monitor pages. For the page, Table A's meaning is unchanged: none of these chords reach a page in either window. **The #135 exception**: once a projection copy's page declares `zoom:"page"` through the §14 handshake, `⌘ 0`/`⌘ =`/`⌘ -` are no-ops for that window — the App no longer applies its own zoom (see [runtime contract §14](./runtime-contract.md) for the declaration).
+Since v1.5.0 (#131) a monitor page can appear in **two windows** — the main window and the projection window (the venue-screen display). The accelerators stay app-wide, but their effect dispatches on the **focused window**: `⌘ 0`/`⌘ =`/`⌘ -` adjust only the focused window's own monitor zoom (each window holds an independent value; the projection window's zoom also scales its intro screen and is remembered in preferences); `⌃ ⌘ F` toggles only the focused window's fullscreen; `⌘ ⇧ R` is the exception — one chord reloads **both** windows' monitor pages. These zoom/fullscreen/reload chords remain native-owned in both windows. **The #135 exception**: once a projection copy's page declares `zoom:"page"` through the §14 handshake, `⌘ 0`/`⌘ =`/`⌘ -` are no-ops for that window — the App no longer applies its own zoom (see [runtime contract §14](./runtime-contract.md) for the declaration).
+
+Since v1.6.3 (#202), `⌘ ⌥ ↑` / `⌘ ⌥ ↓` is reserved only in the focused
+performance main window, including monitor and text-control focus. It reveals
+the sidebar and selects along the active list without wrapping, loading a
+Project, resizing or navigating the running page. App confirmations/popups,
+mode preparation and startup/shutdown (including pending submission before a
+snapshot arrives) block selection. Creation, performer, projection and help
+windows retain their own key handling and cannot select a background performance
+card. No system-global shortcut or new left/right navigation is registered.
 
 ### Table B: conditionally available — belong to the page while the user interacts with it
 
@@ -84,6 +94,7 @@ unchanged by this fitting; the mouse-to-single-touch option lives in the shell.
 
 Plain up/down arrows select projects only inside the performance sidebar. Text
 controls, selectors and popups keep their standard keys; monitor/projection
-arrows remain page-owned. App Cmd-arrow navigation and left/right folder cycling
-are retired. Hiding a performer test window preserves its page and ID; deleting
+arrows remain page-owned. Plain Cmd+up/down remains a main-shell web alias
+outside editable controls and App popups; native Cmd+Opt+up/down uses the scope
+above. Left/right folder cycling remains retired. Hiding a performer test window preserves its page and ID; deleting
 the device unloads the page and closes its connection before native destruction.
