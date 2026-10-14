@@ -49,6 +49,7 @@ import { resolveCreationReadme } from '@/lib/creation-readme'
 import { CreationHandoff } from './CreationHandoff'
 import { CreationBundle } from './CreationBundle'
 import { CreationModules } from './CreationModules'
+import { CreationLibraries } from './CreationLibraries'
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -384,11 +385,18 @@ function ReadingWorkspace({
                         <small>{files.length}</small>
                       </button>
                       {category === 'modules' && editable && (
-                        <CreationModules
-                          key={project.identity}
-                          identity={project.identity}
-                          disabled={menuBlocked || opening}
-                        />
+                        <>
+                          <CreationModules
+                            key={project.identity}
+                            identity={project.identity}
+                            disabled={menuBlocked || opening}
+                          />
+                          <CreationLibraries
+                            key={`libraries-${project.identity}`}
+                            identity={project.identity}
+                            disabled={menuBlocked || opening}
+                          />
+                        </>
                       )}
                     </div>
                     <div hidden={collapsed}>

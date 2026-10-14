@@ -1,5 +1,33 @@
 # manifest.json
 
+## App 共享包能力与 schemaVersion 2
+
+自包含工程继续使用 `schemaVersion: 1`。使用 App 共享包的工程必须声明
+`schemaVersion: 2`，让不支持共享能力的旧 App 明确拒绝。当前 App 同时支持 1 和 2；
+其余运行、音频和路径字段保持原语义。
+
+```json
+{
+  "schemaVersion": 2,
+  "version": "0.2.0",
+  "sharedLibraries": [{ "id": "p5", "version": "2.3.4" }]
+}
+```
+
+这是字段片段，仍需包含其余必填字段。`sharedLibraries` 为确切引用数组；允许的标识只有
+`p5`、`ml5`、`express`、`qrcode`、`socket.io`、`socket.io-client`、`osc-min`。
+版本必须是确切 `x.y.z`，同一标识不能重复；范围、未知标识、缺版本与 `null` 均拒绝。
+缺省或空数组不要求共享资源；非空数组必须用 schema 2。
+
+在创作模式「模块」栏的「加入共享包」选择本 App 提供的候选版本并填写新的工程版本。
+App 在一次原子 manifest 保存中更新引用、工程版本和 schema；manifest 草稿、只读来源、
+身份变化、路径越界或磁盘版本冲突均阻止采用，失败保留原文件。加入不会复制库、接线源码、
+下载资源或启动工程。App 升级和临时试验不会自动采用其它版本。
+
+打开预检与每次启动均按确切版本检查本机资源内容；缺失、损坏或不匹配明确失败，绝不换版。
+模型、谱面和音频仍由工程携带。同源接线见 [p5js.md](./p5js.md)，运行注入见
+[runtime-contract.md](./runtime-contract.md) §3。示例的 2.3.4 是本版验证候选，作品验收后才冻结。
+
 ## 示例
 
 ```json
@@ -48,6 +76,7 @@ audio.supportedModes
 
 ```text
 description
+sharedLibraries
 telematic
 performerAddress
 scoreServer.supportsPerformerUrl
@@ -74,14 +103,15 @@ audio.standaloneTarget
 
 - 布尔值，声明工程适配 Host 提供的**完整 performer URL**（`PNDS_PERFORMER_URL`，[runtime-contract.md](./runtime-contract.md) §3/§15）：二维码、复制地址与浏览器连接配置使用同一完整 URL，页面脚本与 Socket.IO 在该 origin 下同源加载与连接，monitor 保持内部连接；
 - 缺省、`null`、`false` 与非布尔值一律视为**未声明**，不报错（preflight 容错，同 `telematic`）——只有显式 `"supportsPerformerUrl": true` 才算声明；
-- 只是能力声明，不携带任何配置：证书、域名与入口生命周期全部由 App 一侧拥有，manifest 永远拿不到它们；
-- 未声明的工程不受影响：App 不注入 `PNDS_PERFORMER_URL`，工程按原有 HTTP 方式运行（后续入口 patch 依据本声明区分「已适配」与「需显式回落 HTTP」）。
+- 只声明读取完整 URL 的能力，**不请求启用 HTTPS**。普通工程即使声明该能力、全局 HTTPS 开关已开，也默认使用 HTTP；证书、域名与入口生命周期全部由 App 一侧拥有，manifest 永远拿不到它们；
+- 未声明的工程不注入 `PNDS_PERFORMER_URL`，工程按原有 HTTP 方式运行；是否需要显式兼容确认由下述 `needsHttps` 规则决定。
 
 `scoreServer.needsHttps`：
 
-- 布尔值，声明本作**需要 HTTPS 入口支持演出**（手机扫码加入、安全上下文传感器等）——**opt-in：只有显式 `"needsHttps": true` 算声明需要**；缺省、`null`、`false` 与非布尔值一律视为**不需要**（preflight 容错，同 `supportsPerformerUrl` 的宽容形状），**所有旧工程自动豁免**；
-- 决定且仅决定提示：「声明需要 × 未声明 `supportsPerformerUrl` × 入口开关开」→ 设置卡显示「未适配」提示、启动弹「回落 HTTP」确认；未声明需要的工程两者皆无，安静走原 HTTP 流程——之前的工程加载时**不会再出现侧栏提示**；
-- 不影响任何运行行为：入口是否开启仍由 `resolve_entry_launch` 权威决定（`supportsPerformerUrl: true` 仍是入口的硬条件），本字段只触发或免除提示与确认。
+- 布尔值，声明作品实际使用**需要可信安全上下文的浏览器功能**，如运动传感器、摄像头或麦克风。只有显式 `"needsHttps": true` 算声明需要；缺省、`null`、`false` 与非布尔值均视为不需要，不报错。手机参与、扫码或普通触摸本身不构成 HTTPS 需求；
+- **参与实际入口选择**：只有 `needsHttps: true`、`supportsPerformerUrl: true`、全局 HTTPS 开关打开且域名、端口和证书材料有效时，App 才启用 HTTPS；未声明需要的工程始终沿用 HTTP，HTTPS 配置缺失或无效不影响其启动；
+- 开关关闭时沿用 HTTP。声明需要但未声明适配、且开关打开时，设置卡显示「未适配」，启动需操作者显式选择「使用 HTTP 启动」；取消不启动。声明需要且已适配、开关打开但配置无效时，启动明确失败，不静默回退；
+- 创作 agent 应先检查作品实际调用的浏览器 API，再决定是否声明需要；把判断依据和 HTTP／HTTPS 验证结果写入作品交接。完整入口与地址优先级见 [runtime-contract.md](./runtime-contract.md) §3/§15。
 
 `audio.outputChannels`：
 

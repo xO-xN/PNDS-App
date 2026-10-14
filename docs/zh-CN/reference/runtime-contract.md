@@ -24,7 +24,7 @@ Score project Node server
 - App 不解释作品高频消息；
 - 工程不停止 App 的 scsynth；
 - 工程不修改 App 偏好；
-- App 不修改工程目录或 manifest；
+- 运行与升级不修改工程目录或 manifest；创作模式明确采用 App 共享包时，按草稿／身份／磁盘版本保护原子保存；
 - 所有进程和 socket 的所有者负责关闭自己的资源。
 
 ## 2. 固定 Runtime
@@ -60,6 +60,18 @@ PNDS_HOST_IP=<selected LAN IPv4 | manifest performerAddress>
 ```
 
 v1.4.0（#62）：manifest 声明 `performerAddress`（如 `mywork.local`）时，`PNDS_HOST_IP` 的值被替换为该声明——工程零改动，仍读这个变量生成二维码与连接地址；未声明时注入所选 LAN IPv4（现行为）。声明格式与容错见 [manifest.md](./manifest.md)。
+
+App 共享包（schema 2 的明确引用工程）：
+
+```text
+PNDS_SHARED_LIBRARIES={"p5":{"version":"2.3.4","kind":"browser","path":"<本机校验后的绝对入口路径>"}}
+```
+
+- JSON 只包含本工程声明且已按确切版本／内容完整性校验的引用；无引用时清除继承变量，不使用旧环境；
+- `kind` 为 `browser` 或 `node`；可选 `browserPath` 是同一版本额外提供的浏览器入口；
+- 路径仅供本机 Node 读取。浏览器库通过工程自己的 HTTP 服务固定相对路由提供，monitor、performer 与手机都读取同源 URL；可信 HTTPS 入口沿用这一路由；
+- Node 库由作者明确加载绝对入口（ESM 使用 `pathToFileURL`），不依赖系统 Node、维护者 `node_modules` 或运行时 npm；
+- 只解析已声明版本；缺失、损坏或不匹配在启动前失败。App 不自动接线、更新引用或把模型放入共享目录。
 
 Internal：
 
@@ -103,7 +115,7 @@ PNDS_HUB_ROOM={manifest.id}_{分组号}
 PNDS_PERFORMER_URL=<完整 performer 根 URL，如 https://show.example.org:8443/>
 ```
 
-- App 仅在本地可信 HTTPS 入口对当前演出生效时注入；入口只对声明了 `scoreServer.supportsPerformerUrl: true` 的工程开启（字段语义见 [manifest.md](./manifest.md)），且要求设置「可信 HTTPS」的启用开关打开、域名 / 端口已配置、证书材料当下重校验通过。未注入（开关关闭、工程未声明或配置不全）时工程读不到该变量，按原 HTTP 流程运行——对声明了适配的工程，配置不全会使启动失败并给出可行动的错误，绝不静默退回 HTTP；
+- **普通工程默认 HTTP**。App 仅在本地可信 HTTPS 入口对当前演出生效时注入：工程同时显式声明 `scoreServer.needsHttps: true` 与 `scoreServer.supportsPerformerUrl: true`，设置「可信 HTTPS」开关打开、域名 / 端口已配置且证书材料当下重校验通过（字段语义见 [manifest.md](./manifest.md)）。`supportsPerformerUrl` 只声明兼容能力；手机、二维码和普通触摸不触发 HTTPS。未声明需要或开关关闭时，不注入并沿用 HTTP；需要且已适配、开关打开但配置不全或无效时，启动明确失败，绝不静默回退；需要但未适配时沿用显式 HTTP 兼容确认；
 - 它是 Host 为本次演出确定的**完整根 URL**：协议、域名与实际端口齐备。工程一切对外地址（二维码、复制地址、浏览器连接配置）以它为准，优先于任何由 `PNDS_HOST_IP` 拼出的地址；
 - 它不是 `PNDS_HOST_IP` 的新取值，也不是 hub URL：`PNDS_HOST_IP`（连同上面的节点变量）语义与注入行为不变，照常注入；
 - 完整契约（工程身份、入口接入上下文、claim token 的 origin 语义）见 §15。
@@ -333,7 +345,7 @@ PNDS 只保证离散信号输出，不负责声道到扬声器的空间布局。
 
 ```text
 1. App 清理可确认归属的遗留子进程
-2. preflight manifest、路径、依赖、端口、模式与 bus 容量
+2. preflight manifest、路径、确切共享资源、依赖、端口、模式与 bus 容量
 3. 枚举所选设备能力，计算 N/H/K/B
 4. 启动 scsynth，等待 /status
 5. 启动 Node score server，注入环境变量
@@ -547,8 +559,9 @@ window.parent.postMessage({ type: 'pnds-projection', zoom: 'page' }, '*')
 ### 变量与能力声明
 
 - 启动变量 `PNDS_PERFORMER_URL`（§3）：入口生效时注入的完整 performer 根 URL，含协议、域名与实际端口；
-- 能力声明 `scoreServer.supportsPerformerUrl: true`（[manifest.md](./manifest.md)）：工程承诺读取该完整 URL、据它生成二维码与连接配置，并能在该 origin 下加载页面脚本与建立实时连接；缺省 = 未适配的旧工程，入口不得静默对其生效（#140 交付的兼容行为：设置卡显示醒目提示，启动前弹确认对话框，操作者显式选择「使用 HTTP 启动」才继续，取消则不动任何东西）；
-- 优先级：提供 `PNDS_PERFORMER_URL` 时，工程一切对外地址使用该完整 URL；未提供时沿用 `http://<PNDS_HOST_IP>:<performerPort>/`（现行为），不强制迁移旧 manifest。
+- 能力声明 `scoreServer.supportsPerformerUrl: true`（[manifest.md](./manifest.md)）：工程承诺读取该完整 URL、据它生成二维码与连接配置，并能在该 origin 下加载页面脚本与建立实时连接；能力本身不启用 HTTPS；
+- 需求声明 `scoreServer.needsHttps: true`：只在作品实际使用需要安全上下文的 API 时声明。它与适配能力、全局开关及有效材料共同决定 HTTPS 入口；普通工程使用 HTTP。需要但未适配且开关打开时，设置卡提示并在启动前要求显式「使用 HTTP 启动」，取消不改变演出；
+- 优先级：Host 为本次演出选择唯一 performer URL。提供 `PNDS_PERFORMER_URL` 时，工程一切对外地址原样使用它；未提供时沿用 `http://<PNDS_HOST_IP>:<performerPort>/`。二维码、复制地址与浏览器配置共用该解析结果，页面脚本与 Socket.IO 使用 performer 页的当前 origin。工程不自行偏好 HTTPS，也不以局域网地址覆盖已注入的 URL。
 
 ### 工程身份与入口接入上下文
 

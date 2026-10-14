@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 2,
+  "id": "shared-p5-example",
+  "name": "Shared p5 example",
+  "version": "0.1.0",
+  "sharedLibraries": [{ "id": "p5", "version": "2.3.4" }],
+  "scoreServer": {
+    "entry": "server.mjs",
+    "workingDirectory": ".",
+    "performerPort": 6868,
+    "monitorPort": 6869,
+    "supportsPerformerUrl": true
+  },
+  "audio": { "defaultMode": "none", "supportedModes": ["none"] }
+}

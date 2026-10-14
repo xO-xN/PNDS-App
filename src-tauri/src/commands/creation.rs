@@ -339,6 +339,45 @@ pub async fn describe_creation_projects(
 
 #[tauri::command]
 #[specta::specta]
+pub async fn get_creation_libraries(
+    app: AppHandle,
+    state: State<'_, CreationState>,
+    identity: String,
+) -> Result<crate::project::creation::CreationLibraryCatalog, CreationError> {
+    state
+        .run(move |access| {
+            let resources = crate::project::shared_libraries::shipped_root(&app)
+                .map_err(|detail| CreationError::new(CreationErrorCode::TestValidation, detail))?;
+            access.library_catalog(&identity, &resources, &protection(&app)?)
+        })
+        .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn adopt_creation_library(
+    app: AppHandle,
+    state: State<'_, CreationState>,
+    identity: String,
+    adoption: crate::project::creation::CreationLibraryAdoption,
+) -> Result<crate::project::creation::CreationLibraryResult, CreationError> {
+    state
+        .run(move |access| {
+            let resources = crate::project::shared_libraries::shipped_root(&app).map_err(|detail| {
+                let id = &adoption.id;
+                let version = &adoption.version;
+                CreationError::new(
+                    CreationErrorCode::TestValidation,
+                    format!("Required shared libraries [{id} {version}] cannot be verified: {detail}"),
+                )
+            })?;
+            access.adopt_library(&identity, &adoption, &resources, &protection(&app)?)
+        })
+        .await
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn get_creation_modules(
     app: AppHandle,
     state: State<'_, CreationState>,

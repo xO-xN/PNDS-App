@@ -22,7 +22,7 @@ monitorApp.get('/qr', qrHandler(performerUrl))
 ```
 
 - **Monitor side only.** The performer port has no `/qr` — the code is for people who have not opened the performer page yet, so it only ever appears on the monitor page.
-- The endpoint returns a PNG (`image/png`). Resolution priority: while the entry is in effect, the App-injected `PNDS_PERFORMER_URL` (a full URL such as `https://show.example.org:8443/`) wins; when absent, the fallback is `http://<PNDS_HOST_IP>:<performerPort>/`. The IP is the host's LAN address resolved by `lib/network.js` (overridable with the `PNDS_HOST_IP` environment variable); the port comes from manifest.json.
+- The endpoint returns a PNG (`image/png`). The App selects one URL for the performance: encode the full injected `PNDS_PERFORMER_URL` exactly when provided; otherwise fall back to `http://<PNDS_HOST_IP>:<performerPort>/`. Ordinary projects' QR codes default to HTTP; neither the module nor the project selects HTTPS itself. The IP is the host's LAN address resolved by `lib/network.js` (overridable with the `PNDS_HOST_IP` environment variable); the port comes from manifest.json.
 - Rendering takes `lib/qr.js`'s defaults: width 480 px, margin 1, error-correction level M. To change the size or margin, pass a second argument at the server.js mount:
 
 ```js
@@ -43,4 +43,4 @@ Style-wise, give the image a fixed display size and pad it with light backing pa
 
 - Do not change what the code encodes. A performer's scan lands on the performer page — that is the entry of the whole scan-to-join flow (the seat machinery is covered in [Player Identity and Seats](./players.md)).
 - The code is generated from the currently resolved performer URL. After the performance machine changes networks, restart the Project — the monitor page picks up a fresh code on reload.
-- Works declaring `scoreServer.supportsPerformerUrl: true` scan straight into a same-origin page under the App's local trusted HTTPS entry — page scripts and Socket.IO both live inside that origin, and the work never touches certificates (see [runtime-contract.md](../reference/runtime-contract.md) §15). Undeclared works behave exactly as today.
+- `scoreServer.supportsPerformerUrl: true` declares full-URL compatibility only. Declare `scoreServer.needsHttps: true` only for a work actually calling secure-context APIs. The App selects HTTPS when both are declared, the global switch is on and settings are valid. QR joining, phones and ordinary touch alone do not need HTTPS. QR, copied address and browser config share the Host-selected URL; page scripts and Socket.IO use the current performer origin (see [runtime-contract.md](../reference/runtime-contract.md) §15).

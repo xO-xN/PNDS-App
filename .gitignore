@@ -40,3 +40,6 @@ src-tauri/plugins/
 # sources live in their own sibling repositories (see utilities.json).
 src-tauri/resources/utilities/
 .cache/
+
+# Fixed npm libraries staged for offline App resources (npm run libraries:fetch)
+src-tauri/resources/shared-libraries/

@@ -245,6 +245,8 @@ pub fn node_binary_path() -> Result<PathBuf, String> {
 /// resolution and settles the OSC target actually injected — so the env
 /// construction reads everything from this one record.
 pub struct StartRequest {
+    /// Exact App resources verified for this start, never guessed from project files.
+    pub shared_libraries: crate::project::shared_libraries::ResolvedLibraries,
     /// Score project root directory.
     pub path: String,
     /// Requested audio mode; must be manifest-supported.
@@ -310,6 +312,7 @@ impl StartRequest {
             hub: None,
             performer_address: None,
             performer_url: None,
+            shared_libraries: Default::default(),
         }
     }
 
@@ -387,17 +390,18 @@ pub struct EntryLaunch {
 
 /// #140: resolves whether this start opens the trusted-HTTPS entry.
 ///
-/// Activation is operator switch × project declaration × valid
-/// material: `httpsEnabled == true` AND
+/// Activation is operator switch × explicit HTTPS need × full-URL
+/// compatibility × valid material: `httpsEnabled == true` AND
+/// `scoreServer.needsHttps == true` AND
 /// `scoreServer.supportsPerformerUrl == true` AND the stored chain/key
 /// revalidates for the configured domain right now (public anchors,
-/// same rules as the import). Everything else → `Ok(None)` — the
-/// legacy HTTP flow, byte-identical to pre-#140.
+/// same rules as the import). A missing switch, need or capability →
+/// `Ok(None)`, the HTTP flow, without reading HTTPS configuration.
 ///
-/// Switch on × declaration on × configuration broken → `Err`: the
-/// start itself fails with the actionable message. An adapted project
-/// must never silently fall back to HTTP (spec #140); the operator
-/// fixes the material or turns the switch off.
+/// Switch on × need on × capability on × configuration broken → `Err`:
+/// the start itself fails with the actionable message. A project that
+/// needs and supports the entry never silently falls back to HTTP; the
+/// operator fixes the material or turns the switch off.
 pub fn resolve_entry_launch(
     app_data: &Path,
     prefs: &crate::types::AppPreferences,
@@ -406,6 +410,9 @@ pub fn resolve_entry_launch(
     now: std::time::SystemTime,
 ) -> Result<Option<EntryLaunch>, String> {
     if prefs.https_enabled != Some(true) {
+        return Ok(None);
+    }
+    if manifest.score_server.needs_https != Some(true) {
         return Ok(None);
     }
     if manifest.score_server.supports_performer_url != Some(true) {
@@ -525,6 +532,13 @@ pub fn build_score_server_env(request: &StartRequest) -> Vec<(String, String)> {
     // from PNDS_HOST_IP; absence = the legacy HTTP flow.
     if let Some(url) = &request.performer_url {
         env.push(("PNDS_PERFORMER_URL".to_string(), url.clone()));
+    }
+    if !request.shared_libraries.is_empty() {
+        env.push((
+            "PNDS_SHARED_LIBRARIES".into(),
+            serde_json::to_string(&request.shared_libraries)
+                .expect("serializable shared libraries"),
+        ));
     }
     env
 }
@@ -909,6 +923,8 @@ impl SessionManager {
     ) -> Result<(), String> {
         let root = PathBuf::from(&request.path);
         let manifest = load_manifest(&root)?;
+        request.shared_libraries =
+            crate::project::shared_libraries::resolve_for_app(app, &manifest.shared_libraries)?;
 
         if !manifest.audio.supported_modes.contains(&request.mode) {
             return Err(format!(
@@ -1321,6 +1337,8 @@ impl SessionManager {
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
+            .env_remove("PNDS_SHARED_LIBRARIES")
+            .env_remove("PNDS_PERFORMER_URL")
             .envs(env.iter().map(|(k, v)| (k, v)));
 
         // §12: spawn + ownership record (pid + entry marker) in one step —
@@ -2481,6 +2499,30 @@ mod tests {
         let mut cmd = Command::new("sleep");
         cmd.arg(seconds.to_string());
         SupervisedChild::spawn(&registry, format!("sleep {seconds}"), &mut cmd).unwrap()
+    }
+
+    #[test]
+    fn shared_library_environment_reports_exact_verified_files() {
+        let mut request =
+            StartRequest::new("/score".into(), AudioMode::None, "192.168.1.2".into(), None);
+        request.shared_libraries.insert(
+            "p5".into(),
+            crate::project::shared_libraries::ResolvedLibrary {
+                version: "2.3.4".into(),
+                kind: crate::project::shared_libraries::SharedLibraryKind::Browser,
+                path: "/app/shared/p5.min.js".into(),
+                browser_path: None,
+            },
+        );
+        let environment = build_score_server_env(&request);
+        let (_, encoded) = environment
+            .iter()
+            .find(|(key, _)| key == "PNDS_SHARED_LIBRARIES")
+            .unwrap();
+        let value: serde_json::Value = serde_json::from_str(encoded).unwrap();
+        assert_eq!(value["p5"]["version"], "2.3.4");
+        assert_eq!(value["p5"]["path"], "/app/shared/p5.min.js");
+        assert_eq!(value["p5"]["kind"], "browser");
     }
 
     #[test]
@@ -3978,13 +4020,12 @@ mod tests {
         );
     }
 
-    /// A minimal manifest with an optional `supportsPerformerUrl`
-    /// declaration (the #138 lenient boolean).
+    /// A minimal HTTPS-needing manifest with/without full-URL support.
     fn entry_manifest(declared: bool) -> Manifest {
         let declaration = if declared {
-            ", \"supportsPerformerUrl\": true"
+            ", \"needsHttps\": true, \"supportsPerformerUrl\": true"
         } else {
-            ""
+            ", \"needsHttps\": true"
         };
         serde_json::from_str(&format!(
             r#"{{ "schemaVersion": 1, "id": "my-work", "name": "X", "version": "0.1.0",
@@ -4046,15 +4087,85 @@ mod tests {
     }
 
     #[test]
-    fn entry_resolution_requires_switch_declaration_and_valid_config() {
+    fn ordinary_project_keeps_http_with_a_healthy_enabled_https_entry() {
+        let dir = tempfile::tempdir().unwrap();
+        let test_anchors = import_entry_material(dir.path(), "show.example.org");
+        let mut ordinary = entry_manifest(true);
+        ordinary.score_server.needs_https = None;
+
+        let launch = resolve_entry_launch(
+            dir.path(),
+            &entry_prefs(Some(true), Some("show.example.org"), Some(8443)),
+            &ordinary,
+            &test_anchors,
+            std::time::SystemTime::now(),
+        )
+        .unwrap();
+
+        assert!(launch.is_none(), "ordinary projects must retain HTTP");
+    }
+
+    #[test]
+    fn ordinary_projects_ignore_https_config_and_do_not_request_dns_mapping() {
+        let dir = tempfile::tempdir().unwrap();
+        let test_anchors = import_entry_material(dir.path(), "show.example.org");
+        let now = std::time::SystemTime::now();
+
+        for need in [
+            None,
+            Some(serde_json::Value::Null),
+            Some(serde_json::json!(false)),
+            Some(serde_json::json!("true")),
+            Some(serde_json::json!(1)),
+            Some(serde_json::json!({ "enabled": true })),
+        ] {
+            let mut raw = serde_json::to_value(entry_manifest(true)).unwrap();
+            let score_server = raw["scoreServer"].as_object_mut().unwrap();
+            match &need {
+                Some(value) => {
+                    score_server.insert("needsHttps".into(), value.clone());
+                }
+                None => {
+                    score_server.remove("needsHttps");
+                }
+            }
+            let ordinary: Manifest = serde_json::from_value(raw).unwrap();
+
+            for (domain, port) in [
+                (Some("show.example.org"), Some(8443)),
+                (None, None),
+                (Some("show.example.org"), None),
+                (Some("https://show.example.org"), Some(443)),
+                (Some("other.example.org"), Some(8443)),
+            ] {
+                let mut prefs = entry_prefs(Some(true), domain, port);
+                prefs.dns_enabled = Some(true);
+                let launch =
+                    resolve_entry_launch(dir.path(), &prefs, &ordinary, &test_anchors, now)
+                        .unwrap_or_else(|e| {
+                            panic!("need={need:?}, domain={domain:?}, port={port:?}: {e}")
+                        });
+
+                assert!(
+                    launch.is_none(),
+                    "need={need:?}, domain={domain:?}, port={port:?}: ordinary projects retain HTTP"
+                );
+                assert!(resolve_dns_mapping(&prefs, launch.as_ref()).is_none());
+            }
+        }
+    }
+
+    #[test]
+    fn entry_resolution_requires_switch_need_capability_and_valid_config() {
         let dir = tempfile::tempdir().unwrap();
         let test_anchors = import_entry_material(dir.path(), "show.example.org");
         let declared = entry_manifest(true);
         let undeclared = entry_manifest(false);
         let now = std::time::SystemTime::now();
 
-        // Switch off or project undeclared → None (the legacy flow), no
-        // matter what else is configured.
+        // Switch off or a work needing HTTPS without full-URL support →
+        // None (HTTP), no matter what else is configured. The frontend
+        // retains the explicit HTTP confirmation for unsupported works.
         assert!(resolve_entry_launch(
             dir.path(),
             &entry_prefs(None, Some("show.example.org"), Some(8443)),
@@ -4083,8 +4194,8 @@ mod tests {
         .unwrap()
         .is_none());
 
-        // Switch on × declared × config missing → the start fails with
-        // the actionable message (never a silent HTTP fallback).
+        // Switch on × explicit need × capability × config missing → the
+        // start fails with the actionable message (no silent fallback).
         let err = resolve_entry_launch(
             dir.path(),
             &entry_prefs(Some(true), None, None),

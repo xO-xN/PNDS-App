@@ -4,6 +4,8 @@
 
 ## 为什么需要它
 
+普通工程使用 HTTP，包括手机扫码与普通触摸作品。只有作品实际需要安全上下文功能并声明 `scoreServer.needsHttps: true`，才需要准备本页的 HTTPS 入口；`supportsPerformerUrl` 仅声明兼容完整网址的能力。工程声明与入口选择见 [manifest.md](./manifest.md)。
+
 iOS Safari 的运动、摄像头、麦克风等能力只在**可信安全上下文**（secure context）里开放。现有局域网 HTTP 入口不能可靠满足这一条件，而要求每位乐手安装根证书、进系统设置开启信任或安装 VPN，会让临场入场变得复杂。
 
 目标是：乐手连接演出 Wi-Fi → 扫码 → 按作品需要确认浏览器权限。**不安装证书、不用 VPN、不改手机 DNS，也不接受证书错误警告作为正常入场步骤。**
@@ -74,9 +76,9 @@ iOS Safari 的运动、摄像头、麦克风等能力只在**可信安全上下�
 
 ## 入口生命周期（#140 起）
 
-证书材料就绪后，打开设置「可信 HTTPS」顶部的**启用开关**，入口即随演出启动：
+证书材料就绪后，打开设置「可信 HTTPS」顶部的**启用开关**。开关允许需要 HTTPS 的工程使用入口，普通工程继续使用 HTTP：
 
-- **启动**：声明了 `supportsPerformerUrl: true` 的工程在下次启动时，App 在所选 LAN 接口、配置的端口上开启 TLS 网关，把手机请求原样转发到本机 performer 服务（页面、静态资源、Socket.IO polling 与 WebSocket 都走这一条入口）；完整 URL（`https://域名:端口/`）在启动时固定并注入 `PNDS_PERFORMER_URL`——工程二维码、菜单「复制地址」与侧栏入口行显示的是同一个字符串。
+- **启动**：工程同时显式声明 `scoreServer.needsHttps: true` 和 `scoreServer.supportsPerformerUrl: true`、开关打开且配置有效时，App 在下次启动开启 TLS 网关，绑定所选 LAN 接口与配置端口，把手机请求原样转发到本机 performer 服务（页面、静态资源、Socket.IO polling 与 WebSocket 都走这一条入口）；完整 URL（`https://域名:端口/`）在启动时固定并注入 `PNDS_PERFORMER_URL`——工程二维码、菜单「复制地址」与侧栏入口行显示同一个字符串。未声明需要时不创建网关，不校验 HTTPS 启动材料，地址保持 HTTP。
 - **就绪判定**：工程 health ready 后，App 自己经入口发起一次 TLS/HTTP 探测（以域名校验证书、经隧道取 health），成功才把入口标为**就绪**。这只证明本机隧道可用，不等于「所有手机都能连」——手机的 DNS 与信任仍以真机扫码验收为准。
 - **状态展示**：侧栏设置卡（运行卡选中时）的「入口」行显示 准备中 / 就绪 / 故障 与 URL（点击复制）；窗口菜单的 Performer 地址项在入口生效时同样复制入口 URL。
 - **运行中故障**：入口故障（如网口变动导致 listener 失效）只报告为入口故障——本地音频与服务继续运行，不会自动改发 HTTP 二维码；恢复由操作者显式重启演出完成。
@@ -93,4 +95,4 @@ iOS Safari 的运动、摄像头、麦克风等能力只在**可信安全上下�
 
 ## 与工程的关系
 
-工程通过 `scoreServer.supportsPerformerUrl: true` 声明自己会读取 Host 提供的完整 performer URL 并在同源下建立连接（[manifest.md](./manifest.md)）；未声明的旧工程不受影响，沿用 HTTP 流程。Host 侧的配置、导入、校验与受保护存储随 #139 交付，TLS 入口网关随 #140 交付——材料就绪后无需再为入口重新准备。
+工程通过 `scoreServer.supportsPerformerUrl: true` 声明读取 Host 完整 performer URL 并同源连接的能力，通过 `scoreServer.needsHttps: true` 声明实际的安全上下文需求（[manifest.md](./manifest.md)）。普通工程默认 HTTP；开关关闭时也沿用 HTTP。工程按 Host 本次选择的网址生成 QR、复制地址与浏览器配置，已注入 URL 优先于自行拼接地址。Host 侧的配置、导入、校验与受保护存储随 #139 交付，TLS 入口网关随 #140 交付。

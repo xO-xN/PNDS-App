@@ -9,7 +9,7 @@ A PNDS Project is a local directory the user explicitly chooses to open. The Pro
 - its own network interactions and Socket.IO protocol (when used);
 - its own OSC addresses, parameters and sound-control logic;
 - the compiled `.scsyndef` files Internal mode needs;
-- the local dependencies and static assets the production runtime requires.
+- the Project's own production dependencies and static assets.
 
 A Project is not a PNDS App plugin and receives no Tauri API. High-rate performance messages must flow directly between the client pages, the Project's Node server and the audio target — never through the App's Rust/React layers.
 
@@ -28,7 +28,7 @@ Depending on the Project's implementation, it may also contain:
 ```text
 project/
 ├── package.json
-├── node_modules/                 # required only when production dependencies exist
+├── node_modules/                 # required for production dependencies not covered by exact shared references
 ├── public/                       # performer / monitor static assets
 ├── audio/                        # the Project's audio and OSC control code
 ├── README.md                     # optional project self-description (next section)
@@ -53,7 +53,7 @@ Inarticulate III/
 Rules:
 
 - the App never runs `npm install`, and the runtime must not depend on network installs;
-- when `package.json` declares non-empty `dependencies` or `optionalDependencies`, the Project must carry a working `node_modules/`; with no production dependencies, an empty `node_modules/` is not required;
+- a production dependency in `package.json` (`dependencies` or `optionalDependencies`) is covered by an App shared package only when its package name and exact version match a `manifest.sharedLibraries` reference. Ranges, different versions and unreferenced packages still require working local `node_modules/`. Self-contained Projects carry all production dependencies; with none, or with all covered by exact references, an empty `node_modules/` is not required;
 - `.scd` belongs to authoring and debugging only and must not ship as an App-hosted runtime asset;
 - a Project must not depend on the host machine having Node.js, SuperCollider, `sclang` or third-party UGens installed;
 - official Projects should declare the Node major they were developed and verified against in `package.json` (e.g. `">=24 <25"`).
@@ -100,9 +100,29 @@ For the full writing guide see "Writing a Project README" under the Help center'
 
 1. manifest required fields, modes, ports, outputChannels and bus-capacity validation;
 2. containment and existence validation for every declared path;
-3. a complete `node_modules` carried whenever production dependencies exist;
+3. App shared package references checked against the same package name and exact version, with complete local `node_modules` for all other production dependencies;
 4. performer health returns ready per [runtime-contract.md](./runtime-contract.md) §5;
 5. the monitor embeds and responds to resize correctly;
 6. Internal output strictly honours the buses and channel count the App injects;
 7. every resource the Project owns is released on SIGINT/SIGTERM;
 8. an actual startup verification completed under the App's fixed Node runtime.
+
+## App shared packages
+
+Projects may explicitly reference fixed App libraries through
+[manifest.json](./manifest.md) schema 2. Shared files remain in the App and are
+never copied into the project. Author pages, standard module sources, models,
+weights, score assets and audio stay project-owned. Self-contained projects
+continue to use their own dependencies. References do not rewrite local
+`require` calls or browser CDN URLs; authors or external agents must wire and
+validate them using the [runtime contract](./runtime-contract.md) and
+[p5 example](./p5js.md). A reference change also updates the project version;
+missing exact resources never fall back to another version.
+
+For precompiled Preact works such as ASBS, retain the built `dist/` pages,
+fonts and every score asset. ASBS 2.1.0 uses only shared Express 5.3.0,
+qrcode 1.5.4 and Socket.IO/server-client 4.8.4; it loads the client's browser
+file through a same-origin score-server route before the compiled page entry.
+Its audio mode remains `none`. Adding shared references does not introduce p5,
+ml5, osc-min or a secure-context requirement. Validate real pages and controls
+again after packaging and installation; health alone is insufficient.

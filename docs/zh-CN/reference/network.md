@@ -26,7 +26,7 @@ PNDS 演出建立在普通计算机网络之上。组网形态有两种：**本�
 
 工程侧的座位、断线重连与作品数据协议由工程自己实现——PNDS 不规定 Socket.IO 事件名、客户端 ID、角色数量或 UI 框架。
 
-后续 patch 将提供本地可信 HTTPS 入口（完整 performer URL `PNDS_PERFORMER_URL`，契约已冻结，见 [runtime-contract.md](./runtime-contract.md) §15）：它与本节的裸主机名声明相互独立——入口生效时完整 URL 优先，`PNDS_HOST_IP` 的注入语义不变。
+普通工程默认 HTTP。需要安全上下文 API 的工程按 [manifest.md](./manifest.md) 声明 HTTPS 需求与完整 URL 适配，由 Host 按 [runtime-contract.md](./runtime-contract.md) §15 选择本次入口。它与本节的裸主机名声明相互独立——注入了完整 `PNDS_PERFORMER_URL` 时该 URL 优先，`PNDS_HOST_IP` 的注入语义不变。
 
 ## 互联网 / 远程演奏
 

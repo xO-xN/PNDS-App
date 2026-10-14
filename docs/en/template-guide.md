@@ -78,6 +78,15 @@ PNDS recommends a twin-track iteration loop: **AI-assisted generation and editin
 - **Continuous verification and fine-tuning**
   Iterate in small steps: verify the effect in the App immediately after each change, and keep every module behaving as intended.
 
+### Selecting the work's connection protocol
+
+When adding or changing phone interaction, QR or browser connections, the authoring agent first reads the two declarations in [manifest.md](./reference/manifest.md) and [runtime-contract.md](./reference/runtime-contract.md) §15, then inspects the browser APIs actually used:
+
+1. Ordinary touch, phone participation and QR joining use HTTP. `supportsPerformerUrl: true` preserves the ability to consume the Host's full URL only.
+2. Declare `scoreServer.needsHttps: true` only when the work actually needs secure-context APIs such as motion sensors, camera or microphone; record the API and reason. The Host selects HTTPS when adaptation is declared, the global switch is on and material validates.
+3. QR, copied address and browser config consume one Host-selected URL, with injected `PNDS_PERFORMER_URL` taking priority. Page scripts and Socket.IO use the current performer origin.
+4. Record the requirement assessment, declarations, actual URL and QR/connection evidence in the creator handoff. Verify HTTP for ordinary projects. For secure-context works, the author also verifies trusted HTTPS, browser permissions and actual device capabilities. Keep unfinished device checks explicitly pending.
+
 The creation workspace automatically updates files added, removed or edited by an external agent. Clean text can adopt new disk content; unsaved drafts remain intact and show a disk conflict. A draft remains accessible even when its file is removed externally. Saving and external edits do not automatically refresh pages, restart the Project, compile, or change the running health state.
 
 Page changes prompt a refresh; source, audio declarations and artifact changes prompt a restart. SuperCollider source also prompts compilation. Manual refresh, restart and compilation use saved disk files; unsaved drafts are excluded from the test version. A successful monitor refresh clears its captured page prompt. A failed restart retains prompts, and successful compilation still requires a manual restart to adopt the artifacts. Edits arriving during an operation remain pending.

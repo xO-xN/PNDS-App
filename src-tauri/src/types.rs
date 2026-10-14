@@ -192,13 +192,13 @@ pub struct AppPreferences {
     #[serde(default)]
     pub https_port: Option<u16>,
     /// #140: the operator's entry switch — `Some(true)` activates the
-    /// trusted-HTTPS gateway for starts of projects that declare
-    /// `scoreServer.supportsPerformerUrl`. Plain intent: domain, port
-    /// and material are validated at START (and in the settings
-    /// section), so switching on with incomplete config surfaces there,
-    /// never as a mid-start surprise. `None`/`Some(false)` = off, the
-    /// legacy HTTP flow. Like every entry setting: next start, never a
-    /// running session.
+    /// trusted-HTTPS gateway for starts of projects declaring both
+    /// `scoreServer.needsHttps` and `scoreServer.supportsPerformerUrl`.
+    /// Ordinary projects keep HTTP without checking HTTPS configuration.
+    /// Domain, port and material are validated at START for projects
+    /// needing and supporting HTTPS. `None`/`Some(false)` = off, the
+    /// HTTP flow. Like every entry setting: next start, never a running
+    /// session.
     #[serde(default)]
     pub https_enabled: Option<bool>,
     /// #174: the operator's DNS-service switch — `Some(true)` means the

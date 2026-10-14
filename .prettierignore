@@ -30,3 +30,7 @@ src-tauri/resources/utilities/
 
 # Frozen module sources, documentation and provenance retain upstream bytes.
 src-tauri/resources/modules/**
+
+# Verified upstream npm bytes and generated completeness catalog
+src-tauri/resources/shared-libraries/**
+shared-libraries/package-lock.json

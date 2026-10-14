@@ -1,13 +1,13 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "PNDS",
-  "version": "1.6.1",
+  "version": "1.6.2",
   "identifier": "com.xo-xn.pnds-app",
   "build": {
     "removeUnusedCommands": true,
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "npm run build && npm run utilities:fetch",
+    "beforeBuildCommand": "npm run build && npm run libraries:fetch && npm run utilities:fetch",
     "frontendDist": "../dist"
   },
   "app": {
@@ -110,7 +110,8 @@
       "../docs/zh-CN/reference/dns.md": "help/zh-CN/reference/dns.md",
       "../docs/en/reference/dns.md": "help/en/reference/dns.md",
       "../docs/en/modules/hub.md": "help/en/modules/hub.md",
-      "../docs/zh-CN/modules/hub.md": "help/zh-CN/modules/hub.md"
+      "../docs/zh-CN/modules/hub.md": "help/zh-CN/modules/hub.md",
+      "resources/shared-libraries": "shared-libraries"
     },
     "icon": [
       "icons/32x32.png",

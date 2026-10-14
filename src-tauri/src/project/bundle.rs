@@ -60,6 +60,24 @@ pub struct PackResult {
 /// node_modules check, and the output path derivation. The pack UI's
 /// pre-check and the pack itself must agree, so both go through here.
 pub fn validate_packable(project_root: &Path) -> Result<(Manifest, PathBuf), String> {
+    validate_packable_with_libraries(project_root, None)
+}
+
+/// Explicit resource roots are a test/embedding seam, never a user-controlled
+/// runtime search path. None resolves the fixed installed App resources.
+pub fn validate_packable_with_libraries(
+    project_root: &Path,
+    libraries: Option<&Path>,
+) -> Result<(Manifest, PathBuf), String> {
+    let manifest = validate_runtime_tree(project_root, libraries)?;
+    let output = bundle_output_path(project_root, &manifest)?;
+    Ok((manifest, output))
+}
+
+fn validate_runtime_tree(
+    project_root: &Path,
+    libraries: Option<&Path>,
+) -> Result<Manifest, String> {
     if !project_root.is_dir() {
         return Err(format!(
             "Project directory not found: {}",
@@ -68,15 +86,47 @@ pub fn validate_packable(project_root: &Path) -> Result<(Manifest, PathBuf), Str
     }
     let manifest = crate::project::manifest::load_manifest(project_root)?;
     crate::project::manifest::validate_synthdef_paths(&manifest, project_root)?;
-    crate::project::preflight::check_dependencies(project_root)?;
-    let output = bundle_output_path(project_root, &manifest)?;
-    Ok((manifest, output))
+    crate::project::preflight::check_dependencies_with_shared(
+        project_root,
+        &manifest.shared_libraries,
+    )?;
+    if !manifest.shared_libraries.is_empty() {
+        let required = manifest
+            .shared_libraries
+            .iter()
+            .map(|reference| format!("{} {}", reference.id, reference.version))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let resource_error =
+            |error| format!("Required shared libraries [{required}] cannot be verified: {error}");
+        let default;
+        let resources = match libraries {
+            Some(root) => root,
+            None => {
+                default =
+                    crate::project::shared_libraries::default_root().map_err(&resource_error)?;
+                &default
+            }
+        };
+        crate::project::shared_libraries::LibraryCatalog::load(resources)
+            .and_then(|catalog| catalog.resolve(resources, &manifest.shared_libraries))
+            .map_err(resource_error)?;
+    }
+    Ok(manifest)
 }
 
 /// Static output probe used before the native save dialog and again for its
 /// selected destination. It never runs the launch preflight.
 pub fn output_info(project_root: &Path, output: Option<&Path>) -> Result<BundleOutputInfo, String> {
-    let (_, default_output) = validate_packable(project_root)?;
+    output_info_with_libraries(project_root, output, None)
+}
+
+pub fn output_info_with_libraries(
+    project_root: &Path,
+    output: Option<&Path>,
+    libraries: Option<&Path>,
+) -> Result<BundleOutputInfo, String> {
+    let (_, default_output) = validate_packable_with_libraries(project_root, libraries)?;
     let output = output.unwrap_or(&default_output);
     validate_output_location(project_root, output)?;
     Ok(BundleOutputInfo {
@@ -143,7 +193,17 @@ pub fn pack_project_at(
     overwrite: bool,
     packed_with: &str,
 ) -> Result<PackResult, String> {
-    let (manifest, default_output) = validate_packable(project_root)?;
+    pack_project_at_with_libraries(project_root, output, overwrite, packed_with, None)
+}
+
+pub fn pack_project_at_with_libraries(
+    project_root: &Path,
+    output: Option<&Path>,
+    overwrite: bool,
+    packed_with: &str,
+    libraries: Option<&Path>,
+) -> Result<PackResult, String> {
+    let (manifest, default_output) = validate_packable_with_libraries(project_root, libraries)?;
     let output = output.unwrap_or(&default_output);
     validate_output_location(project_root, output)?;
     if output.exists() && !overwrite {
@@ -152,7 +212,14 @@ pub fn pack_project_at(
             output.display()
         ));
     }
-    pack_staged(project_root, &manifest, output, packed_with, overwrite)
+    pack_staged(
+        project_root,
+        &manifest,
+        output,
+        packed_with,
+        overwrite,
+        libraries,
+    )
 }
 
 /// Packs `project_root` to the caller-chosen `output` path (v1.4.0, #59:
@@ -177,6 +244,7 @@ fn pack_staged(
     output: &Path,
     packed_with: &str,
     overwrite: bool,
+    libraries: Option<&Path>,
 ) -> Result<PackResult, String> {
     // stage in the system temp dir so the source tree is never touched.
     let staging =
@@ -186,7 +254,13 @@ fn pack_staged(
     copy_runtime_tree(project_root, project_root, &staged_root)?;
     // Exclusions and materialized links must still leave a runnable saved
     // project. A declaration into root docs/tests cannot silently disappear.
-    validate_packable(&staged_root)?;
+    let (staged_manifest, _) = validate_packable_with_libraries(&staged_root, libraries)?;
+    if staged_manifest.id != manifest.id
+        || staged_manifest.version != manifest.version
+        || staged_manifest.shared_libraries != manifest.shared_libraries
+    {
+        return Err("Project identity, version or shared references changed during packaging; retry from saved files".into());
+    }
 
     if let Some(parent) = output.parent() {
         fs::create_dir_all(parent)
@@ -499,6 +573,14 @@ fn civil_from_days(days: i64) -> (i64, u32, u32) {
 /// `<bundles_root>/<id>-<version>/` (always a full reinstall when the
 /// directory already exists). Returns the installed project directory.
 pub fn install_bundle(bundles_root: &Path, bundle_path: &Path) -> Result<PathBuf, String> {
+    install_bundle_with_libraries(bundles_root, bundle_path, None)
+}
+
+pub fn install_bundle_with_libraries(
+    bundles_root: &Path,
+    bundle_path: &Path,
+    libraries: Option<&Path>,
+) -> Result<PathBuf, String> {
     let file = File::open(bundle_path)
         .map_err(|e| format!("Cannot open the bundle {}: {e}", bundle_path.display()))?;
     let mut archive =
@@ -508,23 +590,81 @@ pub fn install_bundle(bundles_root: &Path, bundle_path: &Path) -> Result<PathBuf
     fs::create_dir_all(bundles_root)
         .map_err(|e| format!("Failed to create {}: {e}", bundles_root.display()))?;
     let target = bundles_root.join(format!("{id}-{version}"));
-    // same id+version always reinstalls over the old directory.
-    if target.exists() {
-        fs::remove_dir_all(&target)
-            .map_err(|e| format!("Failed to replace {}: {e}", target.display()))?;
+    let staging = tempfile::Builder::new()
+        .prefix(".pnds-install-")
+        .tempdir_in(bundles_root)
+        .map_err(|error| format!("Failed to stage bundle installation: {error}"))?;
+    let staged_root = staging.path().join("project");
+    extract_root_entries(&mut archive, &root, &staged_root)?;
+    let manifest = validate_runtime_tree(&staged_root, libraries)?;
+    if manifest.id != id || manifest.version != version {
+        return Err("The extracted manifest identity differs from the archive identity".into());
     }
-
-    if let Err(error) = extract_root_entries(&mut archive, &root, &target).and_then(|()| {
-        // Install step 4: the installed project must pass the full manifest
-        // check.
-        crate::project::manifest::load_manifest(&target)
-    }) {
-        // Never leave a half-extracted install behind ( (the bundles
-        // dir must not accumulate garbage) — the next open retries clean.
-        let _ = fs::remove_dir_all(&target);
-        return Err(error);
+    publish_install(&staged_root, &target)?;
+    // After a replacement the old directory is now under staging. Failure to
+    // remove it never damages the newly installed, fully validated project.
+    if let Err(error) = staging.close() {
+        log::warn!("Installed bundle but could not remove previous install staging: {error}");
     }
     Ok(target)
+}
+
+/// Publish a completely validated directory. Existing installs are exchanged
+/// atomically; a new target uses no-clobber publication, so a racing install or
+/// user-created link cannot be silently replaced after the probe.
+fn publish_install(staged: &Path, target: &Path) -> Result<(), String> {
+    use std::ffi::CString;
+    use std::os::unix::ffi::OsStrExt;
+    let replace = match fs::symlink_metadata(target) {
+        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
+            return Err(format!(
+                "Bundle install target is not a regular directory: {}",
+                target.display()
+            ));
+        }
+        Ok(_) => true,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
+        Err(error) => return Err(format!("Cannot inspect bundle install target: {error}")),
+    };
+    let source = CString::new(staged.as_os_str().as_bytes()).map_err(|error| error.to_string())?;
+    let destination =
+        CString::new(target.as_os_str().as_bytes()).map_err(|error| error.to_string())?;
+    #[cfg(target_os = "macos")]
+    let result = unsafe {
+        libc::renameatx_np(
+            libc::AT_FDCWD,
+            source.as_ptr(),
+            libc::AT_FDCWD,
+            destination.as_ptr(),
+            if replace {
+                libc::RENAME_SWAP
+            } else {
+                libc::RENAME_EXCL
+            },
+        )
+    };
+    #[cfg(target_os = "linux")]
+    let result = unsafe {
+        libc::renameat2(
+            libc::AT_FDCWD,
+            source.as_ptr(),
+            libc::AT_FDCWD,
+            destination.as_ptr(),
+            if replace {
+                libc::RENAME_EXCHANGE
+            } else {
+                libc::RENAME_NOREPLACE
+            },
+        )
+    };
+    if result != 0 {
+        let error = std::io::Error::last_os_error();
+        return Err(format!(
+            "Failed to publish bundle installation at {} (previous install retained): {error}",
+            target.display()
+        ));
+    }
+    Ok(())
 }
 
 /// The shared validation prologue: `(root directory, manifest id, version)`.
@@ -584,6 +724,23 @@ fn single_root_directory(archive: &mut ZipArchive<File>) -> Result<String, Strin
         let entry = archive
             .by_index(index)
             .map_err(|e| format!("Corrupt bundle entry: {e}"))?;
+        if entry.is_symlink() {
+            return Err(format!(
+                "The bundle contains a symbolic link entry, which is not allowed: \"{}\"",
+                entry.name()
+            ));
+        }
+        if entry.name().contains('\\')
+            || Path::new(entry.name()).is_absolute()
+            || Path::new(entry.name())
+                .components()
+                .any(|part| matches!(part, Component::ParentDir))
+        {
+            return Err(format!(
+                "The bundle contains an unsafe entry path: \"{}\"",
+                entry.name()
+            ));
+        }
         let is_dir_entry = entry.name().ends_with('/');
         let name = entry.name().trim_end_matches('/');
         let mut components = Path::new(name).components();
@@ -771,6 +928,390 @@ mod tests {
         fixture_project(&project);
         pack_project(&project, false, APP_VERSION).unwrap();
         parent.join("Inarticulate III-0.1.0.pnds")
+    }
+
+    fn shared_fixture(project: &Path, resources: &Path) {
+        fs::create_dir_all(project).unwrap();
+        let mut manifest: serde_json::Value =
+            serde_json::from_str(&valid_project_manifest_json()).unwrap();
+        manifest["schemaVersion"] = serde_json::json!(2);
+        manifest["sharedLibraries"] = serde_json::json!([{ "id": "p5", "version": "2.3.4" }]);
+        fs::write(project.join("manifest.json"), manifest.to_string()).unwrap();
+        fs::write(project.join("s.js"), "// source stays untouched").unwrap();
+        fs::write(
+            project.join("package.json"),
+            r#"{"dependencies":{"p5":"2.3.4"}}"#,
+        )
+        .unwrap();
+        fs::create_dir_all(resources.join("browser/p5")).unwrap();
+        let bytes = b"window.p5 = function () {};";
+        fs::write(resources.join("browser/p5/p5.js"), bytes).unwrap();
+        fs::write(resources.join("catalog.json"), serde_json::json!({ "schemaVersion": 1, "libraries": [{ "id": "p5", "version": "2.3.4", "kind": "browser", "entry": "browser/p5/p5.js", "source": { "url": "https://registry.npmjs.org/p5/-/p5-2.3.4.tgz", "integrity": "sha512-fixture" }, "files": [{ "path": "browser/p5/p5.js", "bytes": bytes.len(), "sha256": format!("{:x}", Sha256::digest(bytes)) }] }] }).to_string()).unwrap();
+    }
+
+    #[tokio::test]
+    async fn installed_shared_browser_and_node_project_runs_offline_without_materialized_libraries()
+    {
+        use crate::project::shared_libraries::LibraryCatalog;
+        use std::net::TcpListener;
+        use std::process::{Command, Stdio};
+        use std::time::{Duration, Instant};
+        let parent = tempfile::tempdir().unwrap();
+        let project = parent.path().join("source");
+        let resources = Path::new(env!("CARGO_MANIFEST_DIR")).join("resources/shared-libraries");
+        let catalog = LibraryCatalog::load(&resources)
+            .expect("fixed App library resources must be staged for bundle acceptance");
+        let versions: serde_json::Value = catalog
+            .libraries
+            .iter()
+            .filter(|library| matches!(library.id.as_str(), "p5" | "qrcode"))
+            .map(|library| serde_json::json!({ "id": library.id, "version": library.version }))
+            .collect::<Vec<_>>()
+            .into();
+        assert_eq!(versions.as_array().unwrap().len(), 2);
+        let listeners = [
+            TcpListener::bind("127.0.0.1:0").unwrap(),
+            TcpListener::bind("127.0.0.1:0").unwrap(),
+        ];
+        let ports = listeners
+            .each_ref()
+            .map(|listener| listener.local_addr().unwrap().port());
+        fs::create_dir_all(project.join("models")).unwrap();
+        fs::create_dir_all(project.join("audio")).unwrap();
+        fs::create_dir_all(project.join("public")).unwrap();
+        fs::create_dir_all(project.join("docs")).unwrap();
+        fs::write(project.join("models/weights.bin"), [1, 2, 3]).unwrap();
+        fs::write(project.join("audio/score.wav"), b"RIFF-author-audio").unwrap();
+        fs::write(project.join("public/score.svg"), "<svg>author score</svg>").unwrap();
+        fs::write(
+            project.join("docs/creator-handoff.md"),
+            "source-only wiring task",
+        )
+        .unwrap();
+        fs::write(
+            project.join("server.mjs"),
+            include_str!("bundle_runtime.mjs"),
+        )
+        .unwrap();
+        let mut manifest: serde_json::Value =
+            serde_json::from_str(&valid_project_manifest_json()).unwrap();
+        manifest["schemaVersion"] = serde_json::json!(2);
+        manifest["sharedLibraries"] = versions;
+        manifest["scoreServer"]["entry"] = serde_json::json!("server.mjs");
+        manifest["scoreServer"]["performerPort"] = serde_json::json!(ports[0]);
+        manifest["scoreServer"]["monitorPort"] = serde_json::json!(ports[1]);
+        let qrcode_version = &catalog
+            .libraries
+            .iter()
+            .find(|library| library.id == "qrcode")
+            .unwrap()
+            .version;
+        fs::write(
+            project.join("package.json"),
+            serde_json::json!({ "dependencies": { "qrcode": qrcode_version } }).to_string(),
+        )
+        .unwrap();
+        fs::write(project.join("manifest.json"), manifest.to_string()).unwrap();
+        let source_bytes = fs::read(project.join("server.mjs")).unwrap();
+        let output = parent.path().join("shared-runtime.pnds");
+        pack_project_at_with_libraries(
+            &project,
+            Some(&output),
+            false,
+            APP_VERSION,
+            Some(&resources),
+        )
+        .unwrap();
+        assert!(!zip_entry_names(&output)
+            .iter()
+            .any(|name| name.contains("node_modules")
+                || name.contains("p5.min.js")
+                || name.contains("creator-handoff")));
+        let installed = install_bundle_with_libraries(
+            &parent.path().join("bundles"),
+            &output,
+            Some(&resources),
+        )
+        .unwrap();
+        assert_eq!(
+            fs::read(installed.join("models/weights.bin")).unwrap(),
+            [1, 2, 3]
+        );
+        assert_eq!(
+            fs::read(installed.join("audio/score.wav")).unwrap(),
+            b"RIFF-author-audio"
+        );
+        assert_eq!(
+            fs::read_to_string(installed.join("public/score.svg")).unwrap(),
+            "<svg>author score</svg>"
+        );
+        assert_eq!(fs::read(project.join("server.mjs")).unwrap(), source_bytes);
+        assert!(project.join("docs/creator-handoff.md").is_file());
+        let saved = crate::project::manifest::load_manifest(&installed).unwrap();
+        let resolved = catalog
+            .resolve(&resources, &saved.shared_libraries)
+            .unwrap();
+        let p5 = fs::read(&resolved["p5"].path).unwrap();
+        drop(listeners);
+        let child = Command::new(crate::project::session::node_binary_path().unwrap())
+            .arg(installed.join("server.mjs"))
+            .env(
+                "PNDS_SHARED_LIBRARIES",
+                serde_json::to_string(&resolved).unwrap(),
+            )
+            .env("HTTP_PROXY", "http://127.0.0.1:1")
+            .env("HTTPS_PROXY", "http://127.0.0.1:1")
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        struct Child(std::process::Child);
+        impl Drop for Child {
+            fn drop(&mut self) {
+                let _ = self.0.kill();
+                let _ = self.0.wait();
+            }
+        }
+        let mut child = Child(child);
+        let _ = rustls::crypto::ring::default_provider().install_default();
+        let client = reqwest::Client::builder()
+            .no_proxy()
+            .timeout(Duration::from_millis(300))
+            .build()
+            .unwrap();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        for port in ports {
+            let base = format!("http://127.0.0.1:{port}");
+            loop {
+                if let Ok(response) = client.get(format!("{base}/__pnds/health")).send().await {
+                    let payload: serde_json::Value = response.json().await.unwrap();
+                    if payload["status"] == "ready" {
+                        break;
+                    }
+                }
+                assert!(
+                    Instant::now() < deadline,
+                    "installed Node project did not become ready"
+                );
+                tokio::time::sleep(Duration::from_millis(25)).await;
+            }
+            assert_eq!(
+                client
+                    .get(format!("{base}/shared/p5.js"))
+                    .send()
+                    .await
+                    .unwrap()
+                    .bytes()
+                    .await
+                    .unwrap()
+                    .as_ref(),
+                p5
+            );
+            let qr = client
+                .get(format!("{base}/qr"))
+                .send()
+                .await
+                .unwrap()
+                .text()
+                .await
+                .unwrap();
+            assert!(
+                qr.starts_with("data:image/png;base64,iVBOR"),
+                "actual qrcode production library produces PNG"
+            );
+            let page = client
+                .get(format!("{base}/"))
+                .send()
+                .await
+                .unwrap()
+                .text()
+                .await
+                .unwrap();
+            assert!(page.contains("src=\"/shared/p5.js\""));
+            assert!(!page.contains(&resources.to_string_lossy().to_string()));
+        }
+        unsafe {
+            libc::kill(child.0.id() as libc::pid_t, libc::SIGTERM);
+        }
+        let deadline = Instant::now() + Duration::from_secs(3);
+        while child.0.try_wait().unwrap().is_none() {
+            assert!(Instant::now() < deadline, "installed Node did not close");
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+        for port in ports {
+            assert!(TcpListener::bind(("0.0.0.0", port)).is_ok());
+        }
+    }
+
+    #[test]
+    fn self_contained_bundles_need_no_shared_catalog_and_invalid_reinstalls_keep_the_old_slot() {
+        let parent = tempfile::tempdir().unwrap();
+        let source = parent.path().join("source");
+        fs::create_dir(&source).unwrap();
+        fixture_project(&source);
+        let missing_libraries = parent.path().join("missing-libraries");
+        let output = parent.path().join("legacy.pnds");
+        pack_project_at_with_libraries(
+            &source,
+            Some(&output),
+            false,
+            APP_VERSION,
+            Some(&missing_libraries),
+        )
+        .unwrap();
+        let bundles = parent.path().join("bundles");
+        let installed =
+            install_bundle_with_libraries(&bundles, &output, Some(&missing_libraries)).unwrap();
+        assert!(!missing_libraries.exists());
+        let original = fs::read(installed.join("server.js")).unwrap();
+        let manifest = fs::read_to_string(installed.join("manifest.json")).unwrap();
+        let bad = parent.path().join("missing-local-dependency.pnds");
+        handcraft_zip(
+            &bad,
+            &[
+                (METADATA_ENTRY, &valid_metadata_json(), false),
+                ("p/manifest.json", &manifest, false),
+                ("p/server.js", "// replacement", false),
+                (
+                    "p/supercollider/synthdefs/inarticulate-iii.scsyndef",
+                    "SCgf",
+                    false,
+                ),
+                (
+                    "p/package.json",
+                    r#"{"dependencies":{"ws":"^8.0.0"}}"#,
+                    false,
+                ),
+            ],
+        );
+        assert!(
+            install_bundle_with_libraries(&bundles, &bad, Some(&missing_libraries))
+                .unwrap_err()
+                .contains("dependencies are missing")
+        );
+        assert_eq!(fs::read(installed.join("server.js")).unwrap(), original);
+        assert_eq!(fs::read_dir(&bundles).unwrap().count(), 1);
+        let unsafe_target = parent.path().join("target-file");
+        fs::create_dir(&unsafe_target).unwrap();
+        fs::write(
+            unsafe_target.join("inarticulate-iii-0.1.0"),
+            "keep this file",
+        )
+        .unwrap();
+        assert!(install_bundle(&unsafe_target, &output)
+            .unwrap_err()
+            .contains("not a regular directory"));
+        assert_eq!(
+            fs::read_to_string(unsafe_target.join("inarticulate-iii-0.1.0")).unwrap(),
+            "keep this file"
+        );
+        let alias_root = parent.path().join("target-alias");
+        fs::create_dir(&alias_root).unwrap();
+        std::os::unix::fs::symlink(&installed, alias_root.join("inarticulate-iii-0.1.0")).unwrap();
+        assert!(install_bundle(&alias_root, &output)
+            .unwrap_err()
+            .contains("not a regular directory"));
+        assert_eq!(fs::read(installed.join("server.js")).unwrap(), original);
+    }
+
+    #[test]
+    fn shared_bundle_gates_require_exact_resources_and_preserve_outputs_and_previous_install() {
+        let parent = tempfile::tempdir().unwrap();
+        let project = parent.path().join("source");
+        let resources = parent.path().join("shared");
+        shared_fixture(&project, &resources);
+        let original = fs::read(project.join("manifest.json")).unwrap();
+        let output = parent.path().join("shared.pnds");
+        pack_project_at_with_libraries(
+            &project,
+            Some(&output),
+            false,
+            APP_VERSION,
+            Some(&resources),
+        )
+        .unwrap();
+        assert!(!zip_entry_names(&output)
+            .iter()
+            .any(|path| path.contains("browser/p5") || path.contains("node_modules")));
+        let bundles = parent.path().join("bundles");
+        let installed = install_bundle_with_libraries(&bundles, &output, Some(&resources)).unwrap();
+        fs::write(installed.join("marker.txt"), "valid old install").unwrap();
+        let saved_output = fs::read(&output).unwrap();
+        let missing = parent.path().join("missing");
+        for resource_root in [&missing, &resources] {
+            if resource_root == &resources {
+                fs::write(resources.join("browser/p5/p5.js"), b"damaged").unwrap();
+            }
+            assert!(output_info_with_libraries(&project, None, Some(resource_root)).is_err());
+            assert!(pack_project_at_with_libraries(
+                &project,
+                Some(&output),
+                true,
+                APP_VERSION,
+                Some(resource_root)
+            )
+            .is_err());
+            assert_eq!(fs::read(&output).unwrap(), saved_output);
+            assert!(install_bundle_with_libraries(&bundles, &output, Some(resource_root)).is_err());
+            assert_eq!(
+                fs::read_to_string(installed.join("marker.txt")).unwrap(),
+                "valid old install"
+            );
+            assert_eq!(fs::read_dir(&bundles).unwrap().count(), 1);
+        }
+        fs::write(
+            resources.join("browser/p5/p5.js"),
+            b"window.p5 = function () {};",
+        )
+        .unwrap();
+        let catalog_path = resources.join("catalog.json");
+        let mut catalog: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&catalog_path).unwrap()).unwrap();
+        catalog["libraries"][0]["version"] = serde_json::json!("9.0.0");
+        fs::write(catalog_path, catalog.to_string()).unwrap();
+        let mismatch =
+            install_bundle_with_libraries(&bundles, &output, Some(&resources)).unwrap_err();
+        assert!(mismatch.contains("p5 2.3.4"), "{mismatch}");
+        assert_eq!(
+            fs::read_to_string(installed.join("marker.txt")).unwrap(),
+            "valid old install"
+        );
+        assert_eq!(fs::read(project.join("manifest.json")).unwrap(), original);
+        assert!(!project.join("node_modules").exists());
+    }
+
+    #[test]
+    fn failed_reinstall_keeps_the_previous_valid_install_and_rejects_directory_escape() {
+        let parent = tempfile::tempdir().unwrap();
+        let valid = pack_fixture(parent.path());
+        let bundles = parent.path().join("bundles");
+        let installed = install_bundle(&bundles, &valid).unwrap();
+        fs::write(
+            installed.join("local-marker.txt"),
+            "previous valid installation",
+        )
+        .unwrap();
+        let bad = parent.path().join("bad.pnds");
+        let manifest = fs::read_to_string(installed.join("manifest.json")).unwrap();
+        handcraft_zip(
+            &bad,
+            &[
+                (METADATA_ENTRY, &valid_metadata_json(), false),
+                ("p/manifest.json", &manifest, false),
+                ("p/../../escape/", "", false),
+            ],
+        );
+        assert!(install_bundle(&bundles, &bad).is_err());
+        assert_eq!(
+            fs::read_to_string(installed.join("local-marker.txt")).unwrap(),
+            "previous valid installation"
+        );
+        assert!(!parent.path().join("escape").exists());
+        assert_eq!(
+            fs::read_dir(&bundles).unwrap().count(),
+            1,
+            "failed staging is cleaned"
+        );
     }
 
     #[test]
@@ -1506,6 +2047,7 @@ mod tests {
         let project = dir.path().join("P");
         fs::create_dir_all(&project).unwrap();
         let manifest = crate::project::manifest::Manifest {
+            shared_libraries: vec![],
             schema_version: 1,
             id: "some-id".into(),
             name: "Weird / Name".into(),
@@ -1537,5 +2079,256 @@ mod tests {
         bad.version = "../evil".into();
         let err = bundle_output_path(&project, &bad).unwrap_err();
         assert!(err.contains("single path segment"), "unexpected: {err}");
+    }
+    /// Explicit local candidate evidence, separate from native/device acceptance.
+    /// Run with PNDS_CANDIDATES_DIR pointing to the directory containing the
+    /// actual .pnds files and inventory.json, then cargo test
+    /// local_shared_project_candidates_install_and_repack -- --ignored --nocapture.
+    #[test]
+    #[ignore]
+    fn local_shared_project_candidates_install_and_repack() {
+        let candidates = PathBuf::from(
+            std::env::var("PNDS_CANDIDATES_DIR")
+                .expect("Pass the actual local candidate directory explicitly"),
+        );
+        let inventory: Vec<serde_json::Value> =
+            serde_json::from_slice(&fs::read(candidates.join("inventory.json")).unwrap()).unwrap();
+        assert!(!inventory.is_empty());
+        let resources = Path::new(env!("CARGO_MANIFEST_DIR")).join("resources/shared-libraries");
+        let parent = tempfile::tempdir().unwrap();
+        for candidate in inventory {
+            let id = candidate["id"].as_str().unwrap();
+            let version = candidate["version"].as_str().unwrap();
+            let artifact = candidates.join(format!("{id}-v{version}.pnds"));
+            let expected_hash = candidate["sha256"].as_str().unwrap();
+            assert_eq!(sha256_hex(&artifact).unwrap(), expected_hash);
+            let installed = install_bundle_with_libraries(
+                &parent.path().join("first-install"),
+                &artifact,
+                Some(&resources),
+            )
+            .unwrap();
+            let manifest = crate::project::manifest::load_manifest(&installed).unwrap();
+            assert_eq!(manifest.id, id);
+            assert_eq!(manifest.version, version);
+            assert_eq!(manifest.schema_version, 2);
+            assert_eq!(
+                serde_json::to_value(&manifest.shared_libraries).unwrap(),
+                candidate["sharedLibraries"]
+            );
+            assert!(!installed.join("node_modules").exists());
+            // Optional project-owned real-browser acceptance against these
+            // actual installed bytes. Native/device acceptance stays separate.
+            if let Ok(script) = std::env::var("PNDS_CANDIDATE_BROWSER_SCRIPT") {
+                let playwright = std::env::var("PNDS_PLAYWRIGHT_MODULE")
+                    .expect("Pass the local Playwright module explicitly");
+                let browser = std::env::var("PNDS_BROWSER_EXECUTABLE")
+                    .expect("Pass the browser executable explicitly");
+                let output = std::process::Command::new("node")
+                    .arg(script)
+                    .arg("--project")
+                    .arg(&installed)
+                    .arg("--shared-root")
+                    .arg(&resources)
+                    .arg("--playwright-module")
+                    .arg(playwright)
+                    .arg("--browser-executable")
+                    .arg(browser)
+                    .output()
+                    .expect("Run project-owned browser acceptance");
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                assert!(
+                    output.status.success(),
+                    "{id} browser failed:\n{stdout}\n{stderr}"
+                );
+                println!("{stdout}");
+            }
+            let repacked = parent.path().join(format!("{id}.pnds"));
+            pack_project_at_with_libraries(
+                &installed,
+                Some(&repacked),
+                false,
+                APP_VERSION,
+                Some(&resources),
+            )
+            .unwrap();
+            let reinstalled = install_bundle_with_libraries(
+                &parent.path().join("second-install"),
+                &repacked,
+                Some(&resources),
+            )
+            .unwrap();
+            assert!(!reinstalled.join("node_modules").exists());
+            for file in candidate["files"].as_array().unwrap() {
+                let path = file["path"].as_str().unwrap();
+                let expected = file["sha256"].as_str().unwrap();
+                for project in [&installed, &reinstalled] {
+                    assert_eq!(
+                        sha256_hex(&project.join(path)).unwrap(),
+                        expected,
+                        "{id}/{path}"
+                    );
+                }
+            }
+            assert_eq!(sha256_hex(&artifact).unwrap(), expected_hash);
+            println!("{id} {version}: installed, repacked and reinstalled with all source/asset hashes preserved");
+        }
+    }
+
+    /// Requires explicit local Playwright and Chromium paths; normal CI has no
+    /// browser dependency. Run with PNDS_PLAYWRIGHT_MODULE and
+    /// PNDS_BROWSER_EXECUTABLE set, then cargo test installed_bundle_draws_offline
+    /// -- --ignored --nocapture. App/WKWebView/phone/HTTPS remain separate evidence.
+    #[test]
+    #[ignore]
+    fn installed_bundle_draws_offline_in_real_browser_and_after_refresh() {
+        use crate::project::shared_libraries::LibraryCatalog;
+        use std::net::TcpListener;
+        use std::os::unix::process::CommandExt;
+        use std::process::{Command, Stdio};
+        use std::time::{Duration, Instant};
+        let playwright = std::env::var("PNDS_PLAYWRIGHT_MODULE")
+            .expect("Pass the local Playwright module path explicitly");
+        let chromium = std::env::var("PNDS_BROWSER_EXECUTABLE")
+            .expect("Pass the Chromium executable path explicitly");
+        let parent = tempfile::tempdir().unwrap();
+        let source = parent.path().join("source");
+        fs::create_dir(&source).unwrap();
+        let resources = Path::new(env!("CARGO_MANIFEST_DIR")).join("resources/shared-libraries");
+        let catalog = LibraryCatalog::load(&resources).unwrap();
+        let references: Vec<_> = catalog
+            .libraries
+            .iter()
+            .filter(|library| matches!(library.id.as_str(), "p5" | "qrcode"))
+            .map(|library| serde_json::json!({ "id": library.id, "version": library.version }))
+            .collect();
+        assert_eq!(references.len(), 2);
+        let listeners = [
+            TcpListener::bind("127.0.0.1:0").unwrap(),
+            TcpListener::bind("127.0.0.1:0").unwrap(),
+        ];
+        let ports = listeners
+            .each_ref()
+            .map(|listener| listener.local_addr().unwrap().port());
+        let mut manifest: serde_json::Value =
+            serde_json::from_str(&valid_project_manifest_json()).unwrap();
+        manifest["schemaVersion"] = serde_json::json!(2);
+        manifest["sharedLibraries"] = serde_json::json!(references);
+        manifest["scoreServer"]["entry"] = serde_json::json!("server.mjs");
+        manifest["scoreServer"]["performerPort"] = serde_json::json!(ports[0]);
+        manifest["scoreServer"]["monitorPort"] = serde_json::json!(ports[1]);
+        fs::write(source.join("manifest.json"), manifest.to_string()).unwrap();
+        fs::write(
+            source.join("server.mjs"),
+            include_str!("bundle_runtime.mjs"),
+        )
+        .unwrap();
+        let artifact = parent.path().join("browser-roundtrip.pnds");
+        pack_project_at_with_libraries(
+            &source,
+            Some(&artifact),
+            false,
+            APP_VERSION,
+            Some(&resources),
+        )
+        .unwrap();
+        let installed = install_bundle_with_libraries(
+            &parent.path().join("bundles"),
+            &artifact,
+            Some(&resources),
+        )
+        .unwrap();
+        assert!(installed.starts_with(parent.path().join("bundles")));
+        assert!(!installed.join("node_modules").exists());
+        let saved = crate::project::manifest::load_manifest(&installed).unwrap();
+        let resolved = catalog
+            .resolve(&resources, &saved.shared_libraries)
+            .unwrap();
+        drop(listeners);
+        let node = crate::project::session::node_binary_path().unwrap();
+        let child = Command::new(&node)
+            .arg(installed.join("server.mjs"))
+            .env(
+                "PNDS_SHARED_LIBRARIES",
+                serde_json::to_string(&resolved).unwrap(),
+            )
+            .stdout(Stdio::null())
+            .stderr(Stdio::inherit())
+            .spawn()
+            .unwrap();
+        struct Child(std::process::Child, bool);
+        impl Drop for Child {
+            fn drop(&mut self) {
+                if self.1 {
+                    unsafe {
+                        libc::kill(-(self.0.id() as libc::pid_t), libc::SIGKILL);
+                    }
+                }
+                let _ = self.0.kill();
+                let _ = self.0.wait();
+            }
+        }
+        let mut server = Child(child, false);
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            if std::net::TcpStream::connect(("127.0.0.1", ports[0])).is_ok() {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "installed project did not listen"
+            );
+            assert!(
+                server.0.try_wait().unwrap().is_none(),
+                "installed project exited early"
+            );
+            std::thread::sleep(Duration::from_millis(25));
+        }
+        for port in ports {
+            let helper = Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../scripts/verify-installed-bundle-browser.mjs");
+            let child = Command::new(&node)
+                .arg(helper)
+                .args([
+                    "--playwright-module",
+                    &playwright,
+                    "--browser-executable",
+                    &chromium,
+                    "--origin",
+                    &format!("http://127.0.0.1:{port}/"),
+                    "--expected-version",
+                    &resolved["p5"].version,
+                ])
+                .process_group(0)
+                .stdout(Stdio::inherit())
+                .stderr(Stdio::inherit())
+                .spawn()
+                .unwrap();
+            let mut browser = Child(child, true);
+            let deadline = Instant::now() + Duration::from_secs(45);
+            loop {
+                if let Some(status) = browser.0.try_wait().unwrap() {
+                    assert!(status.success(), "browser drawing verification failed");
+                    break;
+                }
+                assert!(
+                    Instant::now() < deadline,
+                    "browser verification exceeded its deadline"
+                );
+                std::thread::sleep(Duration::from_millis(25));
+            }
+        }
+        unsafe {
+            libc::kill(server.0.id() as libc::pid_t, libc::SIGTERM);
+        }
+        let deadline = Instant::now() + Duration::from_secs(3);
+        while server.0.try_wait().unwrap().is_none() {
+            assert!(Instant::now() < deadline, "installed project did not close");
+            std::thread::sleep(Duration::from_millis(25));
+        }
+        for port in ports {
+            assert!(TcpListener::bind(("0.0.0.0", port)).is_ok());
+        }
     }
 }

@@ -1,6 +1,6 @@
 //! PNDS project `manifest.json` parsing and validation.
 //!
-//! Implements the schemaVersion 1 contract from
+//! Implements the schemaVersion 1/2 contract from
 //! `docs/zh-CN/reference/manifest.md`. All user-facing error strings are
 //! English (the V1 UI is English-only).
 
@@ -15,6 +15,10 @@ const VALID_MODES: [&str; 3] = ["internal", "external", "none"];
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct Manifest {
+    /// Exact App-provided libraries. Schema 2 advertises this required Host capability.
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    #[specta(optional)]
+    pub shared_libraries: Vec<SharedLibraryReference>,
     pub schema_version: u32,
     pub id: String,
     pub name: String,
@@ -38,6 +42,33 @@ pub struct Manifest {
     /// the same variable, zero project changes.
     #[serde(default)]
     pub performer_address: Option<String>,
+}
+
+pub const SHARED_LIBRARY_IDS: [&str; 7] = [
+    "p5",
+    "ml5",
+    "express",
+    "qrcode",
+    "socket.io",
+    "socket.io-client",
+    "osc-min",
+];
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SharedLibraryReference {
+    pub id: String,
+    pub version: String,
+}
+
+pub(crate) fn exact_library_version(version: &str) -> bool {
+    let parts: Vec<_> = version.split('.').collect();
+    parts.len() == 3
+        && parts.iter().all(|part| {
+            !part.is_empty()
+                && part.bytes().all(|byte| byte.is_ascii_digit())
+                && (part.len() == 1 || !part.starts_with('0'))
+        })
 }
 
 impl Manifest {
@@ -79,12 +110,10 @@ pub struct ScoreServer {
     /// (`PNDS_PERFORMER_URL`) — QR, copied address and browser config
     /// from that one URL, page scripts and Socket.IO same-origin under
     /// the external HTTPS entry, monitor on its internal connection.
-    /// Declaration-only (no gateway exists yet): it tells a future
-    /// HTTPS entry that this work adapts, so undeclared works can be
-    /// offered the explicit HTTP fallback instead of a silent
-    /// downgrade. Lenient by contract (manifest.md): absent, `null`,
-    /// `false` and non-boolean values all read as undeclared and never
-    /// fail validation.
+    /// This declares compatibility, not a request to enable HTTPS:
+    /// the gateway also requires `needs_https` and the operator switch.
+    /// Lenient by contract (manifest.md): absent, `null`, `false` and
+    /// non-boolean values all read as undeclared and never fail validation.
     #[serde(default, deserialize_with = "lenient_optional_bool")]
     pub supports_performer_url: Option<bool>,
     /// User request after #174: does this work need the HTTPS entry to
@@ -92,8 +121,9 @@ pub struct ScoreServer {
     /// absent, `null`, `false` and non-boolean values all mean the work
     /// performs without the entry (every legacy project), so the「not
     /// adapted」notice and the HTTP-fallback question never appear for
-    /// it. With `true`, an undeclared `supports_performer_url` work
-    /// gets the explicit fallback choice instead of a silent downgrade.
+    /// it. With `true`, full-URL support and the operator switch enable
+    /// HTTPS, subject to valid configuration; without full-URL support
+    /// the work gets the explicit HTTP choice instead of a silent downgrade.
     #[serde(default, deserialize_with = "lenient_optional_bool")]
     pub needs_https: Option<bool>,
 }
@@ -218,12 +248,38 @@ fn get<'a>(value: &'a Value, path: &str) -> Option<&'a Value> {
 fn validate_schema(value: &Value) -> Result<(), String> {
     // manifest.md: the schema version gate runs before anything else.
     match value.get("schemaVersion").and_then(Value::as_u64) {
-        Some(1) => {}
+        Some(1 | 2) => {}
         _ => {
             return Err(
-                "Unsupported schema version: manifest.json must declare \"schemaVersion\": 1"
+                "Unsupported schema version: manifest.json must declare \"schemaVersion\": 1 or 2"
                     .to_string(),
             );
+        }
+    }
+
+    if let Some(references) = value.get("sharedLibraries") {
+        let references: Vec<SharedLibraryReference> = serde_json::from_value(references.clone())
+            .map_err(|error| {
+                format!("sharedLibraries must be an array of exact id/version references: {error}")
+            })?;
+        if !references.is_empty() && value["schemaVersion"] != 2 {
+            return Err("sharedLibraries requires schemaVersion 2; older Apps do not support shared libraries".into());
+        }
+        let mut seen = std::collections::HashSet::new();
+        for reference in references {
+            let id = reference.id;
+            let version = reference.version;
+            if !SHARED_LIBRARY_IDS.contains(&id.as_str()) {
+                return Err(format!("Unsupported shared library: {id}"));
+            }
+            if !exact_library_version(&version) {
+                return Err(format!(
+                    "Shared library {id} requires an exact version (x.y.z): {version}"
+                ));
+            }
+            if !seen.insert(id.clone()) {
+                return Err(format!("sharedLibraries declares {id} more than once"));
+            }
         }
     }
 
@@ -458,6 +514,30 @@ mod tests {
     use super::*;
     use std::fs;
 
+    #[test]
+    fn shared_references_require_capability_and_exact_unique_versions() {
+        let temp = tempfile::tempdir().unwrap();
+        write_valid_project(temp.path());
+        let raw = fs::read_to_string(temp.path().join("manifest.json")).unwrap();
+        let mut value: Value = serde_json::from_str(&raw).unwrap();
+        value["sharedLibraries"] = serde_json::json!([{ "id": "p5", "version": "2.3.4" }]);
+        assert!(parse_manifest(&value.to_string())
+            .unwrap_err()
+            .contains("schemaVersion"));
+        value["schemaVersion"] = serde_json::json!(2);
+        let parsed = parse_manifest(&value.to_string()).unwrap();
+        assert_eq!(parsed.shared_libraries[0].id, "p5");
+        assert_eq!(parsed.shared_libraries[0].version, "2.3.4");
+        for references in [
+            serde_json::json!([{ "id": "p5", "version": "^2.3.4" }]),
+            serde_json::json!([{ "id": "arbitrary", "version": "1.0.0" }]),
+            serde_json::json!([{ "id": "p5", "version": "2.3.4" }, { "id": "p5", "version": "2.3.4" }]),
+        ] {
+            value["sharedLibraries"] = references;
+            assert!(parse_manifest(&value.to_string()).is_err());
+        }
+    }
+
     /// The Multichannel Signal Generator — the App's bundled validation tool (app-behavior「内置验证工具」)
     /// verification project, unpacked from its pinned `.pnds` by
     /// `npm run utilities:fetch` — must keep passing the App parser and
@@ -480,9 +560,13 @@ mod tests {
             vec![crate::types::AudioMode::Internal]
         );
         assert!(manifest.audio.scsynth.as_ref().unwrap().audio_bus_channels >= 32);
-        // One production dependency (qrcode, monitor QR endpoint) -> the
-        // preflight requires node_modules present (structure.md).
-        crate::project::preflight::check_dependencies(&root).unwrap();
+        // Both published self-contained and shared-reference candidates must
+        // meet the same dependency gate used by the App's public preflight.
+        crate::project::preflight::check_dependencies_with_shared(
+            &root,
+            &manifest.shared_libraries,
+        )
+        .unwrap();
         // (Port availability is checked at session start, not here: a
         // running PNDS App legitimately occupies the example ports.)
     }
@@ -553,7 +637,7 @@ mod tests {
     #[test]
     fn wrong_schema_version_rejected() {
         let dir = tempfile::tempdir().unwrap();
-        write_manifest(dir.path(), r#"{ "schemaVersion": 2 }"#);
+        write_manifest(dir.path(), r#"{ "schemaVersion": 3 }"#);
         let err = load_manifest(dir.path()).unwrap_err();
         assert!(
             err.contains("Unsupported schema version"),
@@ -1055,8 +1139,8 @@ mod tests {
 
     /// `needsHttps` (user request after #174) is lenient like its
     /// sibling: only an explicit boolean reads as a declaration, and
-    /// only `Some(true)` changes behavior (raises the compat notice
-    /// for an undeclared work). Everything else — absent, null,
+    /// only `Some(true)` requests HTTPS (or raises the compat notice
+    /// for an unsupported work). Everything else — absent, null,
     /// `"true"` as a string, `0`, `false` — means the work performs
     /// without the entry: legacy manifests are silent by default.
     #[test]

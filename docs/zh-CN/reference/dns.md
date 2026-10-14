@@ -33,7 +33,7 @@
 
 ## 第三步：开始演出
 
-启动声明了 `supportsPerformerUrl` 且 HTTPS 开关已开的工程时，App 自动把 HTTPS 域名映射到所选 LAN 地址，先在守护进程内部验证解析结果，再发布入口。乐手侧：
+只有工程的 HTTPS 入口实际启用时（显式 `needsHttps: true`、`supportsPerformerUrl: true`、全局开关打开且配置有效，见 [manifest.md](./manifest.md)），App 才自动把 HTTPS 域名映射到所选 LAN 地址，先在守护进程内部验证解析结果，再发布入口。普通 HTTP 工程不创建演出映射。乐手侧：
 
 1. 连接演出 Wi-Fi；
 2. 扫码（或输入演出地址）；

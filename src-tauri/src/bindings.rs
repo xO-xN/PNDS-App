@@ -31,6 +31,8 @@ pub fn generate_bindings() -> Builder<tauri::Wry> {
         creation::prepare_performer_window,
         creation::commit_creation_project,
         creation::describe_creation_projects,
+        creation::get_creation_libraries,
+        creation::adopt_creation_library,
         creation::get_creation_modules,
         creation::add_creation_module,
         creation::list_creation_files,

@@ -138,6 +138,20 @@ vi.mock('@/lib/tauri-bindings', async () => {
       performerVisibilityEvent: makeEvent('performer-visibility-event'),
     },
     commands: {
+      getCreationLibraries: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: {
+          code: 'testValidation',
+          detail: 'Shared library catalog not mocked',
+        },
+      }),
+      adoptCreationLibrary: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: {
+          code: 'testValidation',
+          detail: 'Shared library adoption not mocked',
+        },
+      }),
       getCreationModules: vi.fn().mockResolvedValue({
         status: 'error',
         error: {

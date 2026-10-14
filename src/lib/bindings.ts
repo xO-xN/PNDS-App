@@ -276,6 +276,22 @@ async describeCreationProjects(paths: string[]) : Promise<Result<CreationOption[
     else return { status: "error", error: e  as any };
 }
 },
+async getCreationLibraries(identity: string) : Promise<Result<CreationLibraryCatalog, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_creation_libraries", { identity }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async adoptCreationLibrary(identity: string, adoption: CreationLibraryAdoption) : Promise<Result<CreationLibraryResult, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("adopt_creation_library", { identity, adoption }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async getCreationModules(identity: string) : Promise<Result<CreationModuleCatalog, CreationError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("get_creation_modules", { identity }) };
@@ -1042,13 +1058,13 @@ httpsDomain?: string | null;
 httpsPort?: number | null; 
 /**
  * #140: the operator's entry switch — `Some(true)` activates the
- * trusted-HTTPS gateway for starts of projects that declare
- * `scoreServer.supportsPerformerUrl`. Plain intent: domain, port
- * and material are validated at START (and in the settings
- * section), so switching on with incomplete config surfaces there,
- * never as a mid-start surprise. `None`/`Some(false)` = off, the
- * legacy HTTP flow. Like every entry setting: next start, never a
- * running session.
+ * trusted-HTTPS gateway for starts of projects declaring both
+ * `scoreServer.needsHttps` and `scoreServer.supportsPerformerUrl`.
+ * Ordinary projects keep HTTP without checking HTTPS configuration.
+ * Domain, port and material are validated at START for projects
+ * needing and supporting HTTPS. `None`/`Some(false)` = off, the
+ * HTTP flow. Like every entry setting: next start, never a running
+ * session.
  */
 httpsEnabled?: boolean | null; 
 /**
@@ -1162,6 +1178,10 @@ export type CreationError = { code: CreationErrorCode; detail: string }
 export type CreationErrorCode = "missing" | "permission" | "invalidUtf8" | "tooLarge" | "invalidIdentity" | "pathEscape" | "invalidProject" | "manifestInvalid" | "testValidation" | "testStartup" | "versionConflict" | "targetExists" | "io"
 export type CreationFile = { path: string; size: number; kind: CreationFileKind; category: CreationCategory }
 export type CreationFileKind = "text" | "image" | "binary"
+export type CreationLibrary = { id: string; version: string; kind: SharedLibraryKind; source: SharedLibrarySource; referencedVersion: string | null }
+export type CreationLibraryAdoption = { id: string; version: string; projectVersion: string; manifestVersion: string }
+export type CreationLibraryCatalog = { libraries: CreationLibrary[]; manifestVersion: string; projectVersion: string }
+export type CreationLibraryResult = { manifestVersion: string; alreadyAdded: boolean }
 export type CreationModule = { id: string; version: string; source: ModuleSource; shippedVersion: string; compatibility: ModuleCompatibility | null; files: string[]; state: ModuleState; recordVersion: string | null; error: CreationError | null }
 export type CreationModuleAddResult = { files: string[]; handoffRecorded: boolean; alreadyAdded: boolean; error: CreationError | null }
 export type CreationModuleCatalog = { modules: CreationModule[]; handoffVersion: string | null }
@@ -1408,7 +1428,11 @@ export type HttpsProblemCode =
  */
 export type HttpsValidationOutcome = { summary: HttpsCertificateSummary | null; problems: HttpsProblem[] }
 export type JsonValue = null | boolean | number | string | JsonValue[] | Partial<{ [key in string]: JsonValue }>
-export type Manifest = { schemaVersion: number; id: string; name: string; version: string; description: string | null; scoreServer: ScoreServer; audio: AudioConfig; 
+export type Manifest = { 
+/**
+ * Exact App-provided libraries. Schema 2 advertises this required Host capability.
+ */
+sharedLibraries?: SharedLibraryReference[]; schemaVersion: number; id: string; name: string; version: string; description: string | null; scoreServer: ScoreServer; audio: AudioConfig; 
 /**
  * v1.4.0 (issue #58): the work declares cross-internet (telematic)
  * performance capability. Gates the App's hub-variable injection and
@@ -1488,12 +1512,10 @@ export type ScoreServer = { entry: string; workingDirectory: string; performerPo
  * (`PNDS_PERFORMER_URL`) — QR, copied address and browser config
  * from that one URL, page scripts and Socket.IO same-origin under
  * the external HTTPS entry, monitor on its internal connection.
- * Declaration-only (no gateway exists yet): it tells a future
- * HTTPS entry that this work adapts, so undeclared works can be
- * offered the explicit HTTP fallback instead of a silent
- * downgrade. Lenient by contract (manifest.md): absent, `null`,
- * `false` and non-boolean values all read as undeclared and never
- * fail validation.
+ * This declares compatibility, not a request to enable HTTPS:
+ * the gateway also requires `needs_https` and the operator switch.
+ * Lenient by contract (manifest.md): absent, `null`, `false` and
+ * non-boolean values all read as undeclared and never fail validation.
  */
 supportsPerformerUrl?: boolean | null; 
 /**
@@ -1502,8 +1524,9 @@ supportsPerformerUrl?: boolean | null;
  * absent, `null`, `false` and non-boolean values all mean the work
  * performs without the entry (every legacy project), so the「not
  * adapted」notice and the HTTP-fallback question never appear for
- * it. With `true`, an undeclared `supports_performer_url` work
- * gets the explicit fallback choice instead of a silent downgrade.
+ * it. With `true`, full-URL support and the operator switch enable
+ * HTTPS, subject to valid configuration; without full-URL support
+ * the work gets the explicit HTTP choice instead of a silent downgrade.
  */
 needsHttps?: boolean | null }
 export type ScsynthConfig = { 
@@ -1632,6 +1655,9 @@ export type SetlistReadout = { setlistJson: string; bundles: SetlistBundleFile[]
  * the open flow away from a valid set.
  */
 readme: string | null }
+export type SharedLibraryKind = "browser" | "node"
+export type SharedLibraryReference = { id: string; version: string }
+export type SharedLibrarySource = { url: string; integrity: string }
 export type SynthdefCompileReport = { sclangPath: string | null; produced: string[]; references: SynthdefReferenceCheck[]; output: string; error: string | null }
 export type SynthdefReferenceCheck = { path: string; status: SynthdefReferenceStatus; detail: string | null }
 export type SynthdefReferenceStatus = "verified" | "missing" | "invalid" | "notChecked"

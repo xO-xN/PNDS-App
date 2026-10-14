@@ -9,7 +9,7 @@ PNDS score project 是用户明确选择的一个本地目录。工程拥有并�
 - 工程自己的网络交互与 Socket.IO 协议（如使用）；
 - 工程自己的 OSC 地址、参数与声音控制逻辑；
 - Internal 模式需要的已编译 `.scsyndef`；
-- 生产运行所需的本地依赖和静态资产。
+- 工程自带的生产依赖和静态资产。
 
 工程不是 PNDS App 插件，也不获得 Tauri API。高频演奏消息必须在客户端、工程 Node 服务器和音频目标之间直接传递，不经过 PNDS App 的 Rust/React 层。
 
@@ -28,7 +28,7 @@ project/
 ```text
 project/
 ├── package.json
-├── node_modules/                 # 仅在存在生产依赖时需要
+├── node_modules/                 # 自带或未由确切共享引用覆盖的生产依赖
 ├── public/                       # performer / monitor 静态资源
 ├── audio/                        # 工程音频与 OSC 控制代码
 ├── README.md                     # 可选的工程自述（见下一节）
@@ -53,7 +53,7 @@ Inarticulate III/
 规则：
 
 - App 不执行 `npm install`，运行时不得依赖网络安装；
-- `package.json` 声明了非空 `dependencies` 或 `optionalDependencies` 时，工程必须携带可用的 `node_modules/`；没有生产依赖时不要求创建空 `node_modules/`；
+- 生产依赖（`package.json` 的 `dependencies` 或 `optionalDependencies`）仅在包名和确切版本与 `manifest.sharedLibraries` 引用一致时，由 App 共享包满足；版本范围、不同版本和未引用的包仍须携带可用的 `node_modules/`。自包含工程须自带全部生产依赖；没有生产依赖或全部由确切引用覆盖时，不要求创建空 `node_modules/`；
 - `.scd` 只属于创作与调试阶段，不能作为 App 托管运行时资产；
 - 工程不得依赖宿主机器安装 Node.js、SuperCollider、`sclang` 或第三方 UGen；
 - 官方工程应在 `package.json` 中声明其开发和验证过的 Node major（如 `">=24 <25"`）。
@@ -97,9 +97,23 @@ Inarticulate III/
 
 1. manifest 必填、模式、端口、outputChannels 与 bus 容量校验；
 2. 所有声明路径的 containment 与存在性校验；
-3. 有生产依赖时携带完整 `node_modules`；
+3. 按相同包名／确切版本校验 App 共享包引用，其余生产依赖携带完整 `node_modules`；
 4. performer health 按 [runtime-contract.md](./runtime-contract.md) §5 返回 ready；
 5. monitor 可嵌入并正确响应 resize；
 6. Internal 输出严格遵守 App 注入的 bus 与通道数；
 7. SIGINT/SIGTERM 后释放工程拥有的全部资源；
 8. 在 App 固定 Node runtime 下完成实际启动验证。
+
+## App 共享包
+
+工程可在 [manifest.json](./manifest.md) schema 2 中明确引用 App 的固定库。
+共享文件留在 App，不复制进工程；项目页面、标准模块源码、模型、权重、谱面与音频仍归工程。
+自包含工程继续从自带依赖运行。共享引用不会把作者源码的本地 `require` 或浏览器 CDN 地址
+自动改成共享入口；作者或外部 agent 必须按 [运行契约](./runtime-contract.md) 与
+[p5 示例](./p5js.md) 接线并真实验证。引用变化同时更新工程版本；缺确切资源不静默回落。
+
+ASBS 等预编译 Preact 作品须保留完整 `dist/` 页面、字体和全部谱面资产。
+ASBS 2.1.0 仅引用共享 Express 5.3.0、qrcode 1.5.4 和 Socket.IO／client 4.8.4，
+在预编译页面入口前从工程同源服务加载客户端浏览器文件，音频模式仍为 `none`。
+共享引用不会引入 p5、ml5、osc-min 或安全上下文需求。打包安装后仍须验证真实页面
+和控制行为，不能用 health 通过代替作品验收。

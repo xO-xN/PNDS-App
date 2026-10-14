@@ -24,7 +24,7 @@ Rules:
 - the App does not interpret the work's high-rate messages;
 - the Project never stops the App's scsynth;
 - the Project never modifies App preferences;
-- the App never modifies the Project directory or manifest;
+- runtime and App upgrades do not modify the Project directory or manifest; explicit creation-mode App shared package adoption saves atomically under draft, identity and disk-version guards;
 - whoever owns a process or socket closes it.
 
 ## 2. The fixed runtime
@@ -60,6 +60,18 @@ PNDS_HOST_IP=<selected LAN IPv4 | manifest performerAddress>
 ```
 
 v1.4.0 (#62): when the manifest declares `performerAddress` (e.g. `mywork.local`), the `PNDS_HOST_IP` value is replaced by that declaration — zero project changes; the Project keeps reading this variable to build QR and connection addresses. Undeclared works inject the selected LAN IPv4 (today's behavior). Declaration format and tolerance: [manifest.md](./manifest.md).
+
+App shared packages (explicit schema-2 references):
+
+```text
+PNDS_SHARED_LIBRARIES={"p5":{"version":"2.3.4","kind":"browser","path":"<verified absolute local entry>"}}
+```
+
+- JSON contains only this project's declared, exact-version and integrity-checked references. With no references, the inherited variable is removed;
+- `kind` is `browser` or `node`; optional `browserPath` supplies an additional browser entry from the same version;
+- paths are for the local Node server. Browser libraries are served by the project's own HTTP server at fixed relative routes; monitor, performer and phones load same-origin URLs, including through the trusted HTTPS entry;
+- authors explicitly load Node entries by absolute path (ESM uses `pathToFileURL`), without system Node, maintainer `node_modules` or runtime npm;
+- missing, damaged or mismatched resources fail before start. The App never wires sources automatically, changes references at upgrade, or adds models to shared resources.
 
 Internal:
 
@@ -103,7 +115,7 @@ The full performer URL (#138 frozen contract; since #140 the App's local trusted
 PNDS_PERFORMER_URL=<full performer root URL, e.g. https://show.example.org:8443/>
 ```
 
-- the App injects it only while the local trusted HTTPS entry is in effect for the current performance; the entry applies only to works declaring `scoreServer.supportsPerformerUrl: true` (field semantics: [manifest.md](./manifest.md)) AND requires the settings「可信 HTTPS」enable switch to be on, the domain/port configured, and the certificate material to revalidate at that moment. When it is not injected (switch off, work undeclared, config incomplete) a Project that cannot read it simply keeps running the original HTTP flow — for a work that DID declare adaptation, incomplete config fails the start with an actionable error instead of silently falling back to HTTP;
+- **Ordinary projects default to HTTP.** The App injects it only while the local trusted HTTPS entry is in effect: the project explicitly declares both `scoreServer.needsHttps: true` and `scoreServer.supportsPerformerUrl: true`, the global HTTPS switch is on, the domain/port are configured, and certificate material revalidates at that moment (field semantics: [manifest.md](./manifest.md)). `supportsPerformerUrl` is compatibility only; phones, QR codes and ordinary touch do not activate HTTPS. Without the need, or with the switch off, there is no injection and HTTP remains. With need and adaptation declared, an enabled switch and incomplete/invalid settings fail startup clearly, without silent fallback; need without adaptation retains the explicit HTTP compatibility confirmation;
 - it is the **full root URL** the Host determined for this performance: protocol, domain and the actual port. Every address the Project exposes outward (QR code, copied address, browser connection config) uses it, taking priority over any address assembled from `PNDS_HOST_IP`;
 - it is not a new value for `PNDS_HOST_IP` and not a hub URL: `PNDS_HOST_IP` (and the node variables above) keep their semantics and are injected as usual;
 - the full contract (project identity, entry access context, the claim-token origin semantics) is §15.
@@ -333,7 +345,7 @@ PNDS guarantees discrete signal output only; it takes no responsibility for chan
 
 ```text
 1. App cleans up leftover child processes it can prove it owns
-2. preflight: manifest, paths, dependencies, ports, modes, bus capacity
+2. preflight: manifest, paths, exact shared resources, dependencies, ports, modes, bus capacity
 3. enumerate the selected device's capabilities; compute N/H/K/B
 4. start scsynth; wait for /status
 5. start the Node score server with the environment injected
@@ -542,8 +554,9 @@ This section freezes the public contract between the local trusted HTTPS entry a
 ### The variable and the capability declaration
 
 - the startup variable `PNDS_PERFORMER_URL` (§3): the full performer root URL injected while the entry is in effect — protocol, domain and actual port included;
-- the capability declaration `scoreServer.supportsPerformerUrl: true` ([manifest.md](./manifest.md)): the work promises to read that full URL, to build its QR and connection config from it, and to load page scripts and real-time connections under that origin; absent = an unadapted legacy work, and the entry must not silently apply to it (#140's shipped behavior: a prominent notice in the settings card plus a confirm dialog before start — the operator explicitly chooses「Start with HTTP」to proceed, and canceling touches nothing);
-- priority: when `PNDS_PERFORMER_URL` is provided, every outward-facing address of the Project uses that full URL; when it is absent, `http://<PNDS_HOST_IP>:<performerPort>/` continues to apply (today's behavior) — no forced migration of old manifests.
+- the capability declaration `scoreServer.supportsPerformerUrl: true` ([manifest.md](./manifest.md)): the work promises to read that full URL, to build its QR and connection config from it, and to load page scripts and real-time connections under that origin. This capability alone never enables HTTPS;
+- the need declaration `scoreServer.needsHttps: true`: declare it only when the work actually uses APIs requiring a secure context. It combines with adaptation, the global switch and valid material to select HTTPS; ordinary projects use HTTP. Need without adaptation and with the switch on shows the notice and requires an explicit “Start with HTTP” choice; cancel leaves the performance unchanged;
+- priority: the Host selects one performer URL for the performance. When `PNDS_PERFORMER_URL` is provided, every outward-facing address uses it exactly; when absent, use `http://<PNDS_HOST_IP>:<performerPort>/`. QR, copied address and browser config share that resolution; page scripts and Socket.IO use the performer page's current origin. Projects neither prefer HTTPS themselves nor replace an injected URL with a LAN address.
 
 ### Project identity and the entry access context
 

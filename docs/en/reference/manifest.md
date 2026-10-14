@@ -1,5 +1,41 @@
 # manifest.json
 
+## App shared package capability and schemaVersion 2
+
+Self-contained projects continue to use `schemaVersion: 1`. A project requiring
+App shared packages must declare `schemaVersion: 2`, so older Apps reject a
+capability they cannot execute. This App accepts 1 and 2; other runtime, audio and
+path fields keep their existing meaning.
+
+```json
+{
+  "schemaVersion": 2,
+  "version": "0.2.0",
+  "sharedLibraries": [{ "id": "p5", "version": "2.3.4" }]
+}
+```
+
+This is a field fragment; all other required fields remain required.
+`sharedLibraries` is an array of exact references. Supported IDs are only `p5`,
+`ml5`, `express`, `qrcode`, `socket.io`, `socket.io-client`, and `osc-min`.
+Versions must be exact `x.y.z`; repeated IDs, ranges, unknown IDs, missing versions
+and `null` are rejected. Absent or empty references need no shared resources; a
+nonempty array requires schema 2.
+
+In creation mode, use “Add shared package” in the Modules heading and enter a new
+project version. One atomic manifest replacement saves the reference, project
+version and schema together. Manifest drafts, read-only sources, changed workspace
+identities, path escapes or disk-version conflicts refuse adoption and preserve
+the old file. Adoption does not copy a library, wire author sources, download
+resources or start a project. App upgrades and temporary experiments never adopt
+another version automatically.
+
+Preflight and each start verify the exact local resources. Missing, damaged or
+mismatched resources fail clearly, without version substitution. Models, scores
+and audio stay in the project. See [p5js.md](./p5js.md) for same-origin wiring and
+[runtime-contract.md](./runtime-contract.md) §3 for injection. The example's 2.3.4
+is a validation candidate; final release versions follow work acceptance.
+
 ## Example
 
 ```json
@@ -48,6 +84,7 @@ audio.supportedModes
 
 ```text
 description
+sharedLibraries
 telematic
 performerAddress
 scoreServer.supportsPerformerUrl
@@ -74,14 +111,15 @@ audio.standaloneTarget
 
 - a boolean declaring that the work adapts to the Host-provided **full performer URL** (`PNDS_PERFORMER_URL`, see [runtime-contract.md](./runtime-contract.md) §3/§15): QR code, copied address and browser connection config all use that one full URL; page scripts and Socket.IO load and connect same-origin under it; the monitor keeps its internal connection;
 - absent, `null`, `false` and non-boolean values all read as **undeclared**, without error (preflight tolerance, same as `telematic`) — only an explicit `"supportsPerformerUrl": true` declares;
-- a capability declaration only, carrying no configuration: certificates, domain and entry lifecycle belong entirely to the App side — the manifest never sees them;
-- undeclared works are unaffected: the App does not inject `PNDS_PERFORMER_URL` and the Project keeps running its original HTTP flow (the later entry patch uses this declaration to tell "adapted" from "needs an explicit HTTP fallback").
+- a capability declaration only: it **does not request HTTPS**. Ordinary projects use HTTP even when this capability is declared and the global HTTPS switch is on. Certificates, domain and entry lifecycle belong entirely to the App side — the manifest never sees them;
+- undeclared works receive no `PNDS_PERFORMER_URL` and keep their original HTTP flow; the `needsHttps` rules below determine whether explicit compatibility confirmation is required.
 
 `scoreServer.needsHttps`:
 
-- a boolean declaring that this work **needs the HTTPS entry to perform** (phone QR joining, secure-context sensors and the like) — **opt-in: only an explicit `"needsHttps": true` declares the need**; absent, `null`, `false` and non-boolean values all read as **not needing it** (preflight tolerance, same lenient shape as `supportsPerformerUrl`) — **every legacy project is exempt automatically**;
-- it decides the notices and nothing else: "declared × `supportsPerformerUrl` undeclared × entry switch on" → the settings card shows the "not adapted" notice and start asks the HTTP-fallback question; works without the declaration get neither and run their original HTTP flow silently — **previously created projects never see the sidebar notice again**;
-- never a behavior switch: whether the entry opens stays with `resolve_entry_launch` (`supportsPerformerUrl: true` remains the entry's hard condition); this field only raises or waives the notices.
+- a boolean declaring that the work actually uses **browser features requiring a trusted secure context**, such as motion sensors, camera or microphone. Only an explicit `"needsHttps": true` declares the need; absent, `null`, `false` and non-boolean values all mean no need, without error. Phone participation, QR joining and ordinary touch alone do not require HTTPS;
+- **participates in entry selection**: the App enables HTTPS only when `needsHttps: true`, `supportsPerformerUrl: true`, the global HTTPS switch is on, and the domain, port and certificate material validate. A project without the need always keeps HTTP; missing or invalid HTTPS settings do not affect its start;
+- with the switch off, HTTP remains in use. If the need is declared but adaptation is not, the enabled switch shows the “not adapted” notice and requires an explicit “Start with HTTP” choice; cancel does not start. A project declaring both fields with the switch on and invalid settings fails startup clearly, without silent fallback;
+- authoring agents inspect the browser APIs actually used before declaring the need, then record the reason and HTTP/HTTPS verification in the work's handoff. See [runtime-contract.md](./runtime-contract.md) §3/§15 for the full entry and address-priority contract.
 
 `audio.outputChannels`:
 

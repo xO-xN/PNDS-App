@@ -14,7 +14,18 @@ use std::path::Path;
 /// `node_modules/`. Zero-dependency projects need none. `devDependencies`
 /// are irrelevant at runtime, `engines.node` is advisory and never affects
 /// the outcome, and the check never runs npm or touches the network.
+#[cfg(test)]
 pub fn check_dependencies(project_root: &Path) -> Result<(), String> {
+    check_dependencies_with_shared(project_root, &[])
+}
+
+/// A shared reference covers only the same exact package declaration.
+/// Source wiring remains the author's responsibility; resource validation is
+/// performed by the caller against this launch's captured manifest.
+pub fn check_dependencies_with_shared(
+    project_root: &Path,
+    references: &[crate::project::manifest::SharedLibraryReference],
+) -> Result<(), String> {
     let package_json = project_root.join("package.json");
     if !package_json.is_file() {
         return Ok(());
@@ -25,13 +36,22 @@ pub fn check_dependencies(project_root: &Path) -> Result<(), String> {
     let parsed: serde_json::Value = serde_json::from_str(&body)
         .map_err(|e| format!("{} is not valid JSON: {e}", package_json.display()))?;
 
-    let mut requires_node_modules = false;
+    let mut local_dependencies = Vec::new();
     for field in ["dependencies", "optionalDependencies"] {
         match parsed.get(field) {
             None | Some(serde_json::Value::Null) => {}
             Some(serde_json::Value::Object(entries)) => {
-                if !entries.is_empty() {
-                    requires_node_modules = true;
+                for (name, version) in entries {
+                    let covered = references.iter().any(|reference| {
+                        crate::project::manifest::SHARED_LIBRARY_IDS
+                            .contains(&reference.id.as_str())
+                            && crate::project::manifest::exact_library_version(&reference.version)
+                            && reference.id == *name
+                            && version.as_str() == Some(reference.version.as_str())
+                    });
+                    if !covered {
+                        local_dependencies.push(format!("{name}@{version}"));
+                    }
                 }
             }
             Some(_) => {
@@ -43,13 +63,20 @@ pub fn check_dependencies(project_root: &Path) -> Result<(), String> {
         }
     }
 
-    if requires_node_modules {
+    if !local_dependencies.is_empty() {
         let node_modules = project_root.join("node_modules");
         if !node_modules.is_dir() {
-            return Err(format!(
+            let mut message = format!(
                 "Project dependencies are missing.\nExpected: {}",
                 node_modules.display()
-            ));
+            );
+            if !references.is_empty() {
+                message.push_str(&format!(
+                    "\nNot covered by exact shared references: {}. Keep local dependencies or declare the same exact package version.",
+                    local_dependencies.join(", ")
+                ));
+            }
+            return Err(message);
         }
     }
     Ok(())
@@ -117,6 +144,47 @@ mod tests {
 
     fn write_package_json(dir: &Path, body: &str) {
         fs::write(dir.join("package.json"), body).unwrap();
+    }
+
+    #[test]
+    fn exact_shared_dependencies_do_not_need_project_node_modules() {
+        let dir = tempfile::tempdir().unwrap();
+        write_package_json(
+            dir.path(),
+            r#"{"dependencies":{"express":"5.3.0","p5":"2.3.4"},"optionalDependencies":{"qrcode":"1.5.4"}}"#,
+        );
+        let references =
+            [("express", "5.3.0"), ("p5", "2.3.4"), ("qrcode", "1.5.4")].map(|(id, version)| {
+                crate::project::manifest::SharedLibraryReference {
+                    id: id.into(),
+                    version: version.into(),
+                }
+            });
+
+        check_dependencies_with_shared(dir.path(), &references).unwrap();
+        assert!(!dir.path().join("node_modules").exists());
+        assert!(check_dependencies(dir.path()).is_err());
+    }
+
+    #[test]
+    fn shared_references_preserve_local_requirements_for_other_versions_and_packages() {
+        let dir = tempfile::tempdir().unwrap();
+        let references = [crate::project::manifest::SharedLibraryReference {
+            id: "express".into(),
+            version: "5.3.0".into(),
+        }];
+        for declaration in [
+            r#"{"dependencies":{"express":"4.22.3"}}"#,
+            r#"{"dependencies":{"express":"^5.3.0"}}"#,
+            r#"{"dependencies":{"express":"5.3.0","project-private-library":"1.0.0"}}"#,
+        ] {
+            write_package_json(dir.path(), declaration);
+            let error = check_dependencies_with_shared(dir.path(), &references).unwrap_err();
+            assert!(error.starts_with("Project dependencies are missing."));
+            assert!(error.contains("Not covered by exact shared references"));
+        }
+        fs::create_dir(dir.path().join("node_modules")).unwrap();
+        check_dependencies_with_shared(dir.path(), &references).unwrap();
     }
 
     #[test]

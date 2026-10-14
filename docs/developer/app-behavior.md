@@ -208,9 +208,10 @@ Rust session manager 是运行状态真源。React 不得用本地 reset 伪造�
 
 #139 交付准备面之后，#140 交付入口本体：设置「可信 HTTPS」顶部新增**启用开关**（普通偏好，下次启动生效）；入口与 session 生命周期绑定，状态经既有 session snapshot 承载（新增 `httpsEntry`：off / preparing / ready / error + 固定 URL + 错误文案）。
 
-- **激活条件**（后端 `resolve_entry_launch` 是权威）：开关开 × 工程 `scoreServer.supportsPerformerUrl: true` × 域名端口已配置 × 材料按公有信任**当下重校验通过**。任一不满足而非全部满足 → 不开入口（原 HTTP 流程，字节级不变）；「开关开 × 已声明 × 配置不全」→ **启动失败**并给出可行动错误（绝不静默退回 HTTP）；
+- **激活条件**（后端 `resolve_entry_launch` 是权威）：工程显式 `scoreServer.needsHttps: true` × `scoreServer.supportsPerformerUrl: true` × 开关开 × 域名端口已配置 × 材料按公有信任**当下重校验通过**。普通工程默认 HTTP，兼容完整 URL、手机、扫码与普通触摸都不请求 HTTPS；`needsHttps` 缺省、`null`、`false` 或非布尔值时不创建网关，HTTPS 配置无效也不阻止启动。「需求和能力均声明 × 开关开 × 配置不全或无效」→ **启动失败**并给出可行动错误，绝不静默回退；开关关闭沿用 HTTP；需要但未适配沿用下述显式确认；
 - **启动顺序**：端口 preflight 后、子进程 spawn 前绑定 listener（端口冲突 / 材料失败走既有 fail-start 清理）；URL 在此固定并注入 `PNDS_PERFORMER_URL`（§3）；session ready 后独立探测线程经入口做 TLS/HTTP 探测（连绑定地址、SNI=域名、Mozilla 根校验、经隧道要求 health 200），成功才发布 entry ready——**工程 health ready 与入口 ready 是两项事实**；
 - **UI 面**：设置卡（运行卡选中时）「入口」行四态着色 + URL（点击复制）；窗口菜单 Performer 地址项在入口生效时复制入口 URL（Conductor 项保持内部 HTTP origin）；运行期入口故障在入口行报告，**不**结束本地音频 / 服务、**不**自动改发 HTTP 二维码；
+- **地址一致**：Host 决定本次 performer URL；QR、复制地址和页面配置消费同一结果，页面脚本与 Socket.IO 同源。需要安全上下文的工程按实际 API 显式声明，普通工程不因全局开关改成 HTTPS。验收覆盖普通已适配工程在开关打开、材料有效或无效时仍使用 HTTP，以及传感器工程的 HTTPS 选择与既有失败路径；
 - **兼容确认**（开关开 × 工程声明了 `scoreServer.needsHttps: true` × 未声明 `supportsPerformerUrl`）：设置卡醒目提示 + 启动确认对话框（「使用 HTTP 启动」/取消；restart 与切换工程同受此门；取消则不停止任何运行中的会话，保留待应用设置与 Change 动作）。`needsHttps` 是 opt-in 声明（#174 后用户调整）——缺省与 `false`（即所有旧工程）两者皆无，安静走原 HTTP 流程；纯函数 `httpsCompatBlocked` 单点裁决，启动门与设置卡永不漂移；
 - **停止**：teardown 第一步关入口（listener + 活动连接 + 受管资源），先于 Node/scsynth；Stop / Restart / 替换 / 确认退出 / 启动失败清理全部覆盖；入口生命周期 = session 生命周期（§15：替换后旧 QR 不路由到新工程）；
 - **边界**：网关是传输转发（hyper 1 + rustls，不解析 Socket.IO 协议），monitor / 投影 / 本机 health / hub 路径不经入口；资源有界（连接上限 64、流式 body、固定转发缓冲）；测试中测试 CA 只进测试客户端信任库，绝不改系统信任；

@@ -4,6 +4,8 @@ For operators: how to prepare a trusted HTTPS entry where phones join by scannin
 
 ## Why it exists
 
+Ordinary projects use HTTP, including phone QR joining and ordinary touch works. Prepare this HTTPS entry only for a work that actually needs secure-context features and declares `scoreServer.needsHttps: true`; `supportsPerformerUrl` declares full-URL compatibility only. See [manifest.md](./manifest.md) for declarations and entry selection.
+
 iOS Safari exposes motion, camera and microphone capabilities only in a trusted **secure context**. The existing LAN HTTP entry cannot reliably satisfy that, while asking every performer to install a root certificate, flip a trust switch in system settings, or run a VPN makes joining a performance needlessly hard.
 
 The goal: connect to the performance Wi-Fi → scan the code → confirm the browser permissions the work asks for. **No certificate installs, no VPN, no phone-side DNS edits — and no accepting certificate warnings as a normal joining step.**
@@ -74,9 +76,9 @@ Notes:
 
 ## Entry lifecycle (since #140)
 
-Once the material is ready, flip the **enable switch** at the top of the settings「可信 HTTPS」section and the entry rides the performance lifecycle:
+Once the material is ready, flip the **enable switch** at the top of the settings「可信 HTTPS」section. The switch allows projects needing HTTPS to use the entry; ordinary projects retain HTTP:
 
-- **Start**: a work declaring `supportsPerformerUrl: true` gets, at its next start, a TLS gateway on the selected LAN interface and the configured port that forwards phone requests verbatim to the local performer server (pages, static assets, Socket.IO polling and WebSocket all ride the one entry); the full URL (`https://domain:port/`) is fixed at start and injected as `PNDS_PERFORMER_URL` — the project's QR, the menu's copy item and the sidebar entry row all read the same string.
+- **Start**: only a project explicitly declaring both `scoreServer.needsHttps: true` and `scoreServer.supportsPerformerUrl: true`, with the switch on and valid settings, gets a TLS gateway at its next start. It binds the selected LAN interface and configured port, forwarding phone requests verbatim to the local performer server (pages, static assets, Socket.IO polling and WebSocket all ride the one entry). The full URL (`https://domain:port/`) is fixed at start and injected as `PNDS_PERFORMER_URL`; the project's QR, the menu's copy item and the sidebar entry row read the same string. Without the need, no gateway or HTTPS startup-material validation occurs and the address stays HTTP.
 - **Readiness**: after the project health is ready, the App probes the entry itself over TLS/HTTP (validating the certificate for the domain and fetching health through the tunnel) and marks the entry **ready** only on success. That proves the Host-side tunnel only — phones' DNS and trust remain the final device acceptance's business.
 - **Status surfaces**: the「Entry」row of the sidebar settings card (running card selected) shows preparing / ready / fault plus the URL (click to copy); the Window menu's Performer address item copies the entry URL while it is in effect.
 - **Runtime faults**: an entry fault (e.g. the interface vanished under the listener) is reported as an entry fault only — local audio and servers keep running, no automatic HTTP QR swap; recovery is the operator's explicit restart.
@@ -93,4 +95,4 @@ Once the material is ready, flip the **enable switch** at the top of the setting
 
 ## Relationship to projects
 
-A project declares via `scoreServer.supportsPerformerUrl: true` that it reads the Host-provided full performer URL and connects same-origin ([manifest.md](./manifest.md)); undeclared legacy projects are unaffected and keep the HTTP flow. The Host-side configuration, import, validation and protected storage shipped with #139, and the TLS entry gateway with #140 — once the material is ready, no further preparation is needed for the entry itself.
+A project declares full-URL reading and same-origin compatibility through `scoreServer.supportsPerformerUrl: true`, and its actual secure-context requirement through `scoreServer.needsHttps: true` ([manifest.md](./manifest.md)). Ordinary projects default to HTTP; HTTP also remains when the switch is off. The project builds QR, copied address and browser config from the Host's selected URL for this performance; an injected URL takes priority over any assembled address. Host-side configuration, import, validation and protected storage shipped with #139, and the TLS entry gateway with #140.

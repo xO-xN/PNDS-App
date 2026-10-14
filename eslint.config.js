@@ -82,6 +82,7 @@ export default tseslint.config(
         Buffer: 'readonly',
         URL: 'readonly',
         fetch: 'readonly',
+        AbortSignal: 'readonly',
         __dirname: 'readonly',
         __filename: 'readonly',
         global: 'readonly',
@@ -133,6 +134,7 @@ export default tseslint.config(
       // Unpacked utility tools staged for release bundling (npm run
       // utilities:fetch) — same standalone Node projects.
       'src-tauri/resources/utilities/**',
+      'src-tauri/resources/shared-libraries/**',
       // Frozen upstream CommonJS/UMD; public exports and syntax checked by
       // creation-module-assets.test.mjs without rewriting the source snapshot.
       'src-tauri/resources/modules/**/*.js',

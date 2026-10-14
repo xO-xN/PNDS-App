@@ -22,7 +22,7 @@ monitorApp.get('/qr', qrHandler(performerUrl))
 ```
 
 - **只在 monitor 端**。performer 端口没有 `/qr`——二维码是给「还没打开 performer 页的人」看的，只出现在 monitor 页上。
-- 端点返回一张 PNG（`image/png`）。编码内容的解析优先级：入口生效时 App 注入的 `PNDS_PERFORMER_URL`（完整 URL，如 `https://show.example.org:8443/`）优先；未提供时回落 `http://<PNDS_HOST_IP>:<performerPort>/`。IP 由 `lib/network.js` 解析宿主机的局域网地址（可用环境变量 `PNDS_HOST_IP` 覆盖），端口来自 manifest.json。
+- 端点返回一张 PNG（`image/png`）。App 为本次演出选择唯一网址：注入了 `PNDS_PERFORMER_URL` 时原样编码该完整 URL；未提供时回落 `http://<PNDS_HOST_IP>:<performerPort>/`。普通工程的 QR 默认是 HTTP，模块和工程不自行选择 HTTPS。IP 由 `lib/network.js` 解析宿主机的局域网地址（可用环境变量 `PNDS_HOST_IP` 覆盖），端口来自 manifest.json。
 - 生成参数取 `lib/qr.js` 的默认值：宽度 480 px、边距 1、纠错等级 M。想改尺寸或边距，在 server.js 挂载处传第二个参数：
 
 ```js
@@ -43,4 +43,4 @@ monitor 页用一个普通 `<img>` 标签引用端点，不需要任何 JS：
 
 - 编码内容别改。乐手扫码后的落地页就是 performer 页，这是整套「扫码入座」流程的入口（座位机制见[乐手身份与座位](./players.md)）。
 - 码按当前解析的 performer URL 生成。演出机换了网络后重启工程即可，monitor 页刷新后拿到新码。
-- 声明 `scoreServer.supportsPerformerUrl: true` 的工程，在 App 的本地可信 HTTPS 入口下扫码直达同源页面——页面脚本与 Socket.IO 都在该 origin 内，不需要工程处理证书（[runtime-contract.md](../reference/runtime-contract.md) §15）。未声明时行为与今天完全一致。
+- `scoreServer.supportsPerformerUrl: true` 仅是完整网址兼容能力。只有实际调用安全上下文 API 的作品才声明 `scoreServer.needsHttps: true`；两者声明、全局开关打开且配置有效时，App 才选择 HTTPS。扫码、手机与普通触摸本身不要求 HTTPS。二维码、复制地址和浏览器配置共用 Host 选择的 URL，页面脚本与 Socket.IO 使用当前 performer origin（[runtime-contract.md](../reference/runtime-contract.md) §15）。

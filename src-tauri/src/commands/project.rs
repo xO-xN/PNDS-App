@@ -75,7 +75,8 @@ pub(crate) fn preflight_candidate(
     }
 
     let manifest = load_manifest(&root)?;
-    preflight::check_dependencies(&root)?;
+    crate::project::shared_libraries::resolve_for_app(app, &manifest.shared_libraries)?;
+    preflight::check_dependencies_with_shared(&root, &manifest.shared_libraries)?;
     preflight::check_ports_available(
         manifest.score_server.performer_port,
         manifest.score_server.monitor_port,

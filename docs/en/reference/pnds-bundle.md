@@ -2,7 +2,7 @@
 
 ## What it is
 
-A `.pnds` file is a **transport container**: one self-contained score Project plus a piece of bundle metadata, compressed into a single file for easy copying and distribution.
+A `.pnds` file is a **transport container**: one score Project (self-contained dependencies or explicit App shared references) plus a piece of bundle metadata, compressed into a single file for easy copying and distribution.
 
 - the Project directory inside the bundle is an ordinary directory Project that complies with the project-structure spec in [structure.md](./structure.md);
 - the App never runs a Project from inside the archive — installation unpacks it once, and it then runs exactly like a directory Project;
@@ -38,7 +38,7 @@ The workspace packages saved files on disk; **unsaved drafts are excluded and ar
 Pre-pack validation (any failure refuses packing with a readable error):
 
 1. the required manifest and server entry files exist, `manifest.json` passes the App's full load validation, and **every declared synthdef artifact** exists inside the Project, regardless of audio mode;
-2. dependency check: when `package.json` declares non-empty production dependencies (`dependencies` / `optionalDependencies`), the Project must already carry `node_modules/`;
+2. dependency check: a production dependency in `package.json` (`dependencies` / `optionalDependencies`) may omit its local copy only when `sharedLibraries` covers the same name and exact version. Other dependencies require `node_modules/`; `^` / `~` and other ranges are not covered. Every shared reference must pass exact local-version, complete file-list, size and SHA-256 validation;
 3. packing performs static file validation only: it **runs no npm commands**, touches no network, does not compile automatically or invoke a runtime preflight with process cleanup or startup effects, and leaves the source Project and current runtime unchanged.
 
 Staging and the exclusion list:
@@ -81,15 +81,15 @@ Double-click a `.pnds` (the App declares the file association) or pick it in the
 
 1. validates `pnds-bundle.json` (present, parseable, `formatVersion` supported);
 2. validates the structure (single root directory, `manifest.json` inside it);
-3. synchronously unpacks once into the App data directory `bundles/<id>-<version>/` (`id` and `version` taken from the manifest inside the bundle);
-4. runs the full manifest validation against the installed directory;
+3. unpacks into private staging under the App data directory `bundles/`, on the same filesystem as the install slot;
+4. validates the complete manifest, every declared SynthDef, production dependencies and exact shared resources before publishing `bundles/<id>-<version>/` (`id` and `version` taken from the manifest inside the bundle);
 5. then flows through exactly the same openProject → preflight → session pipeline as a directory Project.
 
 The Project list (sidebar and Settings → Projects) shows the manifest's `name` (the App learns and persists it after every successful preflight), not the install directory name `<id>-<version>`; a manual rename (⌘R) still takes precedence.
 
 Overwriting reinstall:
 
-- the install directory name follows `<id>-<version>`; opening the same `id`+`version` again **always reinstalls over it** (old directory deleted, then unpacked);
+- the install directory name follows `<id>-<version>`; opening the same `id`+`version` again **always reinstalls over it** (the new validated directory is atomically exchanged; the old install is not deleted first);
 - `id` and `version` must each be a single path segment (values containing `/`, `\` or `..` are rejected).
 
 Security:
@@ -104,7 +104,7 @@ Directory reclamation:
 
 ## Version semantics: any content change must bump the version
 
-The recipient's install slot is decided by **`<id>-<version>`**, and re-opening the same `id`+`version` **always reinstalls over it** (delete old directory, unpack; the file opened last wins).
+The recipient's install slot is decided by **`<id>-<version>`**, and re-opening the same `id`+`version` **always reinstalls over it** (atomically replace after full validation; the last successfully opened file wins).
 
 So **any content change must increment the manifest's `version`**. What happens without the bump:
 
@@ -128,6 +128,36 @@ shasum -a 256 <name>-<version>.pnds
 ```
 
 A match with the creator's value means the transfer was lossless and it's the intended build.
+
+## Distributing shared references
+
+A shared Project still uses transport `formatVersion: 1`, with
+`manifest.schemaVersion: 2` inside the Project. The bundle carries exact
+`sharedLibraries` IDs and versions; App resources are never copied or
+materialised into it. Older Apps reject schema 2. Recipients need an App
+providing the same exact resources; latest or other versions never substitute.
+Self-contained Projects retain schema 1 and their own production dependencies.
+
+The output probe, packing, copied staging and installation staging all use the
+same static runtime-condition gate. Missing libraries, exact versions, closure
+files or damaged content fail installation while preserving an existing valid
+install. New slots never retain partial Projects. Neither the original `.pnds`
+nor author sources are modified. New installs use an exclusive rename; existing
+slots use an atomic exchange followed by old-staging cleanup. Symlink or
+non-directory install targets are rejected.
+
+Models, weights, score assets, pages and audio continue to travel with the
+Project; standard module sources remain project-owned. Runtime rechecks shared
+conditions and injects only declared resources. Browsers receive the library
+through the Project's own HTTP / trusted HTTPS same-origin route; see
+[p5js.md](./p5js.md). Adopting or changing references also updates the Project
+version. App upgrades and temporary experiments never change source or bundle
+references.
+
+Verify actual Node loading, browser drawing, input, refresh, restart and shutdown
+after the pack/install round trip. HTTP / health success does not replace native,
+phone, device or sound evidence. App shared packages contain no generic models;
+Projects needing inference validate their own models separately.
 
 ## Authoring machine vs performance machine
 

@@ -2,6 +2,8 @@
 
 #139 交付了证书材料的配置 / 导入 / 校验 / 受保护存储（见 [https-material.md](./https-material.md)）；#140 交付入口本体——一个随 session 生命周期启动与关闭的本地 TLS 反向代理。手机 → 网关 → 本机 performer 服务是唯一新增路径；monitor、投影、本机 health 与 node → hub 的处理后消息路径保持原边界。契约层见运行契约 §3（`PNDS_PERFORMER_URL`）、§8/§12（启动与关停中的入口步骤）、§15（完整入口契约）；行为验收见 [app-behavior.md](./app-behavior.md)「可信 HTTPS 入口行为」。
 
+当前协议选择以作品需求为准：普通工程默认 HTTP；只有显式 `needsHttps: true` 的安全上下文作品才参与 HTTPS 激活。`supportsPerformerUrl` 仅声明兼容能力。字段与兼容选择见 [manifest.md](../zh-CN/reference/manifest.md)，取代旧实现中 `needsHttps` 仅控制提示的规则。
+
 ## 技术栈与模块
 
 | 部件                                              | 位置                                                                                                      |
@@ -24,7 +26,7 @@
 
 ## 生命周期接线
 
-- `resolve_entry_launch`（纯函数，anchors 参数化）：开关 × `supportsPerformerUrl` × 域名端口 × `launch_material` 当下重校验（与导入同一套 webpki 规则）。`Ok(None)` = 原 HTTP 流程；「开关开 × 已声明 × 配置不全」= `Err` → 启动失败（fail-start 既有清理路径）；
+- `resolve_entry_launch`（纯函数，anchors 参数化）：`needsHttps` × `supportsPerformerUrl` × 开关 × 域名端口 × `launch_material` 当下重校验（与导入同一套 webpki 规则）。未声明需要、未适配或开关关闭时 `Ok(None)` = 原 HTTP 流程；需要但未适配的显式兼容确认由启动门保留。「需求和能力均声明 × 开关开 × 配置不全或无效」= `Err` → 启动失败（fail-start 既有清理路径）。普通工程不读取或校验启动材料，也不创建网关；
 - **绑定时机**：`start_generation` 里端口 preflight 之后、音频解析之前——冲突 / 材料问题在任何子进程 spawn 前失败。`GatewayConfig` 携带绑定地址（所选 LAN IP + 偏好端口）、上游（127.0.0.1:performerPort）与 chain/key；
 - **状态**：`SessionSnapshot.httpsEntry`（off/preparing/ready/error + url + error）。preparing 在绑定后立即发布（URL 已固定）；探测线程（`spawn_entry_supervisor`）等 session ready 后探测，10 秒期限；入口状态更新全部 generation-guarded——被替换 session 的迟到结果改不了新演出；
 - **运行期故障**：accept 循环致命错误经 `FailureSink` 回调 → `mark_entry_failure`（入口 error，会话照跑）；探测超时同理；
@@ -39,6 +41,7 @@
 - **测试 CA 只进测试客户端**：rcgen 生成 CA/leaf，anchor 只注入测试的 `RootCertStore` / resolve 的 anchors 参数——绝不触碰系统信任（#140 AC 明文要求）；
 - 网关测试用**真实 TCP 上游 fixture**（hyper echo 服务：回显 method/URI/header/body + 升级后字节回显）走真实 TLS：转发保真（路径 / 查询 / 头 / body / Host）、WS 101 + 字节回环、容量 1 时超限 503（用 channel 等持有者拿到 101 再探测，消竞态）、上游死 503、关停后端口释放、探测四态（通过 / 名不匹配 / 无信任 / 上游死）；
 - session 集成测试沿用 mock-app + 真 listener 的既有模式：真实网关 + 探测线程发布 ready、stop 释放端口并复位 off、fail_generation 归零入口、运行期故障不断会话、旧 generation 迟到报告被丢弃；
+- 协议选择矩阵覆盖 `needsHttps` 的显式 true 与缺省／null／false／非布尔值、能力声明、全局开关和材料状态。普通已适配工程在开关开且材料有效或无效时仍 HTTP；安全上下文工程保留 HTTPS 选择、无效材料失败及未适配显式 HTTP 确认；
 - 前端：`session-flow` 兼容门（等待选择 / 取消不动任何东西 / restart 同门）、`SettingsCard.entry`（四态行 + 提示）、`menu`（入口 URL 优先、漫游选择不受影响）、`HttpsSection`（开关提交 + hint）、`HttpsCompatDialog`。
 
 ## 已知边界（有意为之）

@@ -33,7 +33,7 @@ In the performance router's admin page (TP-Link TL-WR800N and similar DHCP-only 
 
 ## Step 3: Start the performance
 
-Starting a project that declares `supportsPerformerUrl` with the HTTPS switch on installs the mapping from the HTTPS domain to the selected LAN address, verifies the resolution inside the daemon, and only then publishes the entry. Performer side:
+Only an actually enabled HTTPS entry (explicit `needsHttps: true`, `supportsPerformerUrl: true`, the global switch on and valid settings; see [manifest.md](./manifest.md)) installs the mapping from the HTTPS domain to the selected LAN address, verifies resolution inside the daemon, and only then publishes the entry. Ordinary HTTP projects create no performance mapping. Performer side:
 
 1. Join the show Wi-Fi;
 2. Scan the code (or type the performance address);

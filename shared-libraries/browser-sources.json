@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "libraries": [
+    {
+      "id": "p5",
+      "version": "2.3.4",
+      "entry": "browser/p5/2.3.4/p5.min.js",
+      "source": {
+        "url": "https://registry.npmjs.org/p5/-/p5-2.3.4.tgz",
+        "integrity": "sha512-bU5oNunn4L51hFu3+b6+zAQj+sPIlVyY0JmUCjABVytYwjNwf06EKFiLQgU70z5HPW58qTHRf5G8vM8gNtfbng=="
+      },
+      "files": [
+        {
+          "source": "package/lib/p5.min.js",
+          "path": "browser/p5/2.3.4/p5.min.js"
+        },
+        {
+          "source": "package/license.txt",
+          "path": "browser/p5/2.3.4/LICENSE.txt"
+        }
+      ]
+    },
+    {
+      "id": "ml5",
+      "version": "1.4.0",
+      "entry": "browser/ml5/1.4.0/ml5.min.js",
+      "source": {
+        "url": "https://registry.npmjs.org/ml5/-/ml5-1.4.0.tgz",
+        "integrity": "sha512-gjWRlas0Bp+1eWTht+XrpJdOmdwqOrh5ACBY162PGfLqOt/IqZEtwiZgVhD7khOgO0HApJUCFGFuaiLjSg5BMg=="
+      },
+      "files": [
+        {
+          "source": "package/dist/ml5.min.js",
+          "path": "browser/ml5/1.4.0/ml5.min.js"
+        },
+        {
+          "source": "package/LICENSE.md",
+          "path": "browser/ml5/1.4.0/LICENSE.txt"
+        }
+      ]
+    }
+  ]
+}

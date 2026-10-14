@@ -2,7 +2,7 @@
 
 ## 定位
 
-`.pnds` 是**运输容器**：一个自包含的 score project 加一份 bundle 元数据，压缩成单一文件，便于拷贝与分发。
+`.pnds` 是**运输容器**：一个 score project（自包含依赖或明确 App 共享引用）加一份 bundle 元数据，压缩成单一文件，便于拷贝与分发。
 
 - bundle 内的工程目录就是一份普通的、符合 [structure.md](./structure.md) 工程结构规范的目录工程；
 - App 永远不从压缩包内运行工程——安装时一次性解压，运行与目录工程完全一致；
@@ -38,7 +38,7 @@ pnds-bundle.json            # bundle 元数据（位于归档顶层，不在工�
 打包前置校验（任一失败即拒绝并给出可读错误）：
 
 1. 必需的 manifest 与服务器入口文件存在，`manifest.json` 通过 App 的完整加载校验，**全部声明的 synthdefs 产物**逐个存在且位于工程内（不因音频模式跳过）；
-2. 依赖校验：`package.json` 声明非空生产依赖（`dependencies` / `optionalDependencies`）时，工程必须已携带 `node_modules/`；
+2. 依赖校验：`package.json` 的生产依赖（`dependencies` / `optionalDependencies`）只有在同名确切版本被 `sharedLibraries` 覆盖时才可免带本地依赖；其余依赖仍要求 `node_modules/`。共享范围不覆盖 `^`／`~` 等版本声明；所有共享引用的本机确切版本、完整文件列表、大小与 SHA-256 必须校验通过；
 3. 打包只做静态文件校验，**不执行任何 npm 命令**、不联网、不自动编译，不调用带进程清理或启动副作用的运行 preflight，不改动源工程或当前运行。
 
 staging 与排除清单：
@@ -81,15 +81,15 @@ staging 与排除清单：
 
 1. 校验 `pnds-bundle.json`（存在、可解析、`formatVersion` 受支持）；
 2. 校验结构（唯一根目录、根目录内有 `manifest.json`）；
-3. 一次性同步解压到 App 数据目录 `bundles/<id>-<version>/`（`id`、`version` 取自包内 manifest）；
-4. 解压后对安装目录执行完整 manifest 校验；
+3. 在 App 数据目录 `bundles/` 内的临时 staging 一次性解压，保持与安装槽位同一文件系统；
+4. 校验完整 manifest、全部声明 SynthDef、生产依赖与确切共享资源后，才发布到 `bundles/<id>-<version>/`（`id`、`version` 取自包内 manifest）；
 5. 随即走与目录工程完全相同的 openProject → preflight → session 流程。
 
 工程列表（侧栏与设置 Projects）显示 manifest 的 `name`（App 在每次 preflight 成功后学习并持久化该名字），而非安装目录名 `<id>-<version>`；用户手动改名（⌘R）仍优先。
 
 覆盖重装：
 
-- 安装目录名由 `<id>-<version>` 决定；同 `id`+`version` 重复打开**总是覆盖重装**（先删除旧目录再解压）；
+- 安装目录名由 `<id>-<version>` 决定；同 `id`+`version` 重复打开**总是覆盖重装**（新目录验证通过后原子交换；不会先删除旧目录）；
 - `id` 与 `version` 必须各自是单一路径段（拒绝包含 `/`、`\` 或 `..` 的值）。
 
 安全：
@@ -104,7 +104,7 @@ staging 与排除清单：
 
 ## 版本号语义：内容变更必须升 version
 
-接收方的安装槽位由 **`<id>-<version>`** 决定，且同 `id`+`version` 重复打开**总是覆盖重装**（删旧目录再解压，最后打开的文件获胜）。
+接收方的安装槽位由 **`<id>-<version>`** 决定，且同 `id`+`version` 重复打开**总是覆盖重装**（通过完整验证后原子替换，最后成功打开的文件获胜）。
 
 因此，**任何内容变更都必须递增 `manifest.json` 的 `version`**。不升版本号的后果：
 
@@ -128,6 +128,26 @@ shasum -a 256 <name>-<version>.pnds
 ```
 
 与创作者提供的值一致，即传输无损、且是预期的那次构建。
+
+## 共享引用的分发
+
+共享工程继续使用运输容器 `formatVersion: 1`，工程本身用 `manifest.schemaVersion: 2`。
+包只携带 `sharedLibraries` 的确切标识／版本，App 共享包不复制、不物化进包。
+旧 App 会拒绝 schema 2；接收方需要提供相同确切资源的 App，不能按最新版本或其它版本回落。
+自带依赖工程继续使用 schema 1，并原样携带自己的生产依赖。
+
+打包探测、实际打包、复制后的 staging、安装后的 staging 都经过同一静态运行条件校验。
+接收方缺库、缺确切版本、闭包文件缺失或内容损坏时，安装明确失败，既有有效安装保持可用，
+新 slot 不留下半成品。原始 `.pnds` 与作者源目录不改动。新安装发布采用排他 rename；已有
+同名 slot 采用原子交换，再清理旧 staging。安装目标为符号链接或非目录时拒绝覆盖。
+
+模型、权重、谱面、页面与音频继续随工程携带；标准模块源码仍属工程。运行时由 App 重新
+校验共享条件，并只注入工程声明的资源路径；浏览器通过工程自己的 HTTP／可信 HTTPS
+同源路由取得库，见 [p5js.md](./p5js.md)。加入或改变共享引用时同时更新工程版本。
+安装新版 App 与临时试验不会修改包或源工程中的引用。
+
+打包安装往返需验证真实 Node 加载、浏览器画面、输入、刷新、重启与关停；HTTP／health
+通过不替代原生、手机、设备或声音证据。App 共享包不携带通用模型；模型推理由需要它的工程另行验证。
 
 ## 创作机与演出机
 

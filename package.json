@@ -1,7 +1,7 @@
 {
   "name": "pnds-app",
   "private": true,
-  "version": "1.6.1",
+  "version": "1.6.2",
   "type": "module",
   "description": "PNDS App — 在演出现场运行 PNDS 数字乐谱工程的 macOS 桌面 Host 应用",
   "author": "xO-xN",
@@ -54,7 +54,10 @@
     "ast:fix": "ast-grep scan --fix",
     "utilities:fetch": "node scripts/fetch-utilities.mjs",
     "dnsd:build": "bash scripts/build-dnsd.sh",
-    "dnsd:build:all": "bash scripts/build-dnsd.sh --all"
+    "dnsd:build:all": "bash scripts/build-dnsd.sh --all",
+    "libraries:fetch": "node scripts/fetch-shared-libraries.mjs",
+    "libraries:check": "node scripts/fetch-shared-libraries.mjs --check",
+    "libraries:verify": "node scripts/verify-shared-libraries.mjs"
   },
   "dependencies": {
     "@radix-ui/react-alert-dialog": "^1.1.15",

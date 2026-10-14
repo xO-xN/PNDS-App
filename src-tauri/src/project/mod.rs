@@ -13,5 +13,6 @@ pub mod preflight;
 pub mod readme;
 pub mod session;
 pub mod setlist;
+pub mod shared_libraries;
 pub mod sidecars;
 pub mod synthdef;

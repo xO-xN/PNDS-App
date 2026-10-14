@@ -26,7 +26,7 @@ Operating discipline for custom `.local` addresses:
 
 Seats, reconnection and the work's data protocol are the Project's own implementation — PNDS prescribes no Socket.IO event names, client IDs, role counts or UI framework.
 
-A later patch will add the local trusted HTTPS entry (the full performer URL `PNDS_PERFORMER_URL`; the contract is already frozen — see [runtime-contract.md](./runtime-contract.md) §15). It is independent of this section's bare-host-name declaration: while the entry is in effect the full URL takes priority, and `PNDS_HOST_IP`'s injection semantics are unchanged.
+Ordinary projects default to HTTP. Projects needing secure-context APIs declare their HTTPS need and full-URL compatibility in [manifest.md](./manifest.md); the Host selects the entry for this performance under [runtime-contract.md](./runtime-contract.md) §15. It is independent of this section's bare-host-name declaration: an injected full `PNDS_PERFORMER_URL` takes priority, and `PNDS_HOST_IP`'s injection semantics are unchanged.
 
 ## Internet / remote performance
 

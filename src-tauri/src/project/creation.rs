@@ -20,11 +20,15 @@ mod compile;
 #[cfg(test)]
 mod compile_tests;
 mod handoff;
+mod libraries;
+#[cfg(test)]
+mod libraries_tests;
 mod modules;
 #[cfg(test)]
 mod modules_tests;
 pub use blank::NewProjectOptions;
 pub use compile::{SynthdefCompileReport, SynthdefCompiler};
+pub use libraries::{CreationLibraryAdoption, CreationLibraryCatalog, CreationLibraryResult};
 pub use modules::{CreationModuleAddResult, CreationModuleCatalog};
 
 pub const TEXT_MAX_BYTES: u64 = 1024 * 1024;
