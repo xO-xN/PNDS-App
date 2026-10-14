@@ -150,6 +150,9 @@ export function CreationNewProject({
               <span>{t('creation.newProject.name')}</span>
               <Input
                 required
+                autoCorrect="off"
+                autoCapitalize="none"
+                spellCheck={false}
                 maxLength={128}
                 value={name}
                 onChange={event => setName(event.target.value)}
@@ -159,6 +162,9 @@ export function CreationNewProject({
               <span>{t('creation.newProject.folderName')}</span>
               <Input
                 required
+                autoCorrect="off"
+                autoCapitalize="none"
+                spellCheck={false}
                 dir="ltr"
                 aria-label={t('creation.newProject.folderName')}
                 maxLength={64}

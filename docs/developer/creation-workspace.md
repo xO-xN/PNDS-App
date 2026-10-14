@@ -39,6 +39,17 @@ Work names are never transformed or used to derive a folder slug. Empty names,
 invalid characters and leading/trailing hyphens expose a localized inline reason
 through `aria-describedby`; correcting the folder clears that error. The input
 retains its 64-character maximum and the backend's lowercase ASCII contract.
+The new-project work-name and folder-name inputs explicitly set
+`autoCorrect="off"`, `autoCapitalize="none"` and `spellCheck={false}`. These
+fields carry creator-chosen names rather than natural-language prose; system
+input assistance must not substitute their spelling or case. This policy is
+local to the two fields, leaving the shared Input and other editing surfaces
+unchanged. Work-name case remains user-owned; folder normalization above still
+applies. WebKit's macOS field-policy history is documented in
+[151019](https://bugs.webkit.org/show_bug.cgi?id=151019) and
+[220598](https://bugs.webkit.org/show_bug.cgi?id=220598). Existing creation
+workflow tests remain the regression seam; jsdom and browser DOM inspection do
+not simulate macOS correction, which requires user native retesting.
 
 `lastCreationParent` is an optional App preference, mirrored in `creation-store`.
 An owned, non-cancelled native selection updates the mirror and writes through
