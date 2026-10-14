@@ -24,6 +24,7 @@ pub(crate) struct ControlFixture {
     _dir: tempfile::TempDir,
     pub(crate) socket: PathBuf,
     pub(crate) engine: Arc<Engine>,
+    pub(crate) listeners: Arc<pnds_dnsd_lib::server::Listeners>,
     pub(crate) requests: Arc<Mutex<Vec<Value>>>,
     shutdown: Arc<AtomicBool>,
     worker: Option<JoinHandle<()>>,
@@ -40,15 +41,16 @@ impl ControlFixture {
             Box::new(std::time::Instant::now),
         ));
         let requests = Arc::new(Mutex::new(Vec::new()));
+        let listeners = pnds_dnsd_lib::server::Listeners::new();
         let shutdown = Arc::new(AtomicBool::new(false));
         let listener = UnixListener::bind(&socket).unwrap();
         listener.set_nonblocking(true).unwrap();
         let server_engine = Arc::clone(&engine);
         let server_requests = Arc::clone(&requests);
         let server_shutdown = Arc::clone(&shutdown);
+        let server_listeners = Arc::clone(&listeners);
         let state_path = dir.path().join("state.json");
         let worker = std::thread::spawn(move || {
-            let listeners = pnds_dnsd_lib::server::Listeners::new();
             let restart = AtomicBool::new(false);
             while !server_shutdown.load(Ordering::SeqCst) {
                 let (mut stream, _) = match listener.accept() {
@@ -74,7 +76,7 @@ impl ControlFixture {
                     Reply::Normal | Reply::Drop => {
                         let response = pnds_dnsd_lib::control::handle_line(
                             &server_engine,
-                            &listeners,
+                            &server_listeners,
                             &state_path,
                             &restart,
                             &line,
@@ -97,6 +99,7 @@ impl ControlFixture {
             _dir: dir,
             socket,
             engine,
+            listeners,
             requests,
             shutdown,
             worker: Some(worker),

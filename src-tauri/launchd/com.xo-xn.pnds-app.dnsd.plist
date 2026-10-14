@@ -22,8 +22,10 @@
     <key>BundleProgram</key>
     <string>Contents/MacOS/pnds-dnsd</string>
 
-    <key>BundleProgramArgs</key>
+    <key>ProgramArguments</key>
     <array>
+        <!-- argv[0]; BundleProgram selects the actual executable. -->
+        <string>pnds-dnsd</string>
         <!-- Fixed state + control paths under /Library (root-owned
              dir, created by the daemon). The control socket is how
              the App installs/refreshes/revokes the performance

@@ -13,6 +13,8 @@ pub(crate) use mapping::MappingLease;
 #[cfg(target_os = "macos")]
 pub mod service;
 #[cfg(test)]
+mod status_tests;
+#[cfg(test)]
 pub(crate) mod test_support;
 
 use serde::{Deserialize, Serialize};
@@ -134,7 +136,22 @@ pub struct DnsServiceStatus {
 pub fn daemon_status() -> DnsServiceStatus {
     let registration = service::registration_status();
     let plist_present = service::plist_path().is_some();
-    let status = client::request("status", serde_json::json!({}), Duration::from_secs(2)).ok();
+    daemon_status_on(&client::control_socket_path(), registration, plist_present)
+}
+
+fn request_status_on(
+    socket: &std::path::Path,
+    timeout: Duration,
+) -> Result<serde_json::Value, String> {
+    client::call_on(socket, "status", serde_json::json!({}), timeout)
+}
+
+fn daemon_status_on(
+    socket: &std::path::Path,
+    registration: DnsRegistrationStatus,
+    plist_present: bool,
+) -> DnsServiceStatus {
+    let status = request_status_on(socket, Duration::from_secs(2)).ok();
     let listeners = status
         .as_ref()
         .and_then(|s| s.get("listeners"))
@@ -211,12 +228,13 @@ pub fn enable(upstreams: Vec<String>, listen_ip: Option<String>) -> Result<(), S
         );
     }
     service::register()?;
+    let socket = client::control_socket_path();
     // The registration returns only after the approval flow completes;
     // the daemon may still be booting — poll the control plane.
     let deadline = std::time::Instant::now() + DAEMON_READINESS_TIMEOUT;
     let mut ready = false;
     while std::time::Instant::now() < deadline {
-        if client::request("status", serde_json::json!({}), Duration::from_secs(1)).is_ok() {
+        if request_status_on(&socket, Duration::from_secs(1)).is_ok() {
             ready = true;
             break;
         }
@@ -235,15 +253,8 @@ pub fn enable(upstreams: Vec<String>, listen_ip: Option<String>) -> Result<(), S
     // bind failure as the definite result it is.
     let deadline = std::time::Instant::now() + DAEMON_READINESS_TIMEOUT;
     while std::time::Instant::now() < deadline {
-        if let Ok(status) = client::request("status", serde_json::json!({}), Duration::from_secs(1))
-        {
-            if let Some(bind_error) = status.get("bindError").and_then(serde_json::Value::as_str) {
-                return Err(format!(
-                    "the DNS daemon could not bind port 53 ({bind_error}) — another DNS \
-                     service is probably running; stop it and enable again"
-                ));
-            }
-            return Ok(());
+        if let Ok(status) = request_status_on(&socket, Duration::from_secs(1)) {
+            return check_bind_error(&status);
         }
         std::thread::sleep(Duration::from_millis(300));
     }
@@ -251,6 +262,16 @@ pub fn enable(upstreams: Vec<String>, listen_ip: Option<String>) -> Result<(), S
         "The DNS daemon applied the config but is restarting — check its status in a moment."
             .to_string(),
     )
+}
+
+fn check_bind_error(status: &serde_json::Value) -> Result<(), String> {
+    if let Some(bind_error) = status.get("bindError").and_then(serde_json::Value::as_str) {
+        return Err(format!(
+            "the DNS daemon could not bind port 53 ({bind_error}) — another DNS \
+             service is probably running; stop it and enable again"
+        ));
+    }
+    Ok(())
 }
 
 /// Pushes the current config to a RUNNING daemon: upstream list plus the

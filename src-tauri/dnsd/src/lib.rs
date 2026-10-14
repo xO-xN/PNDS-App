@@ -179,6 +179,10 @@ pub fn run() -> ExitCode {
         }
     }
 
+    // A config restart leaves `stop` unset. Signal every worker before
+    // joining, or the DNS loops/reaper keep running and launchd never
+    // gets an exited process to relaunch with the persisted address.
+    stop.store(true, Ordering::SeqCst);
     if let Some(handle) = udp_handle {
         handle.join().ok();
     }
