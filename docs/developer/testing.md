@@ -265,7 +265,11 @@ without an early stop, unchanged running-card no-op, pending-change restart,
 preflight/LAN/OSC/node gates, stale focus/selection/mode replies, and default
 input Enter/projection accelerator preservation. A deferred Down focus reply
 followed by Load must never submit the previous card; a pending preflight needs a
-fresh Load after it settles, without an automatically queued start.
+fresh Load after it settles, without an automatically queued start. An installed
+menu regression holds a boundary-selection focus reply, rebuilds on a valid LAN
+change, then settles the unchanged card. Load must work afterward without any
+additional state change or manual menu rebuild, while still rejecting submission
+during the outstanding selection request.
 
 On macOS, `npm run native:selection:verify` builds an isolated opt-in Tauri
 fixture from cached Cargo dependencies (`--offline`). A warm cache can be cloned

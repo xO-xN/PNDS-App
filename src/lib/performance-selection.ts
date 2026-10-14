@@ -20,11 +20,7 @@ export function onPerformanceLoadRequest(submit: () => void): () => void {
 }
 
 function canLoadPerformanceProject(): boolean {
-  return (
-    selectionRequests === 0 &&
-    canSelectPerformanceProject() &&
-    canLoadSelectedProject()
-  )
+  return canSelectPerformanceProject() && canLoadSelectedProject()
 }
 
 export async function canLoadFocusedPerformanceProject(): Promise<boolean> {
@@ -37,11 +33,15 @@ export async function canLoadFocusedPerformanceProject(): Promise<boolean> {
 
 /** Native delivery requests the existing UI flow, including its confirmation. */
 export async function loadPerformanceProject(): Promise<void> {
-  if (!canLoadPerformanceProject()) return
+  // Pending native focus replies block this submission only. Menu availability
+  // follows subscribed store gates: boundary moves can settle without publishing
+  // a store change, so an unnotified counter must not leave an installed item off.
+  if (selectionRequests !== 0 || !canLoadPerformanceProject()) return
   const epoch = useCreationStore.getState().epoch
   const selected = useProjectStore.getState().currentProject
   if (
     !(await canLoadFocusedPerformanceProject()) ||
+    selectionRequests !== 0 ||
     useCreationStore.getState().epoch !== epoch ||
     useProjectStore.getState().currentProject !== selected
   )

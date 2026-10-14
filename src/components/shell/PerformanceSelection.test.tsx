@@ -14,6 +14,7 @@ import { useCreationStore } from '@/store/creation-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { useWindowStore } from '@/store/window-store'
 import { AppShell } from './AppShell'
+import { SessionActionButton } from './SessionActionButton'
 
 interface NativeMenuItem {
   id?: string
@@ -23,8 +24,18 @@ interface NativeMenuItem {
   action?: () => void
 }
 const nativeMenu = vi.hoisted(() => new Map<string, NativeMenuItem>())
+const installedMenu = vi.hoisted(() => new Map<string, NativeMenuItem>())
+const installed = vi.hoisted(() => ({ builds: 0 }))
 vi.mock('@tauri-apps/api/menu', () => ({
-  Menu: { new: vi.fn(async () => ({ setAsAppMenu: vi.fn() })) },
+  Menu: {
+    new: vi.fn(async () => ({
+      setAsAppMenu: vi.fn(async () => {
+        installedMenu.clear()
+        for (const [id, item] of nativeMenu) installedMenu.set(id, item)
+        installed.builds++
+      }),
+    })),
+  },
   Submenu: { new: vi.fn(async (options: unknown) => options) },
   PredefinedMenuItem: { new: vi.fn(async (options: unknown) => options) },
   MenuItem: {
@@ -105,6 +116,8 @@ describe('performance selection from the native menu (#202)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     nativeMenu.clear()
+    installedMenu.clear()
+    installed.builds = 0
     useProjectStore.setState({
       currentProject: { path: '/first', manifest },
       recentProjectPaths: ['/first', '/second', '/third'],
@@ -415,6 +428,63 @@ describe('performance selection from the native menu (#202)', () => {
         null
       )
     )
+  })
+
+  it('keeps the installed Load usable after a slow boundary selection and concurrent valid LAN rebuild', async () => {
+    useProjectStore.setState({ currentProject: { path: '/third', manifest } })
+    useSessionStore.setState({
+      sessionStatus: 'idle',
+      sessionProjectPath: null,
+      pendingChanges: false,
+    })
+    render(<SessionActionButton />)
+    await act(async () => {
+      await buildAppMenu()
+    })
+    expect(installedMenu.get('load-selected-project')?.enabled).toBe(true)
+    let finishFocus!: (
+      result: Awaited<ReturnType<typeof commands.focusedWindowLabel>>
+    ) => void
+    vi.mocked(commands.focusedWindowLabel).mockReturnValueOnce(
+      new Promise(resolve => {
+        finishFocus = resolve
+      })
+    )
+    const off = setupMenuStateListener()
+    try {
+      await act(async () =>
+        installedMenu.get('select-next-project')?.action?.()
+      )
+      act(() => useSessionStore.setState({ lanIp: '192.168.1.11' }))
+      await waitFor(() => expect(installed.builds).toBe(2))
+      // A still-installed callback must reject Load while Down's focus reply
+      // is pending, even if the menu remains enabled through that short wait.
+      await act(async () =>
+        installedMenu.get('load-selected-project')?.action?.()
+      )
+      expect(commands.startProject).not.toHaveBeenCalled()
+      await act(async () => finishFocus({ status: 'ok', data: 'main' }))
+      expect(useProjectStore.getState().currentProject?.path).toBe('/third')
+      expect(commands.preflightProject).not.toHaveBeenCalled()
+      expect(commands.startProject).not.toHaveBeenCalled()
+      // The boundary move changes no subscribed store. No extra user mutation
+      // or manual rebuild may be needed to use the prepared selected card.
+      expect(installedMenu.get('load-selected-project')?.enabled).toBe(true)
+      await act(async () =>
+        installedMenu.get('load-selected-project')?.action?.()
+      )
+      await waitFor(() =>
+        expect(commands.startProject).toHaveBeenCalledExactlyOnceWith(
+          '/third',
+          'none',
+          '192.168.1.11',
+          null
+        )
+      )
+      expect(commands.stopProject).not.toHaveBeenCalled()
+    } finally {
+      off()
+    }
   })
 
   it('requires a new Load after selected-card preflight finishes instead of loading the previous running card', async () => {

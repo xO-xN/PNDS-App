@@ -46,8 +46,10 @@ stopping; a selected running card applies pending settings with Change/restart;
 an unchanged running card is a no-op, never Close. Preflight, LAN, external OSC
 and node completeness remain the normal load gates.
 
-A pending native selection request blocks Load while its focus query is still
-outstanding. A selected card still checking preflight also blocks Load. Neither
+A pending native selection request blocks Load submission while its focus query
+is still outstanding. This transient counter is checked before and after the
+load focus reply; menu availability uses subscribed store gates, so a boundary
+move that publishes no store change cannot leave the installed Load item disabled. A selected card still checking preflight also blocks Load. Neither
 queues a future start: after preparation settles, press Load again. Submission
 uses the existing synchronous latch, so repeated requests cannot duplicate a
 start. Mode/overlay/busy/submission/window gates match native selection; monitor
