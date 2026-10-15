@@ -355,6 +355,16 @@ highlights, while blue is reserved for actions and selection markers.
   properties on the toaster, overriding its own light/dark defaults.
 - File categories keep green (system), blue (pages), ochre (audio) and plum
   (modules), with dark colors on light themes and light colors on Stage.
+- Editor syntax uses its own `--pnds-syntax-*` ink: keyword, string, number,
+  type, function, property and comment. Light themes use stronger hues than
+  file/status labels so code categories remain distinguishable at small sizes;
+  Stage keeps its light ink. Functions include method calls; properties include
+  JSON keys, HTML attributes and CSS properties. Plain identifiers stay in the
+  normal text color, and comments also use italics. Define every role in each
+  theme here rather than recoloring UI categories or adding a runtime palette.
+  Check syntax ink on the editor card, selection/search fill and the current
+  line's 35% selection tint (≥4.5:1). Contrast measures readability against the
+  surface; compare the same code in all four themes to assess category separation.
 - shadcn `primary` maps to the App action color and its matching label;
   `secondary` maps to neutral controls, `accent` to hover, `sidebar-accent`
   to selection, and `ring` to the accessible accent text color. Shared

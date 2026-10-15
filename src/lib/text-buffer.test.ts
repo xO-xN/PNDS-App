@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { TextBuffer } from './text-buffer'
-import { ensureSyntaxTree, matchBrackets } from '@codemirror/language'
+import {
+  ensureSyntaxTree,
+  highlightingFor,
+  matchBrackets,
+} from '@codemirror/language'
 import { insertNewlineAndIndent } from '@codemirror/commands'
-import { classHighlighter, highlightTree } from '@lezer/highlight'
+import { highlightTree } from '@lezer/highlight'
 
 describe('text editing buffer', () => {
   it('keeps Chinese selection replacements and undo isolated between buffers', () => {
@@ -47,9 +51,12 @@ describe('text editing buffer', () => {
 
   it.each([
     ['score.js', 'const gain = 42', 'const'],
+    ['score.js', 'function sound() { return 42 }', 'sound'],
     ['score.ts', 'const gain: number = 42', 'number'],
     ['score.json', '{"gain": 42}', '42'],
+    ['score.json', '{"gain": 42}', '"gain"'],
     ['score.html', '<h1>Score</h1>', 'h1'],
+    ['score.html', '<h1 class="score">Score</h1>', 'class'],
     ['score.css', '.score { color: red; }', 'color'],
     ['score.md', '# Score', 'Score'],
     ['score.scd', 'var gain = SinOsc.ar(440); // sound', 'var'],
@@ -62,8 +69,10 @@ describe('text editing buffer', () => {
       expect(tree).not.toBeNull()
       const colored: string[] = []
       if (tree)
-        highlightTree(tree, classHighlighter, (from, to) =>
-          colored.push(state.sliceDoc(from, to))
+        highlightTree(
+          tree,
+          { style: tags => highlightingFor(state, tags) },
+          (from, to) => colored.push(state.sliceDoc(from, to))
         )
       expect(colored.join(' ')).toContain(token)
     }

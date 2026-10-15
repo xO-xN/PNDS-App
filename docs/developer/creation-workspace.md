@@ -989,7 +989,11 @@ JS/TS/JSON/HTML/CSS/Markdown/SCD, bracket matching, two-space indentation, liter
 case-insensitive find/replace and line navigation. Other already-readable text
 uses plain text. This adds no language server, diagnostics or compiler claim.
 SCD coloring uses a local stream parser for strings, symbols, nested comments,
-keywords and class names. Colors resolve from the existing four theme palettes.
+keywords and class names. Dedicated syntax tokens in the four theme palettes
+separate code categories from the more muted UI file/status colors. Function
+names and properties (including JSON keys, HTML attributes and CSS properties)
+use their own ink. See [UI patterns](./ui-patterns.md#component-roles) for palette
+and contrast checks.
 Long lines scroll horizontally; the editor owns its scroller, and toolbar rows
 wrap within the existing workspace. No monitor/dock ancestry or runtime action
 changes when a text surface mounts.

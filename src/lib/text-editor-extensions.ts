@@ -117,19 +117,30 @@ export function editorLanguage(path: string) {
 }
 
 const highlighting = HighlightStyle.define([
-  { tag: tags.keyword, color: 'var(--pnds-file-modules)' },
+  { tag: tags.keyword, color: 'var(--pnds-syntax-keyword)' },
   {
     tag: [tags.string, tags.special(tags.string)],
-    color: 'var(--pnds-success)',
+    color: 'var(--pnds-syntax-string)',
   },
-  { tag: [tags.number, tags.atom, tags.bool], color: 'var(--pnds-file-audio)' },
+  {
+    tag: [tags.number, tags.atom, tags.bool],
+    color: 'var(--pnds-syntax-number)',
+  },
   {
     tag: [tags.typeName, tags.className, tags.tagName],
-    color: 'var(--pnds-file-pages)',
+    color: 'var(--pnds-syntax-type)',
+  },
+  {
+    tag: [tags.propertyName, tags.attributeName],
+    color: 'var(--pnds-syntax-property)',
+  },
+  {
+    tag: [tags.function(tags.variableName), tags.function(tags.propertyName)],
+    color: 'var(--pnds-syntax-function)',
   },
   {
     tag: [tags.comment, tags.meta],
-    color: 'var(--pnds-text-secondary)',
+    color: 'var(--pnds-syntax-comment)',
     fontStyle: 'italic',
   },
   { tag: [tags.heading, tags.strong], fontWeight: 'bold' },

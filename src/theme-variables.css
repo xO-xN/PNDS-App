@@ -130,6 +130,14 @@
   --pnds-file-pages: #355b85;
   --pnds-file-audio: #714f17;
   --pnds-file-modules: #655080;
+  /* Editor ink is more chromatic than UI category/status labels. */
+  --pnds-syntax-keyword: #7e22ce;
+  --pnds-syntax-string: #16703a;
+  --pnds-syntax-number: #a34200;
+  --pnds-syntax-type: #006b80;
+  --pnds-syntax-function: #155fc4;
+  --pnds-syntax-property: #ac2758;
+  --pnds-syntax-comment: #566575;
   --pnds-logo-halo: #c5dcec;
   --pnds-logo-halo-core: #d9e8f3;
   --pnds-logo-halo-animated: #d9e9f5;
@@ -173,6 +181,13 @@
   --pnds-file-pages: #445384;
   --pnds-file-audio: #6e4c16;
   --pnds-file-modules: #704764;
+  --pnds-syntax-keyword: #7c249c;
+  --pnds-syntax-string: #185e29;
+  --pnds-syntax-number: #8d3700;
+  --pnds-syntax-type: #005a72;
+  --pnds-syntax-function: #1b50a6;
+  --pnds-syntax-property: #9d2350;
+  --pnds-syntax-comment: #60503e;
   --pnds-logo-halo: #e3caa5;
   --pnds-logo-halo-core: #edddc1;
   --pnds-logo-halo-animated: #ead6b4;
@@ -214,6 +229,13 @@
   --pnds-file-pages: #acbee6;
   --pnds-file-audio: #e1bd80;
   --pnds-file-modules: #ccafd9;
+  --pnds-syntax-keyword: #ccafd9;
+  --pnds-syntax-string: #a5c8b6;
+  --pnds-syntax-number: #e1bd80;
+  --pnds-syntax-type: #acbee6;
+  --pnds-syntax-function: #7dd3e8;
+  --pnds-syntax-property: #f0a3b3;
+  --pnds-syntax-comment: #adbbb4;
   --pnds-logo-halo: #30483b;
   --pnds-logo-halo-core: #385646;
   --pnds-logo-halo-animated: #24372c;
@@ -256,6 +278,13 @@
   --pnds-file-pages: #2a417c;
   --pnds-file-audio: #5a3e0b;
   --pnds-file-modules: #60386d;
+  --pnds-syntax-keyword: #7800bf;
+  --pnds-syntax-string: #086b2e;
+  --pnds-syntax-number: #aa3b00;
+  --pnds-syntax-type: #006b82;
+  --pnds-syntax-function: #004fcc;
+  --pnds-syntax-property: #b0184f;
+  --pnds-syntax-comment: #625235;
   --pnds-logo-halo: #7fd8ce;
   --pnds-logo-halo-core: #ffd966;
   --pnds-logo-halo-animated: #ff9ec4;

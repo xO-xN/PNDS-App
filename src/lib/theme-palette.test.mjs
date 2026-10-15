@@ -33,6 +33,19 @@ function contrast(a, b) {
   return (high + 0.05) / (low + 0.05)
 }
 
+function mix(a, b, amount) {
+  return `#${[1, 3, 5]
+    .map(offset =>
+      Math.round(
+        parseInt(a.slice(offset, offset + 2), 16) * (1 - amount) +
+          parseInt(b.slice(offset, offset + 2), 16) * amount
+      )
+        .toString(16)
+        .padStart(2, '0')
+    )
+    .join('')}`
+}
+
 describe.each(COLOR_THEME_OPTIONS)('$value color palette', option => {
   const properties = { ...blocks.pond, ...blocks[option.value] }
   const color = name => {
@@ -79,6 +92,25 @@ describe.each(COLOR_THEME_OPTIONS)('$value color palette', option => {
       }
     }
   )
+
+  it.each([
+    'keyword',
+    'string',
+    'number',
+    'type',
+    'function',
+    'property',
+    'comment',
+  ])('keeps syntax %s readable on editor and highlight surfaces', role => {
+    const card = color('pnds-card')
+    const selection = color('pnds-selection')
+    for (const surface of [card, selection, mix(card, selection, 0.35)]) {
+      expect(
+        contrast(color(`pnds-syntax-${role}`), surface),
+        `${role} on ${surface}`
+      ).toBeGreaterThanOrEqual(4.5)
+    }
+  })
 
   it('keeps input boundaries and focus indicators visible', () => {
     for (const surface of ['bg', 'sidebar-bg', 'card', 'pill']) {
