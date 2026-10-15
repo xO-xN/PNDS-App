@@ -136,8 +136,9 @@ windows. The console starts closed and is available only from creation's bottom
 bar or Command + backtick. Expanding monitor changes layout only; Esc restores it.
 
 Use **Add PNDS module** beside the Modules heading in writable projects.
-Five frozen choices work offline: QR joining, client connection/identity
-recovery, monitor theme, monitor language and monitor view synchronization.
+Six frozen choices work offline: QR joining, client connection/identity
+recovery, monitor theme, monitor language, monitor view synchronization and
+optional hub connection.
 Review real target files, source version and prerequisites before adding. Files
 go to `modules/pnds-<id>/` with a `pnds-module.json` source record; wiring tasks
 append to `docs/creator-handoff.md`. File addition does not mean wiring or

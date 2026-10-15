@@ -13,7 +13,8 @@ function readHubConfig(environment = process.env, standalone = {}) {
     room: trim(environment.PNDS_HUB_ROOM),
   };
   // A partial Host injection cannot be masked by standalone configuration.
-  return Object.values(host).some(Boolean) ? host : {
+  return ["PNDS_NODE_ID", "PNDS_HUB_URL", "PNDS_HUB_TOKEN", "PNDS_HUB_ROOM"]
+    .some(key => Object.hasOwn(environment, key)) ? host : {
     nodeId: trim(standalone.nodeId), url: trim(standalone.url),
     token: trim(standalone.token), room: trim(standalone.room),
   };

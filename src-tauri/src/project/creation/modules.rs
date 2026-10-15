@@ -373,17 +373,27 @@ fn module_record(
         && parsed["source"]["revision"] == LEGACY_REVISION
         && parsed["source"]["version"] == "0.5.1"
         && module.id != "hub";
-    let current = parsed["version"] == VERSION
-        && parsed["source"]["repository"] == source().repository
-        && parsed["source"]["revision"] == source().revision
-        && parsed["source"]["version"] == source().version;
+    let shipped: serde_json::Value =
+        serde_json::from_str(include_str!("../../../resources/modules/SOURCE.json"))
+            .expect("frozen current provenance");
+    let previous: Vec<serde_json::Value> =
+        serde_json::from_str(include_str!("../../../resources/modules/PREVIOUS.json"))
+            .expect("frozen previous provenance");
+    let release = std::iter::once(&shipped)
+        .chain(previous.iter())
+        .find(|release| {
+            parsed["version"] == release["moduleVersion"]
+                && parsed["source"]["repository"] == release["repository"]
+                && parsed["source"]["revision"] == release["revision"]
+                && parsed["source"]["version"] == release["version"]
+        });
     let Some(files) = parsed["files"].as_array() else {
         return Err(CreationError::new(
             CreationErrorCode::InvalidProject,
             module.id,
         ));
     };
-    let required: Vec<&str> = if legacy {
+    let required: Vec<String> = if legacy {
         match module.id {
             "qr" => vec!["qr.js", "package.json", "README.md", "LICENSE.md"],
             "players" => vec![
@@ -411,12 +421,26 @@ fn module_record(
             ],
             _ => unreachable!("legacy catalog"),
         }
+        .into_iter()
+        .map(String::from)
+        .collect()
     } else {
-        module.files.iter().map(|(name, _)| *name).collect()
+        release
+            .map(|release| {
+                let prefix = format!("{}/", module.id);
+                release["files"]
+                    .as_object()
+                    .expect("frozen file list")
+                    .keys()
+                    .filter_map(|name| name.strip_prefix(&prefix).map(String::from))
+                    .chain(std::iter::once("LICENSE.md".to_string()))
+                    .collect()
+            })
+            .unwrap_or_default()
     };
     if parsed["formatVersion"] != 1
         || parsed["id"] != module.id
-        || !(legacy || current)
+        || !(legacy || release.is_some())
         || files.len() != required.len()
         || required
             .iter()
@@ -448,13 +472,15 @@ fn module_record(
                 .unwrap_or_default()
                 .to_string()
         } else {
-            let bytes = module
-                .files
-                .iter()
-                .find(|(path, _)| *path == name)
-                .expect("validated asset")
-                .1;
-            format!("{:x}", Sha256::digest(bytes))
+            let path = if name == "LICENSE.md" {
+                name.to_string()
+            } else {
+                format!("{}/{name}", module.id)
+            };
+            release.expect("validated release")["files"][path]
+                .as_str()
+                .unwrap_or_default()
+                .to_string()
         };
         file["sha256"] != expected
     }) {

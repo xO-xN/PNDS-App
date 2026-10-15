@@ -52,6 +52,38 @@ describe('the actual offline module sources', () => {
     }
   })
 
+  it('retains exact trusted previous source revisions and their original file hashes', () => {
+    const previous = JSON.parse(
+      readFileSync(path.join(root, 'PREVIOUS.json'), 'utf8')
+    )
+    expect(previous.map(release => release.revision)).toEqual([
+      'sha256:5d136e820c0d9cf8d206694c44b79665e60e21849352a619be86b1a5ed566c72',
+      'sha256:12bbf7009386726079ec3f13e99fc37a8a68df942cff5576e0a57a7e6012614e',
+    ])
+    for (const release of previous) {
+      const hash = createHash('sha256')
+        .update(JSON.stringify(release.files))
+        .digest('hex')
+      expect(release.revision).toBe(`sha256:${hash}`)
+      expect(release.repository).toBe('https://github.com/xO-xN/PNDS-Template')
+      expect(release.version).toBe('0.5.1')
+      expect(release.moduleVersion).toBe('0.2.0')
+      for (const id of [
+        'qr',
+        'players',
+        'theme-follow',
+        'locale-follow',
+        'monitor-state',
+        'hub',
+      ]) {
+        expect(release.files[`${id}/compatibility.json`]).toMatch(
+          /^[a-f0-9]{64}$/
+        )
+        expect(release.files[`${id}/README.md`]).toMatch(/^[a-f0-9]{64}$/)
+      }
+    }
+  })
+
   it('are self-contained CommonJS/UMD files that parse under the project Node baseline', () => {
     for (const id of [
       'qr',

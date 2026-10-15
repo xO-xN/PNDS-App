@@ -425,6 +425,127 @@ fn app_updates_preserve_legacy_module_versions_files_and_original_pending_task()
 }
 
 #[test]
+fn prior_modern_snapshot_keeps_all_six_custom_modules_and_original_handoffs() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = tests::project(temp.path(), "score");
+    let snapshots: serde_json::Value =
+        serde_json::from_str(include_str!("../../../resources/modules/PREVIOUS.json")).unwrap();
+    let previous = &snapshots[0];
+    assert_eq!(
+        previous["revision"],
+        "sha256:5d136e820c0d9cf8d206694c44b79665e60e21849352a619be86b1a5ed566c72"
+    );
+    let protection = Protection::default();
+    let mut access = CreationAccess::default();
+    let identity = access.open(&root, &protection).unwrap().project.identity;
+    for id in [
+        "qr",
+        "players",
+        "theme-follow",
+        "locale-follow",
+        "monitor-state",
+        "hub",
+    ] {
+        let catalog = access.module_catalog(&identity, &protection).unwrap();
+        access
+            .add_module(
+                &identity,
+                id,
+                None,
+                catalog.handoff_version.as_deref(),
+                &protection,
+            )
+            .unwrap();
+        let directory = root.join(format!("modules/pnds-{id}"));
+        let record_path = directory.join("pnds-module.json");
+        let mut record: serde_json::Value =
+            serde_json::from_slice(&fs::read(&record_path).unwrap()).unwrap();
+        record["source"] = serde_json::json!({"repository": previous["repository"], "revision": previous["revision"], "version": previous["version"]});
+        for file in record["files"].as_array_mut().unwrap() {
+            let name = file["path"].as_str().unwrap().to_string();
+            let path = if name == "LICENSE.md" {
+                name.to_string()
+            } else {
+                format!("{id}/{name}")
+            };
+            file["sha256"] = previous["files"][path].clone();
+            fs::write(
+                directory.join(name),
+                "// author's custom previous-release source",
+            )
+            .unwrap();
+        }
+        let original_record = serde_json::to_vec(&record).unwrap();
+        fs::write(&record_path, &original_record).unwrap();
+        let original_task = record["handoffTaskId"].as_str().unwrap();
+        let catalog = access.module_catalog(&identity, &protection).unwrap();
+        let entry = catalog.modules.iter().find(|entry| entry.id == id).unwrap();
+        assert_eq!(entry.state, modules::ModuleState::Added, "{id}");
+        assert_eq!(entry.version, "0.2.0");
+        let handoff_path = root.join("docs/creator-handoff.md");
+        let handoff = fs::read_to_string(&handoff_path).unwrap();
+        let retry_text = handoff.replace(
+            &format!("<!-- pnds-task:{original_task} -->"),
+            "<!-- task removed externally -->",
+        );
+        fs::write(&handoff_path, retry_text).unwrap();
+        let catalog = access.module_catalog(&identity, &protection).unwrap();
+        let entry = catalog.modules.iter().find(|entry| entry.id == id).unwrap();
+        assert_eq!(entry.state, modules::ModuleState::NeedsHandoff);
+        let retry = access
+            .add_module(
+                &identity,
+                id,
+                entry.record_version.as_deref(),
+                catalog.handoff_version.as_deref(),
+                &protection,
+            )
+            .unwrap();
+        assert!(retry.handoff_recorded);
+        let handoff = access.read_handoff(&identity, &protection).unwrap();
+        assert_eq!(
+            handoff
+                .text
+                .matches(&format!("<!-- pnds-task:{original_task} -->"))
+                .count(),
+            1
+        );
+        assert_eq!(fs::read(&record_path).unwrap(), original_record);
+        for file in record["files"].as_array().unwrap() {
+            assert_eq!(
+                fs::read_to_string(directory.join(file["path"].as_str().unwrap())).unwrap(),
+                "// author's custom previous-release source"
+            );
+        }
+        for forged in [
+            {
+                let mut value = record.clone();
+                value["source"]["revision"] = "sha256:unknown-release".into();
+                value
+            },
+            {
+                let mut value = record.clone();
+                value["files"][0]["sha256"] = "0".repeat(64).into();
+                value
+            },
+        ] {
+            fs::write(&record_path, serde_json::to_vec(&forged).unwrap()).unwrap();
+            let catalog = access.module_catalog(&identity, &protection).unwrap();
+            assert_eq!(
+                catalog
+                    .modules
+                    .iter()
+                    .find(|entry| entry.id == id)
+                    .unwrap()
+                    .state,
+                modules::ModuleState::Conflict
+            );
+        }
+        fs::write(&record_path, &original_record).unwrap();
+    }
+}
+
+#[test]
 fn published_modules_wire_together_through_real_node_http_and_socket_clients() {
     let temp = tempfile::tempdir().unwrap();
     let root = tests::project(temp.path(), "score");

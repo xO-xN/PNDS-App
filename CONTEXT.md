@@ -43,13 +43,29 @@ _Avoid_: Creator Persona
 创作者通过 App 的「新建工程」在指定位置生成、具备 PNDS 基本运行结构而尚无作品内容的文件夹工程。
 _Avoid_: 简版模板、空白 Template
 
+**工程模板 / Project template**:
+新工程的完整创作起点，包含初始内容与运行结构。
+_Avoid_: 标准技术模块、App 共享包（指工程起点时）
+
+**标准技术模块 / Standard technical module**:
+供工程按需接入通用技术能力的源码，加入后由工程维护。
+_Avoid_: App 共享包、工程模板（指可接入技术能力时）
+
 **工程概况 / Project overview**:
 创作模式中概括当前工程身份、内容迹象与已知验证结果的事实摘要，供创作者与内置助手理解工程现状。
 _Avoid_: 完成度评分、作品是否完成的结论
 
+**创作助手 / Creation assistant**:
+PNDS App 中围绕当前工程与创作者深入讨论创作意图、完善方案并辅助单文件代码修改的助手；复杂任务经创作者确认形成创作交接单，由外部编程 agent 接续。
+_Avoid_: 只读咨询助手、通用编程 agent（指 App 内置助手时）
+
 **创作交接单 / Creator handoff**:
 创作者在 PNDS App 中记录、供外部编程 agent 接续的工程待办与创作意图。
 _Avoid_: 实现手册、工程 README
+
+**交接基线 / Handoff baseline**:
+创作者确认写入交接单时已保存的工程内容，是核对该次交接之后工程变化的比较起点。
+_Avoid_: Git HEAD、恢复点（指交接比较起点时）
 
 **performer / monitor**:
 工程内两种页面角色（performer 页与 monitor 页）。中英文均直接用英文。
@@ -99,7 +115,7 @@ _Avoid_: 模块指南、模板模块（作册名）
 _Avoid_: 插件、addon、实用工具（作统称）
 
 **App 共享包 / App shared package**:
-由 PNDS App 保存并供多个工程引用的依赖资源，可包含库与模型；工程也可选择携带自己的依赖资源。
+由 PNDS App 保存并供多个工程引用的第三方依赖库；工程也可选择携带自己的依赖，模型属于工程自带资源。
 _Avoid_: 内置工具（指依赖资源时）、工程包（指共享依赖时）
 
 **加入共享包 / Add shared package**:
