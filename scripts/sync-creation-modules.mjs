@@ -58,7 +58,7 @@ for (const id of ids) {
     hashes[`${id}/${file.name}`] = digest(bytes)
   }
 }
-for (const name of ['LICENSE.md', 'LEGACY.json'])
+for (const name of ['LICENSE.md', 'LEGACY.json', 'PREVIOUS.json'])
   hashes[name] = digest(await readFile(path.join(target, name)))
 const sorted = Object.fromEntries(
   Object.entries(hashes).sort(([a], [b]) => a.localeCompare(b, 'en'))
