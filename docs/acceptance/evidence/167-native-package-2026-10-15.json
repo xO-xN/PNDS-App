@@ -1,0 +1,48 @@
+{
+  "date": "2026-10-15",
+  "projectLabel": "Test copy",
+  "archiveFileName": "Test-0.1.0.pnds",
+  "archiveBytes": 154826,
+  "archiveSha256": "eec3413ea4c7dfcf7ba663fe69e4d31a1c3b1574e3609d553dc34a185441491d",
+  "screenshotSha256": "eec3413ea4c7dfcf7ba663fe69e4d31a1c3b1574e3609d553dc34a185441491d",
+  "archiveSha256MatchesScreenshot": true,
+  "archiveReadOnly": true,
+  "archiveInstalledOrExecuted": false,
+  "sourceRegularFilesBefore": 99,
+  "sourceRegularFilesAfter": 99,
+  "sourceAddedCount": 0,
+  "sourceRemovedCount": 0,
+  "sourceModifiedCount": 0,
+  "sourceReadErrors": 0,
+  "sourceSkippedSymlinks": 0,
+  "zipCrcPassed": true,
+  "singleProjectRoot": true,
+  "entryCount": 90,
+  "unsafePathCount": 0,
+  "symlinkEntryCount": 0,
+  "historyPathNameMatches": 0,
+  "historyMarkerFileMatches": 0,
+  "exactHistoryFileContentMatches": 0,
+  "projectFilesScanned": 70,
+  "projectUncompressedBytesScanned": 365582,
+  "archiveFilesNotInSourceCount": 0,
+  "archiveSourceContentMismatchCount": 0,
+  "bundleMetadata": {
+    "formatVersion": 1,
+    "packedWith": "1.6.5",
+    "packedAt": "2026-10-15T13:22:08Z",
+    "sourcePlatform": "macos"
+  },
+  "limitations": [
+    "The source snapshot starts immediately before packaging acceptance; it is not an earlier project baseline.",
+    "Marker checks cover the known exit marker as UTF-8 or JSON escapes, the exact history filenames for Test and Test copy, and byte-identical copies of their current history files; arbitrary transformations are not covered.",
+    "The chat display after closing the successful packaging dialog passed per user report; no independent post-close screenshot was supplied.",
+    "The archive was not installed or launched; release and downstream acceptance remain separate."
+  ],
+  "chatDisplayAfterClosingDialog": {
+    "status": "passed per user",
+    "date": "2026-10-15",
+    "bodyOrderAndStatePreserved": true,
+    "independentScreenshotAfterClosing": false
+  }
+}

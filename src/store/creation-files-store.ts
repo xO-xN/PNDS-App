@@ -12,6 +12,7 @@ import {
 import type { CreationParticipant } from '@/lib/creation-lifecycle'
 import { creationTransportError, useCreationStore } from './creation-store'
 import { useSessionStore } from './session-store'
+import { useCreationReadingStore } from './creation-reading-store'
 import { useCreationHandoffStore } from './creation-handoff-store'
 import {
   editReadmeCover,
@@ -546,13 +547,16 @@ export const useCreationFilesStore = create<CreationFilesState>((set, get) => {
         location: { identity, path, line },
         renameNote: null,
       })
+      useCreationReadingStore.getState().showFile()
       return true
     },
     readmeLocale: null,
     renameNote: null,
     dismissedConflict: null,
-    setActivePath: path =>
-      set({ activePath: path, location: null, renameNote: null }),
+    setActivePath: path => {
+      set({ activePath: path, location: null, renameNote: null })
+      if (path) useCreationReadingStore.getState().showFile()
+    },
     setReadmeLocale: readmeLocale => set({ readmeLocale }),
     read: async (identity, path) => {
       const workspace = useCreationStore.getState().workspace
@@ -897,5 +901,6 @@ useCreationStore.subscribe(state => {
   if (identity !== fileWorkspaceIdentity) {
     fileWorkspaceIdentity = identity
     useCreationFilesStore.getState().clear()
+    useCreationReadingStore.getState().syncWorkspace(identity)
   }
 })

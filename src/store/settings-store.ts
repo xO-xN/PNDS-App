@@ -12,6 +12,7 @@ import type { ColorTheme } from '@/lib/color-theme'
  * management lives in the sidebar alone. */
 export type SettingsSection =
   | 'general'
+  | 'modelService'
   | 'audio'
   | 'node'
   | 'https'

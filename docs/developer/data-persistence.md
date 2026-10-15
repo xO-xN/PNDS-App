@@ -23,10 +23,16 @@ All data goes through Rust for type safety and security. The frontend reads via 
 
 ```
 ~/Library/Application Support/com.xo-xn.pnds-app/  (macOS)
-└── preferences.json    # App preferences (the app identifier comes from src-tauri/tauri.conf.json)
+├── preferences.json    # App preferences (the app identifier comes from src-tauri/tauri.conf.json)
+└── assistant-history/  # Versioned private per-source-directory chat snapshots (#167)
 ```
 
 Logs are not stored here — `tauri-plugin-log` writes to the OS log directory (see [logging.md](./logging.md)).
+
+Chat history uses its own bounded schema and atomic publication, rather than the
+preferences queue. Canonical directory identity, captured write epochs, corruption
+recovery and authority-free restoration are documented in
+[Creation assistant](./creation-assistant.md#private-project-history-167).
 
 ## Atomic Write Pattern (Critical)
 

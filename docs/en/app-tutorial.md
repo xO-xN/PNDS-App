@@ -149,6 +149,73 @@ only the handoff. Upgrades, merges and removal belong to the external agent.
 
 ---
 
+### Configuring a model service
+
+Open Settings (`⌘ ,`) → Model service and enter the API base URL, model name and
+key for an OpenAI-compatible service supporting text conversations and tool calls.
+Use the service's base URL, including `/v1` when required, and its exact model name.
+Remote services require HTTPS; a local loopback service can use HTTP.
+
+The URL and model are saved in local preferences; the key is stored in the macOS
+Keychain. Reopening Settings shows whether a key is saved without refilling it.
+Enter a new key to replace it, or explicitly remove it. Save and Keychain failures
+are visible and never fall back to a plain-text file.
+
+Test connection uses the current form values, including unsaved edits. An empty
+key input uses the saved key. The test verifies a text reply and a controlled tool
+round trip without reading or sending the current project. Authentication,
+network, timeout, protocol and unsupported-tool failures have distinct feedback;
+retry manually after correcting the problem. A successful connection test does
+not verify or run your project. Local editing, saving and manual testing remain
+available when the model service is unconfigured or unavailable.
+
+### Asking about installed PNDS documentation
+
+An editable project opens on the discussion surface. After configuring the model
+service, enter a question and click Send or press `⌘ Enter`; plain Enter adds a
+line break. Platform questions use the local help shipped with this App version
+without reading or sending project content. Verified source buttons open the
+actual section in its original language. Replies that did not consult local
+sources are marked accordingly; model-written citations are not verified sources.
+
+Stop while the assistant reads or prepares a reply to keep your input, produced
+text and sources. Correct an error and retry manually. Changing projects, returning
+to performance mode or changing model configuration cancels the request; late
+responses cannot enter a new context. Tool, document and context budgets fail
+explicitly without hidden paid retries.
+
+Open a file for full editing and return to the discussion without losing input,
+replies or individual file drafts. Existing handoff documents remain available
+through their reading entry. The right monitor keeps the same page; opening code
+does not refresh or restart it. Drag the separator to change the reading/monitor
+width, or focus it with Tab and use the arrow keys. Home or double-click restores
+the default. Width is remembered locally and constrained by readable minimums in
+narrow windows. The console remains the existing dock beneath the current
+workspace, opened from the bottom bar or its usual shortcut.
+
+### Restoring and clearing project conversations
+
+Conversations are saved in the App's private data, separately for each actual
+source directory. Reopening the same project or restarting the App restores its
+messages and verified sources. Symlink aliases share a conversation; copies,
+moved folders and other folders with the same manifest ID do not merge histories.
+History stays outside your project, handoff documents and exported bundles.
+
+Restored pending replies are marked cancelled. Historical attachments and
+suggestions display their saved text, origin and versions; they do not reread the
+current file, replace drafts, send project content, apply changes or restart a
+preview. Past test results describe the past, not the current running project.
+
+The discussion toolbar reports saving and failures. Retry a failed save explicitly.
+If loading fails or the format is unsupported, reload or use Clear conversation
+after confirming. A stale history version requires confirmed reload or clearing;
+reloading replaces in-memory messages and stops the old request while keeping
+your input and file drafts. Clearing affects only this project's conversation,
+preserves input and files, and cancels the active request. Cancel the confirmation
+to keep the conversation. A failed clear retains the records; late replies cannot
+restore successfully cleared messages. Tab and Enter operate these controls, and
+Escape cancels the confirmation.
+
 ### Inspecting and releasing ports
 
 Open Settings (`⌘ ,`) → Ports to inspect the selected project's manifest performer and monitor ports. Creation mode reads the workspace's saved manifest; drafts do not change the query target. With no target, the defaults are 6868/6869. The section queries once on entry; click Refresh to update it. There is no background polling.

@@ -1,0 +1,34 @@
+{
+  "date": "2026-10-15",
+  "evidenceKind": "user-confirmation-and-authorized-local-history-read",
+  "source": "Local App history record containing the two acceptance questions; the original record and full replies were not copied.",
+  "messageCount": 4,
+  "assistantReplies": [
+    {
+      "questionTopic": "Meaning, range and default of audio.outputChannels",
+      "status": "completed",
+      "error": null,
+      "sourceCount": 5,
+      "sourceLocale": "zh-CN",
+      "verifiedConclusion": "Discrete project output signals, integer 1 through 64, default 2."
+    },
+    {
+      "questionTopic": "Whether outputChannels 2 proves device capacity or live audio acceptance",
+      "status": "completed",
+      "error": null,
+      "sourceCount": 7,
+      "sourceLocale": "zh-CN",
+      "verifiedConclusion": "The declaration alone proves neither actual device capacity nor successful on-site audio acceptance."
+    }
+  ],
+  "userReported": {
+    "streamingText": "passed",
+    "bothRepliesCompleted": "passed",
+    "sourceNavigation": "passed",
+    "historyStatusDuringStreaming": "flickers between updating and saved; fix awaiting native recheck"
+  },
+  "limitations": [
+    "Saved JSON confirms final content and state, not the timing of streamed UI updates.",
+    "This is not evidence of restart restoration, project isolation, wire payload contents or release acceptance."
+  ]
+}

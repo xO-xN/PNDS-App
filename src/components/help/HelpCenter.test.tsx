@@ -116,6 +116,36 @@ describe('HelpCenterApp (#56)', () => {
     expect(commands.fadeInWindow).toHaveBeenCalledTimes(1)
   })
 
+  it('opens a source in its original locale and scrolls after that corpus is rendered', async () => {
+    await i18n.changeLanguage('en')
+    render(
+      <HelpCenterApp
+        initialTarget={{
+          kind: 'doc',
+          docId: 'app-tutorial',
+          anchor: '端口与地址',
+          locale: 'zh-CN',
+        }}
+      />
+    )
+    const heading = await screen.findByRole('heading', {
+      level: 2,
+      name: '端口与地址',
+    })
+    expect(commands.helpCorpus).toHaveBeenLastCalledWith('zh-CN')
+    await waitFor(() => expect(heading.scrollIntoView).toHaveBeenCalled())
+    expect(screen.getByPlaceholderText('Search the docs…')).toBeInTheDocument()
+    fireHelpEvent('pnds:help-navigate', {
+      kind: 'doc',
+      docId: 'app-tutorial',
+      anchor: '首次启动',
+      locale: 'zh-CN',
+    })
+    expect(
+      await screen.findByRole('heading', { level: 2, name: '首次启动' })
+    ).toBeInTheDocument()
+  })
+
   it('searches live, and a hit click opens the doc on its section with the terms marked', async () => {
     render(<HelpCenterApp />)
 

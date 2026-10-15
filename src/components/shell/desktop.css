@@ -425,8 +425,27 @@
   padding: var(--desktop-topbar-height) 0 0;
   grid-template-columns:
     var(--desktop-creation-sidebar-width) minmax(0, 1fr)
-    minmax(280px, 35%);
+    8px var(--creation-monitor-width, 35%);
   grid-template-rows: minmax(0, 1fr) var(--desktop-bar-height);
+}
+.desktop-frame.creation-runtime-frame > [data-testid='monitor-host'],
+.desktop-frame.creation-runtime-frame > [data-creation-test-idle] {
+  grid-column: 4;
+}
+.creation-splitter {
+  grid-column: 3;
+  grid-row: 1;
+  cursor: col-resize;
+  touch-action: none;
+  background: var(--pnds-bg);
+  border-inline: 1px solid var(--desktop-line);
+}
+.creation-splitter:hover,
+.creation-splitter:focus-visible {
+  background: var(--pnds-pill-hover);
+}
+.creation-splitter[hidden] {
+  display: none;
 }
 .desktop-frame.creation-runtime-frame > .desktop-bar {
   grid-row: 2;

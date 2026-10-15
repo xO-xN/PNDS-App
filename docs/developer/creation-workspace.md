@@ -628,9 +628,11 @@ runtime's actual address. Old load/timeout/config results cannot update a newer
 run. Error publication also checks the client, workspace, run and config revision;
 successful identity changes clear old errors. Delayed send/focus/close failures
 from retired clients cannot pollute the next workspace. A DOM load event records only that navigation finished, including possible
-browser error documents: connection is explicitly unknown because the platform
-has no public performer connection-status contract. No fake connection success
-or optional music-protocol adaptation is introduced.
+browser error documents. The list displays these navigation facts, while the
+shell directs users to the project page or monitor for performer connection
+status. A shared explanatory tooltip distinguishes navigation from connection:
+the platform has no public performer connection-status contract. No fake
+connection success or optional music-protocol adaptation is introduced.
 
 The registered creation participant cleans up after confirmed project close,
 project switch or creation-mode exit. It waits for pending native creation,
@@ -683,9 +685,15 @@ The user approved mouse-to-single-touch simulation after real testing. New test
 clients enable it with a visible checkbox in their own shell;
 turning it off restores original mouse/pointer input without navigation. Native
 setup installs `performer-touch-script.js` once at document start in each project's
-frames. Only a parent-window `pnds:test-touch` message enables it. Mouse down /
-move / up produce one untrusted DOM touch sequence; pointer capture, blur,
-cancellation and disabling release the contact. Native text/form controls keep
+frames. Only a parent-window `pnds:test-touch` message enables it. Pointer
+listeners queue a task after each dispatch, without cancelling or stopping the
+original event. This includes handlers registered later on `window`. A page's
+cancelled pointerdown owns its gesture, so no touch simulation or capture is
+added; this preserves native pointer faders such as the Classic example. Other
+mouse down / move / up events add one untrusted DOM touch sequence in order;
+native mouse defaults are not suppressed. Blur and disabling invalidate queued
+input, cancellation releases the contact, and capture-loss callbacks retain
+their contact identity so an old release cannot cancel a new gesture. Native text/form controls keep
 their mouse behavior. This includes a TouchList-shaped payload for desktop WebKit
 without Touch constructors, rather than pretending it has mobile APIs. Events
 are delivered directly to the page: no OSC, score state or audio goes through

@@ -237,6 +237,8 @@ pub async fn open_creation_project(
             let workspace = access.open(Path::new(&path), &protection(&app)?)?;
             app.state::<super::controlled_checks::ControlledCheckState>()
                 .cancel_except(Some(&workspace.project.identity));
+            app.state::<crate::model::ModelService<crate::model::KeychainCredentials>>()
+                .invalidate_assistant();
             Ok(workspace)
         })
         .await
@@ -373,6 +375,8 @@ pub async fn commit_creation_project(
                     }
                     app.state::<super::controlled_checks::ControlledCheckState>()
                         .cancel_except(identity.as_deref());
+                    app.state::<crate::model::ModelService<crate::model::KeychainCredentials>>()
+                        .invalidate_assistant();
                     Ok(runtime)
                 })
                 .map_err(|e| CreationError::new(CreationErrorCode::InvalidIdentity, e))
@@ -642,13 +646,16 @@ pub async fn reveal_creation_path(
 pub async fn close_creation_project(
     state: State<'_, CreationState>,
     checks: State<'_, super::controlled_checks::ControlledCheckState>,
+    model: State<'_, crate::model::ModelService<crate::model::KeychainCredentials>>,
     identity: String,
 ) -> Result<(), CreationError> {
     let checks = checks.inner().clone();
+    let model = model.inner().clone();
     state
         .run(move |access| {
             access.close(&identity);
             checks.cancel_owner(&identity);
+            model.cancel_assistant_owner(&identity);
             Ok(())
         })
         .await

@@ -39,6 +39,21 @@ pub struct WindowStateEvent {
 #[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
 pub struct WindowFocusEvent {}
 
+/// Saved model configuration or credential changed; consumers revoke pending
+/// tool work and refresh public state without receiving any credential data.
+#[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
+pub struct ModelConfigurationChangedEvent {}
+
+/// Cumulative answer text for exactly one model turn. No credential, provider
+/// reasoning or tool arguments cross this progress channel.
+#[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
+#[serde(rename_all = "camelCase")]
+pub struct AssistantTextEvent {
+    pub request_id: String,
+    pub turn_id: String,
+    pub text: String,
+}
+
 /// A queued `.pnds` bundle finished installing (formerly
 /// `pnds:open-bundle`) — the frontend opens the installed project.
 #[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
@@ -90,6 +105,8 @@ pub fn events_builder<R: tauri::Runtime>() -> tauri_specta::Builder<R> {
         SessionSnapshotEvent,
         WindowStateEvent,
         WindowFocusEvent,
+        ModelConfigurationChangedEvent,
+        AssistantTextEvent,
         OpenBundleEvent,
         SetlistExportProgressEvent,
         HelpReadyEvent,

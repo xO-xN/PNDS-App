@@ -27,6 +27,7 @@ import { logger } from '@/lib/logger'
 import { notifications } from '@/lib/notifications'
 import { useSettingsStore } from '@/store/settings-store'
 import { commands } from '@/lib/tauri-bindings'
+import { helpTargetUrl } from './help-target'
 
 /** The help center's stable window label (capabilities, events, ⌘W). */
 /**
@@ -37,12 +38,6 @@ import { commands } from '@/lib/tauri-bindings'
 let lastTarget: HelpTarget | null = null
 
 /** What the help center should land on when it opens or is reused. */
-function helpUrl(target: HelpTarget): string {
-  return target.kind === 'doc'
-    ? `help.html?doc=${encodeURIComponent(target.docId)}`
-    : 'help.html?search=1'
-}
-
 /** Opens (or reuses) the help center window on the given target. */
 export async function openHelpWindow(target: HelpTarget): Promise<void> {
   // Remembered for the boot handshake — see setupHelpWindowBridge.
@@ -65,7 +60,7 @@ export async function openHelpWindow(target: HelpTarget): Promise<void> {
   }
 
   const helpWindow = new WebviewWindow(HELP_WINDOW_LABEL, {
-    url: helpUrl(target),
+    url: helpTargetUrl(target),
     title: i18n.t('help.windowTitle'),
     width: 980,
     height: 720,

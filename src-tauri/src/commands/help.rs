@@ -23,6 +23,7 @@
 //! document is an explicit error — the help center never silently
 //! falls back to the other language.
 
+use sha2::{Digest, Sha256};
 use std::path::PathBuf;
 
 use specta::Type;
@@ -49,6 +50,8 @@ pub struct HelpCorpusDocument {
     pub id: String,
     pub path: String,
     pub markdown: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
 }
 
 /// The corpus allowlist: (stable id, path relative to EVERY language
@@ -155,6 +158,11 @@ fn read_corpus(
         .iter()
         .map(|(id, docs_relative)| {
             read_document(id, &candidates(docs_relative)).map(|markdown| HelpCorpusDocument {
+                version: Some(format!(
+                    "{}:sha256:{:x}",
+                    env!("CARGO_PKG_VERSION"),
+                    Sha256::digest(markdown.as_bytes())
+                )),
                 id: (*id).to_string(),
                 path: (*docs_relative).to_string(),
                 markdown,

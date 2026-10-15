@@ -11,9 +11,9 @@ use std::sync::Mutex;
 use tauri::{AppHandle, Manager};
 
 use crate::types::{
-    validate_color_theme, validate_creation_parent_field, validate_https_domain_field,
-    validate_https_port_field, validate_hub_rooms, validate_sample_rate, validate_theme,
-    AppPreferences,
+    validate_assistant_monitor_ratio, validate_color_theme, validate_creation_parent_field,
+    validate_https_domain_field, validate_https_port_field, validate_hub_rooms,
+    validate_sample_rate, validate_theme, AppPreferences,
 };
 
 /// In-memory cache of the preferences file. Managed by Tauri.
@@ -89,6 +89,7 @@ pub async fn load_preferences(app: AppHandle) -> Result<AppPreferences, String> 
 #[tauri::command]
 #[specta::specta]
 pub async fn save_preferences(app: AppHandle, preferences: AppPreferences) -> Result<(), String> {
+    let previous_model = load_preferences_sync(&app)?.model_service;
     // Validate theme value
     validate_theme(&preferences.theme)?;
     // v1.2.3 (issue #38): the color theme must be a member of the theme
@@ -105,6 +106,16 @@ pub async fn save_preferences(app: AppHandle, preferences: AppPreferences) -> Re
     // struct) lives in https.rs's protected storage.
     validate_https_domain_field(preferences.https_domain.as_deref())?;
     validate_https_port_field(preferences.https_port)?;
+    if let Some(config) = &preferences.model_service {
+        crate::model::validate_config(config).map_err(|_| "Invalid model service configuration")?;
+    }
+    if preferences.model_context_profiles.len() > 128 {
+        return Err("Too many model context profiles".into());
+    }
+    for config in &preferences.model_context_profiles {
+        crate::model::validate_config(config).map_err(|_| "Invalid model context profile")?;
+    }
+    validate_assistant_monitor_ratio(preferences.assistant_monitor_ratio)?;
 
     // #58: never log the struct — it carries the hub token, which must not
     // reach logs any more than it reaches URLs. The save outcome lines
@@ -137,6 +148,10 @@ pub async fn save_preferences(app: AppHandle, preferences: AppPreferences) -> Re
     // Update the in-memory cache so later reads see the new values.
     let cache = app.state::<PreferencesCache>();
     *cache.cached.lock().unwrap_or_else(|e| e.into_inner()) = Some(preferences.clone());
+
+    if previous_model != preferences.model_service {
+        super::model::configuration_changed(&app);
+    }
 
     log::info!("Successfully saved preferences to {prefs_path:?}");
     Ok(())

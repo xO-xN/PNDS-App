@@ -2,8 +2,8 @@ use tauri_specta::{collect_commands, Builder};
 
 pub fn generate_bindings() -> Builder<tauri::Wry> {
     use crate::commands::{
-        bundle, controlled_checks, creation, dns, help, https, notifications, preferences, project,
-        system, tools,
+        assistant_history, bundle, controlled_checks, creation, dns, help, https, model,
+        notifications, preferences, project, system, tools,
     };
 
     crate::events::events_builder::<tauri::Wry>().commands(collect_commands![
@@ -19,6 +19,17 @@ pub fn generate_bindings() -> Builder<tauri::Wry> {
         crate::window::focused_window_label,
         preferences::load_preferences,
         preferences::save_preferences,
+        model::get_model_credential_status,
+        model::save_model_credential,
+        model::remove_model_credential,
+        model::test_model_connection,
+        model::begin_assistant_request,
+        model::assistant_model_turn,
+        model::measure_assistant_context,
+        model::cancel_assistant_request,
+        assistant_history::load_assistant_history,
+        assistant_history::save_assistant_history,
+        assistant_history::clear_assistant_history,
         creation::open_creation_project,
         creation::create_blank_project,
         creation::create_classic_project,

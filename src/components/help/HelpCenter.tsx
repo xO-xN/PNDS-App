@@ -90,10 +90,18 @@ export function HelpCenterApp({
   // rebuilds — hot, without reopening the window. While a switch is in
   // flight the previous corpus stays on screen; a failed switch surfaces
   // the error state, never the other language's tree.
-  const [locale, setLocale] = useState(currentResolvedLanguage)
+  const [locale, setLocale] = useState(() =>
+    initialTarget?.kind === 'doc' && initialTarget.locale
+      ? initialTarget.locale
+      : currentResolvedLanguage()
+  )
   const [activeDoc, setActiveDoc] = useState<ActiveDoc | null>(() => {
     if (initialTarget?.kind === 'doc') {
-      return { docId: initialTarget.docId, anchor: null, terms: [] }
+      return {
+        docId: initialTarget.docId,
+        anchor: initialTarget.anchor ?? null,
+        terms: [],
+      }
     }
     if (initialTarget?.kind === 'search') return null
     return { docId: 'app-tutorial', anchor: null, terms: [] }
@@ -163,8 +171,18 @@ export function HelpCenterApp({
     const unlisteners: (() => void)[] = [
       onHelpNavigate(target => {
         if (target.kind === 'doc') {
-          setActiveDoc({ docId: target.docId, anchor: null, terms: [] })
+          setLocale(
+            target.locale === 'en' || target.locale === 'zh-CN'
+              ? target.locale
+              : currentResolvedLanguage()
+          )
+          setActiveDoc({
+            docId: target.docId,
+            anchor: target.anchor ?? null,
+            terms: [],
+          })
         } else {
+          setLocale(currentResolvedLanguage())
           setActiveDoc(null)
           searchInput.current?.focus()
         }
@@ -227,7 +245,7 @@ export function HelpCenterApp({
     if (docViewport.current) {
       docViewport.current.scrollTop = 0
     }
-  }, [activeDoc])
+  }, [activeDoc, corpus])
 
   // #56 user report: a corpus link must NEVER navigate this webview —
   // that once booted the whole main app inside the help window. Every

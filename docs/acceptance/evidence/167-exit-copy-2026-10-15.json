@@ -1,0 +1,187 @@
+{
+  "date": "2026-10-15",
+  "historyInspection": {
+    "readOnly": true,
+    "directoryLabel": "Test copy",
+    "matchedBy": "SHA-256 of canonical source directory",
+    "messageCount": 4,
+    "historySchemaVersion": 1,
+    "recordedAppVersion": "1.6.5",
+    "exitAcceptancePair": {
+      "userStatus": "cancelled",
+      "assistantStatus": "cancelled",
+      "assistantCharacters": 88,
+      "sourceCount": 9,
+      "sourceLanguages": ["zh-CN"],
+      "hasError": false
+    },
+    "subsequentPair": {
+      "userText": "继续",
+      "userStatus": "completed",
+      "assistantStatus": "completed",
+      "assistantCharacters": 261,
+      "sourceCount": 0
+    },
+    "manualObservation": {
+      "oldReplyDidNotAutomaticallyContinue": true,
+      "responseTextCouldNotBeCopied": true
+    },
+    "limitations": [
+      "Initial inspection had no screenshot or pre-exit prefix comparison; the user subsequently confirmed text consistency after the copy fix. No independent screenshot comparison was obtained.",
+      "Persistence alone does not establish quit timing.",
+      "The next request excludes cancelled turns; this is not restoration of a previous model stream.",
+      "The subsequent reply asks for clarification and includes an internal budget-shaped line; it is not evidence that the interrupted context was continued."
+    ]
+  },
+  "selectionRegression": {
+    "command": "node /private/tmp/pnds-assistant-selection-check.mjs",
+    "surface": "Actual CreationAssistant, actual Zustand state and compiled App.css in isolated headless Chromium; no model API or PNDS App/dev server started.",
+    "before": {
+      "pageErrors": [],
+      "cases": [
+        {
+          "selector": ".assistant-markdown p:first-child",
+          "text": "COPY THIS / 可复制回复",
+          "selected": "",
+          "copied": "",
+          "userSelect": "none",
+          "webkitUserSelect": "none",
+          "pass": false
+        },
+        {
+          "selector": ".assistant-markdown strong",
+          "text": "Bold text",
+          "selected": "",
+          "copied": "",
+          "userSelect": "none",
+          "webkitUserSelect": "none",
+          "pass": false
+        },
+        {
+          "selector": ".assistant-markdown p code",
+          "text": "inline code",
+          "selected": "",
+          "copied": "",
+          "userSelect": "none",
+          "webkitUserSelect": "none",
+          "pass": false
+        },
+        {
+          "selector": ".assistant-markdown pre code",
+          "text": "const example = 42\n",
+          "selected": "",
+          "copied": "",
+          "userSelect": "none",
+          "webkitUserSelect": "none",
+          "pass": false
+        },
+        {
+          "selector": ".assistant-markdown td",
+          "text": "Cell text",
+          "selected": "",
+          "copied": "",
+          "userSelect": "none",
+          "webkitUserSelect": "none",
+          "pass": false
+        }
+      ],
+      "inputStillSelectable": true,
+      "chromeStillUnselectable": true,
+      "pass": false
+    },
+    "minimalBefore": {
+      "pageErrors": [],
+      "cases": [
+        {
+          "selector": ".assistant-markdown p:first-child",
+          "text": "COPY THIS / 可复制回复",
+          "selected": "",
+          "copied": "",
+          "userSelect": "none",
+          "webkitUserSelect": "none",
+          "pass": false
+        }
+      ],
+      "inputStillSelectable": true,
+      "chromeStillUnselectable": true,
+      "pass": false
+    },
+    "after": {
+      "pageErrors": [],
+      "cases": [
+        {
+          "selector": ".assistant-markdown p:first-child",
+          "text": "COPY THIS / 可复制回复",
+          "selected": "COPY THIS / 可复制回复",
+          "copied": "COPY THIS / 可复制回复",
+          "userSelect": "text",
+          "webkitUserSelect": "text",
+          "pass": true
+        },
+        {
+          "selector": ".assistant-markdown strong",
+          "text": "Bold text",
+          "selected": "Bold text",
+          "copied": "Bold text",
+          "userSelect": "text",
+          "webkitUserSelect": "text",
+          "pass": true
+        },
+        {
+          "selector": ".assistant-markdown p code",
+          "text": "inline code",
+          "selected": "inline code",
+          "copied": "inline code",
+          "userSelect": "text",
+          "webkitUserSelect": "text",
+          "pass": true
+        },
+        {
+          "selector": ".assistant-markdown pre code",
+          "text": "const example = 42",
+          "selected": "const example = 42",
+          "copied": "const example = 42",
+          "userSelect": "text",
+          "webkitUserSelect": "text",
+          "pass": true
+        },
+        {
+          "selector": ".assistant-markdown td",
+          "text": "Cell text",
+          "selected": "Cell text",
+          "copied": "Cell text",
+          "userSelect": "text",
+          "webkitUserSelect": "text",
+          "pass": true
+        }
+      ],
+      "inputStillSelectable": true,
+      "chromeStillUnselectable": true,
+      "pass": true
+    },
+    "clipboard": "copy event captures selection and prevents the default; the system clipboard is not modified.",
+    "nativeAppClipboardRetest": "passed by user after style fix"
+  },
+  "validation": {
+    "command": "RUST_TEST_THREADS=1 npm run check:all",
+    "exitCode": 0,
+    "frontendFiles": 155,
+    "frontendTests": 1819,
+    "appRustPassed": 509,
+    "appRustExistingIgnored": 5,
+    "cliIntegrationPassed": [9, 6],
+    "dnsPassed": 39,
+    "restartIntegrationPassed": 2,
+    "standardsFindings": 0,
+    "specFindings": 0,
+    "nativeClipboard": "passed-user-report"
+  },
+  "nativeRetest": {
+    "date": "2026-10-15",
+    "source": "user report",
+    "canCopyResponseText": true,
+    "restoredTextMatchesPreExit": true,
+    "independentScreenshotComparison": false,
+    "oldCancelledReplyAutomaticContinuation": false
+  }
+}

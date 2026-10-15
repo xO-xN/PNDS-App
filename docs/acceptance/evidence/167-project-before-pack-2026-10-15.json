@@ -1,0 +1,15 @@
+{
+  "date": "2026-10-15",
+  "projectLabel": "Test copy",
+  "operation": "read-only source scan before native packaging",
+  "historyFileExistsInAppData": true,
+  "historyOutsideProject": true,
+  "regularFilesScanned": 99,
+  "bytesScanned": 620922,
+  "skippedSymlinks": 0,
+  "readErrors": 0,
+  "historyPathNameMatches": 0,
+  "historyMarkerFileMatches": 0,
+  "archiveVerification": "pending user-generated native .pnds",
+  "sourceMutation": false
+}

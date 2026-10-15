@@ -17,6 +17,7 @@
 import { emitTo, listen } from '@tauri-apps/api/event'
 import { events } from '@/lib/tauri-bindings'
 import type {
+  AssistantTextEvent,
   SessionSnapshot,
   SetlistExportProgressEvent,
   WindowStateSnapshot,
@@ -39,10 +40,24 @@ export const PROJECTION_WINDOW_LABEL = 'projection'
 export const MAIN_WINDOW_LABEL = 'main'
 
 /** Where the help window should navigate: the search box or one document. */
-export type HelpTarget = { kind: 'search' } | { kind: 'doc'; docId: string }
+export type HelpTarget =
+  | { kind: 'search' }
+  | { kind: 'doc'; docId: string; anchor?: string; locale?: 'en' | 'zh-CN' }
 
 /** Synchronous unsubscribe — the unlisten promise resolves internally. */
 export type Unsubscribe = () => void
+
+export function onModelConfigurationChanged(cb: () => void): Unsubscribe {
+  return toUnsubscribe(events.modelConfigurationChangedEvent.listen(cb))
+}
+
+/** Register before dispatching a turn so its first streamed text cannot race
+ * listener setup. The request owner removes the listener on settlement. */
+export function onAssistantText(
+  cb: (progress: AssistantTextEvent) => void
+): Promise<Unsubscribe> {
+  return events.assistantTextEvent.listen(event => cb(event.payload))
+}
 
 function toUnsubscribe(pending: Promise<() => void>): Unsubscribe {
   return () => {

@@ -1,0 +1,86 @@
+{
+  "date": "2026-10-15",
+  "issuesInScope": [165, 166, 167],
+  "head": "27fdb1bc12bc3f3f3c51222ef2c262e4314d3e56",
+  "commitsCreated": false,
+  "appOrDevServerStartedByAgent": false,
+  "runtimeFileCountComparedToLastReviewedSnapshot": 483,
+  "semanticSourceChangesSinceLastReviewedSnapshot": false,
+  "generatedBindingTrailingWhitespaceNormalized": true,
+  "nativeHistoryAcceptance": "current independent ordinary workflows passed per user and scoped disk evidence",
+  "fixtureAudit": [
+    {
+      "fixtureLabel": "History Recovery 167",
+      "regularFile": true,
+      "symlink": false,
+      "schemaVersion": 1,
+      "projectKeyMatches": true,
+      "messageCount": 2,
+      "immutableFaultFlagActive": false,
+      "fileMode": "0o600"
+    },
+    {
+      "fixtureLabel": "History Future 167",
+      "regularFile": true,
+      "symlink": false,
+      "schemaVersion": 1,
+      "projectKeyMatches": true,
+      "messageCount": 0,
+      "immutableFaultFlagActive": false,
+      "fileMode": "0o600"
+    },
+    {
+      "fixtureLabel": "History Write Failure 167",
+      "regularFile": true,
+      "symlink": false,
+      "schemaVersion": 1,
+      "projectKeyMatches": true,
+      "messageCount": 3,
+      "immutableFaultFlagActive": false,
+      "fileMode": "0o600"
+    }
+  ],
+  "remainingEvidenceGaps": [
+    "Actual attachment, suggestion, preview and comparison integrations wait for downstream #168/#208/#225/#231/#227 and #172; bounded storage and inert consumers were tested.",
+    "arm64 and x86_64 release artifacts are not independently accepted by development-host runs.",
+    "Abnormal termination, actual owned-process/port teardown and standalone first invalid-format wording/shortcut were not individually demonstrated in this manual run.",
+    "Other #165/#166 native fault, proxy, credential-refusal and redacted-live-payload gaps retain their own receipts."
+  ],
+  "finalFullCheck": {
+    "command": "RUST_TEST_THREADS=1 npm run check:all",
+    "status": "passed",
+    "log": "/private/tmp/pnds-165-167-final-acceptance-check-all.log",
+    "exitCode": 0,
+    "verifiedAtUtc": "2026-10-15 14:29:02 UTC",
+    "logSha256": "3739c98823875d0a8c11620e1ec3c1805c9872e8e7941406ee0a992fcfde82cc",
+    "staticChecks": [
+      "typecheck",
+      "eslint",
+      "ast-grep",
+      "prettier",
+      "rustfmt",
+      "clippy"
+    ],
+    "tests": {
+      "frontendFilesPassed": 155,
+      "frontendTestsPassed": 1819,
+      "appRustPassed": 509,
+      "appRustExistingIgnored": 5,
+      "diagnosticCliIntegrationPassed": 9,
+      "controlledCheckCliIntegrationPassed": 6,
+      "dnsPassed": 39,
+      "restartIntegrationPassed": 2
+    }
+  },
+  "review": "Existing final Standards/Spec reports remain valid for unchanged semantic source; full-check result is separate.",
+  "existingIgnoredTests": [
+    "bindings::tests::export_bindings",
+    "project::bundle::tests::installed_bundle_draws_offline_in_real_browser_and_after_refresh",
+    "project::bundle::tests::local_shared_project_candidates_install_and_repack",
+    "project::creation::compile_tests::compile_with_real_sclang",
+    "project::shared_libraries::tests::repeated_shipped_shared_project_resolution_is_faster_after_full_verification"
+  ],
+  "runtimeFingerprintSha256": "0d641ace0c714c49cefdcda0d2f7bc07d63a4a92353bb387679678e00e68dee2",
+  "finalSnapshotPath": "/private/tmp/pnds-after-165-167-acceptance-20261015",
+  "nativeConflictReload": "passed per user; three-message external payload and epoch retained byte-for-byte on disk"
+}

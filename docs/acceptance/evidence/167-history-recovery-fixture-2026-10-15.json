@@ -1,0 +1,58 @@
+{
+  "date": "2026-10-15",
+  "fixtureLabel": "History Recovery 167",
+  "fixtureProjectPath": "/private/tmp/pnds-167-history-recovery-xjqnxj5z/History-Recovery-167",
+  "fixturePurpose": "native corrupt-history load, retry and explicit recovery acceptance",
+  "historyPayload": "synthetic intentionally invalid JSON, not a user transcript",
+  "historySha256AtPreparation": "c65b8eda3c21b5ea2b15fcf3be1492b71758d9b768b1f15b7e01c8c6aa7025c0",
+  "historyFileMode": "0o600",
+  "seedState": "fresh isolated App-data history file seeded with corrupt synthetic JSON",
+  "targetWasNewAndExclusivelyCreated": true,
+  "validRecoveryBackup": "two explicitly labelled synthetic messages in a separate private temporary file",
+  "originalProjectModified": false,
+  "protectedOriginalHistoriesVerifiedUnchanged": true,
+  "modelRequestMade": false,
+  "appOrDevServerStarted": false,
+  "nativeVerification": "user reported reload still failed and send button disabled; other initial checks not explicitly confirmed",
+  "readOrReloadPersistenceCheck": "passed: file bytes matched the original corrupt fixture after user reload, before restore",
+  "restoreOrClearPerformed": true,
+  "postReloadObservation": {
+    "date": "2026-10-15",
+    "fixtureLabel": "History Recovery 167",
+    "fileStillMatchesInitialCorruptFixture": true,
+    "userReportedReloadAttempt": true,
+    "userReportedUnableToSend": true,
+    "userReportedSendButtonDisabled": true,
+    "explicitErrorTextConfirmedByUser": false,
+    "cancelClearAndFileDraftCheckConfirmed": false,
+    "validBackupSha256Matches": true,
+    "restoreState": "not performed at observation"
+  },
+  "restoration": {
+    "date": "2026-10-15",
+    "operation": "atomic replacement of isolated corrupt fixture with its valid synthetic backup",
+    "restoredSyntheticMessageCount": 2,
+    "backupHashVerifiedBeforeAndAfter": true,
+    "corruptHashVerifiedBeforeReplacement": true,
+    "protectedOriginalHistoriesVerifiedUnchanged": true,
+    "nativeReloadAfterRestore": "passed per user; two messages, send availability, input, file draft and cancel-clear checks passed",
+    "clearPerformed": false,
+    "modelRequestMade": false,
+    "nativeUserVerification": {
+      "date": "2026-10-15",
+      "status": "passed per user",
+      "twoSyntheticMessagesRestored": true,
+      "errorClearedAndSavedStatusShown": true,
+      "sendButtonAvailableWithNonemptyInput": true,
+      "inputPreserved": true,
+      "unsavedReadmeDraftPreservedAcrossReload": true,
+      "cancelClearPreservedMessagesInputDraftAndFocus": true,
+      "independentScreenshotProvided": false,
+      "readOnlyDiskCheck": {
+        "version": 1,
+        "messageCount": 2,
+        "bytesMatchRestoredBackup": true
+      }
+    }
+  }
+}

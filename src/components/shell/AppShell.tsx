@@ -8,6 +8,7 @@ import { useCreationStore } from '@/store/creation-store'
 import { CreationView } from '@/components/creation'
 import { useCreationTestStore } from '@/store/creation-test-store'
 import { CreationTestIdle } from '@/components/creation/CreationTestIdle'
+import { CreationSplitter } from '@/components/creation/CreationSplitter'
 import { useCommandKeyboard } from '@/hooks/use-command-keyboard'
 import { loadPreferences } from '@/lib/preferences'
 import { ensureUtilitiesFolder } from '@/lib/utilities-folder'
@@ -43,6 +44,7 @@ import {
  */
 export function AppShell() {
   const { t } = useTranslation()
+  const frameRef = useRef<HTMLDivElement>(null)
   const [controlsOpen, setControlsOpen] = useState(false)
   const [introOpen, setIntroOpen] = useState(false)
   const sessionMirror = useRef<SessionSnapshotMirror | null>(null)
@@ -190,6 +192,7 @@ export function AppShell() {
   return (
     <>
       <div
+        ref={frameRef}
         data-app-frame=""
         className={cn(
           'desktop-frame relative h-screen w-screen overflow-hidden bg-(--pnds-bg)',
@@ -205,6 +208,9 @@ export function AppShell() {
           <CreationTestIdle />
         )}
         {creationActive && <CreationView />}
+        {creationActive && creationWorkspace && (
+          <CreationSplitter frame={frameRef} hidden={monitorExpanded} />
+        )}
         {!creationActive && !monitorVisible && !preparing && (
           <main className="desktop-performance-main">
             {sessionStatus === 'error' ? <ErrorScreen /> : <ReadmePanel />}

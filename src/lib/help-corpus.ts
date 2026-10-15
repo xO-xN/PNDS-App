@@ -37,6 +37,7 @@ export interface RawHelpDocument {
   /** Language-tree-relative path — the link-resolution base (#56). */
   path: string
   markdown: string
+  version?: string | null
 }
 
 /** A placed, parsed help document — what the index and window consume. */
@@ -49,6 +50,7 @@ export interface HelpDocument {
   path: string
   markdown: string
   sections: HelpSection[]
+  version?: string | null
 }
 
 /**
@@ -137,7 +139,7 @@ export function buildHelpCorpus(
   }
 
   return expected.map(({ book, id }) => {
-    const { markdown, path } = byId.get(id) as RawHelpDocument
+    const { markdown, path, version } = byId.get(id) as RawHelpDocument
     const sections = splitSections(markdown)
     const titleSection = sections.find(
       section => section.level === 1 && section.title !== ''
@@ -148,6 +150,7 @@ export function buildHelpCorpus(
       title: titleSection?.title ?? id,
       path,
       markdown,
+      version,
       sections,
     }
   })

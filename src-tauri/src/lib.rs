@@ -3,12 +3,14 @@
 //! Command implementations are organized in the `commands` module,
 //! project/session logic in `project`, and shared types in `types`.
 
+mod assistant_history;
 mod bindings;
 mod commands;
 mod dns;
 mod events;
 mod gateway;
 mod https;
+mod model;
 mod open_panel;
 mod performer;
 mod process_activity;
@@ -91,6 +93,10 @@ pub fn run() {
         .manage(crate::window::WindowManager::default())
         .manage(crate::performer::VisibilityIntent::default())
         .manage(crate::commands::preferences::PreferencesCache::default())
+        .manage(crate::assistant_history::AssistantHistoryStore::default())
+        .manage(crate::model::ModelService::new(
+            crate::model::KeychainCredentials,
+        ))
         .manage(crate::commands::bundle::PendingBundleOpens::default())
         .manage(crate::commands::creation::CreationState::default())
         .manage(crate::commands::controlled_checks::ControlledCheckState::default())

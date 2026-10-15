@@ -228,6 +228,62 @@ describe('AppShell', () => {
     ).toBeInTheDocument()
   })
 
+  it('adjusts discussion width by keyboard and keeps the same running monitor across file reading', async () => {
+    vi.mocked(commands.getSessionState).mockResolvedValue({
+      status: 'ok',
+      data: readySnapshot,
+    })
+    vi.mocked(commands.loadPreferences).mockResolvedValue({
+      status: 'ok',
+      data: { theme: 'system', language: null, assistantMonitorRatio: 0.4 },
+    })
+    vi.mocked(commands.readCreationFile).mockResolvedValue({
+      status: 'ok',
+      data: { kind: 'text', text: 'score content', version: 'v1' },
+    })
+    useSessionStore.getState().applySnapshot(readySnapshot)
+    useCreationStore.setState({
+      active: true,
+      workspace: {
+        project: {
+          identity: 'split-test',
+          root: '/p',
+          name: 'Score',
+          source: 'folder',
+        },
+        files: [
+          { path: 'score.js', kind: 'text', category: 'pages', size: 10 },
+        ],
+      },
+    })
+    render(<AppShell />)
+    const monitor = await screen.findByTitle('Project monitor')
+    const src = monitor.getAttribute('src')
+    const divider = screen.getByRole('separator', {
+      name: 'Discussion and monitor width',
+    })
+    expect(divider).toHaveAttribute('aria-orientation', 'vertical')
+    fireEvent.keyDown(divider, { key: 'ArrowLeft' })
+    await waitFor(() =>
+      expect(commands.savePreferences).toHaveBeenCalledWith(
+        expect.objectContaining({ assistantMonitorRatio: expect.any(Number) })
+      )
+    )
+    const wider = Number(divider.getAttribute('aria-valuenow'))
+    expect(wider).toBeGreaterThan(40)
+    fireEvent.click(screen.getByRole('button', { name: 'score.js' }))
+    expect(
+      await screen.findByRole('textbox', { name: 'score.js' })
+    ).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: 'Back to discussion' }))
+    fireEvent.keyDown(divider, { key: 'Home' })
+    expect(divider).toHaveAttribute('aria-valuenow', '40')
+    expect(screen.getByTitle('Project monitor')).toBe(monitor)
+    expect(monitor.getAttribute('src')).toBe(src)
+    expect(commands.startProject).not.toHaveBeenCalled()
+    expect(commands.stopProject).not.toHaveBeenCalled()
+  })
+
   it.each(['submit', 'opening', 'mode switch'])(
     'keeps the expanded monitor during %s and restores the same document afterward',
     async gate => {

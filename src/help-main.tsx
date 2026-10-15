@@ -3,7 +3,7 @@ import './App.css'
 import { HelpCenterApp } from '@/components/help/HelpCenter'
 import { colorThemeFromPrefs, setColorThemeAttribute } from '@/lib/color-theme'
 import { suppressDefaultContextMenu } from '@/lib/context-menu'
-import type { HelpTarget } from '@/lib/help-window'
+import { parseHelpTarget } from '@/lib/help-target'
 import { commands } from '@/lib/tauri-bindings'
 import { initializeLanguage } from '@/i18n/language-init'
 
@@ -23,14 +23,6 @@ import { initializeLanguage } from '@/i18n/language-init'
 // Same right-click policy as the main window (see lib/context-menu.ts).
 suppressDefaultContextMenu()
 
-function parseInitialTarget(): HelpTarget | undefined {
-  const params = new URLSearchParams(window.location.search)
-  const docId = params.get('doc')
-  if (docId !== null) return { kind: 'doc', docId }
-  if (params.get('search') === '1') return { kind: 'search' }
-  return undefined
-}
-
 async function boot(): Promise<void> {
   let language: string | null = null
   let colorTheme: string | null = null
@@ -44,7 +36,7 @@ async function boot(): Promise<void> {
   setColorThemeAttribute(colorThemeFromPrefs(colorTheme))
   await initializeLanguage(language)
   ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
-    <HelpCenterApp initialTarget={parseInitialTarget()} />
+    <HelpCenterApp initialTarget={parseHelpTarget(window.location.search)} />
   )
 }
 
