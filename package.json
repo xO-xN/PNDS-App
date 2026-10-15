@@ -56,6 +56,8 @@
     "utilities:fetch": "node scripts/fetch-utilities.mjs",
     "dnsd:build": "bash scripts/build-dnsd.sh",
     "dnsd:build:all": "bash scripts/build-dnsd.sh --all",
+    "cli:build": "bash scripts/build-cli.sh",
+    "cli:build:all": "bash scripts/build-cli.sh --all",
     "libraries:fetch": "node scripts/fetch-shared-libraries.mjs",
     "libraries:check": "node scripts/fetch-shared-libraries.mjs --check",
     "libraries:verify": "node scripts/verify-shared-libraries.mjs"

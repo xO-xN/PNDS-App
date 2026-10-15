@@ -133,6 +133,7 @@
       "entitlements": "entitlements.plist",
       "exceptionDomain": "",
       "files": {
+        "MacOS/pnds": "binaries/pnds-aarch64-apple-darwin",
         "Library/LaunchDaemons/com.xo-xn.pnds-app.dnsd.plist": "launchd/com.xo-xn.pnds-app.dnsd.plist"
       }
     }

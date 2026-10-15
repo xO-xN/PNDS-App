@@ -3,8 +3,10 @@
 pub mod audio;
 pub mod bundle;
 pub mod children;
+mod contained_read;
 pub mod cover;
 pub mod creation;
+pub mod diagnostics;
 pub mod handoff;
 pub mod logs;
 pub mod manifest;

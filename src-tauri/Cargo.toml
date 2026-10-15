@@ -6,6 +6,7 @@ members = ["dnsd"]
 
 [package]
 name = "pnds-app"
+default-run = "pnds-app"
 version = "1.6.3"
 description = "在演出现场运行 PNDS 数字乐谱工程的 macOS 桌面 Host 应用"
 authors = ["xO-xN"]
@@ -20,6 +21,10 @@ rust-version = "1.82"
 # This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
 name = "pnds_app_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "pnds"
+path = "src/bin/pnds.rs"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

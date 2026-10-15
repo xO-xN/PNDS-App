@@ -1,10 +1,13 @@
 //! Exact, offline App library resolution. Models and author sources stay in projects.
+use super::contained_read::ReadRoot;
 use crate::project::manifest::{exact_library_version, SharedLibraryReference, SHARED_LIBRARY_IDS};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use specta::Type;
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::fs::{self, File, Metadata};
+#[cfg(test)]
+use std::fs;
+use std::fs::{File, Metadata};
 use std::io::Read;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Component, Path, PathBuf};
@@ -115,33 +118,56 @@ impl SharedLibraryResolver {
         if references.is_empty() {
             return Ok(BTreeMap::new());
         }
-        self.resolve(root, references)
+        let reader = ReadRoot::new(root).map_err(|error| {
+            required_error(
+                references,
+                format!("App shared library directory missing: {error}"),
+            )
+        })?;
+        self.resolve(&reader, references, None)
             .map_err(|detail| required_error(references, detail))
+    }
+
+    /// Static diagnostics bound and fingerprint a captured catalog before
+    /// checking resources. Do not substitute a later catalog's inventory.
+    pub(crate) fn resolve_observed_at(
+        &self,
+        root: &ReadRoot,
+        references: &[SharedLibraryReference],
+        observed_catalog: &Metadata,
+    ) -> Result<ResolvedLibraries, String> {
+        self.resolve(
+            root,
+            references,
+            Some(FileStamp::from(observed_catalog.clone())),
+        )
+        .map_err(|detail| required_error(references, detail))
     }
 
     fn resolve(
         &self,
-        root: &Path,
+        reader: &ReadRoot,
         references: &[SharedLibraryReference],
+        observed_catalog: Option<FileStamp>,
     ) -> Result<ResolvedLibraries, String> {
-        let root = root
-            .canonicalize()
-            .map_err(|error| format!("App shared library directory missing: {error}"))?;
+        let root = &reader.path;
         // Serialize verification, so concurrent requests share a completed scan
         // rather than hashing the same immutable App files in parallel.
         let mut verified = self
             .verified
             .lock()
             .map_err(|_| "App shared library verification cache is unavailable")?;
-        let catalog_path = within(&root, "catalog.json")?;
-        let stamp = FileStamp::from(fs::metadata(&catalog_path).map_err(|e| e.to_string())?);
+        let stamp = FileStamp::from(shared_metadata(reader, "catalog.json")?);
+        if observed_catalog.is_some_and(|observed| observed != stamp) {
+            return Err("App shared library catalog changed after observation; check again".into());
+        }
         if !verified
             .as_ref()
-            .is_some_and(|cached| cached.root == root && cached.stamp == stamp)
+            .is_some_and(|cached| cached.root == *root && cached.stamp == stamp)
         {
             *verified = None;
-            let catalog = LibraryCatalog::load(&root)?;
-            if FileStamp::from(fs::metadata(&catalog_path).map_err(|e| e.to_string())?) != stamp {
+            let catalog = LibraryCatalog::load_with_reader(reader)?;
+            if FileStamp::from(shared_metadata(reader, "catalog.json")?) != stamp {
                 return Err("App shared library catalog changed during verification".into());
             }
             *verified = Some(VerifiedCatalog {
@@ -154,10 +180,10 @@ impl SharedLibraryResolver {
         let cached = verified.as_mut().expect("the catalog was loaded above");
         let result = cached
             .catalog
-            .resolve_verified(&root, references, &mut cached.files);
+            .resolve_verified(reader, references, &mut cached.files);
         // A catalog replaced while its resources were checked invalidates the
         // whole result, including otherwise successful file hashes.
-        let unchanged = fs::metadata(&catalog_path)
+        let unchanged = shared_metadata(reader, "catalog.json")
             .map(|metadata| FileStamp::from(metadata) == stamp)
             .unwrap_or(false);
         if result.is_err() || !unchanged {
@@ -166,17 +192,22 @@ impl SharedLibraryResolver {
         if !unchanged {
             return Err("App shared library catalog changed during verification".into());
         }
+        if let Err(error) = reader.check_current() {
+            *verified = None;
+            return Err(error);
+        }
         result
     }
 }
 
 fn verify_file(
-    root: &Path,
+    reader: &ReadRoot,
     resource: &LibraryFile,
     verified: &mut HashMap<String, VerifiedFile>,
 ) -> Result<(), String> {
+    let root = &reader.path;
     let path = within(root, &resource.path)?;
-    let mut file = File::open(&path).map_err(|error| error.to_string())?;
+    let mut file = open_shared(reader, &resource.path)?;
     let stamp = FileStamp::from(file.metadata().map_err(|error| error.to_string())?);
     if stamp.bytes != resource.bytes {
         return Err(format!("{} size mismatch", resource.path));
@@ -189,8 +220,11 @@ fn verify_file(
         verified.remove(&resource.path);
         let mut hash = Sha256::new();
         let mut buffer = [0; 65536];
+        let mut bounded = (&mut file).take(resource.bytes.saturating_add(1));
         loop {
-            let read = file.read(&mut buffer).map_err(|error| error.to_string())?;
+            let read = bounded
+                .read(&mut buffer)
+                .map_err(|error| error.to_string())?;
             if read == 0 {
                 break;
             }
@@ -201,7 +235,7 @@ fn verify_file(
         }
     }
     if FileStamp::from(file.metadata().map_err(|error| error.to_string())?) != stamp
-        || FileStamp::from(fs::metadata(&path).map_err(|error| error.to_string())?) != stamp
+        || FileStamp::from(shared_metadata(reader, &resource.path)?) != stamp
         || within(root, &resource.path)? != path
     {
         verified.remove(&resource.path);
@@ -240,13 +274,34 @@ fn within(root: &Path, relative: &str) -> Result<PathBuf, String> {
     Ok(path)
 }
 
+fn open_shared(reader: &ReadRoot, relative: &str) -> Result<File, String> {
+    within(&reader.path, relative)?;
+    let file = reader.open(relative, "Shared library resource")?;
+    if !file
+        .metadata()
+        .map_err(|error| error.to_string())?
+        .is_file()
+    {
+        return Err(format!("Shared library resource is not a file: {relative}"));
+    }
+    Ok(file)
+}
+
+fn shared_metadata(reader: &ReadRoot, relative: &str) -> Result<Metadata, String> {
+    open_shared(reader, relative)?
+        .metadata()
+        .map_err(|error| error.to_string())
+}
+
 impl LibraryCatalog {
     pub fn load(root: &Path) -> Result<Self, String> {
-        let root = root
-            .canonicalize()
+        let reader = ReadRoot::new(root)
             .map_err(|error| format!("App shared library directory missing: {error}"))?;
-        let path = within(&root, "catalog.json")?;
-        let mut file = File::open(&path).map_err(|error| error.to_string())?;
+        Self::load_with_reader(&reader)
+    }
+
+    pub(crate) fn load_with_reader(reader: &ReadRoot) -> Result<Self, String> {
+        let mut file = open_shared(reader, "catalog.json")?;
         let stamp = FileStamp::from(file.metadata().map_err(|e| e.to_string())?);
         let mut bytes = Vec::new();
         (&mut file)
@@ -257,7 +312,7 @@ impl LibraryCatalog {
             return Err("App shared library catalog exceeds 32 MiB".into());
         }
         if FileStamp::from(file.metadata().map_err(|e| e.to_string())?) != stamp
-            || FileStamp::from(fs::metadata(&path).map_err(|e| e.to_string())?) != stamp
+            || FileStamp::from(shared_metadata(reader, "catalog.json")?) != stamp
         {
             return Err("App shared library catalog changed during verification".into());
         }
@@ -302,6 +357,7 @@ impl LibraryCatalog {
                 ));
             }
         }
+        reader.check_current()?;
         Ok(catalog)
     }
 
@@ -311,18 +367,18 @@ impl LibraryCatalog {
         references: &[SharedLibraryReference],
     ) -> Result<ResolvedLibraries, String> {
         // Bundle validation always performs a fresh complete content scan.
-        self.resolve_verified(root, references, &mut HashMap::new())
+        let reader = ReadRoot::new(root)
+            .map_err(|error| format!("App shared library directory missing: {error}"))?;
+        self.resolve_verified(&reader, references, &mut HashMap::new())
     }
 
     fn resolve_verified(
         &self,
-        root: &Path,
+        reader: &ReadRoot,
         references: &[SharedLibraryReference],
         verified: &mut HashMap<String, VerifiedFile>,
     ) -> Result<ResolvedLibraries, String> {
-        let root = root
-            .canonicalize()
-            .map_err(|error| format!("App shared library directory missing: {error}"))?;
+        let root = &reader.path;
         let mut resolved = BTreeMap::new();
         let mut checked = HashSet::new();
         for reference in references {
@@ -336,7 +392,7 @@ impl LibraryCatalog {
                     resource.bytes,
                     resource.sha256.as_str(),
                 )) {
-                    verify_file(&root, resource, verified).map_err(|detail| {
+                    verify_file(reader, resource, verified).map_err(|detail| {
                         format!("Shared library {id} {version} is damaged: {detail}")
                     })?;
                 }
@@ -346,19 +402,18 @@ impl LibraryCatalog {
                 ResolvedLibrary {
                     version: version.clone(),
                     kind: library.kind.clone(),
-                    path: within(&root, &library.entry)?
-                        .to_string_lossy()
-                        .into_owned(),
+                    path: within(root, &library.entry)?.to_string_lossy().into_owned(),
                     browser_path: library
                         .browser_entry
                         .as_ref()
                         .map(|path| {
-                            within(&root, path).map(|path| path.to_string_lossy().into_owned())
+                            within(root, path).map(|path| path.to_string_lossy().into_owned())
                         })
                         .transpose()?,
                 },
             );
         }
+        reader.check_current()?;
         Ok(resolved)
     }
 }
@@ -404,7 +459,7 @@ pub fn shipped_root<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<Path
         .unwrap_or_else(default_root)
 }
 
-fn required_error(references: &[SharedLibraryReference], detail: String) -> String {
+pub(crate) fn required_error(references: &[SharedLibraryReference], detail: String) -> String {
     let required = references
         .iter()
         .map(|SharedLibraryReference { id, version }| format!("{id} {version}"))
@@ -713,5 +768,40 @@ mod tests {
         assert!(resolve_at(&temp.path().join("missing"), &[])
             .unwrap()
             .is_empty());
+    }
+
+    #[test]
+    fn public_resolvers_reject_nonregular_replacements_without_waiting_for_a_writer() {
+        use std::ffi::CString;
+        use std::os::unix::ffi::OsStrExt;
+        let temp = tempfile::tempdir().unwrap();
+        let references = node_fixture(temp.path());
+        let resolver = SharedLibraryResolver::default();
+        resolver.resolve_at(temp.path(), &references).unwrap();
+        let catalog = LibraryCatalog::load(temp.path()).unwrap();
+        let entry = temp.path().join("node/entry.js");
+        fs::rename(&entry, temp.path().join("node/previous.js")).unwrap();
+        let fifo = CString::new(entry.as_os_str().as_bytes()).unwrap();
+        assert_eq!(unsafe { libc::mkfifo(fifo.as_ptr(), 0o600) }, 0);
+        assert!(resolver
+            .resolve_at(temp.path(), &references)
+            .unwrap_err()
+            .contains("not a file"));
+        assert!(catalog
+            .resolve(temp.path(), &references)
+            .unwrap_err()
+            .contains("not a file"));
+        let path = temp.path().join("catalog.json");
+        fs::rename(&path, temp.path().join("previous-catalog.json")).unwrap();
+        let fifo = CString::new(path.as_os_str().as_bytes()).unwrap();
+        assert_eq!(unsafe { libc::mkfifo(fifo.as_ptr(), 0o600) }, 0);
+        assert!(LibraryCatalog::load(temp.path())
+            .err()
+            .unwrap()
+            .contains("not a file"));
+        assert!(resolver
+            .resolve_at(temp.path(), &references)
+            .unwrap_err()
+            .contains("not a file"));
     }
 }

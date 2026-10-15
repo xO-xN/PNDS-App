@@ -217,6 +217,22 @@ async getCreationManifest(identity: string) : Promise<Result<Manifest, CreationE
     else return { status: "error", error: e  as any };
 }
 },
+async diagnoseCreationProject(identity: string) : Promise<Result<DiagnosticReport, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("diagnose_creation_project", { identity }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async creationDiagnosticIsStale(identity: string, inputFingerprint: string) : Promise<Result<boolean, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("creation_diagnostic_is_stale", { identity, inputFingerprint }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async preflightCreationProject(identity: string) : Promise<Result<Manifest, CreationError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("preflight_creation_project", { identity }) };
@@ -1013,7 +1029,7 @@ recentCreationProjects?: string[];
  * Last owned native parent selection for new-project creation. It may
  * no longer exist; creation reports that failure without replacing it.
  */
-lastCreationParent?: string | null;
+lastCreationParent?: string | null; 
 /**
  * v1.1.2: one-level performance folders (set lists). Membership only —
  * the trusted list above stays the master list, so deleting a folder
@@ -1235,6 +1251,13 @@ export type CreationProject = { identity: string; root: string; name: string; so
 export type CreationRuntime = { generation: string; snapshot: SessionSnapshot; projectRoot: string | null }
 export type CreationSource = "folder" | "bundle" | "utility" | "readOnlyFolder"
 export type CreationWorkspace = { project: CreationProject; files: CreationFile[] }
+export type DiagnosticCheck = { code: string; status: DiagnosticStatus; reason: string }
+export type DiagnosticInput = { path: string; kind: string; fingerprint: string }
+export type DiagnosticIssue = { code: string; severity: DiagnosticSeverity; field: string | null; path: string | null; reason: string }
+export type DiagnosticProject = { id: string; name: string; version: string }
+export type DiagnosticReport = { schemaVersion: number; checkerVersion: string; projectPath: string; project: DiagnosticProject | null; inputFingerprint: string; inputs: DiagnosticInput[]; checks: DiagnosticCheck[]; issues: DiagnosticIssue[]; unverified: string[]; staticPassed: boolean }
+export type DiagnosticSeverity = "error" | "warning"
+export type DiagnosticStatus = "passed" | "failed" | "skipped"
 /**
  * Control-plane listener liveness as reported by the daemon.
  */

@@ -27,6 +27,7 @@ v1.6.0 的 #150–#163 与 UI 收口 #195 已关闭；首批真实模块添加 #
 - **Blank／Classic 固定创建来源、独立身份与取消／失败保护** → [creation-workspace.md](./creation-workspace.md#fixed-classic-source-and-initialization-200)
 - **工程范围内只读 Git 状态、分层差异与过期快照** → [creation-workspace.md](./creation-workspace.md#read-only-git-inspection-201)
 - **创作阅读、可信工程身份、文件限制与异步切换** → [creation-workspace.md](./creation-workspace.md)
+- **无副作用的 App Doctor、共用报告与离线 CLI** → [static-diagnostics.md](./static-diagnostics.md)（#193 / #203 / #204）。
 - **创作草稿、手动保存、重命名与磁盘版本冲突** → [creation-workspace.md](./creation-workspace.md#manual-save-rename-and-disk-conflicts-154)
 - **错误如何传播、用户反馈与重试模式** → [error-handling.md](./error-handling.md)
 

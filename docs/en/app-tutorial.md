@@ -186,3 +186,28 @@ The shortcuts an App user reaches for (creators asking "which keys can my pages 
 | `⌘ Q`                      | Quit the App (confirm flow while running)                                                                           |
 
 In the performance main window, `⌘ ⌥ Enter` loads the prepared selected Project even with monitor/input focus. Replacing a live show still asks for confirmation; its running card applies pending settings through Change/restart, and an unchanged running card is a no-op. Preflight, LAN, node configuration and overlay/busy gates remain. A request made before preflight finishes is not queued: press again once ready. Creation and secondary windows retain their keys; plain Enter and the projection start gate keep their existing behavior.
+
+## Static project diagnostics
+
+Choose “Static Doctor” in the creation workbench to check saved project
+files explicitly. Unsaved drafts are excluded and are never saved by checking.
+The action remains available while a performance starts, runs or stops. It does
+not start project code, clean processes, reserve ports or install dependencies.
+
+The report identifies the project and version, scope, blocking errors, warnings,
+skipped checks and unverified behavior. Open a project-relative file location to
+return to its editor, then save your changes and explicitly check again. Disk
+changes mark the previous report stale. Static success covers only the listed
+static checks; page behavior, runtime readiness and real sound need separate
+testing.
+
+External agents can use the command-line tool bundled with the App:
+
+```sh
+/Applications/PNDS.app/Contents/MacOS/pnds check /path/to/project --json
+```
+
+It uses the same static rules as the App and prints a readable report by default.
+`--json` emits a machine-readable report. Run `pnds --help` for parameters and exit
+status meanings. The tool reads local resources without executing project source
+or changing the project.

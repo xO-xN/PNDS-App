@@ -23,6 +23,8 @@ pub fn generate_bindings() -> Builder<tauri::Wry> {
         creation::create_classic_project,
         creation::compile_creation_synthdefs,
         creation::get_creation_manifest,
+        creation::diagnose_creation_project,
+        creation::creation_diagnostic_is_stale,
         creation::preflight_creation_project,
         creation::start_creation_project,
         creation::prepare_creation_project,

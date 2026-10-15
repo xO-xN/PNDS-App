@@ -236,6 +236,13 @@ vi.mock('@/lib/tauri-bindings', async () => {
       describeCreationProjects: vi
         .fn()
         .mockResolvedValue({ status: 'ok', data: [] }),
+      diagnoseCreationProject: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: { code: 'io', detail: 'diagnoseCreationProject not mocked' },
+      }),
+      creationDiagnosticIsStale: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: false }),
       getCreationGitStatus: vi.fn().mockResolvedValue({
         status: 'ok',
         data: {

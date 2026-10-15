@@ -336,3 +336,13 @@ they do not prove macOS accelerator delivery. Physical keystrokes in the complet
 App, fullscreen, actual score-monitor identity/layout and runtime preservation
 remain user-run native acceptance; use the checklist in
 [keyboard-shortcuts.md](./keyboard-shortcuts.md#native-performance-selection-202).
+
+## Static project diagnostics (#193)
+
+Diagnostics are tested through public reports and the actual `pnds check`
+executable on temporary project directories. App component tests use only the
+typed native boundary for deterministic command timing; filesystem rules and
+report parity are exercised in Rust. No developer server, network, installed
+project, external compiler or actual sound is needed for these static checks.
+Native macOS keyboard, theme and active-performance acceptance remains separate
+and must be recorded against the built version.

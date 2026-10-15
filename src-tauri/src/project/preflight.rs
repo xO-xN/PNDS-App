@@ -36,6 +36,25 @@ pub fn check_dependencies_with_shared(
     let parsed: serde_json::Value = serde_json::from_str(&body)
         .map_err(|e| format!("{} is not valid JSON: {e}", package_json.display()))?;
 
+    check_dependency_value(
+        &parsed,
+        references,
+        project_root.join("node_modules").is_dir(),
+        &project_root.join("node_modules"),
+    )
+}
+
+/// Shared declaration rule for runtime loading and bounded static diagnostics.
+pub(crate) fn check_dependency_value(
+    parsed: &serde_json::Value,
+    references: &[crate::project::manifest::SharedLibraryReference],
+    node_modules_available: bool,
+    node_modules: &Path,
+) -> Result<(), String> {
+    let package_json = node_modules
+        .parent()
+        .unwrap_or(node_modules)
+        .join("package.json");
     let mut local_dependencies = Vec::new();
     for field in ["dependencies", "optionalDependencies"] {
         match parsed.get(field) {
@@ -63,21 +82,18 @@ pub fn check_dependencies_with_shared(
         }
     }
 
-    if !local_dependencies.is_empty() {
-        let node_modules = project_root.join("node_modules");
-        if !node_modules.is_dir() {
-            let mut message = format!(
-                "Project dependencies are missing.\nExpected: {}",
-                node_modules.display()
-            );
-            if !references.is_empty() {
-                message.push_str(&format!(
+    if !local_dependencies.is_empty() && !node_modules_available {
+        let mut message = format!(
+            "Project dependencies are missing.\nExpected: {}",
+            node_modules.display()
+        );
+        if !references.is_empty() {
+            message.push_str(&format!(
                     "\nNot covered by exact shared references: {}. Keep local dependencies or declare the same exact package version.",
                     local_dependencies.join(", ")
                 ));
-            }
-            return Err(message);
         }
+        return Err(message);
     }
     Ok(())
 }

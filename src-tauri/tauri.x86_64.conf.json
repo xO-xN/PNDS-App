@@ -1,6 +1,11 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "bundle": {
+    "macOS": {
+      "files": {
+        "MacOS/pnds": "binaries/pnds-x86_64-apple-darwin"
+      }
+    },
     "resources": {
       "binaries/scsynth-aarch64-apple-darwin": null,
       "binaries/scsynth-x86_64-apple-darwin": "scsynth"

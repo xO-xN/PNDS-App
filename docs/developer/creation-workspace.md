@@ -938,3 +938,33 @@ Controlled child processes prove timeout and both output bounds. UI workflow tes
 exercise the project-menu entry, stale/refresh and late-result behavior, and retain
 drafts plus a running session. Native visual/focus and user-started App validation
 remain separate acceptance evidence.
+
+## Static Doctor (#203)
+
+The workbench offers an explicit static diagnostic action for the saved project.
+It remains available while a performance starts, runs or stops and for protected
+read-only workspaces. It never saves drafts, compiles, installs dependencies,
+starts or stops a session, probes ports or runs project code.
+
+Both App and CLI consume the same Rust diagnostic report. The App binds its
+request to the backend-issued workspace identity and discards late results after
+a workspace switch. Results identify the observed project and version, checker
+version, checked inputs, individual issues and skipped checks. A static pass
+leaves page behavior, health, audio devices, sound and artistic completion
+unverified. Existing local dependency-directory checks do not establish the
+correctness of every installed package or runtime import.
+
+The dialog distinguishes blocking errors, advisory warnings and prerequisites
+that prevented checks. Project-relative locations can open a corresponding file
+in the workbench. Disk changes mark a displayed report stale; only an explicit
+new check produces a new report. Unsaved drafts remain separate and unchanged.
+Read-only freshness checks also cover observations outside the normal creation
+file watcher, including shared resources and dependency state. A freshness error
+leaves the report unconfirmed and offers another explicit check.
+
+The public report and real CLI executable are the testing seams. Rust temporary
+projects exercise missing, incomplete, invalid, escaping and unreadable inputs
+with multiple independent problems, while occupied ports and controlled live
+processes remain untouched. Component tests exercise ownership, stale results,
+localization, keyboard interaction and navigation without runtime commands.
+See [static-diagnostics.md](./static-diagnostics.md) for report and CLI contracts.

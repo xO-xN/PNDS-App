@@ -14,6 +14,11 @@ mod performer;
 mod process_activity;
 mod project;
 mod types;
+
+pub use project::diagnostics::{
+    diagnose_project, DiagnosticCheck, DiagnosticInput, DiagnosticIssue, DiagnosticProject,
+    DiagnosticReport, DiagnosticSeverity, DiagnosticStatus,
+};
 mod window;
 
 use std::collections::HashSet;

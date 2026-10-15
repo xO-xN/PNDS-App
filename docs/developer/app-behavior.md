@@ -554,3 +554,13 @@ dependency/Skills installation and runtime are unchanged. See
 Release acceptance, including user-reported native evidence and the still
 required Apple Silicon/Intel clean-environment runs, is tracked separately in
 [#164 acceptance](../acceptance/164-v1.6.0-workflows.md).
+
+### 静态工程诊断（#193 / #203 / #204）
+
+创作工作台提供独立的静态 Doctor 操作，读取已保存工程，不自动保存草稿。
+它在演出启动、运行和关停期间仍可用，不启动或执行工程、不清理进程、
+不检查端口、不安装依赖，也不替换运行身份。报告显示工程与版本、
+观察输入、静态范围、多项问题及跳过原因；静态通过仍保留页面、运行和
+声音未验证。工程磁盘变化使旧结果过期，切换后的迟到结果不能进入新工程。
+App 与离线 `pnds check` 共用同一报告服务；具体结构、退出状态及边界见
+[static-diagnostics.md](./static-diagnostics.md)。

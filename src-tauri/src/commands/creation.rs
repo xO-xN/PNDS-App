@@ -63,8 +63,11 @@ pub async fn compile_creation_synthdefs(
 }
 
 fn protection(app: &AppHandle) -> Result<Protection, CreationError> {
-    let bundles = super::bundle::bundles_root(app)
-        .map_err(|e| CreationError::new(CreationErrorCode::Io, e))?;
+    let bundles = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| CreationError::new(CreationErrorCode::Io, e.to_string()))?
+        .join(crate::project::bundle::BUNDLES_DIR);
     let registry = super::tools::builtin_tool_registry()
         .map_err(|e| CreationError::new(CreationErrorCode::Io, e))?;
     let utilities = super::tools::staged_dir_candidates(app)
@@ -99,6 +102,59 @@ impl CreationState {
         })
         .await
     }
+}
+
+/// Diagnostics capture and revalidate the issued identity without holding a
+/// creation or runtime lock during I/O. Protection lookup performs no writes.
+async fn creation_diagnostic(
+    app: AppHandle,
+    access: Arc<Mutex<CreationAccess>>,
+    identity: String,
+) -> Result<crate::project::diagnostics::DiagnosticReport, CreationError> {
+    run_blocking(move || {
+        let protection = protection(&app)?;
+        let lock_error =
+            |_| CreationError::new(CreationErrorCode::Io, "Creation workspace lock failed");
+        let project = access
+            .lock()
+            .map_err(lock_error)?
+            .descriptor(&identity, &protection)?;
+        let libraries = crate::project::shared_libraries::shipped_root(&app).ok();
+        let report = crate::project::diagnostics::diagnose_project(
+            Path::new(&project.root),
+            libraries.as_deref(),
+        );
+        access
+            .lock()
+            .map_err(lock_error)?
+            .descriptor(&identity, &protection)?;
+        Ok(report)
+    })
+    .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn diagnose_creation_project(
+    app: AppHandle,
+    state: State<'_, CreationState>,
+    identity: String,
+) -> Result<crate::project::diagnostics::DiagnosticReport, CreationError> {
+    creation_diagnostic(app, state.access.clone(), identity).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn creation_diagnostic_is_stale(
+    app: AppHandle,
+    state: State<'_, CreationState>,
+    identity: String,
+    input_fingerprint: String,
+) -> Result<bool, CreationError> {
+    Ok(creation_diagnostic(app, state.access.clone(), identity)
+        .await?
+        .input_fingerprint
+        != input_fingerprint)
 }
 
 #[tauri::command]

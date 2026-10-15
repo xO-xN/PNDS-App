@@ -425,7 +425,7 @@ fn validate_schema(value: &Value) -> Result<(), String> {
 
 /// Resolves a manifest-relative path, enforcing manifest.md: relative only, no
 /// escape, and the real (symlink-resolved) path must stay inside the project.
-fn resolve_within(
+pub(crate) fn resolve_within(
     root: &Path,
     canonical_root: &Path,
     rel: &str,

@@ -374,3 +374,12 @@ for its applied ports. `releasePort` requires the identity shown in the
 confirmation; the backend protects actual child handles before both signals.
 See [Ports inspection and release](./ports.md) for cancellation, lifecycle
 locking and controlled-process tests.
+
+## Static diagnostics (#203)
+
+`diagnoseCreationProject(identity)` reads the saved trusted workspace and returns
+the common `DiagnosticReport` used by the CLI.
+`creationDiagnosticIsStale(identity, inputFingerprint)` compares the observed
+inputs without saving or changing runtime state. Neither command takes a session
+lease or invokes runtime preflight. Both recheck workspace ownership after I/O.
+See [static-diagnostics.md](./static-diagnostics.md).

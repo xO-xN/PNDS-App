@@ -145,6 +145,16 @@ jobs:
       - name: Build dnsd sidecars (both lanes)
         run: npm run dnsd:build:all
 
+      # The CLI shares the App crate's static service. Stage frontend/resources
+      # before compiling that library, then ship the exact target through each
+      # lane's macOS.files mapping without an externalBin bootstrap cycle.
+      - name: Build static CLI (both lanes)
+        run: |
+          npm run build
+          npm run libraries:fetch
+          npm run utilities:fetch
+          npm run cli:build:all
+
       # Lane 1 — arm64 mainline: native build, base tauri.conf.json (Node 24
       # sidecar, scsynth aarch64 slice, min macOS 13.5). Creates the draft
       # release; uploadUpdaterJson writes latest.json with the darwin-aarch64

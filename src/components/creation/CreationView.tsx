@@ -14,6 +14,7 @@ import {
   Image,
   Volume2,
   Package,
+  Stethoscope,
   X,
 } from 'lucide-react'
 import {
@@ -51,6 +52,7 @@ import { CreationBundle } from './CreationBundle'
 import { CreationModules } from './CreationModules'
 import { CreationLibraries } from './CreationLibraries'
 import { CreationGit } from './CreationGit'
+import { CreationDoctor } from './CreationDoctor'
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -76,6 +78,7 @@ function ReadingWorkspace({
   menuTarget,
   menuBlocked,
   actionsTarget,
+  inspectionBlocked,
 }: {
   workspace: CreationWorkspace
   chooseProject: () => void
@@ -83,11 +86,13 @@ function ReadingWorkspace({
   menuTarget: HTMLDivElement | null
   menuBlocked: boolean
   actionsTarget: HTMLDivElement | null
+  inspectionBlocked: boolean
 }) {
   const { t, i18n } = useTranslation()
   const [search, setSearch] = useState('')
   const menuAction = useRef<(() => void) | null>(null)
   const [bundleOpen, setBundleOpen] = useState(false)
+  const [doctorOpen, setDoctorOpen] = useState(false)
   const [gitOpen, setGitOpen] = useState(false)
   const [closedGroups, setClosedGroups] = useState<string[]>([
     'artifacts',
@@ -288,6 +293,23 @@ function ReadingWorkspace({
           menuTarget
         )}
       {actionsTarget &&
+        createPortal(
+          <button
+            type="button"
+            data-creation-doctor=""
+            data-tauri-drag-region="false"
+            className="creation-titlebar-trigger pnds-focus-ring"
+            disabled={opening || inspectionBlocked}
+            onClick={() => setDoctorOpen(true)}
+          >
+            <Stethoscope aria-hidden="true" />
+            <span className="creation-titlebar-name">
+              {t('creation.doctor.action')}
+            </span>
+          </button>,
+          actionsTarget
+        )}
+      {actionsTarget &&
         editable &&
         createPortal(
           <button
@@ -483,6 +505,14 @@ function ReadingWorkspace({
         aria-label={t('creation.workspace')}
         className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
       >
+        {doctorOpen && (
+          <CreationDoctor
+            key={project.identity}
+            identity={project.identity}
+            onClose={() => setDoctorOpen(false)}
+            onOpenFile={chooseFile}
+          />
+        )}
         {gitOpen && (
           <CreationGit
             key={project.identity}
@@ -597,8 +627,8 @@ export function CreationView() {
         <div
           ref={setActionsTarget}
           data-creation-titlebar-status=""
-          className="creation-titlebar-status"
-          aria-hidden={!workspace || workspace.project.source !== 'folder'}
+          className="creation-titlebar-status flex items-center gap-1"
+          aria-hidden={!workspace}
         />
       </header>
       {menuTarget &&
@@ -636,6 +666,7 @@ export function CreationView() {
               menuTarget={menuTarget}
               menuBlocked={expanded || modePending || commandPending}
               actionsTarget={actionsTarget}
+              inspectionBlocked={expanded || modePending}
             />
           ) : (
             <>

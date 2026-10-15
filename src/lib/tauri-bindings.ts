@@ -38,6 +38,7 @@ export type {
   SharedLibrarySource,
   CreationContent,
   CreationGitStatus,
+  DiagnosticReport,
   CreationGitDiff,
   GitDiffLayer,
   CreationError,
