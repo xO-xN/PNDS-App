@@ -4,10 +4,14 @@ App 开发的规则层：既定模式与系统做法，按问题检索——查�
 
 ## 已批准的版本规格
 
-v1.6.0 的 #150–#163 与 UI 收口 #195 已关闭；首批真实模块添加 #210 已接入，完整原生工作流与双架构发行验收仍由 #164 收口。
+**已批准版本安排（2026-10-12）** → [v1.6.0–v1.7.0 更新规划](../plans/releases-through-v1.7.0.md)，决定过程见[逐轮讨论](../plans/pre-v1.7-release-grilling.md)。v1.6.0 的 #150–#163 与 UI 收口 #195 已关闭；首批模块添加 #210 已接入，完整原生工作流与双架构发行验收仍由 #164 收口，v1.6.2 共享库每项只提供一个较新版本、模型由工程自带，v1.6.3 导航只新增上下选卡；v1.6.4–1.6.5 交付确定性检查，前序全部验收后再正式开发单文件修改助手。总体规格 [#190](https://github.com/xO-xN/PNDS-App/issues/190) 与版本任务已同步，用户批准的 [58 票实施拆分与依赖](../plans/pre-v1.7-ticket-breakdown.md)为当前领取清单；实施仍须满足实际阻塞与验收，不据规格发布宣称功能完成。
 
 - **v1.6.0 演出与创作模式的工作流、文件操作及测试窗口** → [正式规格](../plans/v1.6.0-creation-mode-spec.md)
 - **v1.6.1 标准技术模块整理与外部 PNDS Skills 重构** → [正式规格](../plans/v1.6.1-modules-skills-spec.md)
+- **v1.6.2 单一较新共享库与三作品发行兼容** → [正式规格](../plans/v1.6.2-shared-libraries-spec.md)
+- **v1.6.3 多模板、只读 Git 与上下选卡** → [正式规格](../plans/v1.6.3-creation-workflow-spec.md)
+- **v1.6.4 静态工程诊断与 CLI** → [正式规格](../plans/v1.6.4-static-diagnostics-spec.md)
+- **v1.6.5 临时副本检查、版本证据与单文件撤销** → [正式规格](../plans/v1.6.5-controlled-checks-spec.md)
 - **v1.7.0 创作助手的读取、模型服务与交接边界** → [正式规格](../plans/v1.7.0-creation-assistant-spec.md)
 - **v1.6.0 跨票回归与真实环境验收** → [#164 验收记录](../acceptance/164-v1.6.0-workflows.md)
 - **r6-final 真实 App 的入口映射、实施及验收状态** → [desktop-1.6-implementation.md](./desktop-1.6-implementation.md)
