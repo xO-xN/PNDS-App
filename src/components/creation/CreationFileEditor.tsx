@@ -1,3 +1,4 @@
+import { CreationFileChangeControls } from './CreationFileChangeControls'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Pencil, MoreHorizontal } from 'lucide-react'
@@ -369,6 +370,13 @@ export function CreationFileEditor({
           <p role="status" className="text-xs">
             {compileReason ?? t('creation.compile.scope')}
           </p>
+        )}
+        {editableText && !unsafeReadme && (
+          <CreationFileChangeControls
+            key={`${identity}:${file.path}`}
+            identity={identity}
+            path={file.path}
+          />
         )}
         {editableText && dirty && (
           <p className="text-xs">{t('creation.draftHint')}</p>

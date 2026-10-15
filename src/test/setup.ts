@@ -243,6 +243,19 @@ vi.mock('@/lib/tauri-bindings', async () => {
       creationDiagnosticIsStale: vi
         .fn()
         .mockResolvedValue({ status: 'ok', data: false }),
+      startCreationCheck: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: 'controlled-check-1' }),
+      getCreationCheck: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: { code: 'io', detail: 'getCreationCheck not mocked' },
+      }),
+      cancelCreationCheck: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      creationCheckIsStale: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: false }),
       getCreationGitStatus: vi.fn().mockResolvedValue({
         status: 'ok',
         data: {
@@ -275,6 +288,14 @@ vi.mock('@/lib/tauri-bindings', async () => {
       }),
       // #154: write commands default to failure — a forgotten mock must
       // never read as a successful save or rename.
+      saveCreationFileChange: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: { code: 'io', detail: 'saveCreationFileChange not mocked' },
+      }),
+      undoCreationFileChange: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: { code: 'io', detail: 'undoCreationFileChange not mocked' },
+      }),
       saveCreationFile: vi.fn().mockResolvedValue({
         status: 'error',
         error: { code: 'io', detail: 'saveCreationFile not mocked' },

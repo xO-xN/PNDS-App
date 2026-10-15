@@ -16,6 +16,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 mod blank;
 #[cfg(test)]
 mod blank_runtime;
+mod changes;
+#[cfg(test)]
+mod changes_tests;
 mod classic;
 #[cfg(test)]
 mod classic_tests;
@@ -34,6 +37,7 @@ mod modules;
 #[cfg(test)]
 mod modules_tests;
 pub use blank::NewProjectOptions;
+pub use changes::CreationFileChange;
 pub use compile::{SynthdefCompileReport, SynthdefCompiler};
 pub use libraries::{CreationLibraryAdoption, CreationLibraryCatalog, CreationLibraryResult};
 pub use modules::{CreationModuleAddResult, CreationModuleCatalog};
@@ -208,6 +212,8 @@ pub struct CreationAccess {
     project: Option<OpenProject>,
     prepared: Option<OpenProject>,
     generation: u64,
+    last_change: Option<(String, CreationFileChange)>,
+    change_sequence: u64,
 }
 
 impl CreationAccess {
@@ -349,6 +355,7 @@ impl CreationAccess {
             ));
         }
         self.project = self.prepared.take();
+        self.last_change = None;
         Ok(())
     }
 
@@ -366,6 +373,7 @@ impl CreationAccess {
             .is_some_and(|p| p.descriptor.identity == identity)
         {
             self.project = None;
+            self.last_change = None;
         }
     }
 
@@ -490,7 +498,7 @@ impl CreationAccess {
     /// longer matches the one the editor read (#154). The check happens at
     /// save time on actual bytes, never through watcher notifications.
     pub fn save(
-        &self,
+        &mut self,
         identity: &str,
         path: &str,
         text: &str,
@@ -539,6 +547,7 @@ impl CreationAccess {
         }
         let resolved = project.resolve(path)?;
         atomic_write(&resolved, text.as_bytes(), metadata.permissions())?;
+        self.last_change = None;
         Ok(file_version(text.as_bytes()))
     }
 
@@ -546,7 +555,7 @@ impl CreationAccess {
     /// replaced and source references are left untouched for external
     /// agents to adjust (#154).
     pub fn rename(
-        &self,
+        &mut self,
         identity: &str,
         path: &str,
         next_path: &str,
@@ -599,11 +608,13 @@ impl CreationAccess {
                 io_error(error)
             }
         })?;
-        Ok(target
+        let renamed = target
             .strip_prefix(&project.root)
             .expect("containment checked")
             .to_string_lossy()
-            .into_owned())
+            .into_owned();
+        self.last_change = None;
+        Ok(renamed)
     }
 }
 

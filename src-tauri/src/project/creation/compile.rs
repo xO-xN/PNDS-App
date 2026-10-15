@@ -188,7 +188,16 @@ impl CreationAccess {
 }
 
 impl SynthdefCompileJob {
-    pub fn run(mut self, compiler: &SynthdefCompiler) -> SynthdefCompileOutput {
+    pub fn run(self, compiler: &SynthdefCompiler) -> SynthdefCompileOutput {
+        self.run_cancellable(compiler, &std::sync::atomic::AtomicBool::new(false))
+    }
+
+    /// Same validated compile workflow, cancellable by a task owner.
+    pub fn run_cancellable(
+        mut self,
+        compiler: &SynthdefCompiler,
+        cancelled: &std::sync::atomic::AtomicBool,
+    ) -> SynthdefCompileOutput {
         let mut staging = None;
         let result = (|| {
             let sclang = compiler.sclang.as_ref().map_err(Clone::clone)?;
@@ -200,6 +209,7 @@ impl SynthdefCompileJob {
                 directory.path(),
                 sclang,
                 compiler.timeout,
+                cancelled,
             );
             staging = Some(directory);
             result

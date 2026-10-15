@@ -4,7 +4,10 @@ use std::io::{self, Write};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-const USAGE: &str = "PNDS static project diagnostics\n\nUsage: pnds check <project-directory> [--json] [--resources-root <shared-library-directory>]\n       pnds --help\n       pnds --version\n\nResources default to ../Resources/shared-libraries beside this executable.\n--resources-root overrides the shared-library directory for an explicit installation.\nUse -- before a project path that begins with a dash.\n\nExit codes: 0 = selected static checks passed; 1 = static checks failed or incomplete;\n            2 = invalid invocation or output error.\nStatic checks never verify execution, pages, devices, or sound.\n";
+#[path = "pnds/controlled.rs"]
+mod controlled;
+
+const USAGE: &str = "PNDS static project diagnostics\n\nUsage: pnds check <project-directory> [--json] [--resources-root <shared-library-directory>]\n       pnds check <project-directory> --run [--mode none|internal] [--compile] [--json]\n            [--timeout-ms 30000] [--sample-rate 48000] [--output-device NAME]\n            [--app-root PNDS.app] [--resources-root <shared-library-directory>]\n       pnds --help\n       pnds --version\n\nResources default to ../Resources/shared-libraries beside this executable.\n--resources-root overrides the shared-library directory for an explicit installation.\nUse -- before a project path that begins with a dash.\n\nExit codes: 0 = selected static checks passed; 1 = static checks failed or incomplete;\n            2 = invalid invocation or output error.\nRuntime checks use saved temporary copies and reject an active performance/check.\nNone is the default; Internal requires --mode internal. External uses App manual testing.\nCtrl-C/SIGTERM cancels and waits for cleanup. Runtime cancellation exits 130.\nRuntime sidecars come only from the installed or explicit --app-root layout.\nStatic checks never verify execution, pages, devices, or sound.\n";
 
 fn write_text(text: &str) -> Result<u8, String> {
     let mut output = io::stdout().lock();
@@ -16,6 +19,24 @@ fn write_text(text: &str) -> Result<u8, String> {
 }
 
 fn run() -> Result<u8, String> {
+    let invocation: Vec<_> = std::env::args_os().skip(1).collect();
+    if invocation
+        .first()
+        .is_some_and(|argument| argument == "__controlled-check-worker")
+    {
+        return controlled::run_worker(invocation.into_iter().skip(1).collect());
+    }
+    if invocation
+        .first()
+        .is_some_and(|argument| argument == "check")
+        && invocation
+            .iter()
+            .skip(1)
+            .take_while(|argument| *argument != "--")
+            .any(|argument| argument == "--run")
+    {
+        return controlled::supervise(invocation.into_iter().skip(1).collect());
+    }
     let mut args = std::env::args_os().skip(1);
     let command = args.next().ok_or_else(|| USAGE.to_owned())?;
     if command == "--help" || command == "-h" {

@@ -148,7 +148,14 @@ addition records. Blank records its original v1.6.0 starting source too.
 Generated AGENTS and implementation publication instructions point at the App's
 saved-file `.pnds` workflow and exact shared references. The frozen upstream
 release-workflow and preinstalled-dependency claims are replaced only during
-generation; provenance and frozen source bytes remain unchanged.
+generation; frozen source bytes and their provenance pins remain unchanged.
+The generated `lib/health.js` also corrects None readiness to `audio.status:
+"disabled"` and `audio.target: null`, matching the runtime contract. Generated
+`docs/template-source.json` records this initialization correction under
+`creationFixes` with the ID `none-health-contract`. Existing projects are not
+rewritten; strict controlled checks can expose the inherited defect in projects
+created before this correction. The generated Classic lifecycle matrix and a
+real saved-copy None check both cover the resulting health payload.
 The included tree excludes Git history, local dependencies, seat caches, logs and
 device records; Classic does not adopt the upstream cover as the new project's
 cover. Ordinary opening preserves the existing identity, client key and Git
@@ -968,3 +975,9 @@ with multiple independent problems, while occupied ports and controlled live
 processes remain untouched. Component tests exercise ownership, stale results,
 localization, keyboard interaction and navigation without runtime commands.
 See [static-diagnostics.md](./static-diagnostics.md) for report and CLI contracts.
+
+## Reviewed changes and guarded undo (#207)
+
+The existing-file text editor adds captured draft review and one in-memory saved
+change with guarded undo. See [single-file-changes.md](./single-file-changes.md)
+for command, ownership, cancellation and content-version boundaries.

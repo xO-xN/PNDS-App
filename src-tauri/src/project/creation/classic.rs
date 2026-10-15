@@ -67,6 +67,10 @@ fn write_classic(root: &File, options: &NewProjectOptions) -> Result<(), Creatio
                 json_bytes(&value)
             }
             "public/shared.js" => text(bytes).replace("\"pnds-template-token\"", &format!("\"{id}-token\"")).into_bytes(),
+            "lib/health.js" => text(bytes)
+                .replace("this.audioStatus = \"ready\";", "this.audioStatus = this.audioMode === \"none\" ? \"disabled\" : \"ready\";")
+                .replace("this.oscTarget = oscTarget || null;", "this.oscTarget = this.audioMode === \"none\" ? null : oscTarget || null;")
+                .into_bytes(),
             "public/index.html" => text(bytes).replace("<title>PNDS Template</title>", &format!("<title>{}</title>", blank::html(name))).into_bytes(),
             "README.md" | "README.zh-CN.md" => readme(text(bytes), options, *path == "README.zh-CN.md", &initialized).into_bytes(),
             "AGENTS.md" => {
@@ -92,7 +96,14 @@ fn write_classic(root: &File, options: &NewProjectOptions) -> Result<(), Creatio
         };
         blank::write(root, path, &output)?;
     }
-    blank::write(root, "docs/template-source.json", PROVENANCE.as_bytes())
+    let mut provenance: Value =
+        serde_json::from_str(PROVENANCE).expect("verified Classic provenance");
+    provenance["creationFixes"] = serde_json::json!([{
+        "id": "none-health-contract",
+        "path": "lib/health.js",
+        "reason": "None mode reports disabled audio with a null target; frozen upstream source remains unchanged"
+    }]);
+    blank::write(root, "docs/template-source.json", &json_bytes(&provenance))
 }
 
 fn readme(source: &str, options: &NewProjectOptions, chinese: bool, initialized: &str) -> String {

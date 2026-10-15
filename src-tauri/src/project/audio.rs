@@ -762,7 +762,7 @@ impl OscClient {
     }
 
     /// Like `wait_for_msg` but discards the payload (presence check only).
-    fn wait_for(&self, address: &str, timeout: Duration) -> Result<(), String> {
+    pub(crate) fn wait_for(&self, address: &str, timeout: Duration) -> Result<(), String> {
         self.wait_for_msg(address, timeout).map(|_| ())
     }
 }

@@ -2,8 +2,10 @@
 
 pub mod audio;
 pub mod bundle;
+pub mod check_evidence;
 pub mod children;
 mod contained_read;
+pub mod controlled_checks;
 pub mod cover;
 pub mod creation;
 pub mod diagnostics;
@@ -13,6 +15,7 @@ pub mod manifest;
 pub mod ports;
 pub mod preflight;
 pub mod readme;
+pub mod runtime_gate;
 pub mod session;
 pub mod setlist;
 pub mod shared_libraries;

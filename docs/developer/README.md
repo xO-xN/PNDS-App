@@ -33,6 +33,8 @@ App 开发的规则层：既定模式与系统做法，按问题检索——查�
 - **工程范围内只读 Git 状态、分层差异与过期快照** → [creation-workspace.md](./creation-workspace.md#read-only-git-inspection-201)
 - **创作阅读、可信工程身份、文件限制与异步切换** → [creation-workspace.md](./creation-workspace.md)
 - **无副作用的 App Doctor、共用报告与离线 CLI** → [static-diagnostics.md](./static-diagnostics.md)（#193 / #203 / #204）。
+- **临时副本检查、跨 App／CLI 运行归属、输入证据与取消清理** → [controlled-checks.md](./controlled-checks.md)（#194）。
+- **已有单文本差异、审阅保存与版本保护撤销** → [single-file-changes.md](./single-file-changes.md)（#207）。
 - **创作草稿、手动保存、重命名与磁盘版本冲突** → [creation-workspace.md](./creation-workspace.md#manual-save-rename-and-disk-conflicts-154)
 - **错误如何传播、用户反馈与重试模式** → [error-handling.md](./error-handling.md)
 

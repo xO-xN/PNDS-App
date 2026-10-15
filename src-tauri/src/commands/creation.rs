@@ -15,7 +15,7 @@ use tauri_plugin_opener::OpenerExt;
 
 #[derive(Default)]
 pub struct CreationState {
-    access: Arc<Mutex<CreationAccess>>,
+    pub(super) access: Arc<Mutex<CreationAccess>>,
     compile_busy: Arc<AtomicBool>,
 }
 
@@ -62,7 +62,7 @@ pub async fn compile_creation_synthdefs(
     .await
 }
 
-fn protection(app: &AppHandle) -> Result<Protection, CreationError> {
+pub(super) fn protection(app: &AppHandle) -> Result<Protection, CreationError> {
     let bundles = app
         .path()
         .app_data_dir()
@@ -80,7 +80,7 @@ fn protection(app: &AppHandle) -> Result<Protection, CreationError> {
     })
 }
 
-async fn run_blocking<T: Send + 'static>(
+pub(super) async fn run_blocking<T: Send + 'static>(
     operation: impl FnOnce() -> Result<T, CreationError> + Send + 'static,
 ) -> Result<T, CreationError> {
     tauri::async_runtime::spawn_blocking(operation)
@@ -233,7 +233,12 @@ pub async fn open_creation_project(
     path: String,
 ) -> Result<CreationWorkspace, CreationError> {
     state
-        .run(move |access| access.open(Path::new(&path), &protection(&app)?))
+        .run(move |access| {
+            let workspace = access.open(Path::new(&path), &protection(&app)?)?;
+            app.state::<super::controlled_checks::ControlledCheckState>()
+                .cancel_except(Some(&workspace.project.identity));
+            Ok(workspace)
+        })
         .await
 }
 
@@ -245,7 +250,12 @@ pub async fn create_blank_project(
     options: crate::project::creation::NewProjectOptions,
 ) -> Result<CreationWorkspace, CreationError> {
     state
-        .run(move |access| access.create_blank(&options, &protection(&app)?))
+        .run(move |access| {
+            let workspace = access.create_blank(&options, &protection(&app)?)?;
+            app.state::<super::controlled_checks::ControlledCheckState>()
+                .cancel_except(Some(&workspace.project.identity));
+            Ok(workspace)
+        })
         .await
 }
 
@@ -260,7 +270,10 @@ pub async fn create_classic_project(
         .run(move |access| {
             let resources = crate::project::shared_libraries::shipped_root(&app)
                 .map_err(|detail| CreationError::new(CreationErrorCode::TestValidation, detail))?;
-            access.create_classic(&options, &resources, &protection(&app)?)
+            let workspace = access.create_classic(&options, &resources, &protection(&app)?)?;
+            app.state::<super::controlled_checks::ControlledCheckState>()
+                .cancel_except(Some(&workspace.project.identity));
+            Ok(workspace)
         })
         .await
 }
@@ -358,6 +371,8 @@ pub async fn commit_creation_project(
                     if let Some(identity) = &identity {
                         access.activate_prepared(identity).map_err(|e| e.detail)?;
                     }
+                    app.state::<super::controlled_checks::ControlledCheckState>()
+                        .cancel_except(identity.as_deref());
                     Ok(runtime)
                 })
                 .map_err(|e| CreationError::new(CreationErrorCode::InvalidIdentity, e))
@@ -626,11 +641,14 @@ pub async fn reveal_creation_path(
 #[specta::specta]
 pub async fn close_creation_project(
     state: State<'_, CreationState>,
+    checks: State<'_, super::controlled_checks::ControlledCheckState>,
     identity: String,
 ) -> Result<(), CreationError> {
+    let checks = checks.inner().clone();
     state
         .run(move |access| {
             access.close(&identity);
+            checks.cancel_owner(&identity);
             Ok(())
         })
         .await
@@ -689,4 +707,40 @@ pub async fn read_creation_git_diff(
         result
     })
     .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn save_creation_file_change(
+    app: AppHandle,
+    state: State<'_, CreationState>,
+    identity: String,
+    path: String,
+    text: String,
+    expected_version: String,
+) -> Result<crate::project::creation::CreationFileChange, CreationError> {
+    state
+        .run(move |access| {
+            access.save_change(
+                &identity,
+                &path,
+                &text,
+                &expected_version,
+                &protection(&app)?,
+            )
+        })
+        .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn undo_creation_file_change(
+    app: AppHandle,
+    state: State<'_, CreationState>,
+    identity: String,
+    change_id: String,
+) -> Result<CreationContent, CreationError> {
+    state
+        .run(move |access| access.undo_change(&identity, &change_id, &protection(&app)?))
+        .await
 }

@@ -2,7 +2,8 @@ use tauri_specta::{collect_commands, Builder};
 
 pub fn generate_bindings() -> Builder<tauri::Wry> {
     use crate::commands::{
-        bundle, creation, dns, help, https, notifications, preferences, project, system, tools,
+        bundle, controlled_checks, creation, dns, help, https, notifications, preferences, project,
+        system, tools,
     };
 
     crate::events::events_builder::<tauri::Wry>().commands(collect_commands![
@@ -25,6 +26,10 @@ pub fn generate_bindings() -> Builder<tauri::Wry> {
         creation::get_creation_manifest,
         creation::diagnose_creation_project,
         creation::creation_diagnostic_is_stale,
+        controlled_checks::start_creation_check,
+        controlled_checks::get_creation_check,
+        controlled_checks::cancel_creation_check,
+        controlled_checks::creation_check_is_stale,
         creation::preflight_creation_project,
         creation::start_creation_project,
         creation::prepare_creation_project,
@@ -45,6 +50,8 @@ pub fn generate_bindings() -> Builder<tauri::Wry> {
         creation::poll_creation_changes,
         creation::read_creation_file,
         creation::save_creation_file,
+        creation::save_creation_file_change,
+        creation::undo_creation_file_change,
         creation::read_creation_handoff,
         creation::append_creation_handoff,
         creation::rename_creation_file,

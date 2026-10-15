@@ -233,6 +233,38 @@ async creationDiagnosticIsStale(identity: string, inputFingerprint: string) : Pr
     else return { status: "error", error: e  as any };
 }
 },
+async startCreationCheck(identity: string, options: ControlledCheckOptions) : Promise<Result<string, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("start_creation_check", { identity, options }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async getCreationCheck(identity: string, taskId: string) : Promise<Result<CreationCheckTask, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_creation_check", { identity, taskId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async cancelCreationCheck(taskId: string) : Promise<Result<null, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("cancel_creation_check", { taskId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async creationCheckIsStale(identity: string, taskId: string) : Promise<Result<boolean, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("creation_check_is_stale", { identity, taskId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async preflightCreationProject(identity: string) : Promise<Result<Manifest, CreationError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("preflight_creation_project", { identity }) };
@@ -388,6 +420,22 @@ async readCreationFile(identity: string, path: string) : Promise<Result<Creation
 async saveCreationFile(identity: string, path: string, text: string, expectedVersion: string) : Promise<Result<string, CreationError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("save_creation_file", { identity, path, text, expectedVersion }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async saveCreationFileChange(identity: string, path: string, text: string, expectedVersion: string) : Promise<Result<CreationFileChange, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("save_creation_file_change", { identity, path, text, expectedVersion }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async undoCreationFileChange(identity: string, changeId: string) : Promise<Result<CreationContent, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("undo_creation_file_change", { identity, changeId }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -1224,8 +1272,16 @@ bridgedChannels: number;
  * B: first private project bus; equals K.
  */
 privateBusStart: number }
+export type ControlledCheckCleanup = { nodeConfirmed: boolean; audioConfirmed: boolean; temporaryFilesRemoved: boolean; errors: string[] }
+export type ControlledCheckEnvironment = { nodeBinary: string; nodeVersion: string | null; outputDevice: string | null; sampleRate: number | null; channelPlan: ChannelPlan | null; oscTarget: string | null }
+export type ControlledCheckOptions = { mode: AudioMode; compile: boolean; timeoutMs: number; outputDevice: string | null; sampleRate: number }
+export type ControlledCheckPhase = "preparing" | "static" | "compiling" | "audio" | "starting" | "health" | "http" | "cleaning" | "finished"
+export type ControlledCheckProgress = { taskId: string; projectPath: string; phase: ControlledCheckPhase; path: string | null; copiedBytes: number }
+export type ControlledCheckReport = { schemaVersion: number; checkerVersion: string; taskId: string; projectPath: string; mode: AudioMode; status: ControlledCheckStatus; error: string | null; diagnostics: DiagnosticReport | null; evidence: InputEvidence | null; freshness: Freshness | null; environment: ControlledCheckEnvironment; checks: DiagnosticCheck[]; health: HealthPayload | null; outputTail: string[]; cleanup: ControlledCheckCleanup; unverified: string[] }
+export type ControlledCheckStatus = "passed" | "failed" | "cancelled" | "notExecuted"
 export type CreationCategory = "audio" | "pages" | "modules" | "assets" | "system"
 export type CreationChanges = { files: CreationFile[]; changed: string[]; revision: number }
+export type CreationCheckTask = { taskId: string; identity: string; progress: ControlledCheckProgress | null; report: ControlledCheckReport | null }
 export type CreationContent = 
 /**
  * `version` fingerprints the bytes read from disk; saves must echo it
@@ -1235,6 +1291,11 @@ export type CreationContent =
 export type CreationError = { code: CreationErrorCode; detail: string }
 export type CreationErrorCode = "missing" | "permission" | "invalidUtf8" | "tooLarge" | "invalidIdentity" | "pathEscape" | "invalidProject" | "manifestInvalid" | "testValidation" | "testStartup" | "versionConflict" | "targetExists" | "io"
 export type CreationFile = { path: string; size: number; kind: CreationFileKind; category: CreationCategory }
+/**
+ * One successfully written existing text file. Content is retained only in
+ * memory and never relies on Git; identity and disk version guard restoration.
+ */
+export type CreationFileChange = { id: string; path: string; beforeText: string; afterText: string; beforeVersion: string; afterVersion: string }
 export type CreationFileKind = "text" | "image" | "binary"
 export type CreationGitChange = { path: string; staged: boolean; unstaged: boolean; untracked: boolean; indexStatus: string; diskStatus: string }
 export type CreationGitDiff = { state: GitDiffState; text: string | null; detail: string | null }
@@ -1251,6 +1312,7 @@ export type CreationProject = { identity: string; root: string; name: string; so
 export type CreationRuntime = { generation: string; snapshot: SessionSnapshot; projectRoot: string | null }
 export type CreationSource = "folder" | "bundle" | "utility" | "readOnlyFolder"
 export type CreationWorkspace = { project: CreationProject; files: CreationFile[] }
+export type DependencyEvidence = { name: string; declaration: string; optional: boolean; installedVersion: string | null; exactSharedVersion: string | null }
 export type DiagnosticCheck = { code: string; status: DiagnosticStatus; reason: string }
 export type DiagnosticInput = { path: string; kind: string; fingerprint: string }
 export type DiagnosticIssue = { code: string; severity: DiagnosticSeverity; field: string | null; path: string | null; reason: string }
@@ -1331,8 +1393,11 @@ daemon: boolean;
  * enabling requires the installed, bundled App).
  */
 plistPresent: boolean; listeners: DnsListeners | null; bindError: string | null; upstreams: string[]; mapping: DnsMappingFacts | null; knownDomains: string[]; stats: JsonValue | null }
+export type EvidenceFile = { path: string; directory: boolean; bytes: number; sha256: string; mode: number }
+export type Freshness = { stale: boolean; complete: boolean; reasons: string[] }
 export type GitDiffLayer = "staged" | "unstaged" | "untracked"
 export type GitDiffState = "text" | "binary" | "unreadable" | "tooLarge" | "unavailable" | "timeout" | "noChange"
+export type GitEvidence = { head: string | null; dirty: boolean | null; state: string; detail: string | null }
 export type GitState = "available" | "gitUnavailable" | "notRepository" | "unreadable" | "tooLarge" | "timeout"
 export type HandoffDocument = { text: string; version: string | null }
 export type HandoffTask = { id: string; intent: string; files: string[]; acceptance: string; status: string }
@@ -1498,6 +1563,8 @@ export type HttpsProblemCode =
  * readable problems when validation refused the material.
  */
 export type HttpsValidationOutcome = { summary: HttpsCertificateSummary | null; problems: HttpsProblem[] }
+export type InputEvidence = { sourceRoot: string; sourceIdentity: string; sharedSourceRoot: string | null; projectSha256: string; sharedSha256: string | null; projectFiles: EvidenceFile[]; sharedFiles: EvidenceFile[]; productionDependencies: DependencyEvidence[]; installedPackages: InstalledPackageEvidence[]; sharedLibraries: SharedLibraryReference[]; git: GitEvidence; changedDuringPreparation: boolean; scope: string; notes: string[] }
+export type InstalledPackageEvidence = { path: string; name: string | null; version: string | null }
 export type JsonValue = null | boolean | number | string | JsonValue[] | Partial<{ [key in string]: JsonValue }>
 export type Manifest = { 
 /**

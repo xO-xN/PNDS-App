@@ -564,3 +564,16 @@ required Apple Silicon/Intel clean-environment runs, is tracked separately in
 声音未验证。工程磁盘变化使旧结果过期，切换后的迟到结果不能进入新工程。
 App 与离线 `pnds check` 共用同一报告服务；具体结构、退出状态及边界见
 [static-diagnostics.md](./static-diagnostics.md)。
+
+### 受控副本检查与单文件撤销（#194）
+
+创作中的受控检查仅由主动开始执行，默认 None，Internal 显式选择，
+External 沿用手动测试。App／CLI 共享独立保存版副本工作流与实际运行锁，
+starting／ready／stopping 和清理都阻止新运行；静态 Doctor 仍可用。
+副本产物不回写，报告区分输入证据、实际运行结果、清理、过期与未验证。
+切换、关闭及取消的迟到结果不进入新工程；退出等待所属清理。
+单文件审阅保存及撤销复用已有可信身份、文本边界与磁盘版本保护，
+拒绝草稿／外部变化，不依赖 Git，不跨重启保留记录。规则见
+[controlled-checks.md](./controlled-checks.md) 与
+[single-file-changes.md](./single-file-changes.md)，真实验收见
+[#194 记录](../acceptance/194-v1.6.5-controlled-checks.md)。

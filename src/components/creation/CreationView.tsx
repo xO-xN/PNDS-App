@@ -15,6 +15,7 @@ import {
   Volume2,
   Package,
   Stethoscope,
+  FlaskConical,
   X,
 } from 'lucide-react'
 import {
@@ -53,6 +54,7 @@ import { CreationModules } from './CreationModules'
 import { CreationLibraries } from './CreationLibraries'
 import { CreationGit } from './CreationGit'
 import { CreationDoctor } from './CreationDoctor'
+import { CreationControlledCheck } from './CreationControlledCheck'
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -93,6 +95,7 @@ function ReadingWorkspace({
   const menuAction = useRef<(() => void) | null>(null)
   const [bundleOpen, setBundleOpen] = useState(false)
   const [doctorOpen, setDoctorOpen] = useState(false)
+  const [checkOpen, setCheckOpen] = useState(false)
   const [gitOpen, setGitOpen] = useState(false)
   const [closedGroups, setClosedGroups] = useState<string[]>([
     'artifacts',
@@ -310,6 +313,23 @@ function ReadingWorkspace({
           actionsTarget
         )}
       {actionsTarget &&
+        createPortal(
+          <button
+            type="button"
+            data-creation-controlled-check=""
+            data-tauri-drag-region="false"
+            className="creation-titlebar-trigger pnds-focus-ring"
+            disabled={opening || inspectionBlocked}
+            onClick={() => setCheckOpen(true)}
+          >
+            <FlaskConical aria-hidden="true" />
+            <span className="creation-titlebar-name">
+              {t('creation.check.action')}
+            </span>
+          </button>,
+          actionsTarget
+        )}
+      {actionsTarget &&
         editable &&
         createPortal(
           <button
@@ -505,6 +525,12 @@ function ReadingWorkspace({
         aria-label={t('creation.workspace')}
         className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
       >
+        <CreationControlledCheck
+          key={project.identity}
+          open={checkOpen}
+          identity={project.identity}
+          onClose={() => setCheckOpen(false)}
+        />
         {doctorOpen && (
           <CreationDoctor
             key={project.identity}

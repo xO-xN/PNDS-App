@@ -212,3 +212,57 @@ It uses the same static rules as the App and prints a readable report by default
 `--json` emits a machine-readable report. Run `pnds --help` for parameters and exit
 status meanings. The tool reads local resources without executing project source
 or changing the project.
+
+## Controlled saved-copy checks
+
+Choose “Controlled check” in the creation workbench, then explicitly start.
+Only saved inputs are copied; unsaved drafts remain untouched. None is the
+default and requires declared project support. Explicitly choose Internal to
+use real audio. External continues through the App's manual testing workflow.
+Optional SynthDef compilation writes only into the copy; missing local compiler
+or required resources remain explicit failures.
+
+Progress covers preparation, static checks, startup, health/HTTP and cleanup.
+The report identifies the task, actual copied content fingerprints, dependency
+and shared versions, mode, device environment, outcome and cleanup. Git HEAD is
+auxiliary, not the complete input identity. Later source changes make a report
+stale; explicitly check again. Copy caches and compiled artifacts are never
+adopted into the source automatically.
+Closing and reopening the dialog in the same creation workspace retains its
+report or error until you explicitly run another check. “Copy report” copies
+the full JSON, including errors and cleanup, for troubleshooting.
+
+App startup, performance, shutdown or another owned check blocks new App/CLI
+runtime checks without stopping the existing performance. Static Doctor remains
+available. Stop, dialog close, workspace replacement and App exit cancel the
+owned task and clean its resources. Service readiness does not validate rendered
+pages, phone behavior, model inference, actual sound or artistic quality.
+
+```sh
+/Applications/PNDS.app/Contents/MacOS/pnds check /path/to/project --run --json
+/Applications/PNDS.app/Contents/MacOS/pnds check /path/to/project --run --mode internal
+```
+
+The command uses the App's Node/audio/shared resources. Ctrl-C or SIGTERM cancels
+and waits for cleanup. Runtime exits: 0 passed including cleanup; 1 failed/not
+executed; 130 cancelled; 2 invalid arguments/output failure. When copying the
+command separately, use `--app-root /path/to/PNDS.app` for the complete resource
+source; global Node is never a fallback. Sequential saved-file copying does not
+promise an instantaneous atomic snapshot or an OS sandbox for arbitrary code.
+
+If cleanup remains unconfirmed, ending the front end still blocks new App/CLI
+runs. Retry after its resources have been released. If ownership evidence is
+incomplete, restart the Mac before retrying. Static diagnostics remain available.
+
+## Single-file differences and undo
+
+After editing one existing text file, choose “Review change” to inspect the
+actual before/candidate difference. Cancel keeps the draft. A successful “Save
+reviewed change” shows the actual saved record; “Undo saved change” restores
+the original text without Git.
+
+Undo applies only to the current workspace's latest recorded single-file
+change. Later manual/external saves, renames, deleted targets or unresolved
+drafts reject the old action without overwriting newer work. Switching or
+closing a workspace revokes its old identity; records do not survive App exit.
+A failed check never automatically undoes the file or adopts copy artifacts.

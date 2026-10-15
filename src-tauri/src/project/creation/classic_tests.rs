@@ -55,6 +55,8 @@ fn classic_creation_keeps_the_reference_implementation_and_initializes_an_editab
         serde_json::from_slice(&fs::read(root.join("docs/template-source.json")).unwrap()).unwrap();
     assert_eq!(source["template"], "PNDS Classic");
     assert_eq!(source["version"], "0.7.0");
+    assert_eq!(source["creationFixes"][0]["id"], "none-health-contract");
+    assert_eq!(source["creationFixes"][0]["path"], "lib/health.js");
     for excluded in [
         ".git",
         "node_modules",
