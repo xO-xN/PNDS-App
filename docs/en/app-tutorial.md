@@ -266,3 +266,25 @@ change. Later manual/external saves, renames, deleted targets or unresolved
 drafts reject the old action without overwriting newer work. Switching or
 closing a workspace revokes its old identity; records do not survive App exit.
 A failed check never automatically undoes the file or adopts copy artifacts.
+
+### Editing project text
+
+Open a text file from the tree or use **Quick open file** (`⌘P` while working in
+the creation workspace). Search uses the current project's file list; arrows
+choose a result and Enter opens it. Large, unreadable and binary files retain
+an explanation rather than becoming editable.
+
+The editor shows line numbers and syntax colors for JavaScript, TypeScript,
+JSON, HTML, CSS, Markdown and SCD; other readable text uses plain text. Colors
+do not mean code has passed validation or compilation. Use **Find and replace**
+(`⌘F`) for the current file, or **Go to line** (`⌘G`). Replacements change the
+draft and can be undone. Tab/Shift+Tab indent a selection; Escape then Tab leaves
+the editor. Undo/redo (`⌘Z` / `⇧⌘Z` or the toolbar) stay with each file when
+switching files or layouts during this project session.
+
+**Save** / `⌘S` writes explicitly with the existing manifest/README validation
+and disk-version conflict protection. Saving does not refresh or restart the
+running project. Cancelling a disk conflict keeps your draft; explicitly adopting
+a disk version resets draft undo/redo and announces that boundary. Histories are
+not restored after restarting the App. **Undo saved change** is a separate
+version-checked operation on a recorded disk write.

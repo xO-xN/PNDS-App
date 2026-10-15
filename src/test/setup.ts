@@ -19,6 +19,10 @@ Element.prototype.scrollIntoView ??= function (this: Element) {
 Element.prototype.scrollTo ??= function (this: Element) {
   // no scroll layout in jsdom
 }
+// CodeMirror measures text ranges. jsdom has no text layout; these stubs
+// support workflow tests and do not certify geometry or native IME behavior.
+Range.prototype.getClientRects ??= () => [] as unknown as DOMRectList
+Range.prototype.getBoundingClientRect ??= () => new DOMRect()
 
 // Radix modal layers (context menu, dialogs) set `pointer-events: none` on
 // document.body while open and restore it on unmount — an abrupt test

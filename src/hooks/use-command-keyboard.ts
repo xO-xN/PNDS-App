@@ -179,6 +179,14 @@ export function useCommandKeyboard(): void {
         if (event.code === 'KeyR') event.preventDefault()
         if (event.code === 'KeyS' && useCreationStore.getState().active) {
           event.preventDefault()
+          if (hasOpenOverlay()) return
+          // Reused suggestion buffers own neither the active file nor its save action.
+          if (
+            event.target instanceof Element &&
+            event.target.closest('[data-text-buffer]') &&
+            !event.target.closest('[data-file-draft]')
+          )
+            return
           const path = useCreationFilesStore.getState().activePath
           if (path) void useCreationFilesStore.getState().save(path)
         }

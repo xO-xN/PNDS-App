@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { TextBuffer } from '@/lib/text-buffer'
 import i18n from '@/i18n/config'
 import {
   commands,
@@ -27,6 +28,9 @@ import {
  */
 export interface CreationDraft {
   text: string
+  /** Session-only editing state, shared across file/layout remounts. */
+  editor?: TextBuffer
+  editorRevision?: number
   /** Source spans belong to this same draft, retaining safe editing boundaries during incomplete keystrokes. */
   readme?: EditableReadme
   /** Disk content of `diskVersion` — the base the draft diverges from. */
@@ -69,6 +73,9 @@ interface CreationFilesState {
   complete: (token: CreationUpdateToken | null, kind: UpdateKind) => void
   drafts: Record<string, CreationDraft>
   activePath: string | null
+  location: { identity: string; path: string; line: number } | null
+  attachEditor: (path: string, editor: TextBuffer) => void
+  locate: (identity: string, path: string, line: number) => boolean
   readmeLocale: string | null
   /** Canonical path of the last rename, so the editor can show the
    * external-agent reference hint until that file is edited or saved. */
@@ -111,7 +118,20 @@ function patch(
 ): Partial<CreationFilesState> {
   const draft = state.drafts[path]
   if (!draft) return {}
-  return { drafts: { ...state.drafts, [path]: { ...draft, ...update } } }
+  const reset =
+    update.text !== undefined &&
+    update.diskVersion !== undefined &&
+    update.diskVersion !== draft.diskVersion
+  return {
+    drafts: {
+      ...state.drafts,
+      [path]: {
+        ...draft,
+        ...update,
+        ...(reset ? { editorRevision: (draft.editorRevision ?? 0) + 1 } : {}),
+      },
+    },
+  }
 }
 
 /** Late async results may only touch drafts of the workspace still shown. */
@@ -507,10 +527,32 @@ export const useCreationFilesStore = create<CreationFilesState>((set, get) => {
     },
     drafts: {},
     activePath: null,
+    location: null,
+    attachEditor: (path, editor) =>
+      set(state => patch(state, path, { editor })),
+    locate: (identity, path, line) => {
+      const workspace = useCreationStore.getState().workspace
+      if (
+        workspace?.project.identity !== identity ||
+        !Number.isInteger(line) ||
+        line < 1 ||
+        !workspace.files.some(
+          file => file.path === path && file.kind === 'text'
+        )
+      )
+        return false
+      set({
+        activePath: path,
+        location: { identity, path, line },
+        renameNote: null,
+      })
+      return true
+    },
     readmeLocale: null,
     renameNote: null,
     dismissedConflict: null,
-    setActivePath: path => set({ activePath: path, renameNote: null }),
+    setActivePath: path =>
+      set({ activePath: path, location: null, renameNote: null }),
     setReadmeLocale: readmeLocale => set({ readmeLocale }),
     read: async (identity, path) => {
       const workspace = useCreationStore.getState().workspace
@@ -797,6 +839,7 @@ export const useCreationFilesStore = create<CreationFilesState>((set, get) => {
         changeBusy: false,
         drafts: {},
         activePath: null,
+        location: null,
         readmeLocale: null,
         renameNote: null,
         dismissedConflict: null,

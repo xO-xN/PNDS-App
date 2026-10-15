@@ -42,6 +42,7 @@ import { useWindowStore } from '@/store/window-store'
 import { TrafficLights } from '@/components/shell/TrafficLights'
 import { Button } from '@/components/ui/button'
 import { CreationFileEditor } from './CreationFileEditor'
+import { CreationQuickOpen } from './CreationQuickOpen'
 import { CreationProjectPicker } from './CreationProjectPicker'
 import { CreationNewProject } from './CreationNewProject'
 import { CreationErrorNotice } from './CreationErrorNotice'
@@ -385,6 +386,11 @@ function ReadingWorkspace({
               </button>
             ))}
           </div>
+          <CreationQuickOpen
+            key={project.identity}
+            files={workspace.files}
+            onOpen={chooseFile}
+          />
           <div className="creation-file-search">
             <Search aria-hidden="true" />
             <input

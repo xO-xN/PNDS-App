@@ -981,3 +981,69 @@ See [static-diagnostics.md](./static-diagnostics.md) for report and CLI contract
 The existing-file text editor adds captured draft review and one in-memory saved
 change with guarded undo. See [single-file-changes.md](./single-file-changes.md)
 for command, ownership, cancellation and content-version boundaries.
+
+## Session text editor (#224)
+
+Readable text now uses CodeMirror 6: virtualized line numbers, syntax colors for
+JS/TS/JSON/HTML/CSS/Markdown/SCD, bracket matching, two-space indentation, literal
+case-insensitive find/replace and line navigation. Other already-readable text
+uses plain text. This adds no language server, diagnostics or compiler claim.
+SCD coloring uses a local stream parser for strings, symbols, nested comments,
+keywords and class names. Colors resolve from the existing four theme palettes.
+Long lines scroll horizontally; the editor owns its scroller, and toolbar rows
+wrap within the existing workspace. No monitor/dock ancestry or runtime action
+changes when a text surface mounts.
+
+`TextBuffer` owns document, selection, history, search and scroll independently
+of React mounting. `CreationDraft.editor` retains that object for the workspace
+session, including file, form/preview and layout switches. Rename moves the same
+draft and history and reconfigures its language. Draft forms synchronize as
+ordinary edits once a text buffer exists. `editorRevision` advances only when
+adopting a different disk version (watcher clean adoption, explicit conflict
+reload or saved-write undo); that resets both undo directions with visible
+feedback. Saving the current draft retains its editing history. A conflicted
+external version stays outside the buffer until explicitly adopted. No undo
+stack is persisted across workspace closure or App restart.
+
+`TextEditor` is the reusable view. Its caller supplies a distinct `TextBuffer`,
+current value and optional change callback; it has no persistence action.
+`text`, `selection`, `selectedText`, `select`, `replaceSelection`, `undo`, `redo`,
+`goToLine` and subscriptions are the local-text/selection integration seam for
+#208. Offsets use CodeMirror's UTF-16 document positions with one character per
+line break. File drafts and suggestion buffers must have different buffer
+objects even when their source path/text match. Only the file wrapper marks
+`data-file-draft`; the global save shortcut ignores standalone suggestion
+surfaces and App overlays. Draft undo and **Undo saved change** remain separate.
+Normal CRLF files retain their line endings, and opening text alone does not
+normalize the draft or dirty the file.
+
+`openCreationFileAtLine(identity, path, line)` is the #166/diagnostics integration
+seam. It checks the current identity, exact listed text path and positive integer
+line before selecting. The text surface validates the actual line count and
+announces out-of-range requests. The existing manifest and safe README editors
+remain available; locating manifest or ordinary Markdown switches to text.
+Structured README covers retain their existing safe field boundary; explicit
+line requests inspect their source read-only. Each retained location request
+is consumed once, so remounts and language changes do not move a later selection.
+
+Quick open (`⌘P` in the host creation workspace) searches only the backend's
+bounded inventory, renders at most 100 matches and uses arrows/Enter. It never
+accepts an arbitrary filesystem path or lists recoverable removed drafts as
+current files. Reading still calls `readCreationFile` with the issued identity;
+size, UTF-8, permissions, protected sources and path containment remain Rust
+checks. The normal error panel explains refused reads and binaries.
+
+The editor owns `⌘F`, `⌘G`, undo/redo and indentation only while focused. Escape
+then Tab leaves the indentation keymap for accessible keyboard navigation.
+Quick open is blocked by modal overlays, mode transitions, opening and expanded
+monitor. No new native menu accelerator or guest-page key ownership is added.
+
+`TextEditor.test.tsx`, `CreationEditorWorkflow.test.tsx` and the existing creation
+save/README/compile suites use the real editor with controlled typed-command
+replies. `src/test/text-editor.ts` drives CodeMirror's public transaction API;
+jsdom Range stubs represent absent layout, never native geometry or IME proof.
+Rust's existing temporary-directory creation tests cover actual versioned writes,
+invalid manifest/README content, size/UTF-8 limits, protected sources and escapes.
+Native IME, clipboard, menu delivery, narrow layout and running monitor evidence
+remain in [#224 acceptance](../acceptance/224-basic-editor.md). #166/#208/#172
+must record actual downstream integration separately from this verified seam.

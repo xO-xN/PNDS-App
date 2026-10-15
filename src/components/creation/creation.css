@@ -379,21 +379,6 @@
   border-radius: 50%;
   background: var(--pnds-accent);
 }
-.creation-editor-textarea {
-  display: block;
-  width: 100%;
-  min-height: 100%;
-  resize: none;
-  border: none;
-  background: transparent;
-  color: var(--pnds-text);
-  font-family: var(--font-mono, monospace);
-  font-size: 12px;
-  line-height: 1.7;
-  white-space: pre;
-  overflow-wrap: normal;
-  outline: none;
-}
 .creation-editor-status {
   display: flex;
   flex-wrap: wrap;
@@ -1287,4 +1272,104 @@
   .creation-module-card {
     transition: none;
   }
+}
+
+/* #224: one scroll owner; CodeMirror virtualizes lines without wrapping code. */
+.creation-file-content:has(> .creation-file-code) {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+}
+.creation-file-code,
+.creation-text-editor {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-inline-size: 0;
+  min-block-size: 0;
+}
+.creation-editor-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-block-end: 1px solid var(--pnds-border);
+}
+.creation-editor-tools input {
+  flex: 1 1 130px;
+  min-inline-size: 0;
+}
+.creation-editor-detail {
+  font-size: 10px;
+  color: var(--pnds-text-secondary);
+}
+.creation-editor-host {
+  flex: 1;
+  min-inline-size: 0;
+  min-block-size: 80px;
+  overflow: hidden;
+}
+.creation-editor-host .cm-editor {
+  block-size: 100%;
+  color: var(--pnds-text);
+  background: var(--pnds-card);
+}
+.creation-editor-host .cm-editor.cm-focused {
+  outline: none;
+}
+/* Keep the shared keyboard ring on the visible viewport of a virtual editor. */
+.creation-editor-host .cm-editor:has(.cm-content:focus-visible) {
+  outline: 2px solid var(--pnds-accent-text);
+  outline-offset: -2px;
+}
+.creation-editor-host .cm-scroller {
+  overflow: auto;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  line-height: 1.7;
+}
+.creation-editor-host .cm-content {
+  padding-block: 10px;
+  caret-color: var(--pnds-text);
+}
+.creation-editor-host .cm-cursor {
+  border-inline-start-color: var(--pnds-text);
+}
+.creation-editor-host .cm-gutters {
+  background: var(--pnds-pill);
+  color: var(--pnds-text-secondary);
+  border-inline-end: 1px solid var(--pnds-border);
+}
+.creation-editor-host .cm-activeLine {
+  background: color-mix(in srgb, var(--pnds-selection) 35%, transparent);
+}
+.creation-editor-host .cm-selectionBackground,
+.creation-editor-host .cm-focused .cm-selectionBackground {
+  background: var(--pnds-selection);
+}
+.creation-editor-host .cm-searchMatch,
+.creation-editor-host .cm-matchingBracket {
+  background: var(--pnds-selection);
+  outline: 1px solid var(--pnds-accent-text);
+}
+.creation-editor-host .cm-searchMatch-selected {
+  outline: 2px solid var(--pnds-accent-text);
+}
+.creation-quick-open-results {
+  max-block-size: 45vh;
+  overflow: auto;
+}
+.creation-quick-open-result {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  inline-size: 100%;
+  padding: 8px;
+  text-align: start;
+  overflow-wrap: anywhere;
+}
+.creation-quick-open-result[aria-selected='true'] {
+  background: var(--pnds-selection);
 }

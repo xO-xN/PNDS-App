@@ -393,3 +393,20 @@ manual refresh workflow. App-global menu accelerators remain reserved.
 JavaScript sheets in performer tests use native Return/Escape button handling.
 Focused-window dispatch resolves the sheet parent, so Cmd+W/fullscreen do not
 fall back to the main window merely because the sheet is the key NSWindow.
+
+## Creation text editor (#224)
+
+While focus is in the host text editor, `⌘F` opens current-file find/replace and
+`⌘G` opens line navigation. `⌘Z` / `⇧⌘Z` undo/redo the current buffer's draft;
+the toolbar exposes the same commands. Tab / Shift+Tab indent/unindent a
+selection; Escape then Tab moves focus out. These are editor-local bindings,
+with no added native menu accelerator or interception of monitor-page keys.
+
+`⌘P` opens quick file search in the host creation workspace. Arrows choose and
+Enter opens an issued file path. Modals, project opening, mode transitions and
+expanded monitor block this shortcut. `⌘S` retains the existing explicit file
+save command and disk conflict checks. It does not submit from App overlays or
+standalone suggestion buffers, which have independent editing histories and
+application actions. **Undo saved change** remains a separate version-checked
+filesystem operation. Native menu, Chinese IME and real page-focus verification
+are recorded in [#224 acceptance](../acceptance/224-basic-editor.md).
