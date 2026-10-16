@@ -59,6 +59,27 @@ fn history_restores_across_store_restart_and_uses_real_source_roots() {
 }
 
 #[test]
+fn selected_draft_and_pending_suggestion_snapshots_restore_exact_sources_without_reading_files() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = project(temp.path(), "source");
+    let app = temp.path().join("app");
+    let store = AssistantHistoryStore::default();
+    let original = store.load(&app, &root).unwrap();
+    let sent:AssistantHistoryMessage=serde_json::from_value(json!({"id":"selected","role":"user","text":"Discuss these selected snapshots","status":"completed","scope":"project","sources":[{"docId":"score.js","sectionId":"L2","title":"score.js:2","locale":"en","version":"draft-v1","offset":0,"endOffset":5,"totalCharacters":5,"project":{"path":"score.js","version":"draft-v1","text":"draft","source":"draft","offset":0,"endOffset":5,"totalCharacters":5,"nextOffset":null,"startLine":2,"endLine":2}}],"attachments":[{"id":"selection","projectKey":original.project_key,"path":"score.js","startLine":2,"endLine":2,"source":"proposal","version":"candidate-v7","sourceVersion":"saved-v1","proposalId":"suggestion-id","candidateRevision":7,"text":"selected candidate only"}]})).unwrap();
+    store
+        .save(&app, &root, &original.epoch, vec![sent])
+        .unwrap();
+    let restored = AssistantHistoryStore::default().load(&app, &root).unwrap();
+    let encoded = serde_json::to_value(&restored.messages[0]).unwrap();
+    assert_eq!(encoded["attachments"][0]["proposalId"], "suggestion-id");
+    assert_eq!(encoded["attachments"][0]["candidateRevision"], 7);
+    assert_eq!(encoded["attachments"][0]["sourceVersion"], "saved-v1");
+    assert_eq!(encoded["sources"][0]["project"]["text"], "draft");
+    assert!(!root.join("score.js").exists());
+    assert!(encoded.get("authorization").is_none());
+}
+
+#[test]
 fn legacy_history_migrates_without_fabricating_usage_and_roundtrips_bounded_statistics() {
     let temp = tempfile::tempdir().unwrap();
     let root = project(temp.path(), "usage");

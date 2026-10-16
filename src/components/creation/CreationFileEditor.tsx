@@ -453,6 +453,7 @@ export function CreationFileEditor({
                   }
                   text={draft.text}
                   location={location}
+                  version={draft.diskVersion}
                 />
               </Suspense>
             )
@@ -464,6 +465,7 @@ export function CreationFileEditor({
               path={file.path}
               text={text}
               location={location}
+              version={content.version}
             />
           </Suspense>
         ) : content?.kind === 'image' && !imageFailed ? (

@@ -19,6 +19,8 @@ import { useCommandKeyboard } from '@/hooks/use-command-keyboard'
 import { TextBuffer } from '@/lib/text-buffer'
 import { CreationView } from './CreationView'
 import { TextEditor } from './TextEditor'
+import { useAssistantStore } from '@/store/assistant-store'
+import { useAssistantProjectStore } from '@/store/assistant-project-store'
 
 const workspace: CreationWorkspace = {
   project: {
@@ -69,6 +71,117 @@ beforeEach(() => {
             },
           }
   )
+})
+
+it('adds the real editor selection as a fixed draft attachment without saving or sending (#225)', async () => {
+  vi.mocked(commands.assistantProjectRead).mockResolvedValue({
+    status: 'ok',
+    data: {
+      path: 'public/score.js',
+      version: 'disk-1',
+      text: 'saved',
+      offset: 0,
+      endOffset: 5,
+      totalCharacters: 5,
+      nextOffset: null,
+      startLine: 1,
+      endLine: 1,
+    },
+  })
+  render(<CreationView />)
+  fireEvent.click(creationFileButton('public/score.js'))
+  editText(
+    await findEditorWithText('// 潮汐\nconst a = 1'),
+    '// do not attach\nconst a = 77\n// other draft'
+  )
+  await waitFor(() =>
+    expect(
+      useCreationFilesStore.getState().drafts['public/score.js']?.editor
+    ).toBeDefined()
+  )
+  const buffer =
+    useCreationFilesStore.getState().drafts['public/score.js']?.editor
+  if (!buffer) throw new Error('The public file editor was not ready')
+  act(() =>
+    useAssistantProjectStore.setState({
+      snapshot: {
+        fingerprint: 'earlier-consent',
+        files: [
+          {
+            path: 'public/score.js',
+            bytes: 20,
+            version: 'disk-0',
+            reason: null,
+          },
+        ],
+      },
+    })
+  )
+  act(() => buffer.select(17, 29))
+  fireEvent.click(screen.getByRole('button', { name: 'Discuss selection' }))
+  await waitFor(() =>
+    expect(useAssistantProjectStore.getState().attachments).toHaveLength(1)
+  )
+  expect(
+    useAssistantProjectStore.getState().attachments[0]?.snapshot
+  ).toMatchObject({
+    path: 'public/score.js',
+    source: 'draft',
+    text: 'const a = 77',
+    startLine: 2,
+    endLine: 2,
+  })
+  expect(
+    screen.getByRole('region', { name: 'Selected code attachments' })
+  ).toBeInTheDocument()
+  expect(screen.queryByText(/The source has changed/)).not.toBeInTheDocument()
+  expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
+  expect(commands.saveCreationFile).not.toHaveBeenCalled()
+  act(() =>
+    useAssistantProjectStore.setState({
+      snapshot: {
+        fingerprint: 'later-disk-change',
+        files: [
+          {
+            path: 'public/score.js',
+            bytes: 20,
+            version: 'disk-2',
+            reason: null,
+          },
+        ],
+      },
+    })
+  )
+  expect(screen.getByText(/The source has changed/)).toBeInTheDocument()
+  expect(
+    useAssistantProjectStore.getState().attachments[0]?.snapshot.text
+  ).toBe('const a = 77')
+  act(() =>
+    useAssistantProjectStore.setState({
+      snapshot: {
+        fingerprint: 'disk-restored',
+        files: [
+          {
+            path: 'public/score.js',
+            bytes: 20,
+            version: 'disk-1',
+            reason: null,
+          },
+        ],
+      },
+    })
+  )
+  expect(screen.queryByText(/The source has changed/)).not.toBeInTheDocument()
+  act(() => buffer.replaceSelection('const a = 88'))
+  expect(await screen.findByText(/The source has changed/)).toBeInTheDocument()
+  expect(
+    useAssistantProjectStore.getState().attachments[0]?.snapshot.text
+  ).toBe('const a = 77')
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Remove public/score.js attachment' })
+  )
+  expect(useAssistantProjectStore.getState().attachments).toEqual([])
+  expect(useAssistantStore.getState().messages).toEqual([])
 })
 
 it('keeps undo and redo with each draft across file, dock and monitor layout changes', async () => {

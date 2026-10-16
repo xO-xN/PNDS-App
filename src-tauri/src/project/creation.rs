@@ -13,7 +13,14 @@ use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
 use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
+mod assistant;
 mod blank;
+pub use assistant::{
+    AssistantProjectOverview, AssistantProjectPage, AssistantProjectRead, AssistantProjectSearch,
+    AssistantProjectSnapshot,
+};
+#[cfg(test)]
+mod assistant_tests;
 #[cfg(test)]
 mod blank_runtime;
 mod changes;
@@ -780,6 +787,12 @@ impl OpenProject {
 
     fn file(&self, path: &str) -> Result<File, CreationError> {
         let resolved = self.resolve(path)?;
+        self.resolved_file(&resolved, path)
+    }
+
+    /// Open exactly the canonical target already checked by the caller. Never
+    /// resolve a mutable entry alias again after policy checks.
+    fn resolved_file(&self, resolved: &Path, path: &str) -> Result<File, CreationError> {
         let relative = resolved
             .strip_prefix(&self.root)
             .expect("containment checked");

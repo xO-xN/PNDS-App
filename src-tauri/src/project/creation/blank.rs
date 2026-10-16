@@ -35,6 +35,35 @@ const ASSETS: &[(&str, &[u8])] = &[
     ),
 ];
 
+pub(super) fn is_blank_source(path: &str, bytes: &[u8], name: &str) -> bool {
+    if ASSETS
+        .iter()
+        .any(|(asset, expected)| *asset == path && *expected == bytes)
+    {
+        return true;
+    }
+    if !matches!(path, "public/monitor.html" | "public/performer.html") {
+        return false;
+    }
+    [
+        ("en", include_str!("../../../../locales/en.json")),
+        ("zh-CN", include_str!("../../../../locales/zh-CN.json")),
+    ]
+    .iter()
+    .any(|(locale, json)| {
+        let strings: serde_json::Value = serde_json::from_str(json).expect("embedded locales");
+        let message = strings["creation.newProject.pageMessage"]
+            .as_str()
+            .expect("page message");
+        include_str!("../../../resources/blank-project/public/page.html")
+            .replace("{{lang}}", locale)
+            .replace("{{message}}", message)
+            .replace("{{name}}", &html(name))
+            .as_bytes()
+            == bytes
+    })
+}
+
 impl CreationAccess {
     /// Generate a complete sibling staging tree, publish with no-clobber rename,
     /// then prepare the workspace. Existing active identities remain valid.

@@ -129,6 +129,10 @@ vi.mock('@/lib/tauri-bindings', async () => {
     projectRoot: null,
     snapshot: idleSnapshot,
   }
+  const assistantInventory = vi.fn().mockResolvedValue({
+    status: 'ok',
+    data: { files: [], fingerprint: 'empty' },
+  })
   return {
     events: {
       helpReadyEvent: makeEvent('help-ready-event'),
@@ -332,6 +336,29 @@ vi.mock('@/lib/tauri-bindings', async () => {
       getModelCredentialStatus: vi
         .fn()
         .mockResolvedValue({ status: 'ok', data: { hasKey: false } }),
+      assistantProjectInventory: assistantInventory,
+      assistantProjectOverview: vi.fn(async (identity: string) => {
+        const result = await assistantInventory(identity)
+        return result.status === 'ok'
+          ? {
+              status: 'ok',
+              data: {
+                snapshot: result.data,
+                manifestStatus: 'unreadable',
+                contentPaths: [],
+                evidence: [],
+              },
+            }
+          : result
+      }),
+      assistantProjectRead: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: { code: 'missing', detail: 'missing' },
+      }),
+      assistantProjectSearch: vi.fn().mockResolvedValue({
+        status: 'ok',
+        data: { pages: [], skipped: [], searchedFiles: 0, remainingFiles: 0 },
+      }),
       beginAssistantRequest: vi.fn().mockResolvedValue({
         status: 'error',
         error: { type: 'invalidConfig' },

@@ -11,6 +11,11 @@ import type { AssistantTurn, AssistantWireMessage } from './assistant-types'
 import type { RawHelpDocument } from './help-corpus'
 import { logger } from './logger'
 import { parseAssistantSummary } from './assistant-context'
+import { modelProfileKey } from './model-context-settings'
+import {
+  projectPageSource,
+  AssistantProjectReadError,
+} from './assistant-project'
 
 const documents = import.meta.glob<string>('../../docs/en/**/*.md', {
   query: '?raw',
@@ -102,6 +107,208 @@ async function service(turns: AssistantTurn[]) {
 }
 
 describe('highest platform assistant request (#166)', () => {
+  it('reports a changed saved source as typed tool evidence without inventing its content (#168)', async () => {
+    const { deps, payloads } = await service([
+      {
+        text: null,
+        toolCalls: [
+          {
+            id: 'changed',
+            name: 'read_project_text',
+            arguments: '{"path":"score.js","version":"old"}',
+          },
+        ],
+      },
+      {
+        text: 'The saved source changed; please clarify or read its new version.',
+        toolCalls: [],
+      },
+    ])
+    const config = {
+      model: 'chosen-model',
+      baseUrl: 'https://model.example/v1',
+    }
+    deps.begin = async (_owner, requestId) => ({ requestId, ...config, config })
+    deps.readProject = async () => {
+      throw new AssistantProjectReadError('versionConflict')
+    }
+    const result = await runAssistantRequest(
+      {
+        ...input(),
+        expectedConfig: config,
+        projectReading: true,
+        project: {
+          files: [
+            { path: 'score.js', bytes: 10, version: 'current', reason: null },
+          ],
+          fingerprint: 'current',
+        },
+      },
+      deps
+    )
+    expect(
+      payloads[1]?.messages.find(message => message.toolCallId === 'changed')
+        ?.content
+    ).toContain('versionConflict')
+    expect(result.sources).toEqual([])
+  })
+  it('sends the complete confirmed range, retains each source page and refuses a changed fingerprint before HTTP (#170)', async () => {
+    const { deps, payloads } = await service([
+      { text: 'The included saved range has two pages.', toolCalls: [] },
+    ])
+    const config = {
+      model: 'chosen-model',
+      baseUrl: 'https://model.example/v1',
+    }
+    const snapshot = {
+      files: [{ path: 'long.js', bytes: 6, version: 'v1', reason: null }],
+      fingerprint: 'v1',
+    }
+    const pages = [
+      {
+        path: 'long.js',
+        version: 'v1',
+        text: 'AAA',
+        offset: 0,
+        endOffset: 3,
+        totalCharacters: 6,
+        nextOffset: 3,
+        startLine: 1,
+        endLine: 1,
+      },
+      {
+        path: 'long.js',
+        version: 'v1',
+        text: 'BBB',
+        offset: 3,
+        endOffset: 6,
+        totalCharacters: 6,
+        nextOffset: null,
+        startLine: 1,
+        endLine: 1,
+      },
+    ]
+    deps.begin = async (_owner, requestId) => ({ requestId, ...config, config })
+    deps.projectInventory = async () => snapshot
+    const request = {
+      ...input(),
+      identity: 'owner',
+      expectedConfig: config,
+      projectReading: true,
+      project: snapshot,
+      wholeProjectFingerprint: 'v1',
+      consumers: [
+        {
+          id: 'whole',
+          kind: 'projectFragment' as const,
+          owner: 'owner',
+          serviceKey: modelProfileKey(config),
+          authorized: true,
+          text: JSON.stringify({ wholeReadableProject: pages }),
+          sources: pages.map(page => projectPageSource(page, 'en')),
+        },
+      ],
+    }
+    const result = await runAssistantRequest(request, deps)
+    expect(JSON.stringify(payloads[0]?.messages)).toContain('AAA')
+    expect(JSON.stringify(payloads[0]?.messages)).toContain('BBB')
+    expect(
+      result.sources.map(source => [
+        source.project?.offset,
+        source.project?.text,
+      ])
+    ).toEqual([
+      [0, 'AAA'],
+      [3, 'BBB'],
+    ])
+    deps.projectInventory = async () => ({
+      ...snapshot,
+      fingerprint: 'changed',
+    })
+    await expect(
+      runAssistantRequest(
+        { ...request, signal: new AbortController().signal },
+        deps
+      )
+    ).rejects.toMatchObject({ code: 'projectScopeChanged' })
+    expect(payloads).toHaveLength(1)
+  })
+  it('mixes installed documents and authorized saved project pages in one observable request loop (#168)', async () => {
+    const { deps, payloads } = await service([
+      {
+        text: null,
+        toolCalls: [
+          {
+            id: 'project-read',
+            name: 'read_project_text',
+            arguments: JSON.stringify({ path: 'score.js' }),
+          },
+        ],
+      },
+      {
+        text: null,
+        toolCalls: [
+          {
+            id: 'help-search',
+            name: 'search_help',
+            arguments: JSON.stringify({ query: 'manifest' }),
+          },
+        ],
+      },
+      {
+        text: 'The saved tempo is 80; the remaining files have not been read.',
+        toolCalls: [],
+      },
+    ])
+    const config = {
+      model: 'chosen-model',
+      baseUrl: 'https://model.example/v1',
+    }
+    deps.begin = async (_owner, requestId) => ({ requestId, ...config, config })
+    deps.readProject = async () => ({
+      path: 'score.js',
+      version: 'saved-80',
+      text: 'const tempo = 80;',
+      offset: 0,
+      endOffset: 17,
+      totalCharacters: 17,
+      nextOffset: null,
+      startLine: 1,
+      endLine: 1,
+    })
+    const result = await runAssistantRequest(
+      {
+        ...input(),
+        expectedConfig: config,
+        projectReading: true,
+        project: {
+          files: [
+            { path: 'score.js', bytes: 17, version: 'saved-80', reason: null },
+          ],
+          fingerprint: 'scope-1',
+        },
+      },
+      deps
+    )
+    expect(payloads).toHaveLength(3)
+    expect(payloads[0]?.messages[0]?.content).toContain('saved project text')
+    expect(
+      payloads[1]?.messages.find(
+        message => message.toolCallId === 'project-read'
+      )?.content
+    ).toContain('const tempo = 80;')
+    expect(result.sources).toContainEqual(
+      expect.objectContaining({
+        project: expect.objectContaining({
+          path: 'score.js',
+          version: 'saved-80',
+          startLine: 1,
+        }),
+      })
+    )
+    expect(result.sources.some(source => !source.project)).toBe(true)
+    expect(JSON.stringify(payloads)).not.toContain('UNSAVED-DRAFT')
+  })
   it('requests only summary JSON without the conversational document-budget footer (#234)', async () => {
     const sections = {
       userDecisions: [{ text: '保留预算测试决定', sourceIds: ['summary-u'] }],

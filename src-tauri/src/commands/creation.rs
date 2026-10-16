@@ -104,6 +104,57 @@ impl CreationState {
     }
 }
 
+#[tauri::command]
+#[specta::specta]
+pub async fn assistant_project_inventory(
+    app: AppHandle,
+    state: State<'_, CreationState>,
+    identity: String,
+) -> Result<crate::project::creation::AssistantProjectSnapshot, CreationError> {
+    state
+        .run(move |access| access.assistant_inventory(&identity, &protection(&app)?))
+        .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn assistant_project_overview(
+    app: AppHandle,
+    state: State<'_, CreationState>,
+    identity: String,
+) -> Result<crate::project::creation::AssistantProjectOverview, CreationError> {
+    state
+        .run(move |access| access.assistant_overview(&identity, &protection(&app)?))
+        .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn assistant_project_read(
+    app: AppHandle,
+    state: State<'_, CreationState>,
+    identity: String,
+    read: crate::project::creation::AssistantProjectRead,
+) -> Result<crate::project::creation::AssistantProjectPage, CreationError> {
+    state
+        .run(move |access| access.assistant_read(&identity, &read, &protection(&app)?))
+        .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn assistant_project_search(
+    app: AppHandle,
+    state: State<'_, CreationState>,
+    identity: String,
+    paths: Vec<String>,
+    query: String,
+) -> Result<crate::project::creation::AssistantProjectSearch, CreationError> {
+    state
+        .run(move |access| access.assistant_search(&identity, &paths, &query, &protection(&app)?))
+        .await
+}
+
 /// Diagnostics capture and revalidate the issued identity without holding a
 /// creation or runtime lock during I/O. Protection lookup performs no writes.
 async fn creation_diagnostic(

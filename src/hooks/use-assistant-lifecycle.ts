@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { onModelConfigurationChanged } from '@/lib/events'
 import { registerCreationParticipant } from '@/lib/creation-lifecycle'
+import { useAssistantProjectStore } from '@/store/assistant-project-store'
 import {
   stopAndPersistAssistantHistory,
   useAssistantStore,
@@ -10,6 +11,7 @@ import {
 export function useAssistantLifecycle() {
   useEffect(() => {
     const off = onModelConfigurationChanged(() => {
+      useAssistantProjectStore.getState().revoke()
       useAssistantStore.getState().stop()
       void useAssistantStore.getState().refreshConfiguration()
     })

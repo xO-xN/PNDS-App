@@ -476,6 +476,38 @@ async listCreationFiles(identity: string) : Promise<Result<CreationFile[], Creat
     else return { status: "error", error: e  as any };
 }
 },
+async assistantProjectInventory(identity: string) : Promise<Result<AssistantProjectSnapshot, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("assistant_project_inventory", { identity }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async assistantProjectOverview(identity: string) : Promise<Result<AssistantProjectOverview, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("assistant_project_overview", { identity }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async assistantProjectRead(identity: string, read: AssistantProjectRead) : Promise<Result<AssistantProjectPage, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("assistant_project_read", { identity, read }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async assistantProjectSearch(identity: string, paths: string[], query: string) : Promise<Result<AssistantProjectSearch, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("assistant_project_search", { identity, paths, query }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async getCreationGitStatus(identity: string) : Promise<Result<CreationGitStatus, CreationError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("get_creation_git_status", { identity }) };
@@ -1290,11 +1322,11 @@ dnsEnabled?: boolean | null;
  * never start bound to a dead interface. App-local, never touches
  * project manifests.
  */
-lanIp?: string | null;
+lanIp?: string | null; 
 /**
  * #165: app-local endpoint/model only; the credential lives in Keychain.
  */
-modelService?: ModelServiceConfig | null; modelContextProfiles?: ModelServiceConfig[];
+modelService?: ModelServiceConfig | null; modelContextProfiles?: ModelServiceConfig[]; 
 /**
  * Monitor fraction within the resizable creation workspace (not sidebar).
  */
@@ -1304,19 +1336,25 @@ export type AssistantContextMarker = { type: "topic" } | { type: "summary"; sour
 export type AssistantDocumentMetrics = { returnedCharacters: number; reusedCharacters: number; resultCharacters: number }
 export type AssistantHistory = { epoch: string; projectKey: string; appVersion: string; messages: AssistantHistoryMessage[] }
 export type AssistantHistoryAppliedDiff = { before: string; after: string }
-export type AssistantHistoryAttachment = { id: string; projectKey: string; path: string; startLine: number; endLine: number; source: AssistantAttachmentSource; version: string; candidateRevision?: number | null; text: string }
+export type AssistantHistoryAttachment = { id: string; projectKey: string; path: string; startLine: number; endLine: number; source: AssistantAttachmentSource; version: string; candidateRevision?: number | null; proposalId?: string | null; sourceVersion?: string | null; text: string }
 export type AssistantHistoryError = { type: "invalidIdentity" } | { type: "io" } | { type: "invalidFormat" } | { type: "unsupportedVersion" } | { type: "staleHistory" } | { type: "tooLarge" }
 export type AssistantHistoryLocale = "en" | "zh-CN"
 export type AssistantHistoryMessage = { id: string; role: AssistantHistoryRole; text: string; status: AssistantHistoryStatus; sources: AssistantHistorySource[]; scope: AssistantHistoryScope; error?: AssistantHistoryRequestError | null; appVersion?: string | null; attachments?: AssistantHistoryAttachment[] | null; proposals?: AssistantHistoryProposal[] | null; usage?: AssistantRoundUsage | null; contextMarker?: AssistantContextMarker | null; contextServiceKey?: string | null }
 export type AssistantHistoryProposal = { id: string; projectKey: string; path: string; sourceVersion: string; candidateRevision: number; text: string; appliedDiff?: AssistantHistoryAppliedDiff | null; preview: AssistantProposalPreview; pendingRefresh: boolean }
-export type AssistantHistoryRequestError = "invalidConfig" | "missingCredential" | "credentialStore" | "authentication" | "network" | "timeout" | "protocol" | "toolsUnsupported" | "rateLimited" | "serviceUnavailable" | "cancelled" | "budgetExceeded" | "contextTokensExceeded" | "contextBytesExceeded" | "contextMessagesExceeded" | "toolCallsExceeded" | "toolCharactersExceeded" | "requestBusy" | "invalidIdentity" | "invalidTool" | "noProgress" | "corpusUnavailable" | "notConfigured" | "requestFailed" | "invalidSummary"
+export type AssistantHistoryRequestError = "invalidConfig" | "missingCredential" | "credentialStore" | "authentication" | "network" | "timeout" | "protocol" | "toolsUnsupported" | "rateLimited" | "serviceUnavailable" | "cancelled" | "budgetExceeded" | "contextTokensExceeded" | "contextBytesExceeded" | "contextMessagesExceeded" | "toolCallsExceeded" | "toolCharactersExceeded" | "requestBusy" | "invalidIdentity" | "invalidTool" | "noProgress" | "corpusUnavailable" | "notConfigured" | "requestFailed" | "invalidSummary" | "projectReadingDisabled" | "projectScopeChanged" | "projectUnavailable" | "attachmentExcluded" | "wholeProjectExceeded"
 export type AssistantHistoryRole = "user" | "assistant"
 export type AssistantHistoryScope = "platform" | "project"
-export type AssistantHistorySource = { docId: string; sectionId: string; title: string; locale: AssistantHistoryLocale; version?: string | null; offset?: number | null; endOffset?: number | null; totalCharacters?: number | null; format?: AssistantSourceFormat | null }
+export type AssistantHistorySource = { docId: string; sectionId: string; title: string; locale: AssistantHistoryLocale; version?: string | null; offset?: number | null; endOffset?: number | null; totalCharacters?: number | null; format?: AssistantSourceFormat | null; project?: AssistantProjectPage | null }
 export type AssistantHistoryStatus = "pending" | "completed" | "failed" | "cancelled"
 export type AssistantMessageRole = "system" | "user" | "assistant" | "tool"
 export type AssistantModelMessage = { role: AssistantMessageRole; content: string | null; toolCalls?: AssistantToolCall[] | null; toolCallId?: string | null; contextKind?: ContextContentKind | null }
 export type AssistantModelTurn = { text: string | null; toolCalls: AssistantToolCall[]; usage?: ModelUsage | null; measurement?: ContextMeasurement | null }
+export type AssistantProjectFile = { path: string; bytes: number; version: string | null; reason: string | null }
+export type AssistantProjectOverview = { snapshot: AssistantProjectSnapshot; manifestStatus: string; contentPaths: string[]; evidence: AssistantProjectPage[] }
+export type AssistantProjectPage = { source?: AssistantAttachmentSource | null; path: string; version: string; text: string; offset: number; endOffset: number; totalCharacters: number; nextOffset: number | null; startLine: number; endLine: number }
+export type AssistantProjectRead = { path: string; version: string | null; offset: number; pageLength: number }
+export type AssistantProjectSearch = { pages: AssistantProjectPage[]; skipped: AssistantProjectFile[]; searchedFiles: number; remainingFiles: number }
+export type AssistantProjectSnapshot = { files: AssistantProjectFile[]; fingerprint: string }
 export type AssistantProposalPreview = "none" | "temporary" | "stale" | "historical"
 export type AssistantRequestSnapshot = { requestId: string; model: string; baseUrl: string; config: ModelServiceConfig }
 export type AssistantRoundUsage = { calls: (ModelUsage | null)[]; complete: boolean; documentMetrics?: AssistantDocumentMetrics | null }
@@ -1406,8 +1444,8 @@ bridgedChannels: number;
  * B: first private project bus; equals K.
  */
 privateBusStart: number }
-export type ContextContentKind = "history" | "input" | "documents" | "summary" | "projectOverview" | "projectFragment" | "attachment"
-export type ContextMeasurement = { characters: number; utf8Bytes: number; estimatedTokens: number | null;
+export type ContextContentKind = "projectPolicy" | "history" | "input" | "documents" | "summary" | "projectOverview" | "projectFragment" | "attachment"
+export type ContextMeasurement = { characters: number; utf8Bytes: number; estimatedTokens: number | null; 
 /**
  * Portable display-only fallback. Never used for admission or server usage.
  */

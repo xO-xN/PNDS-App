@@ -13,7 +13,7 @@ allowlist; development uses the same loader's repository fallback. No online
 copy, compiled document mirror or second parser is introduced. Corpus failures
 stop the request explicitly rather than substituting stale or partial documents.
 
-Only `search_help` and `read_help_section` are available. Arguments, names, call
+Platform-only requests expose `search_help` and `read_help_section`. Authorized project requests add only the saved-text tools described below. Arguments, names, call
 IDs and progress are checked before producing results. Search returns at most
 three section snippets; section reading defaults to 1,200 UTF-16 units, with a 2,000-unit hard maximum
 and explicit offset/total/next-offset ranges. A request allows eight tool calls, 24,000 tool-result
@@ -213,9 +213,7 @@ turn. Measurements include policy/tools, selected history, input and the current
 document-tool protocol, with separate character/byte/token units. Optional
 consumer messages carry a typed category that is measured locally and stripped
 from the HTTP payload. Trusted consumers require fresh explicit authorization,
-current owner/service identity and enabled project reading; the current platform
-UI supplies none. Unconnected consumer categories are absent, never “already
-sent”. #168/#225 remain responsible for real project/attachment integration.
+current owner/service identity and enabled project reading; the creation UI supplies project and attachment consumers only through the transient consent workflow. Absent categories are not reported as already sent.
 
 The context popup previews the next call when idle and follows the actual
 call during tool loops. Capacity is manual/unverified. The ring uses the selected
@@ -243,8 +241,7 @@ reject old results after stop, workspace or model configuration changes.
 
 The complete local transcript and the next outgoing context are different data.
 `selectAssistantContext` keeps up to six recent complete adjacent user/reply
-rounds. Failed, partial, project-derived, attachment/proposal-bearing and
-service-mismatched rounds are excluded as whole pairs. The input area states
+rounds. Failed, partial, attachment/proposal-bearing and service-mismatched rounds are excluded as whole pairs. Project rounds additionally require enabled reading, current scope consent and matching saved source versions. The input area states
 how many originals remain local; nothing is deleted. A long single round still
 fails the same request budget without truncation.
 
@@ -362,3 +359,86 @@ remains attached to the corresponding reply. Unknown tokenizers use an explicitl
 labelled generic reference estimate; they do not claim a matching provider
 tokenizer. Local measurement uses the
 selected chat (or the edited question's prefix) and rejects stale previews.
+
+## Authorized saved project reading (#168)
+
+`assistant-project-store` owns transient scope consent. The first send displays
+project, service and readable paths; cancelling preserves input. Ownership,
+service changes, disabled reading and expanded readable paths revoke consent.
+Content versions are separate: saving or external edits refresh facts without
+asking for the same scope again. History restores no authority.
+
+The native creation capability supplies the assistant inventory, search and
+UTF-16 pages. Entry paths and canonical targets share exclusions; the held-root
+open prevents symlink races. Each file is bounded to 64 KiB; inventory admits
+256 files / 2 MiB, searches inspect at most 64 files and return six short hits.
+Exclusions and remaining search coverage are explicit. The common request entry
+adds only list/search/read tools, with the existing shared calls, result and
+serialized/token budgets; at most 32 distinct files are read per request.
+Project pages remain request-local, outside the installed-document cache.
+
+Actual sources retain relative path, saved version, exact text and line/range
+coordinates. Source navigation rechecks the same native read policy. Project
+history is eligible only with current consent, matching service and source
+versions; attachments/proposals remain conservatively excluded from automatic
+history selection. Disabling reading filters project rounds and summaries while
+keeping the full local transcript. Partial ranges never imply complete analysis.
+
+## Explicit selection attachments (#225)
+
+File and proposal TextEditors expose the same selection action. It snapshots
+only the primary selected range, saved base version, line coordinates and source
+state. Pending suggestions also retain their identity and candidate revision.
+Native assistant reading validates the existing path/exclusions before capture;
+source documents are limited to 64 KiB, selections to 2,000 UTF-16 units, eight
+attachments / 12,000 selected units total. Adding/removing does no model call or
+file write. Subsequent edits label the immutable snapshot stale, never replace it.
+
+Attachment freshness keeps the native disk version and inventory object observed
+at capture in transient state. An earlier consent inventory cannot invalidate a
+newer editor selection. A subsequently refreshed inventory, the current editor
+disk/conflict version and buffer edits each independently detect later changes;
+none overrides another observation. These freshness markers are not history or
+restored reading authority.
+
+The highest request assembler produces attachment payloads and source records
+from those exact snapshots. Disabled reading blocks the entire send, retaining
+input and attachments. Workspace replacement clears pending attachments; a
+service change revokes sending consent. History persists actual sent snapshots,
+without current editor references or restored authority. The controlled proposal
+consumer verifies this container seam; #208's actual suggestion workflow still
+requires its own integration acceptance.
+
+## Local project overview (#169)
+
+The overview is a native saved-text fact service, independent of full runtime
+preflight. It uses the same assistant inventory/pages and manifest parser. Exact
+embedded Blank source matches remain scaffold evidence; other saved source is
+labelled content indications, never completion, artistic quality or valid wiring.
+README, dependency declarations and handoff excerpts keep saved provenance.
+
+`assistant-overview-store` owns the current local snapshot. File revisions and
+focus refresh facts without model, compile or runtime actions. Fingerprint
+changes mark earlier static/test facts stale even before watcher acknowledgement.
+Explicit Doctor and controlled-check results publish their existing evidence;
+manual test transitions record runtime evidence with saved revision. Nothing is
+restored from chat as a current test. Hover/focus opens the single-line overview;
+leaving/blurring closes it. Authorized requests refresh it and assemble the same
+short, visible local facts/excerpts under the common context budget; disabled
+reading never includes it.
+
+## Explicit whole-project reading (#170)
+
+Only the whole-project action collects the admitted saved files. The preview
+shows actual paths/versions, exclusions and the shared native assembler's request
+measurement. The 32-file / 24,000-character admission limits apply before a
+complete candidate can be confirmed; overlarge or incomplete inventories are
+refused, with focused-reading alternatives. There is no truncated “whole” result.
+
+Planning is local-only and bounded by the existing native file/page policy.
+Cancellation and project/service/attachment changes retire the candidate. Scope
+fingerprints are checked after collection, at confirmation, after overview refresh
+and before each actual model turn. The request consumes the same character,
+serialized/token budgets and highest orchestration entry as targeted reading;
+usage and context measurements describe the actual outgoing assembly. History
+keeps exact source snapshots but restores no full-read confirmation.

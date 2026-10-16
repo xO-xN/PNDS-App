@@ -1,0 +1,130 @@
+Window: "PNDS", App: PNDS.
+0 standard window PNDS, Secondary Actions: Raise
+	1 scroll area
+		2 HTML content Description: PNDS, URL: tauri://localhost
+			3 container
+				4 container 实时测试
+					5 container
+						6 text 音频
+						7 combo box (collapsed, settable) 测试音频模式, Value: Internal, Secondary Actions: Expand
+							8 text Internal
+						9 text 未运行测试
+				10 text monitor创作模式 启动测试后显示 monitor。
+				11 container performer 测试窗口
+					12 container
+						13 heading performer 测试窗口, Value: 3
+							14 text performer 测试窗口
+						15 text 0
+					16 text 启动测试后，可添加独立 performer 窗口。
+					17 button (disabled) 添加 performer
+			18 container
+				19 pop up button 工程操作, Help: /Users/xiaoxiang/Coding/PNDS app 开发/pnds-g3-native-2026-10-16/g3-native-a
+				20 button 静态 Doctor
+				21 button 受控检查
+				22 button 生成 .pnds
+			23 container
+				24 toggle button manifest.json, Value: off
+				25 toggle button README.zh-CN.md, Value: off
+				26 button 快速打开文件
+				27 text field (settable) 搜索文件路径
+				28 container 工程文件
+					29 button (expanded) 运行与依赖 2, Secondary Actions: Collapse
+					30 toggle button package.json, Value: off
+					31 toggle button server.js, Value: off
+					32 button (expanded) 页面 2, Secondary Actions: Collapse
+					33 toggle button public/monitor.html, Value: off
+					34 toggle button public/performer.html, Value: off
+					35 button (expanded) 声音源码 2, Secondary Actions: Collapse
+					36 toggle button audio/controller.js, Value: off
+					37 toggle button supercollider/source/pndsBlank.scd, Value: off
+					38 button (collapsed) 编译产物 1, Secondary Actions: Expand
+					39 button (collapsed) 模块 0, Secondary Actions: Expand
+					40 button 添加 PNDS 模块
+					41 button 添加共享包
+					42 button (collapsed) 工程支持 8, Secondary Actions: Expand
+				43 text 17 个文件
+				44 button 在 Finder 中打开工程文件夹
+			45 container 创作工作台
+				46 container 工作区阅读视图
+					47 toggle button 讨论, Value: on
+					48 toggle button 查看创作交接单, Value: off
+				49 container 助手
+					50 combo box (collapsed, settable) 聊天记录, Value: 1 · 请读取 notes.txt，只回答 SAVED_MARKER_A_168 的值，并列出实际来源。不要读取其他文件。, Secondary Actions: Expand
+						51 text 1 · 请读取 notes.txt，只回答 SAVED_MARKER_A_168 的值，并列出实际来源。不要读取其他文件。
+					52 button 新聊天
+					53 text 聊天记录已保存在本机。
+					54 pop up button 清理当前工程记录
+					55 button (collapsed) 工程概况 · 事实已更新, Secondary Actions: Expand
+					56 container 讨论消息
+						57 container
+							58 text 你
+							59 text 请读取 notes.txt，只回答 SAVED_MARKER_A_168 的值，并列出实际来源。不要读取其他文件。
+						60 container
+							61 text 助手
+							62 text SAVED_MARKER_A_168 = amber-orbit
+							63 text 实际来源（均为本次工具实际返回）：
+							64 content list
+								65 container notes.txt（版本 67-69e21e630da336bb，偏移 0–103，全文件共 103 字符，1–3 行）：通过 list_project_files 确认其在已保存文本范围内，再经read_project_text 实际读取。
+									66 list marker •
+									67 text notes.txt（版本 67-69e21e630da336bb，偏移 0–103，全文件共 103 字符，1–3 行）：通过 list_project_files 确认其在已保存文本范围内，再经 read_project_text 实际读取。
+							68 text 按您的要求，未读取其他任何文件。
+							69 text {"remainingDocumentToolCalls":4,"remainingResultCharacters":20720}
+							70 summary 本轮问题服务端用量 · 完整, Value: off
+								71 text 本轮问题服务端用量 · 完整
+							72 container (expanded) Secondary Actions: Collapse
+								73 summary 已查阅来源（5）, Value: on
+									74 text 已查阅来源（5）
+								75 container 已查阅资料
+									76 button README.zh-CN.md:1–8 已保存文件快照 · 采集版本 b5-a76c9f5e4d9fedda 纯文本片段 范围 0–99／99 UTF-16 单位 · b5-a76c9f5e4d9fedda
+									77 summary 查看本次请求采用的内容快照, Value: off
+										78 text 查看本次请求采用的内容快照
+									79 button docs/creator-handoff.md:1–6 已保存文件快照 · 采集版本 cec-e83d02c64fac1315 纯文本片段 范围 0–200／2582 UTF-16 单位 · cec-e83d02c64fac1315
+									80 summary 查看本次请求采用的内容快照, Value: off
+										81 text 查看本次请求采用的内容快照
+									82 button manifest.json:1–11 已保存文件快照 · 采集版本 24a-3016271da3d0ab07 纯文本片段 范围 0–200／586 UTF-16 单位 · 24a-3016271da3d0ab07
+									83 summary 查看本次请求采用的内容快照, Value: off
+										84 text 查看本次请求采用的内容快照
+									85 button package.json:1–10 已保存文件快照 · 采集版本 fc-9cdc566e112ca073 纯文本片段 范围 0–200／252 UTF-16 单位 · fc-9cdc566e112ca073
+									86 summary 查看本次请求采用的内容快照, Value: off
+										87 text 查看本次请求采用的内容快照
+									88 button notes.txt:1–3 已保存文件快照 · 采集版本 67-69e21e630da336bb 纯文本片段 范围 0–103／103 UTF-16 单位 · 67-69e21e630da336bb
+									89 summary 查看本次请求采用的内容快照, Value: off
+										90 text 查看本次请求采用的内容快照
+					91 container
+						92 checkbox 读取当前工程, Value: 1
+						93 text 读取当前工程
+					94 button 阅读整个工程
+					95 container
+						96 text 向助手提问
+						97 text entry area (settable) 向助手提问, Value: [text entry area]
+						98 pop up button 上下文：估算 0.2%
+						99 text Enter 发送 · Shift+Enter 换行
+						100 button (disabled) 发送
+			101 splitter 讨论与 monitor 宽度, Value: 44, Details: Monitor 44%
+			102 container 演出与创作控制
+				103 container 实时测试
+					104 button 启动测试
+					105 button (disabled) 关闭测试
+					106 button (disabled) 刷新保存版测试页面
+				107 toggle button (disabled) 静音, Value: off
+				108 slider (disabled, settable, float) 主音量, Value: 80
+					109 value indicator 80
+				110 text 80%
+				111 pop up button 音频
+				112 pop up button 本地网络
+				113 toggle button 控制台, Value: off
+				114 button 设置
+				115 toggle button 返回演出模式, Value: off
+			116 container Notifications alt+T
+	117 close button
+	118 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	119 minimize button
+120 menu bar
+	121 PNDS
+	122 文件
+	123 编辑
+	124 显示
+	125 窗口
+	126 帮助
+
+The focused UI element is 73 summary 已查阅来源（5）, Value: on

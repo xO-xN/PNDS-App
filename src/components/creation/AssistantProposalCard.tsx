@@ -6,6 +6,7 @@ import { useCreationReadingStore } from '@/store/creation-reading-store'
 import { openCreationFileAtLine } from '@/lib/creation-editor-navigation'
 import type { TextBuffer } from '@/lib/text-buffer'
 import { TextEditor } from './TextEditor'
+import { useAssistantProjectStore } from '@/store/assistant-project-store'
 
 export interface AssistantProposal {
   id: string
@@ -82,6 +83,31 @@ export function AssistantProposalCard({
             value={proposal.candidate.text}
             readOnly={!current || busy}
             onChange={onCodeChange}
+            selectionAction={{
+              label: t('assistant.attachment.add'),
+              onSelect: () => {
+                if (!current || busy) return
+                void useAssistantProjectStore
+                  .getState()
+                  .attachSelection({
+                    identity: proposal.identity,
+                    path: proposal.source.path,
+                    version: proposal.source.version,
+                    source: 'proposal',
+                    buffer,
+                    proposalId: proposal.id,
+                    candidateRevision: proposal.candidate.revision,
+                  })
+                  .then(added => {
+                    if (
+                      added &&
+                      useCreationStore.getState().workspace?.project
+                        .identity === proposal.identity
+                    )
+                      useCreationReadingStore.getState().showDiscussion()
+                  })
+              },
+            }}
           />
         </div>
         <div className="mt-2 flex flex-wrap gap-2">

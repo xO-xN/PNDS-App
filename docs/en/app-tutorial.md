@@ -355,3 +355,35 @@ running project. Cancelling a disk conflict keeps your draft; explicitly adoptin
 a disk version resets draft undo/redo and announces that boundary. Histories are
 not restored after restarting the App. **Undo saved change** is a separate
 version-checked operation on a recorded disk write.
+
+### Discuss saved project text
+
+In the creation discussion, enable **Read current project** before asking about
+source files. The first send shows the current project, model service and allowed
+saved-text scope. Cancel keeps your question. Normal saves refresh the content;
+a different project, service or expanded scope requires confirmation again.
+File tools read saved text only. Unsaved drafts, sensitive configuration,
+dependencies, builds, lockfiles and media are excluded. Sources identify the
+actual saved version and line range; a partial read is not a complete analysis.
+Turn reading off to continue PNDS documentation questions without sending old
+project excerpts or project summaries. Local history remains visible.
+
+Select code in a file's text editor or a pending suggestion and choose **Discuss
+selection** to add a fixed snapshot to the input. Expand it to inspect the path,
+lines, version and saved/draft/pending state, or remove it before sending. Later
+edits do not replace the snapshot. Only that explicit selection is attached;
+sending does not save, apply, preview or run it. Enable project reading before
+sending attachments, or remove them to continue documentation-only questions.
+
+The single-line **Project overview** expands on hover or keyboard focus. It
+separates saved content indications, manifest/static contract facts and the latest
+actual test. File changes refresh facts or mark previous evidence out of date;
+old chat history is not current test evidence. Opening it starts no model request,
+compile or test. Authorized project questions include a short versioned overview.
+
+Choose **Read whole project** explicitly to review every admitted saved-text file,
+excluded entries and a capacity estimate before sending. Cancelling preserves
+your input. File changes require a fresh scope review, and project/service changes
+invalidate the confirmation. Oversized ranges are refused with suggestions to ask
+about relevant files or sections; they are never silently truncated and called
+complete. The estimate includes the assembled request and is not provider usage.

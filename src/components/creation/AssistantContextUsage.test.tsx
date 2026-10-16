@@ -4,6 +4,10 @@ import { act, render, screen, waitFor } from '@/test/test-utils'
 import { commands, type ContextMeasurement } from '@/lib/tauri-bindings'
 import { useAssistantStore } from '@/store/assistant-store'
 import { CreationAssistant } from './CreationAssistant'
+import { useAssistantProjectStore } from '@/store/assistant-project-store'
+import { useAssistantOverviewStore } from '@/store/assistant-overview-store'
+import { modelConfigurationKey } from '@/lib/model-context-settings'
+import { HELP_BOOKS } from '@/lib/help-corpus'
 
 const measurement: ContextMeasurement = {
   characters: 3100,
@@ -47,6 +51,88 @@ beforeEach(() => {
 })
 
 describe('context and usage through the discussion (#233)', () => {
+  it('measures the same authorized overview that the highest workflow actually sends (#168/#169)', async () => {
+    const config = { baseUrl: 'https://example.test/v1', model: 'fixture' }
+    const snapshot = {
+      files: [{ path: 'README.md', bytes: 12, version: 'v1', reason: null }],
+      fingerprint: 'v1',
+    }
+    const overview = {
+      snapshot,
+      manifestStatus: 'valid',
+      contentPaths: [],
+      evidence: [
+        {
+          path: 'README.md',
+          version: 'v1',
+          text: '# Saved intent',
+          offset: 0,
+          endOffset: 14,
+          totalCharacters: 14,
+          nextOffset: null,
+          startLine: 1,
+          endLine: 1,
+        },
+      ],
+    }
+    useAssistantProjectStore.getState().syncWorkspace('usage-ui')
+    useAssistantProjectStore.setState({
+      reading: true,
+      snapshot,
+      authorization: {
+        owner: 'usage-ui',
+        service: modelConfigurationKey(config),
+        paths: ['README.md'],
+      },
+    })
+    useAssistantOverviewStore.getState().syncWorkspace('usage-ui')
+    useAssistantOverviewStore.setState({ overview, stale: false })
+    vi.mocked(commands.assistantProjectOverview).mockResolvedValue({
+      status: 'ok',
+      data: overview,
+    })
+    vi.mocked(commands.assistantProjectInventory).mockResolvedValue({
+      status: 'ok',
+      data: snapshot,
+    })
+    vi.mocked(commands.beginAssistantRequest).mockImplementation(
+      async (_owner, requestId) => ({
+        status: 'ok',
+        data: { requestId, ...config, config },
+      })
+    )
+    vi.mocked(commands.helpCorpus).mockResolvedValue({
+      status: 'ok',
+      data: HELP_BOOKS.flatMap(book =>
+        book.documentIds.map(id => ({
+          id,
+          path: `${id}.md`,
+          markdown: `# ${id}\n\nReference.`,
+        }))
+      ),
+    })
+    vi.mocked(commands.assistantModelTurn).mockResolvedValue({
+      status: 'ok',
+      data: { text: 'Answer', toolCalls: [] },
+    })
+    render(<CreationAssistant identity="usage-ui" />)
+    await waitFor(() =>
+      expect(
+        vi
+          .mocked(commands.measureAssistantContext)
+          .mock.calls.at(-1)?.[1]
+          .some(message => message.contextKind === 'projectOverview')
+      ).toBe(true)
+    )
+    const preview = structuredClone(
+      vi.mocked(commands.measureAssistantContext).mock.calls.at(-1)?.[1]
+    )
+    await act(() => useAssistantStore.getState().send())
+    expect(
+      vi.mocked(commands.assistantModelTurn).mock.calls.at(-1)?.[1]
+    ).toEqual(preview)
+    useAssistantProjectStore.getState().setReading(false)
+  })
   it.each([
     [20, 'var(--pnds-context-low)'],
     [

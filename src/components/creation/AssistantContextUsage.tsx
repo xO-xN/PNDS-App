@@ -13,6 +13,9 @@ import {
 } from '@/lib/tauri-bindings'
 import { buildAssistantMessages } from '@/lib/assistant-flow'
 import { useAssistantStore } from '@/store/assistant-store'
+import { useAssistantProjectStore } from '@/store/assistant-project-store'
+import { modelConfigurationKey } from '@/lib/model-context-settings'
+import { useAssistantOverviewStore } from '@/store/assistant-overview-store'
 
 export function AssistantContextUsage({
   identity,
@@ -30,16 +33,47 @@ export function AssistantContextUsage({
   const phase = useAssistantStore(state => state.phase)
   const live = useAssistantStore(state => state.contextMeasurement)
   const historyState = useAssistantStore(state => state.historyState)
+  const reading = useAssistantProjectStore(state => state.reading)
+  const project = useAssistantProjectStore(state => state.snapshot)
+  const authorization = useAssistantProjectStore(state => state.authorization)
+  const attachments = useAssistantProjectStore(state => state.attachments)
+  const overview = useAssistantOverviewStore(state => state.overview)
+  const overviewStale = useAssistantOverviewStore(state => state.stale)
+  const staticEvidence = useAssistantOverviewStore(
+    state => state.staticEvidence
+  )
+  const testEvidence = useAssistantOverviewStore(state => state.testEvidence)
+  const contextKey = JSON.stringify([
+    overview?.snapshot.fingerprint,
+    overviewStale,
+    staticEvidence,
+    testEvidence,
+  ])
   const [preview, setPreview] = useState<{
     input: string
     messages: typeof messages
     config: typeof config
     active: typeof active
     editing: typeof editing
+    project: typeof project
+    attachments: typeof attachments
+    authorization: typeof authorization
+    reading: boolean
+    contextKey: string
     measurement: ContextMeasurement | null
   } | null>(null)
   useEffect(() => {
     if (!config || phase !== 'idle' || historyState !== 'ready') return
+    const currentProject = overview?.snapshot ?? project
+    const authorized =
+      reading &&
+      authorization?.owner === identity &&
+      authorization.service === modelConfigurationKey(config) &&
+      !!currentProject &&
+      !currentProject.files.some(
+        file => !file.reason && !authorization.paths.includes(file.path)
+      )
+    if (authorized && overviewStale) return
     let stale = false
     let history = conversationMessages(messages, active)
     if (editing)
@@ -48,13 +82,25 @@ export function AssistantContextUsage({
         history.findIndex(message => message.id === editing.messageId)
       )
     const timer = setTimeout(() => {
+      const consumer = authorized
+        ? useAssistantOverviewStore
+            .getState()
+            .contextConsumer(
+              identity,
+              config,
+              i18n.resolvedLanguage === 'zh-CN' ? 'zh-CN' : 'en'
+            )
+        : null
       void commands
         .measureAssistantContext(
           config,
           buildAssistantMessages(history, input, {
             owner: identity,
             config,
-            projectReading: false,
+            projectReading: authorized,
+            project: currentProject ?? undefined,
+            consumers: consumer ? [consumer] : [],
+            attachments: attachments.map(item => item.snapshot),
           })
         )
         .then(result => {
@@ -65,6 +111,11 @@ export function AssistantContextUsage({
               config,
               active,
               editing,
+              project,
+              attachments,
+              authorization,
+              reading,
+              contextKey,
               measurement: result.status === 'ok' ? result.data : null,
             })
         })
@@ -76,6 +127,11 @@ export function AssistantContextUsage({
               config,
               active,
               editing,
+              project,
+              attachments,
+              authorization,
+              reading,
+              contextKey,
               measurement: null,
             })
         })
@@ -84,7 +140,24 @@ export function AssistantContextUsage({
       stale = true
       clearTimeout(timer)
     }
-  }, [config, identity, input, messages, active, editing, phase, historyState])
+  }, [
+    config,
+    identity,
+    input,
+    messages,
+    active,
+    editing,
+    phase,
+    historyState,
+    project,
+    reading,
+    authorization,
+    attachments,
+    contextKey,
+    overview,
+    overviewStale,
+    i18n.resolvedLanguage,
+  ])
   const measurement =
     phase !== 'idle'
       ? live
@@ -92,7 +165,12 @@ export function AssistantContextUsage({
           preview.messages === messages &&
           preview.config === config &&
           preview.active === active &&
-          preview.editing === editing
+          preview.editing === editing &&
+          preview.project === project &&
+          preview.attachments === attachments &&
+          preview.authorization === authorization &&
+          preview.reading === reading &&
+          preview.contextKey === contextKey
         ? preview.measurement
         : null
   const tokens =

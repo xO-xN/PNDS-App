@@ -22,6 +22,7 @@ import {
   useCreationFilesStore,
 } from '@/store/creation-files-store'
 import { CreationErrorNotice } from './CreationErrorNotice'
+import { useAssistantOverviewStore } from '@/store/assistant-overview-store'
 
 /** Saved-disk inspection, independent of drafts and the runtime lifecycle. */
 export function CreationDoctor({
@@ -59,6 +60,9 @@ export function CreationDoctor({
         if (!current()) return
         if (result.status === 'ok') {
           setReport(result.data)
+          useAssistantOverviewStore
+            .getState()
+            .recordStatic(identity, result.data, diskRevision)
           setSnapshotRevision(diskRevision)
         } else setError(result.error)
         setReading(false)
@@ -92,7 +96,10 @@ export function CreationDoctor({
         )
         if (!current()) return
         if (result.status === 'ok') {
-          if (result.data) setExternalStale(true)
+          if (result.data) {
+            setExternalStale(true)
+            useAssistantOverviewStore.getState().markStaticStale(identity)
+          }
           setError(null)
         } else setError(result.error)
       } catch (cause) {
