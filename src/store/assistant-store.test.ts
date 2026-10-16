@@ -4,6 +4,7 @@ import { commands, events } from '@/lib/tauri-bindings'
 import { HELP_BOOKS } from '@/lib/help-corpus'
 import { flushAssistantHistory } from '@/lib/assistant-history'
 import { conversationMessages } from '@/lib/assistant-conversations'
+import { useAssistantProjectStore } from './assistant-project-store'
 
 const corpus = HELP_BOOKS.flatMap(book =>
   book.documentIds.map(id => ({
@@ -37,6 +38,255 @@ beforeEach(async () => {
     status: 'ok',
     data: { text: 'A documented answer.', toolCalls: [] },
   })
+})
+
+it('requires fresh scope consent, preserves cancelled input, refreshes saved versions and filters project history when reading is disabled (#168)', async () => {
+  const config = { model: 'chosen', baseUrl: 'https://model.example/v1' }
+  const store = useAssistantStore.getState
+  const project = useAssistantProjectStore.getState
+  useAssistantStore.setState({ modelConfig: config })
+  const files = [{ path: 'score.js', bytes: 18, version: 'v1', reason: null }]
+  vi.mocked(commands.assistantProjectInventory).mockResolvedValue({
+    status: 'ok',
+    data: { files, fingerprint: '1' },
+  })
+  vi.mocked(commands.assistantModelTurn).mockClear()
+  project().setReading(true)
+  store().setInput('What is the saved tempo?')
+  await store().send()
+  expect(project().consent?.snapshot.files).toEqual(files)
+  expect(commands.assistantModelTurn).not.toHaveBeenCalled()
+  project().cancelConsent()
+  expect(store().input).toBe('What is the saved tempo?')
+  await store().send()
+  expect(project().confirmConsent('workspace-one', config, store().input)).toBe(
+    true
+  )
+  vi.mocked(commands.assistantProjectRead).mockResolvedValue({
+    status: 'ok',
+    data: {
+      path: 'score.js',
+      version: 'v1',
+      text: 'PRIVATE-SAVED-TEMPO',
+      offset: 0,
+      endOffset: 19,
+      totalCharacters: 19,
+      nextOffset: null,
+      startLine: 1,
+      endLine: 1,
+    },
+  })
+  vi.mocked(commands.assistantModelTurn).mockResolvedValueOnce({
+    status: 'ok',
+    data: {
+      text: null,
+      toolCalls: [
+        {
+          id: 'read-saved',
+          name: 'read_project_text',
+          arguments: '{"path":"score.js"}',
+        },
+      ],
+    },
+  })
+  await store().send()
+  expect(
+    JSON.stringify(vi.mocked(commands.assistantModelTurn).mock.calls)
+  ).toContain('PRIVATE-SAVED-TEMPO')
+  expect(store().messages.at(-1)?.sources[0]?.project?.version).toBe('v1')
+  const file = files[0]
+  if (!file) throw new Error('Saved file fixture is missing')
+  file.version = 'v2'
+  store().setInput('Read the new save')
+  await store().send()
+  expect(project().consent).toBeNull()
+  project().setReading(false)
+  vi.mocked(commands.assistantModelTurn).mockClear()
+  store().setInput('How does PNDS work?')
+  await store().send()
+  const payload = JSON.stringify(
+    vi.mocked(commands.assistantModelTurn).mock.calls
+  )
+  expect(payload).not.toContain('PRIVATE-SAVED-TEMPO')
+  expect(payload).not.toContain('score.js')
+  project().setReading(true)
+  store().setInput('Read it again')
+  await store().send()
+  expect(project().consent).not.toBeNull()
+})
+
+it('sends only an explicitly selected immutable draft snapshot after consent and preserves disabled-reading input (#225)', async () => {
+  const { TextBuffer } = await import('@/lib/text-buffer')
+  const config = { model: 'chosen', baseUrl: 'https://model.example/v1' }
+  const store = useAssistantStore.getState
+  const project = useAssistantProjectStore.getState
+  useAssistantStore.setState({ modelConfig: config })
+  vi.mocked(commands.assistantProjectInventory).mockResolvedValue({
+    status: 'ok',
+    data: {
+      files: [{ path: 'score.js', version: 'v1', bytes: 30, reason: null }],
+      fingerprint: '1',
+    },
+  })
+  vi.mocked(commands.assistantProjectRead).mockResolvedValue({
+    status: 'ok',
+    data: {
+      path: 'score.js',
+      version: 'v1',
+      text: 'saved source',
+      offset: 0,
+      endOffset: 12,
+      totalCharacters: 12,
+      nextOffset: null,
+      startLine: 1,
+      endLine: 1,
+    },
+  })
+  const buffer = new TextBuffer(
+    'UNSELECTED-PRIVATE\nconst tempo = 99;\nOTHER-PRIVATE',
+    'score.js'
+  )
+  vi.mocked(commands.beginAssistantRequest).mockClear()
+  buffer.select(19, 36)
+  await project().attachSelection({
+    identity: 'workspace-one',
+    path: 'score.js',
+    version: 'v1',
+    source: 'draft',
+    buffer,
+  })
+  expect(project().attachments[0]?.snapshot.text).toBe('const tempo = 99;')
+  expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
+  buffer.select(0, 18)
+  buffer.replaceSelection('NEW-UNSELECTED')
+  store().setInput('Discuss my selection')
+  await store().send()
+  expect(store().error).toBe('projectReadingDisabled')
+  expect(store().input).toBe('Discuss my selection')
+  expect(project().attachments).toHaveLength(1)
+  project().setReading(true)
+  await store().send()
+  project().confirmConsent('workspace-one', config, store().input)
+  vi.mocked(commands.assistantModelTurn).mockClear()
+  await store().send()
+  const sent = JSON.stringify(vi.mocked(commands.assistantModelTurn).mock.calls)
+  expect(sent).toContain('const tempo = 99;')
+  expect(sent).not.toContain('UNSELECTED')
+  expect(sent).not.toContain('OTHER-PRIVATE')
+  expect(
+    store().messages.find(message => message.role === 'user')?.attachments?.[0]
+  ).toMatchObject({
+    source: 'draft',
+    path: 'score.js',
+    text: 'const tempo = 99;',
+    startLine: 2,
+    endLine: 2,
+  })
+})
+
+it('previews the actual whole-project range, rejects changed confirmation and sends every admitted saved page (#170)', async () => {
+  const config = { model: 'chosen', baseUrl: 'https://model.example/v1' }
+  const store = useAssistantStore.getState
+  const project = useAssistantProjectStore.getState
+  useAssistantStore.setState({ modelConfig: config })
+  let version = 'v1'
+  vi.mocked(commands.assistantProjectInventory).mockImplementation(
+    async () => ({
+      status: 'ok',
+      data: {
+        files: [
+          { path: 'score.js', version, bytes: 18, reason: null },
+          { path: 'asset.png', version: null, bytes: 0, reason: 'binary' },
+        ],
+        fingerprint: version,
+      },
+    })
+  )
+  vi.mocked(commands.assistantProjectRead).mockImplementation(async () => ({
+    status: 'ok',
+    data: {
+      path: 'score.js',
+      version,
+      text: 'WHOLE-SAVED-SCORE',
+      offset: 0,
+      endOffset: 17,
+      totalCharacters: 17,
+      nextOffset: null,
+      startLine: 1,
+      endLine: 1,
+    },
+  }))
+  vi.mocked(commands.beginAssistantRequest).mockClear()
+  store().setInput('Explain the whole structure')
+  await project().planWhole('workspace-one', config, store().input, [])
+  expect(project().whole?.snapshot.files.map(file => file.path)).toEqual([
+    'score.js',
+    'asset.png',
+  ])
+  expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
+  version = 'v2'
+  expect(
+    await project().confirmWhole('workspace-one', config, store().input)
+  ).toBe(false)
+  expect(project().whole?.error).toBe('projectScopeChanged')
+  expect(store().input).toBe('Explain the whole structure')
+  await project().planWhole('workspace-one', config, store().input, [])
+  expect(
+    await project().confirmWhole('workspace-one', config, store().input)
+  ).toBe(true)
+  vi.mocked(commands.assistantModelTurn).mockClear()
+  await store().send(true)
+  expect(
+    JSON.stringify(vi.mocked(commands.assistantModelTurn).mock.calls)
+  ).toContain('WHOLE-SAVED-SCORE')
+  expect(
+    store()
+      .messages.at(-1)
+      ?.sources.some(source => source.project?.path === 'score.js')
+  ).toBe(true)
+})
+
+it('refuses a whole-project file budget without silently collecting a prefix and rejects cancelled or service-mismatched plans (#170)', async () => {
+  const config = { model: 'chosen', baseUrl: 'https://model.example/v1' }
+  const store = useAssistantStore.getState
+  const project = useAssistantProjectStore.getState
+  useAssistantStore.setState({ modelConfig: config })
+  const files = Array.from({ length: 33 }, (_, index) => ({
+    path: `file-${index}.js`,
+    bytes: 1,
+    version: 'v1',
+    reason: null,
+  }))
+  vi.mocked(commands.assistantProjectInventory).mockResolvedValue({
+    status: 'ok',
+    data: { files, fingerprint: 'large' },
+  })
+  vi.mocked(commands.assistantProjectRead).mockClear()
+  vi.mocked(commands.beginAssistantRequest).mockClear()
+  store().setInput('Keep this question')
+  await project().planWhole('workspace-one', config, store().input, [])
+  expect(project().whole?.error).toBe('wholeProjectExceeded')
+  expect(commands.assistantProjectRead).not.toHaveBeenCalled()
+  expect(
+    await project().confirmWhole('workspace-one', config, store().input)
+  ).toBe(false)
+  expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
+  project().cancelWhole()
+  expect(store().input).toBe('Keep this question')
+  vi.mocked(commands.assistantProjectInventory).mockResolvedValue({
+    status: 'ok',
+    data: { files: [], fingerprint: 'empty' },
+  })
+  await project().planWhole('workspace-one', config, store().input, [])
+  expect(
+    await project().confirmWhole(
+      'workspace-one',
+      { ...config, model: 'other' },
+      store().input
+    )
+  ).toBe(false)
+  expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
+  project().cancelWhole()
 })
 
 it('clears the composer on send and restores the submitted question on stop', async () => {

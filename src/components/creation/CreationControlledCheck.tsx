@@ -29,6 +29,7 @@ import {
   useCreationFilesStore,
 } from '@/store/creation-files-store'
 import { CreationErrorNotice } from './CreationErrorNotice'
+import { useAssistantOverviewStore } from '@/store/assistant-overview-store'
 
 type CheckTask = Extract<
   Awaited<ReturnType<typeof commands.getCreationCheck>>,
@@ -178,6 +179,23 @@ export function CreationControlledCheck({
           setTask(result.data)
           setError(null)
           if (result.data.report) {
+            useAssistantOverviewStore.getState().recordTest(identity, {
+              kind: 'controlled',
+              status: result.data.report.status,
+              revision: snapshotRevision,
+              at: new Date().toISOString(),
+              stale:
+                result.data.report.freshness?.stale === true ||
+                result.data.report.freshness?.complete === false,
+            })
+            if (result.data.report.diagnostics)
+              useAssistantOverviewStore
+                .getState()
+                .recordStatic(
+                  identity,
+                  result.data.report.diagnostics,
+                  snapshotRevision
+                )
             request.current.active = false
             setBusy(false)
             return
@@ -193,7 +211,7 @@ export function CreationControlledCheck({
       live = false
       clearTimeout(timer)
     }
-  }, [identity, taskId, report])
+  }, [identity, taskId, report, snapshotRevision])
 
   useEffect(() => {
     if (!open || !report || !taskId || stale) return

@@ -2,6 +2,7 @@ import type { AssistantMessage } from './assistant-types'
 import type {
   AssistantSummarySections,
   ModelServiceConfig,
+  AssistantProjectSnapshot,
 } from './tauri-bindings'
 import { modelProfileKey } from './model-context-settings'
 
@@ -13,11 +14,26 @@ export const SUMMARY_FIELDS = [
   'openQuestions',
 ] as const
 
-function eligible(message: AssistantMessage, serviceKey?: string): boolean {
+function eligible(
+  message: AssistantMessage,
+  serviceKey?: string,
+  project?: AssistantProjectSnapshot
+): boolean {
   return (
     !message.contextMarker &&
     message.status === 'completed' &&
-    message.scope === 'platform' &&
+    (message.scope === 'platform' ||
+      (project !== undefined &&
+        message.sources.every(
+          source =>
+            !source.project ||
+            project.files.some(
+              file =>
+                !file.reason &&
+                file.path === source.project?.path &&
+                file.version === source.project.version
+            )
+        ))) &&
     !message.attachments?.length &&
     !message.proposals?.length &&
     (!serviceKey || message.contextServiceKey === serviceKey)
@@ -26,7 +42,8 @@ function eligible(message: AssistantMessage, serviceKey?: string): boolean {
 
 export function completeContextRounds(
   history: readonly AssistantMessage[],
-  serviceKey?: string
+  serviceKey?: string,
+  project?: AssistantProjectSnapshot
 ): [AssistantMessage, AssistantMessage][] {
   const boundary = history
     .map(message => message.contextMarker?.type === 'topic')
@@ -39,8 +56,10 @@ export function completeContextRounds(
     if (
       user.role === 'user' &&
       reply.role === 'assistant' &&
-      eligible(user, serviceKey) &&
-      eligible(reply, serviceKey)
+      eligible(user, serviceKey, project) &&
+      eligible(reply, serviceKey, project) &&
+      ((user.scope === 'platform' && reply.scope === 'platform') ||
+        reply.sources.some(source => source.project))
     ) {
       rounds.push([user, reply])
       index++
@@ -53,7 +72,8 @@ export function completeContextRounds(
  * enter future calls; document-tool transcripts are never partially replayed. */
 export function selectAssistantContext(
   history: readonly AssistantMessage[],
-  config?: ModelServiceConfig
+  config?: ModelServiceConfig,
+  project?: AssistantProjectSnapshot
 ) {
   const key = config ? modelProfileKey(config) : undefined
   const boundary = history
@@ -88,7 +108,7 @@ export function selectAssistantContext(
   const lastCovered = history
     .map(message => covered.has(message.id))
     .lastIndexOf(true)
-  const recent = completeContextRounds(history, key)
+  const recent = completeContextRounds(history, key, project)
     .filter(round => history.indexOf(round[0]) > lastCovered)
     .slice(-6)
     .flat()

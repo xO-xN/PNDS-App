@@ -41,6 +41,11 @@ pub enum AssistantHistoryRequestError {
     NotConfigured,
     RequestFailed,
     InvalidSummary,
+    ProjectReadingDisabled,
+    ProjectScopeChanged,
+    ProjectUnavailable,
+    AttachmentExcluded,
+    WholeProjectExceeded,
 }
 
 #[derive(Clone, Copy, Serialize, Deserialize, Type, PartialEq, Eq)]
@@ -70,7 +75,7 @@ pub enum AssistantHistoryLocale {
     #[serde(rename = "zh-CN")]
     ZhCn,
 }
-#[derive(Clone, Copy, Serialize, Deserialize, Type)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Type)]
 #[serde(rename_all = "lowercase")]
 pub enum AssistantAttachmentSource {
     Saved,
@@ -103,6 +108,8 @@ pub struct AssistantHistorySource {
     pub total_characters: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub format: Option<AssistantSourceFormat>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project: Option<crate::project::creation::AssistantProjectPage>,
 }
 
 #[derive(Clone, Copy, Serialize, Deserialize, Type)]
@@ -123,6 +130,10 @@ pub struct AssistantHistoryAttachment {
     pub version: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub candidate_revision: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proposal_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_version: Option<String>,
     pub text: String,
 }
 #[derive(Clone, Serialize, Deserialize, Type)]
@@ -370,6 +381,19 @@ pub(super) fn validate_messages(
             return Err(AssistantHistoryError::TooLarge);
         }
         for source in &message.sources {
+            if let Some(page) = &source.project {
+                relative_path(&page.path)?;
+                bounded(&page.version, 128, false)?;
+                bounded(&page.text, 8000, true)?;
+                if message.scope != AssistantHistoryScope::Project
+                    || page.offset > page.end_offset
+                    || page.end_offset > page.total_characters
+                    || page.start_line == 0
+                    || page.end_line < page.start_line
+                {
+                    return Err(AssistantHistoryError::InvalidFormat);
+                }
+            }
             bounded(&source.doc_id, 1024, false)?;
             bounded(&source.section_id, 256, false)?;
             bounded(&source.title, 1024, false)?;
@@ -394,6 +418,12 @@ pub(super) fn validate_messages(
         }
         let mut attachment_ids = HashSet::new();
         for attachment in attachments {
+            if let Some(id) = &attachment.proposal_id {
+                bounded(id, 256, false)?;
+            }
+            if let Some(version) = &attachment.source_version {
+                bounded(version, 512, false)?;
+            }
             bounded(&attachment.id, 256, false)?;
             if !attachment_ids.insert(&attachment.id)
                 || attachment.project_key != project_key

@@ -29,4 +29,5 @@ export interface AssistantContextConsumer {
   owner: string
   serviceKey: string
   authorized: boolean
+  sources?: readonly AssistantSource[]
 }

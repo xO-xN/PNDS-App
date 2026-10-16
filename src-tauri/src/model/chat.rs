@@ -50,6 +50,7 @@ pub struct AssistantModelMessage {
 #[derive(Clone, Copy, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub enum ContextContentKind {
+    ProjectPolicy,
     History,
     Input,
     Documents,
@@ -424,9 +425,17 @@ fn parse_turn(message: Value) -> Result<AssistantModelTurn, ModelServiceError> {
     })
 }
 
-pub(super) fn document_tools() -> Value {
-    json!([
+pub(super) fn document_tools(project_reading: bool) -> Value {
+    let mut tools = json!([
         {"type":"function","function":{"name":"search_help","description":"Search installed PNDS help sections. No project content is available.","parameters":{"type":"object","properties":{"query":{"type":"string","maxLength":256}},"required":["query"],"additionalProperties":false}}},
         {"type":"function","function":{"name":"read_help_section","description":"Read a short page of an installed PNDS help section. Default 1200 UTF-16 units, maximum 2000. Only segments are new evidence; reusedRanges reference previous tool results without duplicating text. Follow nextOffset only when needed. Unreturned ranges remain unread.","parameters":{"type":"object","properties":{"docId":{"type":"string"},"sectionId":{"type":"string"},"offset":{"type":"integer","minimum":0},"pageLength":{"type":"integer","minimum":64,"maximum":2000}},"required":["docId","sectionId"],"additionalProperties":false}}}
-    ])
+    ]);
+    if project_reading {
+        tools.as_array_mut().expect("array").extend([
+            json!({"type":"function","function":{"name":"list_project_files","description":"List the confirmed saved-text scope and exclusions. Inventory is not evidence of having read file content.","parameters":{"type":"object","properties":{},"additionalProperties":false}}}),
+            json!({"type":"function","function":{"name":"search_project_text","description":"Search allowed saved project text, at most 64 files and 6 short hits per call. remainingFiles are not searched. Never read drafts.","parameters":{"type":"object","properties":{"query":{"type":"string","maxLength":256}},"required":["query"],"additionalProperties":false}}}),
+            json!({"type":"function","function":{"name":"read_project_text","description":"Read a saved-text page in the confirmed project. UTF-16 offset, pageLength 64–2000 (default 1200). Supply returned version for subsequent pages; changed versions must be re-read. Unreturned ranges are unread.","parameters":{"type":"object","properties":{"path":{"type":"string"},"version":{"type":"string"},"offset":{"type":"integer","minimum":0},"pageLength":{"type":"integer","minimum":64,"maximum":2000}},"required":["path"],"additionalProperties":false}}})
+        ]);
+    }
+    tools
 }

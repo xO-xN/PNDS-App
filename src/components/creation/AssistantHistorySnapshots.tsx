@@ -16,6 +16,14 @@ export function AssistantHistorySnapshots({
           className="mt-3 rounded border border-(--pnds-border) p-2 text-xs"
         >
           <p>{t(`assistant.history.source.${attachment.source}`)}</p>
+          {attachment.proposalId && (
+            <p>
+              {t('assistant.attachment.proposal', {
+                id: attachment.proposalId,
+                revision: attachment.candidateRevision,
+              })}
+            </p>
+          )}
           <p>
             {t('assistant.history.attachmentLocation', {
               path: attachment.path,

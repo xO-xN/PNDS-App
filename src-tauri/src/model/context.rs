@@ -123,7 +123,11 @@ pub(super) fn assemble(
         .map(|message| message.context_kind)
         .collect();
     let messages = chat::wire_messages(messages)?;
-    let tools = chat::document_tools();
+    let project_reading = matches!(
+        kinds.first(),
+        Some(Some(chat::ContextContentKind::ProjectPolicy))
+    );
+    let tools = chat::document_tools(project_reading);
     let mut body = json!({"model":config.model,"messages":messages,"stream":true,"stream_options":{"include_usage":true},"tools":tools,"tool_choice":"auto"});
     let output = context.max_output + context.reasoning_reserve;
     if context.reasoning_reserve > 0 {
@@ -169,6 +173,7 @@ pub(super) fn assemble(
             let role = message["role"].as_str().unwrap_or("");
             let category = if let Some(kind) = kinds[index] {
                 match kind {
+                    chat::ContextContentKind::ProjectPolicy => "policyTools",
                     chat::ContextContentKind::History => "history",
                     chat::ContextContentKind::Input => "input",
                     chat::ContextContentKind::Documents => "documents",

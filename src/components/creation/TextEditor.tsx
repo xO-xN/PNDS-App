@@ -25,6 +25,7 @@ export function TextEditor({
   readOnly = false,
   resetKey = 0,
   location,
+  selectionAction,
 }: {
   buffer: TextBuffer
   path?: string
@@ -33,6 +34,7 @@ export function TextEditor({
   readOnly?: boolean
   resetKey?: number
   location?: { line: number } | null
+  selectionAction?: { label: string; onSelect: () => void }
 }) {
   const { t } = useTranslation()
   const hintId = useId()
@@ -129,6 +131,16 @@ export function TextEditor({
         role="group"
         aria-label={t('creation.editor.tools')}
       >
+        {selectionAction && (
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={state.selection.main.empty}
+            onClick={selectionAction.onSelect}
+          >
+            {selectionAction.label}
+          </Button>
+        )}
         <Button
           size="sm"
           variant="outline"

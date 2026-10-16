@@ -81,3 +81,6 @@ App 开发的规则层：既定模式与系统做法，按问题检索——查�
 ## 发布
 
 - **发布流程、签名、自动更新与内置工具拉取** → [releases.md](./releases.md)
+
+工程只读授权、显式选区附件、可展开概况及整工程范围确认（#168 / #225 / #169 / #170）
+的状态、路径、预算与来源规则见 [creation-assistant.md](./creation-assistant.md#authorized-saved-project-reading-168)。

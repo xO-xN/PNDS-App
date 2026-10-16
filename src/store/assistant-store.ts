@@ -4,6 +4,7 @@ import { loadPreferences } from '@/lib/preferences'
 import type {
   ContextMeasurement,
   ModelServiceConfig,
+  AssistantProjectSnapshot,
 } from '@/lib/tauri-bindings'
 import type {
   AssistantSummarySections,
@@ -22,9 +23,13 @@ import { AssistantFlowError, runAssistantRequest } from '@/lib/assistant-flow'
 import type {
   AssistantErrorCode,
   AssistantMessage,
+  AssistantContextConsumer,
 } from '@/lib/assistant-types'
 import { useCreationStore } from './creation-store'
 import { useCreationReadingStore } from './creation-reading-store'
+import { useAssistantProjectStore } from './assistant-project-store'
+import { useAssistantOverviewStore } from './assistant-overview-store'
+import { modelConfigurationKey } from '@/lib/model-context-settings'
 import {
   AssistantHistoryFailure,
   clearAssistantHistory,
@@ -87,7 +92,7 @@ interface AssistantState {
   syncWorkspace: (identity: string | null) => void
   refreshConfiguration: () => Promise<void>
   setInput: (input: string) => void
-  send: () => Promise<void>
+  send: (whole?: boolean) => Promise<void>
   stop: () => void
   returnToMessage: (messageId: string) => void
 }
@@ -132,6 +137,8 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
   syncWorkspace: owner => {
     if (get().owner === owner) return
     get().stop()
+    useAssistantProjectStore.getState().syncWorkspace(owner)
+    useAssistantOverviewStore.getState().syncWorkspace(owner)
     configurationGeneration += 1
     historyGeneration += 1
     set({
@@ -253,6 +260,16 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
     const token = ++configurationGeneration
     const prefs = await loadPreferences()
     if (get().owner !== owner || token !== configurationGeneration) return
+    const previousConfig = get().modelConfig
+    if (
+      previousConfig &&
+      (!prefs?.modelService ||
+        modelConfigurationKey(previousConfig) !==
+          modelConfigurationKey(prefs.modelService))
+    ) {
+      get().stop()
+      useAssistantProjectStore.getState().revoke()
+    }
     set({
       configured: prefs ? Boolean(prefs.modelService) : null,
       modelConfig: prefs?.modelService ?? null,
@@ -479,6 +496,8 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
   },
   discardSummary: () => set({ summaryDraft: null, summaryText: '' }),
   stop: () => {
+    useAssistantProjectStore.getState().cancelConsent()
+    useAssistantProjectStore.getState().cancelWhole()
     const pending = get().messages.some(message => message.status === 'pending')
     generation += 1
     controller?.abort()
@@ -498,8 +517,24 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
     }))
     if (pending) void get().persistHistory()
   },
-  send: async () => {
-    const { owner, input, phase, configured, modelConfig, editing } = get()
+  send: async (whole = false) => {
+    const {
+      owner,
+      input: originalInput,
+      phase,
+      configured,
+      modelConfig,
+      editing,
+    } = get()
+    const wholePlan = whole ? useAssistantProjectStore.getState().whole : null
+    if (!whole && useAssistantProjectStore.getState().whole) return
+    if (
+      useAssistantProjectStore.getState().planning ||
+      (whole &&
+        (!wholePlan?.approved || wholePlan.originalInput !== originalInput))
+    )
+      return
+    const input = wholePlan?.input ?? originalInput
     let activeConversationId = get().activeConversationId
     let messages = conversationMessages(get().messages, activeConversationId)
     if (!owner || phase !== 'idle' || !input.trim()) return
@@ -513,6 +548,82 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
       set({ error: 'notConfigured' })
       return
     }
+    let project: AssistantProjectSnapshot | null | undefined
+    let consumers: AssistantContextConsumer[] = []
+    if (
+      useAssistantProjectStore.getState().reading ||
+      useAssistantProjectStore.getState().attachments.length
+    ) {
+      if (!modelConfig) {
+        set({ error: 'notConfigured' })
+        return
+      }
+      const preparing = ++generation
+      set({ phase: 'reading', error: null })
+      try {
+        project = await useAssistantProjectStore
+          .getState()
+          .prepare(owner, modelConfig, input)
+        if (get().owner !== owner || generation !== preparing) return
+        if (project === null) {
+          set({ phase: 'idle' })
+          return
+        }
+        if (project) {
+          useAssistantOverviewStore.getState().syncWorkspace(owner)
+          const overview = await useAssistantOverviewStore
+            .getState()
+            .refresh(owner)
+          if (get().owner !== owner || generation !== preparing) return
+          if (!overview) throw new AssistantFlowError('projectUnavailable')
+          if (
+            overview.snapshot.files.some(
+              file =>
+                !file.reason &&
+                !project?.files.some(
+                  allowed => !allowed.reason && allowed.path === file.path
+                )
+            )
+          )
+            throw new AssistantFlowError('projectScopeChanged')
+          project = overview.snapshot
+          if (
+            wholePlan &&
+            wholePlan.snapshot.fingerprint !== project.fingerprint
+          )
+            throw new AssistantFlowError('projectScopeChanged')
+          const consumer =
+            wholePlan?.overviewConsumer ??
+            useAssistantOverviewStore
+              .getState()
+              .contextConsumer(
+                owner,
+                modelConfig,
+                currentResolvedLanguage() === 'zh-CN' ? 'zh-CN' : 'en'
+              )
+          if (!consumer) throw new AssistantFlowError('projectScopeChanged')
+          consumers = [consumer]
+        }
+        if (wholePlan?.consumer) consumers.push(wholePlan.consumer)
+        set({ phase: 'idle' })
+      } catch (error) {
+        if (get().owner === owner && generation === preparing)
+          set({
+            phase: 'idle',
+            error:
+              error instanceof AssistantFlowError
+                ? error.code
+                : 'projectUnavailable',
+          })
+        return
+      }
+    }
+    const attachments = useAssistantProjectStore.getState().attachments
+    if (wholePlan) useAssistantProjectStore.setState({ whole: null })
+    const snapshots = attachments.map(item => ({
+      ...item.snapshot,
+      projectKey: get().historyProjectKey ?? '',
+    }))
     if (editing) {
       const index = messages.findIndex(
         message => message.id === editing.messageId && message.role === 'user'
@@ -585,8 +696,9 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
             contextServiceKey: serviceKey,
             role: 'user',
             text: input,
+            ...(snapshots.length ? { attachments: snapshots } : {}),
             sources: [],
-            scope: 'platform',
+            scope: project ? 'project' : 'platform',
             status: 'pending',
             appVersion: __APP_VERSION__,
           },
@@ -596,7 +708,7 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
             role: 'assistant',
             text: '',
             sources: [],
-            scope: 'platform',
+            scope: project ? 'project' : 'platform',
             status: 'pending',
             appVersion: __APP_VERSION__,
           },
@@ -608,6 +720,11 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
       const result = await runAssistantRequest({
         identity: owner,
         expectedConfig: modelConfig,
+        projectReading: !!project,
+        project: project ?? undefined,
+        wholeProjectFingerprint: wholePlan?.snapshot.fingerprint,
+        attachments: snapshots,
+        consumers,
         input,
         history: messages,
         locale: currentResolvedLanguage() === 'zh-CN' ? 'zh-CN' : 'en',
@@ -654,6 +771,10 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
       })
       if (!owns()) return
       revise('completed')
+      if (wholePlan) useAssistantProjectStore.getState().cancelWhole()
+      useAssistantProjectStore
+        .getState()
+        .consumeAttachments(snapshots.map(item => item.id))
       set(state => ({
         phase: 'idle',
         submittedInput: null,
@@ -701,4 +822,8 @@ useCreationStore.subscribe(state => {
     ? (state.workspace?.project.identity ?? null)
     : null
   useAssistantStore.getState().syncWorkspace(owner)
+})
+
+useAssistantProjectStore.subscribe((state, previous) => {
+  if (previous.reading && !state.reading) useAssistantStore.getState().stop()
 })

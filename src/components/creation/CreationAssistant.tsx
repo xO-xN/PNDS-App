@@ -19,6 +19,13 @@ import type { AssistantMessage } from '@/lib/assistant-types'
 import { AssistantHistorySnapshots } from './AssistantHistorySnapshots'
 import { AssistantHistoryControls } from './AssistantHistoryControls'
 import { AssistantChats } from './AssistantChats'
+import { AssistantProjectControls } from './AssistantProjectControls'
+import { AssistantAttachments } from './AssistantAttachments'
+import { AssistantProjectOverview } from './AssistantProjectOverview'
+import { useAssistantProjectStore } from '@/store/assistant-project-store'
+import { assistantSourceKey } from '@/lib/assistant-project'
+import { commands } from '@/lib/tauri-bindings'
+import { useCreationFilesStore } from '@/store/creation-files-store'
 import {
   AssistantContextUsage,
   AssistantUsageStatistics,
@@ -39,6 +46,11 @@ export function CreationAssistant({
   renderMessageCards?: (message: AssistantMessage) => ReactNode
 }) {
   const { t } = useTranslation()
+  const [sourceNote, setSourceNote] = useState<{
+    owner: string
+    key: string
+    kind: 'changed' | 'unavailable'
+  } | null>(null)
   const input = useAssistantStore(state => state.input)
   const allMessages = useAssistantStore(state => state.messages)
   const activeConversationId = useAssistantStore(
@@ -49,6 +61,8 @@ export function CreationAssistant({
   const navigationIdentity = `${identity}:${activeConversationId ?? 'original'}`
   const phase = useAssistantStore(state => state.phase)
   const error = useAssistantStore(state => state.error)
+  const planning = useAssistantProjectStore(state => state.planning)
+  const whole = useAssistantProjectStore(state => state.whole)
   const configured = useAssistantStore(state => state.configured)
   const historyState = useAssistantStore(state => state.historyState)
   const historyBusy = useAssistantStore(state => state.historyBusy)
@@ -82,6 +96,8 @@ export function CreationAssistant({
     pausedReading.userMessage === userMessage
   const canSend =
     phase === 'idle' &&
+    !planning &&
+    !whole &&
     configured &&
     input.trim() &&
     historyState === 'ready' &&
@@ -171,6 +187,7 @@ export function CreationAssistant({
     >
       <AssistantChats />
       <AssistantHistoryControls identity={identity} />
+      <AssistantProjectOverview identity={identity} />
       <div
         ref={transcript}
         className="pnds-focus-ring min-h-0 flex-1 overflow-auto p-4 [overflow-wrap:anywhere]"
@@ -307,9 +324,14 @@ export function CreationAssistant({
               {message.sources.length > 0 && (
                 <details className="mt-3 text-xs">
                   <summary className="pnds-focus-ring text-muted-foreground rounded-sm py-1">
-                    {t('assistant.sourceCount', {
-                      count: message.sources.length,
-                    })}
+                    {t(
+                      message.sources.some(source => source.project)
+                        ? 'assistant.project.sourceCount'
+                        : 'assistant.sourceCount',
+                      {
+                        count: message.sources.length,
+                      }
+                    )}
                   </summary>
                   {(message.status === 'failed' ||
                     message.status === 'cancelled') && (
@@ -322,38 +344,128 @@ export function CreationAssistant({
                     className="flex flex-col items-start gap-1"
                   >
                     {message.sources.map(source => (
-                      <Button
-                        key={`${source.locale}:${source.version ?? ''}:${source.docId}:${source.sectionId}:${source.format ?? ''}:${source.offset ?? ''}:${source.endOffset ?? ''}`}
-                        size="sm"
-                        variant="link"
-                        className="h-auto max-w-full whitespace-normal px-0 text-start"
-                        onClick={() =>
-                          void openHelpWindow({
-                            kind: 'doc',
-                            docId: source.docId,
-                            anchor: source.sectionId,
-                            locale: source.locale,
-                          })
-                        }
-                      >
-                        <span>
-                          {source.title}
-                          {source.offset != null &&
-                            source.endOffset != null && (
+                      <div key={assistantSourceKey(source)} className="w-full">
+                        <Button
+                          key={`${source.locale}:${source.version ?? ''}:${source.docId}:${source.sectionId}:${source.format ?? ''}:${source.offset ?? ''}:${source.endOffset ?? ''}`}
+                          size="sm"
+                          variant="link"
+                          className="h-auto max-w-full whitespace-normal px-0 text-start"
+                          onClick={() => {
+                            if (source.project) {
+                              const page = source.project
+                              void commands
+                                .assistantProjectRead(identity, {
+                                  path: page.path,
+                                  version: null,
+                                  offset: 0,
+                                  pageLength: 64,
+                                })
+                                .then(result => {
+                                  if (
+                                    useAssistantStore.getState().owner !==
+                                    identity
+                                  )
+                                    return
+                                  if (result.status === 'error')
+                                    setSourceNote({
+                                      owner: identity,
+                                      key: assistantSourceKey(source),
+                                      kind: 'unavailable',
+                                    })
+                                  else {
+                                    setSourceNote(
+                                      result.data.version !== page.version
+                                        ? {
+                                            owner: identity,
+                                            key: assistantSourceKey(source),
+                                            kind: 'changed',
+                                          }
+                                        : null
+                                    )
+                                    useCreationFilesStore
+                                      .getState()
+                                      .locate(
+                                        identity,
+                                        page.path,
+                                        page.startLine
+                                      )
+                                  }
+                                })
+                                .catch(() => {
+                                  if (
+                                    useAssistantStore.getState().owner ===
+                                    identity
+                                  )
+                                    setSourceNote({
+                                      owner: identity,
+                                      key: assistantSourceKey(source),
+                                      kind: 'unavailable',
+                                    })
+                                })
+                            } else
+                              void openHelpWindow({
+                                kind: 'doc',
+                                docId: source.docId,
+                                anchor: source.sectionId,
+                                locale: source.locale,
+                              })
+                          }}
+                        >
+                          <span>
+                            {source.title}
+                            {source.project && (
                               <span className="block text-xs text-muted-foreground">
-                                {t('assistant.sourceRange', {
-                                  offset: source.offset,
-                                  end: source.endOffset,
-                                  total: source.totalCharacters,
-                                  format: t(
-                                    `assistant.sourceFormat.${source.format ?? 'unknown'}`
-                                  ),
-                                  version: source.version,
+                                {t(
+                                  `assistant.history.source.${source.project.source ?? 'saved'}`
+                                )}{' '}
+                                ·{' '}
+                                {t('assistant.history.version', {
+                                  version: source.project.version,
                                 })}
                               </span>
                             )}
-                        </span>
-                      </Button>
+                            {source.offset != null &&
+                              source.endOffset != null && (
+                                <span className="block text-xs text-muted-foreground">
+                                  {t('assistant.sourceRange', {
+                                    offset: source.offset,
+                                    end: source.endOffset,
+                                    total: source.totalCharacters,
+                                    format: t(
+                                      `assistant.sourceFormat.${source.format ?? 'unknown'}`
+                                    ),
+                                    version: source.version,
+                                  })}
+                                </span>
+                              )}
+                          </span>
+                        </Button>
+                        {source.project && (
+                          <details className="text-xs">
+                            <summary className="pnds-focus-ring">
+                              {t('assistant.project.snapshotText')}
+                            </summary>
+                            <pre
+                              dir="ltr"
+                              tabIndex={0}
+                              className="pnds-focus-ring max-h-40 select-text overflow-auto whitespace-pre-wrap [-webkit-user-select:text]"
+                            >
+                              {source.project.text}
+                            </pre>
+                          </details>
+                        )}
+                        {sourceNote?.owner === identity &&
+                          sourceNote.key === assistantSourceKey(source) && (
+                            <p
+                              aria-live="polite"
+                              className="text-xs text-muted-foreground"
+                            >
+                              {t(
+                                `assistant.project.navigation.${sourceNote.kind}`
+                              )}
+                            </p>
+                          )}
+                      </div>
                     ))}
                   </nav>
                 </details>
@@ -383,6 +495,8 @@ export function CreationAssistant({
         </div>
       )}
       <div className="shrink-0 border-t border-(--pnds-border) p-3">
+        <AssistantProjectControls identity={identity} />
+        <AssistantAttachments />
         {(configured === false ||
           (configured === null && error) ||
           error === 'missingCredential' ||
