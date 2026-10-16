@@ -1,3 +1,4 @@
+import { HandoffOperationProgressView } from './HandoffOperationProgressView'
 import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { confirm } from '@tauri-apps/plugin-dialog'
@@ -22,6 +23,9 @@ export function CreationHandoffBaselines({ identity }: { identity: string }) {
   const error = useHandoffBaselinesStore(state => state.error)
   const receipt = useHandoffBaselinesStore(state => state.receipt)
   const comparison = useHandoffBaselinesStore(state => state.comparison)
+  const operationProgress = useHandoffBaselinesStore(
+    state => state.operationProgress
+  )
   const comparisonBusy = useHandoffBaselinesStore(state => state.comparisonBusy)
   const selectedId = useHandoffBaselinesStore(state => state.selectedId)
   const stale = useHandoffBaselinesStore(state => state.stale)
@@ -62,6 +66,9 @@ export function CreationHandoffBaselines({ identity }: { identity: string }) {
         {t('handoff.baselines.reload')}
       </Button>
       {(busy || comparisonBusy) && <p role="status">{t('creation.loading')}</p>}
+      {comparisonBusy && operationProgress && (
+        <HandoffOperationProgressView progress={operationProgress} />
+      )}
       {error && <CreationErrorNotice error={error} />}
       {receipt && (
         <p role="status">

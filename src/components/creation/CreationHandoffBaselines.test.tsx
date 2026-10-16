@@ -164,7 +164,13 @@ it('marks stale results and rejects a late response after cancellation or projec
       })
   )
   fireEvent.click(screen.getByRole('button', { name: 'Compare saved files' }))
+  await waitFor(() =>
+    expect(commands.compareHandoffBaseline).toHaveBeenCalledTimes(2)
+  )
   fireEvent.click(screen.getByRole('button', { name: 'Cancel comparison' }))
+  await waitFor(() =>
+    expect(commands.cancelHandoffOperation).toHaveBeenCalledWith('operation')
+  )
   await act(async () => {
     finish({ status: 'ok', data: comparison })
   })

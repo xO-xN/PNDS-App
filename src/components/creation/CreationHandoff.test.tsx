@@ -185,3 +185,53 @@ it('settles the original pending task when its captured handoff is retried succe
   await useHandoffBaselinesStore.getState().retry('b1')
   expect(useCreationHandoffStore.getState().pending).toHaveLength(0)
 })
+
+it('shows byte progress and waits for the actual native cancellation outcome', async () => {
+  let finish!: (
+    result: Awaited<ReturnType<typeof commands.confirmCreationHandoff>>
+  ) => void
+  vi.mocked(commands.handoffOperationProgress).mockResolvedValue({
+    status: 'ok',
+    data: {
+      phase: 'hashing',
+      cancellable: true,
+      path: 'sound.wav',
+      bytesRead: 65536,
+      bytesTotal: 1048576,
+      files: 2,
+    },
+  })
+  vi.mocked(commands.confirmCreationHandoff).mockImplementation(
+    () =>
+      new Promise(resolve => {
+        finish = resolve
+      })
+  )
+  render(<CreationHandoff editable exists />)
+  await act(() => useCreationHandoffStore.getState().prepareTask(task))
+  fireEvent.click(screen.getByRole('button', { name: 'Add to handoff' }))
+  fireEvent.click(
+    await screen.findByRole('button', { name: 'Confirm this handoff' })
+  )
+  const progress = await screen.findByRole('progressbar', {
+    name: 'Fingerprint progress for sound.wav',
+  })
+  expect(progress).toHaveAttribute('value', '65536')
+  await waitFor(() =>
+    expect(commands.confirmCreationHandoff).toHaveBeenCalled()
+  )
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+  await waitFor(() =>
+    expect(commands.cancelHandoffOperation).toHaveBeenCalledWith('operation')
+  )
+  expect(useCreationHandoffStore.getState().busy).toBe(true)
+  await act(async () => {
+    finish({
+      status: 'error',
+      error: { code: 'cancelled', detail: 'Collection cancelled' },
+    })
+  })
+  expect(useCreationHandoffStore.getState().recorded).toBe(false)
+  expect(useCreationHandoffStore.getState().busy).toBe(false)
+  expect(commands.appendCreationHandoff).not.toHaveBeenCalled()
+})

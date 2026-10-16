@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { runHandoffOperation } from '@/lib/handoff-operation'
 import i18n from '@/i18n/config'
 import {
   commands,
@@ -7,6 +8,7 @@ import {
   type HandoffTask,
   type HandoffReview,
   type HandoffReceipt,
+  type HandoffOperationProgress,
 } from '@/lib/tauri-bindings'
 import { isProjectReadme, projectReadmeLocale } from '@/lib/creation-readme'
 import type { CreationParticipant } from '@/lib/creation-lifecycle'
@@ -30,6 +32,7 @@ interface HandoffState {
   reviewDrafts: string | null
   review: HandoffReview | null
   receipt: HandoffReceipt | null
+  operationProgress: HandoffOperationProgress | null
   offerReadmeSync: (path: string, version: string, locale: string) => void
   open: (id?: string) => Promise<void>
   prepareTask: (
@@ -43,6 +46,7 @@ interface HandoffState {
   clear: () => void
 }
 let epoch = 0
+let captureController: AbortController | null = null
 const owns = (identity: string, captured: number) =>
   captured === epoch &&
   useCreationStore.getState().workspace?.project.identity === identity
@@ -66,6 +70,7 @@ export const useCreationHandoffStore = create<HandoffState>((set, get) => ({
   recorded: false,
   review: null,
   receipt: null,
+  operationProgress: null,
   draftChoice: false,
   reviewDrafts: null,
   prepareTask: async task => {
@@ -152,6 +157,10 @@ export const useCreationHandoffStore = create<HandoffState>((set, get) => ({
     }))
   },
   cancel: () => {
+    if (get().busy) {
+      captureController?.abort()
+      return
+    }
     if (!get().busy) {
       epoch++
       set({
@@ -190,7 +199,12 @@ export const useCreationHandoffStore = create<HandoffState>((set, get) => ({
     }
     const identity = workspace.project.identity
     const captured = ++epoch
-    set({ busy: true, error: null, draftChoice: false })
+    set({
+      busy: true,
+      error: null,
+      draftChoice: false,
+      operationProgress: null,
+    })
     try {
       if (mode === 'save') {
         for (const [path] of dirtyDrafts()) {
@@ -245,10 +259,19 @@ export const useCreationHandoffStore = create<HandoffState>((set, get) => ({
         )
         return
       }
-      const result = await commands.confirmCreationHandoff(
+      const controller = new AbortController()
+      captureController = controller
+      const token = state.review.token
+      const result = await runHandoffOperation(
         identity,
-        state.review.token
+        controller.signal,
+        operationProgress => {
+          if (owns(identity, captured)) set({ operationProgress })
+        },
+        operationId =>
+          commands.confirmCreationHandoff(identity, token, operationId)
       )
+      if (captureController === controller) captureController = null
       if (!owns(identity, captured)) return
       if (result.status === 'error') {
         if (result.error.code === 'versionConflict') {
@@ -315,6 +338,8 @@ export const useCreationHandoffStore = create<HandoffState>((set, get) => ({
     })
   },
   clear: () => {
+    captureController?.abort()
+    captureController = null
     epoch++
     set({
       pending: [],
@@ -326,6 +351,7 @@ export const useCreationHandoffStore = create<HandoffState>((set, get) => ({
       recorded: false,
       review: null,
       receipt: null,
+      operationProgress: null,
       draftChoice: false,
       reviewDrafts: null,
     })

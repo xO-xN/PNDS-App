@@ -1,4 +1,5 @@
 //! Saved-content handoff journals. Nothing here consults Git or conversation history.
+use super::handoff_operation::HandoffOperation;
 use super::*;
 use crate::project::handoff::{append_task, HandoffTask, HANDOFF_PATH};
 use serde::Deserialize;
@@ -113,7 +114,9 @@ impl Snapshot {
         project: &OpenProject,
         relative: &Path,
         depth: usize,
+        operation: &HandoffOperation,
     ) -> Result<(), CreationError> {
+        operation.check(&project.descriptor.identity)?;
         if depth > MAX_DEPTH {
             return Err(CreationError::new(
                 CreationErrorCode::TooLarge,
@@ -125,6 +128,7 @@ impl Snapshot {
         let mut names = directory_names(directory)?;
         names.sort();
         for name in names {
+            operation.check(&project.descriptor.identity)?;
             self.entries += 1;
             if self.entries > MAX_ENTRIES {
                 return Err(CreationError::new(
@@ -134,7 +138,9 @@ impl Snapshot {
             }
             let child = relative.join(name);
             let path = child.to_str().ok_or_else(|| invalid("baselinePathUtf8"))?;
-            if let Some(reason) = super::assistant::excluded(path) {
+            if let Some(reason) =
+                super::assistant::excluded(path).filter(|reason| *reason != "lockfile")
+            {
                 self.exclude(path, reason);
                 continue;
             }
@@ -147,14 +153,15 @@ impl Snapshot {
             let mut file = project.file(path)?;
             let metadata = file.metadata().map_err(io_error)?;
             if metadata.is_dir() {
-                self.walk(project, &child, depth + 1)?;
+                self.walk(project, &child, depth + 1, operation)?;
                 continue;
             }
             if !metadata.is_file() {
                 self.exclude(path, "notRegular");
                 continue;
             }
-            let text = file_kind(path) == CreationFileKind::Text;
+            let text = file_kind(path) == CreationFileKind::Text
+                || super::assistant::excluded(path) == Some("lockfile");
             if (text && metadata.len() > TEXT_MAX_BYTES)
                 || metadata.len() > RESOURCE_LIMIT
                 || self.hash_bytes + metadata.len() > HASH_BUDGET
@@ -170,7 +177,9 @@ impl Snapshot {
             let mut content = Vec::new();
             let mut total = 0u64;
             let mut buffer = [0u8; 64 * 1024];
+            operation.hashing(path, 0, metadata.len(), self.files.len() as u32)?;
             loop {
+                operation.check(&project.descriptor.identity)?;
                 let count = file.read(&mut buffer).map_err(io_error)?;
                 if count == 0 {
                     break;
@@ -180,6 +189,7 @@ impl Snapshot {
                     return Err(conflict(path));
                 }
                 hash.update(&buffer[..count]);
+                operation.hashing(path, total, metadata.len(), self.files.len() as u32)?;
                 if text {
                     content.extend_from_slice(&buffer[..count]);
                 }
@@ -231,11 +241,12 @@ impl Snapshot {
 pub(super) fn capture(
     project: &OpenProject,
     protection: &Protection,
+    operation: &HandoffOperation,
 ) -> Result<(Vec<BaselineFile>, Vec<BaselineExclusion>), CreationError> {
     let mut first = Snapshot::default();
-    first.walk(project, Path::new(""), 0)?;
+    first.walk(project, Path::new(""), 0, operation)?;
     let mut second = Snapshot::default();
-    second.walk(project, Path::new(""), 0)?;
+    second.walk(project, Path::new(""), 0, operation)?;
     validate_identity(project, protection)?;
     if first.signature() != second.signature() {
         return Err(conflict("Project changed during baseline capture"));
@@ -371,13 +382,15 @@ fn receipt(record: &HandoffBaseline) -> HandoffReceipt {
 }
 
 impl CreationAccess {
-    pub fn record_handoff_baseline(
+    pub fn record_handoff_baseline_with_operation(
         &mut self,
         app_data: &Path,
         identity: &str,
         token: &str,
         protection: &Protection,
+        operation: &HandoffOperation,
     ) -> Result<HandoffReceipt, CreationError> {
+        operation.check(identity)?;
         let project = self.current(identity, protection)?;
         ensure_editable(project)?;
         let review = self
@@ -389,6 +402,7 @@ impl CreationAccess {
         let directory = directory(app_data, project, true)?;
         let id = baseline_id(&review.task);
         if record_path(&directory, &id)?.exists() {
+            operation.begin_publication()?;
             return self.retry_handoff_baseline(app_data, identity, &id, protection);
         }
         if review
@@ -402,7 +416,7 @@ impl CreationAccess {
         if super::handoff::fingerprint(project)? != review.fingerprint {
             return Err(conflict("Project changed; review the handoff again"));
         }
-        let (mut files, excluded) = capture(project, protection)?;
+        let (mut files, excluded) = capture(project, protection, operation)?;
         if super::handoff::fingerprint(project)? != review.fingerprint {
             return Err(conflict("Project changed during baseline capture"));
         }
@@ -440,7 +454,9 @@ impl CreationAccess {
             excluded,
         };
         // Persist the immutable origin before task publication. A later retry never recaptures current files.
+        operation.check(identity)?;
         publish(&directory, &record)?;
+        operation.begin_publication()?;
         match self.confirm_handoff(identity, token, protection) {
             Ok(_) => {
                 record.complete = true;
@@ -589,11 +605,19 @@ impl CreationAccess {
     }
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum HandoffChangeKind {
+    Added,
+    Modified,
+    Deleted,
+}
+
 #[derive(Debug, Clone, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct HandoffFileDifference {
     pub path: String,
-    pub kind: String,
+    pub kind: HandoffChangeKind,
     pub mentioned: bool,
     pub before: Option<BaselineFile>,
     pub after: Option<BaselineFile>,
@@ -612,13 +636,15 @@ pub struct HandoffComparison {
     pub compared_files: u32,
 }
 impl CreationAccess {
-    pub fn compare_handoff_baseline(
+    pub fn compare_handoff_baseline_with_operation(
         &self,
         app_data: &Path,
         identity: &str,
         id: &str,
         protection: &Protection,
+        operation: &HandoffOperation,
     ) -> Result<HandoffComparison, CreationError> {
+        operation.check(identity)?;
         let project = self.current(identity, protection)?;
         let baseline = self.load_handoff_baseline(app_data, identity, id, protection)?;
         if !baseline.complete {
@@ -627,7 +653,7 @@ impl CreationAccess {
             ));
         }
         let fingerprint = super::handoff::fingerprint(project)?;
-        let (files, excluded) = capture(project, protection)?;
+        let (files, excluded) = capture(project, protection, operation)?;
         if super::handoff::fingerprint(project)? != fingerprint {
             return Err(conflict("Saved files changed during comparison; retry"));
         }
@@ -652,6 +678,7 @@ impl CreationAccess {
         let mut changes = Vec::new();
         let mut compared = 0;
         for path in paths {
+            operation.check(identity)?;
             if uncovered(&path) {
                 continue;
             }
@@ -662,9 +689,9 @@ impl CreationAccess {
                 continue;
             }
             let kind = match (old, new) {
-                (None, Some(_)) => "added",
-                (Some(_), None) => "deleted",
-                _ => "modified",
+                (None, Some(_)) => HandoffChangeKind::Added,
+                (Some(_), None) => HandoffChangeKind::Deleted,
+                _ => HandoffChangeKind::Modified,
             };
             changes.push(HandoffFileDifference {
                 mentioned: baseline
@@ -673,7 +700,7 @@ impl CreationAccess {
                     .iter()
                     .any(|file| file == &path || path.starts_with(&format!("{file}/"))),
                 path,
-                kind: kind.into(),
+                kind,
                 before: old.cloned(),
                 after: new.cloned(),
             });
@@ -702,5 +729,39 @@ impl CreationAccess {
         protection: &Protection,
     ) -> Result<bool, CreationError> {
         Ok(super::handoff::fingerprint(self.current(identity, protection)?)? != fingerprint)
+    }
+}
+
+#[cfg(test)]
+impl CreationAccess {
+    pub fn record_handoff_baseline(
+        &mut self,
+        data: &Path,
+        identity: &str,
+        token: &str,
+        protection: &Protection,
+    ) -> Result<HandoffReceipt, CreationError> {
+        self.record_handoff_baseline_with_operation(
+            data,
+            identity,
+            token,
+            protection,
+            &HandoffOperation::new(identity),
+        )
+    }
+    pub fn compare_handoff_baseline(
+        &self,
+        data: &Path,
+        identity: &str,
+        id: &str,
+        protection: &Protection,
+    ) -> Result<HandoffComparison, CreationError> {
+        self.compare_handoff_baseline_with_operation(
+            data,
+            identity,
+            id,
+            protection,
+            &HandoffOperation::new(identity),
+        )
     }
 }

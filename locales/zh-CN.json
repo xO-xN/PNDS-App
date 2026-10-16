@@ -1363,5 +1363,13 @@
   "handoff.exclusion.fileLimit": "超过文件或指纹采集限制",
   "handoff.exclusion.textBudget": "超过文本内容预算",
   "handoff.exclusion.invalidText": "无效文本或二进制内容",
-  "handoff.baselines.revise": "修订此任务"
+  "handoff.baselines.revise": "修订此任务",
+  "handoff.operation.reading": "正在读取保存版文件…",
+  "handoff.operation.hashing": "正在计算当前文件的指纹…",
+  "handoff.operation.publishing": "正在完成已确认任务与基线，此时不能取消写入。",
+  "handoff.operation.complete": "操作已结束",
+  "handoff.operation.cancelled": "采集已取消；已采集的起点会保留。",
+  "handoff.operation.fileProgress": "{{path}} 的指纹计算进度",
+  "handoff.operation.files": "本轮已读取 {{count}} 个文件",
+  "creation.error.cancelled": "操作已取消。"
 }

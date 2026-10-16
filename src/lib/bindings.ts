@@ -604,9 +604,33 @@ async previewCreationHandoff(identity: string, task: HandoffTask) : Promise<Resu
     else return { status: "error", error: e  as any };
 }
 },
-async confirmCreationHandoff(identity: string, token: string) : Promise<Result<HandoffReceipt, CreationError>> {
+async confirmCreationHandoff(identity: string, token: string, operationId: string) : Promise<Result<HandoffReceipt, CreationError>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("confirm_creation_handoff", { identity, token }) };
+    return { status: "ok", data: await TAURI_INVOKE("confirm_creation_handoff", { identity, token, operationId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async beginHandoffOperation(identity: string) : Promise<Result<string, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("begin_handoff_operation", { identity }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async handoffOperationProgress(operationId: string) : Promise<Result<HandoffOperationProgress, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("handoff_operation_progress", { operationId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async cancelHandoffOperation(operationId: string) : Promise<Result<HandoffOperationProgress, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("cancel_handoff_operation", { operationId }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -636,9 +660,9 @@ async deleteHandoffBaseline(identity: string, id: string) : Promise<Result<null,
     else return { status: "error", error: e  as any };
 }
 },
-async compareHandoffBaseline(identity: string, id: string) : Promise<Result<HandoffComparison, CreationError>> {
+async compareHandoffBaseline(identity: string, id: string, operationId: string) : Promise<Result<HandoffComparison, CreationError>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("compare_handoff_baseline", { identity, id }) };
+    return { status: "ok", data: await TAURI_INVOKE("compare_handoff_baseline", { identity, id, operationId }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -1552,7 +1576,7 @@ export type CreationContent =
  */
 { kind: "text"; text: string; version: string } | { kind: "image"; url: string } | { kind: "binary" }
 export type CreationError = { code: CreationErrorCode; detail: string }
-export type CreationErrorCode = "missing" | "permission" | "invalidUtf8" | "tooLarge" | "invalidIdentity" | "pathEscape" | "invalidProject" | "manifestInvalid" | "testValidation" | "testStartup" | "versionConflict" | "targetExists" | "io"
+export type CreationErrorCode = "missing" | "cancelled" | "permission" | "invalidUtf8" | "tooLarge" | "invalidIdentity" | "pathEscape" | "invalidProject" | "manifestInvalid" | "testValidation" | "testStartup" | "versionConflict" | "targetExists" | "io"
 export type CreationFile = { path: string; size: number; kind: CreationFileKind; category: CreationCategory }
 /**
  * One successfully written existing text file. Content is retained only in
@@ -1664,9 +1688,12 @@ export type GitEvidence = { head: string | null; dirty: boolean | null; state: s
 export type GitState = "available" | "gitUnavailable" | "notRepository" | "unreadable" | "tooLarge" | "timeout"
 export type HandoffBaselineCatalog = { baselines: HandoffBaselineSummary[]; usedBytes: number; limitBytes: number }
 export type HandoffBaselineSummary = { id: string; taskId: string; task: HandoffTask | null; intent: string; revision: string; capturedAt: number; complete: boolean; bytes: number; files: number; excluded: BaselineExclusion[]; error: CreationError | null }
+export type HandoffChangeKind = "added" | "modified" | "deleted"
 export type HandoffComparison = { baselineId: string; task: HandoffTask; revision: string; capturedAt: number; currentFingerprint: string; changes: HandoffFileDifference[]; baselineExcluded: BaselineExclusion[]; currentExcluded: BaselineExclusion[]; comparedFiles: number }
 export type HandoffDocument = { text: string; version: string | null }
-export type HandoffFileDifference = { path: string; kind: string; mentioned: boolean; before: BaselineFile | null; after: BaselineFile | null }
+export type HandoffFileDifference = { path: string; kind: HandoffChangeKind; mentioned: boolean; before: BaselineFile | null; after: BaselineFile | null }
+export type HandoffOperationPhase = "reading" | "hashing" | "publishing" | "complete" | "cancelled"
+export type HandoffOperationProgress = { phase: HandoffOperationPhase; cancellable: boolean; path: string | null; bytesRead: number; bytesTotal: number; files: number }
 export type HandoffReceipt = { task: HandoffTask; revision: string; document: HandoffDocument; instructions: string; taskRecorded: boolean; baselineId: string | null; baselineError: CreationError | null }
 export type HandoffReview = { token: string; identity: string; task: HandoffTask; revision: string; document: HandoffDocument; fingerprint: string }
 export type HandoffTask = { id: string; intent: string; files: string[]; acceptance: string; status: string }

@@ -260,7 +260,7 @@ fn comparison_includes_committed_and_manual_changes_and_never_treats_exclusions_
             .find(|change| change.path == "old.md")
             .unwrap()
             .kind,
-        "deleted"
+        super::baselines::HandoffChangeKind::Deleted
     );
     let git = |args: &[&str]| {
         assert!(std::process::Command::new("git")
@@ -421,5 +421,149 @@ fn deleting_a_baseline_does_not_allow_the_same_recorded_revision_to_capture_a_ne
     assert_eq!(
         access.read_handoff(&identity, &protection).unwrap().text,
         original.document.text
+    );
+}
+
+#[test]
+fn local_baselines_include_lockfiles_without_expanding_assistant_read_scope() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = tests::project(temp.path(), "local-lock");
+    let data = temp.path().join("data");
+    fs::write(root.join("package-lock.json"), "{\"lockfileVersion\":3}\n").unwrap();
+    let protection = Protection::default();
+    let mut access = CreationAccess::default();
+    let identity = access.open(&root, &protection).unwrap().project.identity;
+    let review = access
+        .preview_handoff(&identity, task(), &protection)
+        .unwrap();
+    let id = access
+        .record_handoff_baseline(&data, &identity, &review.token, &protection)
+        .unwrap()
+        .baseline_id
+        .unwrap();
+    fs::write(root.join("package-lock.json"), "{\"lockfileVersion\":2}\n").unwrap();
+    let comparison = access
+        .compare_handoff_baseline(&data, &identity, &id, &protection)
+        .unwrap();
+    assert_eq!(
+        comparison
+            .changes
+            .iter()
+            .find(|file| file.path == "package-lock.json")
+            .unwrap()
+            .after
+            .as_ref()
+            .unwrap()
+            .text
+            .as_deref(),
+        Some("{\"lockfileVersion\":2}\n")
+    );
+    assert_eq!(
+        access
+            .assistant_inventory(&identity, &protection)
+            .unwrap()
+            .files
+            .iter()
+            .find(|file| file.path == "package-lock.json")
+            .unwrap()
+            .reason
+            .as_deref(),
+        Some("lockfile")
+    );
+}
+
+#[test]
+fn native_handoff_hashing_reports_real_progress_and_cancels_before_task_publication() {
+    use super::handoff_operation::{HandoffOperation, HandoffOperationPhase};
+    use std::sync::Arc;
+    let temp = tempfile::tempdir().unwrap();
+    let root = tests::project(temp.path(), "cancel-hash");
+    let data = temp.path().join("data");
+    File::create(root.join("large.bin"))
+        .unwrap()
+        .set_len(16 * 1024 * 1024)
+        .unwrap();
+    let mut access = CreationAccess::default();
+    let protection = Protection::default();
+    let identity = access.open(&root, &protection).unwrap().project.identity;
+    let review = access
+        .preview_handoff(&identity, task(), &protection)
+        .unwrap();
+    let operation = Arc::new(HandoffOperation::new(&identity));
+    let observer = operation.clone();
+    let watcher = std::thread::spawn(move || {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        loop {
+            let progress = observer.progress().unwrap();
+            if progress.path.as_deref() == Some("large.bin") && progress.bytes_read > 0.0 {
+                assert!(progress.bytes_read < progress.bytes_total);
+                assert_eq!(progress.bytes_total, 16.0 * 1024.0 * 1024.0);
+                assert_eq!(
+                    observer.cancel().unwrap().phase,
+                    HandoffOperationPhase::Cancelled
+                );
+                break;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "hash progress was not published"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+    });
+    let outcome = access.record_handoff_baseline_with_operation(
+        &data,
+        &identity,
+        &review.token,
+        &protection,
+        &operation,
+    );
+    watcher.join().unwrap();
+    assert_eq!(outcome.unwrap_err().code, CreationErrorCode::Cancelled);
+    assert!(access
+        .read_handoff(&identity, &protection)
+        .unwrap()
+        .version
+        .is_none());
+    assert!(access
+        .list_handoff_baselines(&data, &identity, &protection)
+        .unwrap()
+        .baselines
+        .is_empty());
+    assert!(operation.check("another-project").is_err());
+}
+
+#[test]
+fn operation_reservations_are_single_use_and_publication_reports_its_actual_outcome() {
+    use super::handoff_operation::HandoffOperationPhase;
+    let operations = HandoffOperations::default();
+    let id = operations.begin("owner").unwrap();
+    let operation = operations.get(&id).unwrap();
+    assert_eq!(
+        operation.claim("another-owner").unwrap_err().code,
+        CreationErrorCode::InvalidIdentity
+    );
+    operation.claim("owner").unwrap();
+    operation.begin_publication().unwrap();
+    assert_eq!(
+        operation.cancel().unwrap().phase,
+        HandoffOperationPhase::Publishing
+    );
+    operation.check("owner").unwrap();
+    operation.finish();
+    assert_eq!(
+        operation.progress().unwrap().phase,
+        HandoffOperationPhase::Complete
+    );
+    assert_eq!(
+        operation.claim("owner").unwrap_err().code,
+        CreationErrorCode::VersionConflict
+    );
+    let id = operations.begin("owner").unwrap();
+    let cancelled = operations.get(&id).unwrap();
+    cancelled.cancel().unwrap();
+    assert_eq!(
+        cancelled.claim("owner").unwrap_err().code,
+        CreationErrorCode::Cancelled
     );
 }

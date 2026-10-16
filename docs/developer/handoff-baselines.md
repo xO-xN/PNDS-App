@@ -59,7 +59,7 @@ source handoff, Git commits or `.pnds` publication.
 A confirmation captures saved content twice and compares inventories/content
 fingerprints. Each read verifies held and reopened file metadata; directory
 versions and native root identity are checked as well. Files changed during
-capture fail explicitly. This is bounded filesystem observation, not an OS-wide
+capture fail explicitly. Local comparison includes dependency lockfiles; their assistant-reading exclusion remains unchanged. This is bounded filesystem observation, not an OS-wide
 atomic snapshot or compare-and-swap against arbitrary external editors.
 
 The immutable pending record is atomically published **before** task writing.
@@ -74,7 +74,7 @@ current disk text for draft conflict feedback while the origin stays immutable.
 Text stores actual UTF-8 bytes for comparison, up to 1 MiB each and 8 MiB total.
 Resources store only SHA-256 and size, with a 512 MiB per-file / 1 GiB total
 hashing limit; they have no recoverable resource copy. Dependency/build/cache/Git
-paths, sensitive files, dependency locks, generated third-party content, links,
+paths, sensitive files, generated third-party content, links,
 nonregular files, invalid text and exhausted content budgets are explicit
 exclusions. Trees are limited to 4,096 entries / 32 levels. A journal record is
 limited to 64 MiB and per-project storage to 256 MiB. Capacity exhaustion stops
@@ -100,6 +100,16 @@ undo workflow. Deleted files have historical differences but no recreation
 control. Navigation back to **Changes since handoff** preserves the selected
 comparison; the discussion return remains available. No comparison invokes a
 model, save, runtime refresh/start, restore, Git operation or task completion.
+
+`beginHandoffOperation` reserves an owner-bound native operation before dispatch.
+Confirmation and comparison carry that operation ID. `handoffOperationProgress`
+and `cancelHandoffOperation` access only its independent registry, so cancelling
+can stop the native worker even while it holds the creation access lock. Each
+64 KiB read checks cancellation and reports actual per-file bytes; UI polls only
+while work is active. Cancellation before task publication writes no task and
+retains any already-published origin. Once guarded task publication begins, the
+operation becomes noncancellable and reports that phase; the UI waits for its
+actual result rather than pretending the write was cancelled.
 
 The comparison owns a separate generation and identity. Cancellation, baseline
 selection and project replacement reject late replies. While visible, file-poll

@@ -81,6 +81,8 @@ export type {
   HandoffTask,
   HandoffReview,
   HandoffReceipt,
+  HandoffOperationProgress,
+  HandoffOperationPhase,
   HandoffComparison,
   HandoffFileDifference,
   BaselineFile,

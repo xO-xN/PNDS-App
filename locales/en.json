@@ -1365,5 +1365,13 @@
   "handoff.exclusion.fileLimit": "File or hashing limit exceeded",
   "handoff.exclusion.textBudget": "Text content budget exceeded",
   "handoff.exclusion.invalidText": "Invalid or binary text",
-  "handoff.baselines.revise": "Revise this task"
+  "handoff.baselines.revise": "Revise this task",
+  "handoff.operation.reading": "Reading saved files…",
+  "handoff.operation.hashing": "Computing the current file fingerprint…",
+  "handoff.operation.publishing": "Finishing the confirmed task and baseline; writing can no longer be cancelled.",
+  "handoff.operation.complete": "Operation finished",
+  "handoff.operation.cancelled": "Collection cancelled; any already captured origin is retained.",
+  "handoff.operation.fileProgress": "Fingerprint progress for {{path}}",
+  "handoff.operation.files": "{{count}} files read in this pass",
+  "creation.error.cancelled": "Operation cancelled."
 }

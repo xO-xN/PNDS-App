@@ -17,6 +17,7 @@ use tauri_plugin_opener::OpenerExt;
 pub struct CreationState {
     pub(super) access: Arc<Mutex<CreationAccess>>,
     compile_busy: Arc<AtomicBool>,
+    handoff_operations: Arc<crate::project::creation::HandoffOperations>,
 }
 
 struct CompileGuard(Arc<AtomicBool>);
@@ -707,16 +708,28 @@ pub async fn confirm_creation_handoff(
     state: State<'_, CreationState>,
     identity: String,
     token: String,
+    operation_id: String,
 ) -> Result<crate::project::creation::HandoffReceipt, CreationError> {
-    state
+    let operation = state.handoff_operations.get(&operation_id)?;
+    operation.claim(&identity)?;
+    let worker = operation.clone();
+    let result = state
         .run(move |access| {
             let data = app
                 .path()
                 .app_data_dir()
                 .map_err(|error| CreationError::new(CreationErrorCode::Io, error.to_string()))?;
-            access.record_handoff_baseline(&data, &identity, &token, &protection(&app)?)
+            access.record_handoff_baseline_with_operation(
+                &data,
+                &identity,
+                &token,
+                &protection(&app)?,
+                &worker,
+            )
         })
-        .await
+        .await;
+    operation.finish();
+    result
 }
 
 #[tauri::command]
@@ -957,16 +970,28 @@ pub async fn compare_handoff_baseline(
     state: State<'_, CreationState>,
     identity: String,
     id: String,
+    operation_id: String,
 ) -> Result<crate::project::creation::HandoffComparison, CreationError> {
-    state
+    let operation = state.handoff_operations.get(&operation_id)?;
+    operation.claim(&identity)?;
+    let worker = operation.clone();
+    let result = state
         .run(move |access| {
             let data = app
                 .path()
                 .app_data_dir()
                 .map_err(|error| CreationError::new(CreationErrorCode::Io, error.to_string()))?;
-            access.compare_handoff_baseline(&data, &identity, &id, &protection(&app)?)
+            access.compare_handoff_baseline_with_operation(
+                &data,
+                &identity,
+                &id,
+                &protection(&app)?,
+                &worker,
+            )
         })
-        .await
+        .await;
+    operation.finish();
+    result
 }
 #[tauri::command]
 #[specta::specta]
@@ -981,4 +1006,36 @@ pub async fn handoff_comparison_is_stale(
             access.handoff_comparison_is_stale(&identity, &fingerprint, &protection(&app)?)
         })
         .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn begin_handoff_operation(
+    app: AppHandle,
+    state: State<'_, CreationState>,
+    identity: String,
+) -> Result<String, CreationError> {
+    let operations = state.handoff_operations.clone();
+    state
+        .run(move |access| {
+            access.descriptor(&identity, &protection(&app)?)?;
+            operations.begin(&identity)
+        })
+        .await
+}
+#[tauri::command]
+#[specta::specta]
+pub fn handoff_operation_progress(
+    state: State<'_, CreationState>,
+    operation_id: String,
+) -> Result<crate::project::creation::HandoffOperationProgress, CreationError> {
+    state.handoff_operations.get(&operation_id)?.progress()
+}
+#[tauri::command]
+#[specta::specta]
+pub fn cancel_handoff_operation(
+    state: State<'_, CreationState>,
+    operation_id: String,
+) -> Result<crate::project::creation::HandoffOperationProgress, CreationError> {
+    state.handoff_operations.get(&operation_id)?.cancel()
 }

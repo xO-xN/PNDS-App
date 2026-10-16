@@ -326,6 +326,31 @@ vi.mock('@/lib/tauri-bindings', async () => {
         status: 'error',
         error: { code: 'io', detail: 'saveCreationFile not mocked' },
       }),
+      beginHandoffOperation: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: 'operation' }),
+      handoffOperationProgress: vi.fn().mockResolvedValue({
+        status: 'ok',
+        data: {
+          phase: 'reading',
+          cancellable: true,
+          path: null,
+          bytesRead: 0,
+          bytesTotal: 0,
+          files: 0,
+        },
+      }),
+      cancelHandoffOperation: vi.fn().mockResolvedValue({
+        status: 'ok',
+        data: {
+          phase: 'cancelled',
+          cancellable: false,
+          path: null,
+          bytesRead: 0,
+          bytesTotal: 0,
+          files: 0,
+        },
+      }),
       previewCreationHandoff: vi.fn().mockResolvedValue({
         status: 'error',
         error: { code: 'io', detail: 'previewCreationHandoff not mocked' },

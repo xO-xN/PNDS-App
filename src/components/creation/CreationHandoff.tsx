@@ -1,3 +1,4 @@
+import { HandoffOperationProgressView } from './HandoffOperationProgressView'
 import { writeText } from '@tauri-apps/plugin-clipboard-manager'
 import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
@@ -48,6 +49,9 @@ export function CreationHandoff({
   const conflict = useCreationHandoffStore(state => state.conflict)
   const error = useCreationHandoffStore(state => state.error)
   const recorded = useCreationHandoffStore(state => state.recorded)
+  const operationProgress = useCreationHandoffStore(
+    state => state.operationProgress
+  )
   const draftChoice = useCreationHandoffStore(state => state.draftChoice)
   const drafts = useCreationFilesStore(state => state.drafts)
   const review = useCreationHandoffStore(state => state.review)
@@ -240,7 +244,12 @@ export function CreationHandoff({
               })}
             </p>
           )}
-          {busy && <p role="status">{t('creation.loading')}</p>}
+          {busy &&
+            (operationProgress ? (
+              <HandoffOperationProgressView progress={operationProgress} />
+            ) : (
+              <p role="status">{t('creation.loading')}</p>
+            ))}
           {error && <CreationErrorNotice error={error} />}
           {conflict && <p role="alert">{t('creation.handoff.conflict')}</p>}
           {document && (
@@ -256,7 +265,7 @@ export function CreationHandoff({
           <DialogFooter>
             <Button
               variant="outline"
-              disabled={busy}
+              disabled={busy && !operationProgress?.cancellable}
               onClick={() => useCreationHandoffStore.getState().cancel()}
             >
               {t('creation.cancel')}

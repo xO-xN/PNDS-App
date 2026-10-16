@@ -398,6 +398,9 @@ Tauri access. See [parameter-preview.md](./parameter-preview.md).
 
 `previewCreationHandoff` issues the native task/version review;
 `confirmCreationHandoff` records its immutable saved origin and guarded task.
+Both confirmation and comparison take a native `beginHandoffOperation` token;
+`handoffOperationProgress` and `cancelHandoffOperation` bypass the access lock
+to report real byte progress and cooperatively stop resource reads.
 `listHandoffBaselines`, `retryHandoffBaseline` and `deleteHandoffBaseline` manage
 only the current actual project's App-data records. `compareHandoffBaseline`
 returns actual text/resource differences; `handoffComparisonIsStale` checks

@@ -1,10 +1,12 @@
 import { create } from 'zustand'
+import { runHandoffOperation } from '@/lib/handoff-operation'
 import {
   commands,
   type CreationError,
   type HandoffBaselineCatalog,
   type HandoffReceipt,
   type HandoffComparison,
+  type HandoffOperationProgress,
 } from '@/lib/tauri-bindings'
 import { creationTransportError, useCreationStore } from './creation-store'
 import { useCreationHandoffStore } from './creation-handoff-store'
@@ -19,6 +21,7 @@ interface BaselinesState {
   comparisonBusy: boolean
   selectedId: string | null
   stale: boolean
+  operationProgress: HandoffOperationProgress | null
   compare: (id: string) => Promise<void>
   cancelComparison: () => void
   checkStale: () => Promise<void>
@@ -27,6 +30,7 @@ interface BaselinesState {
   remove: (id: string) => Promise<void>
 }
 let generation = 0
+let comparisonController: AbortController | null = null
 let comparisonGeneration = 0
 const current = (identity: string, captured: number) =>
   captured === generation &&
@@ -61,6 +65,7 @@ export const useHandoffBaselinesStore = create<BaselinesState>((set, get) => {
     comparisonBusy: false,
     selectedId: null,
     stale: false,
+    operationProgress: null,
     compare: async id => {
       const identity = useCreationStore.getState().workspace?.project.identity
       if (!identity) return
@@ -71,13 +76,26 @@ export const useHandoffBaselinesStore = create<BaselinesState>((set, get) => {
         current(identity, ownerGeneration) && comparisonGeneration === captured
       set({
         selectedId: id,
+        operationProgress: null,
         comparison: null,
         comparisonBusy: true,
         error: null,
         stale: false,
       })
       try {
-        const result = await commands.compareHandoffBaseline(identity, id)
+        comparisonController?.abort()
+        const controller = new AbortController()
+        comparisonController = controller
+        const result = await runHandoffOperation(
+          identity,
+          controller.signal,
+          operationProgress => {
+            if (owns()) set({ operationProgress })
+          },
+          operationId =>
+            commands.compareHandoffBaseline(identity, id, operationId)
+        )
+        if (comparisonController === controller) comparisonController = null
         if (!owns()) return
         set(
           result.status === 'ok'
@@ -95,6 +113,8 @@ export const useHandoffBaselinesStore = create<BaselinesState>((set, get) => {
       }
     },
     cancelComparison: () => {
+      comparisonController?.abort()
+      comparisonController = null
       comparisonGeneration++
       set({
         comparisonBusy: false,
@@ -156,6 +176,8 @@ useCreationStore.subscribe(state => {
   const next = state.workspace?.project.identity ?? null
   if (owner !== next) {
     owner = next
+    comparisonController?.abort()
+    comparisonController = null
     generation++
     comparisonGeneration++
     useHandoffBaselinesStore.setState({
@@ -167,6 +189,7 @@ useCreationStore.subscribe(state => {
       comparisonBusy: false,
       selectedId: null,
       stale: false,
+      operationProgress: null,
     })
   }
 })

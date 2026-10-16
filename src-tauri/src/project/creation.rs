@@ -38,8 +38,10 @@ mod compile;
 mod compile_tests;
 mod git;
 mod handoff;
+mod handoff_operation;
 pub use git::{CreationGitDiff, CreationGitStatus, GitDiffLayer, GitReader};
 pub use handoff::{HandoffReceipt, HandoffReview};
+pub use handoff_operation::{HandoffOperationProgress, HandoffOperations};
 #[cfg(test)]
 mod git_tests;
 mod libraries;
@@ -67,6 +69,7 @@ const MAX_DEPTH: usize = 32;
 #[serde(rename_all = "camelCase")]
 pub enum CreationErrorCode {
     Missing,
+    Cancelled,
     Permission,
     InvalidUtf8,
     TooLarge,
@@ -1030,6 +1033,7 @@ fn file_kind(path: &str) -> CreationFileKind {
             | "svg"
             | "csv"
             | "sh"
+            | "lock"
             | "gitignore"
     ) {
         CreationFileKind::Text

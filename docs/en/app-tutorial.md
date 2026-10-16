@@ -408,3 +408,5 @@ the same monitor. Comparing does not send contents to AI, save, restore, start
 or refresh runtime, commit or mark tasks complete. Baselines stay in App data
 across restarts and chat cleanup; inspect usage and explicitly delete selected
 baselines when wanted. They cannot restore a project or its resources.
+
+Local comparison includes lockfiles without granting the assistant permission to read them. Large resource fingerprints report per-file byte progress and can be cancelled during reading; once confirmed task publication starts, wait for its actual outcome.
