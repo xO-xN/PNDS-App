@@ -619,6 +619,8 @@
   "creation.handoff.add": "记录手动待办",
   "creation.handoff.sync": "记录 README 语言同步",
   "creation.handoff.recorded": "任务已记录；实现与验收仍由外部 agent 完成。",
+  "creation.handoff.summary": "交接已记录",
+  "creation.handoff.summaryWithBaseline": "交接已记录 · 基线已就绪",
   "creation.handoff.title": "创作交接任务",
   "creation.handoff.hint": "在 docs/creator-handoff.md 记录意图；取消会保留此草稿，App 不翻译或实施任务。",
   "creation.handoff.intent": "创作意图",

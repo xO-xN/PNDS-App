@@ -100,6 +100,11 @@ undo workflow. Deleted files have historical differences but no recreation
 control. Navigation back to **Changes since handoff** preserves the selected
 comparison; the discussion return remains available. No comparison invokes a
 model, save, runtime refresh/start, restore, Git operation or task completion.
+The mounted reading extension reloads its catalog whenever it becomes visible or
+a handoff receipt changes, so tasks confirmed while editing or revising in place
+appear without discarding the selected comparison. Successful handoff receipts keep a compact, keyboard-expandable
+summary and a visible copy action; full task/revision and baseline details remain
+available without consuming the narrow workspace's editor height by default.
 
 `beginHandoffOperation` reserves an owner-bound native operation before dispatch.
 Confirmation and comparison carry that operation ID. `handoffOperationProgress`

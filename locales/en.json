@@ -621,6 +621,8 @@
   "creation.handoff.add": "Record a manual task",
   "creation.handoff.sync": "Record README language sync",
   "creation.handoff.recorded": "Task recorded; implementation and verification remain with the external agent.",
+  "creation.handoff.summary": "Handoff recorded",
+  "creation.handoff.summaryWithBaseline": "Handoff recorded · Baseline ready",
   "creation.handoff.title": "Creation handoff task",
   "creation.handoff.hint": "Record intent in docs/creator-handoff.md. Cancel keeps this draft. The App does not translate or implement the task.",
   "creation.handoff.intent": "Intent",

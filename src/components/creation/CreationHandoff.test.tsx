@@ -6,6 +6,8 @@ import { useCreationHandoffStore } from '@/store/creation-handoff-store'
 import { useCreationFilesStore } from '@/store/creation-files-store'
 import { writeText } from '@tauri-apps/plugin-clipboard-manager'
 import { CreationHandoff } from './CreationHandoff'
+import { CreationHandoffBaselines } from './CreationHandoffBaselines'
+import { useCreationReadingStore } from '@/store/creation-reading-store'
 
 const task: HandoffTask = {
   id: '701a5180-a2dd-47dc-9319-9312f3790f64',
@@ -163,6 +165,98 @@ it('reports task success and baseline failure separately without claiming compar
     screen.queryByText(/Saved-file comparison baseline recorded/)
   ).not.toBeInTheDocument()
   expect(commands.confirmCreationHandoff).toHaveBeenCalledTimes(1)
+})
+
+it('does not label a later failed manual task as recorded after an earlier success', async () => {
+  render(<CreationHandoff editable exists />)
+  await act(() => useCreationHandoffStore.getState().prepareTask(task))
+  fireEvent.click(screen.getByRole('button', { name: 'Add to handoff' }))
+  fireEvent.click(
+    await screen.findByRole('button', { name: 'Confirm this handoff' })
+  )
+  await screen.findByText('Handoff recorded · Baseline ready')
+  fireEvent.click(screen.getByRole('button', { name: 'Record a manual task' }))
+  fireEvent.change(await screen.findByLabelText('Intent'), {
+    target: { value: 'Later manual task' },
+  })
+  fireEvent.change(screen.getByLabelText('Affected files (one per line)'), {
+    target: { value: 'server.js' },
+  })
+  fireEvent.change(screen.getByLabelText('Acceptance criteria'), {
+    target: { value: 'Record only after successful writing' },
+  })
+  vi.mocked(commands.confirmCreationHandoff).mockResolvedValue({
+    status: 'ok',
+    data: {
+      task: { ...task, id: 'later-task', intent: 'Later manual task' },
+      revision: 'r2',
+      document: { text: 'Existing agent status\nNew task', version: 'h2' },
+      instructions: 'Later task r2',
+      taskRecorded: false,
+      baselineId: 'b2',
+      baselineError: { code: 'io', detail: 'Task write failed' },
+    },
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Add to handoff' }))
+  fireEvent.click(
+    await screen.findByRole('button', { name: 'Confirm this handoff' })
+  )
+  await screen.findByText(/Task was not recorded/)
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+  expect(screen.queryByText('Handoff recorded')).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('button', { name: 'Copy handoff instructions' })
+  ).not.toBeInTheDocument()
+})
+
+it('shows a newly confirmed baseline while the comparison view remains open', async () => {
+  useCreationReadingStore.getState().syncWorkspace('p')
+  useCreationReadingStore
+    .getState()
+    .showExtension(
+      { id: 'handoff-baselines', title: 'Changes', content: null },
+      'reply'
+    )
+  vi.mocked(commands.listHandoffBaselines).mockResolvedValue({
+    status: 'ok',
+    data: { usedBytes: 0, limitBytes: 268435456, baselines: [] },
+  })
+  render(
+    <>
+      <CreationHandoff editable exists />
+      <CreationHandoffBaselines identity="p" />
+    </>
+  )
+  await screen.findByText('No handoff baselines for this project.')
+  await act(() => useCreationHandoffStore.getState().prepareTask(task))
+  fireEvent.click(screen.getByRole('button', { name: 'Add to handoff' }))
+  const confirmButton = await screen.findByRole('button', {
+    name: 'Confirm this handoff',
+  })
+  vi.mocked(commands.listHandoffBaselines).mockResolvedValue({
+    status: 'ok',
+    data: {
+      usedBytes: 500,
+      limitBytes: 268435456,
+      baselines: [
+        {
+          id: 'b1',
+          taskId: task.id,
+          task,
+          intent: task.intent,
+          revision: 'r1',
+          capturedAt: 1700000000000,
+          complete: true,
+          bytes: 500,
+          files: 2,
+          excluded: [],
+          error: null,
+        },
+      ],
+    },
+  })
+  fireEvent.click(confirmButton)
+  await screen.findByRole('heading', { name: 'Connect a module' })
 })
 
 it('settles the original pending task when its captured handoff is retried successfully', async () => {

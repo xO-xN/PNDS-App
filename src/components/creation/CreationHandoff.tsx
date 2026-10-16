@@ -103,7 +103,50 @@ export function CreationHandoff({
             </Button>
           ))}
       </div>
-      {recorded && <p role="status">{t('creation.handoff.recorded')}</p>}
+      {(receipt?.taskRecorded ?? recorded) && (
+        <div
+          className={cn('flex flex-wrap items-start gap-2', menuOnly && 'p-2')}
+        >
+          <details className="min-w-0 flex-1 text-xs">
+            <summary className="pnds-focus-ring">
+              <span role="status">
+                {t(
+                  receipt?.baselineId && !receipt.baselineError
+                    ? 'creation.handoff.summaryWithBaseline'
+                    : 'creation.handoff.summary'
+                )}
+              </span>
+            </summary>
+            <div className="mt-2 space-y-2">
+              <p>{t('creation.handoff.recorded')}</p>
+              {receipt?.baselineId && !receipt.baselineError && (
+                <p>{t('creation.handoff.baselineReady')}</p>
+              )}
+              {receipt && (
+                <p className="break-all">
+                  {t('creation.handoff.revision', {
+                    id: receipt.task.id,
+                    revision: receipt.revision,
+                  })}
+                </p>
+              )}
+            </div>
+          </details>
+          {receipt?.taskRecorded && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() =>
+                void writeText(receipt.instructions)
+                  .then(() => toast.success(t('creation.handoff.copied')))
+                  .catch(() => toast.error(t('toast.error.generic')))
+              }
+            >
+              {t('creation.handoff.copy')}
+            </Button>
+          )}
+        </div>
+      )}
       {receipt?.baselineError && (
         <div role="alert">
           {t(
@@ -112,32 +155,6 @@ export function CreationHandoff({
               : 'creation.handoff.taskFailed'
           )}
           <CreationErrorNotice error={receipt.baselineError} />
-        </div>
-      )}
-      {receipt?.baselineId &&
-        !receipt.baselineError &&
-        receipt.taskRecorded && (
-          <p role="status">{t('creation.handoff.baselineReady')}</p>
-        )}
-      {receipt?.taskRecorded && (
-        <div className="space-y-2 text-xs">
-          <p>
-            {t('creation.handoff.revision', {
-              id: receipt.task.id,
-              revision: receipt.revision,
-            })}
-          </p>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() =>
-              void writeText(receipt.instructions)
-                .then(() => toast.success(t('creation.handoff.copied')))
-                .catch(() => toast.error(t('toast.error.generic')))
-            }
-          >
-            {t('creation.handoff.copy')}
-          </Button>
         </div>
       )}
       <Dialog

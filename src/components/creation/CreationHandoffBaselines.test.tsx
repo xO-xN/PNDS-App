@@ -115,6 +115,44 @@ beforeEach(() => {
     data: comparison,
   })
 })
+it('reloads newly recorded baselines when returning from file editing', async () => {
+  render(<CreationHandoffBaselines identity="p" />)
+  await screen.findByRole('heading', { name: 'Wire sound' })
+  act(() => useCreationReadingStore.getState().showFile())
+  const catalog = await commands.listHandoffBaselines('p')
+  if (catalog.status !== 'ok') throw new Error('Expected baseline fixture')
+  const baseline = catalog.data.baselines[0]
+  if (!baseline) throw new Error('Expected first baseline')
+  vi.mocked(commands.listHandoffBaselines).mockResolvedValue({
+    status: 'ok',
+    data: {
+      ...catalog.data,
+      baselines: [
+        ...catalog.data.baselines,
+        {
+          ...baseline,
+          id: 'b2',
+          taskId: 't2',
+          intent: 'Newly confirmed handoff',
+          task: {
+            ...comparison.task,
+            id: 't2',
+            intent: 'Newly confirmed handoff',
+          },
+        },
+      ],
+    },
+  })
+  act(() =>
+    useCreationReadingStore
+      .getState()
+      .showExtension(
+        { id: 'handoff-baselines', title: 'Changes', content: null },
+        'reply'
+      )
+  )
+  await screen.findByRole('heading', { name: 'Newly confirmed handoff' })
+})
 it('shows actual read-only text and resource differences, opens only current files and preserves drafts', async () => {
   seedCreationDraft('score.js', 'const speed = 3;\n', 'v3')
   useCreationFilesStore.getState().edit('score.js', 'const speed = 4;\n')

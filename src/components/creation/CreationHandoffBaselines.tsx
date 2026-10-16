@@ -32,6 +32,7 @@ export function CreationHandoffBaselines({ identity }: { identity: string }) {
   const drafts = useCreationFilesStore(state => state.drafts)
   const diskRevision = useCreationFilesStore(state => state.diskRevision)
   const readingView = useCreationReadingStore(state => state.view)
+  const handoffReceipt = useCreationHandoffStore(state => state.receipt)
   const projectName = useCreationStore(state => state.workspace?.project.name)
   useEffect(() => {
     if (readingView !== 'extension' || !comparison) return
@@ -47,8 +48,9 @@ export function CreationHandoffBaselines({ identity }: { identity: string }) {
     }
   }, [readingView, comparison, diskRevision])
   useEffect(() => {
-    void useHandoffBaselinesStore.getState().load()
-  }, [identity])
+    if (readingView === 'extension')
+      void useHandoffBaselinesStore.getState().load()
+  }, [identity, readingView, handoffReceipt])
   return (
     <section
       className="space-y-4 p-4 text-start text-sm"
