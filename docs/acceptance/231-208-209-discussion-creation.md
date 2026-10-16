@@ -148,3 +148,38 @@ related store tests.
 Standards and Spec rechecks found no remaining code issues; the required buffer
 ordering documentation was added. `npm run check:all` passed 1890 frontend and
 583 Rust tests (five existing ignored tests).
+
+## Continuation and user stop (2026-10-16)
+
+The same approved native binary gained further evidence: a natural-language
+slow-motion request produced a real speed control after actual source/declaration
+reads; an ambiguous goal without read consent prompted clarification. A candidate
+selection retained revision 3 and its exact function while revision 4 changed the
+candidate. Disabled reading and cancelled consent preserved the question and
+attachment. The real model received the explicitly sent fixed selection, explained
+its original `quick` branch rather than the later `swift` edit, and retained the
+full tool-read budget. A missing-source structural-control question produced no
+invented controls; analysis of fully read complex source remains unverified.
+
+Handwritten conditional code survived parameter edits. Its final one-file write
+was exact, and a later external append blocked guarded undo without altering the
+external bytes. The fixture was then restored through guarded undo. Four themes
+and Chinese/English card labels were observed; Escape/Tab left the editor and
+keyboard slider input changed the actual preview. Narrow-window attempts did not
+establish a narrow layout and are not counted as a pass.
+
+A disposable copy of the bundled Multichannel Signal Generator retained its real
+voice/SynthDef/private-bus logic and added an explicit project-owned adapter.
+While all voices were off, actual scsynth `/s_get` readback verified 440 → 660 →
+440 Hz in the same run; restart-only caption remained unpreviewed. Invalid
+version/type/duplicate/locator requests were rejected. The listener then confirmed
+manual sound on/off and requested no more testing. The automated audible pitch
+sequence stopped before its second stage, so it is not recorded as a completed
+hearing pass. The independent Classic and transport-fault copies were prepared
+but their native cases were not run.
+
+The [evidence record](./evidence/231-208-209-native-2026-10-16.json) preserves these
+scopes and remaining items. The test run stopped normally, releasing Node and
+scsynth; the original four fixtures match their baselines. No further tests ran
+after the user's stop, and no product code changed. This continuation does not
+mark the complete G4/G5 matrix or release acceptance passed.

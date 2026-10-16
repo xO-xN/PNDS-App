@@ -282,11 +282,11 @@
     }
   ],
   "unverifiedNative": [
-    "Real-model ambiguous-goal clarification and unsuitable-parameter selection cases;one earlier model reply described a card without submitting it until explicitly followed up",
-    "Typing during dispatched writes and every rapid lifecycle/file/chat navigation permutation on native final build;automated workflow regressions cover these boundaries",
-    "Refresh/restart declaration-only preview capabilities,protocol timeout and all late-event native permutations",
-    "Four themes,narrow layouts,full keyboard/focus matrix",
-    "Physical sound,phones,External audio,x86_64 and installed release acceptance"
+    "Real-model unsuitable-control selection against a fully read complex source; current negative case only established conservative behavior without evidence.",
+    "Typing during dispatched writes, in-flight repeat click, and all rapid lifecycle/file/chat permutations on native final build; existing automated workflow regressions cover these boundaries.",
+    "Refresh-only native behavior, native timeout/reordered/late-event permutations and second independently structured real-project native case; prepared fixtures not run after user stopped.",
+    "Minimum/narrow native window and full keyboard/focus matrix; four themes, bilingual labels and Escape-Tab/editor plus keyboard slider use observed.",
+    "Audible pitch-preview/restoration sequence not completed; user confirmed manual sound on/off. Phones, External audio, x86_64 and installed release acceptance remain separate."
   ],
   "finalFixtureState": [
     {
@@ -319,5 +319,98 @@
     "spec": "No actionable findings;ownership,restoration and write authority preserved"
   },
   "systemConfirmation": "User confirmed both signed-build Keychain prompts;credential contents were not read/copied.",
-  "finalRuntimeState": "Temporary native test App exited normally with status0 after the final explicit check;Node,audio and temporary-file cleanup confirmed;no performance remains running."
+  "finalRuntimeState": "Continuation stopped normally at user request; Node and scsynth stopped, all project tones off, test App open idle.",
+  "continuation": {
+    "sourceCommit": "efd0448",
+    "samePreviouslyApprovedBinary": true,
+    "runtimeLog": "/private/tmp/pnds-231-208-209-native-dnduq2ce/native-runtime-g4g5-continuation.log",
+    "model": {
+      "id": "glm-5.3-flash",
+      "baseUrl": "https://open.bigmodel.cn/api/coding/paas/v4",
+      "scope": "User explicitly authorized all readable synthetic G4 A fixture texts and selected candidate snippets after automatic approval review required a wider scope confirmation."
+    },
+    "modelCases": [
+      {
+        "case": "ambiguous creative goal, project reading disabled",
+        "result": "Asked what tension means and about direction; no tools, controls, writes or run."
+      },
+      {
+        "case": "natural request to slow motion",
+        "firstAttempt": "Read three files in multiple calls, then service timed out; not counted as pass.",
+        "successfulPrompt": "只完整读取 public/palette.js 和 pnds.preview.json 两份短文件。把画面的运动放慢一半，其他值保留；给我可以继续调节的单文件建议。只需简短确认，不写入或运行。",
+        "result": "Actual pending card with speed 2 to 1, limits 0..10 step0.5, source 70-6422d886667aeb74. No tool names or explicit control schema forced in this prompt."
+      },
+      {
+        "case": "unsuitable one-slider structural logic request, no body attached in that turn",
+        "result": "Conservative generic boundary explanation; refused a concrete conclusion without reading a body and produced no controls. This is a missing-evidence negative case, not proof of correctly analyzing arbitrary complex source."
+      }
+    ],
+    "candidateAttachment": {
+      "proposalId": "43b735f7-387a-463e-9251-d31b6cc95dd8",
+      "capturedRevision": 3,
+      "path": "public/palette.js",
+      "lines": [9, 9],
+      "capturedVersion": "70-6422d886667aeb74:proposal:f7a7ba41-5bc5-492e-b7d0-037991a8ddef",
+      "exactText": "export function describeMotion(value) { return value > 1 ? \"quick\" : \"calm\"; }",
+      "observations": [
+        "Only the selected function appeared in the attachment; adjacent marker comments were absent.",
+        "Later candidate revision4 changed quick to swift; attachment stayed at revision3 and warned source changed.",
+        "Reading disabled refused send and preserved question/attachment. Cancelling consent also preserved both.",
+        "Explicit send recorded proposal provenance and fixed text. Real model explained quick/calm, not later swift, identified pending candidate, and retained all 8 calls / 24000 result characters."
+      ]
+    },
+    "mixedEditingAndWrite": {
+      "observations": [
+        "Handwritten conditional function and unrelated comments survived changing the still-bound speed parameter with the keyboard.",
+        "Actual speed readback5; code input ended that preview and restored actual speed2.",
+        "Escape then Tab left the editor and focused Preview.",
+        "Applied final candidate included speed5, handwritten swift/calm function and both comments. Immutable difference remained source70 to eb-b510c8eb5ecdbbb8.",
+        "External append after application blocked guarded undo with explicit version-conflict feedback; exact external bytes survived. Restoring the applied bytes then using guarded undo restored original baseline."
+      ],
+      "appliedSha256": "f418c435b047575290b1e0dced77577429f90098a1592cef9f6ba888c38987b4",
+      "externalAfterApplySha256": "aaf19877c93df7cb4a4dd02b553457e7629c80584fe2582785007898ffdb3656"
+    },
+    "appearance": {
+      "observed": [
+        "Pond, Sand, Stage and Brutal parameter card screenshots: controls, text and boundaries readable.",
+        "Chinese and English card/action labels; restored original Chinese and Pond.",
+        "Same monitor URL generation _r=1 throughout themes/language and mixed edits."
+      ],
+      "notCompleted": [
+        "Native minimum-window resize attempts did not establish a narrow window; no narrow pass claimed.",
+        "Full keyboard/focus matrix not run."
+      ]
+    },
+    "actualSoundProject": {
+      "root": "/Users/xiaoxiang/Coding/PNDS app 开发/pnds-g4g5-native-2026-10-16/05-real-signal-generator",
+      "derivedFrom": "Bundled Multichannel Signal Generator1.3.0; original unchanged",
+      "adaptation": "Disposable copy adds protocol1 adapter, immutable startup settings/contract digests, first-voice frequency /n_set with actual scsynth /s_get readback; existing voice/SynthDef/private-bus/shutdown retained. Default gain -36dBFS and all16 tones OFF. Frequency/master live; caption restart-only.",
+      "provenanceAndBaselines": "/private/tmp/pnds-231-208-209-native-dnduq2ce/real-projects-baseline.json",
+      "finalSavedSha256": {
+        "settings/acceptance.json": "02bc51c64190fb2a58307919167cb07237a4c059529cfadfe58a8a99f7cce8c7",
+        "pnds.preview.json": "fb07b23032d55b92776e349ee3d4cb26ad3c578b33e260ef9c4a1f0896c93758",
+        "lib/audio-engine.js": "5bedca00be89c73ab804c951f1c8b7d55ebe72654f4c5b24a34e9d5933f4124f",
+        "server.js": "4ac10961f1c4f899fb1a621c899ef4c42344204df13e2e67b9a34d94af33a232",
+        "public/acceptance-preview.mjs": "708845cb84daa3a7e969d52fc3bf5d547441039ed46d544b0b830901a98899f9"
+      },
+      "fixtureCorrections": "Initial copy module MIME and declaration enum/empty-suffix mistakes were corrected before successful binding; App refused invalid declarations. These were test-copy preparation errors, not product defects.",
+      "observations": [
+        "Static Doctor passed exact shared-library and resource checks.",
+        "Internal Mac mini Speakers48000Hz, project private bus2, App bridges two hardware channels, all tones initially off.",
+        "Valid source6d-1f63a58528a39267; runId5. Preview feedback frequency660/master0.4, unpreviewed caption. Actual page reported scsynth-verified freq660 and tone on:false/gain0.",
+        "End returned ended; actual freq440, on:false/gain0. Caption stayed saved baseline.",
+        "Wrong source version rejected versionConflict; wrong type, duplicate targets and forged locator rejected invalidProject.",
+        "After listener ready, first voice manually enabled at440Hz gain0.015848931924611134 (-36dBFS). User subsequently operated on/off and confirmed correct.",
+        "The requested automated audible440→660→440 sequence was interrupted before its second stage by user UI activity, then explicitly cancelled by the user. No completed audible pitch-sequence pass claimed."
+      ],
+      "userConfirmation": "不用测了，我手动打开关闭，都是正确的",
+      "scopeOfUserConfirmation": "Manual sound on/off only; not interpreted as full G4/G5 matrix sign-off."
+    },
+    "preparedButNotRun": [
+      "06-real-classic: independent real template copy with refresh-only geometry declarations and no adapter; JS syntax check passed, native case not run.",
+      "07-transport-faults: controlled reply-delay/reorder copy prepared and syntax checked, native timeout/reorder case not run."
+    ],
+    "stopReason": "User explicitly requested no further testing. No new product-code changes. Full check:all was not rerun after this stop; earlier complete passing result remains recorded separately.",
+    "cleanup": "Original four synthetic project baselines reverified unchanged/no extras. Test Internal run stopped normally; Node and scsynth stopped confirmed in native log. Test App left open idle. Temporary copies/evidence retained."
+  }
 }
