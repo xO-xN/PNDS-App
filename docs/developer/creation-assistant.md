@@ -463,6 +463,13 @@ affected controls without changing code. Resetting one parameter keeps unrelated
 edits; full suggestion restoration and disk reload require discard confirmation.
 The full editor/history/selection attachment behavior comes from #224/#225.
 
+Publish a new candidate/source state before calling `TextBuffer.sync` for control
+edits, resets or reloads. Mounted editor subscribers publish synchronously; with
+the old candidate still in the store, that echo reenters `editCode`, ends live
+preview and can invalidate an in-flight binding without clearing its busy state.
+Cover this boundary with a mounted-editor control regression, not only store
+action tests.
+
 Only Apply authorizes a captured candidate write. `saveReviewed(..., 'proposal')`
 uses #207 with a clean matching file draft, exact saved version and actual before
 text. It never copies candidate edits into a dirty file draft. Duplicate dispatch,

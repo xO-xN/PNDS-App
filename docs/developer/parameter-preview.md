@@ -77,3 +77,6 @@ previous restoration settles. Cancelling that replacement still surfaces the
 original restoration result. Even a handshake with no usable changes ends with
 a restore/release message; it cannot leave an adapter session blocking rebinding.
 Only a new workspace or native run gets a separate restoration scope.
+After successful restoration, each new preview attempt replaces prior feedback,
+unsupported IDs and partial status, including when no monitor is available.
+Failed restoration retains its original owner and warning instead.

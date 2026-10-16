@@ -1,0 +1,323 @@
+{
+  "sourceCommit": "93deed5",
+  "date": "2026-10-16",
+  "app": "/private/tmp/pnds-231-208-209-native-dnduq2ce/target/debug/bundle/macos/PNDS.app",
+  "executableSha256": "4da5c7b0c2f6e0ff4ee69f66d65d93a117b86f6c62568d7e5e5e861262bbf299",
+  "instrumentation": "Temporary entry exposing only workspace/read/contract/bind/authorize/preview/end/status for #231. #208/#209 use normal UI.",
+  "observations231": [
+    {
+      "case": "A native read and contract",
+      "sourceVersion": "70-6422d886667aeb74",
+      "contractVersion": "482-c8eb70c16cdc8b8c",
+      "result": "ok"
+    },
+    {
+      "case": "A multi-kind actual preview",
+      "result": "temporary",
+      "values": {
+        "speed": 7.5,
+        "title": "Amber",
+        "visible": true,
+        "tint": "#f97316",
+        "shape": "square"
+      },
+      "runId": 1,
+      "reload": 1,
+      "pageAX": "heading Amber and Actual runtime values matched feedback"
+    },
+    {
+      "case": "rapid 10 updates",
+      "result": "latest speed 9, same runId 1/reload 1"
+    },
+    {
+      "case": "end twice",
+      "result": "true/ended twice; actual page restored 2/Blue/true/#2563eb/circle"
+    },
+    {
+      "case": "stale source version",
+      "result": "error"
+    },
+    {
+      "case": "hard max10 versus suggested max4",
+      "result": "7.5 binds;12 becomes null and partial true"
+    },
+    {
+      "case": "expression 3+4",
+      "result": "speed null;partial true"
+    },
+    {
+      "case": "controlled restore setter rejection",
+      "result": "false/unrestored/restoreFailed;repeated end remains false/unrestored"
+    },
+    {
+      "case": "manual recovery",
+      "result": "refresh renders baseline but retains failed restoration scope;manual restart creates runId2 and preview becomes temporary"
+    },
+    {
+      "case": "external source append",
+      "result": "watcher and end preserve actual Amber state, refuse old snapshot restoration;old authorization error;notice saved bytes changed"
+    },
+    {
+      "case": "D partial capability",
+      "result": "temporary feedback only speed7.5/titleAmber;visible,tint,shape explicitly unpreviewed;end true"
+    },
+    {
+      "case": "C schema99",
+      "result": "error invalidProject:Incompatible preview declaration"
+    },
+    {
+      "case": "B no adapter / settings/display.json",
+      "result": "contract null;opacity0.8 binding ok;preview failed/unavailable"
+    },
+    {
+      "case": "fixture side effects before208",
+      "result": "all4 baselineSHA256 equal;no extra files after controlled external edit restored"
+    },
+    {
+      "case": "native metadata regression after fix",
+      "result": "D temporary with unpreviewed visible,tint,shape;after end and switch B stopped,failed/unavailable with [] and partial false"
+    },
+    {
+      "case": "actual boolean",
+      "result": "visible false in adapter feedback and actual page output;shape dimmed on screenshot;end restored true"
+    }
+  ],
+  "limitations": [
+    "Temporary instrumented frontend, same production native/backend/preview modules",
+    "No physical sound, x86_64, installed release or exhaustive visual/theme acceptance",
+    "Refresh/restart declaration-only modes and protocol timeout not yet exercised natively"
+  ],
+  "fixedBuildSha256": "b7ad960bb7cb3d084b8f8a51915b9909267616c31ebae6db3ef06ef076fff92c",
+  "observations208": [
+    {
+      "case": "real model B",
+      "provider": "glm-5.3-flash at open.bigmodel.cn existing configured service",
+      "result": "initial request timed out before proposal;smaller request reread complete saved text and produced one actual code-only pending card"
+    },
+    {
+      "case": "B stopped/no adapter apply",
+      "beforeVersion": "44-c1a38c5be6c9a73e",
+      "afterVersion": "44-3ab44759bb696ebe",
+      "result": "explicit Apply wrote caption Calm Native/opacity0.8;fixed actual difference shown;guarded undo restored original SHA256 1cefc27d029d16f70dc1f2c40b313ac409d7d8ffcf25106408881d4aea66be2d"
+    },
+    {
+      "case": "history after reopen",
+      "result": "B and A snapshots explicitly inert,no old apply/preview actions"
+    },
+    {
+      "case": "real model A",
+      "result": "initial response described a card but did not call proposal tool;explicit follow-up reread source+contract and submitted two controls"
+    },
+    {
+      "case": "A native parameter interaction before buffer fix",
+      "result": "explicit preview changed actual speed4.5/titleMint Native;editing speed7.5 ended preview and indefinitely disabled controls"
+    },
+    {
+      "case": "system keychain",
+      "result": "re-signed test build credential access required user-owned system confirmation;timed-out prior request was retried;no credential content read or copied"
+    },
+    {
+      "case": "fresh suggestion on fixed build",
+      "result": "after system Keychain confirmation,real configured glm-5.3-flash reread source70-6422d886667aeb74 and contract482-c8eb70c16cdc8b8c and submitted an actual live speed/title card,revision1"
+    },
+    {
+      "case": "native buffer-fix recheck",
+      "result": "number4→7.5 produced revision2,controls remained enabled and actual monitor speed7.5/titleMint Native;title→Lavender Native revision3 actualreadback;reset only speed→4 revision4 retained Lavender Native"
+    },
+    {
+      "case": "cancel full discard",
+      "result": "native discard confirmation Cancel retained revision4,speed4/titleLavender Native"
+    },
+    {
+      "case": "code and parameters",
+      "result": "same code view retained both edits;replacing speed with2+2 and changing shape/comment produced revision5 and restored monitorbaseline;only speed control disabled,title remained enabled"
+    },
+    {
+      "case": "explicit mapped code preview",
+      "result": "only titleLavender Native applied;actualspeed2 and shapecircle stayed baseline;speed explicitly unpreviewed,other code labeled partial"
+    },
+    {
+      "case": "independent dirty file draft",
+      "result": "separate file draft comment retained while Apply refused;candidateexpression/comment retained through file/discussion navigation;restoring draft to saved text cleared dirty status"
+    },
+    {
+      "case": "external disk conflict",
+      "result": "controlled external source append caused Apply refusal;source change retained;after exactbaseline restoration current saved version matched again"
+    },
+    {
+      "case": "visible code application",
+      "beforeVersion": "70-6422d886667aeb74",
+      "afterVersion": "9b-9bfb7f952e08bf94",
+      "savedBytes": 155,
+      "savedSha256": "84cfbc608a8c119ff11a29cc1dcd18a13bed126d7ea0e5311823f003a28f87db",
+      "result": "disk bytes equal exact visible expression/shape/comment candidate;runtime kept old Blue/speed2/circle until manual action"
+    },
+    {
+      "case": "repeated apply and fixed difference",
+      "result": "repeated completed Apply produced no new displayed record;later candidate revision6/titleLater candidate only did not change saved file or original70→9b actualdifference"
+    },
+    {
+      "case": "manual saved adoption",
+      "result": "manual restart loaded actualsaved digest84cfbc608a8c119ff11a29cc1dcd18a13bed126d7ea0e5311823f003a28f87db;monitor Lavender Native/speed4/square,not later unsaved candidate"
+    }
+  ],
+  "nativeFixes": [
+    {
+      "problem": "prior project unsupported IDs and partial state leaked into next unavailable attempt",
+      "red": "npm run test:run -- src/lib/parameter-preview-workflow.test.mjs failed on old partial true/title metadata",
+      "fix": "replace current attempt feedback/unpreviewed/partial after successful restoration,including no-monitor branch",
+      "nativeRecheck": "pass"
+    },
+    {
+      "problem": "mounted TextEditor echo reentered editCode during parameter buffer sync and stranded bindingBusy",
+      "red": "npm run test:run -- src/components/creation/AssistantLiveProposals.test.tsx failed control toBeEnabled",
+      "fix": "publish candidate/source before TextBuffer.sync for parameter/code/reload",
+      "nativeRecheck": "pass on build b7ad960bb7cb3d084b8f8a51915b9909267616c31ebae6db3ef06ef076fff92c after user-owned Keychain confirmation;number and text controls stay enabled,auto-preview,one revision per edit;single-value reset preserves other edits"
+    }
+  ],
+  "checks": {
+    "command": "npm run check:all",
+    "exitCode": 0,
+    "frontendPassed": 1890,
+    "rustPassed": 583,
+    "rustIgnoredExisting": 5,
+    "notes": "localhost HTTP integration tests require execution outside restricted listener sandbox",
+    "log": "/private/tmp/pnds-231-208-209-native-dnduq2ce/check-all-final.log"
+  },
+  "state": "Focused native run and both native defect rechecks passed. Broader G4/G5 and physical acceptance remain separate; tickets are not closed by this record.",
+  "environment": {
+    "os": "macOS 27.0.1 (26A434)",
+    "architecture": "arm64",
+    "hostOrigin": "tauri://localhost",
+    "audio": "None; controlled fixtures send no note messages"
+  },
+  "fixtureRoots": [
+    "/Users/xiaoxiang/Coding/PNDS app 开发/pnds-g4g5-native-2026-10-16/01-adapted",
+    "/Users/xiaoxiang/Coding/PNDS app 开发/pnds-g4g5-native-2026-10-16/02-no-adapter",
+    "/Users/xiaoxiang/Coding/PNDS app 开发/pnds-g4g5-native-2026-10-16/03-incompatible",
+    "/Users/xiaoxiang/Coding/PNDS app 开发/pnds-g4g5-native-2026-10-16/04-partial"
+  ],
+  "sourceDeltaFiles": [
+    "src/store/parameter-preview-store.ts",
+    "src/store/assistant-proposal-store.ts",
+    "src/lib/parameter-preview-workflow.test.mjs",
+    "src/components/creation/AssistantLiveProposals.test.tsx"
+  ],
+  "sourceDeltaSha256": {
+    "src/store/parameter-preview-store.ts": "38324b4ae27d33be6d286eecbbbab6dc081054aedc570dd01e29fd8c6479ea71",
+    "src/store/assistant-proposal-store.ts": "1ff7734e79ff99cc0050068d0a7e7675ca161efeb133f071415ff92d9b8e8726",
+    "src/lib/parameter-preview-workflow.test.mjs": "73d6795cc382d695ae75638d20e00e15861b6fc4f3911f25020d2b1b0265898f",
+    "src/components/creation/AssistantLiveProposals.test.tsx": "2648ce2af043f4cea75c7712225dc39397d60beb8b8a749828c76972464ab6d7"
+  },
+  "observations209": [
+    {
+      "case": "discussion entry",
+      "result": "opens existing controlled-check dialog,0 dirty drafts,None default,no task until explicit Start"
+    },
+    {
+      "case": "None check",
+      "taskId": "app-62923-1792162356673057000",
+      "result": "passed;Node alive,matching health,both HTTP200;Node/audio/temp cleanup confirmed",
+      "nodeVersion": "v24.18.1",
+      "projectSha256": "1b53c4b35a46393398bc480d570ccf4ba2c00ef23722670aba921797bc19fa1d"
+    },
+    {
+      "case": "busy performance",
+      "result": "explicit check rejected: A PNDS performance or controlled check is active;existing same monitor still Blue/running None,not stopped"
+    },
+    {
+      "case": "explicit Internal",
+      "taskId": "app-62923-1792162424386258000",
+      "result": "passed;owned audio OSC status/master bus confirmed;all cleanup confirmed",
+      "outputDevice": "Mac mini Speakers",
+      "sampleRate": 48000,
+      "projectChannels": 2,
+      "deviceChannels": 2,
+      "bridgedChannels": 2,
+      "privateBusStart": 2,
+      "oscTarget": "127.0.0.1:50827",
+      "actualSound": "unverified;fixture sends no note messages"
+    },
+    {
+      "case": "Copy report",
+      "result": "UI reports copied"
+    },
+    {
+      "case": "cancel during actual health wait",
+      "taskId": "app-62923-1792162458819351000",
+      "fixture": "saved server prepended with12s startup delay",
+      "result": "cancelled;Node/audio/temp cleanup confirmed;not reported as passed"
+    },
+    {
+      "case": "controlled Node failure",
+      "taskId": "app-62923-1792162484475241000",
+      "fixture": "saved server prepended with throw Error",
+      "result": "failed:Node process exited before completion exit1;all cleanup confirmed;source edit retained"
+    },
+    {
+      "case": "decline repair handoff",
+      "result": "native confirmation Cancel retains same failed report and source modification"
+    },
+    {
+      "case": "accept repair handoff preparation",
+      "result": "native confirmation OK opens editable intent/acceptance fields citing actual task;Record remains separate and was not submitted;no docs/creator-handoff.md exists"
+    },
+    {
+      "case": "continue editing",
+      "result": "closes report;main test remains stopped;no automatic repair,model request,write or run"
+    },
+    {
+      "case": "source freshness",
+      "result": "restoring original server causes old failed report to display stale/incomplete warning;same taskId;no auto rerun"
+    },
+    {
+      "case": "failure dialog latest guarded undo",
+      "taskId": "app-62923-1792163079213866000",
+      "result": "controlledserverfailure retainedsavedpalette and showedguardedUndo;explicitUndo restored originalpaletteSHA2567b9a24e78ad9b3d3d8b8a0d9120ef76c691b571e398ed2dc32d94b49428550d5;serverfailure remained;oldreport became stale;no auto rerun"
+    },
+    {
+      "case": "final manual recheck after fixture restoration",
+      "taskId": "app-62923-1792163100092799000",
+      "result": "passed None;Node/audio/temp cleanup all confirmed"
+    }
+  ],
+  "unverifiedNative": [
+    "Real-model ambiguous-goal clarification and unsuitable-parameter selection cases;one earlier model reply described a card without submitting it until explicitly followed up",
+    "Typing during dispatched writes and every rapid lifecycle/file/chat navigation permutation on native final build;automated workflow regressions cover these boundaries",
+    "Refresh/restart declaration-only preview capabilities,protocol timeout and all late-event native permutations",
+    "Four themes,narrow layouts,full keyboard/focus matrix",
+    "Physical sound,phones,External audio,x86_64 and installed release acceptance"
+  ],
+  "finalFixtureState": [
+    {
+      "root": "/Users/xiaoxiang/Coding/PNDS app 开发/pnds-g4g5-native-2026-10-16/01-adapted",
+      "modified": [],
+      "extraFiles": [],
+      "gitPresent": false
+    },
+    {
+      "root": "/Users/xiaoxiang/Coding/PNDS app 开发/pnds-g4g5-native-2026-10-16/02-no-adapter",
+      "modified": [],
+      "extraFiles": [],
+      "gitPresent": false
+    },
+    {
+      "root": "/Users/xiaoxiang/Coding/PNDS app 开发/pnds-g4g5-native-2026-10-16/03-incompatible",
+      "modified": [],
+      "extraFiles": [],
+      "gitPresent": false
+    },
+    {
+      "root": "/Users/xiaoxiang/Coding/PNDS app 开发/pnds-g4g5-native-2026-10-16/04-partial",
+      "modified": [],
+      "extraFiles": [],
+      "gitPresent": false
+    }
+  ],
+  "reviews": {
+    "standards": "No code findings;required synchronous-buffer ordering documentation added",
+    "spec": "No actionable findings;ownership,restoration and write authority preserved"
+  },
+  "systemConfirmation": "User confirmed both signed-build Keychain prompts;credential contents were not read/copied.",
+  "finalRuntimeState": "Temporary native test App exited normally with status0 after the final explicit check;Node,audio and temporary-file cleanup confirmed;no performance remains running."
+}

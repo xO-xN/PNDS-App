@@ -6,6 +6,7 @@ import { useCreationStore } from '@/store/creation-store'
 import { useCreationFilesStore } from '@/store/creation-files-store'
 import { useAssistantProposalStore } from '@/store/assistant-proposal-store'
 import { useSessionStore } from '@/store/session-store'
+import { useParameterPreviewStore } from '@/store/parameter-preview-store'
 import { seedCreationDraft } from '@/test/creation-files'
 import { AssistantLiveProposals } from './AssistantLiveProposals'
 
@@ -50,8 +51,7 @@ beforeEach(() => {
   useSessionStore.setState({ sessionStatus: 'idle' })
   seedCreationDraft('score.js', source, 'v1')
 })
-it('shares the editor candidate with controls, disables an expression and still applies valid code without a runtime', async () => {
-  const candidate = 'const speed = 3;\nconst title = "Blue";\n'
+function installProposal(candidate: string, control = request) {
   useAssistantProposalStore.getState().install(
     'p',
     'reply',
@@ -63,9 +63,9 @@ it('shares the editor candidate with controls, disables an expression and still 
         version: 'v1',
         sourceText: source,
         text: candidate,
-        parameters: [request],
+        parameters: [control],
         binding: {
-          parameters: [{ request, value: 3 }],
+          parameters: [{ request: control, value: 3 }],
           contractVersion: null,
           partial: false,
         },
@@ -73,6 +73,10 @@ it('shares the editor candidate with controls, disables an expression and still 
     ],
     vi.fn()
   )
+}
+it('shares the editor candidate with controls, disables an expression and still applies valid code without a runtime', async () => {
+  const candidate = 'const speed = 3;\nconst title = "Blue";\n'
+  installProposal(candidate)
   render(<AssistantLiveProposals messageId="reply" />)
   expect(screen.getByRole('spinbutton', { name: 'speed' })).toHaveValue(3)
   fireEvent.click(screen.getByRole('button', { name: 'Code' }))
@@ -119,4 +123,43 @@ it('shares the editor candidate with controls, disables an expression and still 
   expect(commands.startCreationCheck).not.toHaveBeenCalled()
   expect(commands.assistantModelTurn).not.toHaveBeenCalled()
   expect(screen.getByText(/Actual applied difference/)).toBeInTheDocument()
+})
+
+it('keeps a control edit bound when the mounted editor publishes the synchronized buffer', async () => {
+  const candidate = 'const speed = 3;\nconst title = "Blue";\n'
+  const control = {
+    ...request,
+    spec: { ...request.spec, preview: 'live' as const },
+  }
+  installProposal(candidate, control)
+  vi.mocked(commands.bindCreationParameters).mockResolvedValue({
+    status: 'ok',
+    data: {
+      parameters: [{ request: control, value: 7 }],
+      contractVersion: null,
+      partial: false,
+    },
+  })
+  render(<AssistantLiveProposals messageId="reply" />)
+  await findEditorWithText(candidate)
+  const end = vi.spyOn(useParameterPreviewStore.getState(), 'end')
+  const preview = vi
+    .spyOn(useParameterPreviewStore.getState(), 'preview')
+    .mockResolvedValue(undefined)
+  fireEvent.change(screen.getByRole('spinbutton', { name: 'speed' }), {
+    target: { value: '7' },
+  })
+  await waitFor(() =>
+    expect(screen.getByRole('spinbutton', { name: 'speed' })).toBeEnabled()
+  )
+  expect(end).not.toHaveBeenCalled()
+  expect(useAssistantProposalStore.getState().items.offer?.candidate).toEqual({
+    revision: 2,
+    text: 'const speed = 7;\nconst title = "Blue";\n',
+  })
+  expect(commands.bindCreationParameters).toHaveBeenCalledTimes(2)
+  expect(preview).toHaveBeenCalledTimes(1)
+  expect(commands.startProject).not.toHaveBeenCalled()
+  end.mockRestore()
+  preview.mockRestore()
 })

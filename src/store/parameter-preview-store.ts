@@ -72,7 +72,15 @@ export const useParameterPreviewStore = create<PreviewState>((set, get) => ({
       return ending.then(restored => {
         if (ticket !== sequence) return
         if (!restored) set({ status: 'unrestored', problem: 'restoreFailed' })
-        else set({ owner, status: 'failed', problem: 'unavailable' })
+        else
+          set({
+            owner,
+            status: 'failed',
+            problem: 'unavailable',
+            feedback: {},
+            unpreviewed: [],
+            partial: candidate.partial,
+          })
       })
     }
     const run = session.runId
@@ -98,6 +106,8 @@ export const useParameterPreviewStore = create<PreviewState>((set, get) => ({
           owner,
           status: 'checking',
           problem: null,
+          feedback: {},
+          unpreviewed: [],
           partial: candidate.partial,
         })
         try {

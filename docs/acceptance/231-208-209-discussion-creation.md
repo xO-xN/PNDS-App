@@ -96,3 +96,55 @@ restore failure, and zero-change handshakes retaining adapter ownership. The fin
 workflow now retains the actual effect owner through restoration and explicitly
 releases negotiated sessions even when no parameter changed. Controlled-page
 regressions cover both cancellation and successful subsequent rebinding.
+
+## Focused native run (2026-10-16)
+
+The [native evidence](./evidence/231-208-209-native-2026-10-16.json) records exact
+temporary signed debug builds, controlled project paths, digests, task IDs and
+observations. The user closed bare dev before the packaged test began. A bounded
+temporary entry exercised #231 through the real native binding and production
+preview modules; #208 model/cards and #209 checks used normal UI. This is not an
+installed-release or physical-sound certification.
+
+Observed #231 effects include number, text, color, option and boolean values on
+the actual same WebKit monitor, latest-value convergence and baseline restoration.
+Stale source, incompatible schema, no adapter, partial support, refused restoration
+and manual restart recovery were exercised. All four disposable projects were
+restored to their original file hashes, with no extra files or Git repositories.
+
+Real-model #208 runs produced a code-only B suggestion and a two-control A
+suggestion, after timeouts and an explicit follow-up when one reply only described
+a card. B applied while stopped without an adapter; its fixed actual difference
+and guarded undo were checked. Reopened history retained inert snapshots. A's
+parameter edit exposed a mounted-editor defect described below. After the user
+confirmed the signed fixed build's system Keychain prompt, a fresh real-model
+card passed native number/text editing and single-parameter reset without locking
+controls. Code input ended old preview; an expression disabled only its control,
+and explicit code preview changed only the verified text value. Separate dirty
+drafts and external source changes blocked application without losing candidates.
+The visible 155-byte code candidate was saved exactly; later candidate edits left
+the fixed actual difference unchanged. Manual restart adopted the saved digest
+and values, rather than the later unsaved candidate.
+
+The #209 discussion entry stayed idle until Start. None and explicitly selected
+Internal checks passed with confirmed Node/audio/temp cleanup; Internal recorded
+Mac mini Speakers at 48 kHz without note messages. A busy check left the existing
+monitor running. Cancellation during delayed health startup, deliberate Node
+failure, retained edits, continue editing, declined/accepted handoff preparation,
+separate Record authority and stale-report display were observed. No repair,
+handoff-file write or Git mutation occurred automatically. The failure-dialog
+latest guarded undo restored the original source hash without rerunning a check;
+a final explicit None check passed after the controlled failure was removed.
+The remaining native matrix is listed as unverified in the evidence; the run does
+not close G4/G5 or the tickets.
+
+Two native defects gained red-before-fix regressions: a previous project's
+unsupported IDs/partial flag survived the next unavailable preview, and
+`TextBuffer.sync` reentered code editing before the candidate was published,
+stranding controls and ending preview. Metadata is now replaced after successful
+restoration, and candidate/source publication precedes synchronous buffer updates.
+Both repairs passed their native rechecks, mounted/workflow regressions and
+related store tests.
+Standards and Spec rechecks found no remaining code issues; the required buffer
+ordering documentation was added. `npm run check:all` passed 1890 frontend and
+583 Rust tests (five existing ignored tests).

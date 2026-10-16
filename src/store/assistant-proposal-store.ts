@@ -118,13 +118,13 @@ export const useAssistantProposalStore = create<ProposalState>((set, get) => {
       if (!item || !owned(item) || text === item.candidate.text) return
       parameterTickets.set(id, (parameterTickets.get(id) ?? 0) + 1)
       void useParameterPreviewStore.getState().end()
-      item.buffer.sync(text)
       patch(id, {
         candidate: { revision: item.candidate.revision + 1, text },
         preview: 'none',
         binding: null,
         error: null,
       })
+      item.buffer.sync(text)
       void get().rebind(id)
     },
     rebind: async id => {
@@ -202,7 +202,6 @@ export const useAssistantProposalStore = create<ProposalState>((set, get) => {
       const text = lines.join('')
       const ticket = (parameterTickets.get(id) ?? 0) + 1
       parameterTickets.set(id, ticket)
-      item.buffer.sync(text)
       const candidate = { revision: item.candidate.revision + 1, text }
       patch(id, {
         candidate,
@@ -216,6 +215,9 @@ export const useAssistantProposalStore = create<ProposalState>((set, get) => {
           : null,
         error: null,
       })
+      // Mounted editors publish buffer changes synchronously. Publish the
+      // candidate first so that echo cannot turn a control into a code edit.
+      item.buffer.sync(text)
       // Validate before publishing a control edit; hard bounds are local facts.
       const generation = epoch
       try {
@@ -360,7 +362,6 @@ export const useAssistantProposalStore = create<ProposalState>((set, get) => {
           return
         }
         if (result.data.kind !== 'text') return
-        item.buffer.sync(result.data.text)
         patch(id, {
           source: { path: item.source.path, version: result.data.version },
           before: result.data.text,
@@ -373,6 +374,7 @@ export const useAssistantProposalStore = create<ProposalState>((set, get) => {
           preview: 'none',
           error: null,
         })
+        item.buffer.sync(result.data.text)
       } catch (cause) {
         if (current()) patch(id, { error: creationTransportError(cause) })
       }

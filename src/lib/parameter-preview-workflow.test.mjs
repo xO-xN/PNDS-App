@@ -228,3 +228,46 @@ it('surfaces the shared failed restoration when a replacement preview is cancell
   expect(page.document.querySelector('output').textContent).toBe('4')
   cleanup()
 })
+
+it('does not carry another project capability feedback into an unavailable preview', async () => {
+  const { request, owner, cleanup } = await controlledPage()
+  await useParameterPreviewStore.getState().preview(owner, {
+    parameters: [
+      { request, value: 4 },
+      {
+        request: { ...request, spec: { ...request.spec, id: 'title' } },
+        value: null,
+      },
+    ],
+    contractVersion: 'contract-v1',
+    partial: true,
+  })
+  expect(useParameterPreviewStore.getState().unpreviewed).toEqual(['title'])
+  expect(await useParameterPreviewStore.getState().end()).toBe(true)
+  cleanup()
+  useCreationStore.setState({
+    workspace: {
+      project: {
+        identity: 'no-adapter-project',
+        root: '/other',
+        name: 'Other',
+        source: 'folder',
+      },
+      files: [],
+    },
+  })
+  useSessionStore.setState({ sessionStatus: 'idle' })
+  await useParameterPreviewStore
+    .getState()
+    .preview(
+      { ...owner, identity: 'no-adapter-project', proposalId: 'code-only' },
+      { parameters: [], contractVersion: null, partial: false }
+    )
+  expect(useParameterPreviewStore.getState()).toMatchObject({
+    status: 'failed',
+    problem: 'unavailable',
+    feedback: {},
+    unpreviewed: [],
+    partial: false,
+  })
+})
