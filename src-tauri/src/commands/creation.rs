@@ -689,6 +689,38 @@ pub async fn read_creation_handoff(
 
 #[tauri::command]
 #[specta::specta]
+pub async fn preview_creation_handoff(
+    app: AppHandle,
+    state: State<'_, CreationState>,
+    identity: String,
+    task: crate::project::handoff::HandoffTask,
+) -> Result<crate::project::creation::HandoffReview, CreationError> {
+    state
+        .run(move |access| access.preview_handoff(&identity, task, &protection(&app)?))
+        .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn confirm_creation_handoff(
+    app: AppHandle,
+    state: State<'_, CreationState>,
+    identity: String,
+    token: String,
+) -> Result<crate::project::creation::HandoffReceipt, CreationError> {
+    state
+        .run(move |access| {
+            let data = app
+                .path()
+                .app_data_dir()
+                .map_err(|error| CreationError::new(CreationErrorCode::Io, error.to_string()))?;
+            access.record_handoff_baseline(&data, &identity, &token, &protection(&app)?)
+        })
+        .await
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn append_creation_handoff(
     app: AppHandle,
     state: State<'_, CreationState>,
@@ -861,5 +893,92 @@ pub async fn undo_creation_file_change(
 ) -> Result<CreationContent, CreationError> {
     state
         .run(move |access| access.undo_change(&identity, &change_id, &protection(&app)?))
+        .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn list_handoff_baselines(
+    app: AppHandle,
+    state: State<'_, CreationState>,
+    identity: String,
+) -> Result<crate::project::creation::HandoffBaselineCatalog, CreationError> {
+    state
+        .run(move |access| {
+            let data = app
+                .path()
+                .app_data_dir()
+                .map_err(|error| CreationError::new(CreationErrorCode::Io, error.to_string()))?;
+            access.list_handoff_baselines(&data, &identity, &protection(&app)?)
+        })
+        .await
+}
+#[tauri::command]
+#[specta::specta]
+pub async fn retry_handoff_baseline(
+    app: AppHandle,
+    state: State<'_, CreationState>,
+    identity: String,
+    id: String,
+) -> Result<crate::project::creation::HandoffReceipt, CreationError> {
+    state
+        .run(move |access| {
+            let data = app
+                .path()
+                .app_data_dir()
+                .map_err(|error| CreationError::new(CreationErrorCode::Io, error.to_string()))?;
+            access.retry_handoff_baseline(&data, &identity, &id, &protection(&app)?)
+        })
+        .await
+}
+#[tauri::command]
+#[specta::specta]
+pub async fn delete_handoff_baseline(
+    app: AppHandle,
+    state: State<'_, CreationState>,
+    identity: String,
+    id: String,
+) -> Result<(), CreationError> {
+    state
+        .run(move |access| {
+            let data = app
+                .path()
+                .app_data_dir()
+                .map_err(|error| CreationError::new(CreationErrorCode::Io, error.to_string()))?;
+            access.delete_handoff_baseline(&data, &identity, &id, &protection(&app)?)
+        })
+        .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn compare_handoff_baseline(
+    app: AppHandle,
+    state: State<'_, CreationState>,
+    identity: String,
+    id: String,
+) -> Result<crate::project::creation::HandoffComparison, CreationError> {
+    state
+        .run(move |access| {
+            let data = app
+                .path()
+                .app_data_dir()
+                .map_err(|error| CreationError::new(CreationErrorCode::Io, error.to_string()))?;
+            access.compare_handoff_baseline(&data, &identity, &id, &protection(&app)?)
+        })
+        .await
+}
+#[tauri::command]
+#[specta::specta]
+pub async fn handoff_comparison_is_stale(
+    app: AppHandle,
+    state: State<'_, CreationState>,
+    identity: String,
+    fingerprint: String,
+) -> Result<bool, CreationError> {
+    state
+        .run(move |access| {
+            access.handoff_comparison_is_stale(&identity, &fingerprint, &protection(&app)?)
+        })
         .await
 }

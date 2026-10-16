@@ -19,6 +19,7 @@ import type { AssistantMessage } from '@/lib/assistant-types'
 import { AssistantHistorySnapshots } from './AssistantHistorySnapshots'
 import { AssistantHistoryControls } from './AssistantHistoryControls'
 import { AssistantChats } from './AssistantChats'
+import { AssistantHandoffCard } from './AssistantHandoffCard'
 import { AssistantLiveProposals } from './AssistantLiveProposals'
 import { useAssistantProposalStore } from '@/store/assistant-proposal-store'
 import { AssistantProjectControls } from './AssistantProjectControls'
@@ -321,7 +322,10 @@ export function CreationAssistant({
                 }
               />
               {!historicalMessageIds.includes(message.id) && (
-                <AssistantLiveProposals messageId={message.id} />
+                <>
+                  <AssistantLiveProposals messageId={message.id} />
+                  <AssistantHandoffCard messageId={message.id} />
+                </>
               )}
               {message.contextMarker?.type === 'summary' && (
                 <AssistantSummaryView

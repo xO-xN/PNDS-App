@@ -4,7 +4,120 @@ use crate::project::handoff::{
 };
 use std::os::unix::fs::PermissionsExt;
 
+#[derive(Debug, Clone, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct HandoffReview {
+    pub token: String,
+    pub identity: String,
+    pub task: HandoffTask,
+    pub revision: String,
+    pub document: HandoffDocument,
+    pub fingerprint: String,
+}
+
+#[derive(Debug, Clone, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct HandoffReceipt {
+    pub task: HandoffTask,
+    pub revision: String,
+    pub document: HandoffDocument,
+    pub instructions: String,
+    pub task_recorded: bool,
+    pub baseline_id: Option<String>,
+    pub baseline_error: Option<CreationError>,
+}
+
+pub(super) fn fingerprint(project: &OpenProject) -> Result<String, CreationError> {
+    use sha2::{Digest, Sha256};
+    let mut files = Vec::new();
+    project.walk(Path::new(""), 0, &mut 0, &mut Vec::new(), &mut files)?;
+    let versions = project.watch_versions(&files)?;
+    Ok(format!(
+        "{:x}",
+        Sha256::digest(serde_json::to_vec(&versions).expect("versions serialize"))
+    ))
+}
+
 impl CreationAccess {
+    pub fn preview_handoff(
+        &mut self,
+        identity: &str,
+        task: HandoffTask,
+        protection: &Protection,
+    ) -> Result<HandoffReview, CreationError> {
+        let project = self.current(identity, protection)?;
+        ensure_editable(project)?;
+        task.validate()?;
+        use ring::rand::SecureRandom;
+        let mut random = [0u8; 32];
+        ring::rand::SystemRandom::new()
+            .fill(&mut random)
+            .map_err(|_| {
+                CreationError::new(CreationErrorCode::Io, "Could not prepare confirmation")
+            })?;
+        let review = HandoffReview {
+            token: random.iter().map(|byte| format!("{byte:02x}")).collect(),
+            identity: identity.into(),
+            revision: task.revision(),
+            task,
+            document: self.read_handoff(identity, protection)?,
+            fingerprint: fingerprint(project)?,
+        };
+        self.handoff_review = Some(review.clone());
+        Ok(review)
+    }
+
+    pub fn confirm_handoff(
+        &mut self,
+        identity: &str,
+        token: &str,
+        protection: &Protection,
+    ) -> Result<HandoffReceipt, CreationError> {
+        let project = self.current(identity, protection)?;
+        ensure_editable(project)?;
+        if let Some((previous, receipt)) = &self.handoff_receipt {
+            if previous == token {
+                return Ok(receipt.clone());
+            }
+        }
+        let review = self
+            .handoff_review
+            .as_ref()
+            .filter(|review| review.identity == identity && review.token == token)
+            .ok_or_else(|| {
+                CreationError::new(
+                    CreationErrorCode::VersionConflict,
+                    "Review the handoff again",
+                )
+            })?
+            .clone();
+        if fingerprint(project)? != review.fingerprint {
+            return Err(CreationError::new(
+                CreationErrorCode::VersionConflict,
+                "Project files changed; review the handoff again",
+            ));
+        }
+        let document = self.append_handoff_version(
+            identity,
+            &review.task,
+            review.document.version.as_deref(),
+            protection,
+            true,
+        )?;
+        let instructions = instructions(&review.task);
+        let receipt = HandoffReceipt {
+            task: review.task,
+            revision: review.revision,
+            document,
+            instructions,
+            task_recorded: true,
+            baseline_id: None,
+            baseline_error: None,
+        };
+        self.handoff_receipt = Some((token.into(), receipt.clone()));
+        Ok(receipt)
+    }
+
     pub fn read_handoff(
         &self,
         identity: &str,
@@ -27,13 +140,29 @@ impl CreationAccess {
         expected_version: Option<&str>,
         protection: &Protection,
     ) -> Result<HandoffDocument, CreationError> {
+        self.append_handoff_version(identity, task, expected_version, protection, false)
+    }
+
+    pub(super) fn append_handoff_version(
+        &self,
+        identity: &str,
+        task: &HandoffTask,
+        expected_version: Option<&str>,
+        protection: &Protection,
+        reviewed: bool,
+    ) -> Result<HandoffDocument, CreationError> {
         let project = self.current(identity, protection)?;
         ensure_editable(project)?;
         task.validate()?;
         let previous = self.read_handoff(identity, protection)?;
         // Stable IDs make a retry after a lost command reply idempotent, even if
         // an external agent has since advanced this task's status.
-        if previous.text.lines().any(|line| line == task.marker()) {
+        let marker = if reviewed {
+            task.revision_marker()
+        } else {
+            task.marker()
+        };
+        if previous.text.lines().any(|line| line == marker) {
             return Ok(previous);
         }
         if previous.version.as_deref() != expected_version {
@@ -42,7 +171,10 @@ impl CreationAccess {
                 HANDOFF_PATH,
             ));
         }
-        let text = append_task(&previous.text, task);
+        let mut text = append_task(&previous.text, task);
+        if reviewed {
+            text.push_str(&format!("{}\n", task.revision_marker()));
+        }
         if text.len() as u64 > TEXT_MAX_BYTES {
             return Err(CreationError::new(
                 CreationErrorCode::TooLarge,
@@ -187,4 +319,10 @@ fn read_document(directory: &File) -> Result<HandoffDocument, CreationError> {
     let text = String::from_utf8(bytes)
         .map_err(|error| CreationError::new(CreationErrorCode::InvalidUtf8, error.to_string()))?;
     Ok(HandoffDocument { text, version })
+}
+
+pub(super) fn instructions(task: &HandoffTask) -> String {
+    let revision = task.revision();
+    let task_id = &task.id;
+    format!("PNDS creator handoff\nTask: {task_id}\nRevision: {revision}\nRead docs/creator-handoff.md and the installed PNDS contracts referenced by AGENTS.md.\n{}\nScope: {}\nAcceptance: {}\nPending requirements are not implemented facts. Verify actual results with the creator; do not assume completion.", task.intent, task.files.join(", "), task.acceptance)
 }

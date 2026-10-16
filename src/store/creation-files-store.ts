@@ -8,6 +8,7 @@ import {
   type CreationFile,
   type CreationFileChange,
   type Result,
+  type HandoffDocument,
 } from '@/lib/tauri-bindings'
 import type { CreationParticipant } from '@/lib/creation-lifecycle'
 import { creationTransportError, useCreationStore } from './creation-store'
@@ -52,6 +53,7 @@ export interface CreationUpdateToken {
   revision: number
 }
 interface CreationFilesState {
+  handoffRecorded: (document: HandoffDocument) => void
   lastChange: CreationFileChange | null
   changeError: CreationError | null
   changeBusy: boolean
@@ -261,6 +263,28 @@ export const useCreationFilesStore = create<CreationFilesState>((set, get) => {
     }
   }
   return {
+    handoffRecorded: document => {
+      const { text, version } = document
+      if (!version) return
+      const path = 'docs/creator-handoff.md'
+      const draft = get().drafts[path]
+      if (!draft) return
+      set(state =>
+        patch(
+          state,
+          path,
+          isDraftDirty(draft)
+            ? { conflict: { text, version }, diskChanged: true }
+            : {
+                text,
+                diskText: text,
+                diskVersion: version,
+                conflict: null,
+                diskChanged: false,
+              }
+        )
+      )
+    },
     ...initialChanges(),
     lastChange: null,
     changeError: null,

@@ -14,7 +14,11 @@ use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 mod assistant;
+mod baselines;
 mod blank;
+pub use baselines::{HandoffBaselineCatalog, HandoffComparison};
+#[cfg(test)]
+mod baselines_tests;
 pub use assistant::{
     AssistantProjectOverview, AssistantProjectPage, AssistantProjectRead, AssistantProjectSearch,
     AssistantProjectSnapshot,
@@ -35,6 +39,7 @@ mod compile_tests;
 mod git;
 mod handoff;
 pub use git::{CreationGitDiff, CreationGitStatus, GitDiffLayer, GitReader};
+pub use handoff::{HandoffReceipt, HandoffReview};
 #[cfg(test)]
 mod git_tests;
 mod libraries;
@@ -225,6 +230,8 @@ pub struct CreationAccess {
     generation: u64,
     last_change: Option<(String, CreationFileChange)>,
     change_sequence: u64,
+    handoff_review: Option<HandoffReview>,
+    handoff_receipt: Option<(String, HandoffReceipt)>,
 }
 
 impl CreationAccess {

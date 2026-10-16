@@ -393,3 +393,14 @@ without writes or execution. `authorizeCreationPreview` additionally requires th
 same ready native runtime, revalidates saved source/declaration and returns actual
 source digests separately from disk fingerprints. Monitor messages never acquire
 Tauri access. See [parameter-preview.md](./parameter-preview.md).
+
+## Handoff review, baselines and comparison (#171 / #226 / #227)
+
+`previewCreationHandoff` issues the native task/version review;
+`confirmCreationHandoff` records its immutable saved origin and guarded task.
+`listHandoffBaselines`, `retryHandoffBaseline` and `deleteHandoffBaseline` manage
+only the current actual project's App-data records. `compareHandoffBaseline`
+returns actual text/resource differences; `handoffComparisonIsStale` checks
+current disk versions without a model or Git call. All use the current native
+creation identity and access lock. See [handoff-baselines.md](./handoff-baselines.md)
+for schema, limits, exclusions, partial outcomes and retry rules.

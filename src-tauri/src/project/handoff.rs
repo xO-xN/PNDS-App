@@ -21,7 +21,7 @@ pub struct HandoffTask {
     pub status: String,
 }
 
-#[derive(Debug, Serialize, Type)]
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct HandoffDocument {
     pub text: String,
@@ -29,6 +29,18 @@ pub struct HandoffDocument {
 }
 
 impl HandoffTask {
+    pub fn revision(&self) -> String {
+        use sha2::{Digest, Sha256};
+        let bytes = serde_json::to_vec(self).expect("task serializes");
+        format!("{:x}", Sha256::digest(bytes))
+    }
+
+    pub fn revision_marker(&self) -> String {
+        let id = &self.id;
+        let revision = self.revision();
+        format!("<!-- pnds-task-revision:{id}:{revision} -->")
+    }
+
     pub fn marker(&self) -> String {
         format!("<!-- pnds-task:{} -->", self.id)
     }
@@ -54,6 +66,9 @@ impl HandoffTask {
             || self.acceptance.trim().is_empty()
             || self.files.is_empty()
             || self.files.len() > 128
+            || self.intent.len() > 16_384
+            || self.acceptance.len() > 32_768
+            || self.files.iter().any(|path| path.len() > 1024)
             || !self.files.iter().all(valid_file)
             || !["pending", "in-progress", "blocked"].contains(&self.status.as_str())
         {

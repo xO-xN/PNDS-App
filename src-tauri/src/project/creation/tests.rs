@@ -2,6 +2,61 @@ use super::*;
 use std::fs;
 
 #[test]
+fn reviewed_handoff_requires_current_files_and_preserves_task_identity_on_retry() {
+    use crate::project::handoff::HandoffTask;
+    let temp = tempfile::tempdir().unwrap();
+    let root = project(temp.path(), "reviewed-handoff");
+    let protection = Protection::default();
+    let mut access = CreationAccess::default();
+    let identity = access.open(&root, &protection).unwrap().project.identity;
+    let task = HandoffTask {
+        id: "701a5180-a2dd-47dc-9319-9312f3790f64".into(),
+        intent: "Connect two files".into(),
+        files: vec!["server.js".into(), "public/new.js".into()],
+        acceptance: "Creator tests the result".into(),
+        status: "pending".into(),
+    };
+    let review = access
+        .preview_handoff(&identity, task.clone(), &protection)
+        .unwrap();
+    fs::write(root.join("server.js"), "external work").unwrap();
+    assert_eq!(
+        access
+            .confirm_handoff(&identity, &review.token, &protection)
+            .unwrap_err()
+            .code,
+        CreationErrorCode::VersionConflict
+    );
+    assert!(access
+        .read_handoff(&identity, &protection)
+        .unwrap()
+        .version
+        .is_none());
+    let fresh = access
+        .preview_handoff(&identity, task, &protection)
+        .unwrap();
+    let receipt = access
+        .confirm_handoff(&identity, &fresh.token, &protection)
+        .unwrap();
+    assert_eq!(receipt.task.id, review.task.id);
+    assert_eq!(receipt.revision, review.revision);
+    let retried = access
+        .confirm_handoff(&identity, &fresh.token, &protection)
+        .unwrap();
+    assert_eq!(retried.document.text, receipt.document.text);
+    access
+        .open(&project(temp.path(), "other-handoff"), &protection)
+        .unwrap();
+    assert_eq!(
+        access
+            .confirm_handoff(&identity, &fresh.token, &protection)
+            .unwrap_err()
+            .code,
+        CreationErrorCode::InvalidIdentity
+    );
+}
+
+#[test]
 fn blank_project_is_complete_localized_and_prepared_without_replacing_the_old_workspace() {
     let temp = tempfile::tempdir().unwrap();
     let old = project(temp.path(), "old");

@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { useAssistantHandoffStore } from './assistant-handoff-store'
 import { currentResolvedLanguage } from '@/i18n/config'
 import { loadPreferences } from '@/lib/preferences'
 import type {
@@ -787,6 +788,10 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
             : message
         ),
       }))
+      if (result.handoff)
+        useAssistantHandoffStore
+          .getState()
+          .offer(owner, replyId, result.handoff)
       const projectKey = get().historyProjectKey
       if (result.proposals?.length && projectKey) {
         useAssistantProposalStore

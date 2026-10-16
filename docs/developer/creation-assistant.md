@@ -504,3 +504,12 @@ The live saved-versus-loaded notice follows the existing verified page-refresh
 or restart completion: it clears only after saved changes have no outstanding
 refresh/restart prompts in a ready runtime. Historical notices remain snapshots.
 Source reload transport failures preserve the candidate and show a typed error.
+
+## Confirmed external handoff (#171)
+
+Complex/new/delete/rename/cross-file work uses the declarative `propose_handoff`
+preview in the same request flow. The card asks for consent with the concrete
+reason, explicit task fields and unimplemented requirements. It cannot call a
+writer or dispatch external work. The reviewed task service, draft choices,
+immutable origin journal and local comparison are described in
+[handoff-baselines.md](./handoff-baselines.md).

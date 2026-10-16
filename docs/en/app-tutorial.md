@@ -387,3 +387,24 @@ your input. File changes require a fresh scope review, and project/service chang
 invalidate the confirmation. Oversized ranges are refused with suggestions to ask
 about relevant files or sections; they are never silently truncated and called
 complete. The estimate includes the assembled request and is not provider usage.
+
+For complex or cross-file work, inspect the assistant's external handoff preview
+and choose whether to continue. Review intent, relative files, known problems
+and acceptance, then explicitly confirm the task. With drafts, choose **Save
+drafts first** or **Use saved files only**; pending suggestions and temporary
+preview are never applied by this choice. A handoff-document draft is preserved
+and may conflict with the newly recorded task. Task writing and comparison
+baseline completion report separate outcomes; retry an incomplete handoff from
+the baseline list without replacing its captured origin. Copy instructions to
+your chosen external agent yourself; the App does not dispatch the task.
+
+Open **Changes since handoff**, select a task/revision baseline and compare the
+current saved files. This works without Git and after external commits. Text
+shows actual differences; resources show SHA-256 and size without recoverable
+copies. Drafts and exclusions are separate. Refresh a stale result explicitly.
+**Open current file** enters your normal editor; deleted files have differences
+only. Return to this comparison or discussion and test effects manually with
+the same monitor. Comparing does not send contents to AI, save, restore, start
+or refresh runtime, commit or mark tasks complete. Baselines stay in App data
+across restarts and chat cleanup; inspect usage and explicitly delete selected
+baselines when wanted. They cannot restore a project or its resources.

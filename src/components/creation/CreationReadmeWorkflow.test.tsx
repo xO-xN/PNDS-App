@@ -43,6 +43,24 @@ const workspace: CreationWorkspace = {
 beforeEach(async () => {
   await i18n.changeLanguage('en')
   vi.clearAllMocks()
+  vi.mocked(commands.previewCreationHandoff).mockImplementation(
+    async (identity, task) => {
+      const document = await commands.readCreationHandoff(identity)
+      return document.status === 'ok'
+        ? {
+            status: 'ok',
+            data: {
+              token: 'review',
+              identity,
+              task,
+              revision: 'r1',
+              fingerprint: 'files',
+              document: document.data,
+            },
+          }
+        : document
+    }
+  )
   useCreationStore.setState({ workspace, active: true, modePhase: 'idle' })
   useCreationFilesStore.getState().clear()
   useCreationHandoffStore.getState().clear()
@@ -311,21 +329,37 @@ it('keeps a manual task when cancelled or when the creator declines switching pr
   expect(await screen.findByRole('textbox', { name: 'Intent' })).toHaveValue(
     'Connect the new sound mapping'
   )
-  vi.mocked(commands.appendCreationHandoff).mockResolvedValueOnce({
+  vi.mocked(commands.confirmCreationHandoff).mockResolvedValueOnce({
     status: 'ok',
-    data: { text: 'Task with creator status', version: 'manual-v1' },
+    data: {
+      task: {
+        id: 'task',
+        intent: 'manual',
+        files: ['README.md'],
+        acceptance: 'check',
+        status: 'in-progress',
+      },
+      revision: 'r1',
+      instructions: 'manual instructions',
+      taskRecorded: true,
+      baselineId: 'b1',
+      baselineError: null,
+      document: { text: 'Task with creator status', version: 'manual-v1' },
+    },
   })
   fireEvent.click(screen.getByRole('button', { name: 'Add to handoff' }))
+  fireEvent.click(
+    await screen.findByRole('button', { name: 'Confirm this handoff' })
+  )
   await screen.findByText(
     'Task recorded; implementation and verification remain with the external agent.'
   )
-  expect(commands.appendCreationHandoff).toHaveBeenCalledWith(
+  expect(commands.previewCreationHandoff).toHaveBeenCalledWith(
     'readme',
     expect.objectContaining({
       status: 'in-progress',
       files: ['audio/controller.js', 'public/monitor.js'],
-    }),
-    null
+    })
   )
 })
 
@@ -385,7 +419,7 @@ it('offers saved README language sync and preserves the task on conflict, cancel
       name: 'Affected files (one per line)',
     })
   ).toHaveValue('README.md\nREADME.zh-CN.md')
-  vi.mocked(commands.appendCreationHandoff).mockResolvedValueOnce({
+  vi.mocked(commands.confirmCreationHandoff).mockResolvedValueOnce({
     status: 'error',
     error: { code: 'versionConflict', detail: 'changed' },
   })
@@ -399,6 +433,9 @@ it('offers saved README language sync and preserves the task on conflict, cancel
   fireEvent.click(
     within(dialog).getByRole('button', { name: 'Add to handoff' })
   )
+  fireEvent.click(
+    await screen.findByRole('button', { name: 'Confirm this handoff' })
+  )
   await screen.findByText('Agent marked previous task complete')
   fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
@@ -409,7 +446,7 @@ it('offers saved README language sync and preserves the task on conflict, cancel
       name: 'Affected files (one per line)',
     })
   ).toHaveValue('README.md\nREADME.zh-CN.md')
-  vi.mocked(commands.appendCreationHandoff).mockResolvedValueOnce({
+  vi.mocked(commands.confirmCreationHandoff).mockResolvedValueOnce({
     status: 'error',
     error: { code: 'versionConflict', detail: 'changed again' },
   })
@@ -420,27 +457,49 @@ it('offers saved README language sync and preserves the task on conflict, cancel
   fireEvent.click(
     within(reopened).getByRole('button', { name: 'Add to handoff' })
   )
+  fireEvent.click(
+    await screen.findByRole('button', { name: 'Confirm this handoff' })
+  )
   await screen.findByText('Agent changed disk again')
-  vi.mocked(commands.appendCreationHandoff).mockResolvedValueOnce({
+  vi.mocked(commands.confirmCreationHandoff).mockResolvedValueOnce({
     status: 'ok',
-    data: { text: 'Agent work plus pending sync task', version: 'handoff-v4' },
+    data: {
+      task: {
+        id: 'task',
+        intent: 'sync',
+        files: ['README.md'],
+        acceptance: 'check',
+        status: 'pending',
+      },
+      revision: 'r1',
+      instructions: 'sync instructions',
+      taskRecorded: true,
+      baselineId: 'b1',
+      baselineError: null,
+      document: {
+        text: 'Agent work plus pending sync task',
+        version: 'handoff-v4',
+      },
+    },
   })
   fireEvent.click(
     within(reopened).getByRole('button', {
       name: 'Confirm append to this version',
     })
   )
+  fireEvent.click(
+    await screen.findByRole('button', { name: 'Confirm this handoff' })
+  )
   await screen.findByText(
     'Task recorded; implementation and verification remain with the external agent.'
   )
-  expect(commands.appendCreationHandoff).toHaveBeenLastCalledWith(
+  expect(commands.previewCreationHandoff).toHaveBeenLastCalledWith(
     'readme',
     expect.objectContaining({
       status: 'pending',
       files: ['README.md', 'README.zh-CN.md'],
       acceptance: expect.stringContaining('saved-v2'),
-    }),
-    'handoff-v3'
+    })
   )
   expect(commands.startProject).not.toHaveBeenCalled()
 })

@@ -72,7 +72,7 @@ pub struct AssistantProjectSearch {
     pub remaining_files: u32,
 }
 
-fn excluded(path: &str) -> Option<&'static str> {
+pub(super) fn excluded(path: &str) -> Option<&'static str> {
     let lower = path.to_ascii_lowercase();
     let parts: Vec<_> = lower.split('/').collect();
     if parts.iter().any(|part| {

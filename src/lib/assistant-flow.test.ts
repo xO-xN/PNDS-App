@@ -107,6 +107,46 @@ async function service(turns: AssistantTurn[]) {
 }
 
 describe('highest platform assistant request (#166)', () => {
+  it('offers complex work only as a handoff preview without creating a task (#171)', async () => {
+    const suggestion = {
+      reason: 'Requires a new file and cross-file wiring',
+      intent: 'Connect a new module',
+      files: ['server.js', 'new.js'],
+      knownProblems: 'Not implemented; preview adapter is absent',
+      acceptance: 'Creator checks the two outputs',
+    }
+    const { deps } = await service([
+      {
+        text: null,
+        toolCalls: [
+          {
+            id: 'handoff',
+            name: 'propose_handoff',
+            arguments: JSON.stringify(suggestion),
+          },
+        ],
+      },
+      {
+        text: 'Would you like to hand this work to an external agent?',
+        toolCalls: [],
+      },
+    ])
+    const result = await runAssistantRequest(
+      {
+        identity: 'project',
+        input: 'Add the module',
+        history: [],
+        locale: 'en',
+        signal: new AbortController().signal,
+        isCurrent: () => true,
+        projectReading: true,
+        project: { fingerprint: 'scope', files: [] },
+      },
+      deps
+    )
+    expect(result.handoff).toMatchObject(suggestion)
+    expect(result.proposals).toBeUndefined()
+  })
   it('offers one pending saved-text proposal through the same model HTTP workflow without writing (#208)', async () => {
     const source = 'const speed = 2;\n'
     const { deps } = await service([

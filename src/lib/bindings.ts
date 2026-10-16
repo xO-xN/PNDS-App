@@ -596,6 +596,62 @@ async readCreationHandoff(identity: string) : Promise<Result<HandoffDocument, Cr
     else return { status: "error", error: e  as any };
 }
 },
+async previewCreationHandoff(identity: string, task: HandoffTask) : Promise<Result<HandoffReview, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("preview_creation_handoff", { identity, task }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async confirmCreationHandoff(identity: string, token: string) : Promise<Result<HandoffReceipt, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("confirm_creation_handoff", { identity, token }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async listHandoffBaselines(identity: string) : Promise<Result<HandoffBaselineCatalog, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("list_handoff_baselines", { identity }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async retryHandoffBaseline(identity: string, id: string) : Promise<Result<HandoffReceipt, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("retry_handoff_baseline", { identity, id }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async deleteHandoffBaseline(identity: string, id: string) : Promise<Result<null, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("delete_handoff_baseline", { identity, id }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async compareHandoffBaseline(identity: string, id: string) : Promise<Result<HandoffComparison, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("compare_handoff_baseline", { identity, id }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async handoffComparisonIsStale(identity: string, fingerprint: string) : Promise<Result<boolean, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("handoff_comparison_is_stale", { identity, fingerprint }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async appendCreationHandoff(identity: string, task: HandoffTask, expectedVersion: string | null) : Promise<Result<HandoffDocument, CreationError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("append_creation_handoff", { identity, task, expectedVersion }) };
@@ -1426,6 +1482,8 @@ export type AudioMode = "internal" | "external" | "none"
  * device supports that rate.
  */
 export type AudioOutputDevice = { name: string; isDefault: boolean; maxOutputChannels: number }
+export type BaselineExclusion = { path: string; reason: string }
+export type BaselineFile = { path: string; sha256: string; size: number; text: string | null }
 export type BoundParameter = { request: ParameterRequest; value: JsonValue | null }
 /**
  * One tool as the frontend sees it: its registry id, the stable project
@@ -1604,7 +1662,13 @@ export type GitDiffLayer = "staged" | "unstaged" | "untracked"
 export type GitDiffState = "text" | "binary" | "unreadable" | "tooLarge" | "unavailable" | "timeout" | "noChange"
 export type GitEvidence = { head: string | null; dirty: boolean | null; state: string; detail: string | null }
 export type GitState = "available" | "gitUnavailable" | "notRepository" | "unreadable" | "tooLarge" | "timeout"
+export type HandoffBaselineCatalog = { baselines: HandoffBaselineSummary[]; usedBytes: number; limitBytes: number }
+export type HandoffBaselineSummary = { id: string; taskId: string; task: HandoffTask | null; intent: string; revision: string; capturedAt: number; complete: boolean; bytes: number; files: number; excluded: BaselineExclusion[]; error: CreationError | null }
+export type HandoffComparison = { baselineId: string; task: HandoffTask; revision: string; capturedAt: number; currentFingerprint: string; changes: HandoffFileDifference[]; baselineExcluded: BaselineExclusion[]; currentExcluded: BaselineExclusion[]; comparedFiles: number }
 export type HandoffDocument = { text: string; version: string | null }
+export type HandoffFileDifference = { path: string; kind: string; mentioned: boolean; before: BaselineFile | null; after: BaselineFile | null }
+export type HandoffReceipt = { task: HandoffTask; revision: string; document: HandoffDocument; instructions: string; taskRecorded: boolean; baselineId: string | null; baselineError: CreationError | null }
+export type HandoffReview = { token: string; identity: string; task: HandoffTask; revision: string; document: HandoffDocument; fingerprint: string }
 export type HandoffTask = { id: string; intent: string; files: string[]; acceptance: string; status: string }
 export type HealthAudio = { 
 /**

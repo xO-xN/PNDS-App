@@ -1,3 +1,4 @@
+import { CreationHandoffBaselines } from './CreationHandoffBaselines'
 import {
   useEffect,
   useLayoutEffect,
@@ -629,6 +630,27 @@ function ReadingWorkspace({
                   ? 'assistant.discussion'
                   : 'assistant.back'
               )}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() =>
+                useCreationReadingStore.getState().showExtension(
+                  {
+                    id: 'handoff-baselines',
+                    title: t('handoff.baselines.title'),
+                    content: (
+                      <CreationHandoffBaselines
+                        key={project.identity}
+                        identity={project.identity}
+                      />
+                    ),
+                  },
+                  useCreationReadingStore.getState().returnMessageId ?? ''
+                )
+              }
+            >
+              {t('handoff.baselines.title')}
             </Button>
             {files.some(file => file.path === HANDOFF_PATH) && (
               <Button

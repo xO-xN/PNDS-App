@@ -1,3 +1,5 @@
+import { writeText } from '@tauri-apps/plugin-clipboard-manager'
+import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import {
@@ -19,7 +21,10 @@ import {
   HANDOFF_PATH,
   useCreationHandoffStore,
 } from '@/store/creation-handoff-store'
-import { useCreationFilesStore } from '@/store/creation-files-store'
+import {
+  isDraftDirty,
+  useCreationFilesStore,
+} from '@/store/creation-files-store'
 import { useCreationTestStore } from '@/store/creation-test-store'
 import { CreationErrorNotice } from './CreationErrorNotice'
 import { cn } from '@/lib/utils'
@@ -43,6 +48,10 @@ export function CreationHandoff({
   const conflict = useCreationHandoffStore(state => state.conflict)
   const error = useCreationHandoffStore(state => state.error)
   const recorded = useCreationHandoffStore(state => state.recorded)
+  const draftChoice = useCreationHandoffStore(state => state.draftChoice)
+  const drafts = useCreationFilesStore(state => state.drafts)
+  const review = useCreationHandoffStore(state => state.review)
+  const receipt = useCreationHandoffStore(state => state.receipt)
   const task = pending.find(item => item.task.id === activeId)?.task
   return (
     <div
@@ -91,6 +100,42 @@ export function CreationHandoff({
           ))}
       </div>
       {recorded && <p role="status">{t('creation.handoff.recorded')}</p>}
+      {receipt?.baselineError && (
+        <div role="alert">
+          {t(
+            receipt.taskRecorded
+              ? 'creation.handoff.baselineFailed'
+              : 'creation.handoff.taskFailed'
+          )}
+          <CreationErrorNotice error={receipt.baselineError} />
+        </div>
+      )}
+      {receipt?.baselineId &&
+        !receipt.baselineError &&
+        receipt.taskRecorded && (
+          <p role="status">{t('creation.handoff.baselineReady')}</p>
+        )}
+      {receipt?.taskRecorded && (
+        <div className="space-y-2 text-xs">
+          <p>
+            {t('creation.handoff.revision', {
+              id: receipt.task.id,
+              revision: receipt.revision,
+            })}
+          </p>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() =>
+              void writeText(receipt.instructions)
+                .then(() => toast.success(t('creation.handoff.copied')))
+                .catch(() => toast.error(t('toast.error.generic')))
+            }
+          >
+            {t('creation.handoff.copy')}
+          </Button>
+        </div>
+      )}
       <Dialog
         open={!!task}
         onOpenChange={open => {
@@ -151,6 +196,50 @@ export function CreationHandoff({
               </label>
             </fieldset>
           )}
+          {draftChoice && (
+            <div
+              role="group"
+              aria-label={t('creation.handoff.draftTitle')}
+              className="space-y-2 text-sm"
+            >
+              <p>{t('creation.handoff.draftHint')}</p>
+              <ul>
+                {Object.entries(drafts)
+                  .filter(([, draft]) => isDraftDirty(draft))
+                  .map(([path]) => (
+                    <li key={path}>{path}</li>
+                  ))}
+              </ul>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  disabled={busy}
+                  onClick={() =>
+                    void useCreationHandoffStore.getState().record('save')
+                  }
+                >
+                  {t('creation.handoff.saveFirst')}
+                </Button>
+                <Button
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() =>
+                    void useCreationHandoffStore.getState().record('saved')
+                  }
+                >
+                  {t('creation.handoff.savedOnly')}
+                </Button>
+              </div>
+            </div>
+          )}
+          {review && (
+            <p role="status" className="break-all text-xs">
+              {t('creation.handoff.reviewHint')}{' '}
+              {t('creation.handoff.revision', {
+                id: review.task.id,
+                revision: review.revision,
+              })}
+            </p>
+          )}
           {busy && <p role="status">{t('creation.loading')}</p>}
           {error && <CreationErrorNotice error={error} />}
           {conflict && <p role="alert">{t('creation.handoff.conflict')}</p>}
@@ -188,6 +277,7 @@ export function CreationHandoff({
             <Button
               disabled={
                 busy ||
+                draftChoice ||
                 !document ||
                 !task?.intent.trim() ||
                 !task.acceptance.trim() ||
@@ -196,9 +286,11 @@ export function CreationHandoff({
               onClick={() => void useCreationHandoffStore.getState().record()}
             >
               {t(
-                conflict
-                  ? 'creation.handoff.confirmAppend'
-                  : 'creation.handoff.record'
+                review
+                  ? 'creation.handoff.confirmReviewed'
+                  : conflict
+                    ? 'creation.handoff.confirmAppend'
+                    : 'creation.handoff.record'
               )}
             </Button>
           </DialogFooter>
