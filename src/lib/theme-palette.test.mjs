@@ -33,6 +33,19 @@ function contrast(a, b) {
   return (high + 0.05) / (low + 0.05)
 }
 
+function mix(a, b, amount) {
+  return `#${[1, 3, 5]
+    .map(offset =>
+      Math.round(
+        parseInt(a.slice(offset, offset + 2), 16) * (1 - amount) +
+          parseInt(b.slice(offset, offset + 2), 16) * amount
+      )
+        .toString(16)
+        .padStart(2, '0')
+    )
+    .join('')}`
+}
+
 describe.each(COLOR_THEME_OPTIONS)('$value color palette', option => {
   const properties = { ...blocks.pond, ...blocks[option.value] }
   const color = name => {
@@ -80,6 +93,25 @@ describe.each(COLOR_THEME_OPTIONS)('$value color palette', option => {
     }
   )
 
+  it.each([
+    'keyword',
+    'string',
+    'number',
+    'type',
+    'function',
+    'property',
+    'comment',
+  ])('keeps syntax %s readable on editor and highlight surfaces', role => {
+    const card = color('pnds-card')
+    const selection = color('pnds-selection')
+    for (const surface of [card, selection, mix(card, selection, 0.35)]) {
+      expect(
+        contrast(color(`pnds-syntax-${role}`), surface),
+        `${role} on ${surface}`
+      ).toBeGreaterThanOrEqual(4.5)
+    }
+  })
+
   it('keeps input boundaries and focus indicators visible', () => {
     for (const surface of ['bg', 'sidebar-bg', 'card', 'pill']) {
       expect(
@@ -88,6 +120,38 @@ describe.each(COLOR_THEME_OPTIONS)('$value color palette', option => {
       expect(
         contrast(color('ring'), color(`pnds-${surface}`))
       ).toBeGreaterThanOrEqual(3)
+    }
+  })
+
+  it('keeps chat bubble text, errors, code and keyboard focus readable', () => {
+    const bubble = color('pnds-chat-user')
+    for (const role of ['text', 'muted', 'danger']) {
+      expect(
+        contrast(color(`pnds-chat-user-${role}`), bubble)
+      ).toBeGreaterThanOrEqual(4.5)
+    }
+    const ink = color('pnds-chat-user-text')
+    expect(contrast(ink, mix(bubble, ink, 0.1))).toBeGreaterThanOrEqual(4.5)
+    expect(contrast(ink, bubble)).toBeGreaterThanOrEqual(3)
+  })
+
+  it('keeps estimated context colors and their continuous blends readable', () => {
+    for (const [start, end] of [
+      ['low', 'mid'],
+      ['mid', 'high'],
+    ]) {
+      for (let step = 0; step <= 10; step++) {
+        const ink = mix(
+          color(`pnds-context-${start}`),
+          color(`pnds-context-${end}`),
+          step / 10
+        )
+        for (const surface of ['bg', 'card', 'pill']) {
+          expect(
+            contrast(ink, color(`pnds-${surface}`))
+          ).toBeGreaterThanOrEqual(4.5)
+        }
+      }
     }
   })
 

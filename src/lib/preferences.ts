@@ -1,5 +1,6 @@
 import { commands, expectOk, type AppPreferences } from '@/lib/tauri-bindings'
 import { logger } from '@/lib/logger'
+import { modelProfileKey } from './model-context-settings'
 
 /**
  * THE app-local preferences module (§6.5, §6.6). Every preference write in
@@ -84,6 +85,8 @@ export type PreferencesPatch = Partial<
   Pick<
     AppPreferences,
     | 'language'
+    | 'modelService'
+    | 'assistantMonitorRatio'
     | 'colorTheme'
     | 'sampleRate'
     | 'outputDevice'
@@ -135,6 +138,28 @@ export async function updatePreferences(
   patch: PreferencesPatch
 ): Promise<boolean> {
   return enqueueSave(prefs => ({ ...prefs, ...patch }))
+}
+
+/** Merge a model's public profile inside the existing serialized writer. */
+export async function updateModelService(
+  config: NonNullable<AppPreferences['modelService']> | null
+): Promise<boolean> {
+  return enqueueSave(prefs => ({
+    ...prefs,
+    modelService: config,
+    modelContextProfiles: [
+      ...(prefs.modelContextProfiles ?? []).filter(
+        profile =>
+          modelProfileKey(profile) !==
+          (config
+            ? modelProfileKey(config)
+            : prefs.modelService
+              ? modelProfileKey(prefs.modelService)
+              : '')
+      ),
+      ...(config ? [config] : []),
+    ],
+  }))
 }
 
 /**

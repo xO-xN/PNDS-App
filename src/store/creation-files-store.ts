@@ -1,15 +1,18 @@
 import { create } from 'zustand'
+import type { TextBuffer } from '@/lib/text-buffer'
 import i18n from '@/i18n/config'
 import {
   commands,
   type CreationContent,
   type CreationError,
   type CreationFile,
+  type CreationFileChange,
   type Result,
 } from '@/lib/tauri-bindings'
 import type { CreationParticipant } from '@/lib/creation-lifecycle'
 import { creationTransportError, useCreationStore } from './creation-store'
 import { useSessionStore } from './session-store'
+import { useCreationReadingStore } from './creation-reading-store'
 import { useCreationHandoffStore } from './creation-handoff-store'
 import {
   editReadmeCover,
@@ -26,6 +29,9 @@ import {
  */
 export interface CreationDraft {
   text: string
+  /** Session-only editing state, shared across file/layout remounts. */
+  editor?: TextBuffer
+  editorRevision?: number
   /** Source spans belong to this same draft, retaining safe editing boundaries during incomplete keystrokes. */
   readme?: EditableReadme
   /** Disk content of `diskVersion` — the base the draft diverges from. */
@@ -46,6 +52,17 @@ export interface CreationUpdateToken {
   revision: number
 }
 interface CreationFilesState {
+  lastChange: CreationFileChange | null
+  changeError: CreationError | null
+  changeBusy: boolean
+  saveReviewed: (
+    path: string,
+    before: string,
+    after: string,
+    version: string,
+    identity: string
+  ) => Promise<boolean>
+  undoChange: (identity: string, changeId: string) => Promise<void>
   revision: number
   diskRevision: number
   fileRevisions: Record<string, number>
@@ -57,6 +74,9 @@ interface CreationFilesState {
   complete: (token: CreationUpdateToken | null, kind: UpdateKind) => void
   drafts: Record<string, CreationDraft>
   activePath: string | null
+  location: { identity: string; path: string; line: number } | null
+  attachEditor: (path: string, editor: TextBuffer) => void
+  locate: (identity: string, path: string, line: number) => boolean
   readmeLocale: string | null
   /** Canonical path of the last rename, so the editor can show the
    * external-agent reference hint until that file is edited or saved. */
@@ -99,7 +119,20 @@ function patch(
 ): Partial<CreationFilesState> {
   const draft = state.drafts[path]
   if (!draft) return {}
-  return { drafts: { ...state.drafts, [path]: { ...draft, ...update } } }
+  const reset =
+    update.text !== undefined &&
+    update.diskVersion !== undefined &&
+    update.diskVersion !== draft.diskVersion
+  return {
+    drafts: {
+      ...state.drafts,
+      [path]: {
+        ...draft,
+        ...update,
+        ...(reset ? { editorRevision: (draft.editorRevision ?? 0) + 1 } : {}),
+      },
+    },
+  }
 }
 
 /** Late async results may only touch drafts of the workspace still shown. */
@@ -228,6 +261,153 @@ export const useCreationFilesStore = create<CreationFilesState>((set, get) => {
   }
   return {
     ...initialChanges(),
+    lastChange: null,
+    changeError: null,
+    changeBusy: false,
+    saveReviewed: async (path, before, after, version, expectedIdentity) => {
+      const workspace = useCreationStore.getState().workspace
+      const draft = get().drafts[path]
+      if (
+        !workspace ||
+        workspace.project.identity !== expectedIdentity ||
+        workspace.project.source !== 'folder' ||
+        !draft ||
+        get().changeBusy ||
+        draft.saving ||
+        draft.renaming ||
+        draft.conflict ||
+        draft.diskChanged ||
+        draft.text !== after ||
+        draft.diskText !== before ||
+        draft.diskVersion !== version ||
+        before === after
+      )
+        return false
+      const identity = workspace.project.identity
+      const owns = beginCreationFileOperation(path)
+      set(state => ({
+        ...patch(state, path, { saving: true }),
+        changeBusy: true,
+        changeError: null,
+      }))
+      try {
+        const result = await commands.saveCreationFileChange(
+          identity,
+          path,
+          after,
+          version
+        )
+        if (!owns()) return false
+        if (result.status === 'error') {
+          set({ changeError: result.error })
+          return false
+        }
+        const change = result.data
+        set(state => ({
+          ...patch(state, path, {
+            diskText: change.afterText,
+            diskVersion: change.afterVersion,
+            conflict: null,
+            diskChanged: false,
+            error: null,
+          }),
+          lastChange: change,
+        }))
+        get().changed([path])
+        useCreationHandoffStore
+          .getState()
+          .offerReadmeSync(
+            path,
+            change.afterVersion,
+            get().readmeLocale ?? i18n.resolvedLanguage ?? 'en'
+          )
+        return true
+      } catch (error) {
+        if (owns()) set({ changeError: creationTransportError(error) })
+        return false
+      } finally {
+        if (owns())
+          set(state => ({
+            ...patch(state, path, { saving: false }),
+            changeBusy: false,
+          }))
+      }
+    },
+    undoChange: async (identity, changeId) => {
+      const workspace = useCreationStore.getState().workspace
+      const change = get().lastChange
+      if (
+        !workspace ||
+        workspace.project.identity !== identity ||
+        workspace.project.source !== 'folder' ||
+        !change ||
+        change.id !== changeId ||
+        get().changeBusy
+      )
+        return
+      const draft = get().drafts[change.path]
+      if (
+        !draft ||
+        isDraftDirty(draft) ||
+        draft.saving ||
+        draft.renaming ||
+        draft.diskVersion !== change.afterVersion
+      ) {
+        set({
+          changeError: {
+            code: 'versionConflict',
+            detail: i18n.t('creation.change.draftConflict'),
+          },
+        })
+        return
+      }
+      const owns = beginCreationFileOperation(change.path)
+      set(state => ({
+        ...patch(state, change.path, { saving: true }),
+        changeBusy: true,
+        changeError: null,
+      }))
+      try {
+        const result = await commands.undoCreationFileChange(
+          workspace.project.identity,
+          change.id
+        )
+        if (!owns()) return
+        if (result.status === 'error') {
+          set({ changeError: result.error })
+          return
+        }
+        if (result.data.kind !== 'text') return
+        const disk = result.data
+        set(state => ({
+          ...patch(state, change.path, {
+            ...(state.drafts[change.path]?.text === draft.text
+              ? {
+                  text: disk.text,
+                  readme: isProjectReadme(change.path)
+                    ? inspectEditableReadme(disk.text)
+                    : undefined,
+                }
+              : {}),
+            diskText: disk.text,
+            diskVersion: disk.version,
+            conflict: null,
+            diskChanged: false,
+            error: null,
+          }),
+          lastChange: null,
+        }))
+        get().changed([change.path])
+      } catch (error) {
+        if (owns()) set({ changeError: creationTransportError(error) })
+      } finally {
+        if (owns())
+          set(state => ({
+            ...patch(state, change.path, { saving: false }),
+            changeBusy: false,
+          }))
+      }
+    },
     changed: paths => {
       if (!paths.length) return
       const workspace = useCreationStore.getState().workspace
@@ -348,10 +528,35 @@ export const useCreationFilesStore = create<CreationFilesState>((set, get) => {
     },
     drafts: {},
     activePath: null,
+    location: null,
+    attachEditor: (path, editor) =>
+      set(state => patch(state, path, { editor })),
+    locate: (identity, path, line) => {
+      const workspace = useCreationStore.getState().workspace
+      if (
+        workspace?.project.identity !== identity ||
+        !Number.isInteger(line) ||
+        line < 1 ||
+        !workspace.files.some(
+          file => file.path === path && file.kind === 'text'
+        )
+      )
+        return false
+      set({
+        activePath: path,
+        location: { identity, path, line },
+        renameNote: null,
+      })
+      useCreationReadingStore.getState().showFile()
+      return true
+    },
     readmeLocale: null,
     renameNote: null,
     dismissedConflict: null,
-    setActivePath: path => set({ activePath: path, renameNote: null }),
+    setActivePath: path => {
+      set({ activePath: path, location: null, renameNote: null })
+      if (path) useCreationReadingStore.getState().showFile()
+    },
     setReadmeLocale: readmeLocale => set({ readmeLocale }),
     read: async (identity, path) => {
       const workspace = useCreationStore.getState().workspace
@@ -504,6 +709,7 @@ export const useCreationFilesStore = create<CreationFilesState>((set, get) => {
             error: null,
           }),
           renameNote: state.renameNote === path ? null : state.renameNote,
+          lastChange: null,
         }))
         get().changed([path])
         useCreationHandoffStore
@@ -598,11 +804,17 @@ export const useCreationFilesStore = create<CreationFilesState>((set, get) => {
               },
               activePath: canonical,
               renameNote: canonical,
+              lastChange: null,
             }
           const drafts = moved
             ? { ...remaining, [canonical]: { ...moved, renaming: false } }
             : state.drafts
-          return { drafts, activePath: canonical, renameNote: canonical }
+          return {
+            drafts,
+            activePath: canonical,
+            renameNote: canonical,
+            lastChange: null,
+          }
         })
         get().changed([path, canonical])
         const revision = get().revision
@@ -626,8 +838,12 @@ export const useCreationFilesStore = create<CreationFilesState>((set, get) => {
       polling = null
       set({
         ...initialChanges(),
+        lastChange: null,
+        changeError: null,
+        changeBusy: false,
         drafts: {},
         activePath: null,
+        location: null,
         readmeLocale: null,
         renameNote: null,
         dismissedConflict: null,
@@ -685,5 +901,6 @@ useCreationStore.subscribe(state => {
   if (identity !== fileWorkspaceIdentity) {
     fileWorkspaceIdentity = identity
     useCreationFilesStore.getState().clear()
+    useCreationReadingStore.getState().syncWorkspace(identity)
   }
 })

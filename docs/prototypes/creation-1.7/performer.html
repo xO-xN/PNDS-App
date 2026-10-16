@@ -1,0 +1,547 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>潮汐 · Performer 原型</title>
+    <style>
+      :root {
+        font-family:
+          -apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'PingFang SC',
+          sans-serif;
+        color: #e7eee9;
+        background: #1b2220;
+        font-size: 13px;
+        color-scheme: dark;
+        --line: #3b4942;
+        --muted: #a7b6ad;
+        --accent: #b7d5bc;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        height: 100dvh;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      button,
+      input {
+        font: inherit;
+      }
+      button {
+        color: inherit;
+        background: #2a3530;
+        border: 1px solid var(--line);
+        border-radius: 5px;
+        padding: 6px 10px;
+        cursor: default;
+      }
+      button:hover {
+        background: #39483e;
+      }
+      button[aria-pressed='true'] {
+        background: #b7d5bc;
+        border-color: #b7d5bc;
+        color: #203427;
+      }
+      button:focus-visible,
+      input:focus-visible,
+      [tabindex]:focus-visible {
+        outline: 2px solid #d3e4c3;
+        outline-offset: 3px;
+      }
+      .toolbar {
+        padding: 13px 16px 10px;
+        border-block-end: 1px solid var(--line);
+        background: #222b27;
+      }
+      .title-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-block-end: 12px;
+      }
+      .title-row strong {
+        font-weight: 600;
+      }
+      .title-row span {
+        color: var(--muted);
+        margin-inline-start: 8px;
+      }
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px 14px;
+      }
+      .group {
+        display: flex;
+        gap: 4px;
+      }
+      .touch-option {
+        display: inline-flex;
+        gap: 6px;
+        align-items: center;
+        line-height: 1.7;
+      }
+      input {
+        accent-color: #b7d5bc;
+      }
+      .viewport-info {
+        margin-block-start: 9px;
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .stage {
+        position: relative;
+        min-block-size: 0;
+        flex: 1;
+        overflow: hidden;
+      }
+      .device {
+        position: absolute;
+        inset-block-start: 50%;
+        inset-inline-start: 50%;
+        width: 390px;
+        height: 844px;
+        transform: translate(-50%, -50%) scale(var(--scale, 0.6));
+        transform-origin: center;
+        border: 1px solid #5c6f60;
+        border-radius: 24px;
+        overflow: hidden;
+        background: #10291f;
+        box-shadow: 0 12px 36px #0005;
+        display: flex;
+        flex-direction: column;
+      }
+      .score-header {
+        padding: 38px 30px 24px;
+        border-block-end: 1px solid #b7d5bc30;
+      }
+      .score-header h1 {
+        margin: 0;
+        font-size: 30px;
+        font-weight: 450;
+        letter-spacing: 2px;
+      }
+      .score-header p {
+        margin: 8px 0 0;
+        color: #b7cfbe;
+        font-size: 13px;
+      }
+      .field {
+        position: relative;
+        flex: 1;
+        min-block-size: 120px;
+        margin: 24px;
+        overflow: hidden;
+        border: 1px solid #b7d5bc42;
+        border-radius: 50% 50% 6px 6px;
+        touch-action: none;
+        background: #143428;
+      }
+      .field svg {
+        width: 100%;
+        height: 100%;
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+      }
+      .field::before,
+      .field::after {
+        content: '';
+        position: absolute;
+        background: #b7d5bc18;
+        pointer-events: none;
+      }
+      .field::before {
+        width: 1px;
+        height: 100%;
+        inset-inline-start: 50%;
+      }
+      .field::after {
+        height: 1px;
+        width: 100%;
+        inset-block-start: 50%;
+      }
+      .marker {
+        position: absolute;
+        width: 25px;
+        height: 25px;
+        border: 2px solid #e0e9c8;
+        background: #d7e3b7;
+        border-radius: 50%;
+        transform: translate(-50%, -50%);
+        inset-inline-start: 50%;
+        inset-block-start: 50%;
+        box-shadow: 0 0 0 14px #cfe1b51a;
+        pointer-events: none;
+      }
+      .axis {
+        position: absolute;
+        color: #accab6;
+        font-size: 12px;
+        pointer-events: none;
+      }
+      .axis-a {
+        inset-inline-start: 15px;
+        inset-block-end: 15px;
+      }
+      .axis-b {
+        inset-inline-end: 15px;
+        inset-block-end: 15px;
+      }
+      .score-footer {
+        padding: 0 30px 28px;
+      }
+      .coordinates {
+        display: flex;
+        justify-content: space-between;
+        color: #e1e8d2;
+        font-variant-numeric: tabular-nums;
+        font-size: 14px;
+      }
+      .instruction {
+        color: #b7cfbe;
+        font-size: 13px;
+        line-height: 1.7;
+        margin-block-end: 0;
+      }
+      .prototype-note {
+        padding: 10px 16px;
+        border-block-start: 1px solid var(--line);
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        gap: 4px 14px;
+        color: var(--muted);
+        line-height: 1.6;
+        font-size: 11px;
+      }
+      .device.landscape .score-header {
+        padding: 18px 26px 12px;
+      }
+      .device.landscape .score-header h1 {
+        font-size: 22px;
+      }
+      .device.landscape .score-header p {
+        margin-block-start: 4px;
+      }
+      .device.landscape .field {
+        margin: 14px 26px;
+        border-radius: 6px;
+      }
+      .device.landscape .score-footer {
+        padding: 0 26px 16px;
+      }
+      .device.landscape .instruction {
+        margin-block-start: 5px;
+      }
+      @media (max-width: 420px) {
+        .toolbar {
+          padding-inline: 10px;
+        }
+        .controls {
+          gap: 8px;
+        }
+        button {
+          padding: 5px 8px;
+        }
+        .title-row span {
+          display: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="toolbar">
+      <div class="title-row">
+        <div>
+          <strong
+            data-zh="演奏者测试窗口"
+            data-en="Performer test window"
+          ></strong
+          ><span>1.7.0</span>
+        </div>
+        <button id="close" data-zh="关闭窗口" data-en="Close window"></button>
+      </div>
+      <div class="controls">
+        <div
+          class="group"
+          role="group"
+          data-label-zh="设备尺寸"
+          data-label-en="Device size"
+        >
+          <button
+            data-device="phone"
+            aria-pressed="true"
+            data-zh="手机"
+            data-en="Phone"
+          ></button>
+          <button
+            data-device="tablet"
+            aria-pressed="false"
+            data-zh="平板"
+            data-en="Tablet"
+          ></button>
+        </div>
+        <div
+          class="group"
+          role="group"
+          data-label-zh="方向"
+          data-label-en="Orientation"
+        >
+          <button
+            data-orientation="portrait"
+            aria-pressed="true"
+            data-zh="竖向"
+            data-en="Portrait"
+          ></button>
+          <button
+            data-orientation="landscape"
+            aria-pressed="false"
+            data-zh="横向"
+            data-en="Landscape"
+          ></button>
+        </div>
+        <label class="touch-option"
+          ><input id="mouse-touch" type="checkbox" checked /><span
+            data-zh="鼠标模拟单点触摸"
+            data-en="Mouse simulates one touch"
+          ></span
+        ></label>
+      </div>
+      <div id="viewport-info" class="viewport-info" aria-live="polite"></div>
+    </header>
+    <main class="stage" id="stage">
+      <section class="device" id="device" aria-label="Tidelines">
+        <header class="score-header">
+          <h1 data-zh="潮汐" data-en="Tidelines"></h1>
+          <p
+            data-zh="寻找一条属于你的潮线。"
+            data-en="Find a tide of your own."
+          ></p>
+        </header>
+        <div
+          class="field"
+          id="field"
+          tabindex="0"
+          role="button"
+          data-label-zh="触摸声场。点击或拖动；方向键移动，空格或回车触发。"
+          data-label-en="Touch field. Click or drag; arrows move, Space or Enter triggers."
+        >
+          <svg
+            viewBox="0 0 400 600"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+          >
+            <g
+              fill="none"
+              stroke="#b7d5bc"
+              stroke-opacity=".2"
+              stroke-width="1.5"
+            >
+              <path d="M-30 540 C40 400 145 660 430 370" />
+              <path d="M-30 490 C40 350 145 610 430 320" />
+              <path d="M-30 440 C40 300 145 560 430 270" />
+              <path d="M-30 390 C40 250 145 510 430 220" />
+              <path d="M-30 340 C40 200 145 460 430 170" />
+              <path d="M-30 290 C40 150 145 410 430 120" />
+              <path d="M-30 240 C40 100 145 360 430 70" />
+              <path d="M-30 190 C40 50 145 310 430 20" />
+              <path d="M-30 140 C40 0 145 260 430 -30" />
+            </g>
+          </svg>
+          <span class="marker" id="marker"></span>
+          <span class="axis axis-a" data-zh="疏" data-en="Sparse"></span>
+          <span class="axis axis-b" data-zh="密" data-en="Dense"></span>
+        </div>
+        <footer class="score-footer">
+          <div class="coordinates">
+            <span id="x-value"></span><span id="y-value"></span>
+          </div>
+          <p class="instruction" id="instruction"></p>
+        </footer>
+      </section>
+    </main>
+    <footer class="prototype-note">
+      <span
+        data-zh="交互原型 · 无实际音频，不模拟手机硬件"
+        data-en="Interactive prototype · No audio or device hardware emulation"
+      ></span>
+      <span id="feedback" role="status" aria-live="polite"></span>
+    </footer>
+    <script>
+      ;(() => {
+        const english =
+          new URLSearchParams(location.search).get('lang') === 'en'
+        const t = (zh, en) => (english ? en : zh)
+        document.documentElement.lang = english ? 'en' : 'zh-CN'
+        document.title = t(
+          '潮汐 · Performer 原型',
+          'Tidelines · Performer prototype'
+        )
+        for (const element of document.querySelectorAll('[data-zh]'))
+          element.textContent = english
+            ? element.dataset.en
+            : element.dataset.zh
+        for (const element of document.querySelectorAll('[data-label-zh]'))
+          element.setAttribute(
+            'aria-label',
+            english ? element.dataset.labelEn : element.dataset.labelZh
+          )
+        const stage = document.getElementById('stage')
+        const device = document.getElementById('device')
+        const field = document.getElementById('field')
+        const mouseTouch = document.getElementById('mouse-touch')
+        let deviceKind = 'phone'
+        let orientation = 'portrait'
+        let activePointer = null
+        let x = 0.5
+        let y = 0.5
+        let count = 0
+        let sentClose = false
+        const targetOrigin = location.origin === 'null' ? '*' : location.origin
+        function notify(message) {
+          if (window.opener && !window.opener.closed)
+            window.opener.postMessage(message, targetOrigin)
+        }
+        function fit() {
+          const base = deviceKind === 'phone' ? [390, 844] : [820, 1180]
+          const [width, height] =
+            orientation === 'portrait' ? base : [base[1], base[0]]
+          const scale = Math.max(
+            0.05,
+            Math.min(
+              (stage.clientWidth - 32) / width,
+              (stage.clientHeight - 28) / height,
+              1
+            )
+          )
+          device.style.width = `${width}px`
+          device.style.height = `${height}px`
+          device.style.setProperty('--scale', String(scale))
+          device.classList.toggle('landscape', orientation === 'landscape')
+          document.getElementById('viewport-info').textContent =
+            `${width} × ${height} CSS px · ${t('适配窗口', 'Fit to window')} ${Math.round(scale * 100)}%`
+        }
+        function paint() {
+          document.getElementById('marker').style.left = `${x * 100}%`
+          document.getElementById('marker').style.top = `${y * 100}%`
+          document.getElementById('x-value').textContent =
+            `${t('密度', 'Density')} ${Math.round(x * 100)}%`
+          document.getElementById('y-value').textContent =
+            `${t('深度', 'Depth')} ${Math.round(y * 100)}%`
+        }
+        function instruction() {
+          document.getElementById('instruction').textContent =
+            mouseTouch.checked
+              ? t(
+                  '点击或拖动，观察主窗口的实时画面。',
+                  'Click or drag and watch the main monitor respond.'
+                )
+              : t(
+                  '鼠标触摸已关闭。可用方向键、空格或真实触摸体验。',
+                  'Mouse touch is off. Use arrows, Space or touch input.'
+                )
+        }
+        function trigger(nextX, nextY) {
+          x = Math.min(1, Math.max(0, nextX))
+          y = Math.min(1, Math.max(0, nextY))
+          paint()
+          count += 1
+          notify({ type: 'pnds-170-touch', x, y })
+          document.getElementById('feedback').textContent =
+            window.opener && !window.opener.closed
+              ? t(`已发送 ${count} 次触摸演示`, `${count} touch updates sent`)
+              : t(
+                  '请从主原型打开此窗口以联动',
+                  'Open from the main prototype to connect'
+                )
+        }
+        function fromPointer(event) {
+          const rect = field.getBoundingClientRect()
+          trigger(
+            (event.clientX - rect.left) / rect.width,
+            (event.clientY - rect.top) / rect.height
+          )
+        }
+        for (const button of document.querySelectorAll('[data-device]')) {
+          button.addEventListener('click', () => {
+            deviceKind = button.dataset.device
+            for (const item of document.querySelectorAll('[data-device]'))
+              item.setAttribute('aria-pressed', String(item === button))
+            fit()
+          })
+        }
+        for (const button of document.querySelectorAll('[data-orientation]')) {
+          button.addEventListener('click', () => {
+            orientation = button.dataset.orientation
+            for (const item of document.querySelectorAll('[data-orientation]'))
+              item.setAttribute('aria-pressed', String(item === button))
+            fit()
+          })
+        }
+        field.addEventListener('pointerdown', event => {
+          if (event.pointerType === 'mouse' && !mouseTouch.checked) return
+          if (activePointer !== null) return
+          activePointer = event.pointerId
+          field.setPointerCapture(event.pointerId)
+          field.focus()
+          fromPointer(event)
+        })
+        field.addEventListener('pointermove', event => {
+          if (event.pointerId === activePointer) fromPointer(event)
+        })
+        for (const type of [
+          'pointerup',
+          'pointercancel',
+          'lostpointercapture',
+        ]) {
+          field.addEventListener(type, event => {
+            if (event.pointerId === activePointer) activePointer = null
+          })
+        }
+        field.addEventListener('keydown', event => {
+          const directions = {
+            ArrowLeft: [-0.05, 0],
+            ArrowRight: [0.05, 0],
+            ArrowUp: [0, -0.05],
+            ArrowDown: [0, 0.05],
+          }
+          if (directions[event.key]) {
+            event.preventDefault()
+            const [dx, dy] = directions[event.key]
+            trigger(x + dx, y + dy)
+          } else if (event.key === ' ' || event.key === 'Enter') {
+            event.preventDefault()
+            trigger(x, y)
+          }
+        })
+        mouseTouch.addEventListener('change', () => {
+          activePointer = null
+          instruction()
+        })
+        function notifyClose() {
+          if (!sentClose) {
+            sentClose = true
+            notify({ type: 'pnds-170-performer-closed' })
+          }
+        }
+        document
+          .getElementById('close')
+          .addEventListener('click', () => window.close())
+        window.addEventListener('pagehide', notifyClose)
+        window.addEventListener('beforeunload', notifyClose)
+        new ResizeObserver(fit).observe(stage)
+        paint()
+        instruction()
+        fit()
+      })()
+    </script>
+  </body>
+</html>

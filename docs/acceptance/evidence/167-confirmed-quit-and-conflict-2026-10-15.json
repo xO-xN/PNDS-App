@@ -1,0 +1,88 @@
+{
+  "date": "2026-10-15",
+  "fixtureLabel": "History Write Failure 167",
+  "confirmedQuit": {
+    "date": "2026-10-15",
+    "fixtureLabel": "History Write Failure 167",
+    "schemaVersion": 1,
+    "messageCount": 2,
+    "projectKeyMatches": true,
+    "exitAcceptanceQuestionPresent": true,
+    "messageStatuses": [
+      {
+        "role": "user",
+        "status": "cancelled",
+        "textCharacters": 48,
+        "sourceCount": 0
+      },
+      {
+        "role": "assistant",
+        "status": "cancelled",
+        "textCharacters": 177,
+        "sourceCount": 11
+      }
+    ],
+    "oldClearedMessageIdOverlap": 0,
+    "lockActive": false,
+    "nativeRunningTestQuitCancelReportedPassed": true,
+    "nativeConfirmedQuitWhileAnswerGeneratingReportedPassed": true,
+    "nativeVisibleTextAndSourcesPreservedReportedPassed": true,
+    "nativeReplyStoppedAndNoAutoResumeOrTestStartReportedPassed": true,
+    "independentScreenshotOrExactTimingProvided": false,
+    "messageBodiesEmitted": false
+  },
+  "conflictPreparation": {
+    "operation": "simulate an external history update in the same isolated acceptance fixture",
+    "beforeAndAfterPrivateBackupsRetained": true,
+    "originalTwoCancelledMessagesPreservedExactly": true,
+    "persistedMessageCountAfterExternalUpdate": 3,
+    "newEpochPublished": true,
+    "syntheticMarker": "并发记录更新-167",
+    "markerClearlyLabelledNotModelOutput": true,
+    "externalPayloadSha256": "14fcbf02b60ccfed8fcac4d333f628af4435958e4c6586da0b0ad332d5225289",
+    "protectedOtherHistoriesVerifiedUnchanged": true,
+    "historyFileLocked": false,
+    "modelRequestMadeByAgent": false,
+    "nativeOldEpochSaveRejection": "passed per user: stale-history message, disabled send, explicit reload offered",
+    "nativeCancelAndConfirmedReload": "passed per user: Escape preserves in-memory test chat/input/draft; explicit replacement loads original two plus marker and preserves input/draft"
+  },
+  "limitations": [
+    "Native quit timing and visible-prefix/source correctness are based on user report; only persisted message counts, states and source counts were independently inspected.",
+    "Actual process ownership and port teardown, abnormal termination, downstream consumers and both release architectures remain separately tracked.",
+    "The simulated external update does not itself verify native stale-history UI or replacement consent."
+  ],
+  "postConfirmedConflictReload": {
+    "date": "2026-10-15",
+    "fixtureLabel": "History Write Failure 167",
+    "schemaVersion": 1,
+    "messageCount": 3,
+    "projectKeyMatches": true,
+    "externalEpochPreserved": true,
+    "externalPayloadBytesPreserved": true,
+    "originalTwoExitRecordsPreservedExactly": true,
+    "syntheticExternalMarkerPresent": true,
+    "onlyPersistedOriginalAndMarkerIdsRemain": true,
+    "messageStates": [
+      {
+        "role": "user",
+        "status": "cancelled",
+        "sourceCount": 0
+      },
+      {
+        "role": "assistant",
+        "status": "cancelled",
+        "sourceCount": 11
+      },
+      {
+        "role": "assistant",
+        "status": "completed",
+        "sourceCount": 0
+      }
+    ],
+    "lockActive": false,
+    "nativeConflictCancelAndConfirmedReloadReportedPassed": true,
+    "nativeInputAndReadmeDraftReportedPreserved": true,
+    "independentNativeScreenshotProvided": false,
+    "messageBodiesEmitted": false
+  }
+}

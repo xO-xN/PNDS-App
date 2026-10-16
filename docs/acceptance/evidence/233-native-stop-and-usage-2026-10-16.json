@@ -1,0 +1,84 @@
+{
+  "date": "2026-10-16",
+  "timezone": "Asia/Shanghai",
+  "method": "macOS Computer Use accessibility observations before and after normal App restart; AppleScript used only for authorized App exit/startup; user completed Keychain authorization",
+  "project": "/Users/xiaoxiang/Desktop/test copy",
+  "build": {
+    "baseCommit": "fc5e98b",
+    "flavor": "standalone debug app built from the current working tree, including pre-existing unrelated performer changes",
+    "bundlePath": "src-tauri/target/debug/bundle/macos/PNDS.app",
+    "bundleExecutableSha256": "171af682e4891f4eae1ed70a15856d6840681932d093776d567dbcf9b1a5d379",
+    "sourceCodeChangedForThisTest": false,
+    "buildExitCode": 0,
+    "startupLimitation": "Debug startup exports bindings relative to src-tauri, so the test app was launched from that working directory. Finder startup of this debug app is not certified."
+  },
+  "completedReplyUsage": {
+    "beforeRestart": {
+      "calls": 1,
+      "inputTokens": 1080,
+      "outputTokens": 81,
+      "cachedInputTokens": 1024,
+      "reasoningTokens": 64,
+      "complete": true
+    },
+    "afterRestart": {
+      "calls": 1,
+      "inputTokens": 1080,
+      "outputTokens": 81,
+      "cachedInputTokens": 1024,
+      "reasoningTokens": 64,
+      "complete": true,
+      "displayedAsHistorical": true
+    }
+  },
+  "stoppedReply": {
+    "request": "【自动验收233-停止】请创作一篇约2500字的舞台音乐作品说明，标题《潮汐与群星》。重点描述听感、意象和情绪发展，用连贯散文，不涉及 PNDS 技术事实或外部资料，直接开始正文。",
+    "beforeRestart": [
+      "《潮汐与群星》",
+      "暮色沉入海面的时候，音乐开始。它不是以一个明确的音高进入的，而像一层薄雾，从极低处缓缓漫上来：大提琴与低音提琴在近乎耳语的地方拉出长长的线条，彼此错开半个呼吸，仿佛潮水并不整齐地涌向岸边，而是一次又一次试探着、退让着。听者的第一感受不是旋律，而是一种呼吸——缓慢、深沉、带着咸味的呼吸。你几乎能感到空气变湿，感到脚下的沙正在被什么东西轻轻吸走。",
+      "在这层水汽之上，竖琴与钢片琴开始发光。最初只是零星几点：一个高音轻轻落下，像远处海平线上第一次亮起的星，随即又熄灭。然后是第二点、第三点，木管在高音区以极轻的力度应和，音与音之间留出大片空白。这些空白并非虚无，而是夜空本身。听感上，低音的潮与高音的星构成两个截然不同的世界：一个贴着地面起伏，永远在运动却几乎不改变形状；一个悬在头顶，静止，清冷，偶尔因为一声泛音而微微颤动。整部作品最初的张力，就藏在这两个世界的距离里。",
+      "大约在全"
+    ],
+    "afterRestart": [
+      "《潮汐与群星》",
+      "暮色沉入海面的时候，音乐开始。它不是以一个明确的音高进入的，而像一层薄雾，从极低处缓缓漫上来：大提琴与低音提琴在近乎耳语的地方拉出长长的线条，彼此错开半个呼吸，仿佛潮水并不整齐地涌向岸边，而是一次又一次试探着、退让着。听者的第一感受不是旋律，而是一种呼吸——缓慢、深沉、带着咸味的呼吸。你几乎能感到空气变湿，感到脚下的沙正在被什么东西轻轻吸走。",
+      "在这层水汽之上，竖琴与钢片琴开始发光。最初只是零星几点：一个高音轻轻落下，像远处海平线上第一次亮起的星，随即又熄灭。然后是第二点、第三点，木管在高音区以极轻的力度应和，音与音之间留出大片空白。这些空白并非虚无，而是夜空本身。听感上，低音的潮与高音的星构成两个截然不同的世界：一个贴着地面起伏，永远在运动却几乎不改变形状；一个悬在头顶，静止，清冷，偶尔因为一声泛音而微微颤动。整部作品最初的张力，就藏在这两个世界的距离里。",
+      "大约在全"
+    ],
+    "utf16UnitsIncludingParagraphSeparators": 396,
+    "exactParagraphComparisonPassed": true,
+    "inputRetainedImmediatelyAfterStop": true,
+    "displayedAsStoppedAfterRestart": true,
+    "savedStatusObservedBeforeAndAfterRestart": true,
+    "automaticallyResumedAfterRestart": false,
+    "usageBeforeAndAfterRestart": {
+      "calls": 1,
+      "inputTokens": null,
+      "outputTokens": null,
+      "complete": false,
+      "missingFieldsDisplayedAsUnknown": true,
+      "displayedAsHistoricalAfterRestart": true
+    }
+  },
+  "liveContextObservation": {
+    "capacity": 1000000,
+    "effectiveInput": 32000,
+    "outputReserve": 8192,
+    "tokenizer": "unknown",
+    "characters": 4530,
+    "utf8Bytes": 6138,
+    "inputCharacters": 120,
+    "inputUtf8Bytes": 272,
+    "documentCharacters": 0,
+    "documentUtf8Bytes": 0
+  },
+  "initialIntegerPrompt": {
+    "outcome": "Model returned a short refusal instead of a long stream; not counted as the stop test",
+    "replacement": "Used the original creative-writing request above"
+  },
+  "limits": [
+    "No service billing statement comparison",
+    "No Intel, all-theme or full release certification",
+    "No #234 or #235 native test performed in this group"
+  ]
+}

@@ -19,6 +19,10 @@ Element.prototype.scrollIntoView ??= function (this: Element) {
 Element.prototype.scrollTo ??= function (this: Element) {
   // no scroll layout in jsdom
 }
+// CodeMirror measures text ranges. jsdom has no text layout; these stubs
+// support workflow tests and do not certify geometry or native IME behavior.
+Range.prototype.getClientRects ??= () => [] as unknown as DOMRectList
+Range.prototype.getBoundingClientRect ??= () => new DOMRect()
 
 // Radix modal layers (context menu, dialogs) set `pointer-events: none` on
 // document.body while open and restore it on unmount — an abrupt test
@@ -132,6 +136,10 @@ vi.mock('@/lib/tauri-bindings', async () => {
       sessionSnapshotEvent: makeEvent('session-snapshot-event'),
       setlistExportProgressEvent: makeEvent('setlist-export-progress-event'),
       windowFocusEvent: makeEvent('window-focus-event'),
+      modelConfigurationChangedEvent: makeEvent(
+        'model-configuration-changed-event'
+      ),
+      assistantTextEvent: makeEvent('assistant-text-event'),
       windowStateEvent: makeEvent('window-state-event'),
       projectionWindowEvent: makeEvent('projection-window-event'),
       performerDestroyedEvent: makeEvent('performer-destroyed-event'),
@@ -243,6 +251,19 @@ vi.mock('@/lib/tauri-bindings', async () => {
       creationDiagnosticIsStale: vi
         .fn()
         .mockResolvedValue({ status: 'ok', data: false }),
+      startCreationCheck: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: 'controlled-check-1' }),
+      getCreationCheck: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: { code: 'io', detail: 'getCreationCheck not mocked' },
+      }),
+      cancelCreationCheck: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      creationCheckIsStale: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: false }),
       getCreationGitStatus: vi.fn().mockResolvedValue({
         status: 'ok',
         data: {
@@ -275,6 +296,14 @@ vi.mock('@/lib/tauri-bindings', async () => {
       }),
       // #154: write commands default to failure — a forgotten mock must
       // never read as a successful save or rename.
+      saveCreationFileChange: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: { code: 'io', detail: 'saveCreationFileChange not mocked' },
+      }),
+      undoCreationFileChange: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: { code: 'io', detail: 'undoCreationFileChange not mocked' },
+      }),
       saveCreationFile: vi.fn().mockResolvedValue({
         status: 'error',
         error: { code: 'io', detail: 'saveCreationFile not mocked' },
@@ -300,6 +329,66 @@ vi.mock('@/lib/tauri-bindings', async () => {
         .fn()
         .mockResolvedValue({ status: 'ok', data: { theme: 'system' } }),
       savePreferences: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
+      getModelCredentialStatus: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: { hasKey: false } }),
+      beginAssistantRequest: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: { type: 'invalidConfig' },
+      }),
+      assistantModelTurn: vi
+        .fn()
+        .mockResolvedValue({ status: 'error', error: { type: 'protocol' } }),
+      measureAssistantContext: vi.fn().mockResolvedValue({
+        status: 'ok',
+        data: {
+          characters: 100,
+          utf8Bytes: 100,
+          estimatedTokens: null,
+          admissionEstimate: 100,
+          tokenizer: 'unknown',
+          capacity: null,
+          effectiveInput: null,
+          outputReserve: 4096,
+          safetyMargin: 256,
+          parts: [],
+          exceeded: null,
+        },
+      }),
+      cancelAssistantRequest: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      loadAssistantHistory: vi.fn().mockResolvedValue({
+        status: 'ok',
+        data: {
+          epoch: 'history-initial',
+          projectKey: 'a'.repeat(64),
+          appVersion: '0.0.0-test',
+          messages: [],
+        },
+      }),
+      saveAssistantHistory: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      clearAssistantHistory: vi.fn().mockResolvedValue({
+        status: 'ok',
+        data: {
+          epoch: 'history-cleared',
+          projectKey: 'a'.repeat(64),
+          appVersion: '0.0.0-test',
+          messages: [],
+        },
+      }),
+      saveModelCredential: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      removeModelCredential: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      testModelConnection: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: { type: 'protocol' },
+      }),
       // #139: HTTPS certificate material — load/clear default to the
       // quiet states (nothing stored); the import default fails loudly
       // (a forgotten mock must not read as a successful import).

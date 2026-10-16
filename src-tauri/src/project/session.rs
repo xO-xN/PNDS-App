@@ -584,7 +584,7 @@ fn lan_addresses_from_interfaces(addrs: Vec<if_addrs::Interface>) -> Vec<String>
 
 /// One health GET against the performer port. Errors (connection refused,
 /// timeout, bad JSON) all mean "not ready yet" to the polling loop.
-fn fetch_health(performer_port: u16) -> Result<HealthPayload, String> {
+pub(crate) fn fetch_health(performer_port: u16) -> Result<HealthPayload, String> {
     let url = format!(
         "http://127.0.0.1:{performer_port}{}",
         crate::https::HEALTH_PATH
@@ -609,6 +609,10 @@ fn fetch_health(performer_port: u16) -> Result<HealthPayload, String> {
 
 struct SessionInner {
     status: SessionStatus,
+    /// Shared with in-flight start calls, through startup and bounded cleanup.
+    runtime_lease: Option<Arc<crate::project::runtime_gate::RuntimeLease>>,
+    teardown_count: u32,
+    cleanup_unconfirmed: bool,
     /// The node score server and the scsynth engine, held through their
     /// `SupervisedChild` lifecycle (spawn-recorded → bounded shutdown).
     child: Option<SupervisedChild>,
@@ -671,6 +675,9 @@ impl Default for SessionInner {
     fn default() -> Self {
         Self {
             status: SessionStatus::Idle,
+            runtime_lease: None,
+            teardown_count: 0,
+            cleanup_unconfirmed: false,
             child: None,
             scsynth: None,
             scsynth_port: None,
@@ -705,6 +712,19 @@ impl Default for SessionInner {
 }
 
 impl SessionInner {
+    fn release_runtime_if_settled(&mut self) {
+        if matches!(self.status, SessionStatus::Idle | SessionStatus::Error)
+            && self.teardown_count == 0
+            && !self.cleanup_unconfirmed
+            && self.child.is_none()
+            && self.scsynth.is_none()
+            && self.gateway.is_none()
+            && self.dns_mapping_lease.is_none()
+        {
+            self.runtime_lease = None;
+        }
+    }
+
     fn snapshot(&self) -> SessionSnapshot {
         SessionSnapshot {
             status: self.status,
@@ -873,7 +893,17 @@ impl SessionManager {
         app_data_dir: PathBuf,
         request: StartRequest,
     ) -> Result<(), String> {
-        let generation = self.lock().generation + 1;
+        let (generation, lease) = {
+            let mut inner = self.lock();
+            let lease = match &inner.runtime_lease {
+                Some(lease) => lease.clone(),
+                None => Arc::new(crate::project::runtime_gate::RuntimeLease::acquire(
+                    &app_data_dir.join("runtime.lock"),
+                )?),
+            };
+            inner.runtime_lease = Some(lease.clone());
+            (inner.generation + 1, lease)
+        };
         // §12 + Retry: the opening move (`any → Starting` on a new
         // generation) also resets the previous run's state, so the first
         // snapshot the UI sees is a clean `starting` at stage 1. A
@@ -886,6 +916,7 @@ impl SessionManager {
             SessionStatus::Starting,
             |inner| {
                 inner.reset_run_state();
+                inner.runtime_lease = Some(lease.clone());
                 inner.project_path = Some(request.path.clone());
                 inner.audio_mode = Some(request.mode);
                 inner.lan_ip = Some(request.lan_ip.clone());
@@ -983,8 +1014,15 @@ impl SessionManager {
         // handles, so a corpse from an unconfirmed kill must still read as
         // a conflict here — it is not the live session's process anymore.
         match registry.cleanup_orphans(&HashSet::new()) {
-            Ok(n) if n > 0 => log::info!("Start cleanup terminated {n} orphan(s) before preflight"),
-            Ok(_) => {}
+            Ok(n) => {
+                if n > 0 {
+                    log::info!("Start cleanup terminated {n} orphan(s) before preflight");
+                }
+                let mut inner = self.lock();
+                if inner.generation == generation {
+                    inner.cleanup_unconfirmed = false;
+                }
+            }
             Err(e) => log::warn!("Orphan cleanup before start failed: {e}"),
         }
         preflight::check_ports_available(
@@ -1973,6 +2011,7 @@ impl SessionManager {
         if opens_generation {
             guard.generation = generation;
         }
+        guard.release_runtime_if_settled();
         drop(guard);
         Self::publish_snapshot(app, inner);
         true
@@ -2142,6 +2181,7 @@ impl SessionManager {
             log_generation,
         ) = {
             let mut guard = inner.lock().unwrap_or_else(|e| e.into_inner());
+            guard.teardown_count += 1;
             (
                 guard.child.take(),
                 guard.scsynth.take(),
@@ -2228,6 +2268,8 @@ impl SessionManager {
                 guard.logger = None;
                 guard.logger_generation = None;
             }
+            guard.teardown_count -= 1;
+            guard.release_runtime_if_settled();
         }
     }
 
@@ -2250,6 +2292,10 @@ impl SessionManager {
                 format!("{label} stopped (pid {pid})")
             }
             ShutdownOutcome::Unconfirmed => {
+                inner
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .cleanup_unconfirmed = true;
                 log::warn!(
                     "{label} (pid {pid}) could not be confirmed dead; keeping its ownership record for the next start"
                 );
@@ -2408,7 +2454,15 @@ impl SessionManager {
     /// True while a score-server child is (or should be) running.
     pub fn has_active_session(&self) -> bool {
         let inner = self.lock();
-        inner.child.is_some()
+        matches!(
+            inner.status,
+            SessionStatus::Starting | SessionStatus::Ready | SessionStatus::Stopping
+        ) || inner.child.is_some()
+            || inner.scsynth.is_some()
+            || inner.gateway.is_some()
+            || inner.dns_mapping_lease.is_some()
+            || inner.teardown_count > 0
+            || inner.cleanup_unconfirmed
     }
 
     /// PIDs of the child processes this manager currently owns handles for
@@ -2491,6 +2545,31 @@ fn health_error_message(health: &HealthPayload) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn competing_controlled_check_does_not_change_the_session() {
+        let dir = tempfile::tempdir().unwrap();
+        let _check =
+            crate::project::runtime_gate::RuntimeLease::acquire(&dir.path().join("runtime.lock"))
+                .unwrap();
+        let app = tauri::test::mock_app().handle().clone();
+        crate::events::events_builder().mount_events(&app);
+        let manager = SessionManager::default();
+        let before = manager.creation_runtime();
+        let error = manager
+            .start(
+                app,
+                dir.path().to_path_buf(),
+                StartRequest::new("/missing".into(), AudioMode::None, "127.0.0.1".into(), None),
+            )
+            .unwrap_err();
+        assert!(error.contains("active"), "{error}");
+        let after = manager.creation_runtime();
+        assert_eq!(after.generation, before.generation);
+        assert_eq!(after.snapshot.status, before.snapshot.status);
+        let report = crate::project::diagnostics::diagnose_project(dir.path(), None);
+        assert!(!report.static_passed);
+    }
 
     /// A supervised `sleep` child recorded in `dir`'s registry — the test
     /// stand-in for a session child (node score server / scsynth).

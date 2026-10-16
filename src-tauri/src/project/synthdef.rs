@@ -14,6 +14,7 @@ use std::fs;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 /// The standard macOS SuperCollider install location, checked before PATH.
@@ -131,7 +132,11 @@ pub(super) fn run_sclang(
     synthdefs_dir: &Path,
     sclang: &Path,
     timeout: Duration,
+    cancelled: &AtomicBool,
 ) -> Result<String, String> {
+    if cancelled.load(Ordering::Acquire) {
+        return Err("SynthDef compilation cancelled".into());
+    }
     let staging =
         tempfile::tempdir().map_err(|e| format!("Failed to create the staging directory: {e}"))?;
     let wrapper = staging.path().join("pnds-compile.scd");
@@ -159,6 +164,9 @@ pub(super) fn run_sclang(
 
     let started = Instant::now();
     let status = loop {
+        if cancelled.load(Ordering::Acquire) {
+            break Err("SynthDef compilation cancelled".into());
+        }
         match child.try_wait() {
             Ok(Some(status)) => break Ok(status),
             Ok(None) => {

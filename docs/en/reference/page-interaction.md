@@ -59,6 +59,13 @@ Two v1.5.0 (#131) revisions:
 
 Special note (`⌘ ←` / `⌘ →`): WKWebView natively treats Cmd + left/right as its own back / forward equivalents and swallows them — the keydown never reaches any page. The App reroutes exactly this chord at the native layer back onto the ordinary keyDown path so pages can listen for it; inside editable elements it keeps the system's line-start / line-end editing behaviour.
 
+The creation host text editor additionally handles `⌘F` (find/replace), `⌘G`
+(line navigation), draft undo/redo and Tab indentation while that editor has
+focus; Escape then Tab leaves it. Host creation `⌘P` opens the project file
+list. These web bindings add no native accelerator and do not intercept keys
+inside a Project page. `⌘S` saves only the active file draft, never a standalone
+suggestion buffer.
+
 ## Pointer and right click
 
 - Pointer events (move / down / up / wheel / drag) pass through to the monitor page **in full** — the App neither intercepts nor interprets them.

@@ -23,6 +23,9 @@ export interface HelpSearchHit {
   sectionTitle: string
   /** Plain-text context around the first match (… at cut edges). */
   snippet: string
+  offset: number
+  endOffset: number
+  totalCharacters: number
 }
 
 interface HelpIndexEntry {
@@ -94,9 +97,13 @@ export function buildHelpIndex(corpus: readonly HelpDocument[]): HelpIndex {
   return { entries }
 }
 
-function buildSnippet(entry: HelpIndexEntry, terms: readonly string[]): string {
+function buildSnippet(
+  entry: HelpIndexEntry,
+  terms: readonly string[]
+): Pick<HelpSearchHit, 'snippet' | 'offset' | 'endOffset' | 'totalCharacters'> {
   const text = entry.text
-  if (text === '') return ''
+  if (text === '')
+    return { snippet: '', offset: 0, endOffset: 0, totalCharacters: 0 }
 
   let matchAt = -1
   for (const term of terms) {
@@ -107,7 +114,12 @@ function buildSnippet(entry: HelpIndexEntry, terms: readonly string[]): string {
   if (matchAt === -1) {
     // Title-only hit: open with the section's own lead instead.
     const lead = text.slice(0, SNIPPET_RADIUS * 2)
-    return lead.length < text.length ? `${lead}…` : lead
+    return {
+      snippet: lead.length < text.length ? `${lead}…` : lead,
+      offset: 0,
+      endOffset: lead.length,
+      totalCharacters: text.length,
+    }
   }
 
   const start = Math.max(0, matchAt - SNIPPET_RADIUS)
@@ -115,7 +127,12 @@ function buildSnippet(entry: HelpIndexEntry, terms: readonly string[]): string {
   const window = text.slice(start, end)
   const prefix = start > 0 ? '…' : ''
   const suffix = end < text.length ? '…' : ''
-  return `${prefix}${window}${suffix}`
+  return {
+    snippet: `${prefix}${window}${suffix}`,
+    offset: start,
+    endOffset: end,
+    totalCharacters: text.length,
+  }
 }
 
 /**
@@ -162,6 +179,6 @@ export function searchHelp(index: HelpIndex, query: string): HelpSearchHit[] {
     docTitle: entry.docTitle,
     sectionId: entry.sectionId,
     sectionTitle: entry.sectionTitle,
-    snippet: buildSnippet(entry, terms),
+    ...buildSnippet(entry, terms),
   }))
 }

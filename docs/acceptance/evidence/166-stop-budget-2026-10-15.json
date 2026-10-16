@@ -1,0 +1,28 @@
+{
+  "date": "2026-10-15",
+  "kind": "authorized-local-history-and-fixed-field-diagnostics-read",
+  "historyMessageCount": 22,
+  "acceptanceQuestionTopic": "Compare PNDS internal, external and none audio modes and outputChannels",
+  "acceptanceSegment": {
+    "cancelledRounds": 5,
+    "budgetExceededRounds": 2,
+    "failedReplySourceCounts": [9, 9],
+    "failedReplyContent": "Only document-reading progress, no final comparison"
+  },
+  "safeNativeDiagnostics": {
+    "cancelledRunsObserved": 5,
+    "latestTwoRunsCompletedTurns": [3, 3]
+  },
+  "userReportedFailure": "Clicking Stop immediately sends the retained question again",
+  "controlledUIReproduction": {
+    "action": "One Stop click; flush the actual store transition before the browser default action",
+    "unexpectedSendCount": 1,
+    "fix": "Prevent the click default action before changing the stop state"
+  },
+  "limitations": [
+    "No original transcript, private questions, project path or identity, tokens or credentials copied",
+    "History and fixed-field logs do not independently identify the exact budget limit or prove the outgoing payload",
+    "Deterministic UI and model fixtures do not substitute for native WebKit stop behavior or real-service completion",
+    "Stop and budget-aware answer completion still require user recheck"
+  ]
+}

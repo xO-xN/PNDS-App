@@ -1,0 +1,1175 @@
+{
+  "cases": [
+    {
+      "after": {
+        "calls": [
+          {
+            "measurement": {
+              "admissionEstimate": 568,
+              "capacity": 32000,
+              "characters": 2916,
+              "effectiveInput": 20000,
+              "estimatedTokens": 568,
+              "exceeded": null,
+              "outputReserve": 512,
+              "parts": [
+                {
+                  "characters": 2717,
+                  "estimatedTokens": 526,
+                  "kind": "policyTools",
+                  "utf8Bytes": 2717
+                },
+                {
+                  "characters": 0,
+                  "estimatedTokens": 0,
+                  "kind": "history",
+                  "utf8Bytes": 0
+                },
+                {
+                  "characters": 63,
+                  "estimatedTokens": 16,
+                  "kind": "input",
+                  "utf8Bytes": 63
+                },
+                {
+                  "characters": 0,
+                  "estimatedTokens": 0,
+                  "kind": "documents",
+                  "utf8Bytes": 0
+                }
+              ],
+              "safetyMargin": 256,
+              "tokenizer": "cl100kBase",
+              "utf8Bytes": 2916
+            },
+            "syntheticServerUsage": {
+              "cachedInputTokens": null,
+              "inputTokens": 123,
+              "outputTokens": 11,
+              "reasoningTokens": null
+            }
+          },
+          {
+            "measurement": {
+              "admissionEstimate": 1036,
+              "capacity": 32000,
+              "characters": 4613,
+              "effectiveInput": 20000,
+              "estimatedTokens": 1036,
+              "exceeded": null,
+              "outputReserve": 512,
+              "parts": [
+                {
+                  "characters": 2717,
+                  "estimatedTokens": 526,
+                  "kind": "policyTools",
+                  "utf8Bytes": 2717
+                },
+                {
+                  "characters": 0,
+                  "estimatedTokens": 0,
+                  "kind": "history",
+                  "utf8Bytes": 0
+                },
+                {
+                  "characters": 63,
+                  "estimatedTokens": 16,
+                  "kind": "input",
+                  "utf8Bytes": 63
+                },
+                {
+                  "characters": 1698,
+                  "estimatedTokens": 471,
+                  "kind": "documents",
+                  "utf8Bytes": 1698
+                }
+              ],
+              "safetyMargin": 256,
+              "tokenizer": "cl100kBase",
+              "utf8Bytes": 4613
+            },
+            "syntheticServerUsage": {
+              "cachedInputTokens": null,
+              "inputTokens": 123,
+              "outputTokens": 11,
+              "reasoningTokens": null
+            }
+          },
+          {
+            "measurement": {
+              "admissionEstimate": 1545,
+              "capacity": 32000,
+              "characters": 6614,
+              "effectiveInput": 20000,
+              "estimatedTokens": 1545,
+              "exceeded": null,
+              "outputReserve": 512,
+              "parts": [
+                {
+                  "characters": 2717,
+                  "estimatedTokens": 526,
+                  "kind": "policyTools",
+                  "utf8Bytes": 2717
+                },
+                {
+                  "characters": 0,
+                  "estimatedTokens": 0,
+                  "kind": "history",
+                  "utf8Bytes": 0
+                },
+                {
+                  "characters": 63,
+                  "estimatedTokens": 16,
+                  "kind": "input",
+                  "utf8Bytes": 63
+                },
+                {
+                  "characters": 3699,
+                  "estimatedTokens": 980,
+                  "kind": "documents",
+                  "utf8Bytes": 3705
+                }
+              ],
+              "safetyMargin": 256,
+              "tokenizer": "cl100kBase",
+              "utf8Bytes": 6620
+            },
+            "syntheticServerUsage": {
+              "cachedInputTokens": null,
+              "inputTokens": 123,
+              "outputTokens": 11,
+              "reasoningTokens": null
+            }
+          }
+        ],
+        "failure": null
+      },
+      "before": {
+        "calls": [
+          {
+            "measurement": {
+              "admissionEstimate": 561,
+              "capacity": 32000,
+              "characters": 2882,
+              "effectiveInput": 20000,
+              "estimatedTokens": 561,
+              "exceeded": null,
+              "outputReserve": 512,
+              "parts": [
+                {
+                  "characters": 2683,
+                  "estimatedTokens": 519,
+                  "kind": "policyTools",
+                  "utf8Bytes": 2683
+                },
+                {
+                  "characters": 0,
+                  "estimatedTokens": 0,
+                  "kind": "history",
+                  "utf8Bytes": 0
+                },
+                {
+                  "characters": 63,
+                  "estimatedTokens": 16,
+                  "kind": "input",
+                  "utf8Bytes": 63
+                },
+                {
+                  "characters": 0,
+                  "estimatedTokens": 0,
+                  "kind": "documents",
+                  "utf8Bytes": 0
+                }
+              ],
+              "safetyMargin": 256,
+              "tokenizer": "cl100kBase",
+              "utf8Bytes": 2882
+            },
+            "syntheticServerUsage": {
+              "cachedInputTokens": null,
+              "inputTokens": 123,
+              "outputTokens": 11,
+              "reasoningTokens": null
+            }
+          },
+          {
+            "measurement": {
+              "admissionEstimate": 944,
+              "capacity": 32000,
+              "characters": 4480,
+              "effectiveInput": 20000,
+              "estimatedTokens": 944,
+              "exceeded": null,
+              "outputReserve": 512,
+              "parts": [
+                {
+                  "characters": 2683,
+                  "estimatedTokens": 519,
+                  "kind": "policyTools",
+                  "utf8Bytes": 2683
+                },
+                {
+                  "characters": 0,
+                  "estimatedTokens": 0,
+                  "kind": "history",
+                  "utf8Bytes": 0
+                },
+                {
+                  "characters": 63,
+                  "estimatedTokens": 16,
+                  "kind": "input",
+                  "utf8Bytes": 63
+                },
+                {
+                  "characters": 1599,
+                  "estimatedTokens": 386,
+                  "kind": "documents",
+                  "utf8Bytes": 1617
+                }
+              ],
+              "safetyMargin": 256,
+              "tokenizer": "cl100kBase",
+              "utf8Bytes": 4498
+            },
+            "syntheticServerUsage": {
+              "cachedInputTokens": null,
+              "inputTokens": 123,
+              "outputTokens": 11,
+              "reasoningTokens": null
+            }
+          },
+          {
+            "measurement": {
+              "admissionEstimate": 2601,
+              "capacity": 32000,
+              "characters": 11161,
+              "effectiveInput": 20000,
+              "estimatedTokens": 2601,
+              "exceeded": null,
+              "outputReserve": 512,
+              "parts": [
+                {
+                  "characters": 2683,
+                  "estimatedTokens": 519,
+                  "kind": "policyTools",
+                  "utf8Bytes": 2683
+                },
+                {
+                  "characters": 0,
+                  "estimatedTokens": 0,
+                  "kind": "history",
+                  "utf8Bytes": 0
+                },
+                {
+                  "characters": 63,
+                  "estimatedTokens": 16,
+                  "kind": "input",
+                  "utf8Bytes": 63
+                },
+                {
+                  "characters": 8280,
+                  "estimatedTokens": 2043,
+                  "kind": "documents",
+                  "utf8Bytes": 8327
+                }
+              ],
+              "safetyMargin": 256,
+              "tokenizer": "cl100kBase",
+              "utf8Bytes": 11208
+            },
+            "syntheticServerUsage": {
+              "cachedInputTokens": null,
+              "inputTokens": 123,
+              "outputTokens": 11,
+              "reasoningTokens": null
+            }
+          }
+        ],
+        "failure": null
+      },
+      "id": "outputChannels"
+    },
+    {
+      "after": {
+        "calls": [
+          {
+            "measurement": {
+              "admissionEstimate": 570,
+              "capacity": 32000,
+              "characters": 2931,
+              "effectiveInput": 20000,
+              "estimatedTokens": 570,
+              "exceeded": null,
+              "outputReserve": 512,
+              "parts": [
+                {
+                  "characters": 2717,
+                  "estimatedTokens": 526,
+                  "kind": "policyTools",
+                  "utf8Bytes": 2717
+                },
+                {
+                  "characters": 0,
+                  "estimatedTokens": 0,
+                  "kind": "history",
+                  "utf8Bytes": 0
+                },
+                {
+                  "characters": 78,
+                  "estimatedTokens": 18,
+                  "kind": "input",
+                  "utf8Bytes": 78
+                },
+                {
+                  "characters": 0,
+                  "estimatedTokens": 0,
+                  "kind": "documents",
+                  "utf8Bytes": 0
+                }
+              ],
+              "safetyMargin": 256,
+              "tokenizer": "cl100kBase",
+              "utf8Bytes": 2931
+            },
+            "syntheticServerUsage": {
+              "cachedInputTokens": null,
+              "inputTokens": 123,
+              "outputTokens": 11,
+              "reasoningTokens": null
+            }
+          },
+          {
+            "measurement": {
+              "admissionEstimate": 1044,
+              "capacity": 32000,
+              "characters": 4719,
+              "effectiveInput": 20000,
+              "estimatedTokens": 1044,
+              "exceeded": null,
+              "outputReserve": 512,
+              "parts": [
+                {
+                  "characters": 2717,
+                  "estimatedTokens": 526,
+                  "kind": "policyTools",
+                  "utf8Bytes": 2717
+                },
+                {
+                  "characters": 0,
+                  "estimatedTokens": 0,
+                  "kind": "history",
+                  "utf8Bytes": 0
+                },
+                {
+                  "characters": 78,
+                  "estimatedTokens": 18,
+                  "kind": "input",
+                  "utf8Bytes": 78
+                },
+                {
+                  "characters": 1789,
+                  "estimatedTokens": 477,
+                  "kind": "documents",
+                  "utf8Bytes": 1789
+                }
+              ],
+              "safetyMargin": 256,
+              "tokenizer": "cl100kBase",
+              "utf8Bytes": 4719
+            },
+            "syntheticServerUsage": {
+              "cachedInputTokens": null,
+              "inputTokens": 123,
+              "outputTokens": 11,
+              "reasoningTokens": null
+            }
+          },
+          {
+            "measurement": {
+              "admissionEstimate": 1423,
+              "capacity": 32000,
+              "characters": 6279,
+              "effectiveInput": 20000,
+              "estimatedTokens": 1423,
+              "exceeded": null,
+              "outputReserve": 512,
+              "parts": [
+                {
+                  "characters": 2717,
+                  "estimatedTokens": 526,
+                  "kind": "policyTools",
+                  "utf8Bytes": 2717
+                },
+                {
+                  "characters": 0,
+                  "estimatedTokens": 0,
+                  "kind": "history",
+                  "utf8Bytes": 0
+                },
+                {
+                  "characters": 78,
+                  "estimatedTokens": 18,
+                  "kind": "input",
+                  "utf8Bytes": 78
+                },
+                {
+                  "characters": 3349,
+                  "estimatedTokens": 856,
+                  "kind": "documents",
+                  "utf8Bytes": 3354
+                }
+              ],
+              "safetyMargin": 256,
+              "tokenizer": "cl100kBase",
+              "utf8Bytes": 6284
+            },
+            "syntheticServerUsage": {
+              "cachedInputTokens": null,
+              "inputTokens": 123,
+              "outputTokens": 11,
+              "reasoningTokens": null
+            }
+          }
+        ],
+        "failure": null
+      },
+      "before": {
+        "calls": [
+          {
+            "measurement": {
+              "admissionEstimate": 563,
+              "capacity": 32000,
+              "characters": 2897,
+              "effectiveInput": 20000,
+              "estimatedTokens": 563,
+              "exceeded": null,
+              "outputReserve": 512,
+              "parts": [
+                {
+                  "characters": 2683,
+                  "estimatedTokens": 519,
+                  "kind": "policyTools",
+                  "utf8Bytes": 2683
+                },
+                {
+                  "characters": 0,
+                  "estimatedTokens": 0,
+                  "kind": "history",
+                  "utf8Bytes": 0
+                },
+                {
+                  "characters": 78,
+                  "estimatedTokens": 18,
+                  "kind": "input",
+                  "utf8Bytes": 78
+                },
+                {
+                  "characters": 0,
+                  "estimatedTokens": 0,
+                  "kind": "documents",
+                  "utf8Bytes": 0
+                }
+              ],
+              "safetyMargin": 256,
+              "tokenizer": "cl100kBase",
+              "utf8Bytes": 2897
+            },
+            "syntheticServerUsage": {
+              "cachedInputTokens": null,
+              "inputTokens": 123,
+              "outputTokens": 11,
+              "reasoningTokens": null
+            }
+          },
+          {
+            "measurement": {
+              "admissionEstimate": 966,
+              "capacity": 32000,
+              "characters": 4627,
+              "effectiveInput": 20000,
+              "estimatedTokens": 966,
+              "exceeded": null,
+              "outputReserve": 512,
+              "parts": [
+                {
+                  "characters": 2683,
+                  "estimatedTokens": 519,
+                  "kind": "policyTools",
+                  "utf8Bytes": 2683
+                },
+                {
+                  "characters": 0,
+                  "estimatedTokens": 0,
+                  "kind": "history",
+                  "utf8Bytes": 0
+                },
+                {
+                  "characters": 78,
+                  "estimatedTokens": 18,
+                  "kind": "input",
+                  "utf8Bytes": 78
+                },
+                {
+                  "characters": 1731,
+                  "estimatedTokens": 406,
+                  "kind": "documents",
+                  "utf8Bytes": 1751
+                }
+              ],
+              "safetyMargin": 256,
+              "tokenizer": "cl100kBase",
+              "utf8Bytes": 4647
+            },
+            "syntheticServerUsage": {
+              "cachedInputTokens": null,
+              "inputTokens": 123,
+              "outputTokens": 11,
+              "reasoningTokens": null
+            }
+          },
+          {
+            "measurement": {
+              "admissionEstimate": 1244,
+              "capacity": 32000,
+              "characters": 5886,
+              "effectiveInput": 20000,
+              "estimatedTokens": 1244,
+              "exceeded": null,
+              "outputReserve": 512,
+              "parts": [
+                {
+                  "characters": 2683,
+                  "estimatedTokens": 519,
+                  "kind": "policyTools",
+                  "utf8Bytes": 2683
+                },
+                {
+                  "characters": 0,
+                  "estimatedTokens": 0,
+                  "kind": "history",
+                  "utf8Bytes": 0
+                },
+                {
+                  "characters": 78,
+                  "estimatedTokens": 18,
+                  "kind": "input",
+                  "utf8Bytes": 78
+                },
+                {
+                  "characters": 2990,
+                  "estimatedTokens": 684,
+                  "kind": "documents",
+                  "utf8Bytes": 3015
+                }
+              ],
+              "safetyMargin": 256,
+              "tokenizer": "cl100kBase",
+              "utf8Bytes": 5911
+            },
+            "syntheticServerUsage": {
+              "cachedInputTokens": null,
+              "inputTokens": 123,
+              "outputTokens": 11,
+              "reasoningTokens": null
+            }
+          }
+        ],
+        "failure": null
+      },
+      "id": "audio-modes"
+    },
+    {
+      "after": {
+        "calls": [
+          {
+            "measurement": {
+              "admissionEstimate": 571,
+              "capacity": 32000,
+              "characters": 2932,
+              "effectiveInput": 20000,
+              "estimatedTokens": 571,
+              "exceeded": null,
+              "outputReserve": 512,
+              "parts": [
+                {
+                  "characters": 2717,
+                  "estimatedTokens": 526,
+                  "kind": "policyTools",
+                  "utf8Bytes": 2717
+                },
+                {
+                  "characters": 0,
+                  "estimatedTokens": 0,
+                  "kind": "history",
+                  "utf8Bytes": 0
+                },
+                {
+                  "characters": 79,
+                  "estimatedTokens": 19,
+                  "kind": "input",
+                  "utf8Bytes": 79
+                },
+                {
+                  "characters": 0,
+                  "estimatedTokens": 0,
+                  "kind": "documents",
+                  "utf8Bytes": 0
+                }
+              ],
+              "safetyMargin": 256,
+              "tokenizer": "cl100kBase",
+              "utf8Bytes": 2932
+            },
+            "syntheticServerUsage": {
+              "cachedInputTokens": null,
+              "inputTokens": 123,
+              "outputTokens": 11,
+              "reasoningTokens": null
+            }
+          },
+          {
+            "measurement": {
+              "admissionEstimate": 644,
+              "capacity": 32000,
+              "characters": 3234,
+              "effectiveInput": 20000,
+              "estimatedTokens": 644,
+              "exceeded": null,
+              "outputReserve": 512,
+              "parts": [
+                {
+                  "characters": 2717,
+                  "estimatedTokens": 526,
+                  "kind": "policyTools",
+                  "utf8Bytes": 2717
+                },
+                {
+                  "characters": 0,
+                  "estimatedTokens": 0,
+                  "kind": "history",
+                  "utf8Bytes": 0
+                },
+                {
+                  "characters": 79,
+                  "estimatedTokens": 19,
+                  "kind": "input",
+                  "utf8Bytes": 79
+                },
+                {
+                  "characters": 303,
+                  "estimatedTokens": 76,
+                  "kind": "documents",
+                  "utf8Bytes": 303
+                }
+              ],
+              "safetyMargin": 256,
+              "tokenizer": "cl100kBase",
+              "utf8Bytes": 3234
+            },
+            "syntheticServerUsage": {
+              "cachedInputTokens": null,
+              "inputTokens": 123,
+              "outputTokens": 11,
+              "reasoningTokens": null
+            }
+          }
+        ],
+        "failure": null
+      },
+      "before": {
+        "calls": [
+          {
+            "measurement": {
+              "admissionEstimate": 564,
+              "capacity": 32000,
+              "characters": 2898,
+              "effectiveInput": 20000,
+              "estimatedTokens": 564,
+              "exceeded": null,
+              "outputReserve": 512,
+              "parts": [
+                {
+                  "characters": 2683,
+                  "estimatedTokens": 519,
+                  "kind": "policyTools",
+                  "utf8Bytes": 2683
+                },
+                {
+                  "characters": 0,
+                  "estimatedTokens": 0,
+                  "kind": "history",
+                  "utf8Bytes": 0
+                },
+                {
+                  "characters": 79,
+                  "estimatedTokens": 19,
+                  "kind": "input",
+                  "utf8Bytes": 79
+                },
+                {
+                  "characters": 0,
+                  "estimatedTokens": 0,
+                  "kind": "documents",
+                  "utf8Bytes": 0
+                }
+              ],
+              "safetyMargin": 256,
+              "tokenizer": "cl100kBase",
+              "utf8Bytes": 2898
+            },
+            "syntheticServerUsage": {
+              "cachedInputTokens": null,
+              "inputTokens": 123,
+              "outputTokens": 11,
+              "reasoningTokens": null
+            }
+          },
+          {
+            "measurement": {
+              "admissionEstimate": 625,
+              "capacity": 32000,
+              "characters": 3148,
+              "effectiveInput": 20000,
+              "estimatedTokens": 625,
+              "exceeded": null,
+              "outputReserve": 512,
+              "parts": [
+                {
+                  "characters": 2683,
+                  "estimatedTokens": 519,
+                  "kind": "policyTools",
+                  "utf8Bytes": 2683
+                },
+                {
+                  "characters": 0,
+                  "estimatedTokens": 0,
+                  "kind": "history",
+                  "utf8Bytes": 0
+                },
+                {
+                  "characters": 79,
+                  "estimatedTokens": 19,
+                  "kind": "input",
+                  "utf8Bytes": 79
+                },
+                {
+                  "characters": 251,
+                  "estimatedTokens": 64,
+                  "kind": "documents",
+                  "utf8Bytes": 251
+                }
+              ],
+              "safetyMargin": 256,
+              "tokenizer": "cl100kBase",
+              "utf8Bytes": 3148
+            },
+            "syntheticServerUsage": {
+              "cachedInputTokens": null,
+              "inputTokens": 123,
+              "outputTokens": 11,
+              "reasoningTokens": null
+            }
+          }
+        ],
+        "failure": null
+      },
+      "id": "missing"
+    },
+    {
+      "after": {
+        "calls": [
+          {
+            "measurement": {
+              "admissionEstimate": 597,
+              "capacity": 32000,
+              "characters": 3077,
+              "effectiveInput": 20000,
+              "estimatedTokens": 597,
+              "exceeded": null,
+              "outputReserve": 512,
+              "parts": [
+                {
+                  "characters": 2717,
+                  "estimatedTokens": 526,
+                  "kind": "policyTools",
+                  "utf8Bytes": 2717
+                },
+                {
+                  "characters": 131,
+                  "estimatedTokens": 27,
+                  "kind": "history",
+                  "utf8Bytes": 131
+                },
+                {
+                  "characters": 94,
+                  "estimatedTokens": 21,
+                  "kind": "input",
+                  "utf8Bytes": 94
+                },
+                {
+                  "characters": 0,
+                  "estimatedTokens": 0,
+                  "kind": "documents",
+                  "utf8Bytes": 0
+                }
+              ],
+              "safetyMargin": 256,
+              "tokenizer": "cl100kBase",
+              "utf8Bytes": 3077
+            },
+            "syntheticServerUsage": {
+              "cachedInputTokens": null,
+              "inputTokens": 123,
+              "outputTokens": 11,
+              "reasoningTokens": null
+            }
+          },
+          {
+            "measurement": {
+              "admissionEstimate": 1065,
+              "capacity": 32000,
+              "characters": 4774,
+              "effectiveInput": 20000,
+              "estimatedTokens": 1065,
+              "exceeded": null,
+              "outputReserve": 512,
+              "parts": [
+                {
+                  "characters": 2717,
+                  "estimatedTokens": 526,
+                  "kind": "policyTools",
+                  "utf8Bytes": 2717
+                },
+                {
+                  "characters": 131,
+                  "estimatedTokens": 27,
+                  "kind": "history",
+                  "utf8Bytes": 131
+                },
+                {
+                  "characters": 94,
+                  "estimatedTokens": 21,
+                  "kind": "input",
+                  "utf8Bytes": 94
+                },
+                {
+                  "characters": 1698,
+                  "estimatedTokens": 471,
+                  "kind": "documents",
+                  "utf8Bytes": 1698
+                }
+              ],
+              "safetyMargin": 256,
+              "tokenizer": "cl100kBase",
+              "utf8Bytes": 4774
+            },
+            "syntheticServerUsage": {
+              "cachedInputTokens": null,
+              "inputTokens": 123,
+              "outputTokens": 11,
+              "reasoningTokens": null
+            }
+          },
+          {
+            "measurement": {
+              "admissionEstimate": 1574,
+              "capacity": 32000,
+              "characters": 6775,
+              "effectiveInput": 20000,
+              "estimatedTokens": 1574,
+              "exceeded": null,
+              "outputReserve": 512,
+              "parts": [
+                {
+                  "characters": 2717,
+                  "estimatedTokens": 526,
+                  "kind": "policyTools",
+                  "utf8Bytes": 2717
+                },
+                {
+                  "characters": 131,
+                  "estimatedTokens": 27,
+                  "kind": "history",
+                  "utf8Bytes": 131
+                },
+                {
+                  "characters": 94,
+                  "estimatedTokens": 21,
+                  "kind": "input",
+                  "utf8Bytes": 94
+                },
+                {
+                  "characters": 3699,
+                  "estimatedTokens": 980,
+                  "kind": "documents",
+                  "utf8Bytes": 3705
+                }
+              ],
+              "safetyMargin": 256,
+              "tokenizer": "cl100kBase",
+              "utf8Bytes": 6781
+            },
+            "syntheticServerUsage": {
+              "cachedInputTokens": null,
+              "inputTokens": 123,
+              "outputTokens": 11,
+              "reasoningTokens": null
+            }
+          },
+          {
+            "measurement": {
+              "admissionEstimate": 1924,
+              "capacity": 32000,
+              "characters": 8198,
+              "effectiveInput": 20000,
+              "estimatedTokens": 1924,
+              "exceeded": null,
+              "outputReserve": 512,
+              "parts": [
+                {
+                  "characters": 2717,
+                  "estimatedTokens": 526,
+                  "kind": "policyTools",
+                  "utf8Bytes": 2717
+                },
+                {
+                  "characters": 131,
+                  "estimatedTokens": 27,
+                  "kind": "history",
+                  "utf8Bytes": 131
+                },
+                {
+                  "characters": 94,
+                  "estimatedTokens": 21,
+                  "kind": "input",
+                  "utf8Bytes": 94
+                },
+                {
+                  "characters": 5122,
+                  "estimatedTokens": 1330,
+                  "kind": "documents",
+                  "utf8Bytes": 5132
+                }
+              ],
+              "safetyMargin": 256,
+              "tokenizer": "cl100kBase",
+              "utf8Bytes": 8208
+            },
+            "syntheticServerUsage": {
+              "cachedInputTokens": null,
+              "inputTokens": 123,
+              "outputTokens": 11,
+              "reasoningTokens": null
+            }
+          }
+        ],
+        "failure": null
+      },
+      "before": {
+        "calls": [
+          {
+            "measurement": {
+              "admissionEstimate": 590,
+              "capacity": 32000,
+              "characters": 3043,
+              "effectiveInput": 20000,
+              "estimatedTokens": 590,
+              "exceeded": null,
+              "outputReserve": 512,
+              "parts": [
+                {
+                  "characters": 2683,
+                  "estimatedTokens": 519,
+                  "kind": "policyTools",
+                  "utf8Bytes": 2683
+                },
+                {
+                  "characters": 131,
+                  "estimatedTokens": 27,
+                  "kind": "history",
+                  "utf8Bytes": 131
+                },
+                {
+                  "characters": 94,
+                  "estimatedTokens": 21,
+                  "kind": "input",
+                  "utf8Bytes": 94
+                },
+                {
+                  "characters": 0,
+                  "estimatedTokens": 0,
+                  "kind": "documents",
+                  "utf8Bytes": 0
+                }
+              ],
+              "safetyMargin": 256,
+              "tokenizer": "cl100kBase",
+              "utf8Bytes": 3043
+            },
+            "syntheticServerUsage": {
+              "cachedInputTokens": null,
+              "inputTokens": 123,
+              "outputTokens": 11,
+              "reasoningTokens": null
+            }
+          },
+          {
+            "measurement": {
+              "admissionEstimate": 973,
+              "capacity": 32000,
+              "characters": 4641,
+              "effectiveInput": 20000,
+              "estimatedTokens": 973,
+              "exceeded": null,
+              "outputReserve": 512,
+              "parts": [
+                {
+                  "characters": 2683,
+                  "estimatedTokens": 519,
+                  "kind": "policyTools",
+                  "utf8Bytes": 2683
+                },
+                {
+                  "characters": 131,
+                  "estimatedTokens": 27,
+                  "kind": "history",
+                  "utf8Bytes": 131
+                },
+                {
+                  "characters": 94,
+                  "estimatedTokens": 21,
+                  "kind": "input",
+                  "utf8Bytes": 94
+                },
+                {
+                  "characters": 1599,
+                  "estimatedTokens": 386,
+                  "kind": "documents",
+                  "utf8Bytes": 1617
+                }
+              ],
+              "safetyMargin": 256,
+              "tokenizer": "cl100kBase",
+              "utf8Bytes": 4659
+            },
+            "syntheticServerUsage": {
+              "cachedInputTokens": null,
+              "inputTokens": 123,
+              "outputTokens": 11,
+              "reasoningTokens": null
+            }
+          },
+          {
+            "measurement": {
+              "admissionEstimate": 2630,
+              "capacity": 32000,
+              "characters": 11322,
+              "effectiveInput": 20000,
+              "estimatedTokens": 2630,
+              "exceeded": null,
+              "outputReserve": 512,
+              "parts": [
+                {
+                  "characters": 2683,
+                  "estimatedTokens": 519,
+                  "kind": "policyTools",
+                  "utf8Bytes": 2683
+                },
+                {
+                  "characters": 131,
+                  "estimatedTokens": 27,
+                  "kind": "history",
+                  "utf8Bytes": 131
+                },
+                {
+                  "characters": 94,
+                  "estimatedTokens": 21,
+                  "kind": "input",
+                  "utf8Bytes": 94
+                },
+                {
+                  "characters": 8280,
+                  "estimatedTokens": 2043,
+                  "kind": "documents",
+                  "utf8Bytes": 8327
+                }
+              ],
+              "safetyMargin": 256,
+              "tokenizer": "cl100kBase",
+              "utf8Bytes": 11369
+            },
+            "syntheticServerUsage": {
+              "cachedInputTokens": null,
+              "inputTokens": 123,
+              "outputTokens": 11,
+              "reasoningTokens": null
+            }
+          },
+          {
+            "measurement": {
+              "admissionEstimate": 4298,
+              "capacity": 32000,
+              "characters": 18005,
+              "effectiveInput": 20000,
+              "estimatedTokens": 4298,
+              "exceeded": null,
+              "outputReserve": 512,
+              "parts": [
+                {
+                  "characters": 2683,
+                  "estimatedTokens": 519,
+                  "kind": "policyTools",
+                  "utf8Bytes": 2683
+                },
+                {
+                  "characters": 131,
+                  "estimatedTokens": 27,
+                  "kind": "history",
+                  "utf8Bytes": 131
+                },
+                {
+                  "characters": 94,
+                  "estimatedTokens": 21,
+                  "kind": "input",
+                  "utf8Bytes": 94
+                },
+                {
+                  "characters": 14963,
+                  "estimatedTokens": 3711,
+                  "kind": "documents",
+                  "utf8Bytes": 15041
+                }
+              ],
+              "safetyMargin": 256,
+              "tokenizer": "cl100kBase",
+              "utf8Bytes": 18083
+            },
+            "syntheticServerUsage": {
+              "cachedInputTokens": null,
+              "inputTokens": 123,
+              "outputTokens": 11,
+              "reasoningTokens": null
+            }
+          }
+        ],
+        "failure": null
+      },
+      "id": "follow-up"
+    }
+  ],
+  "config": {
+    "baseUrl": "https://controlled.fixture/v1",
+    "context": {
+      "capacity": 32000,
+      "inputTarget": 20000,
+      "maxOutput": 512,
+      "reasoningReserve": 0,
+      "safetyMargin": 256,
+      "source": "manualUnverified",
+      "tokenizer": "cl100kBase"
+    },
+    "model": "fixture-model"
+  },
+  "note": "Same native request assembly, loopback fixture model and budget for both document flows. Token counts estimate serialized framing; server usage is synthetic, not paid-service evidence.",
+  "version": 1
+}

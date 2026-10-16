@@ -373,6 +373,7 @@ pub struct SupervisedChild {
     registry: ChildRegistry,
     marker: String,
     registered: bool,
+    owned_group: bool,
 }
 
 impl SupervisedChild {
@@ -414,7 +415,22 @@ impl SupervisedChild {
             registry: registry.clone(),
             marker: marker.into(),
             registered: false,
+            owned_group: false,
         })
+    }
+
+    /// A task-owned process group: descendants inherit the same ownership and
+    /// bounded cleanup, including when the leader exits before its children.
+    pub fn spawn_group(
+        registry: &ChildRegistry,
+        marker: impl Into<String>,
+        command: &mut Command,
+    ) -> std::io::Result<Self> {
+        use std::os::unix::process::CommandExt;
+        command.process_group(0);
+        let mut child = Self::spawn(registry, marker, command)?;
+        child.owned_group = true;
+        Ok(child)
     }
 
     /// Writes the ownership record now (idempotent).
@@ -428,7 +444,12 @@ impl SupervisedChild {
     /// §12 bounded shutdown: SIGTERM → grace window → SIGKILL → confirm.
     /// `Confirmed` drops the ownership record; `Unconfirmed` keeps it.
     pub fn shutdown(&mut self, window: Duration) -> ShutdownOutcome {
-        let outcome = if kill_escalate(&mut self.child, self.identity.pid, window) {
+        let confirmed = if self.owned_group {
+            shutdown_process_group(&mut self.child, self.identity.pid, window)
+        } else {
+            kill_escalate(&mut self.child, self.identity.pid, window)
+        };
+        let outcome = if confirmed {
             ShutdownOutcome::Confirmed
         } else {
             ShutdownOutcome::Unconfirmed
@@ -460,6 +481,17 @@ impl SupervisedChild {
         &self.identity
     }
 
+    /// Captured spawn identity for durable check ownership, including groups
+    /// whose leaders have already exited while descendants remain alive.
+    pub fn owned_runtime_group(&self) -> Option<crate::project::runtime_gate::OwnedRuntimeGroup> {
+        self.owned_group
+            .then(|| crate::project::runtime_gate::OwnedRuntimeGroup {
+                group_id: self.identity.pid,
+                leader_started_at: self.identity.started_at.clone(),
+                marker: self.marker.clone(),
+            })
+    }
+
     /// Non-blocking reap poll — the supervisor / watchdog exit checks.
     pub fn try_wait(&mut self) -> std::io::Result<Option<std::process::ExitStatus>> {
         self.child.try_wait()
@@ -470,6 +502,40 @@ impl SupervisedChild {
     /// here.
     pub fn child(&mut self) -> &mut Child {
         &mut self.child
+    }
+}
+
+/// Signal only the process group created by spawn_group. Reaping the leader
+/// does not prove its descendants released their ports, pipes or devices.
+fn shutdown_process_group(child: &mut Child, pid: u32, window: Duration) -> bool {
+    let group = -(pid as i32);
+    let alive = || unsafe { libc::kill(group, 0) == 0 };
+    let reaped = |child: &mut Child| matches!(child.try_wait(), Ok(Some(_)));
+    if reaped(child) && !alive() {
+        return true;
+    }
+    unsafe {
+        libc::kill(group, libc::SIGTERM);
+    }
+    let deadline = Instant::now() + window;
+    while Instant::now() < deadline {
+        if reaped(child) && !alive() {
+            return true;
+        }
+        std::thread::sleep(PROCESS_POLL_INTERVAL);
+    }
+    unsafe {
+        libc::kill(group, libc::SIGKILL);
+    }
+    let deadline = Instant::now() + Duration::from_secs(1);
+    loop {
+        if reaped(child) && !alive() {
+            return true;
+        }
+        if Instant::now() >= deadline {
+            return false;
+        }
+        std::thread::sleep(PROCESS_POLL_INTERVAL);
     }
 }
 

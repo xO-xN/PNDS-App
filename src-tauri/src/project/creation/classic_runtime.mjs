@@ -90,7 +90,13 @@ async function main() {
             const health = await (await fetch(`${origin}/__pnds/health`)).json()
             assert.equal(health.projectId, manifest.id)
             assert.equal(health.audioMode, mode)
-            return health.status === 'ready'
+            if (health.status !== 'ready') return false
+            assert.equal(
+              health.audio.status,
+              mode === 'none' ? 'disabled' : 'ready'
+            )
+            if (mode === 'none') assert.equal(health.audio.target, null)
+            return true
           } catch (error) {
             if (error instanceof assert.AssertionError) throw error
             return false

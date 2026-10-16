@@ -1,0 +1,9 @@
+{
+  "date": "2026-10-15",
+  "source": "macOS App log: com.xo-xn.pnds-app/PNDS.log",
+  "normalization": "Only observed fixed diagnostic markers retained; other log content omitted.",
+  "events": [
+    "[model-connection] started credential_source=keychain",
+    "[model-connection] passed text=true tool_call=true"
+  ]
+}

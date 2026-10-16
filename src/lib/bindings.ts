@@ -177,6 +177,97 @@ async savePreferences(preferences: AppPreferences) : Promise<Result<null, string
     else return { status: "error", error: e  as any };
 }
 },
+async getModelCredentialStatus() : Promise<Result<ModelCredentialStatus, ModelServiceError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_model_credential_status") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async saveModelCredential(key: string) : Promise<Result<null, ModelServiceError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("save_model_credential", { key }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async removeModelCredential() : Promise<Result<null, ModelServiceError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("remove_model_credential") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async testModelConnection(config: ModelServiceConfig, key: string | null) : Promise<Result<ModelConnectionReport, ModelServiceError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("test_model_connection", { config, key }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async beginAssistantRequest(identity: string, requestId: string) : Promise<Result<AssistantRequestSnapshot, ModelServiceError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("begin_assistant_request", { identity, requestId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async assistantModelTurn(requestId: string, messages: AssistantModelMessage[], turnId: string) : Promise<Result<AssistantModelTurn, ModelServiceError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("assistant_model_turn", { requestId, messages, turnId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Local-only measurement: no credential read, HTTP call or project access.
+ */
+async measureAssistantContext(config: ModelServiceConfig, messages: AssistantModelMessage[]) : Promise<Result<ContextMeasurement, ModelServiceError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("measure_assistant_context", { config, messages }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async cancelAssistantRequest(requestId: string) : Promise<Result<null, ModelServiceError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("cancel_assistant_request", { requestId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async loadAssistantHistory(identity: string) : Promise<Result<AssistantHistory, AssistantHistoryError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("load_assistant_history", { identity }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async saveAssistantHistory(identity: string, epoch: string, messages: AssistantHistoryMessage[]) : Promise<Result<null, AssistantHistoryError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("save_assistant_history", { identity, epoch, messages }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async clearAssistantHistory(identity: string) : Promise<Result<AssistantHistory, AssistantHistoryError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("clear_assistant_history", { identity }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async openCreationProject(path: string) : Promise<Result<CreationWorkspace, CreationError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("open_creation_project", { path }) };
@@ -228,6 +319,38 @@ async diagnoseCreationProject(identity: string) : Promise<Result<DiagnosticRepor
 async creationDiagnosticIsStale(identity: string, inputFingerprint: string) : Promise<Result<boolean, CreationError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("creation_diagnostic_is_stale", { identity, inputFingerprint }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async startCreationCheck(identity: string, options: ControlledCheckOptions) : Promise<Result<string, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("start_creation_check", { identity, options }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async getCreationCheck(identity: string, taskId: string) : Promise<Result<CreationCheckTask, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_creation_check", { identity, taskId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async cancelCreationCheck(taskId: string) : Promise<Result<null, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("cancel_creation_check", { taskId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async creationCheckIsStale(identity: string, taskId: string) : Promise<Result<boolean, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("creation_check_is_stale", { identity, taskId }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -388,6 +511,22 @@ async readCreationFile(identity: string, path: string) : Promise<Result<Creation
 async saveCreationFile(identity: string, path: string, text: string, expectedVersion: string) : Promise<Result<string, CreationError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("save_creation_file", { identity, path, text, expectedVersion }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async saveCreationFileChange(identity: string, path: string, text: string, expectedVersion: string) : Promise<Result<CreationFileChange, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("save_creation_file_change", { identity, path, text, expectedVersion }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async undoCreationFileChange(identity: string, changeId: string) : Promise<Result<CreationContent, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("undo_creation_file_change", { identity, changeId }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -945,7 +1084,9 @@ async systemSafariVersion() : Promise<Result<string | null, string>> {
 
 
 export const events = __makeEvents__<{
+assistantTextEvent: AssistantTextEvent,
 helpReadyEvent: HelpReadyEvent,
+modelConfigurationChangedEvent: ModelConfigurationChangedEvent,
 openBundleEvent: OpenBundleEvent,
 performerDestroyedEvent: PerformerDestroyedEvent,
 performerVisibilityEvent: PerformerVisibilityEvent,
@@ -955,7 +1096,9 @@ setlistExportProgressEvent: SetlistExportProgressEvent,
 windowFocusEvent: WindowFocusEvent,
 windowStateEvent: WindowStateEvent
 }>({
+assistantTextEvent: "assistant-text-event",
 helpReadyEvent: "help-ready-event",
+modelConfigurationChangedEvent: "model-configuration-changed-event",
 openBundleEvent: "open-bundle-event",
 performerDestroyedEvent: "performer-destroyed-event",
 performerVisibilityEvent: "performer-visibility-event",
@@ -1147,7 +1290,45 @@ dnsEnabled?: boolean | null;
  * never start bound to a dead interface. App-local, never touches
  * project manifests.
  */
-lanIp?: string | null }
+lanIp?: string | null;
+/**
+ * #165: app-local endpoint/model only; the credential lives in Keychain.
+ */
+modelService?: ModelServiceConfig | null; modelContextProfiles?: ModelServiceConfig[];
+/**
+ * Monitor fraction within the resizable creation workspace (not sidebar).
+ */
+assistantMonitorRatio?: number | null }
+export type AssistantAttachmentSource = "saved" | "draft" | "proposal"
+export type AssistantContextMarker = { type: "topic" } | { type: "summary"; sourceIds: string[]; serviceKey: string; sections: AssistantSummarySections }
+export type AssistantDocumentMetrics = { returnedCharacters: number; reusedCharacters: number; resultCharacters: number }
+export type AssistantHistory = { epoch: string; projectKey: string; appVersion: string; messages: AssistantHistoryMessage[] }
+export type AssistantHistoryAppliedDiff = { before: string; after: string }
+export type AssistantHistoryAttachment = { id: string; projectKey: string; path: string; startLine: number; endLine: number; source: AssistantAttachmentSource; version: string; candidateRevision?: number | null; text: string }
+export type AssistantHistoryError = { type: "invalidIdentity" } | { type: "io" } | { type: "invalidFormat" } | { type: "unsupportedVersion" } | { type: "staleHistory" } | { type: "tooLarge" }
+export type AssistantHistoryLocale = "en" | "zh-CN"
+export type AssistantHistoryMessage = { id: string; role: AssistantHistoryRole; text: string; status: AssistantHistoryStatus; sources: AssistantHistorySource[]; scope: AssistantHistoryScope; error?: AssistantHistoryRequestError | null; appVersion?: string | null; attachments?: AssistantHistoryAttachment[] | null; proposals?: AssistantHistoryProposal[] | null; usage?: AssistantRoundUsage | null; contextMarker?: AssistantContextMarker | null; contextServiceKey?: string | null }
+export type AssistantHistoryProposal = { id: string; projectKey: string; path: string; sourceVersion: string; candidateRevision: number; text: string; appliedDiff?: AssistantHistoryAppliedDiff | null; preview: AssistantProposalPreview; pendingRefresh: boolean }
+export type AssistantHistoryRequestError = "invalidConfig" | "missingCredential" | "credentialStore" | "authentication" | "network" | "timeout" | "protocol" | "toolsUnsupported" | "rateLimited" | "serviceUnavailable" | "cancelled" | "budgetExceeded" | "contextTokensExceeded" | "contextBytesExceeded" | "contextMessagesExceeded" | "toolCallsExceeded" | "toolCharactersExceeded" | "requestBusy" | "invalidIdentity" | "invalidTool" | "noProgress" | "corpusUnavailable" | "notConfigured" | "requestFailed" | "invalidSummary"
+export type AssistantHistoryRole = "user" | "assistant"
+export type AssistantHistoryScope = "platform" | "project"
+export type AssistantHistorySource = { docId: string; sectionId: string; title: string; locale: AssistantHistoryLocale; version?: string | null; offset?: number | null; endOffset?: number | null; totalCharacters?: number | null; format?: AssistantSourceFormat | null }
+export type AssistantHistoryStatus = "pending" | "completed" | "failed" | "cancelled"
+export type AssistantMessageRole = "system" | "user" | "assistant" | "tool"
+export type AssistantModelMessage = { role: AssistantMessageRole; content: string | null; toolCalls?: AssistantToolCall[] | null; toolCallId?: string | null; contextKind?: ContextContentKind | null }
+export type AssistantModelTurn = { text: string | null; toolCalls: AssistantToolCall[]; usage?: ModelUsage | null; measurement?: ContextMeasurement | null }
+export type AssistantProposalPreview = "none" | "temporary" | "stale" | "historical"
+export type AssistantRequestSnapshot = { requestId: string; model: string; baseUrl: string; config: ModelServiceConfig }
+export type AssistantRoundUsage = { calls: (ModelUsage | null)[]; complete: boolean; documentMetrics?: AssistantDocumentMetrics | null }
+export type AssistantSourceFormat = "plainText" | "markdown"
+export type AssistantSummaryItem = { text: string; sourceIds: string[] }
+export type AssistantSummarySections = { userDecisions: AssistantSummaryItem[]; assistantSuggestions: AssistantSummaryItem[]; verifiedFacts: AssistantSummaryItem[]; unverifiedFacts: AssistantSummaryItem[]; openQuestions: AssistantSummaryItem[] }
+/**
+ * Cumulative answer text for exactly one model turn. No credential, provider
+ * reasoning or tool arguments cross this progress channel.
+ */
+export type AssistantTextEvent = { requestId: string; turnId: string; text: string }
+export type AssistantToolCall = { id: string; name: string; arguments: string }
 export type AudioConfig = { 
 /**
  * The raw-JSON validation below has already rejected unknown mode
@@ -1204,6 +1385,7 @@ path: string;
  */
 name: string }
 export type BundleOutputInfo = { outputPath: string; exists: boolean }
+export type CapacitySource = "manualUnverified"
 /**
  * §7.1: the Internal channel plan computed at session start.
  */
@@ -1224,8 +1406,24 @@ bridgedChannels: number;
  * B: first private project bus; equals K.
  */
 privateBusStart: number }
+export type ContextContentKind = "history" | "input" | "documents" | "summary" | "projectOverview" | "projectFragment" | "attachment"
+export type ContextMeasurement = { characters: number; utf8Bytes: number; estimatedTokens: number | null;
+/**
+ * Portable display-only fallback. Never used for admission or server usage.
+ */
+referenceEstimatedTokens?: number | null; admissionEstimate: number; tokenizer: ContextTokenizer; capacity: number | null; effectiveInput: number | null; outputReserve: number; safetyMargin: number; parts: ContextPart[]; exceeded: string | null }
+export type ContextPart = { kind: string; characters: number; utf8Bytes: number; estimatedTokens: number | null }
+export type ContextTokenizer = "unknown" | "cl100kBase" | "o200kBase"
+export type ControlledCheckCleanup = { nodeConfirmed: boolean; audioConfirmed: boolean; temporaryFilesRemoved: boolean; errors: string[] }
+export type ControlledCheckEnvironment = { nodeBinary: string; nodeVersion: string | null; outputDevice: string | null; sampleRate: number | null; channelPlan: ChannelPlan | null; oscTarget: string | null }
+export type ControlledCheckOptions = { mode: AudioMode; compile: boolean; timeoutMs: number; outputDevice: string | null; sampleRate: number }
+export type ControlledCheckPhase = "preparing" | "static" | "compiling" | "audio" | "starting" | "health" | "http" | "cleaning" | "finished"
+export type ControlledCheckProgress = { taskId: string; projectPath: string; phase: ControlledCheckPhase; path: string | null; copiedBytes: number }
+export type ControlledCheckReport = { schemaVersion: number; checkerVersion: string; taskId: string; projectPath: string; mode: AudioMode; status: ControlledCheckStatus; error: string | null; diagnostics: DiagnosticReport | null; evidence: InputEvidence | null; freshness: Freshness | null; environment: ControlledCheckEnvironment; checks: DiagnosticCheck[]; health: HealthPayload | null; outputTail: string[]; cleanup: ControlledCheckCleanup; unverified: string[] }
+export type ControlledCheckStatus = "passed" | "failed" | "cancelled" | "notExecuted"
 export type CreationCategory = "audio" | "pages" | "modules" | "assets" | "system"
 export type CreationChanges = { files: CreationFile[]; changed: string[]; revision: number }
+export type CreationCheckTask = { taskId: string; identity: string; progress: ControlledCheckProgress | null; report: ControlledCheckReport | null }
 export type CreationContent = 
 /**
  * `version` fingerprints the bytes read from disk; saves must echo it
@@ -1235,6 +1433,11 @@ export type CreationContent =
 export type CreationError = { code: CreationErrorCode; detail: string }
 export type CreationErrorCode = "missing" | "permission" | "invalidUtf8" | "tooLarge" | "invalidIdentity" | "pathEscape" | "invalidProject" | "manifestInvalid" | "testValidation" | "testStartup" | "versionConflict" | "targetExists" | "io"
 export type CreationFile = { path: string; size: number; kind: CreationFileKind; category: CreationCategory }
+/**
+ * One successfully written existing text file. Content is retained only in
+ * memory and never relies on Git; identity and disk version guard restoration.
+ */
+export type CreationFileChange = { id: string; path: string; beforeText: string; afterText: string; beforeVersion: string; afterVersion: string }
 export type CreationFileKind = "text" | "image" | "binary"
 export type CreationGitChange = { path: string; staged: boolean; unstaged: boolean; untracked: boolean; indexStatus: string; diskStatus: string }
 export type CreationGitDiff = { state: GitDiffState; text: string | null; detail: string | null }
@@ -1251,6 +1454,7 @@ export type CreationProject = { identity: string; root: string; name: string; so
 export type CreationRuntime = { generation: string; snapshot: SessionSnapshot; projectRoot: string | null }
 export type CreationSource = "folder" | "bundle" | "utility" | "readOnlyFolder"
 export type CreationWorkspace = { project: CreationProject; files: CreationFile[] }
+export type DependencyEvidence = { name: string; declaration: string; optional: boolean; installedVersion: string | null; exactSharedVersion: string | null }
 export type DiagnosticCheck = { code: string; status: DiagnosticStatus; reason: string }
 export type DiagnosticInput = { path: string; kind: string; fingerprint: string }
 export type DiagnosticIssue = { code: string; severity: DiagnosticSeverity; field: string | null; path: string | null; reason: string }
@@ -1331,8 +1535,11 @@ daemon: boolean;
  * enabling requires the installed, bundled App).
  */
 plistPresent: boolean; listeners: DnsListeners | null; bindError: string | null; upstreams: string[]; mapping: DnsMappingFacts | null; knownDomains: string[]; stats: JsonValue | null }
+export type EvidenceFile = { path: string; directory: boolean; bytes: number; sha256: string; mode: number }
+export type Freshness = { stale: boolean; complete: boolean; reasons: string[] }
 export type GitDiffLayer = "staged" | "unstaged" | "untracked"
 export type GitDiffState = "text" | "binary" | "unreadable" | "tooLarge" | "unavailable" | "timeout" | "noChange"
+export type GitEvidence = { head: string | null; dirty: boolean | null; state: string; detail: string | null }
 export type GitState = "available" | "gitUnavailable" | "notRepository" | "unreadable" | "tooLarge" | "timeout"
 export type HandoffDocument = { text: string; version: string | null }
 export type HandoffTask = { id: string; intent: string; files: string[]; acceptance: string; status: string }
@@ -1358,7 +1565,7 @@ export type HealthScoreServer = { performerPort?: number | null; monitorPort?: n
  * report), and the raw markdown. Titles and sections are the
  * frontend's to derive (it owns the markdown structure pass).
  */
-export type HelpCorpusDocument = { id: string; path: string; markdown: string }
+export type HelpCorpusDocument = { id: string; path: string; markdown: string; version?: string | null }
 /**
  * The help window finished booting and is listening for navigation
  * (formerly `pnds:help-ready`). Emitted by the help webview itself;
@@ -1498,6 +1705,8 @@ export type HttpsProblemCode =
  * readable problems when validation refused the material.
  */
 export type HttpsValidationOutcome = { summary: HttpsCertificateSummary | null; problems: HttpsProblem[] }
+export type InputEvidence = { sourceRoot: string; sourceIdentity: string; sharedSourceRoot: string | null; projectSha256: string; sharedSha256: string | null; projectFiles: EvidenceFile[]; sharedFiles: EvidenceFile[]; productionDependencies: DependencyEvidence[]; installedPackages: InstalledPackageEvidence[]; sharedLibraries: SharedLibraryReference[]; git: GitEvidence; changedDuringPreparation: boolean; scope: string; notes: string[] }
+export type InstalledPackageEvidence = { path: string; name: string | null; version: string | null }
 export type JsonValue = null | boolean | number | string | JsonValue[] | Partial<{ [key in string]: JsonValue }>
 export type Manifest = { 
 /**
@@ -1522,6 +1731,17 @@ telematic?: boolean | null;
  * the same variable, zero project changes.
  */
 performerAddress?: string | null }
+/**
+ * Saved model configuration or credential changed; consumers revoke pending
+ * tool work and refresh public state without receiving any credential data.
+ */
+export type ModelConfigurationChangedEvent = Record<string, never>
+export type ModelConnectionReport = { text: boolean; toolCall: boolean }
+export type ModelContextConfig = { capacity: number | null; inputTarget: number | null; maxOutput: number; reasoningReserve: number; safetyMargin: number; tokenizer: ContextTokenizer; source: CapacitySource }
+export type ModelCredentialStatus = { hasKey: boolean }
+export type ModelServiceConfig = { baseUrl: string; model: string; context?: ModelContextConfig | null }
+export type ModelServiceError = { type: "invalidConfig" } | { type: "missingCredential" } | { type: "credentialStore" } | { type: "authentication" } | { type: "network" } | { type: "timeout" } | { type: "protocol" } | { type: "toolsUnsupported" } | { type: "rateLimited" } | { type: "serviceUnavailable" } | { type: "cancelled" } | { type: "budgetExceeded" } | { type: "contextTokensExceeded" } | { type: "contextBytesExceeded" } | { type: "contextMessagesExceeded" } | { type: "requestBusy" } | { type: "invalidIdentity" }
+export type ModelUsage = { inputTokens: number | null; outputTokens: number | null; cachedInputTokens: number | null; reasoningTokens: number | null }
 export type ModuleCompatibility = { version: string; hostProtocol: number; runtime: string[]; adaptation: string[] }
 export type ModuleSource = { repository: string; revision: string; version: string }
 export type ModuleState = "available" | "added" | "needsHandoff" | "conflict"

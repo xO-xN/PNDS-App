@@ -1,3 +1,4 @@
+import { editText, editorView } from '@/test/text-editor'
 import {
   creationProjectAction,
   creationFileButton,
@@ -234,7 +235,11 @@ it('edits a recognized cover after renaming a generic document into README.md', 
   )
   fireEvent.click(creationFileButton('notes.md'))
   await waitFor(() =>
-    expect(screen.getByRole('textbox', { name: 'notes.md' })).toHaveValue(cover)
+    expect(
+      editorView(
+        screen.getByRole('textbox', { name: 'notes.md' })
+      ).state.doc.toString()
+    ).toBe(cover)
   )
   vi.mocked(commands.renameCreationFile).mockResolvedValueOnce({
     status: 'ok',
@@ -467,9 +472,10 @@ it('reads a plain README with safe links, edits text, and keeps the chosen langu
     screen.getByRole('combobox', { name: 'README language' })
   ).toHaveTextContent('简体中文')
   fireEvent.click(screen.getByRole('button', { name: 'Edit text' }))
-  fireEvent.change(screen.getByRole('textbox', { name: 'README.md' }), {
-    target: { value: plain + '\nNew paragraph.\n' },
-  })
+  editText(
+    screen.getByRole('textbox', { name: 'README.md' }),
+    plain + '\nNew paragraph.\n'
+  )
   fireEvent.click(
     screen.getByRole('button', { name: 'Preview / cover editor' })
   )
@@ -490,12 +496,15 @@ it('keeps ordinary text editing available while typing incomplete cover metadata
   )
   fireEvent.click(creationFileButton('README.md'))
   fireEvent.click(await screen.findByRole('button', { name: 'Edit text' }))
-  fireEvent.change(screen.getByRole('textbox', { name: 'README.md' }), {
-    target: { value: '# Ordinary notes\n\ntitle: Draft\n' },
-  })
-  expect(screen.getByRole('textbox', { name: 'README.md' })).toHaveValue(
+  editText(
+    screen.getByRole('textbox', { name: 'README.md' }),
     '# Ordinary notes\n\ntitle: Draft\n'
   )
+  expect(
+    editorView(
+      screen.getByRole('textbox', { name: 'README.md' })
+    ).state.doc.toString()
+  ).toBe('# Ordinary notes\n\ntitle: Draft\n')
   expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled()
 })
 

@@ -1,0 +1,19 @@
+{
+  "date": "2026-10-15",
+  "evidenceKind": "authorized-local-history-read-and-scope-verification",
+  "historyMessageCount": 6,
+  "latestQuestionTopic": "Whether the current settings allow creating a multichannel work",
+  "latestReply": {
+    "status": "completed",
+    "error": null,
+    "sourceCount": 7,
+    "disclosedProjectFileAccess": false
+  },
+  "verifiedScope": "The implemented #166 flow offers search_help and read_help_section only. Project file access is assigned to #168; explicit snippets to #225, outside the user's #165 through #167 scope.",
+  "userReportedFailure": "Sending a new question did not reveal the newest messages, making progress unclear.",
+  "limitations": [
+    "The original history, full reply and project identity were not copied.",
+    "A model statement and saved message do not prove actual wire payload contents.",
+    "Scroll behavior and the earlier save-status visual fix still require native observation."
+  ]
+}

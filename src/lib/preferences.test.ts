@@ -39,6 +39,33 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks())
 
 describe('updatePreferences — serialized save queue', () => {
+  it('preserves model service configuration alongside overlapping audio and language changes', async () => {
+    const disk = mockDisk({ theme: 'system', modelService: null })
+    await expect(
+      Promise.all([
+        updatePreferences({
+          modelService: {
+            baseUrl: 'https://model.example/v1',
+            model: 'model-one',
+          },
+        }),
+        updatePreferences({ language: 'zh-CN', sampleRate: 96000 }),
+      ])
+    ).resolves.toEqual([true, true])
+    expect(await loadPreferences()).toMatchObject({
+      modelService: { baseUrl: 'https://model.example/v1', model: 'model-one' },
+      language: 'zh-CN',
+      sampleRate: 96000,
+    })
+    await expect(updatePreferences({ modelService: null })).resolves.toBe(true)
+    expect(disk.read()).toEqual({
+      theme: 'system',
+      modelService: null,
+      language: 'zh-CN',
+      sampleRate: 96000,
+    })
+  })
+
   it('overlapping field patches never clobber each other', async () => {
     const disk = mockDisk({ theme: 'system' })
 

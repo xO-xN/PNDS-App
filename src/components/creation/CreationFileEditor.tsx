@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { CreationFileChangeControls } from './CreationFileChangeControls'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Pencil, MoreHorizontal } from 'lucide-react'
 import {
@@ -46,6 +47,7 @@ import {
 import { CreationErrorNotice } from './CreationErrorNotice'
 import { CreationManifestForm } from './CreationManifestForm'
 import { CreationReadme } from './CreationReadme'
+const CreationCodeEditor = lazy(() => import('./CreationCodeEditor'))
 import {
   inspectEditableReadme,
   isProjectReadme,
@@ -84,8 +86,29 @@ export function CreationFileEditor({
       ? t('creation.compile.runtimeBusy')
       : null
   const renameNote = useCreationFilesStore(state => state.renameNote)
-  const [manifestView, setManifestView] = useState<'form' | 'text'>('form')
-  const [readmeView, setReadmeView] = useState<'preview' | 'text'>('preview')
+  const location = useCreationFilesStore(state =>
+    state.location?.identity === identity && state.location.path === file.path
+      ? state.location
+      : null
+  )
+  const [manifestChoice, setManifestChoice] = useState<{
+    location: typeof location
+    view: 'form' | 'text'
+  }>({ location: null, view: 'form' })
+  const [readmeChoice, setReadmeChoice] = useState<{
+    location: typeof location
+    view: 'preview' | 'text'
+  }>({ location: null, view: 'preview' })
+  const manifestView =
+    location && manifestChoice.location !== location
+      ? 'text'
+      : manifestChoice.view
+  const readmeView =
+    location && readmeChoice.location !== location ? 'text' : readmeChoice.view
+  const setManifestView = (view: 'form' | 'text') =>
+    setManifestChoice({ location, view })
+  const setReadmeView = (view: 'preview' | 'text') =>
+    setReadmeChoice({ location, view })
   const workspace = useCreationStore(state => state.workspace)
   const readmeLocale =
     useCreationFilesStore(state => state.readmeLocale) ??
@@ -94,15 +117,11 @@ export function CreationFileEditor({
   const [content, setContent] = useState<CreationContent | null>(null)
   const [error, setError] = useState<CreationError | null>(null)
   const [imageFailed, setImageFailed] = useState(false)
-  const [query, setQuery] = useState('')
-  const [start, setStart] = useState(0)
   const [renameOpen, setRenameOpen] = useState(false)
   const [renameValue, setRenameValue] = useState('')
   const [renameBusy, setRenameBusy] = useState(false)
   const [renameError, setRenameError] = useState<CreationError | null>(null)
   const menuAction = useRef<(() => void) | null>(null)
-  const editorRef = useRef<HTMLTextAreaElement>(null)
-  const match = useRef<HTMLElement>(null)
   const editableText = editable && file.kind === 'text'
   const isManifest = editableText && file.path === 'manifest.json'
   const diskRevision = useCreationFilesStore(
@@ -135,12 +154,6 @@ export function CreationFileEditor({
   const isReadme = file.kind === 'text' && isProjectReadme(file.path)
   const readmeDocument = draft?.readme ?? inspectEditableReadme(text)
   const unsafeReadme = isReadme && readmeDocument.kind === 'unsafe'
-  const index = query
-    ? text.toLocaleLowerCase().indexOf(query.toLocaleLowerCase(), start)
-    : -1
-  useEffect(() => {
-    if (!editableText) match.current?.scrollIntoView({ block: 'center' })
-  }, [index, query, editableText])
   const reveal = async () => {
     try {
       const result = await commands.revealCreationPath(identity, file.path)
@@ -194,7 +207,10 @@ export function CreationFileEditor({
           : t('creation.saved')
     : t('creation.saved')
   return (
-    <section className="flex min-h-0 flex-1 flex-col" aria-label={file.path}>
+    <section
+      className="flex min-h-0 min-w-0 flex-1 flex-col"
+      aria-label={file.path}
+    >
       <header className="desktop-file-header space-y-2 border-b border-(--pnds-border) p-3">
         <div className="flex min-w-0 items-center gap-2">
           <h2 className="break-all font-medium">{file.path}</h2>
@@ -370,52 +386,18 @@ export function CreationFileEditor({
             {compileReason ?? t('creation.compile.scope')}
           </p>
         )}
+        {editableText && !unsafeReadme && (
+          <CreationFileChangeControls
+            key={`${identity}:${file.path}`}
+            identity={identity}
+            path={file.path}
+          />
+        )}
         {editableText && dirty && (
           <p className="text-xs">{t('creation.draftHint')}</p>
         )}
-        {file.kind === 'text' &&
-          (!isManifest || manifestView === 'text') &&
-          (!isReadme || (readmeView === 'text' && !unsafeReadme)) && (
-            <div className="flex items-center gap-2">
-              <Input
-                aria-label={t('creation.findText')}
-                placeholder={t('creation.findText')}
-                value={query}
-                onChange={event => {
-                  setQuery(event.target.value)
-                  setStart(0)
-                }}
-              />
-              <Button
-                variant="outline"
-                disabled={!query || index < 0}
-                onClick={() => {
-                  const next = index + query.length
-                  setStart(
-                    text
-                      .toLocaleLowerCase()
-                      .indexOf(query.toLocaleLowerCase(), next) < 0
-                      ? 0
-                      : next
-                  )
-                  if (editableText) {
-                    editorRef.current?.focus()
-                    editorRef.current?.setSelectionRange(
-                      index,
-                      index + query.length
-                    )
-                  }
-                }}
-              >
-                {t('creation.nextMatch')}
-              </Button>
-              {query && index < 0 && (
-                <span role="status">{t('creation.noMatch')}</span>
-              )}
-            </div>
-          )}
       </header>
-      <div className="min-h-0 flex-1 overflow-auto p-4">
+      <div className="creation-file-content min-h-0 flex-1 overflow-auto p-4">
         {(error || draft?.error) && (
           <CreationErrorNotice
             error={(error ?? draft?.error) as CreationError}
@@ -437,6 +419,7 @@ export function CreationFileEditor({
         )}
         {isReadme &&
         (draft || content?.kind === 'text') &&
+        !(location && readmeView === 'text') &&
         (readmeView === 'preview' || unsafeReadme || !editableText) ? (
           <CreationReadme
             text={text}
@@ -459,41 +442,30 @@ export function CreationFileEditor({
                 }
               />
             ) : (
-              <textarea
-                ref={editorRef}
-                dir="ltr"
-                className="creation-editor-textarea"
-                aria-label={file.path}
-                value={draft.text}
-                spellCheck={false}
-                onChange={event =>
-                  useCreationFilesStore
-                    .getState()
-                    .edit(file.path, event.target.value)
-                }
-              />
+              <Suspense fallback={<p role="status">{t('creation.loading')}</p>}>
+                <CreationCodeEditor
+                  identity={identity}
+                  path={file.path}
+                  draft={
+                    isReadme && readmeDocument.kind !== 'document'
+                      ? undefined
+                      : draft
+                  }
+                  text={draft.text}
+                  location={location}
+                />
+              </Suspense>
             )
           ) : null
         ) : content?.kind === 'text' ? (
-          <pre
-            dir="ltr"
-            className="select-text whitespace-pre-wrap break-words font-mono text-sm leading-6"
-          >
-            {index < 0 ? (
-              text
-            ) : (
-              <>
-                {text.slice(0, index)}
-                <mark
-                  ref={match}
-                  className="bg-(--pnds-accent) text-(--pnds-accent-foreground)"
-                >
-                  {text.slice(index, index + query.length)}
-                </mark>
-                {text.slice(index + query.length)}
-              </>
-            )}
-          </pre>
+          <Suspense fallback={<p role="status">{t('creation.loading')}</p>}>
+            <CreationCodeEditor
+              identity={identity}
+              path={file.path}
+              text={text}
+              location={location}
+            />
+          </Suspense>
         ) : content?.kind === 'image' && !imageFailed ? (
           <img
             className="mx-auto max-h-full max-w-full object-contain"

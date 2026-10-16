@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { commands, type WindowStateSnapshot } from '@/lib/tauri-bindings'
 import { shouldConfirmClose, useSessionStore } from '@/store/session-store'
+import { stopAndPersistAssistantHistory } from '@/store/assistant-store'
 
 /**
  * Window state mirror (§7.4): the Rust WindowManager owns fullscreen and
@@ -134,6 +135,7 @@ export async function requestQuit(): Promise<void> {
  */
 export async function quitNow(): Promise<void> {
   await markQuitting()
+  await stopAndPersistAssistantHistory()
   const result = await commands.quitApp()
   if (result.status === 'error') {
     console.error('quitApp failed:', result.error)

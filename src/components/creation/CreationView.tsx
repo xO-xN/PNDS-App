@@ -1,4 +1,10 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import {
@@ -15,6 +21,7 @@ import {
   Volume2,
   Package,
   Stethoscope,
+  FlaskConical,
   X,
 } from 'lucide-react'
 import {
@@ -41,6 +48,11 @@ import { useWindowStore } from '@/store/window-store'
 import { TrafficLights } from '@/components/shell/TrafficLights'
 import { Button } from '@/components/ui/button'
 import { CreationFileEditor } from './CreationFileEditor'
+import { CreationAssistant } from './CreationAssistant'
+import { useCreationReadingStore } from '@/store/creation-reading-store'
+import { useAssistantLifecycle } from '@/hooks/use-assistant-lifecycle'
+import type { AssistantMessage } from '@/lib/assistant-types'
+import { CreationQuickOpen } from './CreationQuickOpen'
 import { CreationProjectPicker } from './CreationProjectPicker'
 import { CreationNewProject } from './CreationNewProject'
 import { CreationErrorNotice } from './CreationErrorNotice'
@@ -53,6 +65,7 @@ import { CreationModules } from './CreationModules'
 import { CreationLibraries } from './CreationLibraries'
 import { CreationGit } from './CreationGit'
 import { CreationDoctor } from './CreationDoctor'
+import { CreationControlledCheck } from './CreationControlledCheck'
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -79,6 +92,7 @@ function ReadingWorkspace({
   menuBlocked,
   actionsTarget,
   inspectionBlocked,
+  renderAssistantCards,
 }: {
   workspace: CreationWorkspace
   chooseProject: () => void
@@ -87,12 +101,14 @@ function ReadingWorkspace({
   menuBlocked: boolean
   actionsTarget: HTMLDivElement | null
   inspectionBlocked: boolean
+  renderAssistantCards?: (message: AssistantMessage) => ReactNode
 }) {
   const { t, i18n } = useTranslation()
   const [search, setSearch] = useState('')
   const menuAction = useRef<(() => void) | null>(null)
   const [bundleOpen, setBundleOpen] = useState(false)
   const [doctorOpen, setDoctorOpen] = useState(false)
+  const [checkOpen, setCheckOpen] = useState(false)
   const [gitOpen, setGitOpen] = useState(false)
   const [closedGroups, setClosedGroups] = useState<string[]>([
     'artifacts',
@@ -104,6 +120,8 @@ function ReadingWorkspace({
   const [refreshing, setRefreshing] = useState(false)
   const opening = useCreationStore(state => state.opening)
   const selected = useCreationFilesStore(state => state.activePath)
+  const requestedReadingView = useCreationReadingStore(state => state.view)
+  const readingExtension = useCreationReadingStore(state => state.extension)
   // Identity-stable dirty set: the tree re-renders when dirty membership
   // changes, not on every editor keystroke.
   const dirtyPaths = new Set(
@@ -182,6 +200,7 @@ function ReadingWorkspace({
     useCreationTestStore.getState().setTab('file')
   }
   const editable = project.source === 'folder'
+  const readingView = editable ? requestedReadingView : 'file'
   const owns = () =>
     useCreationStore.getState().workspace?.project.identity === project.identity
   const finder = async () => {
@@ -310,6 +329,23 @@ function ReadingWorkspace({
           actionsTarget
         )}
       {actionsTarget &&
+        createPortal(
+          <button
+            type="button"
+            data-creation-controlled-check=""
+            data-tauri-drag-region="false"
+            className="creation-titlebar-trigger pnds-focus-ring"
+            disabled={opening || inspectionBlocked}
+            onClick={() => setCheckOpen(true)}
+          >
+            <FlaskConical aria-hidden="true" />
+            <span className="creation-titlebar-name">
+              {t('creation.check.action')}
+            </span>
+          </button>,
+          actionsTarget
+        )}
+      {actionsTarget &&
         editable &&
         createPortal(
           <button
@@ -335,7 +371,10 @@ function ReadingWorkspace({
                 key={path}
                 className="creation-pinned-file pnds-focus-ring"
                 aria-label={path}
-                aria-pressed={selected === path && tab === 'file'}
+                aria-pressed={
+                  selected === path &&
+                  (readingView === 'file' || readingView === 'handoff')
+                }
                 onClick={() => chooseFile(path)}
               >
                 {path === 'manifest.json' ? (
@@ -365,6 +404,11 @@ function ReadingWorkspace({
               </button>
             ))}
           </div>
+          <CreationQuickOpen
+            key={project.identity}
+            files={workspace.files}
+            onOpen={chooseFile}
+          />
           <div className="creation-file-search">
             <Search aria-hidden="true" />
             <input
@@ -449,7 +493,11 @@ function ReadingWorkspace({
                             key={file.path}
                             aria-label={file.path}
                             title={file.path}
-                            aria-pressed={file.path === selected}
+                            aria-pressed={
+                              file.path === selected &&
+                              (readingView === 'file' ||
+                                readingView === 'handoff')
+                            }
                             className="creation-file-row pnds-focus-ring"
                             onClick={() => {
                               useCreationFilesStore
@@ -505,6 +553,12 @@ function ReadingWorkspace({
         aria-label={t('creation.workspace')}
         className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
       >
+        <CreationControlledCheck
+          key={project.identity}
+          open={checkOpen}
+          identity={project.identity}
+          onClose={() => setCheckOpen(false)}
+        />
         {doctorOpen && (
           <CreationDoctor
             key={project.identity}
@@ -557,10 +611,69 @@ function ReadingWorkspace({
             )}
           </div>
         )}
+        {editable && (
+          <nav
+            aria-label={t('assistant.readingViews')}
+            className="flex shrink-0 flex-wrap items-center gap-2 border-b border-(--pnds-border) px-3 py-2"
+          >
+            <Button
+              size="sm"
+              variant="ghost"
+              aria-pressed={readingView === 'discussion'}
+              onClick={() =>
+                useCreationReadingStore.getState().showDiscussion()
+              }
+            >
+              {t(
+                readingView === 'discussion'
+                  ? 'assistant.discussion'
+                  : 'assistant.back'
+              )}
+            </Button>
+            {files.some(file => file.path === HANDOFF_PATH) && (
+              <Button
+                size="sm"
+                variant="ghost"
+                aria-pressed={readingView === 'handoff'}
+                onClick={() => {
+                  chooseFile(HANDOFF_PATH)
+                  useCreationReadingStore.getState().showHandoff()
+                }}
+              >
+                {t('creation.handoff.view')}
+              </Button>
+            )}
+            {readingView === 'extension' && (
+              <span className="min-w-0 truncate text-xs">
+                {readingExtension?.title}
+              </span>
+            )}
+          </nav>
+        )}
+        {editable && (
+          <div
+            hidden={readingView !== 'discussion'}
+            className="creation-file-tab flex min-h-0 flex-1 flex-col"
+          >
+            <CreationAssistant
+              identity={project.identity}
+              renderMessageCards={renderAssistantCards}
+            />
+          </div>
+        )}
+        {editable && (
+          <div
+            hidden={readingView !== 'extension'}
+            className="creation-file-tab flex min-h-0 flex-1 flex-col overflow-auto"
+          >
+            {readingExtension?.content}
+          </div>
+        )}
         <div
           role="region"
           id={`creation-${project.identity}-file`}
           aria-label={file?.path ?? t('creation.files')}
+          hidden={readingView !== 'file' && readingView !== 'handoff'}
           className="creation-file-tab flex min-h-0 flex-1 flex-col"
         >
           {file ? (
@@ -588,7 +701,10 @@ function ReadingWorkspace({
   )
 }
 
-export function CreationView() {
+export function CreationView({
+  renderAssistantCards,
+}: { renderAssistantCards?: (message: AssistantMessage) => ReactNode } = {}) {
+  useAssistantLifecycle()
   const { t } = useTranslation()
   const workspace = useCreationStore(state => state.workspace)
   const recent = useCreationStore(state => state.recentPaths)
@@ -659,6 +775,7 @@ export function CreationView() {
         <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
           {workspace ? (
             <ReadingWorkspace
+              renderAssistantCards={renderAssistantCards}
               key={workspace.project.identity}
               workspace={workspace}
               chooseProject={() => setPickerOpen(true)}

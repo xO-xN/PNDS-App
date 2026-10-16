@@ -66,6 +66,29 @@ describe('help-window (#56)', () => {
     vi.mocked(WebviewWindow.getByLabel).mockResolvedValue(null)
   })
 
+  it('keeps an actual source section and its original language through window creation and reuse', async () => {
+    const source = {
+      kind: 'doc' as const,
+      docId: 'reference-manifest',
+      anchor: '音频声明',
+      locale: 'zh-CN' as const,
+    }
+    await openHelpWindow(source)
+    const options = vi.mocked(WebviewWindow).mock.calls.at(-1)?.[1]
+    const url = new URL(String(options?.url), 'https://app.local')
+    expect(url.searchParams.get('anchor')).toBe('音频声明')
+    expect(url.searchParams.get('locale')).toBe('zh-CN')
+    vi.mocked(WebviewWindow.getByLabel).mockResolvedValue(
+      instanceFor() as unknown as WebviewWindow
+    )
+    await openHelpWindow(source)
+    expect(emitTo).toHaveBeenLastCalledWith(
+      'help',
+      'pnds:help-navigate',
+      source
+    )
+  })
+
   it('creates the help window hidden with the doc target in the URL', async () => {
     await openHelpWindow({ kind: 'doc', docId: 'app-tutorial' })
 

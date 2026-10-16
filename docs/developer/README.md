@@ -4,7 +4,7 @@ App 开发的规则层：既定模式与系统做法，按问题检索——查�
 
 ## 已批准的版本规格
 
-**已批准版本安排（2026-10-12）** → [v1.6.0–v1.7.0 更新规划](../plans/releases-through-v1.7.0.md)，决定过程见[逐轮讨论](../plans/pre-v1.7-release-grilling.md)。v1.6.0 的 #150–#163 与 UI 收口 #195 已关闭；首批模块添加 #210 已接入，完整原生工作流与双架构发行验收仍由 #164 收口，v1.6.2 共享库每项只提供一个较新版本、模型由工程自带，v1.6.3 导航只新增上下选卡；v1.6.4–1.6.5 交付确定性检查，前序全部验收后再正式开发单文件修改助手。总体规格 [#190](https://github.com/xO-xN/PNDS-App/issues/190) 与版本任务已同步，用户批准的 [58 票实施拆分与依赖](../plans/pre-v1.7-ticket-breakdown.md)为当前领取清单；实施仍须满足实际阻塞与验收，不据规格发布宣称功能完成。
+**已批准版本安排（2026-10-15）** → [v1.6.0–v1.7.0 更新规划](../plans/releases-through-v1.7.0.md)，原决定过程见[逐轮讨论](../plans/pre-v1.7-release-grilling.md)，最新完整创作范围见[本轮决定](../plans/post-v1.7-creation-experience.md)。v1.6.0–v1.6.5 分别承接创作基础、模块与 Skills、共享库、起点与只读 Git、静态诊断及受控检查；前序全部验收后正式开发 v1.7.0。1.7.0 包括对话主入口、讨论内调参／直接编辑代码／按工程能力预演、基础编辑器、显式片段、交接基线与比较、App 自供本地 Git 和历史载入草稿。总体规格 [#190](https://github.com/xO-xN/PNDS-App/issues/190) 与 [70 票实施拆分与依赖](../plans/pre-v1.7-ticket-breakdown.md)为领取入口；#224–#230 承接完整工作流，新增 [#231](https://github.com/xO-xN/PNDS-App/issues/231) 提供参数绑定与临时预演基础，由 #208 接入建议卡。任务状态与实际验收分别核对，不据规格发布宣称功能完成。
 
 - **v1.6.0 演出与创作模式的工作流、文件操作及测试窗口** → [正式规格](../plans/v1.6.0-creation-mode-spec.md)
 - **v1.6.1 标准技术模块整理与外部 PNDS Skills 重构** → [正式规格](../plans/v1.6.1-modules-skills-spec.md)
@@ -12,10 +12,14 @@ App 开发的规则层：既定模式与系统做法，按问题检索——查�
 - **v1.6.3 多模板、只读 Git 与上下选卡** → [正式规格](../plans/v1.6.3-creation-workflow-spec.md)
 - **v1.6.4 静态工程诊断与 CLI** → [正式规格](../plans/v1.6.4-static-diagnostics-spec.md)
 - **v1.6.5 临时副本检查、版本证据与单文件撤销** → [正式规格](../plans/v1.6.5-controlled-checks-spec.md)
-- **v1.7.0 创作助手的读取、模型服务与交接边界** → [正式规格](../plans/v1.7.0-creation-assistant-spec.md)
+- **v1.7.0 完整创作流程、模型服务、编辑器、交接比较与本地版本** → [正式规格](../plans/v1.7.0-creation-assistant-spec.md)
 - **v1.6.0 跨票回归与真实环境验收** → [#164 验收记录](../acceptance/164-v1.6.0-workflows.md)
+- **v1.7.0 讨论内调参、代码编辑、预演与完整创作流程验收** → [#172 待实施验收要求](../acceptance/172-v1.7.0-creation-workflows.md)
+- **v1.7.0 八组调试的依赖、操作步骤、通过标准与阶段交付** → [阶段性调试计划](../plans/v1.7.0-staged-debugging-plan.md)
 - **r6-final 真实 App 的入口映射、实施及验收状态** → [desktop-1.6-implementation.md](./desktop-1.6-implementation.md)
 - **UI 定稿和逐轮交互记录** → [原型说明](../prototypes/README.md)
+
+2026-10-15 后续追加：[模型容量、上下文用量、长对话与文档读取优化](../plans/v1.7.0-context-management-spec.md)由 #232～#235 承担，基础排在 #168 前。本轮 #165～#167 范围不扩展。#232～#235 的实现、受控前后比较与待用户实机项目见[验收记录](../acceptance/232-235-context-management.md)；不据自动化宣称原生验收完成。
 
 以上规格记录已确认、尚待实现的行为；实现时同步更新下方对应规则篇。v1.6.0 交付首批五项模块文件添加与接线交接，v1.6.1 整理模块及外部 Skills；App 助手不安装 Skills 或实施移植。
 
@@ -32,6 +36,8 @@ App 开发的规则层：既定模式与系统做法，按问题检索——查�
 - **工程范围内只读 Git 状态、分层差异与过期快照** → [creation-workspace.md](./creation-workspace.md#read-only-git-inspection-201)
 - **创作阅读、可信工程身份、文件限制与异步切换** → [creation-workspace.md](./creation-workspace.md)
 - **无副作用的 App Doctor、共用报告与离线 CLI** → [static-diagnostics.md](./static-diagnostics.md)（#193 / #203 / #204）。
+- **临时副本检查、跨 App／CLI 运行归属、输入证据与取消清理** → [controlled-checks.md](./controlled-checks.md)（#194）。
+- **已有单文本差异、审阅保存与版本保护撤销** → [single-file-changes.md](./single-file-changes.md)（#207）。
 - **创作草稿、手动保存、重命名与磁盘版本冲突** → [creation-workspace.md](./creation-workspace.md#manual-save-rename-and-disk-conflicts-154)
 - **错误如何传播、用户反馈与重试模式** → [error-handling.md](./error-handling.md)
 
@@ -57,7 +63,9 @@ App 开发的规则层：既定模式与系统做法，按问题检索——查�
 - **可信 HTTPS 证书材料：校验管线、受保护存储与设置区接线（#139）** → [https-material.md](./https-material.md)
 - **HTTPS 准备操作时序、异常收尾与域名保存后的摘要重验** → [https-material.md](./https-material.md#前端准备流程)
 - **可信 HTTPS 入口网关：hyper/rustls 转发、生命周期接线与探测（#140）** → [https-gateway.md](./https-gateway.md)
-- **HTTP 请求与外部 API 调用** → [external-apis.md](./external-apis.md)
+- **模型服务配置、钥匙串、连接测试与外部 HTTP 约定** → [external-apis.md](./external-apis.md)（#165）。
+- **创作助手请求编排、装机来源、取消归属与阅读布局** → [creation-assistant.md](./creation-assistant.md)（#166）。
+- **本机聊天历史、工程隔离、原子保存与旧授权不恢复** → [creation-assistant.md](./creation-assistant.md#private-project-history-167)（#167）。
 - **帮助语料装载、运行时渲染与离线搜索** → [help-center.md](./help-center.md)
 - **演出文件夹导入导出：set.json 格式与导出/导入缝** → [setlist.md](./setlist.md)
 

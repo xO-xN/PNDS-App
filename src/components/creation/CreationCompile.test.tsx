@@ -1,3 +1,4 @@
+import { findEditorWithText } from '@/test/text-editor'
 import { seedCreationDraft } from '@/test/creation-files'
 import { beforeEach, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor, act } from '@/test/test-utils'
@@ -122,7 +123,7 @@ it('blocks SCD and manifest drafts with a reason while preserving them across th
     useCreationTestStore.getState().setTab('console')
     useCreationTestStore.getState().setTab('file')
   })
-  expect(screen.getByDisplayValue('// unsaved voice')).toBeVisible()
+  expect(await findEditorWithText('// unsaved voice')).toBeVisible()
   expect(button).toBeDisabled()
   expect(
     screen.getByText(/Save or reload SCD and manifest drafts.*voice.scd/)

@@ -3,22 +3,31 @@
 //! Command implementations are organized in the `commands` module,
 //! project/session logic in `project`, and shared types in `types`.
 
+mod assistant_history;
 mod bindings;
 mod commands;
 mod dns;
 mod events;
 mod gateway;
 mod https;
+mod model;
 mod open_panel;
 mod performer;
 mod process_activity;
 mod project;
 mod types;
 
+pub use project::audio::STANDARD_SAMPLE_RATES;
+pub use project::controlled_checks::{
+    run_controlled_check, ControlledCheckContext, ControlledCheckOptions, ControlledCheckReport,
+    ControlledCheckStatus,
+};
 pub use project::diagnostics::{
     diagnose_project, DiagnosticCheck, DiagnosticInput, DiagnosticIssue, DiagnosticProject,
     DiagnosticReport, DiagnosticSeverity, DiagnosticStatus,
 };
+pub use project::runtime_gate::{default_gate_path, OwnedRuntimeGroup, RuntimeLease};
+pub use types::AudioMode;
 mod window;
 
 use std::collections::HashSet;
@@ -84,8 +93,13 @@ pub fn run() {
         .manage(crate::window::WindowManager::default())
         .manage(crate::performer::VisibilityIntent::default())
         .manage(crate::commands::preferences::PreferencesCache::default())
+        .manage(crate::assistant_history::AssistantHistoryStore::default())
+        .manage(crate::model::ModelService::new(
+            crate::model::KeychainCredentials,
+        ))
         .manage(crate::commands::bundle::PendingBundleOpens::default())
         .manage(crate::commands::creation::CreationState::default())
+        .manage(crate::commands::controlled_checks::ControlledCheckState::default())
         .plugin({
             #[allow(unused_mut)]
             let mut targets = vec![
@@ -496,6 +510,9 @@ pub fn run() {
                 .emit(app_handle);
             }
             RunEvent::ExitRequested { .. } => {
+                app_handle
+                    .state::<crate::commands::controlled_checks::ControlledCheckState>()
+                    .shutdown();
                 if let Err(error) = crate::performer::close_windows(app_handle, None) {
                     log::warn!("Failed to close performer windows on exit: {error}");
                 }
@@ -511,6 +528,9 @@ pub fn run() {
                 log::info!("Cleanup complete");
             }
             RunEvent::Exit => {
+                app_handle
+                    .state::<crate::commands::controlled_checks::ControlledCheckState>()
+                    .shutdown();
                 log::info!("Application exiting — performing cleanup");
 
                 // never leave an orphaned score server behind.

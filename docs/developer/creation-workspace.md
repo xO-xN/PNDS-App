@@ -148,7 +148,14 @@ addition records. Blank records its original v1.6.0 starting source too.
 Generated AGENTS and implementation publication instructions point at the App's
 saved-file `.pnds` workflow and exact shared references. The frozen upstream
 release-workflow and preinstalled-dependency claims are replaced only during
-generation; provenance and frozen source bytes remain unchanged.
+generation; frozen source bytes and their provenance pins remain unchanged.
+The generated `lib/health.js` also corrects None readiness to `audio.status:
+"disabled"` and `audio.target: null`, matching the runtime contract. Generated
+`docs/template-source.json` records this initialization correction under
+`creationFixes` with the ID `none-health-contract`. Existing projects are not
+rewritten; strict controlled checks can expose the inherited defect in projects
+created before this correction. The generated Classic lifecycle matrix and a
+real saved-copy None check both cover the resulting health payload.
 The included tree excludes Git history, local dependencies, seat caches, logs and
 device records; Classic does not adopt the upstream cover as the new project's
 cover. Ordinary opening preserves the existing identity, client key and Git
@@ -621,9 +628,11 @@ runtime's actual address. Old load/timeout/config results cannot update a newer
 run. Error publication also checks the client, workspace, run and config revision;
 successful identity changes clear old errors. Delayed send/focus/close failures
 from retired clients cannot pollute the next workspace. A DOM load event records only that navigation finished, including possible
-browser error documents: connection is explicitly unknown because the platform
-has no public performer connection-status contract. No fake connection success
-or optional music-protocol adaptation is introduced.
+browser error documents. The list displays these navigation facts, while the
+shell directs users to the project page or monitor for performer connection
+status. A shared explanatory tooltip distinguishes navigation from connection:
+the platform has no public performer connection-status contract. No fake
+connection success or optional music-protocol adaptation is introduced.
 
 The registered creation participant cleans up after confirmed project close,
 project switch or creation-mode exit. It waits for pending native creation,
@@ -676,9 +685,15 @@ The user approved mouse-to-single-touch simulation after real testing. New test
 clients enable it with a visible checkbox in their own shell;
 turning it off restores original mouse/pointer input without navigation. Native
 setup installs `performer-touch-script.js` once at document start in each project's
-frames. Only a parent-window `pnds:test-touch` message enables it. Mouse down /
-move / up produce one untrusted DOM touch sequence; pointer capture, blur,
-cancellation and disabling release the contact. Native text/form controls keep
+frames. Only a parent-window `pnds:test-touch` message enables it. Pointer
+listeners queue a task after each dispatch, without cancelling or stopping the
+original event. This includes handlers registered later on `window`. A page's
+cancelled pointerdown owns its gesture, so no touch simulation or capture is
+added; this preserves native pointer faders such as the Classic example. Other
+mouse down / move / up events add one untrusted DOM touch sequence in order;
+native mouse defaults are not suppressed. Blur and disabling invalidate queued
+input, cancellation releases the contact, and capture-loss callbacks retain
+their contact identity so an old release cannot cancel a new gesture. Native text/form controls keep
 their mouse behavior. This includes a TouchList-shaped payload for desktop WebKit
 without Touch constructors, rather than pretending it has mobile APIs. Events
 are delivered directly to the page: no OSC, score state or audio goes through
@@ -968,3 +983,79 @@ with multiple independent problems, while occupied ports and controlled live
 processes remain untouched. Component tests exercise ownership, stale results,
 localization, keyboard interaction and navigation without runtime commands.
 See [static-diagnostics.md](./static-diagnostics.md) for report and CLI contracts.
+
+## Reviewed changes and guarded undo (#207)
+
+The existing-file text editor adds captured draft review and one in-memory saved
+change with guarded undo. See [single-file-changes.md](./single-file-changes.md)
+for command, ownership, cancellation and content-version boundaries.
+
+## Session text editor (#224)
+
+Readable text now uses CodeMirror 6: virtualized line numbers, syntax colors for
+JS/TS/JSON/HTML/CSS/Markdown/SCD, bracket matching, two-space indentation, literal
+case-insensitive find/replace and line navigation. Other already-readable text
+uses plain text. This adds no language server, diagnostics or compiler claim.
+SCD coloring uses a local stream parser for strings, symbols, nested comments,
+keywords and class names. Dedicated syntax tokens in the four theme palettes
+separate code categories from the more muted UI file/status colors. Function
+names and properties (including JSON keys, HTML attributes and CSS properties)
+use their own ink. See [UI patterns](./ui-patterns.md#component-roles) for palette
+and contrast checks.
+Long lines scroll horizontally; the editor owns its scroller, and toolbar rows
+wrap within the existing workspace. No monitor/dock ancestry or runtime action
+changes when a text surface mounts.
+
+`TextBuffer` owns document, selection, history, search and scroll independently
+of React mounting. `CreationDraft.editor` retains that object for the workspace
+session, including file, form/preview and layout switches. Rename moves the same
+draft and history and reconfigures its language. Draft forms synchronize as
+ordinary edits once a text buffer exists. `editorRevision` advances only when
+adopting a different disk version (watcher clean adoption, explicit conflict
+reload or saved-write undo); that resets both undo directions with visible
+feedback. Saving the current draft retains its editing history. A conflicted
+external version stays outside the buffer until explicitly adopted. No undo
+stack is persisted across workspace closure or App restart.
+
+`TextEditor` is the reusable view. Its caller supplies a distinct `TextBuffer`,
+current value and optional change callback; it has no persistence action.
+`text`, `selection`, `selectedText`, `select`, `replaceSelection`, `undo`, `redo`,
+`goToLine` and subscriptions are the local-text/selection integration seam for
+#208. Offsets use CodeMirror's UTF-16 document positions with one character per
+line break. File drafts and suggestion buffers must have different buffer
+objects even when their source path/text match. Only the file wrapper marks
+`data-file-draft`; the global save shortcut ignores standalone suggestion
+surfaces and App overlays. Draft undo and **Undo saved change** remain separate.
+Normal CRLF files retain their line endings, and opening text alone does not
+normalize the draft or dirty the file.
+
+`openCreationFileAtLine(identity, path, line)` is the #166/diagnostics integration
+seam. It checks the current identity, exact listed text path and positive integer
+line before selecting. The text surface validates the actual line count and
+announces out-of-range requests. The existing manifest and safe README editors
+remain available; locating manifest or ordinary Markdown switches to text.
+Structured README covers retain their existing safe field boundary; explicit
+line requests inspect their source read-only. Each retained location request
+is consumed once, so remounts and language changes do not move a later selection.
+
+Quick open (`⌘P` in the host creation workspace) searches only the backend's
+bounded inventory, renders at most 100 matches and uses arrows/Enter. It never
+accepts an arbitrary filesystem path or lists recoverable removed drafts as
+current files. Reading still calls `readCreationFile` with the issued identity;
+size, UTF-8, permissions, protected sources and path containment remain Rust
+checks. The normal error panel explains refused reads and binaries.
+
+The editor owns `⌘F`, `⌘G`, undo/redo and indentation only while focused. Escape
+then Tab leaves the indentation keymap for accessible keyboard navigation.
+Quick open is blocked by modal overlays, mode transitions, opening and expanded
+monitor. No new native menu accelerator or guest-page key ownership is added.
+
+`TextEditor.test.tsx`, `CreationEditorWorkflow.test.tsx` and the existing creation
+save/README/compile suites use the real editor with controlled typed-command
+replies. `src/test/text-editor.ts` drives CodeMirror's public transaction API;
+jsdom Range stubs represent absent layout, never native geometry or IME proof.
+Rust's existing temporary-directory creation tests cover actual versioned writes,
+invalid manifest/README content, size/UTF-8 limits, protected sources and escapes.
+Native IME, clipboard, menu delivery, narrow layout and running monitor evidence
+remain in [#224 acceptance](../acceptance/224-basic-editor.md). #166/#208/#172
+must record actual downstream integration separately from this verified seam.

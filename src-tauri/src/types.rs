@@ -226,6 +226,23 @@ pub struct AppPreferences {
     /// project manifests.
     #[serde(default)]
     pub lan_ip: Option<String>,
+    /// #165: app-local endpoint/model only; the credential lives in Keychain.
+    #[serde(default)]
+    pub model_service: Option<ModelServiceConfig>,
+    #[serde(default)]
+    pub model_context_profiles: Vec<ModelServiceConfig>,
+    /// Monitor fraction within the resizable creation workspace (not sidebar).
+    #[serde(default)]
+    pub assistant_monitor_ratio: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ModelServiceConfig {
+    pub base_url: String,
+    pub model: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context: Option<crate::model::ModelContextConfig>,
 }
 
 /// A named one-level group of project paths (spec issue #4).
@@ -271,6 +288,9 @@ impl Default for AppPreferences {
             https_enabled: None,
             dns_enabled: None,
             lan_ip: None,
+            model_service: None,
+            model_context_profiles: Vec::new(),
+            assistant_monitor_ratio: None,
         }
     }
 }
@@ -282,6 +302,50 @@ impl AppPreferences {
     pub fn effective_sample_rate(&self) -> u32 {
         self.sample_rate.unwrap_or(DEFAULT_SAMPLE_RATE)
     }
+}
+
+#[cfg(test)]
+mod model_preferences_tests {
+    use super::*;
+
+    #[test]
+    fn assistant_layout_preferences_restore_and_validate_readable_ratios() {
+        let legacy: AppPreferences = serde_json::from_str(r#"{"theme":"system"}"#).unwrap();
+        assert_eq!(legacy.assistant_monitor_ratio, None);
+        let saved: AppPreferences =
+            serde_json::from_str(r#"{"theme":"system","assistantMonitorRatio":0.4}"#).unwrap();
+        assert_eq!(saved.assistant_monitor_ratio, Some(0.4));
+        assert!(validate_assistant_monitor_ratio(None).is_ok());
+        for ratio in [0.25, 0.4, 0.6] {
+            assert!(validate_assistant_monitor_ratio(Some(ratio)).is_ok());
+        }
+        for ratio in [0.0, 0.249, 0.601, f64::NAN, f64::INFINITY] {
+            assert!(validate_assistant_monitor_ratio(Some(ratio)).is_err());
+        }
+    }
+
+    #[test]
+    fn model_config_restores_without_a_credential_field() {
+        let legacy: AppPreferences = serde_json::from_str(r#"{"theme":"system"}"#).unwrap();
+        assert!(legacy.model_service.is_none());
+        let saved: AppPreferences = serde_json::from_str(
+            r#"{"theme":"system","modelService":{"baseUrl":"https://model.example/v1","model":"chosen-model"}}"#,
+        ).unwrap();
+        let config = saved.model_service.as_ref().unwrap();
+        assert_eq!(config.model, "chosen-model");
+        assert_eq!(config.base_url, "https://model.example/v1");
+        let value = serde_json::to_value(saved).unwrap();
+        assert_eq!(value["modelService"].as_object().unwrap().len(), 2);
+    }
+}
+
+/// Assistant monitor share of the available discussion/monitor columns.
+/// Pixel minimums are additionally enforced by the workspace layout.
+pub fn validate_assistant_monitor_ratio(ratio: Option<f64>) -> Result<(), String> {
+    if ratio.is_some_and(|ratio| !ratio.is_finite() || !(0.25..=0.6).contains(&ratio)) {
+        return Err("Invalid assistant layout ratio".into());
+    }
+    Ok(())
 }
 
 /// New-project parent is an absolute native path, not a filesystem lease.

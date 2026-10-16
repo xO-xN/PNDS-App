@@ -1,226 +1,127 @@
 # External APIs
 
-Patterns for calling external HTTP APIs from Tauri applications.
+Authenticated model requests run in Rust and reach React through the generated
+commands in `@/lib/tauri-bindings`. The WebView never reads a saved API key or
+makes authenticated model requests itself. See [tauri-commands.md](./tauri-commands.md)
+for command registration and binding generation.
 
-> **Note:** No HTTP client is installed in this app — not on the Rust side and not as a frontend wrapper. When a feature needs external HTTP, add a Rust-side command with `reqwest` (below), or consider `tauri-plugin-http` (see [tauri-plugins.md](./tauri-plugins.md)). For token storage, use the `keyring` crate (OS keychain) rather than plain files.
+## HTTP and proxy conventions
 
-## Rust vs Frontend: When to Use Which
+The app already depends on `reqwest` 0.13. Its `system-proxy` feature preserves the
+macOS System Settings proxy convention introduced for the updater; model requests
+reuse that dependency and enable JSON and TLS support. Do not add a frontend HTTP
+plugin or disable the production proxy to make a test pass. Local HTTP fixtures
+can use an explicitly isolated test client.
 
-**Default recommendation: Use Rust backend (reqwest)**
+The model service accepts an HTTPS API base URL, or HTTP for a loopback service.
+URL credentials, query strings and fragments are rejected. Requests append the
+Chat Completions route to the base URL, so a service whose base is `/v1` is entered
+with `/v1`. The caller chooses the model; no model-list lookup substitutes for a
+request to that model. Redirects and automatic retries are disabled. Response
+size and elapsed time are bounded before interpreting untrusted response data.
 
-| Approach         | Pros                                           | Cons                                  |
-| ---------------- | ---------------------------------------------- | ------------------------------------- |
-| Rust (reqwest)   | CORS bypass, secure token storage, type safety | More code per endpoint                |
-| Frontend (fetch) | No extra dependencies, familiar API            | CSP must allow the host, exposed keys |
+## Model configuration and credentials (#165)
 
-### Use Rust Backend For
+`AppPreferences.modelService` contains the API base URL, model name and optional non-sensitive context budget.
+React saves it through the serialized `updatePreferences` queue; no independent
+preferences writer is introduced. A missing configuration remains a normal state
+and does not block local editing, saving or manual testing.
 
-- All authenticated API calls (keeps tokens out of WebView)
-- APIs with CORS restrictions (desktop apps bypass CORS from Rust)
-- Calls requiring response caching to local storage
-- Production applications
+The model credential store uses macOS Security.framework generic passwords via
+`security-framework`. Its replace operation updates the existing keychain item;
+it never deletes the old key first. The credential seam is replaceable in tests,
+while production failures stay failures: there is no plain-file fallback.
 
-### Use Frontend Fetch For
+The typed command surface exposes credential presence, save, remove and a
+connection test. Presence is a boolean, not a masked or partial key. A newly
+entered key can be passed directly to a connection test without saving it;
+otherwise Rust resolves the saved key. A saved credential is never returned to
+React for refilling a password input. Do not derive `Debug` for secret-bearing
+requests, log command arguments or return provider response bodies in errors.
 
-- Public APIs with no authentication
-- Rapid prototyping before moving to Rust
-- Third-party SDKs requiring browser context
+Presence checks use a separate `CredentialStore::contains` operation. On macOS
+it requests generic-password attributes, never password data. Opening settings
+must not decrypt a saved key merely to show whether it exists. Public URL/model
+restoration completes independently of the credential check. A saved-key input
+stays empty with an explicit Keychain placeholder; status failures have an inline
+retry action, rather than requiring another close/reopen cycle. Presence does not
+prove that a later authenticated read will be allowed by macOS.
 
-The webview's `fetch` is subject to the app CSP: `connect-src` in `src-tauri/tauri.conf.json` currently allows only `'self'`, `tauri:`, `ipc:`, and `http://ipc.localhost` — a plain `fetch` to an external host fails until that host is added to `connect-src`.
+Saving public configuration and saving a key are separate operations. The UI
+reports their actual results, including partial success, and retains entered
+values needed for a manual retry. A test uses the currently entered configuration
+and key, rather than silently substituting the last saved configuration.
 
-## Setup
+The App manages one credential service. Its asynchronous FIFO gate serializes
+status reads and mutations; the native worker retains the gate even if its
+caller is cancelled while a Keychain prompt is open. The settings panel also
+tracks the entire configuration-then-key operation across unmounts. Reopening
+waits for that operation before restoring state or enabling another action, so
+an older save cannot recreate a key after a newer removal.
 
-```bash
-# Rust HTTP client
-cd src-tauri && cargo add reqwest --features json,rustls-tls
-```
+## Connection verification
 
-For simple cases, `tauri-plugin-http` (the `http` row in tauri-plugins.md's "Plugins to Consider Adding") is the lighter alternative.
+A successful connection test requires both text generation and an actual
+controlled tool round trip. The tool name, arguments and result are validated;
+HTTP success, a model list or an ordinary text response in place of the tool call
+is insufficient. The probe contains no project identity, file content, chat
+history or other project data.
 
-For secure token storage, see the Authentication section below.
+Errors are stable typed categories with localized, actionable UI messages:
+configuration, absent credentials, keychain failure, authentication, network,
+timeout, protocol, unsupported tools, rate limiting and service availability.
+Never expose a raw HTTP body, a credential-store error containing sensitive data,
+or an authenticated URL as the user-facing diagnostic. Paid requests are retried
+only by an explicit user action.
 
-## Architecture Pattern
+Safe connection diagnostics use `[model-connection]`, `[model-transport]` and
+`[model-keychain]` in the normal native log. They contain only input-versus-Keychain
+source, fixed failure phases/reasons, HTTP status, whitelisted finish categories,
+and numeric OSStatus. Never add key values, key hashes/lengths, URL/model fields,
+messages, tool arguments or raw provider strings. These diagnostics distinguish
+credential access from an incomplete or incompatible response without exposing
+request content. A generic protocol error alone cannot establish key corruption.
 
-Follow the same pattern as local data: Tauri commands wrap API calls; the frontend calls the typed commands directly (introduce a query-cache layer only if a feature needs it).
+For a development build, distinguish the item ACL from the running process's
+signature validity. Read-only item metadata can confirm presence, an unlocked
+login keychain and trusted application requirements without requesting password
+data. A static requirement match only describes the executable on disk. If that
+executable was replaced after launch, `SecCodeCheckValidity` on the running PID
+can return `errSecCSStaticCodeChanged` (-67034) while password reads fail with
+`errSecAuthFailed` (-25293). Fully stop and relaunch the development App before
+replacing credentials or changing permissions. Re-saving a key does not repair
+an invalidated running process. Keep the user's App/dev-server launch manual;
+never weaken access to all applications or reset the system keychain.
 
-```
-React Component → Tauri Command (reqwest) → External API
-```
+Tests exercise the public service boundary against a local HTTP server and a
+credential-store substitute, checking actual request payloads, selected model,
+tool messages, bounded failures and secret-free returned state. These tests do
+not contact a paid service or change the user's keychain. Native keychain prompts,
+real provider compatibility and macOS proxy behavior remain separate manual
+acceptance evidence.
 
-### Rust Command
+## Model context configuration (#232)
 
-```rust
-use reqwest;
-use serde::{Deserialize, Serialize};
-use specta::Type;
+`modelService.context` is optional, so #165 preferences remain readable. Public
+profiles are merged inside the existing preferences writer, keyed by URL
+normalization (including default ports and trailing slashes) and exact trimmed
+model ID. Switching an endpoint/model selects its own draft/profile. Keys remain
+separate; invalid capacity/reserve input is retained and blocks configuration
+publication before any credential mutation.
 
-#[derive(Debug, Clone, Serialize, Deserialize, Type)]
-pub struct User {
-    pub id: u32,
-    pub name: String,
-    pub email: String,
-}
+All capacity values are manual and explicitly unverified. No capacity is inferred
+from a model name. The App target can only reduce available input: capacity minus
+visible output, reasoning reserve and safety margin. Reasoning reserve uses
+`max_completion_tokens`; ordinary output uses `max_tokens`. Server capabilities
+still apply. No capability-filling probe or automatic retry is introduced.
 
-#[tauri::command]
-#[specta::specta]
-pub async fn fetch_user(user_id: u32) -> Result<User, String> {
-    let client = reqwest::Client::new();
-
-    let response = client
-        .get(format!("https://api.example.com/users/{user_id}"))
-        .timeout(std::time::Duration::from_secs(10))
-        .send()
-        .await
-        .map_err(|e| format!("Network error: {e}"))?;
-
-    if !response.status().is_success() {
-        return Err(format!("API error: {}", response.status()));
-    }
-
-    response.json::<User>()
-        .await
-        .map_err(|e| format!("Parse error: {e}"))
-}
-```
-
-### Frontend: call the typed command directly
-
-There is no query-cache layer (no TanStack Query, no service hooks). Load on mount or in an event handler, with explicit status handling:
-
-```typescript
-import { commands, type User } from '@/lib/tauri-bindings'
-
-const [user, setUser] = useState<User | null>(null)
-const [error, setError] = useState<string | null>(null)
-
-useEffect(() => {
-  let stale = false
-  commands.fetchUser(userId).then(result => {
-    if (stale) return
-    if (result.status === 'error') {
-      setError(result.error)
-      return
-    }
-    setUser(result.data)
-  })
-  return () => {
-    stale = true
-  }
-}, [userId])
-```
-
-## Authentication
-
-### Token Storage Options
-
-| Option                    | Security            | Use When                          |
-| ------------------------- | ------------------- | --------------------------------- |
-| `keyring` crate           | High (OS keychain)  | API tokens, credentials           |
-| `tauri-plugin-stronghold` | High (encrypted DB) | Multiple secrets, encryption keys |
-| `tauri-plugin-store`      | Low (plain JSON)    | Non-sensitive data only           |
-
-For OS keychain access, use the `keyring` crate directly:
-
-```bash
-cd src-tauri && cargo add keyring
-```
-
-```rust
-use keyring::Entry;
-
-#[tauri::command]
-#[specta::specta]
-pub fn save_auth_token(token: String) -> Result<(), String> {
-    let entry = Entry::new("myapp", "auth_token")
-        .map_err(|e| format!("Keyring error: {e}"))?;
-    entry.set_password(&token)
-        .map_err(|e| format!("Failed to save token: {e}"))
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn get_auth_token() -> Result<Option<String>, String> {
-    let entry = Entry::new("myapp", "auth_token")
-        .map_err(|e| format!("Keyring error: {e}"))?;
-    match entry.get_password() {
-        Ok(token) => Ok(Some(token)),
-        Err(keyring::Error::NoEntry) => Ok(None),
-        Err(e) => Err(format!("Failed to get token: {e}")),
-    }
-}
-```
-
-### Authenticated Requests
-
-```rust
-#[tauri::command]
-#[specta::specta]
-pub async fn fetch_protected_data() -> Result<Data, String> {
-    let entry = Entry::new("myapp", "auth_token")
-        .map_err(|e| format!("Keyring error: {e}"))?;
-    let token = entry.get_password()
-        .map_err(|_| "Not authenticated")?;
-
-    let client = reqwest::Client::new();
-    client
-        .get("https://api.example.com/protected")
-        .header("Authorization", format!("Bearer {token}"))
-        .send()
-        .await
-        .map_err(|e| format!("Request failed: {e}"))?
-        .json::<Data>()
-        .await
-        .map_err(|e| format!("Parse error: {e}"))
-}
-```
-
-## Error Handling
-
-See [error-handling.md](./error-handling.md) for complete patterns. Key points for API calls — no query layer retries for you, so retry with an explicit budget and only for transient (network) failures:
-
-```typescript
-// Retry transient network errors, not validation errors
-for (let attempt = 1; ; attempt++) {
-  const result = await commands.fetchUser(userId)
-  if (result.status === 'ok') return result.data
-  if (attempt >= 3 || isPermanent(result.error)) {
-    logger.warn('fetchUser failed', { attempt, error: result.error })
-    return null
-  }
-}
-```
-
-## Offline Handling
-
-For apps that need to work offline, cache API responses to SQLite:
-
-```rust
-#[tauri::command]
-#[specta::specta]
-pub async fn fetch_with_cache(app: tauri::AppHandle, id: u32) -> Result<Data, String> {
-    // Try network first
-    match fetch_from_api(id).await {
-        Ok(data) => {
-            cache_to_db(&app, &data)?;  // Cache for offline
-            Ok(data)
-        }
-        Err(_) => {
-            // Fallback to cache on network error
-            load_from_cache(&app, id)
-        }
-    }
-}
-```
-
-See [data-persistence.md](./data-persistence.md) for SQLite setup.
-
-## Quick Reference
-
-| Task            | Pattern                                    |
-| --------------- | ------------------------------------------ |
-| Basic API call  | Rust command with reqwest                  |
-| Caching         | SQLite (frontend has no query-cache layer) |
-| Token storage   | `keyring` crate (OS keychain)              |
-| Type safety     | tauri-specta (same as local commands)      |
-| Error handling  | Result types, see error-handling.md        |
-| Offline support | Cache to SQLite, fallback on network err   |
+`model::context::assemble` builds the actual wire messages, installed-document
+tool schemas and output options for both local measurement and authenticated
+turns. Explicit cl100k_base/o200k_base selection uses bundled tiktoken-rs 0.7;
+JSON framing remains an estimate rather than provider usage. Unknown encoding
+keeps the selected-encoder token count unknown and adds an o200k_base reference
+estimate for display across providers. Its conservative byte-sized admission
+estimate still enforces a configured target independently of that display value. Characters, UTF-8 bytes and token estimates
+stay distinct. The whole serialized request retains its independent 128 KiB cap;
+tool/result/session limits remain in force. Config/key mutations revoke captured
+sessions. `measureAssistantContext` performs no network, Keychain or project I/O.

@@ -1,3 +1,9 @@
+import {
+  editText,
+  editorView,
+  editorWithText,
+  findEditorWithText,
+} from '@/test/text-editor'
 import { seedCreationDraft } from '@/test/creation-files'
 import {
   creationProjectAction,
@@ -80,7 +86,8 @@ describe('creation reading workspace', () => {
     fireEvent.click(
       await screen.findByRole('button', { name: 'public/score.js' })
     )
-    await screen.findByDisplayValue('alpha beta alpha')
+    await findEditorWithText('alpha beta alpha')
+    fireEvent.click(screen.getByRole('button', { name: 'Find and replace' }))
     fireEvent.change(
       screen.getByRole('textbox', { name: 'Find in current file' }),
       { target: { value: 'alpha' } }
@@ -88,9 +95,9 @@ describe('creation reading workspace', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Next match' }))
     const editor = screen.getByRole('textbox', {
       name: 'public/score.js',
-    }) as HTMLTextAreaElement
-    expect(editor.selectionStart).toBe(0)
-    expect(editor.selectionEnd).toBe(5)
+    })
+    expect(editorView(editor).state.selection.main.from).toBe(0)
+    expect(editorView(editor).state.selection.main.to).toBe(5)
     fireEvent.click(
       screen.getByRole('button', { name: 'Open project folder in Finder' })
     )
@@ -139,7 +146,7 @@ describe('creation reading workspace', () => {
     expect(
       within(topbar).getByRole('button', { name: 'Generate .pnds' })
     ).toBeEnabled()
-    const editor = await screen.findByDisplayValue('unsaved')
+    const editor = await findEditorWithText('unsaved')
     await creationProjectAction('Switch to another project')
     const picker = await screen.findByRole('dialog', {
       name: 'Switch to another project',
@@ -148,7 +155,7 @@ describe('creation reading workspace', () => {
       useCreationFilesStore.getState().drafts['public/score.js']?.text
     ).toBe('unsaved')
     fireEvent.click(within(picker).getByRole('button', { name: 'Cancel' }))
-    expect(screen.getByDisplayValue('unsaved')).toBe(editor)
+    expect(editorWithText('unsaved')).toBe(editor)
     expect(commands.prepareCreationProject).not.toHaveBeenCalled()
     expect(commands.startProject).not.toHaveBeenCalled()
     expect(commands.stopProject).not.toHaveBeenCalled()
@@ -179,7 +186,7 @@ describe('creation reading workspace', () => {
     await screen.findByText('Pages changed on disk · refresh pending')
     expect(screen.getByText(/unsaved drafts are excluded/i)).toBeInTheDocument()
     fireEvent.click(creationFileButton('public/score.js'))
-    await screen.findByDisplayValue('my unsaved page')
+    await findEditorWithText('my unsaved page')
     expect(await screen.findByLabelText('Disk changed')).toBeInTheDocument()
     expect(commands.startProject).not.toHaveBeenCalled()
   })
@@ -200,8 +207,8 @@ describe('creation reading workspace', () => {
     const editor = await screen.findByRole('textbox', {
       name: 'public/score.js',
     })
-    await screen.findByDisplayValue('original')
-    fireEvent.change(editor, { target: { value: 'unsaved text' } })
+    await findEditorWithText('original')
+    editText(editor, 'unsaved text')
     const result = await commands.getSessionState()
     if (result.status === 'error') throw new Error(result.error)
     vi.mocked(commands.getSessionState).mockResolvedValueOnce({
@@ -216,7 +223,7 @@ describe('creation reading workspace', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: 'Console' }))
     expect(editor).toBeVisible()
-    expect(editor).toHaveValue('unsaved text')
+    expect(editorView(editor).state.doc.toString()).toBe('unsaved text')
     await screen.findByText('[node] stopped unexpectedly')
     fireEvent.click(screen.getByRole('button', { name: 'Copy test details' }))
     await waitFor(() =>
@@ -228,7 +235,7 @@ describe('creation reading workspace', () => {
     expect(screen.getByRole('textbox', { name: 'public/score.js' })).toBe(
       editor
     )
-    expect(editor).toHaveValue('unsaved text')
+    expect(editorView(editor).state.doc.toString()).toBe('unsaved text')
     expect(commands.saveCreationFile).not.toHaveBeenCalled()
   })
 
@@ -295,7 +302,7 @@ describe('creation reading workspace', () => {
       data: { kind: 'text', text: 'new contents', version: 'v2' },
     })
     fireEvent.click(creationFileButton('public/score.js'))
-    await screen.findByDisplayValue('new contents')
+    await findEditorWithText('new contents')
     await act(async () =>
       resolveRead({
         status: 'error',
@@ -304,11 +311,9 @@ describe('creation reading workspace', () => {
     )
     expect(screen.queryByText(/old error/)).not.toBeInTheDocument()
     expect(
-      (
-        screen.getByRole('textbox', {
-          name: 'public/score.js',
-        }) as HTMLTextAreaElement
-      ).value
+      editorView(
+        screen.getByRole('textbox', { name: 'public/score.js' })
+      ).state.doc.toString()
     ).toBe('new contents')
   })
 
@@ -395,21 +400,17 @@ describe('creation reading workspace', () => {
         </>
       )
       fireEvent.click(creationFileButton('public/score.js'))
-      const editor = (await screen.findByDisplayValue(
-        'score contents'
-      )) as HTMLTextAreaElement
-      fireEvent.change(editor, { target: { value: 'score edited' } })
+      const editor = await findEditorWithText('score contents')
+      editText(editor, 'score edited')
       expect(
         document.querySelectorAll('.creation-file-row .creation-dirty-dot')
           .length
       ).toBe(1)
       fireEvent.click(creationFileButton('public/notes.js'))
-      await screen.findByDisplayValue('note contents')
+      await findEditorWithText('note contents')
       // Switching back restores the draft exactly, without re-reading disk.
       fireEvent.click(creationFileButton('public/score.js'))
-      expect(
-        (await screen.findByDisplayValue('score edited')) as HTMLTextAreaElement
-      ).toBeTruthy()
+      expect(await findEditorWithText('score edited')).toBeTruthy()
       expect(commands.readCreationFile).toHaveBeenCalledTimes(2)
       // The mode button's confirm shows the real discard consequence.
       fireEvent.click(
@@ -444,9 +445,7 @@ describe('creation reading workspace', () => {
         </>
       )
       fireEvent.click(creationFileButton('public/score.js'))
-      fireEvent.change(await screen.findByDisplayValue('score contents'), {
-        target: { value: 'score edited' },
-      })
+      editText(await findEditorWithText('score contents'), 'score edited')
       vi.mocked(commands.readCreationFile).mockResolvedValueOnce({
         status: 'ok',
         data: { kind: 'text', text: 'external agent text', version: 'v2' },
@@ -460,18 +459,16 @@ describe('creation reading workspace', () => {
         await screen.findByText('The file changed on disk')
       ).toBeInTheDocument()
       // The draft is untouched while the choice is open.
-      expect(screen.getByDisplayValue('score edited')).toBeInTheDocument()
+      expect(editorWithText('score edited')).toBeInTheDocument()
       await creationFileAction('Reload from disk')
-      await screen.findByDisplayValue('external agent text')
+      await findEditorWithText('external agent text')
       expect(
         screen.queryByText('The file changed on disk')
       ).not.toBeInTheDocument()
 
       // After the reload the draft bases on v2. Editing and saving again
       // carries v2; the disk moved to v3, so the choice re-opens.
-      fireEvent.change(screen.getByDisplayValue('external agent text'), {
-        target: { value: 'overwritten draft' },
-      })
+      editText(editorWithText('external agent text'), 'overwritten draft')
       vi.mocked(commands.saveCreationFile)
         .mockResolvedValueOnce({
           status: 'error',
@@ -509,7 +506,7 @@ describe('creation reading workspace', () => {
       expect(
         await screen.findByText('The file changed on disk')
       ).toBeInTheDocument()
-      expect(screen.getByDisplayValue('overwritten draft')).toBeInTheDocument()
+      expect(editorWithText('overwritten draft')).toBeInTheDocument()
       // Confirming again against the now-displayed v4 finally lands.
       fireEvent.click(
         screen.getByRole('button', { name: 'Overwrite and save' })
@@ -539,9 +536,7 @@ describe('creation reading workspace', () => {
         </>
       )
       fireEvent.click(creationFileButton('public/score.js'))
-      fireEvent.change(await screen.findByDisplayValue('score contents'), {
-        target: { value: 'score edited' },
-      })
+      editText(await findEditorWithText('score contents'), 'score edited')
       await creationFileAction('Rename')
       const dialog = await screen.findByRole('dialog')
       expect(
@@ -571,7 +566,7 @@ describe('creation reading workspace', () => {
         ],
       })
       fireEvent.click(within(dialog).getByRole('button', { name: 'Rename' }))
-      await screen.findByDisplayValue('score edited')
+      await findEditorWithText('score edited')
       expect(commands.renameCreationFile).toHaveBeenCalledWith(
         'first',
         'public/score.js',
@@ -617,9 +612,7 @@ describe('creation reading workspace', () => {
       })
       const { rerender } = render(<KeyboardHarness />)
       fireEvent.click(creationFileButton('public/score.js'))
-      fireEvent.change(await screen.findByDisplayValue('score contents'), {
-        target: { value: 'score edited' },
-      })
+      editText(await findEditorWithText('score contents'), 'score edited')
       vi.mocked(commands.saveCreationFile).mockResolvedValueOnce({
         status: 'ok',
         data: 'v2',
@@ -648,7 +641,7 @@ describe('creation reading workspace', () => {
         data: { kind: 'text', text: 'newer disk contents', version: 'v3' },
       })
       await creationFileAction('Reload from disk')
-      await screen.findByDisplayValue('newer disk contents')
+      await findEditorWithText('newer disk contents')
 
       useCreationStore.setState({
         workspace: {
@@ -849,9 +842,9 @@ describe('creation reading workspace', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Text' }))
       const editor = screen.getByRole('textbox', {
         name: 'manifest.json',
-      }) as HTMLTextAreaElement
-      expect(editor.value).toBe('{ not json')
-      fireEvent.change(editor, { target: { value: diskManifest } })
+      })
+      expect(editorView(editor).state.doc.toString()).toBe('{ not json')
+      editText(editor, diskManifest)
       fireEvent.click(screen.getByRole('button', { name: 'Form' }))
       expect(
         ((await screen.findByLabelText('Work title')) as HTMLInputElement).value
@@ -876,11 +869,14 @@ describe('creation reading workspace', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Text' }))
       const editor = screen.getByRole('textbox', {
         name: 'manifest.json',
-      }) as HTMLTextAreaElement
-      expect(editor.value).toContain('"name": "Form edit"')
-      fireEvent.change(editor, {
-        target: { value: editor.value.replace('"1.0.1"', '"1.0.2"') },
       })
+      expect(editorView(editor).state.doc.toString()).toContain(
+        '"name": "Form edit"'
+      )
+      editText(
+        editor,
+        editorView(editor).state.doc.toString().replace('"1.0.1"', '"1.0.2"')
+      )
       fireEvent.click(screen.getByRole('button', { name: 'Form' }))
       expect(
         ((await screen.findByLabelText('Version')) as HTMLInputElement).value

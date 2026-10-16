@@ -74,14 +74,10 @@ export function CreationPerformers() {
                 <span
                   role="status"
                   className="creation-performer-status"
-                  title={t(`creation.performers.page.${client.pageStatus}`)}
+                  title={t('creation.performers.connectionHint')}
                 >
                   <i aria-hidden="true" />
-                  {t('creation.performers.connectionUnknown')}
-                  <span className="sr-only">
-                    {' '}
-                    · {t(`creation.performers.page.${client.pageStatus}`)}
-                  </span>
+                  {t(`creation.performers.page.${client.pageStatus}`)}
                 </span>
                 <button
                   className="creation-icon-button pnds-focus-ring"

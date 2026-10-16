@@ -63,7 +63,7 @@ manifest、package／lock、README 与 agent 指引以新工程身份和版本 0
 
 音频选择只显示保存版 manifest 允许的 Internal／External／None，External 使用 App 本机目标，不使用 standaloneTarget，不修改默认模式。待应用配置与 ready 运行事实分开，设备、采样率和增益规则沿用全局设置及现有音频基线。刷新只导航 monitor 与注册的测试页面，不重启进程；未保存草稿不进入任何测试动作。
 
-monitor 顶栏显示创作模式、实际地址和展开／还原入口。展开只改变布局并隐藏原有编辑工作区，按钮或聚焦主窗口中的 Esc 还原同一页面，不关闭测试窗口；提交和 App 弹层期间尊重原门控。文件与控制台标签切换保留编辑状态，控制台显示现有服务的最近带来源日志与错误，可复制当前测试详情，不提供任意终端或工程内新日志。真实 performer 窗口由 #157 交付。
+monitor 顶栏显示创作模式、实际地址和展开／还原入口。展开只改变布局并隐藏原有编辑工作区，按钮或聚焦主窗口中的 Esc 还原同一页面，不关闭测试窗口；提交和 App 弹层期间尊重原门控。控制台由底栏入口按需展开在文件编辑区下方的 dock，展开／收起保留文件编辑状态；它显示现有服务的最近带来源日志与错误，可复制当前测试详情，不提供任意终端或工程内新日志。真实 performer 窗口由 #157 交付。
 
 App 负责：
 
@@ -83,7 +83,38 @@ App 不是：
 - 多声道扬声器布局、校准或现场 PA 管理器；
 - 工程下载、安装或在线项目库。
 
+### 模型服务配置与连接测试（#165）
+
+设置中的模型服务只管理一套 API 基础地址、模型名称和密钥。地址与模型通过已有序列化偏好队列保存，密钥使用 macOS 钥匙串；界面只恢复是否已保存密钥，不回填密钥值。保存、替换和移除失败明确显示，失败不回退为明文保存。非敏感配置与凭据分别保存时，界面如实显示部分成功。
+
+连接测试使用当前填写的配置；新输入的密钥仅用于本次测试，未输入时由 Rust 读取已保存密钥。测试实际完成文本回复和受控工具调用回环，不读取或发送工程。请求经 Rust 的既有 HTTP 依赖与系统代理约定，鉴权、网络、超时、协议、工具能力等错误区分反馈；不自动重试。模型未配置或不可用不影响本地编辑、保存与手动测试。真实钥匙串交互和真实服务兼容性需另有原生验收证据。
+
 ## 平台与交付范围
+
+### 创作讨论与装机文档问答（#166）
+
+可编辑工程默认进入讨论，文件与交接文档按需阅读；视图切换保持输入、已产生回复与
+各文件草稿。右侧 monitor 沿同一个页面实例，分隔线拖动和键盘调整只改变布局，
+偏好走既有序列化更新队列。控制台继续使用当前工作区下方的单一 dock。
+
+平台问答在同一个请求编排入口捕获输入、工程代次、模型配置和装机语料语言，
+只开放有次数、返回量与上下文预算的文档搜索／分节读取工具，不发送工程资料。
+来源由真实工具结果生成并定位原语言小节，模型自写引用不构成来源。
+错误保留输入和记录，重试由用户发起；停止、切换／关闭工程、返回演出或修改模型
+配置会取消请求，迟到内容不得提交到新代次。未配置或服务不可用不阻碍本地编辑与测试。
+
+### 当前工程聊天记录（#167）
+
+聊天仅存放在 App 数据区，按规范化实际源目录隔离；同目录符号链接共用记录，
+同 manifest 标识的不同目录、搬迁或克隆不自动合并。关闭重开与重启恢复消息、
+真实来源和完成／失败／取消状态；旧待完成请求显示取消，不恢复发送、应用或预演授权。
+历史附件、建议及实际差异显示保存的快照和版本，不从当前文件重建，不覆盖文件草稿；
+旧测试结果不构成当前运行事实。平台问答排除全部工程记录及带附件／建议的历史内容。
+
+保存失败保留当前内存内容并允许重试；恢复失败或未知格式不自动覆盖，提供重载与
+显式清理入口。清理经确认、停止活动请求，只在原子保存成功后清空当前工程记录，
+保留输入和工程草稿，不影响其他工程。旧请求和排队写入不能补回已清理记录。
+历史版本过期需确认重载或清理；重载保留输入，并停止旧请求和替换内存记录。
 
 必须支持：
 
@@ -523,7 +554,10 @@ Back/Close 返回 Welcome，不自动重启。
 
 Creation testing opens multiple independent native performer clients. The list
 owns per-client number, device/orientation, page navigation facts and focus /
-close actions. Connection is unknown under the current public runtime contract.
+close actions. The list shows page navigation status; the shell directs the
+user to the project page or monitor for connection status. The current public
+runtime contract cannot report a project's performer connection, and finishing
+navigation does not prove connection success.
 Device sizing changes preserve the page; runtime restart preserves shells and
 browser identity, while manual page refresh navigates all existing pages. Music
 messages use the project server directly. Closing one never stops the project.
@@ -536,7 +570,9 @@ Performer tests support normal JavaScript alert/confirm/prompt as native sheets,
 including a prompt before a project chooses its performer ID. A labelled mouse
 single-touch option is enabled for new clients and can be changed per client
 without reloading; it produces untrusted DOM touch events while preserving native
-form controls. This is input simulation, not mobile browser/hardware emulation.
+form controls. Page pointer handlers run first: a cancelled pointerdown keeps
+the gesture and receives no simulated touch. This is input simulation, not
+mobile browser/hardware emulation.
 
 ## Offline module addition (#210)
 
@@ -564,3 +600,16 @@ required Apple Silicon/Intel clean-environment runs, is tracked separately in
 声音未验证。工程磁盘变化使旧结果过期，切换后的迟到结果不能进入新工程。
 App 与离线 `pnds check` 共用同一报告服务；具体结构、退出状态及边界见
 [static-diagnostics.md](./static-diagnostics.md)。
+
+### 受控副本检查与单文件撤销（#194）
+
+创作中的受控检查仅由主动开始执行，默认 None，Internal 显式选择，
+External 沿用手动测试。App／CLI 共享独立保存版副本工作流与实际运行锁，
+starting／ready／stopping 和清理都阻止新运行；静态 Doctor 仍可用。
+副本产物不回写，报告区分输入证据、实际运行结果、清理、过期与未验证。
+切换、关闭及取消的迟到结果不进入新工程；退出等待所属清理。
+单文件审阅保存及撤销复用已有可信身份、文本边界与磁盘版本保护，
+拒绝草稿／外部变化，不依赖 Git，不跨重启保留记录。规则见
+[controlled-checks.md](./controlled-checks.md) 与
+[single-file-changes.md](./single-file-changes.md)，真实验收见
+[#194 记录](../acceptance/194-v1.6.5-controlled-checks.md)。

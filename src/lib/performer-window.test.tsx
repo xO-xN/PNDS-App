@@ -280,8 +280,24 @@ describe('independent performer windows', () => {
       device: 'phone',
       orientation: 'portrait',
     })
-    expect(screen.getByText(/Connection unknown/)).toBeInTheDocument()
     const original = configFor(label)
+    expect(screen.getByRole('status')).toHaveTextContent(/^Loading page$/)
+    act(() =>
+      deliver(PERFORMER_PAGE, {
+        label,
+        identity: original.identity,
+        runId: original.runId,
+        navigation: original.navigation,
+        loaded: true,
+      })
+    )
+    expect(screen.getByRole('status')).toHaveTextContent(
+      /^Navigation finished$/
+    )
+    expect(screen.getByRole('status')).toHaveAttribute(
+      'title',
+      'Page navigation does not confirm a performer connection. Check the project page or monitor for connection status.'
+    )
     const options = {
       label,
       identity: original.identity,

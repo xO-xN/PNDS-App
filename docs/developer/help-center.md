@@ -48,6 +48,12 @@ Rust 侧 `help_corpus(locale)` 返回 `{ id, path, markdown }[]`（id 是稳定�
 
 ## T8 窗口接线（#56，已完成）
 
+#166 的助手来源沿用同一窗口：`HelpTarget` 的文档目标可带 `anchor` 和来源
+`locale`，由 `help-target.ts` 对称编码／解析，URL 首开、导航事件和 ready 回放均保留。
+来源可以打开原语言小节，帮助窗口 UI 语言仍跟随 App；用户随后显式切换语言时继续
+沿既有规则切换语料。锚点滚动同时依赖文档目标与已渲染语料，避免异步语言装载后
+停在页首。旧的仅 `docId` 入口保持有效；资源清单及装机路径不改变。
+
 帮助中心是**第二个 webview 窗口**（label `help`），独立最小入口 `help.html` + `src/help-main.tsx`（vite 多页构建，`build.rolldownOptions.input`）——不引导主 App 的 store / 菜单 / 会话机制，react-markdown 只进 help 分块不进主包。启动链复刻 App.tsx 的 #51 防闪：`loadPreferences → setColorThemeAttribute → initializeLanguage`（主题先于首帧落地）→ 渲染 `HelpCenterApp`；**窗口由 `HelpCenterApp` 在语料就绪（或失败出错误态）后调 `commands.fadeInWindow('help')` 揭示**——内容未到也揭示，窗口绝不卡在隐藏态。
 
 | 部件                                   | 位置                                                                        |

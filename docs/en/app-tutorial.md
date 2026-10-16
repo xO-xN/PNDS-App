@@ -149,6 +149,73 @@ only the handoff. Upgrades, merges and removal belong to the external agent.
 
 ---
 
+### Configuring a model service
+
+Open Settings (`⌘ ,`) → Model service and enter the API base URL, model name and
+key for an OpenAI-compatible service supporting text conversations and tool calls.
+Use the service's base URL, including `/v1` when required, and its exact model name.
+Remote services require HTTPS; a local loopback service can use HTTP.
+
+The URL and model are saved in local preferences; the key is stored in the macOS
+Keychain. Reopening Settings shows whether a key is saved without refilling it.
+Enter a new key to replace it, or explicitly remove it. Save and Keychain failures
+are visible and never fall back to a plain-text file.
+
+Test connection uses the current form values, including unsaved edits. An empty
+key input uses the saved key. The test verifies a text reply and a controlled tool
+round trip without reading or sending the current project. Authentication,
+network, timeout, protocol and unsupported-tool failures have distinct feedback;
+retry manually after correcting the problem. A successful connection test does
+not verify or run your project. Local editing, saving and manual testing remain
+available when the model service is unconfigured or unavailable.
+
+### Asking about installed PNDS documentation
+
+An editable project opens on the discussion surface. After configuring the model
+service, enter a question and click Send or press `⌘ Enter`; plain Enter adds a
+line break. Platform questions use the local help shipped with this App version
+without reading or sending project content. Verified source buttons open the
+actual section in its original language. Replies that did not consult local
+sources are marked accordingly; model-written citations are not verified sources.
+
+Stop while the assistant reads or prepares a reply to keep your input, produced
+text and sources. Correct an error and retry manually. Changing projects, returning
+to performance mode or changing model configuration cancels the request; late
+responses cannot enter a new context. Tool, document and context budgets fail
+explicitly without hidden paid retries.
+
+Open a file for full editing and return to the discussion without losing input,
+replies or individual file drafts. Existing handoff documents remain available
+through their reading entry. The right monitor keeps the same page; opening code
+does not refresh or restart it. Drag the separator to change the reading/monitor
+width, or focus it with Tab and use the arrow keys. Home or double-click restores
+the default. Width is remembered locally and constrained by readable minimums in
+narrow windows. The console remains the existing dock beneath the current
+workspace, opened from the bottom bar or its usual shortcut.
+
+### Restoring and clearing project conversations
+
+Conversations are saved in the App's private data, separately for each actual
+source directory. Reopening the same project or restarting the App restores its
+messages and verified sources. Symlink aliases share a conversation; copies,
+moved folders and other folders with the same manifest ID do not merge histories.
+History stays outside your project, handoff documents and exported bundles.
+
+Restored pending replies are marked cancelled. Historical attachments and
+suggestions display their saved text, origin and versions; they do not reread the
+current file, replace drafts, send project content, apply changes or restart a
+preview. Past test results describe the past, not the current running project.
+
+The discussion toolbar reports saving and failures. Retry a failed save explicitly.
+If loading fails or the format is unsupported, reload or use Clear conversation
+after confirming. A stale history version requires confirmed reload or clearing;
+reloading replaces in-memory messages and stops the old request while keeping
+your input and file drafts. Clearing affects only this project's conversation,
+preserves input and files, and cancels the active request. Cancel the confirmation
+to keep the conversation. A failed clear retains the records; late replies cannot
+restore successfully cleared messages. Tab and Enter operate these controls, and
+Escape cancels the confirmation.
+
 ### Inspecting and releasing ports
 
 Open Settings (`⌘ ,`) → Ports to inspect the selected project's manifest performer and monitor ports. Creation mode reads the workspace's saved manifest; drafts do not change the query target. With no target, the defaults are 6868/6869. The section queries once on entry; click Refresh to update it. There is no background polling.
@@ -212,3 +279,79 @@ It uses the same static rules as the App and prints a readable report by default
 `--json` emits a machine-readable report. Run `pnds --help` for parameters and exit
 status meanings. The tool reads local resources without executing project source
 or changing the project.
+
+## Controlled saved-copy checks
+
+Choose “Controlled check” in the creation workbench, then explicitly start.
+Only saved inputs are copied; unsaved drafts remain untouched. None is the
+default and requires declared project support. Explicitly choose Internal to
+use real audio. External continues through the App's manual testing workflow.
+Optional SynthDef compilation writes only into the copy; missing local compiler
+or required resources remain explicit failures.
+
+Progress covers preparation, static checks, startup, health/HTTP and cleanup.
+The report identifies the task, actual copied content fingerprints, dependency
+and shared versions, mode, device environment, outcome and cleanup. Git HEAD is
+auxiliary, not the complete input identity. Later source changes make a report
+stale; explicitly check again. Copy caches and compiled artifacts are never
+adopted into the source automatically.
+Closing and reopening the dialog in the same creation workspace retains its
+report or error until you explicitly run another check. “Copy report” copies
+the full JSON, including errors and cleanup, for troubleshooting.
+
+App startup, performance, shutdown or another owned check blocks new App/CLI
+runtime checks without stopping the existing performance. Static Doctor remains
+available. Stop, dialog close, workspace replacement and App exit cancel the
+owned task and clean its resources. Service readiness does not validate rendered
+pages, phone behavior, model inference, actual sound or artistic quality.
+
+```sh
+/Applications/PNDS.app/Contents/MacOS/pnds check /path/to/project --run --json
+/Applications/PNDS.app/Contents/MacOS/pnds check /path/to/project --run --mode internal
+```
+
+The command uses the App's Node/audio/shared resources. Ctrl-C or SIGTERM cancels
+and waits for cleanup. Runtime exits: 0 passed including cleanup; 1 failed/not
+executed; 130 cancelled; 2 invalid arguments/output failure. When copying the
+command separately, use `--app-root /path/to/PNDS.app` for the complete resource
+source; global Node is never a fallback. Sequential saved-file copying does not
+promise an instantaneous atomic snapshot or an OS sandbox for arbitrary code.
+
+If cleanup remains unconfirmed, ending the front end still blocks new App/CLI
+runs. Retry after its resources have been released. If ownership evidence is
+incomplete, restart the Mac before retrying. Static diagnostics remain available.
+
+## Single-file differences and undo
+
+After editing one existing text file, choose “Review change” to inspect the
+actual before/candidate difference. Cancel keeps the draft. A successful “Save
+reviewed change” shows the actual saved record; “Undo saved change” restores
+the original text without Git.
+
+Undo applies only to the current workspace's latest recorded single-file
+change. Later manual/external saves, renames, deleted targets or unresolved
+drafts reject the old action without overwriting newer work. Switching or
+closing a workspace revokes its old identity; records do not survive App exit.
+A failed check never automatically undoes the file or adopts copy artifacts.
+
+### Editing project text
+
+Open a text file from the tree or use **Quick open file** (`⌘P` while working in
+the creation workspace). Search uses the current project's file list; arrows
+choose a result and Enter opens it. Large, unreadable and binary files retain
+an explanation rather than becoming editable.
+
+The editor shows line numbers and syntax colors for JavaScript, TypeScript,
+JSON, HTML, CSS, Markdown and SCD; other readable text uses plain text. Colors
+do not mean code has passed validation or compilation. Use **Find and replace**
+(`⌘F`) for the current file, or **Go to line** (`⌘G`). Replacements change the
+draft and can be undone. Tab/Shift+Tab indent a selection; Escape then Tab leaves
+the editor. Undo/redo (`⌘Z` / `⇧⌘Z` or the toolbar) stay with each file when
+switching files or layouts during this project session.
+
+**Save** / `⌘S` writes explicitly with the existing manifest/README validation
+and disk-version conflict protection. Saving does not refresh or restart the
+running project. Cancelling a disk conflict keeps your draft; explicitly adopting
+a disk version resets draft undo/redo and announces that boundary. Histories are
+not restored after restarting the App. **Undo saved change** is a separate
+version-checked operation on a recorded disk write.
