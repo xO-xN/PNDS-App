@@ -87,6 +87,7 @@ describe('creation discussion reading (#166)', () => {
       expect(useAssistantProjectStore.getState().planning).toBe(false)
     )
     expect(screen.getByRole('dialog')).toHaveTextContent('not provider usage')
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeVisible()
     await user.keyboard('{Escape}')
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(
@@ -185,6 +186,7 @@ describe('creation discussion reading (#166)', () => {
     expect(screen.getByRole('dialog')).toHaveTextContent(
       'Sensitive configuration'
     )
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeVisible()
     expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
     await user.keyboard('{Escape}')
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()

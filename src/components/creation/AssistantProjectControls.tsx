@@ -129,7 +129,7 @@ export function AssistantProjectControls({ identity }: { identity: string }) {
                 useAssistantProjectStore.getState().cancelConsent()
               }
             >
-              {t('common.cancel')}
+              {t('creation.cancel')}
             </Button>
             <Button
               disabled={!config || phase !== 'idle'}
@@ -193,7 +193,7 @@ export function AssistantProjectControls({ identity }: { identity: string }) {
               variant="outline"
               onClick={() => useAssistantProjectStore.getState().cancelWhole()}
             >
-              {t('common.cancel')}
+              {t('creation.cancel')}
             </Button>
             {whole?.error && (
               <Button variant="outline" disabled={planning} onClick={plan}>

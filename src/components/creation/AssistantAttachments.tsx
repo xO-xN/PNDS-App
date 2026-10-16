@@ -16,17 +16,21 @@ function Attachment({ item }: { item: PendingAssistantAttachment }) {
     item.buffer.getSnapshot
   )
   const draftVersion = useCreationFilesStore(
-    state => state.drafts[item.snapshot.path]?.diskVersion
-  )
-  const savedVersion = useAssistantProjectStore(
     state =>
-      state.snapshot?.files.find(file => file.path === item.snapshot.path)
-        ?.version
+      state.drafts[item.snapshot.path]?.conflict?.version ??
+      state.drafts[item.snapshot.path]?.diskVersion
+  )
+  const savedVersion = useAssistantProjectStore(state =>
+    state.snapshot !== item.inventoryAtCapture
+      ? state.snapshot?.files.find(file => file.path === item.snapshot.path)
+          ?.version
+      : null
   )
   const phase = useAssistantStore(state => state.phase)
   const { snapshot } = item
   const stale =
     editorState.doc.toString() !== item.document.replace(/\r\n|\r/g, '\n') ||
+    item.diskVersionAtCapture !== item.baseVersion ||
     (!!savedVersion && savedVersion !== item.baseVersion) ||
     (!!draftVersion && draftVersion !== item.baseVersion)
   return (

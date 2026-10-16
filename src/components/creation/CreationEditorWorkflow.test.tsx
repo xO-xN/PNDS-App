@@ -102,6 +102,21 @@ it('adds the real editor selection as a fixed draft attachment without saving or
   const buffer =
     useCreationFilesStore.getState().drafts['public/score.js']?.editor
   if (!buffer) throw new Error('The public file editor was not ready')
+  act(() =>
+    useAssistantProjectStore.setState({
+      snapshot: {
+        fingerprint: 'earlier-consent',
+        files: [
+          {
+            path: 'public/score.js',
+            bytes: 20,
+            version: 'disk-0',
+            reason: null,
+          },
+        ],
+      },
+    })
+  )
   act(() => buffer.select(17, 29))
   fireEvent.click(screen.getByRole('button', { name: 'Discuss selection' }))
   await waitFor(() =>
@@ -119,8 +134,44 @@ it('adds the real editor selection as a fixed draft attachment without saving or
   expect(
     screen.getByRole('region', { name: 'Selected code attachments' })
   ).toBeInTheDocument()
+  expect(screen.queryByText(/The source has changed/)).not.toBeInTheDocument()
   expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
   expect(commands.saveCreationFile).not.toHaveBeenCalled()
+  act(() =>
+    useAssistantProjectStore.setState({
+      snapshot: {
+        fingerprint: 'later-disk-change',
+        files: [
+          {
+            path: 'public/score.js',
+            bytes: 20,
+            version: 'disk-2',
+            reason: null,
+          },
+        ],
+      },
+    })
+  )
+  expect(screen.getByText(/The source has changed/)).toBeInTheDocument()
+  expect(
+    useAssistantProjectStore.getState().attachments[0]?.snapshot.text
+  ).toBe('const a = 77')
+  act(() =>
+    useAssistantProjectStore.setState({
+      snapshot: {
+        fingerprint: 'disk-restored',
+        files: [
+          {
+            path: 'public/score.js',
+            bytes: 20,
+            version: 'disk-1',
+            reason: null,
+          },
+        ],
+      },
+    })
+  )
+  expect(screen.queryByText(/The source has changed/)).not.toBeInTheDocument()
   act(() => buffer.replaceSelection('const a = 88'))
   expect(await screen.findByText(/The source has changed/)).toBeInTheDocument()
   expect(

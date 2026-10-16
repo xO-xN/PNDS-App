@@ -394,6 +394,13 @@ source documents are limited to 64 KiB, selections to 2,000 UTF-16 units, eight
 attachments / 12,000 selected units total. Adding/removing does no model call or
 file write. Subsequent edits label the immutable snapshot stale, never replace it.
 
+Attachment freshness keeps the native disk version and inventory object observed
+at capture in transient state. An earlier consent inventory cannot invalidate a
+newer editor selection. A subsequently refreshed inventory, the current editor
+disk/conflict version and buffer edits each independently detect later changes;
+none overrides another observation. These freshness markers are not history or
+restored reading authority.
+
 The highest request assembler produces attachment payloads and source records
 from those exact snapshots. Disabled reading blocks the entire send, retaining
 input and attachments. Workspace replacement clears pending attachments; a

@@ -1,0 +1,534 @@
+{
+  "date": "2026-10-16",
+  "timezone": "Asia/Shanghai",
+  "baseCommit": "02882515387f5fc3445cab5474d0556906941282",
+  "environment": {
+    "macOS": "27.0.1",
+    "macOSBuild": "26A434",
+    "architecture": "arm64"
+  },
+  "method": "Native macOS Computer Use; real configured model; synthetic isolated A/B projects; persisted test-only history and trusted source snapshots; no real-provider HTTP payload capture",
+  "model": {
+    "baseUrl": "https://open.bigmodel.cn/api/coding/paas/v4",
+    "name": "glm-5.3-flash",
+    "contextCapacity": 1000000,
+    "inputTarget": 32000,
+    "maxOutput": 8192,
+    "reasoningReserve": 0,
+    "safetyMargin": 2048,
+    "tokenizer": "unknown",
+    "credentialsReadOrChangedByAgent": false,
+    "configurationRestored": true
+  },
+  "initialNativeReleaseExecutableSha256": "ceed1ff2669817141ff3bbd23bbd34343a4fc7480d9a1d65b5301a68db4965be",
+  "debugLaunch": {
+    "executableSha256": "521d3576adad2c85227c8f95035dc134926fa49edad69ac9904d30d17bb49697",
+    "deepSignatureValid": true,
+    "finderExitCode": 101,
+    "inference": "Debug startup exports TypeScript bindings using a cwd-relative destination before logging. Finder launch exits before a window appears; release launch succeeds. Startup cause not independently confirmed or fixed."
+  },
+  "projects": {
+    "g3-native-a": {
+      "root": "/Users/xiaoxiang/Coding/PNDS app 开发/pnds-g3-native-2026-10-16/g3-native-a",
+      "historySchema": 3,
+      "messages": [
+        {
+          "role": "user",
+          "text": "请读取 notes.txt，只回答 SAVED_MARKER_A_168 的值，并列出实际来源。不要读取其他文件。",
+          "scope": "project",
+          "status": "completed",
+          "sources": []
+        },
+        {
+          "role": "assistant",
+          "text": "**SAVED_MARKER_A_168 = `amber-orbit`**\n\n实际来源（均为本次工具实际返回）：\n- `notes.txt`（版本 `67-69e21e630da336bb`，偏移 0–103，全文件共 103 字符，1–3 行）：通过 `list_project_files` 确认其在已保存文本范围内，再经 `read_project_text` 实际读取。\n\n按您的要求，未读取其他任何文件。\n\n{\"remainingDocumentToolCalls\":4,\"remainingResultCharacters\":20720}",
+          "scope": "project",
+          "status": "completed",
+          "usage": {
+            "calls": [
+              {
+                "inputTokens": 1599,
+                "outputTokens": 453,
+                "cachedInputTokens": 0,
+                "reasoningTokens": 446
+              },
+              {
+                "inputTokens": 2148,
+                "outputTokens": 94,
+                "cachedInputTokens": 0,
+                "reasoningTokens": 57
+              },
+              {
+                "inputTokens": 2299,
+                "outputTokens": 121,
+                "cachedInputTokens": 960,
+                "reasoningTokens": 0
+              }
+            ],
+            "complete": true,
+            "documentMetrics": {
+              "returnedCharacters": 103,
+              "reusedCharacters": 0,
+              "resultCharacters": 2080
+            }
+          },
+          "sources": [
+            {
+              "path": "README.zh-CN.md",
+              "version": "b5-a76c9f5e4d9fedda",
+              "offset": 0,
+              "endOffset": 99,
+              "totalCharacters": 99,
+              "source": "saved"
+            },
+            {
+              "path": "docs/creator-handoff.md",
+              "version": "cec-e83d02c64fac1315",
+              "offset": 0,
+              "endOffset": 200,
+              "totalCharacters": 2582,
+              "source": "saved"
+            },
+            {
+              "path": "manifest.json",
+              "version": "24a-3016271da3d0ab07",
+              "offset": 0,
+              "endOffset": 200,
+              "totalCharacters": 586,
+              "source": "saved"
+            },
+            {
+              "path": "package.json",
+              "version": "fc-9cdc566e112ca073",
+              "offset": 0,
+              "endOffset": 200,
+              "totalCharacters": 252,
+              "source": "saved"
+            },
+            {
+              "path": "notes.txt",
+              "version": "67-69e21e630da336bb",
+              "offset": 0,
+              "endOffset": 103,
+              "totalCharacters": 103,
+              "source": "saved"
+            }
+          ]
+        },
+        {
+          "role": "user",
+          "text": "只根据已附加的草稿选区，用一句话回答其中变量和值，并说明它是否已保存。不要调用文件或文档工具。",
+          "scope": "project",
+          "status": "completed",
+          "attachments": [
+            {
+              "id": "da835f7f-3468-42e5-bcd5-0919f7f65549",
+              "projectKey": "79601375174386e51c552f943ef44db28d4e9e49115ffa5d043c1f1d28dd0b3e",
+              "path": "notes.txt",
+              "startLine": 2,
+              "endLine": 2,
+              "source": "draft",
+              "version": "68-bd7e50dbd28df922:draft:da835f7f-3468-42e5-bcd5-0919f7f65549",
+              "sourceVersion": "68-bd7e50dbd28df922",
+              "text": "SELECTED_DRAFT_225=violet-rhythm"
+            }
+          ],
+          "sources": []
+        },
+        {
+          "role": "assistant",
+          "text": "附加草稿选区中的变量为 `SELECTED_DRAFT_225`，其值为 `violet-rhythm`；它仅是本次显式附加的草稿内容（source 为 draft），并未保存到项目中——当前工程概要显示无任何已保存的内容文件，因此这只是待处理的草稿选区，不是已落盘的工程数据。\n\n{\"remainingCalls\":8,\"remainingResultCharacters\":24000}",
+          "scope": "project",
+          "status": "completed",
+          "usage": {
+            "calls": [
+              {
+                "inputTokens": 1732,
+                "outputTokens": 264,
+                "cachedInputTokens": 1536,
+                "reasoningTokens": 173
+              }
+            ],
+            "complete": true
+          },
+          "sources": [
+            {
+              "path": "README.zh-CN.md",
+              "version": "b5-a76c9f5e4d9fedda",
+              "offset": 0,
+              "endOffset": 99,
+              "totalCharacters": 99,
+              "source": "saved"
+            },
+            {
+              "path": "docs/creator-handoff.md",
+              "version": "cec-e83d02c64fac1315",
+              "offset": 0,
+              "endOffset": 200,
+              "totalCharacters": 2582,
+              "source": "saved"
+            },
+            {
+              "path": "manifest.json",
+              "version": "24a-3016271da3d0ab07",
+              "offset": 0,
+              "endOffset": 200,
+              "totalCharacters": 586,
+              "source": "saved"
+            },
+            {
+              "path": "package.json",
+              "version": "fc-9cdc566e112ca073",
+              "offset": 0,
+              "endOffset": 200,
+              "totalCharacters": 252,
+              "source": "saved"
+            },
+            {
+              "path": "notes.txt",
+              "version": "68-bd7e50dbd28df922:draft:da835f7f-3468-42e5-bcd5-0919f7f65549",
+              "offset": 0,
+              "endOffset": 32,
+              "totalCharacters": 32,
+              "source": "draft"
+            }
+          ]
+        }
+      ]
+    },
+    "g3-native-b": {
+      "root": "/Users/xiaoxiang/Coding/PNDS app 开发/pnds-g3-native-2026-10-16/g3-native-b",
+      "historySchema": 3,
+      "messages": [
+        {
+          "role": "user",
+          "text": "请阅读整个工程，用一句话报告 README 中的 Whole-project marker。",
+          "scope": "project",
+          "status": "completed",
+          "sources": []
+        },
+        {
+          "role": "assistant",
+          "text": "README.md（版本 6e-5eb936724e3703cd）中记载的 Whole-project marker 为：`WHOLE_B_170=blue-lantern-v2`。\n\n（依据为已纳入的整个可读工程文本，仅是文件内容事实，非运行时验证。）\n\n{\"remainingCalls\":8,\"remainingResultCharacters\":22125}",
+          "scope": "project",
+          "status": "completed",
+          "usage": {
+            "calls": [
+              {
+                "inputTokens": 1920,
+                "outputTokens": 282,
+                "cachedInputTokens": 0,
+                "reasoningTokens": 200
+              }
+            ],
+            "complete": true
+          },
+          "sources": [
+            {
+              "path": "README.md",
+              "version": "6e-5eb936724e3703cd",
+              "offset": 0,
+              "endOffset": 110,
+              "totalCharacters": 110,
+              "source": "saved"
+            },
+            {
+              "path": "manifest.json",
+              "version": "144-2cc64d74eb95c638",
+              "offset": 0,
+              "endOffset": 200,
+              "totalCharacters": 324,
+              "source": "saved"
+            },
+            {
+              "path": "manifest.json",
+              "version": "144-2cc64d74eb95c638",
+              "offset": 0,
+              "endOffset": 324,
+              "totalCharacters": 324,
+              "source": "saved"
+            },
+            {
+              "path": "notes.txt",
+              "version": "39-37f899390746350",
+              "offset": 0,
+              "endOffset": 57,
+              "totalCharacters": 57,
+              "source": "saved"
+            },
+            {
+              "path": "public/monitor.html",
+              "version": "41-beaeaa6b3ec20cad",
+              "offset": 0,
+              "endOffset": 65,
+              "totalCharacters": 65,
+              "source": "saved"
+            },
+            {
+              "path": "server.js",
+              "version": "104-945a0d30f9be69da",
+              "offset": 0,
+              "endOffset": 260,
+              "totalCharacters": 260,
+              "source": "saved"
+            }
+          ]
+        },
+        {
+          "role": "user",
+          "text": "仅根据本次模型上下文：能否知道先前工程 README 的 Whole-project marker 的值？若本次没有提供，请只回复“本次未提供”。不要使用工具，也不要猜测。",
+          "scope": "platform",
+          "status": "completed",
+          "sources": []
+        },
+        {
+          "role": "assistant",
+          "text": "本次未提供\n\n{\"remainingCalls\":8,\"remainingResultCharacters\":24000}",
+          "scope": "platform",
+          "status": "completed",
+          "usage": {
+            "calls": [
+              {
+                "inputTokens": 692,
+                "outputTokens": 379,
+                "cachedInputTokens": 0,
+                "reasoningTokens": 360
+              }
+            ],
+            "complete": true
+          },
+          "sources": []
+        }
+      ]
+    }
+  },
+  "observations": {
+    "168": {
+      "firstScopeCancelRetainsInput": true,
+      "realSavedMarkerCorrect": true,
+      "versionsAndExcludedReasonsVisible": true,
+      "sensitiveAliasExcluded": true,
+      "escapeSymlinkRefusesWorkspaceOpen": true,
+      "oldSourceNavigationShowsChangedFileAndPreservesSnapshot": true,
+      "readingOffWithAttachmentBlocksWholeSendAndRetainsInput": true,
+      "readingOffRealCanaryReply": "本次未提供",
+      "readingOffRealCanarySources": 0,
+      "newModelIdentityRequiresNewConsent": true,
+      "projectSwitchDefaultReadingOff": true
+    },
+    "225": {
+      "savedSelectionPreview": true,
+      "draftSelectionPreviewAndRealReply": true,
+      "actualSentHistoryAttachmentText": "SELECTED_DRAFT_225=violet-rhythm",
+      "attachmentOnlySelectedLineInHistory": true,
+      "draftNotSavedByAttachmentOrSend": true,
+      "cancelledWorkspaceSwitchPreservesDraft": true,
+      "pendingSuggestionRealG5Integration": "pending #208 / #172",
+      "postFixCurrentSelectionNotMislabelledByOldInventory": true,
+      "laterEditorChangeWarnsWithoutReplacingSnapshot": true,
+      "postFixCapturedBaseVersion": "6c-2680c29950abc273",
+      "selectionOf2201Utf16UnitsRefused": true,
+      "sensitiveAliasSelectionRefused": true,
+      "successfulProjectSwitchClearsPendingAttachment": true,
+      "restartPreservesHistoricalDraftSnapshotLabelAndText": true,
+      "regressionLaterInventoryChangeNotHiddenByDraftVersion": "Automated real-editor UI regression passed"
+    },
+    "169": {
+      "pointerHoverExpansionAndLeaveCollapse": true,
+      "keyboardFocusExpansionAndBlurCollapse": true,
+      "staticDoctorPassed": true,
+      "staticEvidenceStaleAfterSavedCodeChange": true,
+      "noneModeActualReadyObserved": true,
+      "actualReadyAt": "2026-10-16T04:49:23.437Z",
+      "testEvidenceStaleAfterSavedReadmeChange": true,
+      "noneModeTestStopped": true,
+      "restartDoesNotRestoreStaticOrRuntimeSuccess": true
+    },
+    "170": {
+      "AWholeBudgetRefusedWithConfirmDisabled": true,
+      "BWholeFileCount": 5,
+      "BInitialEstimateTokens": 1925,
+      "BInitialSerializedUtf8Bytes": 7917,
+      "changedBeforeConfirmRefused": true,
+      "cancelRetainsOriginalInputAndEmptyChat": true,
+      "BRefreshedEstimateTokens": 1927,
+      "BRefreshedSerializedUtf8Bytes": 7923,
+      "BRealLatestMarkerCorrect": true,
+      "BTrustedSourceSnapshots": 6,
+      "BDistinctFilesInSources": 5,
+      "postFixCancelLabelLocalized": true,
+      "33AllowedFilesRefusedWithConfirmDisabled": true,
+      "longScopeBodyScrollAndFixedFooter": true,
+      "themesVisuallyChecked": ["pond", "sand", "dark", "brutal"],
+      "originalThemeRestored": "pond",
+      "narrowWindow": {
+        "status": "passed",
+        "method": "Native system green-button Move & Resize Left, then bottom-edge drag",
+        "theme": "pond (top/bottom/keyboard), all four themes (long-scope bottom/footer)",
+        "logicalWindowApproximate": [1000, 700],
+        "screenshotPixels": [2000, 1400],
+        "33FileScopeTopAndBottomVisible": true,
+        "headerAndFooterFixedWhileBodyScrolls": true,
+        "cancelRefreshAndDisabledConfirmVisible": true,
+        "shiftTabFocusesCancel": true,
+        "returnCancelsWithoutNewRequest": true,
+        "themesChecked": ["pond", "sand", "dark", "brutal"]
+      }
+    }
+  },
+  "limitations": [
+    "No raw provider payload capture; do not use replies alone as direct payload proof. Automated loopback payload regressions remain separate evidence.",
+    "GLM echoed internal budget JSON and overstated scaffold facts in one draft reply; trusted App sources remained distinct. No general output-quality or artistic validation is claimed.",
+    "Intel clean-environment acceptance and #208 real suggestion integration remain pending."
+  ],
+  "finalNativeReleaseExecutableSha256": "642a7fe0b5985c4e42a6e54c4b5ae54f865b1c708cad63981c8a87b0a9fca581",
+  "finalReleaseDeepStrictSignatureValid": true,
+  "builds": {
+    "realModelRounds": "02882515387f5fc3445cab5474d0556906941282 release build; initialNativeReleaseExecutableSha256",
+    "postFixNativeRecheck": "Current five-file source fix on top of 0288251; finalNativeReleaseExecutableSha256",
+    "finalBuildLog": "/tmp/pnds-g3-native-fixed-build.log",
+    "runtimeLaunch": "Finder UI; no dev server started by agent"
+  },
+  "automatedChecks": {
+    "command": "RUST_TEST_THREADS=1 npm run check:all",
+    "exitCode": 0,
+    "log": "/tmp/pnds-g3-native-check-all-final.log",
+    "frontendFiles": 158,
+    "frontendTests": 1875,
+    "appRustPassed": 524,
+    "appRustExistingIgnored": 5,
+    "cliIntegrationPassed": [9, 6],
+    "dnsPassed": 39,
+    "dnsRestartIntegrationPassed": 2,
+    "standardsActionableFindings": 0,
+    "specActionableFindings": 0
+  },
+  "screenshots": [
+    {
+      "file": "168-first-read.jpg",
+      "sha256": "321d4f171728b92edac91c083c07485e5e1cde50a8a0a25b282ef4da2f82c5e3"
+    },
+    {
+      "file": "168-fixed-cancel-label.jpg",
+      "sha256": "f65aa50810907a885e9fe39e71fbb0a5ae62341dcae7f2821cc49bd521072673"
+    },
+    {
+      "file": "168-reading-off-context-filter.jpg",
+      "sha256": "18397c6cd9fc9168a06cc63265b654826187dee6dcc4b4f90ca19d73cba4a225"
+    },
+    {
+      "file": "168-service-change-confirmation.jpg",
+      "sha256": "3aa59375d052b1e17e0fd53caba9906daacfc6923779582f9bac339f57b26041"
+    },
+    {
+      "file": "169-keyboard-overview.jpg",
+      "sha256": "4082a468636e811c233287201304d94b4e2202257d5aaf5941e143b1bb510236"
+    },
+    {
+      "file": "169-stale-runtime-evidence.jpg",
+      "sha256": "a984e6e19d8c1e513b44395919c216717a72d53a520123abb31b51ed47f97a08"
+    },
+    {
+      "file": "169-stale-static-evidence.jpg",
+      "sha256": "1c9ae881210faf4becd4ca37f5587500248f54f88e5301a1f37a368ed0f1e621"
+    },
+    {
+      "file": "170-min-theme-brutal.jpg",
+      "sha256": "197ad421287647a1a8f48546fb21f7d5391aca4da75d19e1642e6266b0dad8e0"
+    },
+    {
+      "file": "170-min-theme-dark.jpg",
+      "sha256": "869eabe815273f4dfb991226608b0c0056b4548264ff811cf8e890df05995236"
+    },
+    {
+      "file": "170-min-theme-pond-restored.jpg",
+      "sha256": "bc96fc47a9f84f536ae8daaef9a3bfaa50e9661d5654118c673a5d74d52de904"
+    },
+    {
+      "file": "170-min-theme-sand.jpg",
+      "sha256": "c99144dcfad019f7da3749e2276d5ab9147c2a9dd54281e3ede61c4bbd031405"
+    },
+    {
+      "file": "170-min-window-bottom.jpg",
+      "sha256": "f078516ed3ad8d7837872d2f53bb332a1a2a15f1ab04ae13e67c05e1d47b0966"
+    },
+    {
+      "file": "170-min-window-keyboard-cancel.jpg",
+      "sha256": "16f4ac94b6aea02dd5160989fbebe4061b3797df6e05f4fd53117b06ffe9a87e"
+    },
+    {
+      "file": "170-min-window-top.jpg",
+      "sha256": "395d1bcc4378727627f18c5385d0fbd6be587eb29240195c062c13bcb3f7f591"
+    },
+    {
+      "file": "170-pond-scroll-footer.jpg",
+      "sha256": "4de15f6302e64e8a815207a72ff7a4e7f231575c2b3cb194c7396dfcee925f58"
+    },
+    {
+      "file": "170-theme-brutal.jpg",
+      "sha256": "0f68dd7c7e68e3796852b847a37ee8f3bbc9c225500e78979890f5622d9db874"
+    },
+    {
+      "file": "170-theme-dark.jpg",
+      "sha256": "c4ef929fdd625fb27be8e11583a003350d624b02fe85360e47727c9dbbb4e2ca"
+    },
+    {
+      "file": "170-theme-pond-final.jpg",
+      "sha256": "c19f5d4c715be24048f577ff341e50d94462037fa6ea59a297947b06664255cc"
+    },
+    {
+      "file": "170-theme-sand.jpg",
+      "sha256": "8158dc98146a392fa94b87cd658056039d9760cadabbb141b9048b9a3050c376"
+    },
+    {
+      "file": "170-version-change-refusal.jpg",
+      "sha256": "cc025ea61ed0aaf0321a2162b707256320a6e49f75fd1db41c9e2b0ea7488cf2"
+    },
+    {
+      "file": "170-whole-budget-refusal.jpg",
+      "sha256": "7a8562144f30ccbaa36eb9eee061213e6f3d26c25a8222dd6115c1b5837935f1"
+    },
+    {
+      "file": "170-whole-project-sources.jpg",
+      "sha256": "2772b3e26a7c6a8b849b43fac17ac82706fcb29b2d13f4c5c27fff89ea7c1438"
+    },
+    {
+      "file": "225-fixed-fresh-selection.jpg",
+      "sha256": "12a8640773f81aaf0524ca8f86d4d50cb9507b0a6793740cfd3d7c8959094fa9"
+    },
+    {
+      "file": "225-fixed-stale-snapshot.jpg",
+      "sha256": "16b8a50fb87081637f569275fee21124a1c85d47da0162294b0915f504ffc209"
+    },
+    {
+      "file": "225-reading-off-refusal.jpg",
+      "sha256": "19fe12b11932502c92aa1792cbca51305a8183f346b84bf254d00df177172c77"
+    },
+    {
+      "file": "225-restart-history.jpg",
+      "sha256": "c0b19f88d2bf054523f509baab0918b85b9383cb6bb287584364d97357e3f192"
+    },
+    {
+      "file": "225-selection-limit-refusal.jpg",
+      "sha256": "9b246d0e9f2a1631c9e0248ab578d8bf406c6fa0d55884260e5722fd7eac2b79"
+    },
+    {
+      "file": "225-sensitive-alias-refusal.jpg",
+      "sha256": "cd220fdec1d72de40512f0246ebf127cd411fc01ec1d9fc234a91348b5d84a4d"
+    },
+    {
+      "file": "native-final-idle.jpg",
+      "sha256": "80c476a7724003d07d0dd8802f85f26aa23ac560e99f0b311e0b8325c04dc652"
+    }
+  ],
+  "cleanup": {
+    "budgetOnlyFilesRemoved": 28,
+    "retainedFixtures": ["g3-native-a", "g3-native-b"],
+    "retainedTestHistories": true,
+    "originalModelAndThemeRestored": true,
+    "activeRuntime": false,
+    "projectReadingEnabled": false,
+    "pendingAttachments": 0,
+    "composerEmpty": true
+  }
+}

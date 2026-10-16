@@ -31,6 +31,8 @@ export interface PendingAssistantAttachment {
   buffer: TextBuffer
   document: string
   baseVersion: string
+  diskVersionAtCapture: string
+  inventoryAtCapture: AssistantProjectSnapshot | null
   identity: string
 }
 
@@ -357,6 +359,8 @@ export const useAssistantProjectStore = create<AssistantProjectState>(
               buffer,
               document,
               baseVersion: version,
+              diskVersionAtCapture: result.data.version,
+              inventoryAtCapture: current.snapshot,
               snapshot: {
                 id,
                 projectKey: '',
