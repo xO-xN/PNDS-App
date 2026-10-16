@@ -116,6 +116,14 @@
   --pnds-accent-text: #285a8d;
   --pnds-text: #293541;
   --pnds-text-secondary: #495b68;
+  --pnds-chat-user: #d8e6f1;
+  --pnds-chat-user-text: var(--pnds-text);
+  --pnds-chat-user-muted: var(--pnds-text-secondary);
+  --pnds-chat-user-danger: var(--pnds-danger);
+  /* Context occupancy follows each palette's accessible status ink. */
+  --pnds-context-low: var(--pnds-success);
+  --pnds-context-mid: var(--pnds-warning-text);
+  --pnds-context-high: var(--pnds-danger);
   --pnds-border: #bdcbd6;
   --pnds-input: #617789;
   --pnds-danger: #9d3043;
@@ -167,6 +175,10 @@
   --pnds-accent-text: #6f481e;
   --pnds-text: #352e24;
   --pnds-text-secondary: #60523f;
+  --pnds-chat-user: #dccbb4;
+  --pnds-chat-user-text: var(--pnds-text);
+  --pnds-chat-user-muted: var(--pnds-text-secondary);
+  --pnds-chat-user-danger: var(--pnds-danger);
   --pnds-border: #b8aa92;
   --pnds-input: #7c6d57;
   --pnds-danger: #93332b;
@@ -215,6 +227,10 @@
   --pnds-accent-text: #b7d8c6;
   --pnds-text: #e7ece9;
   --pnds-text-secondary: #adbbb4;
+  --pnds-chat-user: #2c3432;
+  --pnds-chat-user-text: #e7ece9;
+  --pnds-chat-user-muted: #bdcbc4;
+  --pnds-chat-user-danger: #ffb7c4;
   --pnds-border: #46554e;
   --pnds-input: #7c8f84;
   --pnds-danger: #f4a3ac;
@@ -264,6 +280,10 @@
   --pnds-accent-text: #842708;
   --pnds-text: #000000;
   --pnds-text-secondary: #4a4028;
+  --pnds-chat-user: #ffd987;
+  --pnds-chat-user-text: var(--pnds-text);
+  --pnds-chat-user-muted: var(--pnds-text-secondary);
+  --pnds-chat-user-danger: var(--pnds-danger);
   --pnds-border: #000000;
   --pnds-input: #000000;
   --pnds-danger: #8e1530;

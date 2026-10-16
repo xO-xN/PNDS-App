@@ -1,0 +1,192 @@
+{
+  "date": "2026-10-16",
+  "timezone": "Asia/Shanghai",
+  "method": "Native macOS Computer Use accessibility observations, source-navigation screenshots, fixed diagnostic markers and local corpus SHA-256 comparisons; no real-provider payload capture",
+  "project": "/Users/xiaoxiang/Desktop/test copy",
+  "build": {
+    "baseCommit": "fc5e98b",
+    "bundleExecutableSha256": "c5b06afb5281039e71b92f6dff939508cb662b39f76848f881120cf9ece03b44",
+    "flavor": "same standalone debug test app used for the #234 summary-policy fix, including pre-existing unrelated performer changes",
+    "businessCodeChangedDuringThisGroup": false,
+    "checkAllAfterSummaryFixExitCode": 0,
+    "frontendTestsPassed": 1836,
+    "rustTestsPassed": 573,
+    "rustTestsIgnored": 5
+  },
+  "configuration": {
+    "model": "glm-5.3-flash",
+    "capacity": 1000000,
+    "inputTarget": 32000,
+    "maxOutput": 8192,
+    "reasoningReserve": 0,
+    "safetyMargin": 2048,
+    "tokenizer": "unknown",
+    "changedDuringThisGroup": false
+  },
+  "corpusHashesMatchedLocalOriginals": {
+    "zh-CN/reference/manifest.md": "eb8975a37e1e793c005b84fbb53d85253c1ae1ecd442f04811c3e09fdd33e782",
+    "zh-CN/reference/runtime-contract.md": "d84fad9833f83c0db7e2d0e394693294adb191eaed2b090da08e26be6085cb3b",
+    "en/reference/audio-modes.md": "65ce1e9a4e3025631e8f84452613b7a0484a0b086a8a85f46731dc336bc9f2cc",
+    "en/reference/runtime-contract.md": "1913385e9af5c82c2f60b86ffd04db39843011de8e0e384ee86df9d26d951681"
+  },
+  "outputChannels": {
+    "outcome": "completed",
+    "sourceCount": 8,
+    "searchExcerptsAndMarkdownPagesDistinguished": true,
+    "observedLongPages": [
+      { "offset": 0, "endOffset": 2000, "totalCharacters": 2241 },
+      { "offset": 0, "endOffset": 2000, "totalCharacters": 4029 }
+    ],
+    "answerStatesOptionalDefaultTwoRangeAndDeviceRelationship": true,
+    "answerIdentifiesUnreadTails": true,
+    "modelBudgetFooterNotUsedAsMeasurementEvidence": true,
+    "usage": {
+      "calls": 3,
+      "inputTokens": 6445,
+      "outputTokens": 2199,
+      "complete": true,
+      "perCall": [
+        { "input": 700, "output": 78, "cached": 0, "reasoning": 50 },
+        { "input": 1487, "output": 361, "cached": 0, "reasoning": 258 },
+        { "input": 4258, "output": 1760, "cached": 576, "reasoning": 1005 }
+      ]
+    },
+    "documents": {
+      "returnedCharacters": 5067,
+      "reusedCharacters": 55,
+      "resultCharacters": 8308
+    },
+    "liveDocumentContext": { "characters": 10212, "utf8Bytes": 14429 },
+    "sourceNavigation": {
+      "docId": "reference-manifest",
+      "anchor": "可选字段",
+      "locale": "zh-CN",
+      "correctHeadingVisible": true
+    }
+  },
+  "overlapInitialAttempt": {
+    "outcome": "invalidTool",
+    "exactRejectedToolArgumentsCaptured": false,
+    "inputRetained": true,
+    "automaticRetry": false,
+    "serverUsageCaptured": false,
+    "retryExplicitAfterLookingUpTrustedSourceAnchor": true
+  },
+  "overlapRetry": {
+    "outcome": "requestTimeoutWhileStreamingFinalAnswer",
+    "countedAsSuccessfulQuestion": false,
+    "docId": "reference-runtime-contract",
+    "sectionId": "7-internal-多通道音频",
+    "locale": "zh-CN",
+    "requestedInitialPages": [
+      { "offset": 1800, "pageLength": 1200 },
+      { "offset": 2000, "pageLength": 1200 }
+    ],
+    "observedNewSourceRanges": [
+      { "offset": 1800, "endOffset": 3000, "totalCharacters": 4029 },
+      { "offset": 3000, "endOffset": 3200, "totalCharacters": 4029 },
+      { "offset": 3200, "endOffset": 4029, "totalCharacters": 4029 }
+    ],
+    "continuedToSectionEnd": true,
+    "documents": {
+      "returnedCharacters": 2229,
+      "reusedCharacters": 1000,
+      "resultCharacters": 3665
+    },
+    "liveDocumentContext": { "characters": 4912, "utf8Bytes": 6503 },
+    "usage": {
+      "calls": 3,
+      "knownInputSubtotal": 4176,
+      "knownOutputSubtotal": 1909,
+      "complete": false,
+      "perCall": [
+        { "input": 1548, "output": 161, "cached": 640, "reasoning": 73 },
+        { "input": 2628, "output": 1748, "cached": 0, "reasoning": 1695 },
+        null
+      ]
+    },
+    "inputPartialAnswerAndAllThreeSourcesRetained": true,
+    "partialAnswerOverstatedReadCoverage": true,
+    "totalDeadlineApproximatelySeconds": 120
+  },
+  "englishAudioOverview": {
+    "outcome": "completedWithExplicitEvidenceGap",
+    "answeredAllRequestedRuntimeColumns": false,
+    "fullAudioModesPage": {
+      "offset": 0,
+      "endOffset": 802,
+      "totalCharacters": 802
+    },
+    "runtimeSectionSixNotReadAcknowledged": true,
+    "sourceCount": 7,
+    "usage": {
+      "calls": 3,
+      "inputTokens": 6588,
+      "outputTokens": 1573,
+      "complete": true,
+      "perCall": [
+        { "input": 1516, "output": 1005, "cached": 640, "reasoning": 970 },
+        { "input": 2380, "output": 91, "cached": 0, "reasoning": 56 },
+        { "input": 2692, "output": 477, "cached": 576, "reasoning": 282 }
+      ]
+    },
+    "documents": {
+      "returnedCharacters": 1161,
+      "reusedCharacters": 0,
+      "resultCharacters": 3786
+    }
+  },
+  "englishSupplementAndMissingEvidence": {
+    "outcome": "completed",
+    "fullRuntimeAudioPage": {
+      "offset": 0,
+      "endOffset": 468,
+      "totalCharacters": 468
+    },
+    "allNineModeComparisonCellsMatchOriginal": true,
+    "missingPhrase": "PNDS Quantum Telepathy Bridge v9",
+    "searchReturnedGenericExcerptCount": 3,
+    "noSpecificFeatureEvidenceAcknowledged": true,
+    "setupStepsInvented": false,
+    "installationStateClaimVerified": false,
+    "installationStateCaveat": "Model said appears uninstalled; absence from help is not evidence of machine installation state",
+    "sourceCount": 4,
+    "usage": {
+      "calls": 2,
+      "inputTokens": 4398,
+      "outputTokens": 504,
+      "complete": true,
+      "perCall": [
+        { "input": 1822, "output": 127, "cached": 1472, "reasoning": 67 },
+        { "input": 2576, "output": 377, "cached": 0, "reasoning": 202 }
+      ]
+    },
+    "documents": {
+      "returnedCharacters": 690,
+      "reusedCharacters": 0,
+      "resultCharacters": 2240
+    }
+  },
+  "languageAndCleanup": {
+    "originalUiLocale": "zh-CN",
+    "temporaryUiLocale": "en",
+    "finalUiLocale": "zh-CN",
+    "englishSourceStillOpensEnglishAfterUiRestored": true,
+    "sourceTarget": {
+      "docId": "reference-runtime-contract",
+      "anchor": "6-audio-modes",
+      "locale": "en"
+    },
+    "correctHeadingAndTableVisible": true,
+    "testHelpWindowClosed": true,
+    "finalInputEmpty": true,
+    "finalAppIdleAndHistorySaved": true
+  },
+  "limits": [
+    "Real GLM questions did not all succeed on the first attempt; invalidTool and timeout retained",
+    "No provider-agnostic answer-quality guarantee; model footer, coverage wording and installation inference are not authoritative facts",
+    "No real-provider before/after payload capture or billing comparison; deterministic comparison is in the separate controlled replay artifacts",
+    "No Intel, all-theme, minimum-window, IME or app-version-switch race certification",
+    "No budget increase, forced fixed answer, business-code change or issue closure during this group"
+  ]
+}

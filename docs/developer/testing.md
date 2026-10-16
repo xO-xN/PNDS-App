@@ -337,6 +337,36 @@ App, fullscreen, actual score-monitor identity/layout and runtime preservation
 remain user-run native acceptance; use the checklist in
 [keyboard-shortcuts.md](./keyboard-shortcuts.md#native-performance-selection-202).
 
+## Native assistant UI acceptance (#232–#235)
+
+Use the exact `.app` path for native UI automation when an installed PNDS and a
+local test build share a bundle identifier. A bare `tauri dev` process may have
+no bundle identifier and be absent from the controller's app inventory. The
+single-instance plugin also prevents a packaged copy from replacing an active
+development instance. Obtain explicit approval to quit when unsaved state is
+unknown, then use a normal exit and preserve the user's data.
+
+For a standalone local debug test, build frontend assets and the application,
+rather than only bundling the development executable. With bundle dependencies
+already prepared, the #233 run used `npm exec tauri -- build --debug --bundles app
+--ci` and a temporary config that set `build.beforeBuildCommand` to `npm run build`
+and disabled updater artifacts. The current debug entry exports TypeScript
+bindings relative to `src-tauri`; launch this debug test executable from that
+working directory. This is a test setup limitation, not proof that Finder
+startup of a debug package works. Do not rebuild or replace an executable while
+its instance is under test; see the running-signature diagnosis in
+[external-apis.md](./external-apis.md#connection-verification).
+
+For usage persistence, capture the completed reply's numeric fields and the
+stopped reply's visible partial text through the UI before exit, then compare
+after reopening the same project. Missing usage stays unknown and incomplete;
+historical numbers are not the next call's context occupancy. User credential
+entry remains a handoff. A real model may decline a synthetic long-output prompt;
+use a bounded creative request and stop after visible output instead of treating
+a short refusal as a cancellation test. The #233
+[native evidence](../acceptance/evidence/233-native-stop-and-usage-2026-10-16.json)
+records the exact observations and limitations.
+
 ## Static project diagnostics (#193)
 
 Diagnostics are tested through public reports and the actual `pnds check`

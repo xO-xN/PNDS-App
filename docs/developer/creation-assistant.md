@@ -217,8 +217,14 @@ current owner/service identity and enabled project reading; the current platform
 UI supplies none. Unconnected consumer categories are absent, never “already
 sent”. #168/#225 remain responsible for real project/attachment integration.
 
-The input disclosure previews the next call when idle and follows the actual
-call during tool loops. Capacity is manual/unverified; no percentage is shown.
+The context popup previews the next call when idle and follows the actual
+call during tool loops. Capacity is manual/unverified. The ring uses the selected
+encoder estimate when available and otherwise a portable o200k_base reference
+count of the same serialized request. This fallback is published separately as
+`referenceEstimatedTokens`; it never changes conservative admission, usage or
+model configuration. No model name implies an encoder or capacity. Missing
+capacity still prevents a percentage. Every displayed proportion is explicitly
+labelled as estimated; nonzero values below 0.1% display “<0.1%”.
 Local JSON/tokenizer counts remain estimates of provider framing. Parts are
 independently encoded and are not an exact additive decomposition.
 
@@ -251,6 +257,14 @@ structured candidate distinguishes user decisions, assistant suggestions,
 verified/unverified claims and open questions, with validated original-message
 IDs per item. Users inspect originals, discard, redo or explicitly accept.
 Rejected/failed/partial candidates never enter future model context.
+
+Summary generation uses its own JSON-only system policy. It does not inherit
+conversational document-reading instructions or the document-budget footer:
+GLM echoed that footer after an otherwise structured summary during native
+acceptance, causing strict parsing to reject it. Keep validation strict rather
+than silently stripping arbitrary trailing model text. The highest-entry HTTP
+fixture checks the outgoing summary policy; real-model acceptance remains the
+check that a provider follows it.
 
 Accepted summaries are user-role reference data, not system instructions. They
 carry service identity and original IDs; current source scope/attachments are
@@ -301,3 +315,50 @@ The controlled four-question comparison and native acceptance checklist live in
 [the #232–#235 record](../acceptance/232-235-context-management.md). Known short-result
 metadata overhead and reduced source coverage are retained, alongside reductions
 for long sections and overlap; synthetic usage is not real-provider evidence.
+
+## Chat navigation and question branches
+
+The assistant header lists chats within the current project. Schema-3 topic
+markers delimit chats without migrating or discarding existing messages. The
+initial unmarked transcript is the first chat. Only the selected chat enters
+context selection, organization and the next request; continuing an earlier chat
+inserts its new messages before the following topic marker in storage. All chats
+remain in the same atomic project-history snapshot. On reopening, the latest
+created chat is selected; chat selection and unsent drafts are session state.
+
+Switching chats stops the current request, invalidates late callbacks and keeps
+each chat's composer draft. A normal send clears the composer immediately;
+stopping or failing restores the submitted question. Existing clear-history
+confirmation still clears the whole project's history, rather than one chat.
+The composer sends on Enter and inserts a line break on Shift+Enter. Composition
+confirmation is excluded, including WebKit's legacy key-code 229 IME signal.
+
+Editing a platform text question loads it into the composer with an explicit
+branch banner. Cancel restores the prior draft. Sending creates a new chat with
+copies of the prefix before that question, then the edited question. The original
+chat and its later discussion remain unchanged. Copied records receive new IDs;
+summary source references are remapped within the branch. Copied snapshots stay
+historical and do not restore execution authority. Questions carrying attachments
+or proposal snapshots are not editable through this text-only action.
+
+User messages use an end-aligned bubble, while assistant messages occupy
+the available width without a card. Pond, Sand and Brutal use light blue-gray,
+warm beige and amber fills with dark theme ink; Stage retains its dark bubble.
+Theme tokens cover bubble text, secondary text and error contrast; the bubble
+retains rounded corners in all palettes.
+The composer footer exposes only a keyboard-accessible context ring: a continuous
+faint background track with a single arc for the estimated used fraction. With
+no measurement or capacity, the track remains empty. The percentage is visible
+beside the ring and exposed in its accessible name. Up to 20% uses the theme
+green, 60% uses amber and 100% uses red, with continuous sRGB interpolation
+between these points and saturation above 100%. These colors alias each theme's
+readable status ink; interpolated percentage text meets 4.5:1 contrast. The popup
+provides a textual Smart zone label at or below 20%, with context-organization
+or new-chat guidance as occupancy grows. App-budget errors take precedence
+over these zone hints. The popup shows the estimated request tokens against
+manually configured model capacity,
+plus the explicit context-organization workflow. Detailed server consumption
+remains attached to the corresponding reply. Unknown tokenizers use an explicitly
+labelled generic reference estimate; they do not claim a matching provider
+tokenizer. Local measurement uses the
+selected chat (or the edited question's prefix) and rejects stale previews.

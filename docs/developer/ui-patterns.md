@@ -749,3 +749,12 @@ Tests exercise this single interface using frozen probe geometry and a controlle
 clock/font/visibility/resize environment; pure branch math stays private. Real
 WebKit painting, fonts, zoom and full-screen transitions remain manual acceptance
 (see [app-behavior.md](./app-behavior.md), cover page section).
+
+The assistant's context ring uses the theme's existing success, warning-text
+and danger ink through `--pnds-context-low`, `--pnds-context-mid` and
+`--pnds-context-high`. The estimated proportion stays green through 20%,
+reaches amber at 60% and red at 100%, with continuous sRGB blends between
+thresholds. The neutral background track remains continuous. The number is
+labelled as estimated and the popup gives textual Smart zone / growing /
+new-chat guidance, so color is not the only signal. Palette tests check all
+three surfaces and intermediate blends for readable percentage text.

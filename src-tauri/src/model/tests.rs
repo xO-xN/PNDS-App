@@ -727,6 +727,11 @@ async fn a_small_input_target_rejects_tools_before_any_http_request_even_without
     let config: ModelServiceConfig = serde_json::from_value(value).unwrap();
     let measurement = measure_context(config.clone(), assistant_question()).unwrap();
     assert!(measurement.estimated_tokens.is_none());
+    let display = serde_json::to_value(&measurement).unwrap()["referenceEstimatedTokens"]
+        .as_u64()
+        .expect("unknown tokenizers still provide a portable display estimate");
+    assert!(display > 0 && display < u64::from(measurement.utf8_bytes));
+    assert_eq!(measurement.admission_estimate, measurement.utf8_bytes);
     assert_eq!(measurement.exceeded.as_deref(), Some("contextTokens"));
     let service = ModelService::new(MemoryCredentials::default());
     service.save_credential("fixture-secret").await.unwrap();
@@ -747,6 +752,45 @@ async fn a_small_input_target_rejects_tools_before_any_http_request_even_without
     ));
     assert!(!server.is_finished());
     server.abort();
+}
+
+#[test]
+fn reference_context_estimates_are_provider_independent_and_leave_budgets_conservative() {
+    for model in ["glm-5.3-flash", "another-provider-model"] {
+        let mut value = json!({
+            "baseUrl":"https://model.example/v1", "model":model,
+            "context":{"capacity":1_000_000,"inputTarget":32000,"maxOutput":4096,
+            "reasoningReserve":0,"safetyMargin":256,"tokenizer":"unknown","source":"manualUnverified"}
+        });
+        let messages = serde_json::from_value(json!([
+            {"role":"system","content":"Use installed documentation."},
+            {"role":"user","content":"中文 English const x = 1; 🎵"}
+        ]))
+        .unwrap();
+        let unknown =
+            measure_context(serde_json::from_value(value.clone()).unwrap(), messages).unwrap();
+        value["context"]["tokenizer"] = json!("o200kBase");
+        let selected = measure_context(
+            serde_json::from_value(value).unwrap(),
+            serde_json::from_value(json!([
+                {"role":"system","content":"Use installed documentation."},
+                {"role":"user","content":"中文 English const x = 1; 🎵"}
+            ]))
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            unknown.reference_estimated_tokens,
+            selected.estimated_tokens
+        );
+        assert!(unknown
+            .reference_estimated_tokens
+            .is_some_and(|count| count > 0));
+        assert!(unknown.estimated_tokens.is_none());
+        assert_eq!(unknown.admission_estimate, unknown.utf8_bytes);
+        assert!(selected.reference_estimated_tokens.is_none());
+        assert_eq!(unknown.capacity, Some(1_000_000));
+    }
 }
 
 #[tokio::test]

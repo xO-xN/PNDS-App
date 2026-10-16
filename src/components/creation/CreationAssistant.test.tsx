@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { flushSync } from 'react-dom'
 import { TextBuffer } from '@/lib/text-buffer'
 import { editText } from '@/test/text-editor'
-import { act, render, screen } from '@/test/test-utils'
+import { act, fireEvent, render, screen } from '@/test/test-utils'
 import { commands } from '@/lib/tauri-bindings'
 import { useCreationStore } from '@/store/creation-store'
 import { useCreationFilesStore } from '@/store/creation-files-store'
@@ -55,6 +55,85 @@ beforeEach(async () => {
 })
 
 describe('creation discussion reading (#166)', () => {
+  it('sends with Enter and inserts a line break with Shift+Enter', async () => {
+    useAssistantStore.setState({ configured: true })
+    const original = useAssistantStore.getState().send
+    const send = vi.fn().mockResolvedValue(undefined)
+    useAssistantStore.setState({ send })
+    try {
+      const user = userEvent.setup()
+      render(<CreationAssistant identity="assistant-test" />)
+      const input = screen.getByRole('textbox', { name: 'Ask the assistant' })
+      await user.type(input, 'First line{Shift>}{Enter}{/Shift}Second line')
+      expect(input).toHaveValue('First line\nSecond line')
+      expect(send).not.toHaveBeenCalled()
+      await user.keyboard('{Enter}')
+      expect(send).toHaveBeenCalledOnce()
+      expect(input).toHaveValue('First line\nSecond line')
+    } finally {
+      useAssistantStore.setState({ send: original })
+    }
+  })
+
+  it.each([{ isComposing: true }, { keyCode: 229 }])(
+    'keeps IME confirmation Enter from sending (%o)',
+    nativeState => {
+      useAssistantStore.setState({ configured: true, input: '输入法选词' })
+      const original = useAssistantStore.getState().send
+      const send = vi.fn().mockResolvedValue(undefined)
+      useAssistantStore.setState({ send })
+      try {
+        render(<CreationAssistant identity="assistant-test" />)
+        fireEvent.keyDown(
+          screen.getByRole('textbox', { name: 'Ask the assistant' }),
+          { key: 'Enter', ...nativeState }
+        )
+        expect(send).not.toHaveBeenCalled()
+      } finally {
+        useAssistantStore.setState({ send: original })
+      }
+    }
+  )
+
+  it('switches chats and offers a historical question as an editable new-chat draft', async () => {
+    const user = userEvent.setup()
+    useAssistantStore.setState({
+      messages: [
+        {
+          id: 'question',
+          role: 'user',
+          text: 'Original question',
+          scope: 'platform',
+          status: 'completed',
+          sources: [],
+        },
+      ],
+      configured: true,
+    })
+    render(<CreationAssistant identity="assistant-test" />)
+    await user.click(screen.getByRole('button', { name: 'Edit and resend' }))
+    expect(
+      screen.getByRole('textbox', { name: 'Ask the assistant' })
+    ).toHaveValue('Original question')
+    expect(
+      screen.getByRole('textbox', { name: 'Ask the assistant' })
+    ).toHaveFocus()
+    expect(
+      screen.getByRole('button', { name: 'Send as new chat' })
+    ).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Cancel editing' }))
+    expect(
+      screen.getByRole('textbox', { name: 'Ask the assistant' })
+    ).toHaveValue('')
+    await user.click(screen.getByRole('button', { name: 'New chat' }))
+    expect(screen.queryByText('Original question')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('combobox', { name: 'Chats' }))
+    await user.click(
+      screen.getByRole('option', { name: /1 · Original question/ })
+    )
+    expect(screen.getByText('Original question')).toBeVisible()
+  })
+
   it.each(['bundle', 'utility', 'readOnlyFolder'] as const)(
     'keeps the readonly file reader available without an assistant for %s projects',
     async source => {

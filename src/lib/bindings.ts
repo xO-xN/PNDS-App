@@ -1407,7 +1407,11 @@ bridgedChannels: number;
  */
 privateBusStart: number }
 export type ContextContentKind = "history" | "input" | "documents" | "summary" | "projectOverview" | "projectFragment" | "attachment"
-export type ContextMeasurement = { characters: number; utf8Bytes: number; estimatedTokens: number | null; admissionEstimate: number; tokenizer: ContextTokenizer; capacity: number | null; effectiveInput: number | null; outputReserve: number; safetyMargin: number; parts: ContextPart[]; exceeded: string | null }
+export type ContextMeasurement = { characters: number; utf8Bytes: number; estimatedTokens: number | null;
+/**
+ * Portable display-only fallback. Never used for admission or server usage.
+ */
+referenceEstimatedTokens?: number | null; admissionEstimate: number; tokenizer: ContextTokenizer; capacity: number | null; effectiveInput: number | null; outputReserve: number; safetyMargin: number; parts: ContextPart[]; exceeded: string | null }
 export type ContextPart = { kind: string; characters: number; utf8Bytes: number; estimatedTokens: number | null }
 export type ContextTokenizer = "unknown" | "cl100kBase" | "o200kBase"
 export type ControlledCheckCleanup = { nodeConfirmed: boolean; audioConfirmed: boolean; temporaryFilesRemoved: boolean; errors: string[] }

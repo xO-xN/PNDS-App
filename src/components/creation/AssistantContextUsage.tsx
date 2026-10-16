@@ -1,4 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+import { conversationMessages } from '@/lib/assistant-conversations'
 import { useTranslation } from 'react-i18next'
 import {
   commands,
@@ -8,10 +14,18 @@ import {
 import { buildAssistantMessages } from '@/lib/assistant-flow'
 import { useAssistantStore } from '@/store/assistant-store'
 
-export function AssistantContextUsage({ identity }: { identity: string }) {
-  const { t } = useTranslation()
+export function AssistantContextUsage({
+  identity,
+  children,
+}: {
+  identity: string
+  children?: ReactNode
+}) {
+  const { t, i18n } = useTranslation()
   const input = useAssistantStore(state => state.input)
   const messages = useAssistantStore(state => state.messages)
+  const active = useAssistantStore(state => state.activeConversationId)
+  const editing = useAssistantStore(state => state.editing)
   const config = useAssistantStore(state => state.modelConfig)
   const phase = useAssistantStore(state => state.phase)
   const live = useAssistantStore(state => state.contextMeasurement)
@@ -20,16 +34,24 @@ export function AssistantContextUsage({ identity }: { identity: string }) {
     input: string
     messages: typeof messages
     config: typeof config
+    active: typeof active
+    editing: typeof editing
     measurement: ContextMeasurement | null
   } | null>(null)
   useEffect(() => {
     if (!config || phase !== 'idle' || historyState !== 'ready') return
     let stale = false
+    let history = conversationMessages(messages, active)
+    if (editing)
+      history = history.slice(
+        0,
+        history.findIndex(message => message.id === editing.messageId)
+      )
     const timer = setTimeout(() => {
       void commands
         .measureAssistantContext(
           config,
-          buildAssistantMessages(messages, input, {
+          buildAssistantMessages(history, input, {
             owner: identity,
             config,
             projectReading: false,
@@ -41,113 +63,159 @@ export function AssistantContextUsage({ identity }: { identity: string }) {
               input,
               messages,
               config,
+              active,
+              editing,
               measurement: result.status === 'ok' ? result.data : null,
             })
         })
         .catch(() => {
-          if (!stale) setPreview({ input, messages, config, measurement: null })
+          if (!stale)
+            setPreview({
+              input,
+              messages,
+              config,
+              active,
+              editing,
+              measurement: null,
+            })
         })
     }, 150)
     return () => {
       stale = true
       clearTimeout(timer)
     }
-  }, [config, identity, input, messages, phase, historyState])
+  }, [config, identity, input, messages, active, editing, phase, historyState])
   const measurement =
     phase !== 'idle'
       ? live
       : preview?.input === input &&
           preview.messages === messages &&
-          preview.config === config
+          preview.config === config &&
+          preview.active === active &&
+          preview.editing === editing
         ? preview.measurement
         : null
-  if (!config)
-    return (
-      <p className="text-muted-foreground text-xs">
-        {t('assistant.context.unavailable')}
-      </p>
-    )
+  const tokens =
+    measurement?.estimatedTokens ?? measurement?.referenceEstimatedTokens
+  const capacity = measurement?.capacity ?? config?.context?.capacity
+  const percent = tokens != null && capacity ? (tokens / capacity) * 100 : null
+  const number = new Intl.NumberFormat(i18n.resolvedLanguage, {
+    maximumFractionDigits: 1,
+  })
+  const percentText =
+    percent !== null && percent > 0 && percent < 0.1
+      ? `<${number.format(0.1)}`
+      : number.format(percent ?? 0)
+  const status =
+    percent === null
+      ? t(
+          tokens != null && !capacity
+            ? 'assistant.chat.contextCapacityUnknown'
+            : 'assistant.chat.contextUnknown'
+        )
+      : t('assistant.chat.contextEstimatedPercent', { value: percentText })
+  let color: string | undefined
+  if (percent !== null) {
+    if (percent <= 20) color = 'var(--pnds-context-low)'
+    else if (percent === 60) color = 'var(--pnds-context-mid)'
+    else if (percent >= 100) color = 'var(--pnds-context-high)'
+    else {
+      const lower = percent < 60 ? 'low' : 'mid'
+      const upper = percent < 60 ? 'mid' : 'high'
+      const weight = (1 - (percent - (percent < 60 ? 20 : 60)) / 40) * 100
+      color = `color-mix(in srgb, var(--pnds-context-${lower}) ${weight}%, var(--pnds-context-${upper}))`
+    }
+  }
   return (
-    <details className="rounded-md border border-(--pnds-border) p-2 text-xs">
-      <summary className="pnds-focus-ring">
-        {t(
-          phase === 'idle'
-            ? 'assistant.context.next'
-            : 'assistant.context.current'
-        )}
-        :{' '}
-        {measurement?.estimatedTokens == null
-          ? t('assistant.context.tokensUnknown')
-          : t('assistant.context.estimated', {
-              count: measurement.estimatedTokens,
-            })}
-      </summary>
-      <div className="mt-2 max-h-48 space-y-2 overflow-auto [overflow-wrap:anywhere]">
-        <p>
-          {t('assistant.context.capacity', {
-            value: measurement?.capacity ?? t('assistant.context.unknown'),
-          })}{' '}
-          · {t('assistant.context.unverified')}
-        </p>
-        <p>
-          {t('assistant.context.inputBudget', {
-            value:
-              measurement?.effectiveInput ?? t('assistant.context.unknown'),
-          })}{' '}
-          ·{' '}
-          {t('assistant.context.reserve', {
-            value:
-              measurement?.outputReserve ??
-              (config.context?.maxOutput ?? 4096) +
-                (config.context?.reasoningReserve ?? 0),
-          })}
-        </p>
-        <p>
-          {t('assistant.context.method', {
-            method: t(
-              `assistant.context.encoder.${measurement?.tokenizer ?? config.context?.tokenizer ?? 'unknown'}`
-            ),
-          })}
-        </p>
-        {measurement && (
-          <>
-            <p>
-              {t('assistant.context.units', {
-                characters: measurement.characters,
-                bytes: measurement.utf8Bytes,
-              })}
-            </p>
-            {measurement.parts.map(part => (
-              <p key={part.kind}>
-                {t(`assistant.context.part.${part.kind}`)}:{' '}
-                {part.estimatedTokens === null
-                  ? t('assistant.context.tokensUnknown')
-                  : t('assistant.context.estimated', {
-                      count: part.estimatedTokens,
-                    })}{' '}
-                ·{' '}
-                {t('assistant.context.units', {
-                  characters: part.characters,
-                  bytes: part.utf8Bytes,
-                })}
-              </p>
-            ))}
-            {measurement.exceeded && (
-              <p role="alert" className="text-destructive">
-                {t(
-                  measurement.exceeded === 'contextBytes'
-                    ? 'assistant.error.contextBytesExceeded'
-                    : 'assistant.error.contextTokensExceeded'
-                )}
-              </p>
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="pnds-focus-ring inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-md px-1 text-muted-foreground hover:text-foreground"
+          style={{ color }}
+          aria-label={t('assistant.chat.contextStatus', { value: status })}
+          title={t('assistant.chat.contextStatus', { value: status })}
+        >
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 24 24"
+            className="size-5 -rotate-90 fill-none"
+            strokeWidth="3"
+          >
+            <circle
+              cx="12"
+              cy="12"
+              r="9"
+              stroke="currentColor"
+              opacity="0.25"
+              className="text-muted-foreground"
+            />
+            {percent !== null && (
+              <circle
+                cx="12"
+                cy="12"
+                r="9"
+                stroke="currentColor"
+                pathLength="100"
+                strokeDasharray={`${Math.min(100, Math.max(0, percent))} 100`}
+              />
             )}
-          </>
-        )}
-        <p className="text-muted-foreground">
-          {t('assistant.context.framing')}
+          </svg>
+          <span className="text-xs tabular-nums">
+            {percent === null ? t('assistant.chat.contextTitle') : status}
+          </span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        side="top"
+        align="start"
+        className="max-h-[70vh] w-80 max-w-[calc(100vw-2rem)] space-y-3 overflow-auto text-sm"
+      >
+        <p className="font-medium">{t('assistant.chat.contextTitle')}</p>
+        <p className="text-lg tabular-nums">
+          {percent === null ? (
+            <span className="block text-sm">{status}</span>
+          ) : (
+            `${status} · `
+          )}
+          {t('assistant.chat.contextFraction', {
+            used: tokens?.toLocaleString() ?? '—',
+            capacity: capacity?.toLocaleString() ?? '—',
+          })}
         </p>
-      </div>
-    </details>
+        <p className="text-xs text-muted-foreground">
+          {config
+            ? t(
+                measurement?.estimatedTokens == null &&
+                  measurement?.referenceEstimatedTokens != null
+                  ? 'assistant.chat.contextReferenceEstimate'
+                  : 'assistant.chat.contextEstimate'
+              )
+            : t('assistant.context.unavailable')}
+        </p>
+        {percent !== null && !measurement?.exceeded && (
+          <p className="text-xs">
+            {t(
+              percent <= 20
+                ? 'assistant.chat.contextSmartZone'
+                : percent <= 60
+                  ? 'assistant.chat.contextGrowing'
+                  : 'assistant.chat.contextHigh'
+            )}
+          </p>
+        )}
+        {measurement?.exceeded && (
+          <p role="alert" className="text-xs text-destructive">
+            {t(
+              measurement.exceeded === 'contextBytes'
+                ? 'assistant.error.contextBytesExceeded'
+                : 'assistant.error.contextTokensExceeded'
+            )}
+          </p>
+        )}
+        {children}
+      </PopoverContent>
+    </Popover>
   )
 }
 

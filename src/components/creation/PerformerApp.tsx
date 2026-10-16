@@ -392,8 +392,8 @@ export function PerformerApp() {
           {t('creation.performers.mouseTouch')}
         </label>
 
-        <span title={t('creation.performers.simulation')}>
-          {t('creation.performers.connectionUnknown')}
+        <span title={t('creation.performers.connectionHint')}>
+          {t('creation.performers.connectionStatus')}
         </span>
       </footer>
     </main>

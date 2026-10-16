@@ -82,6 +82,17 @@ messages, tool arguments or raw provider strings. These diagnostics distinguish
 credential access from an incomplete or incompatible response without exposing
 request content. A generic protocol error alone cannot establish key corruption.
 
+For a development build, distinguish the item ACL from the running process's
+signature validity. Read-only item metadata can confirm presence, an unlocked
+login keychain and trusted application requirements without requesting password
+data. A static requirement match only describes the executable on disk. If that
+executable was replaced after launch, `SecCodeCheckValidity` on the running PID
+can return `errSecCSStaticCodeChanged` (-67034) while password reads fail with
+`errSecAuthFailed` (-25293). Fully stop and relaunch the development App before
+replacing credentials or changing permissions. Re-saving a key does not repair
+an invalidated running process. Keep the user's App/dev-server launch manual;
+never weaken access to all applications or reset the system keychain.
+
 Tests exercise the public service boundary against a local HTTP server and a
 credential-store substitute, checking actual request payloads, selected model,
 tool messages, bounded failures and secret-free returned state. These tests do
@@ -108,8 +119,9 @@ still apply. No capability-filling probe or automatic retry is introduced.
 tool schemas and output options for both local measurement and authenticated
 turns. Explicit cl100k_base/o200k_base selection uses bundled tiktoken-rs 0.7;
 JSON framing remains an estimate rather than provider usage. Unknown encoding
-keeps token occupancy unknown, with a conservative byte-sized admission estimate
-when enforcing a configured target. Characters, UTF-8 bytes and token estimates
+keeps the selected-encoder token count unknown and adds an o200k_base reference
+estimate for display across providers. Its conservative byte-sized admission
+estimate still enforces a configured target independently of that display value. Characters, UTF-8 bytes and token estimates
 stay distinct. The whole serialized request retains its independent 128 KiB cap;
 tool/result/session limits remain in force. Config/key mutations revoke captured
 sessions. `measureAssistantContext` performs no network, Keychain or project I/O.

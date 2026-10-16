@@ -123,6 +123,38 @@ describe.each(COLOR_THEME_OPTIONS)('$value color palette', option => {
     }
   })
 
+  it('keeps chat bubble text, errors, code and keyboard focus readable', () => {
+    const bubble = color('pnds-chat-user')
+    for (const role of ['text', 'muted', 'danger']) {
+      expect(
+        contrast(color(`pnds-chat-user-${role}`), bubble)
+      ).toBeGreaterThanOrEqual(4.5)
+    }
+    const ink = color('pnds-chat-user-text')
+    expect(contrast(ink, mix(bubble, ink, 0.1))).toBeGreaterThanOrEqual(4.5)
+    expect(contrast(ink, bubble)).toBeGreaterThanOrEqual(3)
+  })
+
+  it('keeps estimated context colors and their continuous blends readable', () => {
+    for (const [start, end] of [
+      ['low', 'mid'],
+      ['mid', 'high'],
+    ]) {
+      for (let step = 0; step <= 10; step++) {
+        const ink = mix(
+          color(`pnds-context-${start}`),
+          color(`pnds-context-${end}`),
+          step / 10
+        )
+        for (const surface of ['bg', 'card', 'pill']) {
+          expect(
+            contrast(ink, color(`pnds-${surface}`))
+          ).toBeGreaterThanOrEqual(4.5)
+        }
+      }
+    }
+  })
+
   it('uses the same action and label colors in shared and PNDS components', () => {
     expect(color('primary')).toBe(color('pnds-accent'))
     expect(color('primary-foreground')).toBe(color('pnds-accent-foreground'))

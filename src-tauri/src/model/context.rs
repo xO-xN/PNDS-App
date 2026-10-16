@@ -99,6 +99,9 @@ pub struct ContextMeasurement {
     pub characters: u32,
     pub utf8_bytes: u32,
     pub estimated_tokens: Option<u32>,
+    /// Portable display-only fallback. Never used for admission or server usage.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reference_estimated_tokens: Option<u32>,
     pub admission_estimate: u32,
     pub tokenizer: ContextTokenizer,
     pub capacity: Option<u32>,
@@ -210,6 +213,11 @@ pub(super) fn assemble(
     // JSON encoding is measured as a whole, including tools and protocol fields.
     // Tokenizer counts are estimates of provider framing, never server usage.
     let estimated_tokens = count(&encoded);
+    let reference_estimated_tokens = estimated_tokens.is_none().then(|| {
+        tiktoken_rs::o200k_base_singleton()
+            .encode_ordinary(&encoded)
+            .len() as u32
+    });
     // Without a selected encoder, use a deliberately conservative byte-sized
     // admission estimate, while keeping actual token occupancy unknown.
     let admission_estimate = estimated_tokens.unwrap_or(encoded.len() as u32);
@@ -227,6 +235,7 @@ pub(super) fn assemble(
             characters: encoded.chars().count() as u32,
             utf8_bytes: encoded.len() as u32,
             estimated_tokens,
+            reference_estimated_tokens,
             admission_estimate,
             tokenizer: context.tokenizer,
             capacity: context.capacity,

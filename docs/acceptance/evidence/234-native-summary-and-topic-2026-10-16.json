@@ -1,0 +1,98 @@
+{
+  "date": "2026-10-16",
+  "timezone": "Asia/Shanghai",
+  "method": "macOS Computer Use accessibility observations and source-navigation screenshot; normal quit/restart; fixed diagnostic marker counts only",
+  "project": "/Users/xiaoxiang/Desktop/test copy",
+  "model": "glm-5.3-flash",
+  "build": {
+    "baseCommit": "fc5e98b",
+    "flavor": "standalone debug app including the summary-policy fix and pre-existing unrelated performer changes",
+    "bundlePath": "src-tauri/target/debug/bundle/macos/PNDS.app",
+    "bundleExecutableSha256": "c5b06afb5281039e71b92f6dff939508cb662b39f76848f881120cf9ece03b44",
+    "buildExitCode": 0,
+    "startupWorkingDirectory": "src-tauri",
+    "finderStartupCertified": false
+  },
+  "regression": {
+    "symptom": "GLM appended remainingCalls/remainingResultCharacters JSON after the fenced summary; strict parsing rejected the whole result",
+    "fix": "Use a dedicated JSON-only summary policy without conversational document-budget instructions; keep strict response validation",
+    "highestEntryRegressionObservedRedThenGreen": true,
+    "checkAllExitCode": 0,
+    "frontendTestsPassed": 1836,
+    "rustTestsPassed": 573,
+    "rustTestsIgnored": 5
+  },
+  "beforeOrganization": {
+    "recentOriginalMessages": 10,
+    "excludedOriginalMessages": 14,
+    "invalidZeroRoundLimitDisablesGenerate": true,
+    "cancelPreviewPreservesInput": true,
+    "stopGenerationPreservesOriginalsAndInput": true,
+    "rejectedSummaryPreservesOriginalsAndInput": true
+  },
+  "firstCandidateAfterFix": {
+    "sourceMessages": 6,
+    "requestUtf8Bytes": 4488,
+    "elapsedMilliseconds": 83588,
+    "strictValidationPassed": true,
+    "allFiveCategoriesAndOriginalLinksVisible": true,
+    "sourceNavigationFocusedOriginalText": "请只回复：预算测试通过",
+    "discardedAfterReview": true,
+    "reviewReason": "Candidate overstated the selected range as the entire conversation",
+    "originalsAndInputPreservedAfterDiscard": true
+  },
+  "acceptedCandidate": {
+    "sourceMessages": 2,
+    "requestUtf8Bytes": 2235,
+    "elapsedMilliseconds": 27337,
+    "strictValidationPassed": true,
+    "sourceIds": [
+      "35f15b9e-124e-4976-b21a-e9a192efb84e",
+      "af528e19-5588-4598-bc1a-88dae3781470"
+    ],
+    "displayedAsReferenceNotInstruction": true,
+    "recentOriginalMessagesAfterAccept": 4,
+    "excludedOriginalMessagesAfterAccept": 20,
+    "summaryCharactersInNextContext": 688,
+    "summaryUtf8BytesInNextContext": 930,
+    "usageBeforeAndAfterRestart": {
+      "calls": 1,
+      "inputTokens": 591,
+      "outputTokens": 1168,
+      "cachedInputTokens": 0,
+      "reasoningTokens": 937,
+      "complete": true,
+      "displayedAsHistoricalAfterRestart": true
+    }
+  },
+  "newTopic": {
+    "originalRecordsAndAcceptedSummaryRemainVisible": true,
+    "inputRetainedImmediatelyAfterNewTopic": true,
+    "unsavedReadmeComposerFieldRetained": true,
+    "testOnlyFileDraftRevertedWithoutSaving": true,
+    "testOnlyInputClearedAfterRetentionCheck": true,
+    "recentOriginalMessagesBeforeAndAfterRestart": 0,
+    "excludedOriginalMessagesBeforeAndAfterRestart": 24,
+    "historyCharactersBeforeAndAfterRestart": 0,
+    "historyUtf8BytesBeforeAndAfterRestart": 0,
+    "oldSummaryAbsentFromNextContextBeforeAndAfterRestart": true,
+    "boundaryMarkerRestored": true
+  },
+  "restart": {
+    "originalTopLevelTextNodesCompared": 126,
+    "originalTopLevelTextNodesExactlyEqualAfterAcceptTopicAndRestart": true,
+    "summaryCategoryAndContentTextNodesCompared": 11,
+    "summaryTextNodesExactlyEqual": true,
+    "originalSourceIdsRestored": true,
+    "savedStatusAndIdleStateObserved": true,
+    "automaticHttpTurnsAfterRestart": 0
+  },
+  "limits": [
+    "AX comparisons cover the specified text nodes, not a bytewise comparison of the entire stored history file",
+    "The dedicated Redo button was not separately exercised; discard followed by explicit generation was exercised",
+    "No all-theme, minimum-window, IME, Intel or full-release certification",
+    "No native project/service-switch race test in this quick group",
+    "No guarantee of arbitrary provider summary quality; first candidate was deliberately rejected after review",
+    "No #235 native test performed in this group"
+  ]
+}

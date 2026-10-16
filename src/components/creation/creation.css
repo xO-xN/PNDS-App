@@ -1379,6 +1379,22 @@
   -webkit-user-select: text;
   user-select: text;
 }
+.assistant-message-user {
+  background: var(--pnds-chat-user);
+  color: var(--pnds-chat-user-text);
+  --muted-foreground: var(--pnds-chat-user-muted);
+  --destructive: var(--pnds-chat-user-danger);
+}
+.assistant-message-user .assistant-markdown pre {
+  background: color-mix(in srgb, var(--pnds-chat-user-text) 10%, transparent);
+}
+.assistant-message-user .pnds-focus-ring:focus-visible {
+  outline-color: var(--pnds-chat-user-text);
+}
+/* Chat role geometry stays distinct in every palette. */
+[data-color-theme='brutal'] .assistant-message-user {
+  border-radius: 1rem !important;
+}
 .assistant-markdown p + p,
 .assistant-markdown pre,
 .assistant-markdown ul,

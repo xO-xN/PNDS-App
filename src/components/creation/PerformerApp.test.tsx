@@ -3,6 +3,7 @@ import { beforeEach, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen, waitFor } from '@/test/test-utils'
 import { listen, emitTo } from '@tauri-apps/api/event'
 import { commands } from '@/lib/tauri-bindings'
+import i18n from '@/i18n/config'
 import { fitPerformerWindow } from '@/lib/performer-window-size'
 import { PerformerApp } from './PerformerApp'
 import type { PerformerConfig } from '@/lib/performer-protocol'
@@ -28,7 +29,8 @@ const first: PerformerConfig = {
   mouseTouch: true,
 }
 let receive: (value: PerformerConfig) => Promise<void>
-beforeEach(() => {
+beforeEach(async () => {
+  await i18n.changeLanguage('en')
   vi.clearAllMocks()
   vi.mocked(fitPerformerWindow).mockResolvedValue(undefined)
   vi.mocked(commands.preparePerformerWindow).mockResolvedValue({
@@ -56,6 +58,27 @@ beforeEach(() => {
     return () => undefined
   })
 })
+
+it.each([
+  [
+    'en',
+    'Connection status: see project page',
+    'Page navigation does not confirm a performer connection. Check the project page or monitor for connection status.',
+  ],
+  [
+    'zh-CN',
+    '连接状态见工程页面',
+    '页面导航不代表演奏连接成功；实际连接状态请查看工程页面或 monitor。',
+  ],
+])(
+  'explains the connection boundary in %s without reporting a disconnection',
+  async (locale, label, hint) => {
+    render(<PerformerApp />)
+    await waitFor(() => expect(emitTo).toHaveBeenCalled())
+    await act(async () => receive({ ...first, locale }))
+    expect(screen.getByText(label)).toHaveAttribute('title', hint)
+  }
+)
 
 it('prepares native JavaScript dialogs before allowing the real performer page to load', async () => {
   let prepared!: (value: { status: 'ok'; data: null }) => void

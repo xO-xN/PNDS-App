@@ -8,6 +8,8 @@ import {
 import { useTranslation } from 'react-i18next'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { Pencil } from 'lucide-react'
+import { conversationMessages } from '@/lib/assistant-conversations'
 import { useAssistantStore } from '@/store/assistant-store'
 import { useCreationReadingStore } from '@/store/creation-reading-store'
 import { useSettingsStore } from '@/store/settings-store'
@@ -16,6 +18,7 @@ import { Button } from '@/components/ui/button'
 import type { AssistantMessage } from '@/lib/assistant-types'
 import { AssistantHistorySnapshots } from './AssistantHistorySnapshots'
 import { AssistantHistoryControls } from './AssistantHistoryControls'
+import { AssistantChats } from './AssistantChats'
 import {
   AssistantContextUsage,
   AssistantUsageStatistics,
@@ -37,7 +40,13 @@ export function CreationAssistant({
 }) {
   const { t } = useTranslation()
   const input = useAssistantStore(state => state.input)
-  const messages = useAssistantStore(state => state.messages)
+  const allMessages = useAssistantStore(state => state.messages)
+  const activeConversationId = useAssistantStore(
+    state => state.activeConversationId
+  )
+  const editing = useAssistantStore(state => state.editing)
+  const messages = conversationMessages(allMessages, activeConversationId)
+  const navigationIdentity = `${identity}:${activeConversationId ?? 'original'}`
   const phase = useAssistantStore(state => state.phase)
   const error = useAssistantStore(state => state.error)
   const configured = useAssistantStore(state => state.configured)
@@ -53,6 +62,7 @@ export function CreationAssistant({
     state => state.returnMessageId
   )
   const transcript = useRef<HTMLDivElement>(null)
+  const composer = useRef<HTMLTextAreaElement>(null)
   const transcriptContent = useRef<HTMLDivElement>(null)
   const followingLatest = useRef(true)
   const previousNavigation = useRef<{
@@ -68,7 +78,7 @@ export function CreationAssistant({
     userMessage: string | null
   } | null>(null)
   const showLatest =
-    pausedReading?.identity === identity &&
+    pausedReading?.identity === navigationIdentity &&
     pausedReading.userMessage === userMessage
   const canSend =
     phase === 'idle' &&
@@ -86,14 +96,14 @@ export function CreationAssistant({
       userMessage !== null &&
       userMessage !== previous?.userMessage &&
       !historicalMessageIds.includes(userMessage)
-    const ownerChanged = previous?.identity !== identity
+    const ownerChanged = previous?.identity !== navigationIdentity
     const targetedNavigation =
       returnMessageId &&
       (ownerChanged ||
         previous?.view !== view ||
         previous.target !== returnMessageId)
     previousNavigation.current = {
-      identity,
+      identity: navigationIdentity,
       view,
       target: returnMessageId,
       userMessage,
@@ -120,7 +130,7 @@ export function CreationAssistant({
     }
   }, [
     messages,
-    identity,
+    navigationIdentity,
     view,
     returnMessageId,
     historicalMessageIds,
@@ -141,7 +151,9 @@ export function CreationAssistant({
       if (disposed) return
       if (followingLatest.current) panel.scrollTop = panel.scrollHeight
       setPausedReading(
-        followingLatest.current ? null : { identity, userMessage }
+        followingLatest.current
+          ? null
+          : { identity: navigationIdentity, userMessage }
       )
     })
     observer.observe(panel)
@@ -150,13 +162,14 @@ export function CreationAssistant({
       disposed = true
       observer.disconnect()
     }
-  }, [identity, view, userMessage])
+  }, [navigationIdentity, view, userMessage])
 
   return (
     <section
       aria-label={t('assistant.title')}
       className="creation-assistant flex min-h-0 flex-1 flex-col"
     >
+      <AssistantChats />
       <AssistantHistoryControls identity={identity} />
       <div
         ref={transcript}
@@ -171,7 +184,9 @@ export function CreationAssistant({
             panel.scrollHeight - panel.clientHeight - panel.scrollTop <=
             BOTTOM_THRESHOLD
           setPausedReading(
-            followingLatest.current ? null : { identity, userMessage }
+            followingLatest.current
+              ? null
+              : { identity: navigationIdentity, userMessage }
           )
         }}
       >
@@ -186,9 +201,15 @@ export function CreationAssistant({
               key={message.id}
               data-message-id={message.id}
               tabIndex={-1}
-              className="pnds-focus-ring mb-4 min-w-0 rounded-lg border border-(--pnds-border) p-3"
+              className={`pnds-focus-ring group mb-6 min-w-0 ${message.role === 'user' ? 'assistant-message-user ms-auto w-fit max-w-[88%] rounded-2xl px-4 py-3' : 'w-full py-1'}`}
             >
-              <p className="text-muted-foreground mb-2 text-xs">
+              <p
+                className={
+                  message.role === 'user'
+                    ? 'sr-only'
+                    : 'text-muted-foreground mb-2 text-xs'
+                }
+              >
                 {t(
                   message.role === 'user' ? 'assistant.user' : 'assistant.title'
                 )}
@@ -206,6 +227,31 @@ export function CreationAssistant({
                   {message.text}
                 </ReactMarkdown>
               </div>
+              {message.role === 'user' &&
+                message.scope === 'platform' &&
+                !message.attachments?.length &&
+                !message.proposals?.length && (
+                  <div className="mt-2 flex justify-end">
+                    <button
+                      type="button"
+                      className="pnds-focus-ring inline-flex size-7 items-center justify-center rounded-md opacity-60 hover:opacity-100 focus-visible:opacity-100 disabled:opacity-25"
+                      aria-label={t('assistant.chat.editQuestion')}
+                      title={t('assistant.chat.editQuestion')}
+                      disabled={
+                        phase !== 'idle' ||
+                        historyState !== 'ready' ||
+                        historyBusy ||
+                        historySaveError === 'staleHistory'
+                      }
+                      onClick={() => {
+                        useAssistantStore.getState().beginEditing(message.id)
+                        composer.current?.focus()
+                      }}
+                    >
+                      <Pencil className="size-3.5" aria-hidden="true" />
+                    </button>
+                  </div>
+                )}
               {message.role === 'assistant' &&
                 message.status === 'pending' &&
                 !message.text && (
@@ -375,10 +421,19 @@ export function CreationAssistant({
             {t(`assistant.error.${error}`)}
           </p>
         )}
-        <div className="max-h-52 space-y-2 overflow-auto">
-          <AssistantContextUsage identity={identity} />
-          <AssistantContextControls identity={identity} />
-        </div>
+        {editing && (
+          <div className="mb-2 flex items-center justify-between gap-2 text-xs">
+            <p>{t('assistant.chat.editingQuestion')}</p>
+            <Button
+              size="sm"
+              type="button"
+              variant="ghost"
+              onClick={() => useAssistantStore.getState().cancelEditing()}
+            >
+              {t('assistant.chat.cancelEditing')}
+            </Button>
+          </div>
+        )}
         <form
           onSubmit={event => {
             event.preventDefault()
@@ -390,6 +445,7 @@ export function CreationAssistant({
             {t('assistant.input')}
           </label>
           <textarea
+            ref={composer}
             id="creation-assistant-input"
             className="pnds-focus-ring max-h-40 min-h-20 w-full resize-y rounded-md border border-(--pnds-border) bg-(--pnds-pill) p-2 text-sm"
             value={input}
@@ -400,8 +456,9 @@ export function CreationAssistant({
             onKeyDown={event => {
               if (
                 event.key === 'Enter' &&
-                (event.metaKey || event.ctrlKey) &&
-                !event.nativeEvent.isComposing
+                !event.shiftKey &&
+                !event.nativeEvent.isComposing &&
+                event.nativeEvent.keyCode !== 229
               ) {
                 event.preventDefault()
                 if (canSend) void useAssistantStore.getState().send()
@@ -409,12 +466,23 @@ export function CreationAssistant({
             }}
           />
           <div className="flex items-center justify-between gap-2">
-            <span className="text-muted-foreground text-xs">
-              {t('assistant.sendHint')}
-            </span>
+            <div className="flex min-w-0 items-center gap-2">
+              <AssistantContextUsage identity={identity}>
+                <AssistantContextControls identity={identity} compact />
+              </AssistantContextUsage>
+              <span className="text-muted-foreground text-xs">
+                {t('assistant.sendHint')}
+              </span>
+            </div>
             {phase === 'idle' ? (
               <Button size="sm" type="submit" disabled={!canSend}>
-                {t(error ? 'assistant.retry' : 'assistant.send')}
+                {t(
+                  editing
+                    ? 'assistant.chat.sendBranch'
+                    : error
+                      ? 'assistant.retry'
+                      : 'assistant.send'
+                )}
               </Button>
             ) : (
               <Button

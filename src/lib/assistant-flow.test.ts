@@ -10,6 +10,7 @@ import {
 import type { AssistantTurn, AssistantWireMessage } from './assistant-types'
 import type { RawHelpDocument } from './help-corpus'
 import { logger } from './logger'
+import { parseAssistantSummary } from './assistant-context'
 
 const documents = import.meta.glob<string>('../../docs/en/**/*.md', {
   query: '?raw',
@@ -101,6 +102,29 @@ async function service(turns: AssistantTurn[]) {
 }
 
 describe('highest platform assistant request (#166)', () => {
+  it('requests only summary JSON without the conversational document-budget footer (#234)', async () => {
+    const sections = {
+      userDecisions: [{ text: '保留预算测试决定', sourceIds: ['summary-u'] }],
+      assistantSuggestions: [],
+      verifiedFacts: [],
+      unverifiedFacts: [],
+      openQuestions: [],
+    }
+    const { deps, payloads } = await service([
+      { text: JSON.stringify(sections), toolCalls: [] },
+    ])
+    const result = await runAssistantRequest(
+      { ...input(), purpose: 'summary' },
+      deps
+    )
+    const policy = payloads[0]?.messages[0]?.content ?? ''
+    expect(policy).not.toContain('Document tool budget:')
+    expect(policy).not.toContain('The final line gives')
+    expect(policy).toContain('Return only a JSON object')
+    expect(parseAssistantSummary(result.text, ['summary-u'])).toEqual(sections)
+    expect(payloads).toHaveLength(1)
+  })
+
   it('keeps the independent result-size limit even when pages fit the token and call budgets', async () => {
     let ordinal = 0
     const onSources = vi.fn()

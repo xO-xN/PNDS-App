@@ -3,6 +3,7 @@ import { useAssistantStore } from './assistant-store'
 import { commands, events } from '@/lib/tauri-bindings'
 import { HELP_BOOKS } from '@/lib/help-corpus'
 import { flushAssistantHistory } from '@/lib/assistant-history'
+import { conversationMessages } from '@/lib/assistant-conversations'
 
 const corpus = HELP_BOOKS.flatMap(book =>
   book.documentIds.map(id => ({
@@ -36,6 +37,197 @@ beforeEach(async () => {
     status: 'ok',
     data: { text: 'A documented answer.', toolCalls: [] },
   })
+})
+
+it('clears the composer on send and restores the submitted question on stop', async () => {
+  let finish!: (
+    value: Awaited<ReturnType<typeof commands.assistantModelTurn>>
+  ) => void
+  vi.mocked(commands.assistantModelTurn).mockImplementationOnce(
+    () =>
+      new Promise(resolve => {
+        finish = resolve
+      })
+  )
+  useAssistantStore.getState().setInput('Keep the submitted question')
+  const sending = useAssistantStore.getState().send()
+  expect(useAssistantStore.getState().input).toBe('')
+  await vi.waitFor(() => expect(finish).toBeDefined())
+  useAssistantStore.getState().stop()
+  expect(useAssistantStore.getState().input).toBe('Keep the submitted question')
+  finish({ status: 'ok', data: { text: 'Late', toolCalls: [] } })
+  await sending
+  expect(useAssistantStore.getState().messages.at(-1)?.status).toBe('cancelled')
+})
+
+it('can return to an older chat and continues only that chat while saving every chat', async () => {
+  const store = useAssistantStore.getState
+  useAssistantStore.setState({
+    modelConfig: { model: 'chosen', baseUrl: 'https://model.example/v1' },
+  })
+  store().setInput('Original chat question')
+  await store().send()
+  store().newTopic()
+  store().setInput('Separate chat question')
+  await store().send()
+  store().switchConversation(null)
+  store().setInput('Continue the original chat')
+  await store().send()
+  const sent = vi.mocked(commands.assistantModelTurn).mock.calls.at(-1)?.[1]
+  expect(JSON.stringify(sent)).toContain('Original chat question')
+  expect(JSON.stringify(sent)).not.toContain('Separate chat question')
+  await flushAssistantHistory()
+  const saved = vi.mocked(commands.saveAssistantHistory).mock.calls.at(-1)?.[2]
+  expect(
+    saved
+      ?.filter(message => message.role === 'user')
+      .map(message => message.text)
+  ).toEqual([
+    'Original chat question',
+    'Continue the original chat',
+    'Separate chat question',
+  ])
+})
+
+it('editing a historical question forks at that point and preserves the original later discussion', async () => {
+  const store = useAssistantStore.getState
+  useAssistantStore.setState({
+    modelConfig: { model: 'chosen', baseUrl: 'https://model.example/v1' },
+  })
+  for (const text of [
+    'Opening decision',
+    'Original follow-up',
+    'Later discussion',
+  ]) {
+    store().setInput(text)
+    await store().send()
+  }
+  const original = structuredClone(store().messages)
+  store().beginEditing(original[2]?.id ?? 'missing-question')
+  expect(store().input).toBe('Original follow-up')
+  store().setInput('Edited follow-up')
+  await store().send()
+  expect(store().activeConversationId).not.toBeNull()
+  const sent = JSON.stringify(
+    vi.mocked(commands.assistantModelTurn).mock.calls.at(-1)?.[1]
+  )
+  expect(sent).toContain('Opening decision')
+  expect(sent).toContain('Edited follow-up')
+  expect(sent).not.toContain('Original follow-up')
+  expect(sent).not.toContain('Later discussion')
+  expect(store().messages.slice(0, original.length)).toEqual(original)
+  expect(new Set(store().messages.map(message => message.id)).size).toBe(
+    store().messages.length
+  )
+  store().switchConversation(null)
+  expect(store().messages.slice(0, original.length)).toEqual(original)
+})
+
+it('remaps reviewed summary sources inside a fork and restores all chats after reopening', async () => {
+  const store = useAssistantStore.getState
+  useAssistantStore.setState({
+    modelConfig: { model: 'chosen', baseUrl: 'https://model.example/v1' },
+  })
+  store().setInput('A recorded decision')
+  await store().send()
+  const sourceId = store().messages[0]?.id ?? 'missing-source'
+  useAssistantStore.setState(state => ({
+    messages: [
+      ...state.messages,
+      {
+        id: 'reviewed-summary',
+        role: 'assistant',
+        text: 'Reviewed summary',
+        scope: 'platform',
+        status: 'completed',
+        sources: [],
+        contextMarker: {
+          type: 'summary',
+          sourceIds: [sourceId],
+          serviceKey: '["https://model.example/v1","chosen"]',
+          sections: {
+            userDecisions: [
+              { text: 'Retain this decision', sourceIds: [sourceId] },
+            ],
+            assistantSuggestions: [],
+            verifiedFacts: [],
+            unverifiedFacts: [],
+            openQuestions: [],
+          },
+        },
+      },
+    ],
+  }))
+  store().setInput('Follow-up')
+  await store().send()
+  const original = structuredClone(store().messages)
+  store().beginEditing(original[3]?.id ?? 'missing-question')
+  store().setInput('Changed follow-up')
+  await store().send()
+  const branchId = store().activeConversationId
+  const branch = conversationMessages(store().messages, branchId)
+  const summary = branch.find(
+    message => message.contextMarker?.type === 'summary'
+  )?.contextMarker
+  expect(summary?.type).toBe('summary')
+  if (summary?.type !== 'summary') throw new Error('Expected copied summary')
+  expect(summary.sourceIds).toEqual([branch[0]?.id])
+  expect(summary.sections.userDecisions[0]?.sourceIds).toEqual([branch[0]?.id])
+  expect(branch[0]?.id).not.toBe(sourceId)
+  await flushAssistantHistory()
+  const saved =
+    vi.mocked(commands.saveAssistantHistory).mock.calls.at(-1)?.[2] ?? []
+  store().syncWorkspace(null)
+  vi.mocked(commands.loadAssistantHistory).mockResolvedValueOnce({
+    status: 'ok',
+    data: {
+      epoch: 'reopened',
+      projectKey: 'a'.repeat(64),
+      appVersion: '1.6.5',
+      messages: saved,
+    },
+  })
+  store().syncWorkspace('workspace-one')
+  await vi.waitFor(() => expect(store().historyState).toBe('ready'))
+  expect(store().activeConversationId).toBe(branchId)
+  expect(conversationMessages(store().messages, branchId).at(-2)?.text).toBe(
+    'Changed follow-up'
+  )
+  store().switchConversation(null)
+  expect(
+    conversationMessages(store().messages, null).map(message => message.text)
+  ).toEqual(original.map(message => message.text))
+})
+
+it('switching chats stops a request, preserves each draft and rejects the late response', async () => {
+  const store = useAssistantStore.getState
+  store().setInput('Original draft')
+  store().newTopic()
+  const newerId = store().activeConversationId
+  let finish!: (
+    value: Awaited<ReturnType<typeof commands.assistantModelTurn>>
+  ) => void
+  vi.mocked(commands.assistantModelTurn).mockImplementationOnce(
+    () =>
+      new Promise(resolve => {
+        finish = resolve
+      })
+  )
+  store().setInput('Question in newer chat')
+  const sending = store().send()
+  await vi.waitFor(() => expect(finish).toBeDefined())
+  store().switchConversation(null)
+  expect(store().input).toBe('Original draft')
+  finish({ status: 'ok', data: { text: 'A late answer', toolCalls: [] } })
+  await sending
+  expect(
+    store().messages.some(message => message.text === 'A late answer')
+  ).toBe(false)
+  store().switchConversation(newerId)
+  expect(store().input).toBe('Question in newer chat')
+  expect(conversationMessages(store().messages, newerId).at(-1)?.status).toBe(
+    'cancelled'
+  )
 })
 
 it('stopping retains produced text and input, and ignores the released cancelled reply', async () => {

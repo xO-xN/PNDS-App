@@ -8,6 +8,7 @@ import {
   summaryInput,
   SUMMARY_FIELDS,
 } from '@/lib/assistant-context'
+import { conversationMessages } from '@/lib/assistant-conversations'
 import { buildAssistantMessages } from '@/lib/assistant-flow'
 import { useAssistantStore } from '@/store/assistant-store'
 import { AssistantUsageStatistics } from './AssistantContextUsage'
@@ -57,9 +58,19 @@ export function AssistantSummaryView({
   )
 }
 
-export function AssistantContextControls({ identity }: { identity: string }) {
+export function AssistantContextControls({
+  identity,
+  compact = false,
+}: {
+  identity: string
+  compact?: boolean
+}) {
   const { t } = useTranslation()
-  const messages = useAssistantStore(state => state.messages)
+  const allMessages = useAssistantStore(state => state.messages)
+  const active = useAssistantStore(state => state.activeConversationId)
+  const editing = useAssistantStore(state => state.editing)
+  const messages = conversationMessages(allMessages, active)
+  const reviewIdentity = `${identity}:${active ?? 'original'}`
   const config = useAssistantStore(state => state.modelConfig)
   const phase = useAssistantStore(state => state.phase)
   const historyState = useAssistantStore(state => state.historyState)
@@ -76,7 +87,7 @@ export function AssistantContextControls({ identity }: { identity: string }) {
   const prepared = config
     ? summaryInput(messages, config, validLimit ? limit : 8)
     : null
-  const review = reviewOwner === identity
+  const review = reviewOwner === reviewIdentity
   const [estimate, setEstimate] = useState<{
     input: string
     config: typeof config
@@ -118,13 +129,14 @@ export function AssistantContextControls({ identity }: { identity: string }) {
       ? estimate
       : null
   const disabled =
+    editing !== null ||
     phase !== 'idle' ||
     historyState !== 'ready' ||
     busy ||
     saveError === 'staleHistory'
   return (
     <div className="space-y-2 text-xs">
-      {phase === 'idle' && (
+      {!compact && phase === 'idle' && (
         <p>
           {t('assistant.context.selection', {
             count: selection.recent.length,
@@ -138,26 +150,30 @@ export function AssistantContextControls({ identity }: { identity: string }) {
           type="button"
           variant="outline"
           disabled={disabled || !prepared?.source.length}
-          onClick={() => setReviewOwner(review ? null : identity)}
+          onClick={() => setReviewOwner(review ? null : reviewIdentity)}
         >
           {t('assistant.summary.organize')}
         </Button>
-        <Button
-          size="sm"
-          type="button"
-          variant="outline"
-          disabled={disabled || !messages.length}
-          onClick={() => {
-            setReviewOwner(null)
-            useAssistantStore.getState().newTopic()
-          }}
-        >
-          {t('assistant.context.newTopic')}
-        </Button>
+        {!compact && (
+          <Button
+            size="sm"
+            type="button"
+            variant="outline"
+            disabled={disabled || !messages.length}
+            onClick={() => {
+              setReviewOwner(null)
+              useAssistantStore.getState().newTopic()
+            }}
+          >
+            {t('assistant.context.newTopic')}
+          </Button>
+        )}
       </div>
-      <p className="text-muted-foreground">
-        {t('assistant.context.topicHint')}
-      </p>
+      {!compact && (
+        <p className="text-muted-foreground">
+          {t('assistant.context.topicHint')}
+        </p>
+      )}
       {review && prepared && (
         <div className="space-y-2 rounded-md border border-(--pnds-border) p-3">
           <p>{t('assistant.summary.explain', { model: config?.model })}</p>

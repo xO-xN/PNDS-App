@@ -10,6 +10,12 @@ import type {
   AssistantRoundUsage,
 } from '@/lib/tauri-bindings'
 import { parseAssistantSummary, summaryInput } from '@/lib/assistant-context'
+import {
+  assistantConversations,
+  conversationMessages,
+  appendConversationMessages,
+  forkConversationPrefix,
+} from '@/lib/assistant-conversations'
 import { modelProfileKey } from '@/lib/model-context-settings'
 import i18n from '@/i18n/config'
 import { AssistantFlowError, runAssistantRequest } from '@/lib/assistant-flow'
@@ -29,10 +35,25 @@ import {
   type AssistantHistoryErrorCode,
 } from '@/lib/assistant-history'
 
+interface QuestionEdit {
+  messageId: string
+  previousInput: string
+}
+
 interface AssistantState {
   owner: string | null
   input: string
+  submittedInput: string | null
   messages: AssistantMessage[]
+  activeConversationId: string | null
+  conversationDrafts: Record<
+    string,
+    { input: string; editing: QuestionEdit | null }
+  >
+  editing: QuestionEdit | null
+  beginEditing: (messageId: string) => void
+  cancelEditing: () => void
+  switchConversation: (id: string | null) => void
   phase: 'idle' | 'reading' | 'responding'
   error: AssistantErrorCode | null
   configured: boolean | null
@@ -94,7 +115,11 @@ const historyFailure = (error: unknown): AssistantHistoryErrorCode =>
 export const useAssistantStore = create<AssistantState>((set, get) => ({
   owner: null,
   input: '',
+  submittedInput: null,
   messages: [],
+  activeConversationId: null,
+  conversationDrafts: {},
+  editing: null,
   phase: 'idle',
   error: null,
   configured: null,
@@ -112,7 +137,11 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
     set({
       owner,
       input: '',
+      submittedInput: null,
       messages: [],
+      activeConversationId: null,
+      conversationDrafts: {},
+      editing: null,
       phase: 'idle',
       error: null,
       configured: null,
@@ -147,6 +176,10 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
       const messages = restoreAssistantMessages(history)
       set({
         messages,
+        activeConversationId:
+          assistantConversations(messages).at(-1)?.id ?? null,
+        conversationDrafts: {},
+        editing: null,
         phase: 'idle',
         historyState: 'ready',
         historyBusy: false,
@@ -196,6 +229,9 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
       if (get().owner !== owner || token !== historyGeneration) return
       set({
         messages: [],
+        activeConversationId: null,
+        conversationDrafts: {},
+        editing: null,
         historicalMessageIds: [],
         phase: 'idle',
         error: null,
@@ -225,6 +261,61 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
     })
   },
   setInput: input => set({ input, error: null }),
+  beginEditing: messageId => {
+    const state = get()
+    if (
+      state.phase !== 'idle' ||
+      state.historyBusy ||
+      state.historyState !== 'ready' ||
+      state.historySaveError === 'staleHistory'
+    )
+      return
+    const message = conversationMessages(
+      state.messages,
+      state.activeConversationId
+    ).find(message => message.id === messageId)
+    if (
+      !message ||
+      message.role !== 'user' ||
+      message.scope !== 'platform' ||
+      message.attachments?.length ||
+      message.proposals?.length
+    )
+      return
+    set({
+      input: message.text,
+      editing: {
+        messageId,
+        previousInput: state.editing?.previousInput ?? state.input,
+      },
+      error: null,
+    })
+  },
+  cancelEditing: () => {
+    const editing = get().editing
+    if (editing)
+      set({ input: editing.previousInput, editing: null, error: null })
+  },
+  switchConversation: id => {
+    if (!assistantConversations(get().messages).some(chat => chat.id === id))
+      return
+    if (get().activeConversationId === id || get().historyBusy) return
+    get().stop()
+    set(state => ({
+      activeConversationId: id,
+      conversationDrafts: {
+        ...state.conversationDrafts,
+        [state.activeConversationId ?? 'original']: {
+          input: state.input,
+          editing: state.editing,
+        },
+      },
+      input: state.conversationDrafts[id ?? 'original']?.input ?? '',
+      editing: state.conversationDrafts[id ?? 'original']?.editing ?? null,
+      error: null,
+      summaryText: '',
+    }))
+  },
   newTopic: () => {
     if (
       get().historyState !== 'ready' ||
@@ -233,11 +324,21 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
     )
       return
     get().stop()
+    const id = crypto.randomUUID()
     set(state => ({
+      activeConversationId: id,
+      conversationDrafts: {
+        ...state.conversationDrafts,
+        [state.activeConversationId ?? 'original']: {
+          input: state.input,
+          editing: state.editing,
+        },
+      },
+      editing: null,
       messages: [
         ...state.messages,
         {
-          id: crypto.randomUUID(),
+          id,
           role: 'assistant',
           text: i18n.t('assistant.context.topicRecord'),
           scope: 'platform',
@@ -262,8 +363,12 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
       historyBusy
     )
       return
-    if (get().historySaveError === 'staleHistory') return
-    const prepared = summaryInput(messages, modelConfig, roundLimit)
+    if (get().historySaveError === 'staleHistory' || get().editing) return
+    const prepared = summaryInput(
+      conversationMessages(messages, get().activeConversationId),
+      modelConfig,
+      roundLimit
+    )
     if (!prepared.source.length) return
     const token = ++generation
     const requestController = new AbortController()
@@ -348,24 +453,27 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
     set(state => ({
       summaryDraft: null,
       summaryText: '',
-      messages: [
-        ...state.messages,
-        {
-          id: crypto.randomUUID(),
-          role: 'assistant',
-          text: i18n.t('assistant.context.summaryRecord'),
-          scope: 'platform',
-          status: 'completed',
-          sources: [],
-          contextMarker: {
-            type: 'summary',
-            sourceIds: draft.sourceIds,
-            serviceKey: draft.serviceKey,
-            sections: draft.sections,
+      messages: appendConversationMessages(
+        state.messages,
+        state.activeConversationId,
+        [
+          {
+            id: crypto.randomUUID(),
+            role: 'assistant',
+            text: i18n.t('assistant.context.summaryRecord'),
+            scope: 'platform',
+            status: 'completed',
+            sources: [],
+            contextMarker: {
+              type: 'summary',
+              sourceIds: draft.sourceIds,
+              serviceKey: draft.serviceKey,
+              sections: draft.sections,
+            },
+            ...(draft.usage ? { usage: draft.usage } : {}),
           },
-          ...(draft.usage ? { usage: draft.usage } : {}),
-        },
-      ],
+        ]
+      ),
     }))
     void get().persistHistory()
   },
@@ -377,6 +485,8 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
     controller = null
     set(state => ({
       phase: 'idle',
+      input: state.input || state.submittedInput || '',
+      submittedInput: null,
       contextMeasurement: null,
       organizing: false,
       summaryDraft: null,
@@ -389,7 +499,9 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
     if (pending) void get().persistHistory()
   },
   send: async () => {
-    const { owner, input, messages, phase, configured, modelConfig } = get()
+    const { owner, input, phase, configured, modelConfig, editing } = get()
+    let activeConversationId = get().activeConversationId
+    let messages = conversationMessages(get().messages, activeConversationId)
     if (!owner || phase !== 'idle' || !input.trim()) return
     if (
       get().historyState !== 'ready' ||
@@ -400,6 +512,41 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
     if (configured === false) {
       set({ error: 'notConfigured' })
       return
+    }
+    if (editing) {
+      const index = messages.findIndex(
+        message => message.id === editing.messageId && message.role === 'user'
+      )
+      if (index < 0) return
+      const copies = forkConversationPrefix(messages.slice(0, index))
+      const previousId = activeConversationId
+      activeConversationId = crypto.randomUUID()
+      const marker: AssistantMessage = {
+        id: activeConversationId,
+        role: 'assistant',
+        text: i18n.t('assistant.context.topicRecord'),
+        status: 'completed',
+        scope: 'platform',
+        sources: [],
+        contextMarker: { type: 'topic' },
+      }
+      set(state => ({
+        activeConversationId,
+        messages: [...state.messages, marker, ...copies],
+        historicalMessageIds: [
+          ...state.historicalMessageIds,
+          ...copies.map(message => message.id),
+        ],
+        conversationDrafts: {
+          ...state.conversationDrafts,
+          [previousId ?? 'original']: {
+            input: editing.previousInput,
+            editing: null,
+          },
+        },
+        editing: null,
+      }))
+      messages = copies
     }
     const token = ++generation
     const requestController = new AbortController()
@@ -423,33 +570,38 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
     }
     set({
       phase: 'reading',
+      input: '',
+      submittedInput: input,
       contextMeasurement: null,
       summaryDraft: null,
       summaryText: '',
       error: null,
-      messages: [
-        ...messages,
-        {
-          id: userId,
-          contextServiceKey: serviceKey,
-          role: 'user',
-          text: input,
-          sources: [],
-          scope: 'platform',
-          status: 'pending',
-          appVersion: __APP_VERSION__,
-        },
-        {
-          id: replyId,
-          contextServiceKey: serviceKey,
-          role: 'assistant',
-          text: '',
-          sources: [],
-          scope: 'platform',
-          status: 'pending',
-          appVersion: __APP_VERSION__,
-        },
-      ],
+      messages: appendConversationMessages(
+        get().messages,
+        activeConversationId,
+        [
+          {
+            id: userId,
+            contextServiceKey: serviceKey,
+            role: 'user',
+            text: input,
+            sources: [],
+            scope: 'platform',
+            status: 'pending',
+            appVersion: __APP_VERSION__,
+          },
+          {
+            id: replyId,
+            contextServiceKey: serviceKey,
+            role: 'assistant',
+            text: '',
+            sources: [],
+            scope: 'platform',
+            status: 'pending',
+            appVersion: __APP_VERSION__,
+          },
+        ]
+      ),
     })
     void get().persistHistory()
     try {
@@ -504,7 +656,7 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
       revise('completed')
       set(state => ({
         phase: 'idle',
-        input: state.input === input ? '' : state.input,
+        submittedInput: null,
         messages: state.messages.map(message =>
           message.id === replyId
             ? { ...message, text: result.text, sources: result.sources }
@@ -517,14 +669,24 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
       const code =
         error instanceof AssistantFlowError ? error.code : 'requestFailed'
       revise(code === 'cancelled' ? 'cancelled' : 'failed', code)
-      set({ phase: 'idle', error: code })
+      set(state => ({
+        phase: 'idle',
+        error: code,
+        input: state.input || state.submittedInput || '',
+        submittedInput: null,
+      }))
       void get().persistHistory()
     } finally {
       if (owns()) controller = null
     }
   },
-  returnToMessage: messageId =>
-    useCreationReadingStore.getState().showDiscussion(messageId),
+  returnToMessage: messageId => {
+    const chat = assistantConversations(get().messages).find(chat =>
+      chat.messages.some(message => message.id === messageId)
+    )
+    if (chat) get().switchConversation(chat.id)
+    useCreationReadingStore.getState().showDiscussion(messageId)
+  },
 }))
 
 /** Stop producers before draining snapshots, shared by workspace cleanup and quit. */
