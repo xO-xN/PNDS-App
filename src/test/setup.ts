@@ -150,6 +150,20 @@ vi.mock('@/lib/tauri-bindings', async () => {
       performerVisibilityEvent: makeEvent('performer-visibility-event'),
     },
     commands: {
+      getCreationParameterContract: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      bindCreationParameters: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: {
+          code: 'invalidProject',
+          detail: 'Parameter binding not mocked',
+        },
+      }),
+      authorizeCreationPreview: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: { code: 'testValidation', detail: 'Preview not mocked' },
+      }),
       getCreationLibraries: vi.fn().mockResolvedValue({
         status: 'error',
         error: {

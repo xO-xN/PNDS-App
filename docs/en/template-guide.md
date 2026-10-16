@@ -161,3 +161,38 @@ Performer test windows support the Project's normal JavaScript dialogs, includin
 Skills are optional creation aids. Resources: [pnds-agent-skills](https://github.com/xO-xN/pnds-agent-skills). Follow the resource directory instructions to choose the unified creation entry or an independent capability, and install the complete directory in your external coding agent environment with its declared supporting resources. The App does not perform installation. The general entry supports creation, modification and assessment of arbitrary source projects; the author confirms a porting plan before implementation. CM1 remains an explicitly selected course entry. Prefer the installed App's local reference corpus; remote latest documents do not establish local capabilities.
 
 Ordinary tasks deliver editable source with decisions, verification and creator handoff records; package only when distribution is requested. Course tasks deliver both. Record structure readiness, wiring, runtime, sound and device checks, and distribution readiness separately. Reading, editing, module addition and manual testing in the App do not require installed Skills.
+
+## Discuss, edit and check independently
+
+After explicitly authorizing saved Project reading, the creation assistant can
+offer one pending change to one fully read existing text file. The same card's
+Parameters and Code tabs share a candidate buffer, separate from file drafts.
+Expressions or changed anchors disable affected controls; code remains editable.
+Restore one suggested parameter without replacing unrelated edits, or confirm
+discarding the whole candidate before restoring the full suggestion/reloading disk.
+
+A temporary preview requires an explicitly adapted, matching running Project.
+Only declared values cross the restricted interface; code is never injected.
+Typing code ends the old preview; use Preview temporarily to verify a new mapping.
+Partial effects and actual readback are distinct from complete-code validation.
+End preview restores runtime parameter baselines, not time or prior effects. If
+restoration is unconfirmed, verify the Project and use manual runtime controls.
+Adaptation details are in the [runtime contract](./reference/runtime-contract.md).
+
+Apply this candidate authorizes one specific write of the visible candidate.
+Existing drafts or external/version conflicts stop it and preserve your work.
+Preview failure or an idle runtime does not block a valid explicit application.
+Actual differences retain immutable before/after versions and offer guarded undo
+while still current. Adopting saved code still requires manual refresh/restart.
+New/delete/rename, multiple files and complex adaptation belong in a confirmed
+external handoff. Restored chat history contains inert snapshots, never old apply
+or preview permission.
+
+Run independent check opens the existing saved-copy check workflow. None is the
+default, Internal is explicitly chosen, and External stays manual. Chatting,
+editing and saving never start it. An active performance/check is not stopped to
+make room for another. Progress, Stop, actual input evidence, freshness and cleanup
+remain in the report. Failure preserves edits: continue editing, undo the last
+guarded save or confirm preparing an editable repair handoff. Record that handoff
+only after review. Nothing automatically retries the model, repairs files, adopts
+copy outputs or commits Git. Native pages, devices and sound still need real tests.

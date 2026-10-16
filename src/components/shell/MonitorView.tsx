@@ -31,6 +31,7 @@ import { cn } from '@/lib/utils'
 import { useGuestFocusGate } from '@/hooks/use-guest-focus-gate'
 import { useMonitorPreview } from '@/hooks/use-monitor-preview'
 import { MonitorScaleFrame } from './MonitorScaleFrame'
+import { bindPreviewMonitor } from '@/lib/parameter-preview'
 
 /**
  * Performance view (§10.1): the project's monitor page fills the whole
@@ -180,6 +181,7 @@ export function MonitorView() {
     onReclaim: reclaimKeyboardFocus,
     onRegain: pushBridges,
   })
+  useEffect(() => () => bindPreviewMonitor(null, ''), [])
 
   if (!hostAddress || !monitorPort) {
     // Should not happen for a ready session; fail visibly rather than blank.
@@ -221,6 +223,10 @@ export function MonitorView() {
               onMouseEnter={gate.onFramePointerEnter}
               onMouseLeave={gate.onFramePointerLeave}
               onLoad={() => {
+                bindPreviewMonitor(
+                  iframeRef.current?.contentWindow ?? null,
+                  monitorOrigin
+                )
                 // A fresh document has not been interacted with — the guest
                 // gate re-arms for the page that just loaded (its reporter
                 // re-registers with it).

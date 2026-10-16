@@ -1,6 +1,8 @@
 import { beforeEach, expect, it, vi } from 'vitest'
 import userEvent from '@testing-library/user-event'
 import { writeText } from '@tauri-apps/plugin-clipboard-manager'
+import { confirm } from '@tauri-apps/plugin-dialog'
+import { useCreationReadingStore } from '@/store/creation-reading-store'
 import { act, fireEvent, render, screen, waitFor } from '@/test/test-utils'
 import { commands, type CreationWorkspace } from '@/lib/tauri-bindings'
 import { useCreationStore } from '@/store/creation-store'
@@ -102,6 +104,44 @@ async function openCheck() {
   fireEvent.click(screen.getByRole('button', { name: 'Controlled check' }))
   await screen.findByRole('dialog', { name: 'Controlled check' })
 }
+it('offers an independent discussion check and leaves failed input for the user to edit, undo or hand off (#209)', async () => {
+  useCreationReadingStore.getState().showDiscussion()
+  seedCreationDraft('server.js', 'saved', 'v1')
+  useCreationFilesStore.getState().edit('server.js', 'my next edit')
+  vi.mocked(commands.getCreationCheck).mockResolvedValue({
+    status: 'ok',
+    data: {
+      ...completed,
+      report: {
+        ...report,
+        status: 'failed',
+        error: 'Controlled health failure',
+      },
+    },
+  })
+  render(<CreationView />)
+  fireEvent.click(screen.getByRole('button', { name: 'Run independent check' }))
+  await screen.findByRole('dialog', { name: 'Controlled check' })
+  expect(commands.startCreationCheck).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button', { name: 'Start check' }))
+  await screen.findByText('Controlled health failure')
+  expect(
+    screen.getByRole('button', { name: 'Continue editing' })
+  ).toBeInTheDocument()
+  vi.mocked(confirm).mockResolvedValue(false)
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Prepare repair handoff' })
+  )
+  await waitFor(() => expect(confirm).toHaveBeenCalled())
+  expect(commands.appendCreationHandoff).not.toHaveBeenCalled()
+  expect(useCreationFilesStore.getState().drafts['server.js']?.text).toBe(
+    'my next edit'
+  )
+  expect(commands.saveCreationFile).not.toHaveBeenCalled()
+  expect(commands.saveCreationFileChange).not.toHaveBeenCalled()
+  expect(commands.startProject).not.toHaveBeenCalled()
+  expect(commands.stopProject).not.toHaveBeenCalled()
+})
 it('opens without starting, then checks saved inputs in None and shows cleanup without saving drafts', async () => {
   seedCreationDraft('server.js', 'saved', 'v1')
   useCreationFilesStore.getState().edit('server.js', 'draft')

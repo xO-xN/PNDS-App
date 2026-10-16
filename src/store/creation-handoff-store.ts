@@ -26,6 +26,9 @@ interface HandoffState {
   recorded: boolean
   offerReadmeSync: (path: string, version: string, locale: string) => void
   open: (id?: string) => Promise<void>
+  prepareTask: (
+    task: Pick<HandoffTask, 'intent' | 'files' | 'acceptance'>
+  ) => Promise<void>
   edit: (update: Partial<HandoffTask>) => void
   cancel: () => void
   record: () => Promise<void>
@@ -53,6 +56,15 @@ export const useCreationHandoffStore = create<HandoffState>((set, get) => ({
   conflict: false,
   error: null,
   recorded: false,
+  prepareTask: async task => {
+    if (get().busy) return
+    const next = { ...emptyTask(), ...task }
+    set(state => ({
+      pending: [...state.pending, { task: next, readme: false }],
+      recorded: false,
+    }))
+    await get().open(next.id)
+  },
   offerReadmeSync: (path, version, locale) => {
     if (!isProjectReadme(path)) return
     const paths =

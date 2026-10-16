@@ -508,6 +508,30 @@ async assistantProjectSearch(identity: string, paths: string[], query: string) :
     else return { status: "error", error: e  as any };
 }
 },
+async getCreationParameterContract(identity: string) : Promise<Result<[ParameterContract, string] | null, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_creation_parameter_contract", { identity }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async bindCreationParameters(identity: string, path: string, version: string, candidate: string, parameters: ParameterRequest[]) : Promise<Result<ParameterCandidate, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("bind_creation_parameters", { identity, path, version, candidate, parameters }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async authorizeCreationPreview(identity: string, path: string, version: string, contractVersion: string) : Promise<Result<PreviewAuthorization, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("authorize_creation_preview", { identity, path, version, contractVersion }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async getCreationGitStatus(identity: string) : Promise<Result<CreationGitStatus, CreationError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("get_creation_git_status", { identity }) };
@@ -1402,6 +1426,7 @@ export type AudioMode = "internal" | "external" | "none"
  * device supports that rate.
  */
 export type AudioOutputDevice = { name: string; isDefault: boolean; maxOutputChannels: number }
+export type BoundParameter = { request: ParameterRequest; value: JsonValue | null }
 /**
  * One tool as the frontend sees it: its registry id, the stable project
  * path inside the app resources, and its manifest-declared display name.
@@ -1790,6 +1815,21 @@ export type NewProjectOptions = { parent: string; folderName: string; name: stri
  */
 export type OpenBundleEvent = Record<string, never>
 export type PackResult = { outputPath: string; sha256: string }
+export type ParameterCandidate = { parameters: BoundParameter[]; contractVersion: string | null; 
+/**
+ * Changes outside successfully mapped literals have not been previewed.
+ */
+partial: boolean }
+export type ParameterContract = { schemaVersion: number; parameters: ParameterSpec[] }
+export type ParameterKind = "number" | "boolean" | "text" | "color" | "option"
+export type ParameterLimits = { min: number | null; max: number | null; step: number | null; options?: string[]; maxLength: number | null }
+export type ParameterPreview = "live" | "refresh" | "restart" | "unsupported"
+export type ParameterRequest = { spec: ParameterSpec; current: JsonValue; suggestedMin: number | null; suggestedMax: number | null }
+export type ParameterSpec = { id: string; path: string; 
+/**
+ * Exact prefix/suffix of one whole line, excluding its line ending.
+ */
+prefix: string; suffix: string; kind: ParameterKind; limits: ParameterLimits; preview: ParameterPreview }
 export type PerformerDestroyedEvent = { label: string }
 export type PerformerVisibilityEvent = { label: string; visible: boolean }
 /**
@@ -1814,6 +1854,7 @@ export type PortReleaseResult = { outcome: PortReleaseOutcome; status: PortStatu
  * Occupancy of one TCP port.
  */
 export type PortStatus = { port: number; occupant: PortOccupant | null; managedByApp: boolean; runningProject: string | null }
+export type PreviewAuthorization = { runtime: CreationRuntime; sourceDigest: string; contractDigest: string }
 /**
  * A named one-level group of project paths (spec issue #4).
  */

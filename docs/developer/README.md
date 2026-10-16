@@ -38,6 +38,7 @@ App 开发的规则层：既定模式与系统做法，按问题检索——查�
 - **无副作用的 App Doctor、共用报告与离线 CLI** → [static-diagnostics.md](./static-diagnostics.md)（#193 / #203 / #204）。
 - **临时副本检查、跨 App／CLI 运行归属、输入证据与取消清理** → [controlled-checks.md](./controlled-checks.md)（#194）。
 - **已有单文本差异、审阅保存与版本保护撤销** → [single-file-changes.md](./single-file-changes.md)（#207）。
+- **工程字面值绑定、受限临时预演协议与恢复** → [parameter-preview.md](./parameter-preview.md)（#231）。
 - **创作草稿、手动保存、重命名与磁盘版本冲突** → [creation-workspace.md](./creation-workspace.md#manual-save-rename-and-disk-conflicts-154)
 - **错误如何传播、用户反馈与重试模式** → [error-handling.md](./error-handling.md)
 

@@ -129,3 +129,10 @@ Runtime exit codes: 0 passed including confirmed cleanup; 1 failed or not
 executed; 130 cancelled; 2 invalid arguments or output failure. Read the complete
 cleanup and unverified fields even when a report is returned. Single-file review
 and recovery are independent and described in [single-file-changes.md](./single-file-changes.md).
+
+The assistant discussion's independent check button (#209) opens this same mounted
+dialog; opening, chatting and saving never submit a task. Failed reports retain
+input and offer continue editing, the existing latest guarded undo, or confirmation
+to prepare a separate editable repair handoff. The handoff still needs its own
+Record action. Decline leaves all state intact. No failure automatically starts a
+model request, repairs input, adopts copy artifacts or changes Git.

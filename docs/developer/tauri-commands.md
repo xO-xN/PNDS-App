@@ -383,3 +383,13 @@ the common `DiagnosticReport` used by the CLI.
 inputs without saving or changing runtime state. Neither command takes a session
 lease or invokes runtime preflight. Both recheck workspace ownership after I/O.
 See [static-diagnostics.md](./static-diagnostics.md).
+
+## Parameter binding and temporary preview (#231)
+
+`getCreationParameterContract(identity)` reads the optional versioned project
+declaration through bounded trusted text access. `bindCreationParameters` checks
+identity, one existing path, source version, candidate text and parameter requests
+without writes or execution. `authorizeCreationPreview` additionally requires the
+same ready native runtime, revalidates saved source/declaration and returns actual
+source digests separately from disk fingerprints. Monitor messages never acquire
+Tauri access. See [parameter-preview.md](./parameter-preview.md).

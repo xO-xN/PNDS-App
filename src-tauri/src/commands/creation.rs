@@ -106,6 +106,67 @@ impl CreationState {
 
 #[tauri::command]
 #[specta::specta]
+pub async fn get_creation_parameter_contract(
+    app: AppHandle,
+    state: State<'_, CreationState>,
+    identity: String,
+) -> Result<Option<(crate::project::creation::ParameterContract, String)>, CreationError> {
+    state
+        .run(move |access| access.parameter_contract(&identity, &protection(&app)?))
+        .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn bind_creation_parameters(
+    app: AppHandle,
+    state: State<'_, CreationState>,
+    identity: String,
+    path: String,
+    version: String,
+    candidate: String,
+    parameters: Vec<crate::project::creation::ParameterRequest>,
+) -> Result<crate::project::creation::ParameterCandidate, CreationError> {
+    state
+        .run(move |access| {
+            access.bind_parameters(
+                &identity,
+                &path,
+                &version,
+                &candidate,
+                &parameters,
+                &protection(&app)?,
+            )
+        })
+        .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn authorize_creation_preview(
+    app: AppHandle,
+    state: State<'_, CreationState>,
+    identity: String,
+    path: String,
+    version: String,
+    contract_version: String,
+) -> Result<crate::project::creation::PreviewAuthorization, CreationError> {
+    state
+        .run(move |access| {
+            access.authorize_parameter_preview(
+                &identity,
+                &path,
+                &version,
+                &contract_version,
+                app.state::<SessionManager>().creation_runtime(),
+                &protection(&app)?,
+            )
+        })
+        .await
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn assistant_project_inventory(
     app: AppHandle,
     state: State<'_, CreationState>,

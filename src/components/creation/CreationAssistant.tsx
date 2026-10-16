@@ -19,6 +19,8 @@ import type { AssistantMessage } from '@/lib/assistant-types'
 import { AssistantHistorySnapshots } from './AssistantHistorySnapshots'
 import { AssistantHistoryControls } from './AssistantHistoryControls'
 import { AssistantChats } from './AssistantChats'
+import { AssistantLiveProposals } from './AssistantLiveProposals'
+import { useAssistantProposalStore } from '@/store/assistant-proposal-store'
 import { AssistantProjectControls } from './AssistantProjectControls'
 import { AssistantAttachments } from './AssistantAttachments'
 import { AssistantProjectOverview } from './AssistantProjectOverview'
@@ -41,9 +43,11 @@ const BOTTOM_THRESHOLD = 48
 export function CreationAssistant({
   identity,
   renderMessageCards,
+  onCheck,
 }: {
   identity: string
   renderMessageCards?: (message: AssistantMessage) => ReactNode
+  onCheck?: () => void
 }) {
   const { t } = useTranslation()
   const [sourceNote, setSourceNote] = useState<{
@@ -52,6 +56,7 @@ export function CreationAssistant({
     kind: 'changed' | 'unavailable'
   } | null>(null)
   const input = useAssistantStore(state => state.input)
+  const liveProposals = useAssistantProposalStore(state => state.items)
   const allMessages = useAssistantStore(state => state.messages)
   const activeConversationId = useAssistantStore(
     state => state.activeConversationId
@@ -307,7 +312,17 @@ export function CreationAssistant({
                   <p>{t('assistant.history.restoredNote')}</p>
                 </div>
               )}
-              <AssistantHistorySnapshots message={message} />
+              <AssistantHistorySnapshots
+                message={message}
+                showProposals={
+                  !message.proposals?.some(
+                    proposal => !!liveProposals[proposal.id]
+                  )
+                }
+              />
+              {!historicalMessageIds.includes(message.id) && (
+                <AssistantLiveProposals messageId={message.id} />
+              )}
               {message.contextMarker?.type === 'summary' && (
                 <AssistantSummaryView
                   sections={message.contextMarker.sections}
@@ -495,6 +510,16 @@ export function CreationAssistant({
         </div>
       )}
       <div className="shrink-0 border-t border-(--pnds-border) p-3">
+        {onCheck && (
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
+            <Button size="sm" variant="outline" onClick={onCheck}>
+              {t('assistant.check.open')}
+            </Button>
+            <span className="text-muted-foreground">
+              {t('assistant.check.independent')}
+            </span>
+          </div>
+        )}
         <AssistantProjectControls identity={identity} />
         <AssistantAttachments />
         {(configured === false ||

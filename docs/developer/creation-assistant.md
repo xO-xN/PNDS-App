@@ -13,7 +13,7 @@ allowlist; development uses the same loader's repository fallback. No online
 copy, compiled document mirror or second parser is introduced. Corpus failures
 stop the request explicitly rather than substituting stale or partial documents.
 
-Platform-only requests expose `search_help` and `read_help_section`. Authorized project requests add only the saved-text tools described below. Arguments, names, call
+Platform-only requests expose `search_help` and `read_help_section`. Authorized project requests add the saved-text readers and one declarative pending-proposal tool described below. Arguments, names, call
 IDs and progress are checked before producing results. Search returns at most
 three section snippets; section reading defaults to 1,200 UTF-16 units, with a 2,000-unit hard maximum
 and explicit offset/total/next-offset ranges. A request allows eight tool calls, 24,000 tool-result
@@ -442,3 +442,58 @@ and before each actual model turn. The request consumes the same character,
 serialized/token budgets and highest orchestration entry as targeted reading;
 usage and context measurements describe the actual outgoing assembly. History
 keeps exact source snapshots but restores no full-read confirmation.
+
+## Pending single-text proposals (#208)
+
+The existing highest request entry exposes `propose_text_change` only under fresh
+project reading consent. One request can offer at most one candidate. It must
+name an allowed existing saved text and the exact version of a complete actual
+read in this request's sources. Read pages may be combined; inventory, search
+fragments, attached drafts and historical snapshots do not substitute for a full
+saved read. Tool output is only a pending-review receipt; it cannot write, run,
+start a model request or expand scope. Ambiguous/complex or cross-file work is
+clarified or handed off, never automatically split into separate writes.
+
+`assistant-proposal-store` owns a separate TextBuffer and candidate revision per
+proposal. Parameters and Code share that buffer; controls replace only a currently
+verified unique literal line. Native binding is authoritative. Immediate UI
+validation preserves responsive continuous controls; native results and previews
+are fenced by candidate, source and operation generations. Expressions disable
+affected controls without changing code. Resetting one parameter keeps unrelated
+edits; full suggestion restoration and disk reload require discard confirmation.
+The full editor/history/selection attachment behavior comes from #224/#225.
+
+Only Apply authorizes a captured candidate write. `saveReviewed(..., 'proposal')`
+uses #207 with a clean matching file draft, exact saved version and actual before
+text. It never copies candidate edits into a dirty file draft. Duplicate dispatch,
+external edits and source conflicts fail without losing either buffer. Typing
+during a dispatched write remains a new candidate; successful before/after records
+are immutable. The latest backend record alone owns guarded undo; older records
+remain read-only. Application is independent of parameter binding and runtime
+availability. Applying ends temporary preview; disk adoption is still manual.
+
+Current candidates are captured into existing private history snapshots. Restoring
+those snapshots does not install live proposal-store entries, TextBuffers,
+parameter adapters or execution callbacks. History reload/clear and workspace
+replacement revoke live entries. Temporary-preview readback is never a saved code
+check. See [parameter-preview.md](./parameter-preview.md).
+
+## Independent checks and repair choices (#209)
+
+The discussion's Run independent check action opens the same identity-scoped
+`CreationControlledCheck` mounted by the workspace toolbar. Opening does not
+submit; its Start action uses the App/CLI saved-copy service, task ownership,
+progress, cancellation, freshness and cleanup already documented in
+[controlled-checks.md](./controlled-checks.md). None remains default, Internal
+explicit, External manual. Runtime busy does not stop an existing performance.
+No model tool manages processes, and neither chat, candidate edit nor save starts
+a check. A failed report keeps edits and offers continuing discussion, the latest
+guarded single-file undo and a confirmed editable repair handoff. Confirming
+prepares a separate task without replacing an existing handoff draft. The existing
+Record action remains the only handoff writer. Declining changes nothing; there
+is no automatic repair, new model call, Git operation or copy-output adoption.
+
+The live saved-versus-loaded notice follows the existing verified page-refresh
+or restart completion: it clears only after saved changes have no outstanding
+refresh/restart prompts in a ready runtime. Historical notices remain snapshots.
+Source reload transport failures preserve the candidate and show a typed error.

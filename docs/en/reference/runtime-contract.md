@@ -597,3 +597,38 @@ The background LAN DNS service (daemon `dnsd`) ships inside the App bundle and i
 - Everyday forwarding is available only while **this Mac is on, awake, online and the service healthy**; venue DNS during Mac shutdown/sleep/offline is out of scope, and the router-DNS restore steps belong to the operator doc (dns.md);
 - DNS and HTTPS are two facts: a live mapping proves only "the domain resolves to this Mac", never that the entry is usable (§15's entry probe and the performers' device acceptance are their own checks);
 - Address selection follows §4: the mapping uses the address the operator explicitly picked in「Node」; VPN tunnel interfaces never participate, the App never guesses from the default route or the first address, and macOS network settings, router DHCP and project manifests are never modified.
+
+## Optional temporary parameter preview (protocol 1)
+
+Preview adaptation is explicit and optional. Root `pnds.preview.json` declares
+`schemaVersion: 1` and a `parameters` array. Each entry names an existing relative
+text `path`, unique `id`, exact whole-line `prefix` and `suffix` around a JSON
+primitive literal, `kind` (number, boolean, text, color, option), project `limits`
+(min/max/step/options/maxLength as applicable), and `preview`
+(live, refresh, restart, unsupported). Limits and capabilities are project facts;
+a model's suggested trial range does not change them. Ambiguous anchors,
+expressions, changed versions and incompatible declarations have no live binding.
+
+An optional project-owned adapter is available at
+`PNDS.app/Contents/Resources/preview/adapter.mjs`. The App does not install it.
+`installPreviewAdapter({hostOrigin, sources, contractDigest, parameters})` takes
+immutable SHA-256 digests of the source and declaration bytes actually loaded by
+that run (`sha256:<hex>`), and declared project-owned get/set callbacks. Do not
+rehash current disk during handshake and claim it was loaded. The exact Host
+origin must be configured by the project author, never accepted from a message.
+
+Both sides validate origin and exact window. Messages carry channel
+`pnds.preview`, version 1, fresh session and increasing sequence. Host verbs are
+hello (requested IDs), set (declared primitive values), restore. The page returns
+ready (loaded digests, supported IDs and baseline values), applied/restored (actual
+readback), or error. Setters are serialized; superseded queued updates are skipped.
+Only touched parameters are restored. No message carries code, expressions, shell,
+process controls or file writes. A live sound parameter must use already enabled
+audio; adapting preview never enables sound.
+
+Native authorization checks the trusted saved source, declaration and the same
+ready runtime; the Host also checks actual loaded digests. Missing adaptation,
+version mismatch, timeout, partial support and unconfirmed restoration remain
+visible. Preview does not save, check, refresh, restart or reverse time and prior
+effects. Source changes revoke old authority rather than applying an old baseline
+over new state. A manual refresh/restart is still required to adopt saved code.

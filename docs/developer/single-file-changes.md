@@ -41,3 +41,10 @@ source and path guards, prepared-switch cancellation and identity revocation.
 Editor/store tests cover real diff display, review cancellation, captured draft
 and identity conflicts, unsaved work, typing during undo and late replies.
 Native App acceptance remains with the user's final manual test.
+
+For assistant candidates (#208), `saveReviewed` explicitly selects proposal origin.
+It requires the file draft to remain clean at the proposal's before text/version,
+then submits the separately captured visible candidate to the same native service.
+A successful write updates the clean file draft only if it has not changed during
+dispatch; new typing is preserved. Candidate buffers never enter file drafts as an
+intermediate dirty save. Preview mapping and runtime state are not write gates.

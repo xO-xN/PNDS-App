@@ -30,6 +30,8 @@ import {
 } from '@/store/creation-files-store'
 import { CreationErrorNotice } from './CreationErrorNotice'
 import { useAssistantOverviewStore } from '@/store/assistant-overview-store'
+import { useCreationReadingStore } from '@/store/creation-reading-store'
+import { prepareAssistantHandoff } from '@/lib/assistant-handoff'
 
 type CheckTask = Extract<
   Awaited<ReturnType<typeof commands.getCreationCheck>>,
@@ -81,6 +83,9 @@ export function CreationControlledCheck({
   })
   const revision = useCreationFilesStore(state => state.revision)
   const drafts = useCreationFilesStore(selectUnsavedCount)
+  const lastChange = useCreationFilesStore(state => state.lastChange)
+  const changeBusy = useCreationFilesStore(state => state.changeBusy)
+  const changeError = useCreationFilesStore(state => state.changeError)
   const taskId = task?.taskId ?? null
   const report = task?.report ?? null
   const checks = [
@@ -395,6 +400,62 @@ export function CreationControlledCheck({
           </div>
           {report && (
             <>
+              {report.status === 'failed' && (
+                <section
+                  className="space-y-2 rounded border border-(--pnds-border) p-3"
+                  aria-label={t('assistant.check.next')}
+                >
+                  <p>{t('assistant.check.failure')}</p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        useCreationReadingStore.getState().showDiscussion()
+                        close()
+                      }}
+                    >
+                      {t('assistant.check.edit')}
+                    </Button>
+                    {lastChange && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={changeBusy}
+                        onClick={() =>
+                          void useCreationFilesStore
+                            .getState()
+                            .undoChange(identity, lastChange.id)
+                        }
+                      >
+                        {t('creation.change.undo')}
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        void prepareAssistantHandoff(
+                          identity,
+                          t('assistant.check.handoffIntent', {
+                            task: report.taskId,
+                            mode: report.mode,
+                          }),
+                          lastChange ? [lastChange.path] : [],
+                          t('assistant.check.handoffAcceptance', {
+                            task: report.taskId,
+                          })
+                        ).then(prepared => {
+                          if (prepared) onClose()
+                        })
+                      }
+                    >
+                      {t('assistant.check.handoff')}
+                    </Button>
+                  </div>
+                  {changeError && <CreationErrorNotice error={changeError} />}
+                </section>
+              )}
               {report.error && (
                 <p
                   role="alert"

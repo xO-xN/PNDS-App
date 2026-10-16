@@ -60,7 +60,8 @@ interface CreationFilesState {
     before: string,
     after: string,
     version: string,
-    identity: string
+    identity: string,
+    origin?: 'draft' | 'proposal'
   ) => Promise<boolean>
   undoChange: (identity: string, changeId: string) => Promise<void>
   revision: number
@@ -264,7 +265,14 @@ export const useCreationFilesStore = create<CreationFilesState>((set, get) => {
     lastChange: null,
     changeError: null,
     changeBusy: false,
-    saveReviewed: async (path, before, after, version, expectedIdentity) => {
+    saveReviewed: async (
+      path,
+      before,
+      after,
+      version,
+      expectedIdentity,
+      origin = 'draft'
+    ) => {
       const workspace = useCreationStore.getState().workspace
       const draft = get().drafts[path]
       if (
@@ -277,7 +285,7 @@ export const useCreationFilesStore = create<CreationFilesState>((set, get) => {
         draft.renaming ||
         draft.conflict ||
         draft.diskChanged ||
-        draft.text !== after ||
+        draft.text !== (origin === 'proposal' ? before : after) ||
         draft.diskText !== before ||
         draft.diskVersion !== version ||
         before === after
@@ -305,6 +313,14 @@ export const useCreationFilesStore = create<CreationFilesState>((set, get) => {
         const change = result.data
         set(state => ({
           ...patch(state, path, {
+            ...(origin === 'proposal' && state.drafts[path]?.text === before
+              ? {
+                  text: change.afterText,
+                  readme: isProjectReadme(path)
+                    ? inspectEditableReadme(change.afterText)
+                    : undefined,
+                }
+              : {}),
             diskText: change.afterText,
             diskVersion: change.afterVersion,
             conflict: null,

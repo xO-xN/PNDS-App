@@ -29,6 +29,7 @@ import { useCreationStore } from './creation-store'
 import { useCreationReadingStore } from './creation-reading-store'
 import { useAssistantProjectStore } from './assistant-project-store'
 import { useAssistantOverviewStore } from './assistant-overview-store'
+import { useAssistantProposalStore } from './assistant-proposal-store'
 import { modelConfigurationKey } from '@/lib/model-context-settings'
 import {
   AssistantHistoryFailure,
@@ -168,6 +169,7 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
     const owner = get().owner
     if (!owner) return
     get().stop()
+    useAssistantProposalStore.getState().clear()
     const token = ++historyGeneration
     set({
       historyState: 'loading',
@@ -234,6 +236,7 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
     try {
       const history = await clearAssistantHistory(owner)
       if (get().owner !== owner || token !== historyGeneration) return
+      useAssistantProposalStore.getState().clear()
       set({
         messages: [],
         activeConversationId: null,
@@ -784,6 +787,34 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
             : message
         ),
       }))
+      const projectKey = get().historyProjectKey
+      if (result.proposals?.length && projectKey) {
+        useAssistantProposalStore
+          .getState()
+          .install(owner, replyId, projectKey, result.proposals, snapshot => {
+            if (
+              get().owner !== owner ||
+              get().historicalMessageIds.includes(replyId)
+            )
+              return
+            set(state => ({
+              messages: state.messages.map(message =>
+                message.id === replyId
+                  ? {
+                      ...message,
+                      proposals: [
+                        ...(message.proposals ?? []).filter(
+                          proposal => proposal.id !== snapshot.id
+                        ),
+                        snapshot,
+                      ],
+                    }
+                  : message
+              ),
+            }))
+            void get().persistHistory()
+          })
+      }
       void get().persistHistory()
     } catch (error) {
       if (!owns()) return

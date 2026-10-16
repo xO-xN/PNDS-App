@@ -52,6 +52,7 @@
     ],
     "externalBin": ["binaries/node", "binaries/pnds-dnsd"],
     "resources": {
+      "resources/parameter-preview/adapter.mjs": "preview/adapter.mjs",
       "binaries/scsynth-aarch64-apple-darwin": "scsynth",
       "resources/synthdefs/pndsMaster.scsyndef": "synthdefs/pndsMaster.scsyndef",
       "plugins": "plugins",

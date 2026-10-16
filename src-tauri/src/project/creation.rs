@@ -41,8 +41,12 @@ mod libraries;
 #[cfg(test)]
 mod libraries_tests;
 mod modules;
+mod parameters;
+pub use parameters::*;
 #[cfg(test)]
 mod modules_tests;
+#[cfg(test)]
+mod parameters_tests;
 pub use blank::NewProjectOptions;
 pub use changes::CreationFileChange;
 pub use compile::{SynthdefCompileReport, SynthdefCompiler};

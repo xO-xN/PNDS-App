@@ -15,7 +15,13 @@ import {
 } from '@/store/creation-files-store'
 import { CreationErrorNotice } from './CreationErrorNotice'
 
-function TextDifference({ before, after }: { before: string; after: string }) {
+export function TextDifference({
+  before,
+  after,
+}: {
+  before: string
+  after: string
+}) {
   const { t } = useTranslation()
   const oldLines = before.split('\n')
   const newLines = after.split('\n')

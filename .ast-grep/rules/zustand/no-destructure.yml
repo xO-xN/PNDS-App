@@ -20,6 +20,8 @@ rule:
     - pattern: const { $$$PROPS } = useCreationStore($$$ARGS)
     - pattern: const { $$$PROPS } = useCreationDraftsStore($$$ARGS)
     - pattern: const { $$$PROPS } = useCreationCompileStore($$$ARGS)
+    - pattern: const { $$$PROPS } = useAssistantProposalStore($$$ARGS)
+    - pattern: const { $$$PROPS } = useParameterPreviewStore($$$ARGS)
 note: |
   Destructuring causes render cascades - every store update triggers re-renders
   even if destructured values haven't changed.

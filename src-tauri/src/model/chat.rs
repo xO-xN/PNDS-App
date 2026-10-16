@@ -434,7 +434,23 @@ pub(super) fn document_tools(project_reading: bool) -> Value {
         tools.as_array_mut().expect("array").extend([
             json!({"type":"function","function":{"name":"list_project_files","description":"List the confirmed saved-text scope and exclusions. Inventory is not evidence of having read file content.","parameters":{"type":"object","properties":{},"additionalProperties":false}}}),
             json!({"type":"function","function":{"name":"search_project_text","description":"Search allowed saved project text, at most 64 files and 6 short hits per call. remainingFiles are not searched. Never read drafts.","parameters":{"type":"object","properties":{"query":{"type":"string","maxLength":256}},"required":["query"],"additionalProperties":false}}}),
-            json!({"type":"function","function":{"name":"read_project_text","description":"Read a saved-text page in the confirmed project. UTF-16 offset, pageLength 64–2000 (default 1200). Supply returned version for subsequent pages; changed versions must be re-read. Unreturned ranges are unread.","parameters":{"type":"object","properties":{"path":{"type":"string"},"version":{"type":"string"},"offset":{"type":"integer","minimum":0},"pageLength":{"type":"integer","minimum":64,"maximum":2000}},"required":["path"],"additionalProperties":false}}})
+            json!({"type":"function","function":{"name":"read_project_text","description":"Read a saved-text page in the confirmed project. UTF-16 offset, pageLength 64–2000 (default 1200). Supply returned version for subsequent pages; changed versions must be re-read. Unreturned ranges are unread.","parameters":{"type":"object","properties":{"path":{"type":"string"},"version":{"type":"string"},"offset":{"type":"integer","minimum":0},"pageLength":{"type":"integer","minimum":64,"maximum":2000}},"required":["path"],"additionalProperties":false}}}),
+            json!({"type":"function","function":{
+                "name":"propose_text_change",
+                "description":"Offer one pending change to one existing fully read saved text at its actual version. No write, execution or preview. Clarify ambiguous intent first. Return the complete candidate. Use a few accurately located JSON primitive whole-line controls only when relevant, or parameters:[] for code. Copy project limits/capabilities exactly from pnds.preview.json; undeclared controls require empty limits and unsupported preview. New/delete/rename/multi-file or complex adaptation requires confirmed external handoff; never split a cross-file task into this tool.",
+                "parameters":{"type":"object","properties":{
+                    "path":{"type":"string"},"version":{"type":"string"},"text":{"type":"string"},
+                    "parameters":{"type":"array","maxItems":16,"items":{"type":"object","properties":{
+                        "spec":{"type":"object","properties":{
+                            "id":{"type":"string"},"path":{"type":"string"},"prefix":{"type":"string"},"suffix":{"type":"string"},
+                            "kind":{"enum":["number","boolean","text","color","option"]},
+                            "preview":{"enum":["live","refresh","restart","unsupported"]},
+                            "limits":{"type":"object","properties":{"min":{"type":"number"},"max":{"type":"number"},"step":{"type":"number"},"options":{"type":"array","items":{"type":"string"}},"maxLength":{"type":"integer","minimum":0}},"additionalProperties":false}
+                        },"required":["id","path","prefix","suffix","kind","preview","limits"],"additionalProperties":false},
+                        "current":{"type":["number","boolean","string"]},"suggestedMin":{"type":"number"},"suggestedMax":{"type":"number"}
+                    },"required":["spec","current"],"additionalProperties":false}}
+                },"required":["path","version","text","parameters"],"additionalProperties":false}
+            }})
         ]);
     }
     tools

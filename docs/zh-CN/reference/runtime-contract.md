@@ -602,3 +602,29 @@ window.parent.postMessage({ type: 'pnds-projection', zoom: 'page' }, '*')
 - 日常转发仅在**本机开机、未休眠、联网且服务健康**期间可用；Mac 关机/休眠/离网期间的全网 DNS 不在保证范围内，恢复路由器原 DNS 的步骤属于操作者文档（dns.md）；
 - DNS 与 HTTPS 是两个事实：映射生效只证明"域名解析到这台 Mac"，不证明入口可用（§15 的入口探测、乐手设备验收各自独立）；
 - 地址选择沿用 §4：映射使用操作者在「节点」区显式选定的物理 LAN 地址；VPN 隧道接口不参与选址，App 不从默认路由或首地址猜测，也不修改 macOS 网络设置、路由器 DHCP 或工程 manifest。
+
+## 可选临时参数预演（协议 1）
+
+预演适配需由工程明确声明。根 `pnds.preview.json` 包含 `schemaVersion: 1`
+和 `parameters` 数组。每项声明已有相对文本 `path`、唯一 `id`、包围 JSON
+基本字面值的完整行精确 `prefix`／`suffix`、`kind`（number、boolean、text、
+color、option）、适用的工程硬限制 `limits`（min/max/step/options/maxLength）
+及 `preview`（live、refresh、restart、unsupported）。硬限制及能力属于工程事实，
+模型建议的试调范围不能改变它们。歧义定位、表达式、来源变化及不兼容声明均不能实时绑定。
+
+可选工程适配器位于 `PNDS.app/Contents/Resources/preview/adapter.mjs`，App 不会
+安装它。`installPreviewAdapter({hostOrigin, sources, contractDigest, parameters})`
+接收本次运行实际加载的源码／声明字节的固定 SHA-256 摘要（`sha256:<hex>`），以及
+工程声明的 get/set 回调。不得握手时重读磁盘并声称它是运行加载版。Host 的精确 origin
+由工程作者配置，不能从消息中接受。
+
+两端核对 origin 与确切窗口。消息携带 channel `pnds.preview`、version 1、新 session
+及递增 sequence。Host 只有 hello（请求的 ID）、set（声明的基本值）、restore；
+页面回复 ready（加载摘要、支持 ID 和参数基准）、applied/restored（实际回读值）
+或 error。setter 串行，过时排队更新被跳过，只恢复实际触及的参数。消息不承载代码、
+表达式、shell、进程控制或文件写入。声音参数只能使用已明确开启的音频，不能因预演适配开启声音。
+
+原生命令核对可信保存来源、声明及同一 ready 运行，Host 另核对实际加载摘要。缺适配、
+版本不符、超时、局部支持和恢复未确认均保持可见。预演不会保存、检查、刷新或重启，
+也不能回退时间及已发生效果。来源变化撤销旧授权，不用旧基准覆盖新状态。保存代码
+仍需手动刷新／重启才进入实际运行。

@@ -107,6 +107,78 @@ async function service(turns: AssistantTurn[]) {
 }
 
 describe('highest platform assistant request (#166)', () => {
+  it('offers one pending saved-text proposal through the same model HTTP workflow without writing (#208)', async () => {
+    const source = 'const speed = 2;\n'
+    const { deps } = await service([
+      {
+        text: null,
+        toolCalls: [
+          {
+            id: 'read',
+            name: 'read_project_text',
+            arguments: '{"path":"score.js"}',
+          },
+        ],
+      },
+      {
+        text: null,
+        toolCalls: [
+          {
+            id: 'proposal',
+            name: 'propose_text_change',
+            arguments: JSON.stringify({
+              path: 'score.js',
+              version: 'v1',
+              text: 'const speed = 3;\n',
+              parameters: [],
+            }),
+          },
+        ],
+      },
+      { text: 'Review this pending change.', toolCalls: [] },
+    ])
+    deps.readProject = async () => ({
+      path: 'score.js',
+      version: 'v1',
+      text: source,
+      source: null,
+      offset: 0,
+      endOffset: source.length,
+      totalCharacters: source.length,
+      nextOffset: null,
+      startLine: 1,
+      endLine: 2,
+    })
+    const result = await runAssistantRequest(
+      {
+        identity: 'project',
+        input: 'Make it faster',
+        history: [],
+        locale: 'en',
+        signal: new AbortController().signal,
+        isCurrent: () => true,
+        projectReading: true,
+        project: {
+          fingerprint: 'scope',
+          files: [
+            {
+              path: 'score.js',
+              version: 'v1',
+              bytes: source.length,
+              reason: null,
+            },
+          ],
+        },
+      },
+      deps
+    )
+    expect(result.proposals?.[0]).toMatchObject({
+      path: 'score.js',
+      version: 'v1',
+      sourceText: source,
+      text: 'const speed = 3;\n',
+    })
+  })
   it('reports a changed saved source as typed tool evidence without inventing its content (#168)', async () => {
     const { deps, payloads } = await service([
       {

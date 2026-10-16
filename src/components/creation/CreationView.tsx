@@ -657,6 +657,7 @@ function ReadingWorkspace({
           >
             <CreationAssistant
               identity={project.identity}
+              onCheck={() => setCheckOpen(true)}
               renderMessageCards={renderAssistantCards}
             />
           </div>
