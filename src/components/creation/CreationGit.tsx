@@ -217,7 +217,12 @@ export function CreationGit({
             />
           ) : (
             <>
-              {error && <CreationErrorNotice error={error} />}
+              {error && (
+                <CreationErrorNotice
+                  error={error}
+                  validationMessage={t('creation.git.validationError')}
+                />
+              )}
               <div role="status" aria-atomic="true" className="text-xs">
                 {reading && <p>{t('creation.git.loading')}</p>}
                 {stale && <p>{t('creation.git.stale')}</p>}

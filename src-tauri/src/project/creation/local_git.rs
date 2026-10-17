@@ -594,10 +594,10 @@ fn snapshot_with_locks(
             files.push(GitRecordFile {
                 path: change.path.clone(),
                 size: size as f64,
-                status: if change.untracked {
-                    GitRecordStatus::Added
-                } else if change.disk_status == "D" {
+                status: if change.disk_status == "D" {
                     GitRecordStatus::Deleted
+                } else if change.untracked || change.index_status == "A" {
+                    GitRecordStatus::Added
                 } else {
                     GitRecordStatus::Modified
                 },

@@ -190,12 +190,19 @@ export function CreationGitRecord({
           ),
         })}
       </p>
-      {error && <CreationErrorNotice error={error} />}
+      {error && (
+        <CreationErrorNotice
+          error={error}
+          validationMessage={t('creation.git.validationError')}
+        />
+      )}
       {!preview && !error && <p role="status">{t('creation.git.loading')}</p>}
       {preview && (
         <>
           <p className="break-all font-mono">
-            {preview.branch ?? t('creation.git.detached')} ·{' '}
+            {(preview.branch || preview.head) && (
+              <>{preview.branch ?? t('creation.git.detached')} · </>
+            )}
             {preview.head ?? t('creation.git.unborn')}
           </p>
           {revision !== diskRevision && (

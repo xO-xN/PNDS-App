@@ -182,6 +182,27 @@ fn records_only_selected_saved_whole_files_and_preserves_unselected_external_ind
 }
 
 #[test]
+fn newly_staged_files_are_described_as_added_but_cannot_be_selected() {
+    let (_temp, root, mut access, id) = enabled();
+    fs::write(root.join("externally-added.txt"), "external new file\n").unwrap();
+    let repo = git2::Repository::open(&root).unwrap();
+    let mut index = repo.index().unwrap();
+    index.add_path(Path::new("externally-added.txt")).unwrap();
+    index.write().unwrap();
+    let preview = access
+        .preview_git_record(&id, &Protection::default())
+        .unwrap();
+    let file = preview
+        .files
+        .iter()
+        .find(|file| file.path == "externally-added.txt")
+        .unwrap();
+    assert!(file.staged);
+    assert!(!file.default_selected);
+    assert_eq!(file.status, GitRecordStatus::Added);
+}
+
+#[test]
 fn tracked_large_resources_stay_selectable_while_new_large_resources_are_default_excluded() {
     let (_temp, root, mut access, id) = enabled();
     let repo = git2::Repository::open(&root).unwrap();

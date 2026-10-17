@@ -885,6 +885,7 @@
   "creation.git.head": "Git HEAD",
   "creation.git.detached": "分离的 HEAD",
   "creation.git.unborn": "尚无提交",
+  "creation.git.validationError": "无法继续此本地 Git 操作。",
   "creation.git.clean": "当前工程范围内没有未提交变化。",
   "creation.git.diff": "文本差异",
   "creation.git.layer.staged": "已暂存：HEAD → 暂存区",

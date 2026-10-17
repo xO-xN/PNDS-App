@@ -142,7 +142,12 @@ export function CreationGitHistory({
           {t('creation.history.more')}
         </p>
       )}
-      {error && <CreationErrorNotice error={error} />}
+      {error && (
+        <CreationErrorNotice
+          error={error}
+          validationMessage={t('creation.git.validationError')}
+        />
+      )}
       {!history && !error && <p role="status">{t('creation.git.loading')}</p>}
       {history?.commits.length === 0 && (
         <p role="status">{t('creation.history.empty')}</p>

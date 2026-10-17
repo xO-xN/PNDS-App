@@ -1,0 +1,138 @@
+{
+  "date": "2026-10-17",
+  "scope": "Native macOS UI acceptance of #228, #229 and #230",
+  "environment": {
+    "architecture": "arm64",
+    "macOS": "27.0.1",
+    "macOSBuild": "26A434",
+    "sourceBase": "0dd8acc",
+    "testedExecutableSHA256": "876ebcad10804d71e060c2ddcf0b7524a108d1f0e3f6d274e12b7c58627d83ce",
+    "app": "src-tauri/target/release/bundle/macos/PNDS.app",
+    "build": "npm exec tauri -- build --bundles app --ci --config /private/tmp/pnds-native-git.config.json",
+    "buildConfiguration": "Production frontend assets, offline Cargo, local ad-hoc signing; existing prepared bundle dependencies; updater artifacts disabled",
+    "initialSignatureVerification": "codesign --verify --deep --strict passed",
+    "controller": "cua_repl native accessibility, keyboard and screenshots",
+    "fixtureRoot": "/private/tmp/pnds-native-git.RwgeVJ"
+  },
+  "passed": [
+    {
+      "case": "Blank creation and independent author",
+      "observed": "Version name initially followed the project creator, then retained an explicitly edited name after a further creator edit. Creation opened the workspace without starting it.",
+      "commit": "c03825f7b57a8f0432cdb14b3bb0a08c4a5d55fb",
+      "author": "Native Git Author <creator@pnds.local>",
+      "treeFiles": 12
+    },
+    {
+      "case": "Whole saved-file recording with a dirty draft and external index",
+      "observed": "README draft title was UNSAVED Native Draft Title. Saved difference contained only the on-disk V2 addition. Fake .env.native and external staged notes-staged.txt were disabled. unselected.txt was explicitly unchecked.",
+      "commit": "0b7f8b578a33f67fa1bbee3a97397dd75922aa9e",
+      "committedPaths": ["README.zh-CN.md", "notes-selected.txt"],
+      "externalIndexBlobBeforeAndAfter": "6b3247d4e9a5b886213e2cf6faf2ad3fb1d8c6df",
+      "result": "The tree contained saved bytes and excluded the dirty title, unselected file, fake secret and externally staged file. The external staged entry remained unchanged. The UI displayed the same real commit ID."
+    },
+    {
+      "case": "Disk changes invalidate an old record review",
+      "observed": "Changing notes-selected.txt after preview disabled confirmation and marked the snapshot stale. Refresh retained the user's Chinese message and required a new selection/review before the successful record."
+    },
+    {
+      "case": "History metadata and existing-draft decisions",
+      "observed": "The two real commits showed exact IDs, author/email, timestamps, messages and changed paths. The old README showed selected, saved and draft differences. Keep current draft retained the unsaved title; explicit Replace then adopted the chosen historical text."
+    },
+    {
+      "case": "History load is read-only outside the editor draft",
+      "checkedProjectAndGitFiles": 49,
+      "changedFilesAfterLoad": [],
+      "runtimePidBeforeAndAfter": 57477,
+      "runtimeStarted": "2026-10-17 12:51:59 +0800",
+      "monitorURLBeforeAndAfter": "http://192.168.31.13:6869/?theme=pond&lang=zh-CN&_r=1",
+      "observed": "All project and .git file hashes were unchanged after load. The same Node process and monitor navigation remained active in None mode."
+    },
+    {
+      "case": "Explicit history-draft save still checks external disk changes",
+      "observed": "After an external V3 README edit, Cmd+S showed the actual current disk contents and a conflict. Cancel retained both the draft and external disk contents. A subsequent explicit overwrite saved exactly the selected historical text while HEAD and index stayed unchanged.",
+      "externalContentBackup": "external-v3-readme.txt"
+    },
+    {
+      "case": "Classic creation with an explicit email",
+      "commit": "12405c64283abb64ccb8b6d07efa8c1490f5c0f1",
+      "author": "PNDS Creator <native.classic@example.invalid>",
+      "treeFiles": 95,
+      "observed": "The generated independent initial version had no upstream history. The workspace did not automatically run. Manual Internal startup reached ready and loaded the actual monitor with performer QR controls; it was normally stopped afterward."
+    },
+    {
+      "case": "Unsupported binary history and keyboard dismissal",
+      "observed": "Classic's 354-byte SynthDef history showed that current or historical content is not editable UTF-8 and offered no load action. Escape closed the dialog and returned focus to the project menu."
+    },
+    {
+      "case": "Opening and cancelling enablement do not initialize Git",
+      "observed": "The copied existing folder had no root .git after opening and after Escape cancelled its first enable preview. Both checks were verified on disk."
+    },
+    {
+      "case": "Nested repository write boundary",
+      "observed": "Adding a real nested repository made the native enable flow refuse with the detail Nested Git repositories require an external Git tool. No root repository was created."
+    }
+  ],
+  "nativeFindingsFixed": [
+    {
+      "finding": "A folder without a repository was shown as Detached HEAD in initial preview.",
+      "fix": "Show No commits yet when both branch and HEAD are absent; preserve actual unborn branch and detached commit states.",
+      "regression": "React public workflow: no repository, unborn main and actual detached HEAD. Red observed, then green."
+    },
+    {
+      "finding": "A Git write-boundary refusal was prefixed with Saved-file test validation failed.",
+      "fix": "Git consumers supply a localized Git validation message; other error codes and existing consumers keep their original message.",
+      "regression": "React public workflow with the real nested-repository refusal detail. Red observed, then green."
+    },
+    {
+      "finding": "An externally staged new file was labelled Modified.",
+      "fix": "Use Added for index additions while retaining staged=true and defaultSelected=false.",
+      "regression": "Rust public CreationAccess preview with a real temporary repository and external index addition. Modified vs Added assertion failed before the correction and passed afterward."
+    }
+  ],
+  "finalNativeRecheck": {
+    "result": "passed",
+    "signatureVerification": "codesign --verify --deep --strict passed on the rebuilt App",
+    "observed": [
+      "Nested-repository refusal now showed 无法继续此本地 Git 操作。 with the actual technical reason.",
+      "After moving the nested repository out, initial preview showed only 尚无提交, without Detached HEAD.",
+      "Explicit review and confirmation initialized the existing folder and displayed the real initial commit receipt.",
+      "external [*] ü 新增.txt was shown as Added and disabled in the English record preview.",
+      "Space selected server.js, Tab reached its saved-difference button, and Enter displayed the actual saved difference.",
+      "A 636-character English version message wrapped in review; scrolling reached Confirm and Back to selection. Escape cancelled this review without another commit.",
+      "Brutal English history showed the actual initial metadata, file list, selected source, saved difference and Review load into draft action. Escape closed the Git dialog."
+    ],
+    "existingInitialCommit": "6b854ea3dbd64e6e699af5fdf7e713d086f21914",
+    "existingInitialTreeFiles": 15,
+    "existingInitialExcluded": [".env.native"],
+    "commitsAfterCancelledLongReview": 1,
+    "externalAddedIndexBlob": "180a3ffa3a6cc543f90078cc5c77ae753fb34543"
+  },
+  "visualSmokeMatrix": [
+    { "theme": "pond", "language": "zh-CN", "result": "passed" },
+    { "theme": "sand", "language": "zh-CN", "result": "passed" },
+    { "theme": "stage", "language": "en", "result": "passed" },
+    { "theme": "brutal", "language": "en", "result": "passed" }
+  ],
+  "validation": {
+    "checkAll": "passed",
+    "frontend": "169 files; 1917 tests passed",
+    "rustWorkspace": "611 tests passed; 5 ignored",
+    "latestIntelTestCompilation": "passed; --target x86_64-apple-darwin --lib --no-run",
+    "standardsReview": "No remaining actionable findings",
+    "specReview": "No remaining actionable findings"
+  },
+  "notVerified": [
+    "Intel native execution and a clean installed Intel release",
+    "Clean installed/offline macOS with system Git, CLT and Xcode unavailable",
+    "Actual acoustic output, artistic result and physical-device routing; Internal ready is not listening evidence",
+    "Every theme-language cross-product, window size and keyboard combination",
+    "Native failure injection for post-initialization retry, post-commit index/config failure, linked worktree/parent repository writes and late project-switch results; automated contract coverage remains separate"
+  ],
+  "controllerObservation": "After selecting Brutal through accessibility, focus was reported on the native window and the first Escape did not dismiss Settings. The Close button worked. After content interaction, Escape closed the Git dialog and returned focus correctly. This observation was not diagnosed or reproduced with physical pointer input, so it is not asserted as a product defect.",
+  "restoration": {
+    "theme": "pond",
+    "language": "zh-CN",
+    "newProjectParent": "/Users/xiaoxiang/Coding/PNDS app 开发/pnds-g3-native-2026-10-16",
+    "finalState": "Idle performance home, no running test; original project entries retained, temporary test projects retained for inspection"
+  }
+}

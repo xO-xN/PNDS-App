@@ -887,6 +887,7 @@
   "creation.git.head": "Git HEAD",
   "creation.git.detached": "Detached HEAD",
   "creation.git.unborn": "No commits yet",
+  "creation.git.validationError": "This local Git operation cannot continue.",
   "creation.git.clean": "No uncommitted changes inside this project.",
   "creation.git.diff": "Text difference",
   "creation.git.layer.staged": "Staged: HEAD → index",

@@ -25,6 +25,13 @@ Processes and their timeout probes were removed: native reads use bounded text,
 path inventories and history counts instead. Do not reintroduce `/usr/bin/git`
 or developer-tool discovery as a production dependency.
 
+Before the first commit, show the actual unborn branch when known, or only
+“No commits yet” when no repository exists. “Detached HEAD” requires a real
+HEAD target. In the Git dialog, boundary refusals retain their technical detail
+with a Git validation summary; they do not imply that a runtime test failed. External
+index additions remain “Added” even though their staged contents make them
+ineligible for selection.
+
 ## Preview and write ownership
 
 `previewCreationGitRecord` checks an issued editable identity and prepares a
