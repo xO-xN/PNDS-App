@@ -157,7 +157,7 @@ fn git_inspection_keeps_partial_clone_objects_index_and_working_files_unchanged(
         format!(
             "#!/bin/sh\ntouch '{}'\nexec '{}' upload-pack \"$@\"\n",
             marker.display(),
-            GitReader::default().executable.display(),
+            "git",
         ),
     )
     .unwrap();
@@ -184,6 +184,19 @@ fn git_inspection_keeps_partial_clone_objects_index_and_working_files_unchanged(
         .unwrap()
         .run(&GitReader::default());
     let diff = access.finish_git_diff(output, &protection).unwrap();
+    assert!(access.git_history(&identity, &protection).is_err());
+    assert!(access
+        .git_history_file(
+            &identity,
+            status
+                .head
+                .as_deref()
+                .unwrap_or("0000000000000000000000000000000000000000"),
+            "server.js",
+            &protection
+        )
+        .is_err());
+    assert!(access.preview_git_record(&identity, &protection).is_err());
     let after = snapshot(&repository);
     assert_eq!(
         after.keys().collect::<Vec<_>>(),
@@ -319,25 +332,13 @@ fn git_untracked_preview_is_bounded_utf8_and_never_reads_external_symlinks() {
 }
 
 #[test]
-fn git_workflow_degrades_without_git_or_repository_and_rejects_revoked_jobs() {
+fn git_workflow_handles_nonrepository_unborn_detached_and_revoked_jobs() {
     let temp = tempfile::tempdir().unwrap();
     let root = project(temp.path(), "score");
     let other = project(temp.path(), "other");
     let mut access = CreationAccess::default();
     let protection = Protection::default();
     let identity = access.open(&root, &protection).unwrap().project.identity;
-    let missing = GitReader {
-        executable: temp.path().join("missing-git"),
-        ..GitReader::default()
-    };
-    let output = access
-        .prepare_git_status(&identity, &protection)
-        .unwrap()
-        .run(&missing);
-    assert_eq!(
-        access.finish_git_status(output, &protection).unwrap().state,
-        GitState::GitUnavailable
-    );
     let output = access
         .prepare_git_status(&identity, &protection)
         .unwrap()
@@ -396,45 +397,12 @@ fn git_workflow_degrades_without_git_or_repository_and_rejects_revoked_jobs() {
 }
 
 #[test]
-fn git_reads_terminate_chatty_or_stalled_processes_and_report_corrupt_repository() {
-    use std::os::unix::fs::PermissionsExt;
-    use std::time::{Duration, Instant};
+fn git_reader_reports_corrupt_repository_without_starting_a_process() {
     let temp = tempfile::tempdir().unwrap();
     let root = project(temp.path(), "score");
     let mut access = CreationAccess::default();
     let protection = Protection::default();
     let identity = access.open(&root, &protection).unwrap().project.identity;
-    for (script, expected) in [
-        ("#!/bin/sh\nsleep 10\n", GitState::Timeout),
-        (
-            "#!/bin/sh\nwhile :; do echo 'xxxxxxxxxxxxxxxx'; done\n",
-            GitState::TooLarge,
-        ),
-        (
-            "#!/bin/sh\nwhile :; do echo 'xxxxxxxxxxxxxxxx' >&2; done\n",
-            GitState::TooLarge,
-        ),
-    ] {
-        let executable = temp.path().join("controlled-git");
-        fs::write(&executable, script).unwrap();
-        fs::set_permissions(&executable, fs::Permissions::from_mode(0o755)).unwrap();
-        let reader = GitReader {
-            executable,
-            timeout: Duration::from_millis(500),
-            max_bytes: 64,
-            ..GitReader::default()
-        };
-        let started = Instant::now();
-        let output = access
-            .prepare_git_status(&identity, &protection)
-            .unwrap()
-            .run(&reader);
-        assert_eq!(
-            access.finish_git_status(output, &protection).unwrap().state,
-            expected
-        );
-        assert!(started.elapsed() < Duration::from_secs(2));
-    }
     fs::write(root.join(".git"), "gitdir: /nonexistent/repository\n").unwrap();
     let output = access
         .prepare_git_status(&identity, &protection)

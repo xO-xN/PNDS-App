@@ -109,6 +109,8 @@ fn blank_server_rejects_audio_creation_failure_even_before_the_sync_waiter() {
                 author: String::new(),
                 description: String::new(),
                 locale: "en".into(),
+                git_name: None,
+                git_email: None,
             },
             &protection,
         )
@@ -193,6 +195,8 @@ fn blank_server_failure_releases_started_http_and_audio_resources() {
                 author: String::new(),
                 description: String::new(),
                 locale: "en".into(),
+                git_name: None,
+                git_email: None,
             },
             &protection,
         )
@@ -271,6 +275,8 @@ fn blank_artifact_starts_restarts_and_releases_resources_in_all_three_audio_mode
         author: String::new(),
         description: String::new(),
         locale: "en".into(),
+        git_name: None,
+        git_email: None,
     };
     let opened = access.create_blank(&options, &protection).unwrap();
     access

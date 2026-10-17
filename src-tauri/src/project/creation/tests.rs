@@ -70,12 +70,28 @@ fn blank_project_is_complete_localized_and_prepared_without_replacing_the_old_wo
         author: "Composer".into(),
         description: "A new piece.".into(),
         locale: "zh-CN".into(),
+        git_name: None,
+        git_email: None,
     };
     let prepared = access.create_blank(&options, &protection).unwrap();
     assert_eq!(prepared.project.source, CreationSource::Folder);
     assert_eq!(prepared.project.name, "My New Score");
     assert!(access.read(&old_identity, "server.js", &protection).is_ok());
     let root = temp.path().join("new-score");
+    // Creation is complete only after an independent standard initial version.
+    let history = std::process::Command::new("git")
+        .args(["log", "-1", "--format=%an <%ae> %s"])
+        .current_dir(&root)
+        .output()
+        .unwrap();
+    assert!(
+        history.status.success(),
+        "new project has no initial version"
+    );
+    assert_eq!(
+        String::from_utf8(history.stdout).unwrap(),
+        "Composer <creator@pnds.local> Initial project\n"
+    );
     let manifest = crate::project::manifest::load_manifest(&root).unwrap();
     assert!(manifest.id.starts_with("new-score-"));
     assert_eq!(
@@ -136,6 +152,8 @@ fn blank_creation_refuses_existing_targets_protected_roots_escape_and_permission
         author: String::new(),
         description: String::new(),
         locale: "en".into(),
+        git_name: None,
+        git_email: None,
     };
     fs::create_dir(temp.path().join("existing")).unwrap();
     fs::write(
@@ -218,6 +236,8 @@ fn concurrent_blank_creations_publish_exactly_one_complete_project_without_repla
                     author: String::new(),
                     description: String::new(),
                     locale: "en".into(),
+                    git_name: None,
+                    git_email: None,
                 };
                 barrier.wait();
                 CreationAccess::default().create_blank(&options, &Protection::default())

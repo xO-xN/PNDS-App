@@ -31,6 +31,8 @@ tauri-build = { version = "2", features = [] }
 sha2 = "0.10"
 
 [dependencies]
+# Statically bundled local Git; no SSH/HTTPS transport libraries or system Git.
+git2 = { version = "0.21", default-features = false, features = ["vendored-libgit2"] }
 tauri = { version = "2", features = ["macos-private-api", "test"] }
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }

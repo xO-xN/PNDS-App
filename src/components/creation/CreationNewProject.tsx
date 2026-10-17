@@ -30,6 +30,8 @@ export function CreationNewProject({
   const [name, setName] = useState(t('creation.newProject.defaultName'))
   const [folderName, setFolderName] = useState('untitled-score')
   const [author, setAuthor] = useState('')
+  const [gitName, setGitName] = useState<string | null>(null)
+  const [gitEmail, setGitEmail] = useState('')
   const [description, setDescription] = useState('')
   const lastParent = useCreationStore(state => state.lastCreationParent)
   const [selectedParent, setSelectedParent] = useState<string | null>(null)
@@ -92,6 +94,8 @@ export function CreationNewProject({
       folderName,
       name,
       author,
+      ...(gitName !== null ? { gitName } : {}),
+      ...(gitEmail ? { gitEmail } : {}),
       description,
       locale: i18n.resolvedLanguage ?? 'en',
     })
@@ -213,6 +217,31 @@ export function CreationNewProject({
                 onChange={event => setDescription(event.target.value)}
               />
             </label>
+            <fieldset className="grid gap-2 rounded border border-border p-3">
+              <legend className="text-sm">
+                {t('creation.version.initial')}
+              </legend>
+              <p className="text-xs">{t('creation.version.newScope')}</p>
+              <label className="grid gap-1 text-sm">
+                <span>{t('creation.version.name')}</span>
+                <Input
+                  required
+                  maxLength={128}
+                  value={gitName ?? (author.trim() || 'PNDS Creator')}
+                  onChange={event => setGitName(event.target.value)}
+                />
+              </label>
+              <label className="grid gap-1 text-sm">
+                <span>{t('creation.version.email')}</span>
+                <Input
+                  type="email"
+                  maxLength={254}
+                  value={gitEmail}
+                  onChange={event => setGitEmail(event.target.value)}
+                />
+              </label>
+              <p className="text-xs">{t('creation.version.placeholder')}</p>
+            </fieldset>
             <label className="grid gap-1 text-sm">
               <span>{t('creation.newProject.parent')}</span>
               <Input readOnly value={parent} />

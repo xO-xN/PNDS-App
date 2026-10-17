@@ -910,26 +910,12 @@ larger repository never returns other projects' paths or cross-boundary rename
 headers. Existing and untracked files use the ordinary containment check;
 untracked previews refuse symbolic links and nonregular files.
 
-The reader probes installed Git binaries directly instead of the macOS
-`/usr/bin/git` install shim. Missing Git and nonrepository folders remain normal
-creation workspaces. Git children get a cleared environment, disabled system/global
-configuration, prompts, optional locks, hooks and fsmonitor. Configured clean,
-smudge and process filter drivers are discovered by a read-only config query and
-neutralized for the inspection; diffs also disable external diff and textconv.
-Every child disables lazy fetching and all transports. A read-only config probe
-rejects repositories declaring `extensions.partialClone`, remote `promisor` or
-`partialCloneFilter` before object inspection, returning an explicit unreadable
-detail. This conservative boundary also works with older installed Git versions
-that ignore `GIT_NO_LAZY_FETCH`; creators complete such repositories in their
-external Git tool. Ordinary diff can otherwise download missing objects and
-write the object database even without an explicit fetch action; see Git's
-[partial-clone contract](https://git-scm.com/docs/partial-clone) and
-[transport/lazy-fetch guards](https://git-scm.com/docs/git/2.56.0.html).
-No Git initialization, login, network, commit, branch switch, merge or push command
-is exposed. Each child has a five-second deadline, a separate process group and
-1 MiB caps on stdout and stderr; status stops at 4,096 paths. Binary, non-UTF-8,
-unreadable, oversize, timeout and no-longer-changed comparisons have explicit
-results without silently truncating text.
+The production reader now uses statically bundled libgit2, without a Git child
+process or system developer tools. Text/diff and path limits remain explicit;
+partial clones are refused before object reads, and no hook, filter, external
+diff or transport runs. #228–#230 add separate confirmed recording and history
+surfaces; see [local Git](./local-git.md) for the engine, write boundary, fixed
+resource rules, index isolation and history-to-draft contract.
 
 The file workflow revision makes a displayed result stale after disk changes,
 including changes during an in-flight read. Returning focus from another tool or
@@ -949,7 +935,7 @@ Git, deleted/binary/invalid text, literal filenames and helper-execution markers
 The partial-clone fixture deliberately omits blobs and compares the entire
 repository file inventory and bytes before/after status and diff, covering the
 object store, config, index and working files plus a transport-helper marker.
-Controlled child processes prove timeout and both output bounds. UI workflow tests
+The process-free reader keeps the bounded text and path regression cases. UI workflow tests
 exercise the project-menu entry, stale/refresh and late-result behavior, and retain
 drafts plus a running session. Native visual/focus and user-started App validation
 remain separate acceptance evidence.

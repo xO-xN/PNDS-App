@@ -407,3 +407,14 @@ returns actual text/resource differences; `handoffComparisonIsStale` checks
 current disk versions without a model or Git call. All use the current native
 creation identity and access lock. See [handoff-baselines.md](./handoff-baselines.md)
 for schema, limits, exclusions, partial outcomes and retry rules.
+
+## Local Git (#228–#230)
+
+`previewCreationGitRecord` issues a one-use saved-scope token;
+`confirmCreationGitRecord` consumes it with complete selected paths, local
+identity and message. A successful commit always returns its real ID, including
+partial index/config warnings. `getCreationGitHistory`,
+`readCreationGitHistoryFile` and `loadCreationGitHistoryText` are read-only native
+operations; the last returns historical text and the checked current disk base
+for the draft store. All commands use issued identities on the blocking worker.
+See [local Git](./local-git.md) for boundaries and bounded resources.

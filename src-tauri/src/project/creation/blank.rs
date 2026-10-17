@@ -12,6 +12,10 @@ pub struct NewProjectOptions {
     pub author: String,
     pub description: String,
     pub locale: String,
+    #[serde(default)]
+    pub git_name: Option<String>,
+    #[serde(default)]
+    pub git_email: Option<String>,
 }
 
 const ASSETS: &[(&str, &[u8])] = &[
@@ -84,6 +88,7 @@ impl CreationAccess {
     ) -> Result<CreationWorkspace, CreationError> {
         validate(options)?;
         let parent = fs::canonicalize(&options.parent).map_err(io_error)?;
+        local_git::require_no_parent_repository(&parent)?;
         let held = File::options()
             .read(true)
             .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW)
@@ -123,6 +128,7 @@ impl CreationAccess {
         check_directory_identity(staging.path(), &staged)?;
         crate::project::bundle::validate_packable_with_libraries(staging.path(), libraries)
             .map_err(|detail| CreationError::new(CreationErrorCode::InvalidProject, detail))?;
+        local_git::initialize_generated(staging.path(), options)?;
         check_directory_identity(&parent, &held)?;
         check_directory_identity(staging.path(), &staged)?;
         let staged_name =

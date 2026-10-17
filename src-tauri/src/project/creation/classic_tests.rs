@@ -11,6 +11,8 @@ fn options(parent: &Path) -> NewProjectOptions {
         author: "Composer".into(),
         description: "My score".into(),
         locale: "en".into(),
+        git_name: None,
+        git_email: None,
     }
 }
 
@@ -57,8 +59,16 @@ fn classic_creation_keeps_the_reference_implementation_and_initializes_an_editab
     assert_eq!(source["version"], "0.7.0");
     assert_eq!(source["creationFixes"][0]["id"], "none-health-contract");
     assert_eq!(source["creationFixes"][0]["path"], "lib/health.js");
+    let repo = git2::Repository::open(root).unwrap();
+    assert_eq!(
+        repo.head()
+            .unwrap()
+            .peel_to_commit()
+            .unwrap()
+            .parent_count(),
+        0
+    );
     for excluded in [
-        ".git",
         "node_modules",
         ".pnds-seats.json",
         ".pnds-seats.json.tmp",

@@ -600,3 +600,22 @@ it('leaves a removed remembered parent available for retry when creation reports
   expect(screen.getByRole('button', { name: 'Create project' })).toBeEnabled()
   expect(commands.savePreferences).not.toHaveBeenCalled()
 })
+
+it('shows an independent editable local Git identity and the placeholder before creation', async () => {
+  render(<CreationView />)
+  fireEvent.click(await screen.findByRole('button', { name: 'New project' }))
+  const name = screen.getByRole('textbox', { name: 'Version author name' })
+  expect(name).toHaveValue('PNDS Creator')
+  fireEvent.change(
+    screen.getByRole('textbox', { name: 'Creator (optional)' }),
+    { target: { value: 'Composer' } }
+  )
+  expect(name).toHaveValue('Composer')
+  fireEvent.change(name, { target: { value: 'Version Author' } })
+  fireEvent.change(
+    screen.getByRole('textbox', { name: 'Creator (optional)' }),
+    { target: { value: 'Another Composer' } }
+  )
+  expect(name).toHaveValue('Version Author')
+  expect(screen.getByText(/creator@pnds.local/)).toBeInTheDocument()
+})

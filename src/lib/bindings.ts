@@ -540,6 +540,46 @@ async getCreationGitStatus(identity: string) : Promise<Result<CreationGitStatus,
     else return { status: "error", error: e  as any };
 }
 },
+async previewCreationGitRecord(identity: string) : Promise<Result<GitRecordPreview, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("preview_creation_git_record", { identity }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async confirmCreationGitRecord(identity: string, token: string, request: GitRecordRequest) : Promise<Result<GitRecordReceipt, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("confirm_creation_git_record", { identity, token, request }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async getCreationGitHistory(identity: string) : Promise<Result<GitHistory, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_creation_git_history", { identity }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async readCreationGitHistoryFile(identity: string, commit: string, path: string) : Promise<Result<GitHistoryFile, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("read_creation_git_history_file", { identity, commit, path }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async loadCreationGitHistoryText(identity: string, commit: string, path: string, version: string) : Promise<Result<GitHistoryFile, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("load_creation_git_history_text", { identity, commit, path, version }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async readCreationGitDiff(identity: string, path: string, layer: GitDiffLayer) : Promise<Result<CreationGitDiff, CreationError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("read_creation_git_diff", { identity, path, layer }) };
@@ -1683,9 +1723,19 @@ plistPresent: boolean; listeners: DnsListeners | null; bindError: string | null;
 export type EvidenceFile = { path: string; directory: boolean; bytes: number; sha256: string; mode: number }
 export type Freshness = { stale: boolean; complete: boolean; reasons: string[] }
 export type GitDiffLayer = "staged" | "unstaged" | "untracked"
-export type GitDiffState = "text" | "binary" | "unreadable" | "tooLarge" | "unavailable" | "timeout" | "noChange"
+export type GitDiffState = "text" | "binary" | "unreadable" | "tooLarge" | "unavailable" | "noChange"
 export type GitEvidence = { head: string | null; dirty: boolean | null; state: string; detail: string | null }
-export type GitState = "available" | "gitUnavailable" | "notRepository" | "unreadable" | "tooLarge" | "timeout"
+export type GitExclusion = "sensitiveOrGenerated" | "tooLarge" | "largeMedia" | "ignored"
+export type GitHistory = { head: string | null; commits: GitHistoryCommit[]; limited: boolean }
+export type GitHistoryCommit = { id: string; timestamp: number; author: string; email: string; message: string; files: string[] }
+export type GitHistoryFile = { commit: string; path: string; historicalText: string | null; historicalSize: number; savedText: string | null; diskVersion: string | null; loadable: boolean; reason: GitHistoryReason | null }
+export type GitHistoryReason = "tooLarge" | "binary" | "unsupportedText" | "notRegular" | "missingHistory" | "missingCurrent" | "notEditable"
+export type GitRecordFile = { path: string; size: number; status: GitRecordStatus; defaultSelected: boolean; exclusion: GitExclusion | null; staged: boolean }
+export type GitRecordPreview = { token: string; initial: boolean; branch: string | null; head: string | null; name: string; email: string; files: GitRecordFile[] }
+export type GitRecordReceipt = { commit: string; message: string; paths: string[]; warning: string | null }
+export type GitRecordRequest = { paths: string[]; name: string; email: string; message: string }
+export type GitRecordStatus = "added" | "modified" | "deleted"
+export type GitState = "available" | "notRepository" | "unreadable" | "tooLarge"
 export type HandoffBaselineCatalog = { baselines: HandoffBaselineSummary[]; usedBytes: number; limitBytes: number }
 export type HandoffBaselineSummary = { id: string; taskId: string; task: HandoffTask | null; intent: string; revision: string; capturedAt: number; complete: boolean; bytes: number; files: number; excluded: BaselineExclusion[]; error: CreationError | null }
 export type HandoffChangeKind = "added" | "modified" | "deleted"
@@ -1899,7 +1949,7 @@ export type ModelUsage = { inputTokens: number | null; outputTokens: number | nu
 export type ModuleCompatibility = { version: string; hostProtocol: number; runtime: string[]; adaptation: string[] }
 export type ModuleSource = { repository: string; revision: string; version: string }
 export type ModuleState = "available" | "added" | "needsHandoff" | "conflict"
-export type NewProjectOptions = { parent: string; folderName: string; name: string; author: string; description: string; locale: string }
+export type NewProjectOptions = { parent: string; folderName: string; name: string; author: string; description: string; locale: string; gitName?: string | null; gitEmail?: string | null }
 /**
  * A queued `.pnds` bundle finished installing (formerly
  * `pnds:open-bundle`) — the frontend opens the installed project.

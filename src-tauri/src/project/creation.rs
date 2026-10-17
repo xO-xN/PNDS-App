@@ -37,6 +37,13 @@ mod compile;
 #[cfg(test)]
 mod compile_tests;
 mod git;
+mod git_history;
+mod local_git;
+mod native_git;
+pub use git_history::*;
+#[cfg(test)]
+mod local_git_tests;
+pub use local_git::*;
 mod handoff;
 mod handoff_operation;
 pub use git::{CreationGitDiff, CreationGitStatus, GitDiffLayer, GitReader};
@@ -233,6 +240,7 @@ pub struct CreationAccess {
     generation: u64,
     last_change: Option<(String, CreationFileChange)>,
     change_sequence: u64,
+    git_preview: Option<GitPreviewSession>,
     handoff_review: Option<HandoffReview>,
     handoff_receipt: Option<(String, HandoffReceipt)>,
 }

@@ -24,6 +24,8 @@ import {
   useCreationFilesStore,
 } from '@/store/creation-files-store'
 import { useSessionStore } from '@/store/session-store'
+import { CreationGitHistory } from './CreationGitHistory'
+import { CreationGitRecord } from './CreationGitRecord'
 import { CreationErrorNotice } from './CreationErrorNotice'
 
 /** A local inspection snapshot. Draft editing and runtime actions remain owned
@@ -36,6 +38,10 @@ export function CreationGit({
   onClose: () => void
 }) {
   const { t } = useTranslation()
+  const recordOperation = useRef(false)
+  const [recordBusy, setRecordBusy] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [recording, setRecording] = useState(false)
   const [refresh, setRefresh] = useState(0)
   const [status, setStatus] = useState<CreationGitStatus | null>(null)
   const [diff, setDiff] = useState<CreationGitDiff | null>(null)
@@ -136,7 +142,7 @@ export function CreationGit({
     <Dialog
       open
       onOpenChange={open => {
-        if (!open) onClose()
+        if (!open && !recordOperation.current) onClose()
       }}
     >
       <DialogContent
@@ -161,7 +167,7 @@ export function CreationGit({
           <Button
             size="sm"
             variant="outline"
-            disabled={reading}
+            disabled={reading || recordBusy}
             onClick={reload}
           >
             {t('creation.git.refresh')}
@@ -175,100 +181,142 @@ export function CreationGit({
           className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto"
           aria-busy={reading}
         >
-          {error && <CreationErrorNotice error={error} />}
-          <div role="status" aria-atomic="true" className="text-xs">
-            {reading && <p>{t('creation.git.loading')}</p>}
-            {stale && <p>{t('creation.git.stale')}</p>}
-            {status && status.state !== 'available' && (
-              <p>{t(`creation.git.state.${status.state}`)}</p>
+          {!recording &&
+            !historyOpen &&
+            (status?.state === 'notRepository' ||
+              status?.state === 'available') &&
+            project?.source === 'folder' && (
+              <Button variant="outline" onClick={() => setRecording(true)}>
+                {t(
+                  status?.head
+                    ? 'creation.version.record'
+                    : 'creation.version.enable'
+                )}
+              </Button>
             )}
-          </div>
-          {status?.detail && (
-            <p className="max-h-24 overflow-auto text-xs break-all">
-              {status.detail}
-            </p>
+          {!recording && !historyOpen && status?.head && (
+            <Button variant="outline" onClick={() => setHistoryOpen(true)}>
+              {t('creation.history.action')}
+            </Button>
           )}
-          {status?.state === 'available' && (
-            <div className="flex flex-col gap-3">
-              <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-xs">
-                <dt>{t('creation.git.branch')}</dt>
-                <dd>{status.branch ?? t('creation.git.detached')}</dd>
-                <dt>{t('creation.git.head')}</dt>
-                <dd className="break-all font-mono">
-                  {status.head ?? t('creation.git.unborn')}
-                </dd>
-              </dl>
-              {status.changes.length === 0 && (
-                <p className="text-sm">{t('creation.git.clean')}</p>
+          {historyOpen ? (
+            <CreationGitHistory
+              identity={identity}
+              onBack={() => setHistoryOpen(false)}
+              onLoaded={onClose}
+            />
+          ) : recording ? (
+            <CreationGitRecord
+              identity={identity}
+              onRecorded={reload}
+              onBusyChange={busy => {
+                recordOperation.current = busy
+                setRecordBusy(busy)
+              }}
+              onBack={() => setRecording(false)}
+            />
+          ) : (
+            <>
+              {error && <CreationErrorNotice error={error} />}
+              <div role="status" aria-atomic="true" className="text-xs">
+                {reading && <p>{t('creation.git.loading')}</p>}
+                {stale && <p>{t('creation.git.stale')}</p>}
+                {status && status.state !== 'available' && (
+                  <p>{t(`creation.git.state.${status.state}`)}</p>
+                )}
+              </div>
+              {status?.detail && (
+                <p className="max-h-24 overflow-auto text-xs break-all">
+                  {status.detail}
+                </p>
               )}
-              <ul className="space-y-2">
-                {status.changes.map(change => (
-                  <li
-                    key={change.path}
-                    className="rounded border border-(--pnds-border) p-2 text-xs"
-                  >
-                    <p className="mb-2 break-all font-mono">{change.path}</p>
-                    <div className="flex flex-wrap gap-2">
-                      {(['staged', 'unstaged', 'untracked'] as const)
-                        .filter(layer => change[layer])
-                        .map(layer => (
-                          <Button
-                            key={layer}
-                            size="sm"
-                            variant="outline"
-                            disabled={reading || stale}
-                            aria-label={`${change.path} — ${t(`creation.git.layer.${layer}`)}`}
-                            aria-pressed={
-                              selected?.path === change.path &&
-                              selected.layer === layer
-                            }
-                            onClick={() => void showDiff(change.path, layer)}
-                          >
-                            {t(`creation.git.layer.${layer}`)}
-                          </Button>
-                        ))}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-              {selected && (
-                <section
-                  aria-label={t('creation.git.diff')}
-                  className="min-h-0"
-                >
-                  <h3 className="mb-2 text-xs font-semibold break-all">
-                    {selected.path} ·{' '}
-                    {t(`creation.git.layer.${selected.layer}`)}
-                  </h3>
-                  {diffReading && (
-                    <p role="status" className="text-xs">
-                      {t('creation.git.loadingDiff')}
-                    </p>
+              {status?.state === 'available' && (
+                <div className="flex flex-col gap-3">
+                  <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-xs">
+                    <dt>{t('creation.git.branch')}</dt>
+                    <dd>{status.branch ?? t('creation.git.detached')}</dd>
+                    <dt>{t('creation.git.head')}</dt>
+                    <dd className="break-all font-mono">
+                      {status.head ?? t('creation.git.unborn')}
+                    </dd>
+                  </dl>
+                  {status.changes.length === 0 && (
+                    <p className="text-sm">{t('creation.git.clean')}</p>
                   )}
-                  {diff && diff.state !== 'text' && (
-                    <p role="status" className="text-xs">
-                      {t(`creation.git.diffState.${diff.state}`)}
-                    </p>
-                  )}
-                  {diff?.detail && (
-                    <p className="text-xs break-all">{diff.detail}</p>
-                  )}
-                  {diff?.text !== null && diff?.text !== undefined && (
-                    <pre
-                      tabIndex={0}
+                  <ul className="space-y-2">
+                    {status.changes.map(change => (
+                      <li
+                        key={change.path}
+                        className="rounded border border-(--pnds-border) p-2 text-xs"
+                      >
+                        <p className="mb-2 break-all font-mono">
+                          {change.path}
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {(['staged', 'unstaged', 'untracked'] as const)
+                            .filter(layer => change[layer])
+                            .map(layer => (
+                              <Button
+                                key={layer}
+                                size="sm"
+                                variant="outline"
+                                disabled={reading || stale}
+                                aria-label={`${change.path} — ${t(`creation.git.layer.${layer}`)}`}
+                                aria-pressed={
+                                  selected?.path === change.path &&
+                                  selected.layer === layer
+                                }
+                                onClick={() =>
+                                  void showDiff(change.path, layer)
+                                }
+                              >
+                                {t(`creation.git.layer.${layer}`)}
+                              </Button>
+                            ))}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                  {selected && (
+                    <section
                       aria-label={t('creation.git.diff')}
-                      className="pnds-focus-ring max-h-72 overflow-auto rounded border border-(--pnds-border) p-3 text-xs"
+                      className="min-h-0"
                     >
-                      {diff.text}
-                    </pre>
+                      <h3 className="mb-2 text-xs font-semibold break-all">
+                        {selected.path} ·{' '}
+                        {t(`creation.git.layer.${selected.layer}`)}
+                      </h3>
+                      {diffReading && (
+                        <p role="status" className="text-xs">
+                          {t('creation.git.loadingDiff')}
+                        </p>
+                      )}
+                      {diff && diff.state !== 'text' && (
+                        <p role="status" className="text-xs">
+                          {t(`creation.git.diffState.${diff.state}`)}
+                        </p>
+                      )}
+                      {diff?.detail && (
+                        <p className="text-xs break-all">{diff.detail}</p>
+                      )}
+                      {diff?.text !== null && diff?.text !== undefined && (
+                        <pre
+                          tabIndex={0}
+                          aria-label={t('creation.git.diff')}
+                          className="pnds-focus-ring max-h-72 overflow-auto rounded border border-(--pnds-border) p-3 text-xs"
+                        >
+                          {diff.text}
+                        </pre>
+                      )}
+                    </section>
                   )}
-                </section>
+                </div>
               )}
-            </div>
+            </>
           )}
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" disabled={recordBusy} onClick={onClose}>
             {t('creation.git.close')}
           </Button>
         </DialogFooter>

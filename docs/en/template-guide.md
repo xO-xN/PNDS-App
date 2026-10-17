@@ -63,6 +63,55 @@ open it later. Success enters the workbench **without starting** and places the
 project first in performance Home. Returning to performance requires manual
 selection and load; the entry is remembered across App restarts.
 
+## App local versions and history
+
+The project menu's **Git status and differences** opens saved-file differences,
+**Record version**, and **Local history**. The App supplies local Git on Apple
+Silicon and Intel; these actions need neither system Git nor a remote login.
+No Git action runs project hooks, external diff, filters or network helpers.
+
+Blank and Classic receive an independent initial version before creation
+succeeds. Review the version author in the creation form: it follows the creator
+until you edit it, or defaults to `PNDS Creator`. Email is optional; a blank email
+uses the disclosed local placeholder `creator@pnds.local`. This signature is
+separate from the project creator and changes only the current repository.
+
+Opening an existing folder never enables Git automatically. Choose **Enable
+local version recording**, review the file scope, identity and initial message,
+then confirm. If initialization succeeded but recording failed, keep the folder
+and preview again to complete the missing step. Existing history is preserved.
+Parent/nested repositories, linked worktrees and other unsupported write
+structures need external tools; their supported read-only inspection remains.
+
+Select whole saved files and type a message, then review and confirm. Drafts,
+unapplied proposals and temporary previews are shown separately and are never
+saved or included automatically. External staged content on a selected file
+must be handled in another Git tool; unselected staged entries are retained.
+Files, HEAD or index changing after preview require another preview. No empty
+commit, reset or automatic repair is made. Success shows the real commit ID;
+index/config warnings after that success do not mean the commit should be repeated.
+
+Existing ignore rules are followed. Dependencies, caches, build output, App data,
+`.env` files and known secrets are excluded. Audio/video/model files of 10 MiB
+or more are unselected by default and can be explicitly included; already tracked
+resources stay visible. Each file is limited to 64 MiB, collection to 256 MiB,
+and inventory to 4,096 entries/32 levels. Included resources can increase history
+storage; Git recording is not a complete resource backup. Filter/LFS-dependent
+writes, required signing, locks/conflicts, partial clones and missing objects
+require an external Git tool. PNDS never fetches missing objects.
+
+History shows at most 30 relevant commits, following up to 300 first-parent commits from HEAD, and
+states when more history may remain. Select a commit and a path to compare its
+text with current saved content and the separate draft. **Review load into
+draft** supports only one currently existing editable text file. Keep or cancel
+an existing draft, or explicitly replace it. Loading changes only the draft;
+then open it, inspect, save and test explicitly. The current disk version remains
+the save-conflict base. Deleted files are not recreated; binaries, directories,
+unsupported text, escaping links and unreachable history are refused. Text is
+limited to 1 MiB. Saving still validates content and rejects unseen disk changes.
+Recording and loading never refresh/restart the running project or certify sound.
+Git history and local App data do not enter a `.pnds` bundle.
+
 ## Prerequisites
 
 Before you start, make sure your machine has:

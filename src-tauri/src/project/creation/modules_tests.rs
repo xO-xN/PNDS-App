@@ -316,6 +316,8 @@ fn added_sources_round_trip_in_a_real_bundle_while_handoff_stays_in_source() {
                 author: "".into(),
                 description: "".into(),
                 locale: "en".into(),
+                git_name: None,
+                git_email: None,
             },
             &protection,
         )

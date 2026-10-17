@@ -251,6 +251,26 @@ vi.mock('@/lib/tauri-bindings', async () => {
           detail: 'openCreationProject not mocked',
         },
       }),
+      getCreationGitHistory: vi.fn().mockResolvedValue({
+        status: 'ok',
+        data: { head: null, commits: [], limited: false },
+      }),
+      readCreationGitHistoryFile: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: { code: 'io', detail: 'History not mocked' },
+      }),
+      loadCreationGitHistoryText: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: { code: 'io', detail: 'History load not mocked' },
+      }),
+      previewCreationGitRecord: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: { code: 'io', detail: 'previewCreationGitRecord not mocked' },
+      }),
+      confirmCreationGitRecord: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: { code: 'io', detail: 'confirmCreationGitRecord not mocked' },
+      }),
       createClassicProject: vi.fn().mockResolvedValue({
         status: 'error',
         error: { code: 'io', detail: 'createClassicProject not mocked' },

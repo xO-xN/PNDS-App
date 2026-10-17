@@ -37,6 +37,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   useCreationStore.setState({
     active: true,
+    recentPaths: [],
     workspace: null,
     modePhase: 'idle',
     opening: false,
@@ -168,12 +169,12 @@ it('ignores late status responses when the user opens another project', async ()
   expect(commands.getCreationGitStatus).toHaveBeenLastCalledWith('next')
 })
 
-it('explains missing Git and binary files without disabling the editor', async () => {
+it('explains unreadable Git repositories and binary files without disabling the editor', async () => {
   vi.mocked(commands.getCreationGitStatus).mockResolvedValueOnce({
     status: 'ok',
     data: {
       ...report,
-      state: 'gitUnavailable',
+      state: 'unreadable',
       branch: null,
       head: null,
       changes: [],
@@ -182,7 +183,7 @@ it('explains missing Git and binary files without disabling the editor', async (
   render(<CreationView />)
   await creationProjectAction('Git status and differences')
   await screen.findByText(
-    'Git is unavailable. You can continue creating without Git.'
+    'Git could not read this repository. Check it in an external tool, then refresh.'
   )
   fireEvent.click(screen.getByRole('button', { name: 'Close' }))
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
@@ -234,4 +235,120 @@ it('discards a pending old-project difference after a successful workspace chang
   )
   expect(screen.queryByText('old-project text')).not.toBeInTheDocument()
   expect(commands.getCreationGitStatus).toHaveBeenLastCalledWith('next')
+})
+
+it('previews initial scope and identity before explicitly enabling local versions', async () => {
+  vi.mocked(commands.getCreationGitStatus).mockResolvedValue({
+    status: 'ok',
+    data: { ...report, state: 'notRepository', changes: [], head: null },
+  })
+  vi.mocked(commands.previewCreationGitRecord).mockResolvedValue({
+    status: 'ok',
+    data: {
+      token: 'preview',
+      initial: true,
+      branch: null,
+      head: null,
+      name: 'PNDS Creator',
+      email: 'creator@pnds.local',
+      files: [
+        {
+          path: 'server.js',
+          size: 12,
+          status: 'added',
+          defaultSelected: true,
+          exclusion: null,
+          staged: false,
+        },
+      ],
+    },
+  })
+  vi.mocked(commands.confirmCreationGitRecord).mockResolvedValue({
+    status: 'ok',
+    data: {
+      commit: 'abcdef1234567890',
+      message: 'Initial project',
+      paths: ['server.js'],
+      warning: null,
+    },
+  })
+  render(<CreationView />)
+  await creationProjectAction('Git status and differences')
+  fireEvent.click(
+    await screen.findByRole('button', {
+      name: 'Enable local version recording',
+    })
+  )
+  await screen.findByRole('textbox', { name: 'Version author name' })
+  expect(commands.confirmCreationGitRecord).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button', { name: 'Review version' }))
+  expect(commands.confirmCreationGitRecord).not.toHaveBeenCalled()
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Confirm and record version' })
+  )
+  await screen.findByText('abcdef1234567890')
+  expect(commands.saveCreationFile).not.toHaveBeenCalled()
+})
+
+it('keeps the confirmed record visible until its real commit receipt arrives', async () => {
+  vi.mocked(commands.getCreationGitStatus).mockResolvedValue({
+    status: 'ok',
+    data: { ...report, state: 'notRepository', changes: [], head: null },
+  })
+  vi.mocked(commands.previewCreationGitRecord).mockResolvedValue({
+    status: 'ok',
+    data: {
+      token: 'pending',
+      initial: true,
+      branch: null,
+      head: null,
+      name: 'Creator',
+      email: 'creator@pnds.local',
+      files: [
+        {
+          path: 'server.js',
+          size: 12,
+          status: 'added',
+          defaultSelected: true,
+          exclusion: null,
+          staged: false,
+        },
+      ],
+    },
+  })
+  let complete!: (
+    value: Awaited<ReturnType<typeof commands.confirmCreationGitRecord>>
+  ) => void
+  vi.mocked(commands.confirmCreationGitRecord).mockReturnValueOnce(
+    new Promise(resolve => {
+      complete = resolve
+    })
+  )
+  render(<CreationView />)
+  await creationProjectAction('Git status and differences')
+  fireEvent.click(
+    await screen.findByRole('button', {
+      name: 'Enable local version recording',
+    })
+  )
+  fireEvent.click(await screen.findByRole('button', { name: 'Review version' }))
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Confirm and record version' })
+  )
+  expect(screen.getByRole('button', { name: 'Close' })).toBeDisabled()
+  fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' })
+  expect(screen.getByRole('dialog')).toBeInTheDocument()
+  await act(async () =>
+    complete({
+      status: 'ok',
+      data: {
+        commit: 'confirmed-real-commit',
+        message: 'Initial project',
+        paths: ['server.js'],
+        warning: null,
+      },
+    })
+  )
+  await screen.findByText('confirmed-real-commit')
+  expect(screen.getByRole('button', { name: 'Close' })).toBeEnabled()
 })

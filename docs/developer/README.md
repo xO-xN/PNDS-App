@@ -33,6 +33,7 @@ App 开发的规则层：既定模式与系统做法，按问题检索——查�
 - **离线标准模块、旧版来源保护与外部 Skills 分发** → [standard-modules.md](./standard-modules.md)
 - **固定共享库、工程采用与离线加载边界** → [shared-libraries.md](./shared-libraries.md)
 - **Blank／Classic 固定创建来源、独立身份与取消／失败保护** → [creation-workspace.md](./creation-workspace.md#fixed-classic-source-and-initialization-200)
+- **自供本地 Git、初始版本、完整文件记录与历史载入草稿** → [local-git.md](./local-git.md)（#228–#230）。
 - **工程范围内只读 Git 状态、分层差异与过期快照** → [creation-workspace.md](./creation-workspace.md#read-only-git-inspection-201)
 - **创作阅读、可信工程身份、文件限制与异步切换** → [creation-workspace.md](./creation-workspace.md)
 - **无副作用的 App Doctor、共用报告与离线 CLI** → [static-diagnostics.md](./static-diagnostics.md)（#193 / #203 / #204）。

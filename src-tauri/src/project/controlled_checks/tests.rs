@@ -83,6 +83,8 @@ fn newly_created_classic_passes_none_check_with_disabled_audio_health() {
                 author: "".into(),
                 description: "".into(),
                 locale: "en".into(),
+                git_name: None,
+                git_email: None,
             },
             &shared,
             &Protection::default(),

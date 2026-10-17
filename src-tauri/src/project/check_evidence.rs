@@ -740,38 +740,22 @@ mod content_tests {
 #[cfg(test)]
 mod git_and_limit_tests {
     use super::*;
-    use std::process::Command;
 
     #[test]
     fn git_head_is_separate_from_the_actual_uncommitted_saved_content() {
         let source = tempfile::tempdir().unwrap();
         fs::write(source.path().join("manifest.json"),r#"{"schemaVersion":1,"id":"test","name":"Test","version":"1.0.0","scoreServer":{"entry":"server.js","workingDirectory":".","performerPort":6868,"monitorPort":6869},"audio":{"defaultMode":"none","supportedModes":["none"]}}"#).unwrap();
         fs::write(source.path().join("server.js"), "committed").unwrap();
-        let reader = GitReader::default();
-        for arguments in [
-            vec!["init", "--quiet"],
-            vec!["add", "."],
-            vec![
-                "-c",
-                "user.name=Evidence Test",
-                "-c",
-                "user.email=evidence@example.invalid",
-                "-c",
-                "commit.gpgsign=false",
-                "commit",
-                "--quiet",
-                "-m",
-                "fixture",
-            ],
-        ] {
-            assert!(Command::new(&reader.executable)
-                .current_dir(source.path())
-                .args(arguments)
-                .output()
-                .unwrap()
-                .status
-                .success());
-        }
+        let repo = git2::Repository::init(source.path()).unwrap();
+        let mut index = repo.index().unwrap();
+        index.add_path(Path::new("manifest.json")).unwrap();
+        index.add_path(Path::new("server.js")).unwrap();
+        index.write().unwrap();
+        let tree_id = index.write_tree().unwrap();
+        let tree = repo.find_tree(tree_id).unwrap();
+        let signature = git2::Signature::now("Evidence Test", "evidence@example.invalid").unwrap();
+        repo.commit(Some("HEAD"), &signature, &signature, "fixture", &tree, &[])
+            .unwrap();
         let cancel = AtomicBool::new(false);
         let first_destination = tempfile::tempdir().unwrap();
         let first = prepare_snapshot(

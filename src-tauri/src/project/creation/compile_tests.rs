@@ -505,6 +505,8 @@ fn compile_with_real_sclang() {
                 author: String::new(),
                 description: String::new(),
                 locale: "en".into(),
+                git_name: None,
+                git_email: None,
             },
             &protection,
         )

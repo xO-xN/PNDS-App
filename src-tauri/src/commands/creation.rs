@@ -820,6 +820,77 @@ pub async fn close_creation_project(
 
 #[tauri::command]
 #[specta::specta]
+pub async fn preview_creation_git_record(
+    app: AppHandle,
+    state: State<'_, CreationState>,
+    identity: String,
+) -> Result<crate::project::creation::GitRecordPreview, CreationError> {
+    state
+        .run(move |access| access.preview_git_record(&identity, &protection(&app)?))
+        .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn get_creation_git_history(
+    app: AppHandle,
+    state: State<'_, CreationState>,
+    identity: String,
+) -> Result<crate::project::creation::GitHistory, CreationError> {
+    state
+        .run(move |access| access.git_history(&identity, &protection(&app)?))
+        .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn read_creation_git_history_file(
+    app: AppHandle,
+    state: State<'_, CreationState>,
+    identity: String,
+    commit: String,
+    path: String,
+) -> Result<crate::project::creation::GitHistoryFile, CreationError> {
+    state
+        .run(move |access| access.git_history_file(&identity, &commit, &path, &protection(&app)?))
+        .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn load_creation_git_history_text(
+    app: AppHandle,
+    state: State<'_, CreationState>,
+    identity: String,
+    commit: String,
+    path: String,
+    version: String,
+) -> Result<crate::project::creation::GitHistoryFile, CreationError> {
+    state
+        .run(move |access| {
+            access.load_git_history_text(&identity, &commit, &path, &version, &protection(&app)?)
+        })
+        .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn confirm_creation_git_record(
+    app: AppHandle,
+    state: State<'_, CreationState>,
+    identity: String,
+    token: String,
+    request: crate::project::creation::GitRecordRequest,
+) -> Result<crate::project::creation::GitRecordReceipt, CreationError> {
+    state
+        .run(move |access| {
+            access.confirm_git_record(&identity, &token, request, &protection(&app)?)
+        })
+        .await
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn get_creation_git_status(
     app: AppHandle,
     state: State<'_, CreationState>,

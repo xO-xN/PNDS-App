@@ -9,6 +9,7 @@ import {
   type CreationFileChange,
   type Result,
   type HandoffDocument,
+  type GitHistoryFile,
 } from '@/lib/tauri-bindings'
 import type { CreationParticipant } from '@/lib/creation-lifecycle'
 import { creationTransportError, useCreationStore } from './creation-store'
@@ -53,6 +54,12 @@ export interface CreationUpdateToken {
   revision: number
 }
 interface CreationFilesState {
+  loadHistory: (
+    identity: string,
+    source: GitHistoryFile,
+    expectedDraft: CreationDraft | undefined,
+    current?: () => boolean
+  ) => Promise<CreationError | null>
   handoffRecorded: (document: HandoffDocument) => void
   lastChange: CreationFileChange | null
   changeError: CreationError | null
@@ -263,6 +270,75 @@ export const useCreationFilesStore = create<CreationFilesState>((set, get) => {
     }
   }
   return {
+    loadHistory: async (
+      identity,
+      source,
+      expectedDraft,
+      current = () => true
+    ) => {
+      const path = source.path
+      const conflict = (): CreationError => ({
+        code: 'versionConflict',
+        detail: i18n.t('creation.history.changed'),
+      })
+      const workspace = useCreationStore.getState().workspace
+      if (
+        !current() ||
+        !ownsWorkspace(identity) ||
+        workspace?.project.source !== 'folder' ||
+        !source.loadable ||
+        !source.diskVersion ||
+        get().drafts[path] !== expectedDraft ||
+        expectedDraft?.saving ||
+        expectedDraft?.renaming
+      )
+        return conflict()
+      const owns = beginCreationFileOperation(path)
+      try {
+        const result = await commands.loadCreationGitHistoryText(
+          identity,
+          source.commit,
+          path,
+          source.diskVersion
+        )
+        if (!current() || !owns() || get().drafts[path] !== expectedDraft)
+          return conflict()
+        if (result.status === 'error') return result.error
+        const loaded = result.data
+        if (
+          !loaded.loadable ||
+          loaded.historicalText === null ||
+          loaded.savedText === null ||
+          loaded.diskVersion !== source.diskVersion ||
+          loaded.path !== path ||
+          loaded.commit !== source.commit
+        )
+          return conflict()
+        const draft: CreationDraft = {
+          ...expectedDraft,
+          text: loaded.historicalText,
+          readme: isProjectReadme(path)
+            ? inspectEditableReadme(loaded.historicalText)
+            : undefined,
+          diskText: loaded.savedText,
+          diskVersion: loaded.diskVersion,
+          editorRevision:
+            (expectedDraft?.editorRevision ?? 0) +
+            (expectedDraft && expectedDraft.diskVersion !== loaded.diskVersion
+              ? 1
+              : 0),
+          conflict: null,
+          saving: false,
+          renaming: false,
+          diskChanged: false,
+          error: null,
+        }
+        set(state => ({ drafts: { ...state.drafts, [path]: draft } }))
+        return null
+      } catch (cause) {
+        return creationTransportError(cause)
+      }
+    },
     handoffRecorded: document => {
       const { text, version } = document
       if (!version) return
