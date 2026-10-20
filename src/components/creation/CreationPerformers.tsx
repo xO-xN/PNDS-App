@@ -13,6 +13,14 @@ import {
 export function CreationPerformers() {
   const { t } = useTranslation()
   const windows = useCreationPerformersStore(state => state.windows)
+  const connections = useCreationPerformersStore(state => state.connections)
+  const connectionStatus = useCreationPerformersStore(
+    state => state.connectionStatus
+  )
+  const external =
+    connections?.clients.filter(
+      client => !windows.some(window => window.label === client.testClient)
+    ) ?? []
   const error = useCreationPerformersStore(state => state.error)
   const workspace = useCreationStore(state => state.workspace)
   const runtimeProject = useCreationStore(state => state.runtimeProject)
@@ -36,7 +44,9 @@ export function CreationPerformers() {
     >
       <header>
         <h3>{t('creation.performers.title')}</h3>
-        <span className="creation-performer-count">{windows.length}</span>
+        <span className="creation-performer-count">
+          {windows.length + external.length}
+        </span>
       </header>
       {windows.length === 0 ? (
         <p className="creation-performer-empty">
@@ -67,6 +77,7 @@ export function CreationPerformers() {
                     {t('creation.performers.client', { number: client.number })}
                   </button>
                   <span>
+                    {t('creation.performers.virtual')} ·{' '}
                     {t(`creation.performers.${client.device}`)} ·{' '}
                     {t(`creation.performers.${client.orientation}`)}
                   </span>
@@ -78,6 +89,17 @@ export function CreationPerformers() {
                 >
                   <i aria-hidden="true" />
                   {t(`creation.performers.page.${client.pageStatus}`)}
+                  {connectionStatus === 'available' && (
+                    <span className="creation-performer-joined">
+                      {t(
+                        connections?.clients.some(
+                          row => row.testClient === client.label
+                        )
+                          ? 'creation.performers.connected'
+                          : 'creation.performers.notJoined'
+                      )}
+                    </span>
+                  )}
                 </span>
                 <button
                   className="creation-icon-button pnds-focus-ring"
@@ -130,6 +152,38 @@ export function CreationPerformers() {
           })}
         </ul>
       )}
+      {external.length > 0 && (
+        <ul
+          className="creation-performer-list"
+          aria-label={t('creation.performers.external')}
+        >
+          {external.map(client => (
+            <li key={client.id} className="creation-performer-row">
+              <Smartphone
+                aria-hidden="true"
+                className="creation-performer-icon"
+              />
+              <div className="creation-performer-info">
+                <strong>{client.label}</strong>
+                <span>
+                  {t(
+                    client.testClient
+                      ? 'creation.performers.otherTest'
+                      : 'creation.performers.external'
+                  )}
+                </span>
+              </div>
+              <span className="creation-performer-status">
+                <i aria-hidden="true" />
+                {t('creation.performers.connected')}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="creation-performer-roster" aria-live="polite">
+        {t(`creation.performers.roster.${connectionStatus}`)}
+      </p>
       <button
         className="creation-performer-add pnds-focus-ring"
         disabled={busy || status !== 'ready' || !ownsRun}

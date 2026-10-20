@@ -6,15 +6,24 @@ function planTitleFit({
   designWidth,
   zeroWidth,
   unitSlope,
+  tracking,
 }: {
   available: number
   em: number
   designWidth: number
   zeroWidth: number
   unitSlope: number
+  tracking: number
 }): { letterSpacing: string; fontSize?: string } {
   if (designWidth <= available) {
-    return { letterSpacing: `${0.37 * em}px` }
+    return { letterSpacing: `${tracking * em}px` }
+  }
+  if (tracking < 0) {
+    const ratio = available / designWidth
+    return {
+      letterSpacing: `${tracking * em * ratio}px`,
+      fontSize: `${em * ratio}px`,
+    }
   }
   if (zeroWidth <= available && unitSlope > 0) {
     return {
@@ -60,7 +69,10 @@ function refineTitleFit({
  * dispose before changing its text, even when React reuses the same h1.
  * Styles are the state: fitting never causes a React render.
  */
-export function attachCoverTitleFit(title: HTMLHeadingElement): () => void {
+export function attachCoverTitleFit(
+  title: HTMLHeadingElement,
+  tracking = 0.37
+): () => void {
   const label = title.textContent ?? ''
   const mountedAt = performance.now()
   const fonts = document.fonts
@@ -100,7 +112,14 @@ export function attachCoverTitleFit(title: HTMLHeadingElement): () => void {
       zone.appendChild(probe)
       try {
         const rect = probe.getBoundingClientRect()
-        return rect.width === 0 && rect.height === 0 ? null : rect
+        if (rect.width === 0 && rect.height === 0) return null
+        // Probe rects include the canvas transform; fitting uses logical pixels.
+        const scale =
+          zone.offsetWidth > 0
+            ? zone.getBoundingClientRect().width / zone.offsetWidth
+            : 1
+        const divisor = scale > 0 ? scale : 1
+        return new DOMRect(0, 0, rect.width / divisor, rect.height / divisor)
       } finally {
         probe.remove()
       }
@@ -121,7 +140,7 @@ export function attachCoverTitleFit(title: HTMLHeadingElement): () => void {
       !(designWidth > 0) ||
       !(zeroWidth > 0) ||
       !(unitSlope > 0) ||
-      zeroWidth > designWidth
+      (tracking >= 0 && zeroWidth > designWidth)
     ) {
       logger.info('Cover title fit: degenerate measurements', {
         title: label,
@@ -139,6 +158,7 @@ export function attachCoverTitleFit(title: HTMLHeadingElement): () => void {
       designWidth,
       zeroWidth,
       unitSlope,
+      tracking,
     })
     const appliedSpacing = () => Number.parseFloat(plan.letterSpacing) || 0
     const apply = (next: typeof plan) => {

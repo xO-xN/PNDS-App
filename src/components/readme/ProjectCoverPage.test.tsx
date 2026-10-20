@@ -11,6 +11,9 @@ vi.mock('@tauri-apps/plugin-opener', () => ({
 const PAGE: ReadmeCoverPage = {
   title: '失语 III',
   composer: '@肖翔',
+  duration: '6′32″',
+  performers: 'A、B、C、D',
+  contact: '@mail.com',
   composerUrl: null,
   githubUrl: null,
   websiteUrl: null,
@@ -39,12 +42,12 @@ describe('ProjectCoverPage', () => {
   it('renders the header, title, and band from the parsed page', () => {
     render(<ProjectCoverPage page={PAGE} cover={null} />)
 
-    expect(screen.getByText('PNDS')).toBeInTheDocument()
-    expect(screen.getByTestId('cover-composer')).toHaveTextContent('@肖翔')
+    expect(screen.getByText('PNDS池谱')).toBeInTheDocument()
+    expect(screen.getByTestId('cover-composer')).toHaveTextContent('肖翔')
     expect(
       screen.getByRole('heading', { name: '失语 III' })
     ).toBeInTheDocument()
-    expect(screen.getByTestId('cover-label')).toHaveTextContent('作品简介：')
+    expect(screen.getByTestId('cover-label')).toHaveTextContent('作品简介')
     // The section body rides through the markdown renderer.
     expect(
       screen.getByText(/失语III 是为三个手机演奏者而作的数字乐谱作品/)
@@ -81,10 +84,10 @@ describe('ProjectCoverPage', () => {
     expect(screen.getByTestId('cover-label')).toBeInTheDocument()
   })
 
-  it('hides the composer pill when the project names none', () => {
+  it('keeps the four metadata positions and shows a dash when a value is missing', () => {
     render(<ProjectCoverPage page={{ ...PAGE, composer: null }} cover={null} />)
 
-    expect(screen.queryByTestId('cover-composer')).not.toBeInTheDocument()
+    expect(screen.getByTestId('cover-composer')).toHaveTextContent('—')
   })
 
   it('ripples the title per glyph without changing its text', () => {
@@ -274,97 +277,82 @@ describe('ProjectCoverPage', () => {
     }
   )
 
-  // The user's hard spec, locked: the band's gap to the window bottom
-  // equals the PNDS/composer row's gap to the window top. Both sides
-  // must resolve the SAME --cover-edge-inset token (defined once on
-  // the root) — this goes red the moment anyone hardcodes one side.
-  it('mirrors the window-edge gaps through one shared inset token', () => {
-    const { container } = render(<ProjectCoverPage page={PAGE} cover={null} />)
-
-    const root = container.firstElementChild as HTMLElement
-    expect(root.className).toContain('[--cover-edge-inset:5cqh]')
-    expect(root.className).toContain('[--cover-band-h:min(26cqh,42cqw)]')
-    // The cq reference frames are split per axis: the root is an
-    // INLINE-SIZE container (`@container`) so cqw tracks the panel's
-    // width, while cqh resolves against the embedding — the projection
-    // stage box (a size container) or, in the app panel, the viewport
-    // fallback, which IS the approved original look. A size-carrying
-    // root re-referenced every cqh to the p-8-inset panel and shrank
-    // the whole vertical rhythm (user report: app 端间距被扩大) — this
-    // pins the per-axis frames the cq layout depends on.
-    expect(root.className).toContain('@container')
-    expect(root.className).not.toContain('[container-type:size]')
-    expect(screen.getByTestId('cover-header').className).toContain(
-      'pt-(--cover-edge-inset)'
-    )
-    expect(screen.getByTestId('cover-band').className).toContain(
-      'bottom-(--cover-edge-inset)'
-    )
-    // The title reserves the band's full footprint above the inset,
-    // so it rides directly on top of the band — in the ORIGINAL
-    // hard constants (no override tokens left on this axis).
-    const titleZone = screen.getByTestId('cover-title')
-      .parentElement as HTMLElement
-    expect(titleZone.className).toContain('calc(var(--cover-edge-inset)')
-    expect(titleZone.className).toContain('pt-[2cqh]')
-    expect(titleZone.className).toContain('_4.5cqh)]')
-  })
-
-  // The projection screen passes a roomier band (user request: 带内容
-  // 上下增长) and a tighter edge inset (user request: title 与上下两部
-  // 分的间距增大 — the one token that widens the centered title's
-  // visible gaps symmetrically); both overrides ride the SAME tokens
-  // inline, over the class defaults — absent, the class defaults (the
-  // README panel's shares) hold.
-  it('overrides the band and inset tokens per embedding, defaulting to the class shares', () => {
-    const { rerender, container } = render(
-      <ProjectCoverPage page={PAGE} cover={null} />
-    )
-    const root = container.firstElementChild as HTMLElement
-    expect(root.style.getPropertyValue('--cover-band-h')).toBe('')
-    expect(root.style.getPropertyValue('--cover-edge-inset')).toBe('')
-
-    rerender(
-      <ProjectCoverPage
-        page={PAGE}
-        cover={null}
-        bandHeight="min(40cqh,42cqw)"
-        edgeInset="2cqh"
-      />
-    )
-    expect(root.style.getPropertyValue('--cover-band-h')).toBe(
-      'min(40cqh,42cqw)'
-    )
-    expect(root.style.getPropertyValue('--cover-edge-inset')).toBe('2cqh')
-    // The class defaults stay as the non-override baseline — the README
-    // panel (no props) renders EXACTLY the stock composition, pinned
-    // by these token defaults equal to the original hard constants.
-    expect(root.className).toContain('[--cover-edge-inset:5cqh]')
-    expect(root.className).toContain('[--cover-band-h:min(26cqh,42cqw)]')
-  })
-
-  it('opens the composer and github links in the system browser', () => {
+  it('keeps metadata and Markdown links as readable, non-interactive audience text', () => {
     render(
       <ProjectCoverPage
         page={{
           ...PAGE,
-          composerUrl: 'https://arthur.example',
+          composerUrl: 'https://author.example',
           githubUrl: 'https://github.com/user/repo',
+          websiteUrl: 'https://work.example',
+          sectionMarkdown:
+            'See [`docs/start.md`](docs/start.md), **the score**, and [notes][ref].\n\n[ref]: https://example.com\n\n[Website](https://work.example) · [Author](https://author.example)',
         }}
         cover={null}
       />
     )
-
+    const body = screen.getByTestId('cover-band-text')
+    expect(body.querySelector('code')).toHaveTextContent('docs/start.md')
+    expect(body.querySelector('strong')).toHaveTextContent('the score')
+    expect(body).toHaveTextContent('notes')
+    expect(body).not.toHaveTextContent('](docs/start.md)')
+    expect(body).not.toHaveTextContent('Website')
+    expect(screen.queryByRole('link')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button')).not.toBeInTheDocument()
     fireEvent.click(screen.getByTestId('cover-composer'))
-    fireEvent.click(screen.getByTestId('cover-github'))
-    expect(openUrl).toHaveBeenCalledWith('https://arthur.example')
-    expect(openUrl).toHaveBeenCalledWith('https://github.com/user/repo')
+    expect(openUrl).not.toHaveBeenCalled()
   })
 
-  it('keeps the pill inert and hides github without url metadata', () => {
-    render(<ProjectCoverPage page={PAGE} cover={null} />)
-
-    expect(screen.getByTestId('cover-composer').tagName).toBe('SPAN')
-    expect(screen.queryByTestId('cover-github')).not.toBeInTheDocument()
+  it('keeps GFM structure while discarding active HTML and embedded images', () => {
+    const { container } = render(
+      <ProjectCoverPage
+        page={{
+          ...PAGE,
+          sectionMarkdown:
+            '| Voice | Part |\n| --- | --- |\n| One | A |\n\n![remote](https://example.com/a.png)\n\n<script>alert(1)</script>',
+        }}
+        cover={null}
+      />
+    )
+    expect(screen.getByRole('cell', { name: 'One' })).toBeInTheDocument()
+    expect(container.querySelector('img')).toBeNull()
+    expect(container.querySelector('script')).toBeNull()
   })
+
+  it('updates the surface, palette and foreground zoom without replacing the title', () => {
+    const { rerender } = render(<ProjectCoverPage page={PAGE} cover={null} />)
+    const title = screen.getByTestId('cover-title')
+    const root = screen.getByTestId('project-cover-page')
+    const wash = root.style.getPropertyValue('--cover-fog-primary')
+    expect(root.dataset.surface).toBe('app')
+    rerender(
+      <ProjectCoverPage
+        page={{
+          ...PAGE,
+          palette: ['#ff0000', '#00ff00', '#0000ff', '#ffffff'],
+        }}
+        cover={null}
+        surface="projection"
+        zoom={110}
+      />
+    )
+    expect(root.dataset.surface).toBe('projection')
+    expect(root.style.getPropertyValue('--cover-zoom')).toBe('1.1')
+    expect(root.style.getPropertyValue('--cover-fog-primary')).not.toBe(wash)
+    expect(screen.getByTestId('cover-title')).toBe(title)
+    expect(screen.getByTestId('cover-content-stage')).toContainElement(title)
+  })
+})
+
+it('renders four two-line metadata fields as inert audience text', () => {
+  render(<ProjectCoverPage page={PAGE} cover={null} />)
+  const meta = screen.getByTestId('cover-metadata')
+  expect(
+    [...meta.querySelectorAll('dt')].map(node => node.textContent)
+  ).toEqual(['Author', 'Duration', 'Performers', 'Contact'])
+  expect(meta.querySelectorAll('dd')).toHaveLength(4)
+  expect(screen.getByTestId('cover-duration')).toHaveTextContent('6′32″')
+  expect(screen.getByTestId('cover-performers')).toHaveTextContent('A、B、C、D')
+  expect(screen.getByTestId('cover-contact')).toHaveTextContent('@mail.com')
+  expect(meta.querySelector('a')).toBeNull()
 })

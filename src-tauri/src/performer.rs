@@ -106,6 +106,27 @@ pub fn set_visibility<R: Runtime>(
     .map_err(|error| error.to_string())
 }
 
+/// Pin only a scoped test shell. Querying after a change keeps the button tied
+/// to actual native state, including when the shell itself reloads.
+pub fn window_pinned<R: Runtime>(
+    app: &AppHandle<R>,
+    label: &str,
+    pinned: Option<bool>,
+) -> Result<bool, String> {
+    if !is_performer_label(label) {
+        return Err("Invalid performer window label".into());
+    }
+    let window = app
+        .get_webview_window(label)
+        .ok_or("Performer window not found")?;
+    if let Some(pinned) = pinned {
+        window
+            .set_always_on_top(pinned)
+            .map_err(|error| error.to_string())?;
+    }
+    window.is_always_on_top().map_err(|error| error.to_string())
+}
+
 /// Destroy only issued test-window labels. `None` also catches orphaned shells
 /// after a main-webview reload; no unrelated window can be a target.
 pub fn close_windows<R: Runtime>(
@@ -200,6 +221,8 @@ mod tests {
         ] {
             assert!(set_visibility(app.handle(), label, false).is_err());
             assert!(set_visibility(app.handle(), label, true).is_err());
+            assert!(window_pinned(app.handle(), label, Some(true)).is_err());
+            assert!(window_pinned(app.handle(), label, None).is_err());
         }
     }
 

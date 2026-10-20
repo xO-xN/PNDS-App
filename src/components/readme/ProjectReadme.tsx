@@ -18,9 +18,9 @@ import { ProjectCoverPage } from './ProjectCoverPage'
 /**
  * v1.5.0 (#125): the project's root README.md in the main area — the
  * optional, author-written document the README routing shows when the
- * project's card is selected. The renderer is the help center's
- * HelpMarkdown (react-markdown + GFM; raw HTML never renders), so a
- * README renders exactly like the corpus. Reused as-is from help — no
+ * project's card is selected. Ordinary documents use the help center's
+ * HelpMarkdown (react-markdown + GFM; raw HTML never renders). Covers
+ * use the dedicated, non-interactive audience renderer. Reused as-is from help — no
  * decoupling was needed: the component is prop-driven (markdown +
  * className) with no help-window coupling.
  *
@@ -138,7 +138,7 @@ export function ProjectReadme({ path }: { path: string }) {
       <div
         data-testid="project-readme"
         onClick={onRootClick}
-        className="absolute inset-0 flex flex-col bg-(--pnds-bg) p-8 animate-[fade-in_0.8s_ease-in]"
+        className="readme-cover-host absolute inset-0 flex flex-col animate-[fade-in_0.8s_ease-in]"
       >
         <ProjectCoverPage page={coverPage} cover={coverImage} />
         <PreflightDock />

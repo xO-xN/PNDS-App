@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { TextBuffer } from '@/lib/text-buffer'
 import {
   useCreationFilesStore,
@@ -18,6 +18,7 @@ export default function CreationCodeEditor({
   text,
   location,
   version,
+  statusContent,
 }: {
   identity: string
   path: string
@@ -25,6 +26,7 @@ export default function CreationCodeEditor({
   text: string
   location: { line: number } | null
   version: string
+  statusContent?: ReactNode
 }) {
   const { t } = useTranslation()
   const [buffer] = useState(() => draft?.editor ?? new TextBuffer(text, path))
@@ -44,6 +46,7 @@ export default function CreationCodeEditor({
         readOnly={!editable}
         resetKey={draft?.editorRevision}
         location={location}
+        statusContent={statusContent}
         selectionAction={{
           label: t('assistant.attachment.add'),
           onSelect: () => {

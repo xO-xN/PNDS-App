@@ -3,6 +3,8 @@ import type { CreationFile } from '@/lib/tauri-bindings'
 export const CREATION_FILE_GROUPS = [
   'runtime',
   'pages',
+  'scripts',
+  'styles',
   'audio',
   'artifacts',
   'modules',
@@ -29,5 +31,9 @@ export function creationFileGroup(
   )
     return 'runtime'
   if (file.category === 'system') return 'support'
+  if (file.category === 'pages') {
+    if (/\.(?:[cm]?js|[jt]sx?)$/i.test(file.path)) return 'scripts'
+    if (/\.css$/i.test(file.path)) return 'styles'
+  }
   return file.category
 }

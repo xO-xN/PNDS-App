@@ -141,6 +141,12 @@ pub fn serve_tcp(
 }
 
 fn serve_tcp_connection(engine: &Engine, mut stream: std::net::TcpStream) {
+    // Accepted sockets can inherit the nonblocking listener mode. Each worker
+    // uses bounded blocking I/O and must wait for a query rather than treating
+    // WouldBlock as a closed connection.
+    if stream.set_nonblocking(false).is_err() {
+        return;
+    }
     stream.set_read_timeout(Some(Duration::from_secs(5))).ok();
     stream.set_write_timeout(Some(Duration::from_secs(5))).ok();
     let mut length = [0u8; 2];
@@ -270,6 +276,48 @@ mod tests {
         assert_eq!(answer.answers.len(), 1);
         stop.store(true, Ordering::SeqCst);
         handle.join().unwrap();
+    }
+
+    #[test]
+    fn nonblocking_accepted_socket_waits_for_the_query_before_replying() {
+        use std::io::{Read, Write};
+        use std::sync::mpsc;
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let mut client = std::net::TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+        client
+            .set_read_timeout(Some(Duration::from_secs(5)))
+            .unwrap();
+        let (stream, _) = listener.accept().unwrap();
+        stream.set_nonblocking(true).unwrap();
+        let (ready, started) = mpsc::channel();
+        let (done, ended) = mpsc::channel();
+        let worker = std::thread::spawn(move || {
+            ready.send(()).unwrap();
+            serve_tcp_connection(&engine(vec![]), stream);
+            let _ = done.send(());
+        });
+        started.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert!(
+            matches!(
+                ended.recv_timeout(Duration::from_millis(30)),
+                Err(mpsc::RecvTimeoutError::Timeout)
+            ),
+            "a query worker must wait for bytes instead of closing on WouldBlock"
+        );
+        let query = query_wire("show.example.org", hickory_proto::rr::RecordType::A, 9);
+        client
+            .write_all(&(query.len() as u16).to_be_bytes())
+            .unwrap();
+        client.write_all(&query).unwrap();
+        let mut length = [0; 2];
+        client.read_exact(&mut length).unwrap();
+        let mut response = vec![0; u16::from_be_bytes(length) as usize];
+        client.read_exact(&mut response).unwrap();
+        assert_eq!(
+            hickory_proto::op::Message::from_vec(&response).unwrap().id,
+            9
+        );
+        worker.join().unwrap();
     }
 
     #[test]

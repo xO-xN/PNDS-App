@@ -228,6 +228,8 @@ describe('buildAppMenu (v1.2.0 issue #13)', () => {
     ).toHaveLength(0)
 
     const fullscreen = item('toggle-fullscreen')
+    expect(submenuItems('Window')).toContain(item('reload-monitor'))
+    expect(submenuItems('View')).not.toContain(item('reload-monitor'))
     expect(fullscreen.accelerator).toBe('Ctrl+Cmd+F')
     expect(submenuItems('Window')).toContain(fullscreen)
   })
@@ -782,6 +784,16 @@ describe('buildAppMenu help menu (v1.3.0, #56)', () => {
         kind: 'reload-monitor',
       }
     )
+  })
+
+  it('routes Window refresh through creation saved-page protection', () => {
+    useCreationStore.setState({ active: true })
+    const refresh = vi
+      .spyOn(useCreationTestStore.getState(), 'refresh')
+      .mockResolvedValueOnce()
+    item('reload-monitor').action?.()
+    expect(refresh).toHaveBeenCalledOnce()
+    expect(item('reload-monitor').accelerator).toBe('Cmd+Shift+R')
   })
 
   it('reserves native Escape only for the expanded main creation monitor without an App confirmation', async () => {

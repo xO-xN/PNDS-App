@@ -69,6 +69,75 @@ fn saved_none_check_runs_real_node_http_and_cleans_without_source_writes() {
 }
 
 #[test]
+fn durable_real_check_receipt_rehashes_assets_installed_packages_and_shared_inputs() {
+    let (dir, mut context) = fixture("");
+    let root = fs::canonicalize(dir.path().join("project")).unwrap();
+    let libraries = dir.path().join("shared");
+    fs::create_dir_all(libraries.join("node")).unwrap();
+    fs::write(libraries.join("node/express.js"), "original").unwrap();
+    fs::write(libraries.join("catalog.json"),r#"{"schemaVersion":1,"libraries":[{"id":"express","version":"5.3.0","kind":"node","entry":"node/express.js","source":{"url":"fixture","integrity":"fixture"},"files":[{"path":"node/express.js","bytes":8,"sha256":"0682c5f2076f099c34cfdd15a9e063849ed437a49677e6fcc5b4198c76575be5"}]}]}"#).unwrap();
+    context.shared_root = Some(libraries.clone());
+    let manifest = root.join("manifest.json");
+    let mut value: serde_json::Value =
+        serde_json::from_slice(&fs::read(&manifest).unwrap()).unwrap();
+    value["schemaVersion"] = serde_json::json!(2);
+    value["sharedLibraries"] = serde_json::json!([{"id":"express","version":"5.3.0"}]);
+    fs::write(manifest, value.to_string()).unwrap();
+    fs::write(
+        root.join("package.json"),
+        r#"{"dependencies":{"express":"5.3.0","local":"^1.0.0"}}"#,
+    )
+    .unwrap();
+    fs::create_dir_all(root.join("node_modules/local")).unwrap();
+    let package = root.join("node_modules/local/package.json");
+    let package_text = r#"{"name":"local","version":"1.2.0"}"#;
+    fs::write(&package, package_text).unwrap();
+    let asset = root.join("animation.bin");
+    fs::write(&asset, b"original asset").unwrap();
+    let report = run_controlled_check(
+        &root,
+        &ControlledCheckOptions::default(),
+        &context,
+        &AtomicBool::new(false),
+        |_| {},
+    );
+    assert_eq!(
+        report.status,
+        ControlledCheckStatus::Passed,
+        "{:?}",
+        report.error
+    );
+    let data = dir.path().join("private-receipts");
+    persist_report_receipt(&data, &report).unwrap();
+    let loaded = load_report_receipt(&data, &root, &report.task_id).unwrap();
+    let evidence = loaded.evidence.unwrap();
+    let fresh = || {
+        check_evidence::source_freshness(
+            &root,
+            Some(&libraries),
+            &evidence,
+            &AtomicBool::new(false),
+        )
+    };
+    assert!(!fresh().stale);
+    fs::write(&asset, b"new animation asset").unwrap();
+    assert!(fresh().stale);
+    fs::write(&asset, b"original asset").unwrap();
+    assert!(!fresh().stale);
+    fs::write(&package, r#"{"name":"local","version":"1.3.0"}"#).unwrap();
+    assert!(fresh().stale);
+    fs::write(&package, package_text).unwrap();
+    assert!(!fresh().stale);
+    fs::write(libraries.join("node/express.js"), "changed").unwrap();
+    let result = fresh();
+    assert!(result.stale && result.complete);
+    assert!(result
+        .reasons
+        .iter()
+        .any(|reason| reason.contains("Shared library")));
+}
+
+#[test]
 fn newly_created_classic_passes_none_check_with_disabled_audio_health() {
     use super::super::creation::{CreationAccess, NewProjectOptions, Protection};
     let (dir, mut context) = fixture("");
@@ -701,4 +770,170 @@ fn journal_finalization_failure_preserves_complete_report_and_primary_outcome() 
             assert_eq!(json["error"], "primary outcome");
         }
     }
+}
+
+#[test]
+fn browser_failure_observation_runs_while_server_is_alive_and_cannot_bypass_cleanup() {
+    let (dir, context) = fixture("");
+    let root = dir.path().join("project");
+    let observed = AtomicBool::new(false);
+    let report = run_controlled_check_observed(
+        &root,
+        &ControlledCheckOptions::default(),
+        &context,
+        &AtomicBool::new(false),
+        |_| {},
+        |manifest, report| {
+            assert!(session::fetch_health(manifest.score_server.performer_port).is_ok());
+            assert_eq!(report.status, ControlledCheckStatus::Passed);
+            observed.store(true, Ordering::Release);
+            Err("ReferenceError: canvas setup failed".into())
+        },
+    );
+    assert!(observed.load(Ordering::Acquire));
+    assert_eq!(report.status, ControlledCheckStatus::Failed);
+    assert!(report.error.unwrap().contains("canvas setup failed"));
+    assert!(report.cleanup.node_confirmed && report.cleanup.temporary_files_removed);
+}
+
+#[test]
+#[ignore = "optional private runes project acceptance; copies input and never edits the source"]
+fn runes_edit_task_adopts_local_p5_creates_pages_repairs_checks_and_undoes() {
+    use super::super::creation::{
+        AssistantMode, AssistantWrite, CreationAccess, CreationContent, Protection,
+    };
+    let source = PathBuf::from(
+        std::env::var("PNDS_ASSISTANT_REPLAY_PROJECT").expect("set PNDS_ASSISTANT_REPLAY_PROJECT"),
+    );
+    let shared = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/shared-libraries");
+    let acceptance = tempfile::tempdir().unwrap();
+    let snapshot = check_evidence::prepare_snapshot(
+        &source,
+        Some(&shared),
+        acceptance.path(),
+        &AtomicBool::new(false),
+        |_, _| {},
+    )
+    .unwrap();
+    let root = &snapshot.project_root;
+    let (_fixture, mut context) = fixture("");
+    context.shared_root = Some(shared.clone());
+    let mut manifest: serde_json::Value =
+        serde_json::from_slice(&fs::read(root.join("manifest.json")).unwrap()).unwrap();
+    let performer = free_port();
+    let mut monitor = free_port();
+    while monitor == performer {
+        monitor = free_port();
+    }
+    manifest["scoreServer"]["performerPort"] = serde_json::json!(performer);
+    manifest["scoreServer"]["monitorPort"] = serde_json::json!(monitor);
+    fs::write(
+        root.join("manifest.json"),
+        serde_json::to_string_pretty(&manifest).unwrap(),
+    )
+    .unwrap();
+    let protection = Protection::default();
+    let data = acceptance.path().join("recovery");
+    let before_server = fs::read_to_string(root.join("server.js")).unwrap();
+    let before_manifest = fs::read_to_string(root.join("manifest.json")).unwrap();
+    let mut access = CreationAccess::default();
+    let identity = access.open(root, &protection).unwrap().project.identity;
+    let task = access
+        .begin_assistant_task(&identity, AssistantMode::Edit, None, &data, &protection)
+        .unwrap();
+    let failed = run_controlled_check(
+        root,
+        &ControlledCheckOptions::default(),
+        &context,
+        &AtomicBool::new(false),
+        |_| {},
+    );
+    assert_eq!(
+        failed.status,
+        ControlledCheckStatus::Failed,
+        "original task must reproduce the missing-page failure"
+    );
+    access
+        .adopt_assistant_library(&identity, &task.id, "p5", &data, &shared, &protection)
+        .unwrap();
+    let performer_text = fs::read_to_string(root.join("public/performer.js")).unwrap();
+    let monitor_text="<!doctype html><html><head><meta charset=\"utf-8\"><title>Runes</title></head><body><script src=\"/p5.js\"></script><script src=\"/Grid.js\"></script><script src=\"/Pattern.js\"></script><script src=\"/monitor.js\"></script></body></html>";
+    for (path, text) in [
+        ("public/performer.html", performer_text.as_str()),
+        ("public/monitor.html", monitor_text),
+    ] {
+        access
+            .write_assistant_file(
+                &identity,
+                &task.id,
+                &AssistantWrite {
+                    path: path.into(),
+                    version: None,
+                    text: Some(text.into()),
+                    edits: None,
+                },
+                &data,
+                &protection,
+            )
+            .unwrap();
+    }
+    let server=before_server.replace("const servers = []","const servers = []\nconst assets = new Map()")
+        .replace("    } else {\n      response.writeHead(404)","    } else if (assets.has(path)) {\n      response.setHeader('Content-Type', 'application/javascript; charset=utf-8')\n      response.end(request.method === 'HEAD' ? undefined : assets.get(path))\n    } else {\n      response.writeHead(404)")
+        .replace("  audio = await createAudio(mode)","  audio = await createAudio(mode)\n  const shared = JSON.parse(process.env.PNDS_SHARED_LIBRARIES ?? '{}')\n  assets.set('/p5.js', await readFile(shared.p5.path))\n  for (const name of ['Grid.js', 'Pattern.js', 'monitor.js']) assets.set('/' + name, await readFile(new URL('./public/' + name, import.meta.url)))");
+    let CreationContent::Text { version, .. } =
+        access.read(&identity, "server.js", &protection).unwrap()
+    else {
+        panic!()
+    };
+    access
+        .write_assistant_file(
+            &identity,
+            &task.id,
+            &AssistantWrite {
+                path: "server.js".into(),
+                version: Some(version),
+                text: Some(server),
+                edits: None,
+            },
+            &data,
+            &protection,
+        )
+        .unwrap();
+    let passed = run_controlled_check(
+        root,
+        &ControlledCheckOptions::default(),
+        &context,
+        &AtomicBool::new(false),
+        |_| {},
+    );
+    assert_eq!(
+        passed.status,
+        ControlledCheckStatus::Passed,
+        "{:?} {:?}",
+        passed.error,
+        passed.output_tail
+    );
+    assert!(passed.cleanup.node_confirmed && passed.cleanup.temporary_files_removed);
+    assert_eq!(
+        access
+            .assistant_tasks(&identity, &data, &protection)
+            .unwrap()[0]
+            .files
+            .len(),
+        4
+    );
+    access.end_assistant_task(&identity, &task.id);
+    access
+        .undo_assistant_task(&identity, &task.id, None, &data, &protection)
+        .unwrap();
+    assert_eq!(
+        fs::read_to_string(root.join("server.js")).unwrap(),
+        before_server
+    );
+    assert_eq!(
+        fs::read_to_string(root.join("manifest.json")).unwrap(),
+        before_manifest
+    );
+    assert!(!root.join("public/monitor.html").exists());
+    assert!(!root.join("public/performer.html").exists());
 }

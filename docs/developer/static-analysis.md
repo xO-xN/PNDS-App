@@ -82,6 +82,47 @@ npm run rust:clippy:fix  # Auto-fix clippy warnings
 npm run rust:test        # Run Rust tests
 ```
 
+### External Rust Build Cache
+
+For storage-constrained development, Cargo 1.97 supports separating intermediate
+build files from final artifacts. Put a machine-local `.cargo/config.toml` in the
+checkout root; this file is gitignored because its absolute volume path belongs
+to one machine:
+
+```toml
+[build]
+build-dir = "/Volumes/<SSD>/PNDS-Development/CargoBuild/{workspace-path-hash}"
+```
+
+Keep `target-dir` unchanged. Compiler dependencies, fingerprints and incremental
+files go to the external build directory; final executables and App bundles stay
+under `src-tauri/target`, preserving the CLI/dnsd staging scripts. The workspace
+path hash keeps isolated fixture workspaces separate from the App cache. Cargo
+configuration is discovered from the command's working directory, so run the
+normal npm commands from this checkout. A fixture invoked elsewhere needs its
+own external build-directory configuration.
+
+Mount the SSD before building and stop builds before ejecting it. Sandboxed
+commands need write access to the configured external cache root. Verify
+`build_directory` and `target_directory` with `cargo metadata`, then run
+`npm run check:all` and both architecture builds before removing old internal
+`deps`, `build`, `incremental` and `.fingerprint` directories. Preserve source,
+Git, runtime inputs and final bundles; back up existing bundles before rebuilding.
+Do not move an active build directory or commit a personal volume path.
+
+For Codex agents, persist the cache directory in a machine-local, gitignored
+`.codex/config.toml` at the trusted checkout root:
+
+```toml
+[sandbox_workspace_write]
+writable_roots = ["/Volumes/<SSD>/PNDS-Development/CargoBuild/<checkout>"]
+```
+
+This adds the cache to the existing `workspace-write` policy without changing
+network access or approval settings. New sessions load the project configuration;
+an existing session may need its permissions reloaded before using the new root.
+Keep the grant limited to the cache directory and keep the SSD mounted.
+
 ### knip (Periodic Cleanup)
 
 Detects unused exports, dependencies, and files. Not in `check:all` - use periodically.

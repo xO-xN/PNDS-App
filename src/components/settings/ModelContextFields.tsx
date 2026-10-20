@@ -25,7 +25,9 @@ export function ModelContextFields({
     Number(value.safetyMargin)
   const target = Number(value.inputTarget)
   const available = value.capacity
-    ? capacity > reserve && (!value.inputTarget || target > 0)
+    ? value.maxOutput &&
+      capacity > reserve &&
+      (!value.inputTarget || target > 0)
       ? Math.min(capacity - reserve, target || Infinity)
       : null
     : value.inputTarget && target > 0
@@ -45,73 +47,138 @@ export function ModelContextFields({
       >
         {t('settings.modelContext.hint')}
       </p>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {(
-          [
-            'capacity',
-            'inputTarget',
-            'maxOutput',
-            'reasoningReserve',
-            'safetyMargin',
-          ] as const
-        ).map(field => (
-          <div key={field} className="flex flex-col gap-1.5">
-            <Label htmlFor={`settings-model-context-${field}`}>
-              {t(`settings.modelContext.${field}`)}
-            </Label>
-            <Input
-              id={`settings-model-context-${field}`}
-              type="number"
-              min={
-                field === 'reasoningReserve' || field === 'safetyMargin' ? 0 : 1
-              }
-              max={16000000}
-              step={1}
-              dir="ltr"
-              value={value[field]}
-              onChange={event =>
-                onChange({ ...value, [field]: event.target.value })
-              }
-            />
-          </div>
-        ))}
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="settings-model-context-tokenizer">
-            {t('settings.modelContext.tokenizer')}
-          </Label>
-          <Select
-            value={value.tokenizer}
-            onValueChange={tokenizer =>
-              onChange({
-                ...value,
-                tokenizer: tokenizer as ContextDraft['tokenizer'],
-              })
-            }
-          >
-            <SelectTrigger
-              id="settings-model-context-tokenizer"
-              className="w-full"
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="unknown">
-                {t('settings.modelContext.unknown')}
-              </SelectItem>
-              <SelectItem value="cl100kBase">
-                cl100k_base (tiktoken-rs 0.7)
-              </SelectItem>
-              <SelectItem value="o200kBase">
-                o200k_base (tiktoken-rs 0.7)
-              </SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="settings-model-context-capacity">
+          {t('settings.modelContext.capacity')}
+        </Label>
+        <Input
+          id="settings-model-context-capacity"
+          type="number"
+          min={1}
+          max={16000000}
+          step={1}
+          dir="ltr"
+          value={value.capacity}
+          aria-describedby="settings-model-context-capacity-hint"
+          onChange={event =>
+            onChange({ ...value, capacity: event.target.value })
+          }
+        />
+        <p
+          id="settings-model-context-capacity-hint"
+          className="text-xs text-muted-foreground"
+        >
+          {t('settings.modelContext.capacityHint')}
+        </p>
       </div>
+      <div className="flex items-center justify-between gap-3">
+        <Label htmlFor="settings-model-context-manual">
+          {t('settings.modelContext.manual')}
+        </Label>
+        <input
+          type="checkbox"
+          role="switch"
+          className="size-4 accent-(--pnds-accent)"
+          id="settings-model-context-manual"
+          checked={value.mode === 'manual'}
+          onChange={event =>
+            onChange({
+              ...value,
+              mode: event.target.checked ? 'manual' : 'auto',
+            })
+          }
+        />
+      </div>
+      <details>
+        <summary className="cursor-pointer text-sm">
+          {t('settings.modelContext.advanced')}
+        </summary>
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {(
+            [
+              'inputTarget',
+              'maxOutput',
+              'reasoningReserve',
+              'safetyMargin',
+            ] as const
+          )
+            .filter(
+              field =>
+                value.mode === 'manual' ||
+                field === 'maxOutput' ||
+                field === 'reasoningReserve'
+            )
+            .map(field => (
+              <div key={field} className="flex flex-col gap-1.5">
+                <Label htmlFor={`settings-model-context-${field}`}>
+                  {t(`settings.modelContext.${field}`)}
+                </Label>
+                <Input
+                  id={`settings-model-context-${field}`}
+                  type="number"
+                  min={
+                    field === 'reasoningReserve' || field === 'safetyMargin'
+                      ? 0
+                      : 1
+                  }
+                  max={16000000}
+                  step={1}
+                  dir="ltr"
+                  value={value[field]}
+                  placeholder={
+                    field === 'maxOutput'
+                      ? t('settings.modelContext.providerDefault')
+                      : undefined
+                  }
+                  onChange={event =>
+                    onChange({ ...value, [field]: event.target.value })
+                  }
+                />
+              </div>
+            ))}
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="settings-model-context-tokenizer">
+              {t('settings.modelContext.tokenizer')}
+            </Label>
+            <Select
+              value={value.tokenizer}
+              onValueChange={tokenizer =>
+                onChange({
+                  ...value,
+                  tokenizer: tokenizer as ContextDraft['tokenizer'],
+                })
+              }
+            >
+              <SelectTrigger
+                id="settings-model-context-tokenizer"
+                className="w-full"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="unknown">
+                  {t('settings.modelContext.unknown')}
+                </SelectItem>
+                <SelectItem value="cl100kBase">
+                  cl100k_base (tiktoken-rs 0.7)
+                </SelectItem>
+                <SelectItem value="o200kBase">
+                  o200k_base (tiktoken-rs 0.7)
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <p className="mt-2 text-xs text-muted-foreground">
+          {t('settings.modelContext.outputHint')}
+        </p>
+      </details>
       <p className="text-xs">
-        {available === null
-          ? t('settings.modelContext.inputUnknown')
-          : t('settings.modelContext.available', { count: available })}
+        {value.mode !== 'manual'
+          ? t('settings.modelContext.automatic')
+          : available === null
+            ? t('settings.modelContext.inputUnknown')
+            : t('settings.modelContext.available', { count: available })}
       </p>
       <p className="text-muted-foreground text-xs">
         {t('settings.modelContext.safety')}

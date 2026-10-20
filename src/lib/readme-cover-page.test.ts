@@ -219,3 +219,22 @@ describe('parseReadmeCoverPage fences', () => {
     expect(page.sectionMarkdown).not.toContain('关于作品')
   })
 })
+
+it('reads optional audience metadata while keeping legacy covers empty', () => {
+  const page = parseOrThrow(
+    CANONICAL.replace(
+      'composer: @肖翔',
+      'composer: @肖翔\nduration: 6′32″\nperformers: A、B、C、D\ncontact: @mail.com'
+    )
+  )
+  expect(page).toMatchObject({
+    duration: '6′32″',
+    performers: 'A、B、C、D',
+    contact: '@mail.com',
+  })
+  expect(parseOrThrow(CANONICAL)).toMatchObject({
+    duration: null,
+    performers: null,
+    contact: null,
+  })
+})

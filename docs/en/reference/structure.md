@@ -69,7 +69,7 @@ Conventions:
 - it travels inside the `.pnds` verbatim (the packing exclusion list never subtracts it) — what the receiving machine sees in the App is exactly this file.
 - optional language variants: `README.<locale>.md` (e.g. `README.zh-CN.md`) — the App auto-selects the variant matching its UI language and falls back to the plain `README.md`;
 - optional cover image `cover.png`: the README panel band's screenshot of the work (probed in order `.png` → `.jpg` → `.jpeg` → `.webp`, language-agnostic, 1:1 recommended); it travels inside the `.pnds` verbatim like README.md, and preflight never checks it;
-- cover-page format: a README may carry a metadata block at the top (`title` / `composer` / `composer_url` / `github_url` / `website_url` / `color_palette`), from which the App renders its first `##` section as the designed cover page (the panel's content ends at the first `---`); a README without the metadata block renders as a plain document — legacy projects are unaffected. See "Writing a Project README" in Help;
+- cover-page format: a README may carry a metadata block at the top (`title` / `composer` / `duration` / `performers` / `contact` / `composer_url` / `github_url` / `website_url` / `color_palette`), from which the App renders its first `##` section as the designed cover page (the panel's content ends at the first `---`); a README without the metadata block renders as a plain document — legacy projects are unaffected. See "Writing a Project README" in Help;
 
 Recommended outline (work title, author, intro, how to perform, optional technical needs):
 
@@ -137,3 +137,11 @@ is not a runtime manifest field and root docs are excluded from `.pnds`.
 Opening an existing project preserves its identity and Git history. A Host
 update never automatically updates a project's original template source.
 See [the creator guide](../template-guide.md) for creation and offline requirements.
+
+New Blank 1.7.0 projects separate `public/monitor.html` / `monitor.js`,
+`public/performer.html` / `performer.js`, and shared `public/style.css`.
+They include a local `public/pnds-preview.mjs` adapter and empty root
+`pnds.preview.json`. The monitor wiring is ready for real parameter callbacks;
+dependencies and artwork are added as needed. Generated `docs/implementation.md`
+explains file responsibilities and save/refresh/restart behavior. These are
+creation defaults, not new requirements for existing score projects.

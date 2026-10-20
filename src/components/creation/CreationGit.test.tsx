@@ -1,3 +1,5 @@
+import { useRef, useState } from 'react'
+import { CreationGit } from './CreationGit'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen, waitFor } from '@/test/test-utils'
 import { commands, type CreationWorkspace } from '@/lib/tauri-bindings'
@@ -7,6 +9,33 @@ import { useSessionStore } from '@/store/session-store'
 import { seedCreationDraft } from '@/test/creation-files'
 import { creationProjectAction } from '@/test/desktop-actions'
 import { CreationView } from './CreationView'
+
+// The advanced status dialog remains independently tested; the workspace now exposes the graph.
+function LegacyGitInspection() {
+  const identity = useCreationStore(state => state.workspace?.project.identity)
+  const [owner, setOwner] = useState<string | null>(null)
+  const trigger = useRef<HTMLButtonElement>(null)
+  return (
+    <>
+      <button
+        data-creation-git=""
+        ref={trigger}
+        onClick={() => setOwner(identity ?? null)}
+      >
+        Git status and differences
+      </button>
+      {identity && owner === identity && (
+        <CreationGit
+          identity={identity}
+          onClose={() => {
+            setOwner(null)
+            trigger.current?.focus()
+          }}
+        />
+      )}
+    </>
+  )
+}
 
 const workspace: CreationWorkspace = {
   project: {
@@ -62,7 +91,7 @@ it('reviews saved-disk Git differences through the project menu while retaining 
     status: 'ok',
     data: { state: 'text', text: '-HEAD text\n+index text', detail: null },
   })
-  render(<CreationView />)
+  render(<LegacyGitInspection />)
   await creationProjectAction('Git status and differences')
   await screen.findByRole('dialog', { name: 'Git status and differences' })
   await screen.findByText('main')
@@ -100,7 +129,7 @@ it('marks disk and external-tool snapshots stale, refreshes Git facts, and inval
       complete = resolve
     })
   )
-  render(<CreationView />)
+  render(<LegacyGitInspection />)
   await creationProjectAction('Git status and differences')
   await screen.findByText('main')
   fireEvent.click(
@@ -146,7 +175,7 @@ it('ignores late status responses when the user opens another project', async ()
       complete = resolve
     })
   )
-  render(<CreationView />)
+  render(<LegacyGitInspection />)
   await creationProjectAction('Git status and differences')
   await screen.findByText('Reading Git status…')
   act(() =>
@@ -180,14 +209,21 @@ it('explains unreadable Git repositories and binary files without disabling the 
       changes: [],
     },
   })
-  render(<CreationView />)
+  render(<LegacyGitInspection />)
   await creationProjectAction('Git status and differences')
   await screen.findByText(
     'Git could not read this repository. Check it in an external tool, then refresh.'
   )
   fireEvent.click(screen.getByRole('button', { name: 'Close' }))
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-  expect(screen.getByRole('button', { name: 'server.js' })).toBeEnabled()
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Git status and differences' })
+    ).toHaveFocus()
+  )
+  expect(useCreationStore.getState().workspace?.project.identity).toBe(
+    'git-score'
+  )
   await creationProjectAction('Git status and differences')
   await screen.findByText('main')
   vi.mocked(commands.readCreationGitDiff).mockResolvedValueOnce({
@@ -211,7 +247,7 @@ it('discards a pending old-project difference after a successful workspace chang
       complete = resolve
     })
   )
-  render(<CreationView />)
+  render(<LegacyGitInspection />)
   await creationProjectAction('Git status and differences')
   await screen.findByText('main')
   fireEvent.click(
@@ -272,14 +308,14 @@ it('previews initial scope and identity before explicitly enabling local version
       warning: null,
     },
   })
-  render(<CreationView />)
+  render(<LegacyGitInspection />)
   await creationProjectAction('Git status and differences')
   fireEvent.click(
     await screen.findByRole('button', {
       name: 'Enable local version recording',
     })
   )
-  await screen.findByRole('textbox', { name: 'Version author name' })
+  await screen.findByRole('textbox', { name: 'Version message' })
   expect(commands.confirmCreationGitRecord).not.toHaveBeenCalled()
   fireEvent.click(screen.getByRole('button', { name: 'Review version' }))
   expect(commands.confirmCreationGitRecord).not.toHaveBeenCalled()
@@ -324,7 +360,7 @@ it('keeps the confirmed record visible until its real commit receipt arrives', a
       complete = resolve
     })
   )
-  render(<CreationView />)
+  render(<LegacyGitInspection />)
   await creationProjectAction('Git status and differences')
   fireEvent.click(
     await screen.findByRole('button', {
@@ -351,4 +387,39 @@ it('keeps the confirmed record visible until its real commit receipt arrives', a
   )
   await screen.findByText('confirmed-real-commit')
   expect(screen.getByRole('button', { name: 'Close' })).toBeEnabled()
+})
+
+it('opens quick version saving in the middle page from the project menu', async () => {
+  vi.mocked(commands.previewCreationGitRecord).mockResolvedValue({
+    status: 'ok',
+    data: {
+      token: 'quick',
+      initial: false,
+      head: report.head,
+      branch: 'main',
+      name: 'Creator',
+      email: 'creator@pnds.local',
+      files: [],
+    },
+  })
+  render(<CreationView />)
+  await creationProjectAction('Save current version')
+  await waitFor(() =>
+    expect(commands.previewCreationGitRecord).toHaveBeenCalledWith('git-score')
+  )
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(screen.getByRole('region', { name: 'Project versions' })).toBeVisible()
+  expect(
+    screen.getByRole('textbox', { name: 'Version name (optional)' })
+  ).toBeVisible()
+})
+
+it('opens the multi-branch version page directly from the project menu', async () => {
+  render(<CreationView />)
+  await creationProjectAction('Open version graph')
+  await waitFor(() =>
+    expect(commands.getCreationGitVersions).toHaveBeenCalledWith('git-score', 0)
+  )
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(screen.getByRole('region', { name: 'Project versions' })).toBeVisible()
 })

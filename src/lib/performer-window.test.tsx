@@ -8,6 +8,8 @@ import { refreshMonitorFromDisk } from './creation-runtime-updates'
 import type { PerformerConfig } from './performer-protocol'
 import { act, render, screen, fireEvent, waitFor } from '@/test/test-utils'
 import { CreationPerformers } from '@/components/creation/CreationPerformers'
+import { MonitorView } from '@/components/shell/MonitorView'
+import { useCreationTestStore } from '@/store/creation-test-store'
 import { stopAndReset } from './open-project'
 import { useCreationStore } from '@/store/creation-store'
 import { useSessionStore } from '@/store/session-store'
@@ -125,6 +127,57 @@ beforeEach(() => {
 })
 
 describe('independent performer windows', () => {
+  it('shows connected external phones separately from native test windows', async () => {
+    await openPerformerWindow('phone', 'portrait')
+    const label = labelAt()
+    useCreationPerformersStore.setState({
+      connectionStatus: 'available',
+      connections: {
+        schemaVersion: 1,
+        clients: [
+          { id: 'physical', label: 'Phone 3', testClient: null },
+          { id: 'test', label: 'Test 1', testClient: label },
+        ],
+      },
+    })
+    render(<CreationPerformers />)
+    expect(screen.getByText('Phone 3')).toBeInTheDocument()
+    expect(screen.getByText('External performers')).toBeInTheDocument()
+    expect(screen.queryByText('Test 1')).not.toBeInTheDocument()
+    expect(screen.getAllByText('Connected')).toHaveLength(2)
+    expect(
+      screen.getByRole('button', { name: 'Focus performer #1' })
+    ).toBeInTheDocument()
+  })
+
+  it('shows and focuses an existing hidden test client from expanded monitor without navigating the score', async () => {
+    await openPerformerWindow('phone', 'portrait')
+    const label = labelAt()
+    act(() => deliver(PERFORMER_READY, { label }))
+    const before = configFor(label)
+    useCreationTestStore.setState({ expanded: true, debugView: 'preview' })
+    render(<MonitorView />)
+    const monitor = screen.getByTitle('Project monitor')
+    const src = monitor.getAttribute('src')
+    fireEvent.click(screen.getByRole('button', { name: 'Performers · 1' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Focus performer #1' }))
+    await waitFor(() =>
+      expect(commands.setCreationPerformerVisibility).toHaveBeenCalledWith(
+        label,
+        true
+      )
+    )
+    await waitFor(() =>
+      expect(
+        vi.mocked(WebviewWindow).mock.results[0]?.value.setFocus
+      ).toHaveBeenCalled()
+    )
+    expect(screen.getByTitle('Project monitor')).toBe(monitor)
+    expect(monitor).toHaveAttribute('src', src)
+    expect(configFor(label).navigation).toBe(before.navigation)
+    expect(commands.stopProject).not.toHaveBeenCalled()
+    useCreationTestStore.setState({ expanded: false })
+  })
   it('does not publish late send/focus errors from a replaced project', async () => {
     await openPerformerWindow('phone', 'portrait')
     const label = labelAt()
@@ -296,7 +349,7 @@ describe('independent performer windows', () => {
     )
     expect(screen.getByRole('status')).toHaveAttribute(
       'title',
-      'Page navigation does not confirm a performer connection. Check the project page or monitor for connection status.'
+      'Page navigation does not confirm a performer connection. Joined clients are reported by supporting projects in the App performer list.'
     )
     const options = {
       label,
@@ -313,7 +366,7 @@ describe('independent performer windows', () => {
       navigation: original.navigation,
       url: original.url,
     })
-    expect(screen.getByText('Tablet · Landscape')).toBeInTheDocument()
+    expect(screen.getByText('Virtual · Tablet · Landscape')).toBeInTheDocument()
     vi.mocked(emitTo).mockClear()
     act(() =>
       deliver('pnds:performer-options', {

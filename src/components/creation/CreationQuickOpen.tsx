@@ -1,5 +1,6 @@
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useEffectEvent, useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { ListFilter } from 'lucide-react'
 import type { CreationFile } from '@/lib/tauri-bindings'
 import {
   Dialog,
@@ -9,7 +10,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { Button } from '@/components/ui/button'
 import { hasOpenOverlay } from '@/hooks/use-command-keyboard'
 import { useCreationStore } from '@/store/creation-store'
 import { useCreationTestStore } from '@/store/creation-test-store'
@@ -18,12 +18,24 @@ import { useCreationTestStore } from '@/store/creation-test-store'
 export function CreationQuickOpen({
   files,
   onOpen,
+  request = 0,
+  hideTrigger = false,
+  disabled = false,
+  returnFocus,
 }: {
   files: CreationFile[]
   onOpen: (path: string) => void
+  request?: number
+  hideTrigger?: boolean
+  disabled?: boolean
+  returnFocus?: () => void
 }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
+  const showRequested = useEffectEvent(() => setOpen(true))
+  useEffect(() => {
+    if (request) showRequested()
+  }, [request])
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState(0)
   const listId = useId()
@@ -41,6 +53,7 @@ export function CreationQuickOpen({
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
       if (
+        !disabled &&
         event.metaKey &&
         !event.ctrlKey &&
         !event.altKey &&
@@ -58,21 +71,25 @@ export function CreationQuickOpen({
     }
     window.addEventListener('keydown', keydown)
     return () => window.removeEventListener('keydown', keydown)
-  }, [])
+  }, [disabled])
   const choose = (path: string) => {
     onOpen(path)
     setOpen(false)
   }
   return (
     <>
-      <Button
-        size="sm"
-        variant="outline"
-        className="mx-3"
+      <button
+        hidden={hideTrigger}
+        disabled={disabled}
+        type="button"
+        className="creation-icon-button creation-quick-open-trigger pnds-focus-ring"
+        aria-label={t('creation.editor.quickOpen')}
+        title={t('creation.editor.quickOpen')}
+        aria-keyshortcuts="Meta+P"
         onClick={() => setOpen(true)}
       >
-        {t('creation.editor.quickOpen')}
-      </Button>
+        <ListFilter aria-hidden="true" />
+      </button>
       <Dialog
         open={open}
         onOpenChange={value => {
@@ -83,7 +100,14 @@ export function CreationQuickOpen({
           }
         }}
       >
-        <DialogContent>
+        <DialogContent
+          onCloseAutoFocus={event => {
+            if (returnFocus) {
+              event.preventDefault()
+              returnFocus()
+            }
+          }}
+        >
           <DialogHeader>
             <DialogTitle>{t('creation.editor.quickOpen')}</DialogTitle>
             <DialogDescription>

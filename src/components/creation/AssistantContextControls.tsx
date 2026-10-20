@@ -1,3 +1,4 @@
+import { useAssistantProjectStore } from '@/store/assistant-project-store'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
@@ -81,11 +82,21 @@ export function AssistantContextControls({
   const organizing = useAssistantStore(state => state.organizing)
   const [reviewOwner, setReviewOwner] = useState<string | null>(null)
   const [roundLimit, setRoundLimit] = useState('8')
-  const selection = selectAssistantContext(messages, config ?? undefined)
+  const project = useAssistantProjectStore(state => state.snapshot)
+  const selection = selectAssistantContext(
+    messages,
+    config ?? undefined,
+    project ?? undefined
+  )
   const limit = Number(roundLimit)
   const validLimit = Number.isSafeInteger(limit) && limit >= 1 && limit <= 200
   const prepared = config
-    ? summaryInput(messages, config, validLimit ? limit : 8)
+    ? summaryInput(
+        messages,
+        config,
+        validLimit ? limit : 8,
+        project ?? undefined
+      )
     : null
   const review = reviewOwner === reviewIdentity
   const [estimate, setEstimate] = useState<{
@@ -128,7 +139,9 @@ export function AssistantContextControls({
     estimate?.input === prepared?.input && estimate?.config === config
       ? estimate
       : null
+  const resourceApproval = useAssistantStore(state => state.resourceApproval)
   const disabled =
+    !!resourceApproval ||
     editing !== null ||
     phase !== 'idle' ||
     historyState !== 'ready' ||

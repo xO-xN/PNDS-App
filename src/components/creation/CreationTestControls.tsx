@@ -17,7 +17,7 @@ import {
 } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import type { AudioMode } from '@/lib/tauri-bindings'
-import { Info, Play, RefreshCw, RotateCcw, Square } from 'lucide-react'
+import { Info, Play, RotateCcw } from 'lucide-react'
 
 export function CreationTestControls({
   placement = 'full',
@@ -178,34 +178,6 @@ export function CreationTestControls({
             )}
             {runLabel}
           </Button>
-          <button
-            className="creation-icon-button pnds-focus-ring"
-            aria-label={t('creation.closeTest')}
-            title={t('creation.closeTest')}
-            disabled={
-              unavailable ||
-              blocked ||
-              status === 'stopping' ||
-              !matches ||
-              status === 'idle'
-            }
-            onClick={() => {
-              void useCreationTestStore.getState().close()
-            }}
-          >
-            <Square aria-hidden="true" />
-          </button>
-          <button
-            className="creation-icon-button pnds-focus-ring"
-            aria-label={t('creation.refreshTestPages')}
-            title={t('creation.refreshTestPages')}
-            disabled={unavailable || busy || !applied}
-            onClick={() => {
-              void useCreationTestStore.getState().refresh()
-            }}
-          >
-            <RefreshCw aria-hidden="true" />
-          </button>
           {placement !== 'bar' && applied?.audioMode === 'internal' && (
             <label className="creation-test-gain">
               <span>{t('creation.testGain')}</span>
@@ -242,11 +214,6 @@ export function CreationTestControls({
       )}
       {placement !== 'bar' && !lanIp && (
         <p className="creation-test-note">{t('creation.testLanMissing')}</p>
-      )}
-      {placement !== 'bar' && error && (
-        <p role="alert" className="creation-test-note">
-          {error}
-        </p>
       )}
       {placement !== 'bar' && !manifest && !loading && (
         <Button

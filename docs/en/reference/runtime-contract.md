@@ -511,6 +511,20 @@ Verify at minimum:
 - monitor resize without iframe reload or Socket.IO reconnect;
 - full startup of official Projects under the fixed bundled Node (`24.18.1`).
 
+### Optional creation-preview Host origin
+
+The main monitor may carry `pndsHostOrigin=<origin>`, the exact current Host
+origin snapshotted at navigation, for a local preview adapter's postMessage
+target. It may be present in performance and creation modes so switching modes
+does not reload the page. It grants no preview authority: the App still checks
+the same project's ready runtime, saved versions and actual loaded-byte digests.
+Unwired projects ignore it and independent browser pages tolerate its absence.
+The adapter negotiates on the `pnds.preview` version-1 channel through
+project-owned parameter callbacks. Public pages,
+scripts and styles should read saved files per request with correct MIME and
+cache policy. A page `_r` cannot update bytes cached at Node startup or a cached
+script response.
+
 ## 14. The projection-surface protocol (?surface=venue and the zoom-ownership handshake)
 
 Since v1.5.0, two protocol legs connect the App's **projection window** and the monitor copy it loads: the URL first-frame parameter `?surface=venue` (host → page, copy identity) and the zoom-ownership handshake (page → host, capability declaration, since #135). The main window (the conductor's operating surface) **never participates** in either — it carries no parameter and the App always owns its zoom. For usage-level branching and declaration examples see the Module Manual's [Projection Surface](../modules/projection-surface.md) — this section is the protocol's normative home.
@@ -632,3 +646,51 @@ version mismatch, timeout, partial support and unconfirmed restoration remain
 visible. Preview does not save, check, refresh, restart or reverse time and prior
 effects. Source changes revoke old authority rather than applying an old baseline
 over new state. A manual refresh/restart is still required to adopt saved code.
+
+## Optional connected performer roster
+
+Creation mode can read an optional `performers` field from the existing
+`GET /__pnds/health` response. Existing health semantics are unchanged; projects
+without it still run and display unknown connection status.
+
+```json
+{
+  "performers": {
+    "schemaVersion": 1,
+    "clients": [
+      {
+        "id": "ephemeral-connection-id",
+        "label": "Performer 3",
+        "testClient": null
+      },
+      {
+        "id": "test-connection-id",
+        "label": "Performer 1",
+        "testClient": "performer-00000000-0000-4000-8000-000000000001"
+      }
+    ]
+  }
+}
+```
+
+List only performers accepted by the work's join policy and still online. Exclude
+monitor/observers. Remove released/disconnected connections promptly; replace old
+connections on reconnect. Do not report only while touch input is active. `id` is
+an ephemeral connection ID and `label` is a readable name. Never include claim
+tokens, credentials, IPs, touch data or arbitrary project state. At most 128 rows
+are accepted; IDs are unique, nonempty and at most 128 UTF-8 bytes, labels nonempty
+and at most 160 bytes. Neither may contain control characters.
+
+Virtual performer page URLs carry `pndsTestClient=<native window UUID label>`.
+Supporting projects pass that marker in their own join payload and echo it as
+`testClient`; ordinary phones/browsers use null or omit it. This is display
+correlation, never identity or authorization, and changes no musical policy.
+Unmatched test markers provide no native window controls. The Host does not infer
+hardware type or use page loads/HTTP request counts as evidence of joining.
+
+One read-only loop polls the ready runtime's loopback performer health endpoint
+about every two seconds. Project identity, audio mode and ports are checked;
+workspace and runtime generation are checked again after I/O. Responses are
+bounded to 64 KiB; an invalid optional roster is ignored. A failed request clears
+stale rows rather than claiming zero clients. Observation creates no players,
+check pages, extra audio services or project processes.

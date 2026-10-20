@@ -36,19 +36,9 @@ export interface PendingAssistantAttachment {
   identity: string
 }
 
-interface ProjectConsent {
-  owner: string
-  service: string
-  input: string
-  snapshot: AssistantProjectSnapshot
-  attachmentIds: string
-}
 interface AssistantProjectState {
   owner: string | null
-  reading: boolean
   snapshot: AssistantProjectSnapshot | null
-  consent: ProjectConsent | null
-  authorization: { owner: string; service: string; paths: string[] } | null
   attachments: PendingAssistantAttachment[]
   attachmentError: boolean
   whole: WholeProjectPlan | null
@@ -69,30 +59,16 @@ interface AssistantProjectState {
   removeAttachment: (id: string) => void
   consumeAttachments: (ids: string[]) => void
   syncWorkspace: (owner: string | null) => void
-  setReading: (reading: boolean) => void
   revoke: () => void
-  cancelConsent: () => void
-  confirmConsent: (
-    owner: string,
-    config: ModelServiceConfig,
-    input: string
-  ) => boolean
-  prepare: (
-    owner: string,
-    config: ModelServiceConfig,
-    input: string
-  ) => Promise<AssistantProjectSnapshot | null | undefined>
+  prepare: (owner: string) => Promise<AssistantProjectSnapshot>
 }
 let revision = 0
 
-/** Transient sending authority, never persisted with local history. */
+/** Request-local saved-project scope; drafts still require explicit selection. */
 export const useAssistantProjectStore = create<AssistantProjectState>(
   (set, get) => ({
     owner: null,
-    reading: false,
     snapshot: null,
-    consent: null,
-    authorization: null,
     attachments: [],
     attachmentError: false,
     whole: null,
@@ -102,33 +78,16 @@ export const useAssistantProjectStore = create<AssistantProjectState>(
       revision++
       set({
         owner,
-        reading: false,
         snapshot: null,
-        consent: null,
-        authorization: null,
         attachments: [],
         attachmentError: false,
         whole: null,
         planning: false,
       })
     },
-    setReading: reading => {
-      revision++
-      set({
-        reading,
-        consent: null,
-        authorization: null,
-        whole: null,
-        planning: false,
-      })
-    },
     revoke: () => {
       revision++
-      set({ consent: null, authorization: null, whole: null, planning: false })
-    },
-    cancelConsent: () => {
-      revision++
-      set({ consent: null })
+      set({ whole: null, planning: false })
     },
     cancelWhole: () => {
       revision++
@@ -141,7 +100,7 @@ export const useAssistantProjectStore = create<AssistantProjectState>(
         if (token !== revision || get().owner !== owner)
           throw new AssistantFlowError('cancelled')
       }
-      set({ reading: true, consent: null, whole: null, planning: true })
+      set({ whole: null, planning: true })
       let plan: WholeProjectPlan | null = null
       try {
         const inventory = await commands.assistantProjectInventory(owner)
@@ -223,7 +182,6 @@ export const useAssistantProjectStore = create<AssistantProjectState>(
         plan.error ||
         !plan.consumer ||
         get().planning ||
-        !get().reading ||
         plan.owner !== owner ||
         plan.service !== modelConfigurationKey(config) ||
         plan.originalInput !== input ||
@@ -256,13 +214,6 @@ export const useAssistantProjectStore = create<AssistantProjectState>(
         set({
           planning: false,
           whole: { ...plan, approved: true },
-          authorization: {
-            owner,
-            service: plan.service,
-            paths: plan.snapshot.files
-              .filter(file => !file.reason)
-              .map(file => file.path),
-          },
         })
         return true
       } catch {
@@ -273,34 +224,6 @@ export const useAssistantProjectStore = create<AssistantProjectState>(
           })
         return false
       }
-    },
-    confirmConsent: (owner, config, input) => {
-      const consent = get().consent
-      if (
-        !consent ||
-        !get().reading ||
-        consent.owner !== owner ||
-        consent.service !== modelConfigurationKey(config) ||
-        consent.input !== input ||
-        consent.attachmentIds !==
-          get()
-            .attachments.map(item => item.snapshot.id)
-            .join(',')
-      ) {
-        set({ consent: null })
-        return false
-      }
-      set({
-        authorization: {
-          owner,
-          service: consent.service,
-          paths: consent.snapshot.files
-            .filter(file => !file.reason)
-            .map(file => file.path),
-        },
-        consent: null,
-      })
-      return true
     },
     attachSelection: async selection => {
       const { identity, path, buffer, version, source } = selection
@@ -348,7 +271,6 @@ export const useAssistantProjectStore = create<AssistantProjectState>(
         const id = crypto.randomUUID()
         revision++
         set(current => ({
-          consent: null,
           whole: null,
           planning: false,
           attachmentError: false,
@@ -390,7 +312,6 @@ export const useAssistantProjectStore = create<AssistantProjectState>(
     removeAttachment: id => {
       revision++
       set(state => ({
-        consent: null,
         whole: null,
         planning: false,
         attachments: state.attachments.filter(item => item.snapshot.id !== id),
@@ -403,15 +324,10 @@ export const useAssistantProjectStore = create<AssistantProjectState>(
           item => !ids.includes(item.snapshot.id)
         ),
       })),
-    prepare: async (owner, config, input) => {
-      if (!get().reading) {
-        if (get().attachments.length)
-          throw new AssistantFlowError('projectReadingDisabled')
-        return undefined
-      }
+    prepare: async owner => {
       const token = ++revision
       const result = await commands.assistantProjectInventory(owner)
-      if (token !== revision || get().owner !== owner || !get().reading)
+      if (token !== revision || get().owner !== owner)
         throw new AssistantFlowError('cancelled')
       if (result.status === 'error')
         throw new AssistantFlowError('projectUnavailable')
@@ -425,31 +341,7 @@ export const useAssistantProjectStore = create<AssistantProjectState>(
         )
           throw new AssistantFlowError('attachmentExcluded')
       }
-      const service = modelConfigurationKey(config)
-      const authorization = get().authorization
       set({ snapshot })
-      if (
-        !authorization ||
-        authorization.owner !== owner ||
-        authorization.service !== service ||
-        snapshot.files.some(
-          file => !file.reason && !authorization.paths.includes(file.path)
-        )
-      ) {
-        set({
-          authorization: null,
-          consent: {
-            owner,
-            service,
-            input,
-            snapshot,
-            attachmentIds: get()
-              .attachments.map(item => item.snapshot.id)
-              .join(','),
-          },
-        })
-        return null
-      }
       return snapshot
     },
   })

@@ -22,13 +22,19 @@ pub enum AssistantHistoryRequestError {
     Authentication,
     Network,
     Timeout,
+    RequestDeadline,
     Protocol,
+    RequestRejected,
+    OutputTruncated,
+    ResponseInterrupted,
+    ResponseTooLarge,
     ToolsUnsupported,
     RateLimited,
     ServiceUnavailable,
     Cancelled,
     BudgetExceeded,
     ContextTokensExceeded,
+    ContextWindowExceeded,
     ContextBytesExceeded,
     ContextMessagesExceeded,
     ToolCallsExceeded,
@@ -162,7 +168,13 @@ pub struct AssistantHistoryMessage {
     pub id: String,
     pub role: AssistantHistoryRole,
     pub text: String,
+    /// Private provider protocol data, excluded from rendering and summaries.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_content: Option<String>,
     pub status: AssistantHistoryStatus,
+    /// Display-only tool-turn commentary, never execution authority or private reasoning.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub activity: Option<Vec<String>>,
     pub sources: Vec<AssistantHistorySource>,
     pub scope: AssistantHistoryScope,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -338,13 +350,13 @@ pub(super) fn validate_messages(
         }
         if let Some(usage) = &message.usage {
             if usage.document_metrics.as_ref().is_some_and(|metrics| {
-                metrics.returned_characters > 24000
-                    || metrics.reused_characters > 24000
-                    || metrics.result_characters > 24000
+                metrics.returned_characters > 16 * 1024 * 1024
+                    || metrics.reused_characters > 256 * 65536
+                    || metrics.result_characters > 16 * 1024 * 1024
             }) {
                 return Err(AssistantHistoryError::InvalidFormat);
             }
-            if usage.calls.len() > 12
+            if usage.calls.len() > 128
                 || (usage.complete
                     && usage.calls.iter().any(|call| {
                         call.as_ref().is_none_or(|call| {
@@ -374,17 +386,34 @@ pub(super) fn validate_messages(
             return Err(AssistantHistoryError::InvalidFormat);
         }
         bounded(&message.text, 64 * 1024, true)?;
+        if let Some(reasoning) = &message.reasoning_content {
+            if message.role != AssistantHistoryRole::Assistant || message.context_marker.is_some() {
+                return Err(AssistantHistoryError::InvalidFormat);
+            }
+            bounded(reasoning, crate::model::MAX_REASONING_BYTES, true)?;
+        }
+        if let Some(activity) = &message.activity {
+            if message.role != AssistantHistoryRole::Assistant || activity.len() > 128 {
+                return Err(AssistantHistoryError::InvalidFormat);
+            }
+            if activity.iter().map(String::len).sum::<usize>() > 64 * 1024 {
+                return Err(AssistantHistoryError::TooLarge);
+            }
+            for entry in activity {
+                bounded(entry, 64 * 1024, true)?;
+            }
+        }
         if let Some(version) = &message.app_version {
             bounded(version, 64, false)?;
         }
-        if message.sources.len() > 64 {
+        if message.sources.len() > 256 {
             return Err(AssistantHistoryError::TooLarge);
         }
         for source in &message.sources {
             if let Some(page) = &source.project {
                 relative_path(&page.path)?;
                 bounded(&page.version, 128, false)?;
-                bounded(&page.text, 8000, true)?;
+                bounded(&page.text, 256 * 1024, true)?;
                 if message.scope != AssistantHistoryScope::Project
                     || page.offset > page.end_offset
                     || page.end_offset > page.total_characters
@@ -445,10 +474,10 @@ pub(super) fn validate_messages(
             }
             relative_path(&proposal.path)?;
             bounded(&proposal.source_version, 512, false)?;
-            bounded(&proposal.text, 64 * 1024, true)?;
+            bounded(&proposal.text, 1024 * 1024, true)?;
             if let Some(diff) = &proposal.applied_diff {
-                bounded(&diff.before, 64 * 1024, true)?;
-                bounded(&diff.after, 64 * 1024, true)?;
+                bounded(&diff.before, 1024 * 1024, true)?;
+                bounded(&diff.after, 1024 * 1024, true)?;
             }
         }
     }

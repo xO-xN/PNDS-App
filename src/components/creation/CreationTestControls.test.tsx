@@ -15,7 +15,6 @@ import { useCreationTestStore } from '@/store/creation-test-store'
 import { useSessionStore } from '@/store/session-store'
 import { CreationTestControls } from './CreationTestControls'
 import { CreationConsole } from './CreationConsole'
-import { useProjectStore } from '@/store/project-store'
 
 const manifest: Manifest = {
   schemaVersion: 1,
@@ -161,23 +160,19 @@ it('inherits the actual external target on adoption and only offers saved suppor
   expect(commands.startCreationProject).not.toHaveBeenCalled()
 })
 
-it('keeps the workspace and project selection when closing a test', async () => {
-  useProjectStore.setState({
-    currentProject: { path: '/draft', manifest },
-    preflightStatus: 'ready',
-  })
+it('keeps restart at the leading edge without a separate stop action', () => {
   render(<CreationTestControls />)
-  fireEvent.click(screen.getByRole('button', { name: 'Close test' }))
-  await waitFor(() =>
-    expect(useSessionStore.getState().sessionStatus).toBe('idle')
-  )
-  expect(useProjectStore.getState().currentProject?.path).toBe('/draft')
+  expect(
+    screen.queryByRole('button', { name: 'Close test' })
+  ).not.toBeInTheDocument()
+  expect(screen.getAllByRole('button')[0]).toHaveAccessibleName('Restart test')
+  expect(commands.stopProject).not.toHaveBeenCalled()
   expect(useCreationStore.getState().workspace?.project.identity).toBe(
     'controls'
   )
 })
 
-it('shows asynchronous health startup failure in the console and leaves Retry available', async () => {
+it('retains error details and Retry without automatically expanding the console', async () => {
   render(
     <>
       <CreationTestControls />
@@ -194,9 +189,11 @@ it('shows asynchronous health startup failure in the console and leaves Retry av
       outputTail: ['[node] health unavailable'],
     })
   )
+  expect(useCreationTestStore.getState().tab).toBe('file')
+  act(() => useCreationTestStore.getState().setTab('console'))
   expect(
     await screen.findByText(/Runtime: Startup health timeout/)
-  ).toBeInTheDocument()
+  ).toBeVisible()
   expect(screen.getByRole('button', { name: 'Retry test' })).toBeEnabled()
   expect(commands.startCreationProject).not.toHaveBeenCalled()
 })

@@ -4,6 +4,7 @@ import { useCreationStore } from '@/store/creation-store'
 import { useCreationTestStore } from '@/store/creation-test-store'
 import { useSessionStore } from '@/store/session-store'
 import { commands } from '@/lib/tauri-bindings'
+import { CreationDebugPanel } from '@/components/creation/CreationDebugPanel'
 import { MonitorView } from './MonitorView'
 
 beforeEach(() => {
@@ -47,7 +48,12 @@ beforeEach(() => {
 })
 afterEach(() => vi.restoreAllMocks())
 it('renders a desktop viewport in the small preview and uses the actual available area when expanded', () => {
-  render(<MonitorView />)
+  render(
+    <>
+      <MonitorView />
+      <CreationDebugPanel hidden={false} />
+    </>
+  )
   const frame = screen.getByTitle('Project monitor')
   const src = frame.getAttribute('src')
   expect(screen.getByTestId('monitor-scale-frame')).toHaveStyle({

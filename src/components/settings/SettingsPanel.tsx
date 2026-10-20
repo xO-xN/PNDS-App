@@ -41,6 +41,7 @@ import { AudioSection } from './AudioSection'
 import { DnsSection } from './DnsSection'
 import { HttpsSection } from './HttpsSection'
 import { NodeSection } from './NodeSection'
+import { GitIdentitySection } from './GitIdentitySection'
 import { ModelServiceSection } from './ModelServiceSection'
 
 /** Categorized r6 settings reuse existing sections, retaining visited operation state. */
@@ -121,6 +122,7 @@ export function SettingsPanel() {
               [
                 'general',
                 'modelService',
+                'git',
                 'audio',
                 'node',
                 'https',
@@ -220,6 +222,7 @@ export function SettingsPanel() {
             {(
               [
                 ['modelService', ModelServiceSection],
+                ['git', GitIdentitySection],
                 ['audio', AudioSection],
                 ['node', NodeSection],
                 ['https', HttpsSection],

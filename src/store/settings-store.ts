@@ -13,6 +13,7 @@ import type { ColorTheme } from '@/lib/color-theme'
 export type SettingsSection =
   | 'general'
   | 'modelService'
+  | 'git'
   | 'audio'
   | 'node'
   | 'https'

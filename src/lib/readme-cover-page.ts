@@ -26,9 +26,9 @@
  * <boilerplate for GitHub readers; the panel stops at the --- >
  * ```
  *
- * The panel renders everything the template owns (the four-dot mark,
- * the PNDS wordmark, the divider, the composer pill, the huge title,
- * the cover band) and takes the creator's data from the metadata lines
+ * The panel renders everything the template owns (the palette mark,
+ * the PNDS wordmark, right-side color island, lower-left title,
+ * two-line metadata and cover/introduction) and takes the creator's data from the metadata lines
  * plus the FIRST `##` section, which ends at a `---` thematic break or
  * the next heading. A README without the metadata block is not this
  * format — `null` — and the panel falls back to rendering it as a
@@ -42,16 +42,16 @@
 export interface ReadmeCoverPage {
   /** Metadata `title:`, falling back to the H1. */
   title: string
-  /** Metadata `composer:` verbatim (the pill text); null hides the pill. */
+  /** Metadata `composer:` verbatim; null omits the author line. */
   composer: string | null
-  /** Metadata `composer_url:` — when an http(s) URL, the pill becomes a
-   * button opening it in the system browser; null keeps it inert. */
+  /** Optional audience metadata; absent values never become demo data. */
+  duration: string | null
+  performers: string | null
+  contact: string | null
+  /** URL metadata remains parsed/editable for compatibility; audience covers
+   * display no external link controls. */
   composerUrl: string | null
-  /** Metadata `github_url:` — when an http(s) URL, a `github` button
-   * joins the header; null hides it. */
   githubUrl: string | null
-  /** Metadata `website_url:` — when an http(s) URL, a `website` button
-   * joins the header beside github; null hides it. */
   websiteUrl: string | null
   /** Four sanitized hex colors for the diamond mark, in panel order
    * (left, top, right, bottom). */
@@ -71,6 +71,9 @@ export const DEFAULT_COVER_PALETTE: readonly [string, string, string, string] =
 type MetadataKey =
   | 'title'
   | 'composer'
+  | 'duration'
+  | 'performers'
+  | 'contact'
   | 'composerUrl'
   | 'githubUrl'
   | 'websiteUrl'
@@ -79,6 +82,9 @@ type MetadataKey =
 const METADATA_KEYS: Record<string, MetadataKey> = {
   title: 'title',
   composer: 'composer',
+  duration: 'duration',
+  performers: 'performers',
+  contact: 'contact',
   composer_url: 'composerUrl',
   github_url: 'githubUrl',
   website_url: 'websiteUrl',
@@ -186,6 +192,9 @@ export function parseReadmeCoverPage(markdown: string): ReadmeCoverPage | null {
   return {
     title,
     composer: (metadata.composer ?? '').trim() || null,
+    duration: (metadata.duration ?? '').trim() || null,
+    performers: (metadata.performers ?? '').trim() || null,
+    contact: (metadata.contact ?? '').trim() || null,
     composerUrl: sanitizeUrl(metadata.composerUrl),
     githubUrl: sanitizeUrl(metadata.githubUrl),
     websiteUrl: sanitizeUrl(metadata.websiteUrl),

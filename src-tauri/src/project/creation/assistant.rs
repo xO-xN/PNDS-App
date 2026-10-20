@@ -2,7 +2,7 @@
 //! target obey the same exclusion policy, including internal symlink aliases.
 use super::*;
 
-const FILE_BYTES: u64 = 64 * 1024;
+const FILE_BYTES: u64 = 1024 * 1024;
 const INVENTORY_BYTES: u64 = 2 * 1024 * 1024;
 const READABLE_FILES: usize = 256;
 
@@ -17,7 +17,8 @@ struct InventoryBudget {
 #[serde(rename_all = "camelCase")]
 pub struct AssistantProjectFile {
     pub path: String,
-    pub bytes: u32,
+    /// Unknown for excluded/unreadable entries; zero is a measured empty file.
+    pub bytes: Option<u32>,
     pub version: Option<String>,
     pub reason: Option<String>,
 }
@@ -206,7 +207,7 @@ impl OpenProject {
                 .ok_or_else(|| CreationError::new(CreationErrorCode::InvalidUtf8, "fileName"))?;
             let mut entry = AssistantProjectFile {
                 path: path.into(),
-                bytes: 0,
+                bytes: None,
                 version: None,
                 reason: None,
             };
@@ -248,7 +249,7 @@ impl OpenProject {
                     continue;
                 }
                 Ok(Some(text)) => {
-                    entry.bytes = text.len() as u32;
+                    entry.bytes = Some(text.len() as u32);
                     if budget.readable >= READABLE_FILES
                         || budget.bytes + text.len() as u64 > INVENTORY_BYTES
                     {
@@ -319,7 +320,7 @@ impl CreationAccess {
                     protection,
                 )?);
             }
-            if ["js", "ts", "jsx", "tsx", "html", "scd"]
+            if ["js", "mjs", "cjs", "ts", "jsx", "tsx", "html", "css", "scd"]
                 .iter()
                 .any(|extension| path.ends_with(&format!(".{extension}")))
             {
@@ -361,8 +362,28 @@ impl CreationAccess {
             &mut Vec::new(),
         )?;
         files.sort_by(|a, b| a.path.cmp(&b.path));
-        let fingerprint =
-            file_version(&serde_json::to_vec(&files).expect("serializable inventory"));
+        // Keep the existing identity encoding for durable checkpoints. Unknown
+        // sizes used to have a zero sentinel; only the public evidence changes
+        // to null, without invalidating unchanged saved project scopes.
+        #[derive(Serialize)]
+        struct IdentityEntry<'a> {
+            path: &'a str,
+            bytes: u32,
+            version: Option<&'a str>,
+            reason: Option<&'a str>,
+        }
+        let identity_entries: Vec<_> = files
+            .iter()
+            .map(|file| IdentityEntry {
+                path: &file.path,
+                bytes: file.bytes.unwrap_or(0),
+                version: file.version.as_deref(),
+                reason: file.reason.as_deref(),
+            })
+            .collect();
+        let fingerprint = file_version(
+            &serde_json::to_vec(&identity_entries).expect("serializable inventory identity"),
+        );
         Ok(AssistantProjectSnapshot { files, fingerprint })
     }
 
@@ -379,7 +400,7 @@ impl CreationAccess {
             page_length: length,
         } = read;
         let (offset, length) = (*offset, *length);
-        if !(64..=2000).contains(&length) {
+        if !(64..=65536).contains(&length) {
             return Err(CreationError::new(
                 CreationErrorCode::TooLarge,
                 "pageLength",
@@ -489,7 +510,7 @@ impl CreationAccess {
                 }
                 Err(error) => result.skipped.push(AssistantProjectFile {
                     path: path.clone(),
-                    bytes: 0,
+                    bytes: None,
                     version: None,
                     reason: Some(format!("{:?}", error.code)),
                 }),

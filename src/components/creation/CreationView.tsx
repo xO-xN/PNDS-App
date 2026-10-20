@@ -1,4 +1,8 @@
-import { CreationHandoffBaselines } from './CreationHandoffBaselines'
+import { CreationGitFiles } from './CreationGitFiles'
+import { CreationFileTree } from './CreationFileTree'
+import { CreationResources } from './CreationResources'
+import { CreationGitLocation } from './CreationGitLocation'
+import { CreationHandoffDocument } from './CreationHandoffDocument'
 import {
   useEffect,
   useLayoutEffect,
@@ -10,19 +14,9 @@ import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import {
   FolderOpen,
-  Folder,
-  ChevronDown,
-  BookOpen,
-  Search,
-  ChevronRight,
-  FileText,
-  Settings2,
-  FileCode,
-  Image,
-  Volume2,
   Package,
-  Stethoscope,
-  FlaskConical,
+  PanelRightClose,
+  PanelRightOpen,
   X,
 } from 'lucide-react'
 import {
@@ -43,7 +37,6 @@ import {
 import { registerCreationParticipant } from '@/lib/creation-lifecycle'
 
 import { useSessionStore } from '@/store/session-store'
-import { refreshMonitorFromDisk } from '@/lib/creation-runtime-updates'
 import { syncNativeWindowControls } from '@/lib/native-window-controls'
 import { useWindowStore } from '@/store/window-store'
 import { TrafficLights } from '@/components/shell/TrafficLights'
@@ -53,75 +46,56 @@ import { CreationAssistant } from './CreationAssistant'
 import { useCreationReadingStore } from '@/store/creation-reading-store'
 import { useAssistantLifecycle } from '@/hooks/use-assistant-lifecycle'
 import type { AssistantMessage } from '@/lib/assistant-types'
-import { CreationQuickOpen } from './CreationQuickOpen'
 import { CreationProjectPicker } from './CreationProjectPicker'
 import { CreationNewProject } from './CreationNewProject'
-import { CreationErrorNotice } from './CreationErrorNotice'
+import { CreationErrorToast } from './CreationErrorToast'
 import { CreationConsole } from './CreationConsole'
 import { useCreationTestStore } from '@/store/creation-test-store'
-import { resolveCreationReadme } from '@/lib/creation-readme'
 import { CreationHandoff } from './CreationHandoff'
 import { CreationBundle } from './CreationBundle'
-import { CreationModules } from './CreationModules'
-import { CreationLibraries } from './CreationLibraries'
-import { CreationGit } from './CreationGit'
-import { CreationDoctor } from './CreationDoctor'
-import { CreationControlledCheck } from './CreationControlledCheck'
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-} from '@/components/ui/dropdown-menu'
+import { CreationGitPage } from './CreationGitPage'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import {
-  CREATION_FILE_GROUPS,
-  creationFileGroup,
-} from '@/lib/creation-file-navigation'
-import {
   creationHandoffParticipant,
-  useCreationHandoffStore,
   HANDOFF_PATH,
 } from '@/store/creation-handoff-store'
 
 function ReadingWorkspace({
   workspace,
-  chooseProject,
-  createProject,
   menuTarget,
   menuBlocked,
   actionsTarget,
   inspectionBlocked,
+  previewVisible,
+  onPreviewToggle,
   renderAssistantCards,
 }: {
   workspace: CreationWorkspace
-  chooseProject: () => void
-  createProject: () => void
   menuTarget: HTMLDivElement | null
   menuBlocked: boolean
   actionsTarget: HTMLDivElement | null
   inspectionBlocked: boolean
+  previewVisible: boolean
+  onPreviewToggle?: () => void
   renderAssistantCards?: (message: AssistantMessage) => ReactNode
 }) {
-  const { t, i18n } = useTranslation()
-  const [search, setSearch] = useState('')
-  const menuAction = useRef<(() => void) | null>(null)
+  const { t } = useTranslation()
+  const readingTrigger = useRef<HTMLButtonElement>(null)
   const [bundleOpen, setBundleOpen] = useState(false)
-  const [doctorOpen, setDoctorOpen] = useState(false)
-  const [checkOpen, setCheckOpen] = useState(false)
-  const [gitOpen, setGitOpen] = useState(false)
-  const [closedGroups, setClosedGroups] = useState<string[]>([
-    'artifacts',
-    'modules',
-    'assets',
-    'support',
-  ])
+  const [gitBusy, setGitBusy] = useState(false)
+  const gitVisited = useCreationReadingStore(state => state.gitVisited)
   const [error, setError] = useState<CreationError | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const opening = useCreationStore(state => state.opening)
-  const selected = useCreationFilesStore(state => state.activePath)
+  const activePath = useCreationFilesStore(state => state.activePath)
   const requestedReadingView = useCreationReadingStore(state => state.view)
+  const selected =
+    requestedReadingView === 'handoff' ? HANDOFF_PATH : activePath
+  // Existing explicit document links enter the ordinary file surface too.
+  useEffect(() => {
+    if (requestedReadingView === 'handoff')
+      useCreationFilesStore.getState().setActivePath(HANDOFF_PATH)
+  }, [requestedReadingView])
   const readingExtension = useCreationReadingStore(state => state.extension)
   // Identity-stable dirty set: the tree re-renders when dirty membership
   // changes, not on every editor keystroke.
@@ -129,10 +103,6 @@ function ReadingWorkspace({
     useCreationFilesStore(selectDirtyPathKey).split('\n').filter(Boolean)
   )
   const project = workspace.project
-  const pendingHandoff = useCreationHandoffStore(state => state.pending)
-  const manifestEntry = useCreationTestStore(
-    state => state.manifest?.scoreServer.entry
-  )
   const tab = useCreationTestStore(state => state.tab)
   const manifestRevision = useCreationFilesStore(
     state => state.fileRevisions['manifest.json'] ?? 0
@@ -144,18 +114,10 @@ function ReadingWorkspace({
     useCreationFilesStore(selectDiskConflictPathKey).split('\n').filter(Boolean)
   )
   const pending = useCreationFilesStore(state => state.pending)
+  const testError = useCreationTestStore(
+    state => state.error ?? state.runtimeError
+  )
   const watchError = useCreationFilesStore(state => state.error)
-  const runtimePath = useCreationStore(state =>
-    state.runtimeProject?.root === project.root
-      ? state.runtimeProject.path
-      : null
-  )
-  const running = useSessionStore(
-    state =>
-      state.sessionStatus === 'ready' &&
-      (state.sessionProjectPath === project.root ||
-        (!!runtimePath && state.sessionProjectPath === runtimePath))
-  )
   useEffect(() => {
     let live = true
     let timer: ReturnType<typeof setTimeout> | undefined
@@ -184,26 +146,36 @@ function ReadingWorkspace({
         size: 0,
       })),
   ]
-  const visible = files.filter(file =>
-    file.path.toLocaleLowerCase().includes(search.toLocaleLowerCase())
-  )
-  const file = files.find(file => file.path === selected)
-  const readmePath = resolveCreationReadme(
-    files.map(file => file.path),
-    i18n.resolvedLanguage ?? 'en'
-  )
-  const pinnedPaths = ['manifest.json', readmePath].filter(
-    (path): path is string =>
-      path !== null && files.some(file => file.path === path)
-  )
+  const file =
+    files.find(file => file.path === selected) ??
+    (selected === HANDOFF_PATH
+      ? {
+          path: HANDOFF_PATH,
+          kind: 'text' as const,
+          category: 'system' as const,
+          size: 0,
+        }
+      : undefined)
   const chooseFile = (path: string) => {
+    if (gitBusy) return
     useCreationFilesStore.getState().setActivePath(path)
     useCreationTestStore.getState().setTab('file')
   }
   const editable = project.source === 'folder'
-  const readingView = editable ? requestedReadingView : 'file'
+  const readingView =
+    editable && requestedReadingView !== 'handoff'
+      ? requestedReadingView
+      : 'file'
   const owns = () =>
     useCreationStore.getState().workspace?.project.identity === project.identity
+  const dragFile = async (path: string) => {
+    try {
+      const result = await commands.dragCreationFile(project.identity, path)
+      if (owns() && result.status === 'error') setError(result.error)
+    } catch (error) {
+      if (owns()) setError(creationTransportError(error))
+    }
+  }
   const finder = async () => {
     try {
       const result = await commands.revealCreationPath(project.identity, null)
@@ -221,128 +193,37 @@ function ReadingWorkspace({
     <>
       {menuTarget &&
         createPortal(
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                data-tauri-drag-region="false"
-                className="creation-titlebar-trigger pnds-focus-ring"
-                aria-label={t('desktop.projectMenu')}
-                title={project.root}
-                disabled={opening || menuBlocked}
-              >
-                <Folder aria-hidden="true" />
-                <span className="creation-titlebar-name">{project.name}</span>
-                <ChevronDown aria-hidden="true" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="start"
-              onCloseAutoFocus={event => {
-                const action = menuAction.current
-                menuAction.current = null
-                if (action) {
-                  event.preventDefault()
-                  if (owns()) action()
-                }
-              }}
-            >
-              <DropdownMenuItem
-                onSelect={() => {
-                  menuAction.current = chooseProject
-                }}
-              >
-                {t('creation.switchProject')}
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={() => {
-                  menuAction.current = createProject
-                }}
-              >
-                {t('creation.newProject.open')}
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => void finder()}>
-                {t('creation.openFinder')}
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                disabled={refreshing}
-                onSelect={() => void refresh()}
-              >
-                {t('creation.refreshFiles')}
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={() => {
-                  menuAction.current = () => setGitOpen(true)
-                }}
-              >
-                {t('creation.git.action')}
-              </DropdownMenuItem>
-              {editable && (
-                <>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onSelect={() => {
-                      menuAction.current = () => {
-                        void useCreationHandoffStore.getState().open()
-                      }
-                    }}
-                  >
-                    {t('creation.handoff.add')}
-                  </DropdownMenuItem>
-                </>
-              )}
-              {pendingHandoff
-                .filter(item => item.readme)
-                .map(item => (
-                  <DropdownMenuItem
-                    key={item.task.id}
-                    onSelect={() =>
-                      void useCreationHandoffStore.getState().open(item.task.id)
-                    }
-                  >
-                    {t('creation.handoff.sync')}
-                  </DropdownMenuItem>
-                ))}
-              {files.some(file => file.path === HANDOFF_PATH) && (
-                <DropdownMenuItem onSelect={() => chooseFile(HANDOFF_PATH)}>
-                  {t('creation.handoff.view')}
-                </DropdownMenuItem>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>,
+          <CreationGitLocation
+            identity={project.identity}
+            disabled={opening || menuBlocked || gitBusy}
+          />,
           menuTarget
         )}
       {actionsTarget &&
+        onPreviewToggle &&
         createPortal(
           <button
             type="button"
-            data-creation-doctor=""
             data-tauri-drag-region="false"
             className="creation-titlebar-trigger pnds-focus-ring"
+            aria-label={t(
+              previewVisible ? 'creation.hidePreview' : 'creation.showPreview'
+            )}
+            title={t(
+              previewVisible ? 'creation.hidePreview' : 'creation.showPreview'
+            )}
+            aria-pressed={previewVisible}
             disabled={opening || inspectionBlocked}
-            onClick={() => setDoctorOpen(true)}
+            onClick={onPreviewToggle}
           >
-            <Stethoscope aria-hidden="true" />
-            <span className="creation-titlebar-name">
-              {t('creation.doctor.action')}
-            </span>
-          </button>,
-          actionsTarget
-        )}
-      {actionsTarget &&
-        createPortal(
-          <button
-            type="button"
-            data-creation-controlled-check=""
-            data-tauri-drag-region="false"
-            className="creation-titlebar-trigger pnds-focus-ring"
-            disabled={opening || inspectionBlocked}
-            onClick={() => setCheckOpen(true)}
-          >
-            <FlaskConical aria-hidden="true" />
-            <span className="creation-titlebar-name">
-              {t('creation.check.action')}
-            </span>
+            {previewVisible ? (
+              <PanelRightClose
+                aria-hidden="true"
+                className="rtl:-scale-x-100"
+              />
+            ) : (
+              <PanelRightOpen aria-hidden="true" className="rtl:-scale-x-100" />
+            )}
           </button>,
           actionsTarget
         )}
@@ -353,7 +234,7 @@ function ReadingWorkspace({
             type="button"
             data-tauri-drag-region="false"
             className="creation-titlebar-trigger pnds-focus-ring"
-            disabled={opening || menuBlocked}
+            disabled={opening || menuBlocked || gitBusy}
             onClick={() => setBundleOpen(true)}
           >
             <Package aria-hidden="true" />
@@ -364,218 +245,57 @@ function ReadingWorkspace({
           actionsTarget
         )}
       <aside data-sidebar-surface="" className="creation-sidebar">
-        <div className="creation-sidebar-body">
-          <div className="creation-pinned-files">
-            {pinnedPaths.map(path => (
-              <button
-                type="button"
-                key={path}
-                className="creation-pinned-file pnds-focus-ring"
-                aria-label={path}
-                aria-pressed={
-                  selected === path &&
-                  (readingView === 'file' || readingView === 'handoff')
-                }
-                onClick={() => chooseFile(path)}
-              >
-                {path === 'manifest.json' ? (
-                  <Settings2 aria-hidden="true" />
-                ) : (
-                  <BookOpen aria-hidden="true" />
-                )}
-                <span>
-                  <strong>
-                    {t(
-                      path === 'manifest.json'
-                        ? 'desktop.manifest'
-                        : 'desktop.readme'
-                    )}
-                  </strong>
-                  <small>{path}</small>
-                </span>
-                {dirtyPaths.has(path) && (
-                  <i
-                    aria-label={t('creation.unsaved')}
-                    className="creation-dirty-dot"
-                  />
-                )}
-                {conflictPaths.has(path) && (
-                  <i aria-label={t('creation.diskChanged')}>!</i>
-                )}
-              </button>
-            ))}
-          </div>
-          <CreationQuickOpen
-            key={project.identity}
-            files={workspace.files}
-            onOpen={chooseFile}
+        {readingView === 'git' && (
+          <CreationGitFiles disabled={opening || menuBlocked || gitBusy} />
+        )}
+        <div
+          hidden={readingView === 'git'}
+          className="creation-file-tree-surface"
+        >
+          <CreationFileTree
+            identity={project.identity}
+            files={files}
+            directories={workspace.directories ?? []}
+            selected={selected}
+            dirtyPaths={dirtyPaths}
+            conflictPaths={conflictPaths}
+            disabled={
+              opening ||
+              menuBlocked ||
+              gitBusy ||
+              refreshing ||
+              readingView === 'git'
+            }
+            editable={editable}
+            onSelect={chooseFile}
+            onDrag={dragFile}
+            onRefresh={refresh}
+            onFinder={finder}
+            resources={
+              editable ? (
+                <CreationResources
+                  identity={project.identity}
+                  disabled={opening || menuBlocked || gitBusy}
+                />
+              ) : null
+            }
           />
-          <div className="creation-file-search">
-            <Search aria-hidden="true" />
-            <input
-              className="pnds-focus-ring"
-              aria-label={t('creation.searchFiles')}
-              placeholder={t('creation.searchFiles')}
-              value={search}
-              onChange={event => setSearch(event.target.value)}
-            />
-          </div>
-          <nav aria-label={t('creation.files')} className="creation-file-tree">
-            {CREATION_FILE_GROUPS.map(category => {
-              const files = visible.filter(
-                file =>
-                  !pinnedPaths.includes(file.path) &&
-                  creationFileGroup(file, manifestEntry) === category
-              )
-              const collapsed =
-                !search &&
-                closedGroups.includes(category) &&
-                !files.some(
-                  file => file.path === selected || dirtyPaths.has(file.path)
-                )
-              return (
-                (files.length > 0 || (category === 'modules' && editable)) && (
-                  <section
-                    key={category}
-                    className="creation-file-group"
-                    data-category={category}
-                  >
-                    <div className="flex items-center">
-                      <button
-                        type="button"
-                        className="creation-group-label pnds-focus-ring"
-                        aria-expanded={!collapsed}
-                        onClick={() =>
-                          setClosedGroups(current =>
-                            current.includes(category)
-                              ? current.filter(item => item !== category)
-                              : [...current, category]
-                          )
-                        }
-                      >
-                        <ChevronRight
-                          aria-hidden="true"
-                          className={!collapsed ? 'rotate-90' : ''}
-                        />
-                        <span>{t(`desktop.category.${category}`)}</span>
-                        <small>{files.length}</small>
-                      </button>
-                      {category === 'modules' && editable && (
-                        <>
-                          <CreationModules
-                            key={project.identity}
-                            identity={project.identity}
-                            disabled={menuBlocked || opening}
-                          />
-                          <CreationLibraries
-                            key={`libraries-${project.identity}`}
-                            identity={project.identity}
-                            disabled={menuBlocked || opening}
-                          />
-                        </>
-                      )}
-                    </div>
-                    <div hidden={collapsed}>
-                      {files.map(file => {
-                        const Icon =
-                          file.kind === 'image'
-                            ? Image
-                            : file.kind === 'binary' &&
-                                file.category === 'audio'
-                              ? Volume2
-                              : /\.(?:[cm]?js|[jt]sx?|scd|html|css)$/.test(
-                                    file.path
-                                  )
-                                ? FileCode
-                                : FileText
-                        return (
-                          <button
-                            type="button"
-                            key={file.path}
-                            aria-label={file.path}
-                            title={file.path}
-                            aria-pressed={
-                              file.path === selected &&
-                              (readingView === 'file' ||
-                                readingView === 'handoff')
-                            }
-                            className="creation-file-row pnds-focus-ring"
-                            onClick={() => {
-                              useCreationFilesStore
-                                .getState()
-                                .setActivePath(file.path)
-                              useCreationTestStore.getState().setTab('file')
-                            }}
-                          >
-                            <Icon aria-hidden="true" />
-                            <span className="creation-file-name">
-                              {file.path}
-                            </span>
-                            {conflictPaths.has(file.path) && (
-                              <span
-                                aria-label={t('creation.diskChanged')}
-                                title={t('creation.diskChanged')}
-                              >
-                                !
-                              </span>
-                            )}
-                            {dirtyPaths.has(file.path) && (
-                              <span
-                                aria-label={t('creation.unsaved')}
-                                className="creation-dirty-dot"
-                              />
-                            )}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </section>
-                )
-              )
-            })}
-            {visible.length === 0 && (
-              <p className="p-2 text-xs">{t('creation.noFiles')}</p>
-            )}
-          </nav>
-        </div>
-        <div className="creation-sidebar-footer">
-          <span>{t('desktop.fileCount', { count: files.length })}</span>
-          <button
-            type="button"
-            className="creation-icon-button pnds-focus-ring"
-            aria-label={t('creation.openFinder')}
-            onClick={() => void finder()}
-          >
-            <FolderOpen aria-hidden="true" />
-          </button>
         </div>
       </aside>
       <main
         aria-label={t('creation.workspace')}
         className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
       >
-        <CreationControlledCheck
-          key={project.identity}
-          open={checkOpen}
-          identity={project.identity}
-          onClose={() => setCheckOpen(false)}
+        <CreationErrorToast
+          error={error ?? watchError}
+          id={`creation-workspace:${project.identity}`}
         />
-        {doctorOpen && (
-          <CreationDoctor
-            key={project.identity}
-            identity={project.identity}
-            onClose={() => setDoctorOpen(false)}
-            onOpenFile={chooseFile}
-          />
-        )}
-        {gitOpen && (
-          <CreationGit
-            key={project.identity}
-            identity={project.identity}
-            onClose={() => setGitOpen(false)}
-          />
-        )}
-        {error && <CreationErrorNotice error={error} />}
+        <CreationErrorToast
+          error={testError}
+          id={`creation-test:${project.identity}`}
+          identity={project.identity}
+          details
+        />
         <Dialog open={bundleOpen} onOpenChange={setBundleOpen}>
           <DialogContent>
             <DialogTitle>{t('creation.bundle.action')}</DialogTitle>
@@ -586,8 +306,11 @@ function ReadingWorkspace({
           editable={editable}
           exists={files.some(file => file.path === HANDOFF_PATH)}
           menuOnly
+          onCloseAutoFocus={event => {
+            event.preventDefault()
+            if (owns()) readingTrigger.current?.focus()
+          }}
         />
-        {watchError && <CreationErrorNotice error={watchError} />}
         {(pending.refresh > 0 ||
           pending.restart > 0 ||
           pending.compile > 0) && (
@@ -598,72 +321,66 @@ function ReadingWorkspace({
               {pending.compile > 0 && <p>{t('creation.pendingCompile')}</p>}
               <p className="mt-2">{t('creation.runningDiskHint')}</p>
             </div>
-            {running && pending.refresh > 0 && (
-              <Button
-                size="sm"
-                variant="outline"
-                className="mt-2"
-                onClick={() => {
-                  void refreshMonitorFromDisk()
-                }}
-              >
-                {t('creation.refreshPages')}
-              </Button>
-            )}
           </div>
         )}
         {editable && (
           <nav
+            className="creation-workspace-tabs"
             aria-label={t('assistant.readingViews')}
-            className="flex shrink-0 flex-wrap items-center gap-2 border-b border-(--pnds-border) px-3 py-2"
           >
-            <Button
-              size="sm"
-              variant="ghost"
+            <button
+              ref={readingTrigger}
+              type="button"
+              disabled={gitBusy}
+              className="pnds-focus-ring"
               aria-pressed={readingView === 'discussion'}
               onClick={() =>
                 useCreationReadingStore.getState().showDiscussion()
               }
             >
-              {t(
-                readingView === 'discussion'
-                  ? 'assistant.discussion'
-                  : 'assistant.back'
-              )}
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() =>
-                useCreationReadingStore.getState().showExtension(
-                  {
-                    id: 'handoff-baselines',
-                    title: t('handoff.baselines.title'),
-                    content: (
-                      <CreationHandoffBaselines
-                        key={project.identity}
-                        identity={project.identity}
-                      />
-                    ),
-                  },
-                  useCreationReadingStore.getState().returnMessageId ?? ''
-                )
-              }
+              {t('assistant.discussion')}
+            </button>
+            <button
+              type="button"
+              disabled={gitBusy}
+              className="pnds-focus-ring"
+              aria-pressed={readingView === 'git'}
+              onClick={() => useCreationReadingStore.getState().showGit()}
             >
-              {t('handoff.baselines.title')}
-            </Button>
-            {files.some(file => file.path === HANDOFF_PATH) && (
-              <Button
-                size="sm"
-                variant="ghost"
-                aria-pressed={readingView === 'handoff'}
-                onClick={() => {
-                  chooseFile(HANDOFF_PATH)
-                  useCreationReadingStore.getState().showHandoff()
-                }}
-              >
-                {t('creation.handoff.view')}
-              </Button>
+              {t('creation.versions.tab')}
+            </button>
+            {file && (
+              <div className="creation-current-file-tab">
+                <button
+                  type="button"
+                  className="pnds-focus-ring"
+                  aria-pressed={readingView === 'file'}
+                  disabled={gitBusy}
+                  title={file.path}
+                  onClick={() => useCreationReadingStore.getState().showFile()}
+                >
+                  {file.path.split('/').at(-1)}
+                  {dirtyPaths.has(file.path) && (
+                    <span
+                      className="creation-dirty-dot"
+                      aria-label={t('creation.unsaved')}
+                    />
+                  )}
+                </button>
+                <button
+                  type="button"
+                  className="creation-icon-button pnds-focus-ring"
+                  disabled={gitBusy}
+                  aria-label={t('creation.tree.closeFile')}
+                  onClick={() => {
+                    useCreationFilesStore.getState().setActivePath(null)
+                    if (readingView === 'file')
+                      useCreationReadingStore.getState().showDiscussion()
+                  }}
+                >
+                  <X aria-hidden="true" />
+                </button>
+              </div>
             )}
             {readingView === 'extension' && (
               <span className="min-w-0 truncate text-xs">
@@ -679,7 +396,6 @@ function ReadingWorkspace({
           >
             <CreationAssistant
               identity={project.identity}
-              onCheck={() => setCheckOpen(true)}
               renderMessageCards={renderAssistantCards}
             />
           </div>
@@ -692,14 +408,32 @@ function ReadingWorkspace({
             {readingExtension?.content}
           </div>
         )}
+        {editable && (gitVisited || readingView === 'git') && (
+          <div
+            hidden={readingView !== 'git'}
+            className="creation-file-tab flex min-h-0 flex-1 flex-col"
+          >
+            <CreationGitPage
+              key={project.identity}
+              identity={project.identity}
+              active={readingView === 'git'}
+              onBusyChange={setGitBusy}
+            />
+          </div>
+        )}
         <div
           role="region"
           id={`creation-${project.identity}-file`}
           aria-label={file?.path ?? t('creation.files')}
-          hidden={readingView !== 'file' && readingView !== 'handoff'}
+          hidden={readingView !== 'file'}
           className="creation-file-tab flex min-h-0 flex-1 flex-col"
         >
-          {file ? (
+          {file?.path === HANDOFF_PATH ? (
+            <CreationHandoffDocument
+              identity={project.identity}
+              editable={editable}
+            />
+          ) : file ? (
             <CreationFileEditor
               key={`${project.identity}:${file.path}`}
               identity={project.identity}
@@ -714,7 +448,7 @@ function ReadingWorkspace({
           role="region"
           id={`creation-${project.identity}-console`}
           aria-label={t('creation.console')}
-          hidden={tab !== 'console'}
+          hidden={tab !== 'console' || readingView === 'git'}
           className="creation-file-tab creation-console-dock flex min-h-0 flex-col"
         >
           <CreationConsole />
@@ -726,7 +460,13 @@ function ReadingWorkspace({
 
 export function CreationView({
   renderAssistantCards,
-}: { renderAssistantCards?: (message: AssistantMessage) => ReactNode } = {}) {
+  previewVisible = false,
+  onPreviewToggle,
+}: {
+  renderAssistantCards?: (message: AssistantMessage) => ReactNode
+  previewVisible?: boolean
+  onPreviewToggle?: () => void
+} = {}) {
   useAssistantLifecycle()
   const { t } = useTranslation()
   const workspace = useCreationStore(state => state.workspace)
@@ -771,22 +511,13 @@ export function CreationView({
         />
       </header>
       {menuTarget &&
-        !workspace &&
         createPortal(
-          <button
-            type="button"
-            data-tauri-drag-region="false"
-            className="creation-titlebar-trigger pnds-focus-ring"
-            aria-label={t('creation.switchProject')}
-            disabled={opening || modePending || commandPending}
-            onClick={() => setPickerOpen(true)}
-          >
-            <Folder aria-hidden="true" />
-            <span className="creation-titlebar-name">
-              {t('creation.switchProject')}
-            </span>
-            <ChevronDown aria-hidden="true" />
-          </button>,
+          <CreationProjectPicker
+            open={pickerOpen}
+            onOpenChange={setPickerOpen}
+            disabled={expanded || opening || modePending || commandPending}
+            onNewProject={() => setNewProjectOpen(true)}
+          />,
           menuTarget
         )}
       <div
@@ -801,12 +532,12 @@ export function CreationView({
               renderAssistantCards={renderAssistantCards}
               key={workspace.project.identity}
               workspace={workspace}
-              chooseProject={() => setPickerOpen(true)}
-              createProject={() => setNewProjectOpen(true)}
               menuTarget={menuTarget}
               menuBlocked={expanded || modePending || commandPending}
               actionsTarget={actionsTarget}
               inspectionBlocked={expanded || modePending}
+              previewVisible={previewVisible}
+              onPreviewToggle={onPreviewToggle}
             />
           ) : (
             <>
@@ -872,23 +603,14 @@ export function CreationView({
             </>
           )}
         </div>
-        {!pickerOpen && !newProjectOpen && (error || opening) && (
-          <div className="max-h-1/4 shrink-0 overflow-auto bg-(--pnds-card) p-3">
-            {error ? (
-              <CreationErrorNotice error={error} />
-            ) : (
-              <p role="status">{t('creation.loading')}</p>
-            )}
-          </div>
-        )}
-        {pickerOpen && (
-          <CreationProjectPicker
-            onClose={() => setPickerOpen(false)}
-            onNewProject={() => {
-              setPickerOpen(false)
-              setNewProjectOpen(true)
-            }}
-          />
+        <CreationErrorToast
+          error={!pickerOpen && !newProjectOpen ? error : null}
+          id="creation-project"
+        />
+        {!pickerOpen && !newProjectOpen && opening && (
+          <p role="status" className="p-3 text-xs">
+            {t('creation.loading')}
+          </p>
         )}
         {newProjectOpen && (
           <CreationNewProject onClose={() => setNewProjectOpen(false)} />

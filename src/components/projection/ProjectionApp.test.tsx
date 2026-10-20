@@ -153,6 +153,9 @@ describe('ProjectionApp (#130 gate)', () => {
         '',
         'title: 失语 III',
         'composer: @肖翔',
+        'duration: 6′32″',
+        'performers: A、B、C、D',
+        'contact: @mail.com',
         'github_url: https://github.com/xO-xN/pnds-app',
         '',
         '## 作品简介：',
@@ -176,9 +179,14 @@ describe('ProjectionApp (#130 gate)', () => {
     expect(intro().dataset.introView).toBe('cover')
     expect(screen.getByTestId('project-cover-page')).toBeInTheDocument()
     expect(screen.getByTestId('cover-title')).toHaveTextContent('失语 III')
-    expect(screen.getByTestId('cover-composer')).toHaveTextContent('@肖翔')
-    expect(screen.getByTestId('cover-github')).toBeInTheDocument()
-    expect(screen.getByTestId('cover-label')).toHaveTextContent('作品简介：')
+    expect(screen.getByTestId('cover-composer')).toHaveTextContent('肖翔')
+    expect(screen.getByTestId('cover-duration')).toHaveTextContent('6′32″')
+    expect(screen.getByTestId('cover-performers')).toHaveTextContent(
+      'A、B、C、D'
+    )
+    expect(screen.getByTestId('cover-contact')).toHaveTextContent('@mail.com')
+    expect(screen.queryByTestId('cover-github')).not.toBeInTheDocument()
+    expect(screen.getByTestId('cover-label')).toHaveTextContent('作品简介')
     expect(screen.getByText('为场地屏幕而作。')).toBeInTheDocument()
     // The panel stops at the --- boundary; the boilerplate never shows.
     expect(
@@ -193,43 +201,21 @@ describe('ProjectionApp (#130 gate)', () => {
       'src',
       'data:image/png;base64,cover'
     )
-    // Venue-screen only (user request): the band rides the roomier
-    // 40cqh share — more first-section content before the in-band
-    // scroll; the title rides higher, composition still centered.
     const coverRoot = screen.getByTestId('project-cover-page')
-    expect(coverRoot.style.getPropertyValue('--cover-band-h')).toBe(
-      'min(40cqh,42cqw)'
-    )
-    // …and the venue screen's roomier title spacing (user request:
-    // title 与上下两部分的间距增大) rides a TIGHTER edge inset — the
-    // centered title's field grows both ways (pt/pb overrides are
-    // absorbed by the centering slack and only shift the title; the
-    // inset lifts the header and drops the band by the same amount, so
-    // each visible gap widens symmetrically).
-    expect(coverRoot.style.getPropertyValue('--cover-edge-inset')).toBe('2cqh')
-    // The venue-screen frame: the cover composes inside a generously
-    // inset stage box (user report: 大屏要更多四周留白) — and the zoom
-    // scales the STAGE BOX itself (real layout, crisp text; the cq
-    // composition rides along). Base frame at 100%: 85% × 80%. The
-    // stage is also the composition's SIZE container — the cover root
-    // is inline-size only, so every cqh resolves against this definite
-    // box (the app panel's copy keeps its viewport fallback, its
-    // approved original look).
+    expect(coverRoot.dataset.surface).toBe('projection')
+    expect(coverRoot.style.getPropertyValue('--cover-zoom')).toBe('1')
     const stage = screen.getByTestId('projection-cover-stage')
-    expect(stage.className).toContain('[container-type:size]')
-    expect(stage.style.width).toBe('85%')
-    expect(stage.style.height).toBe('80%')
-    // ⌘+ grows the poster frame — 110% zoom → 93.5% × 88%. The stage
-    // is KEYED by zoom (Intel / macOS 13: old WebKit leaves descendant
-    // cq units stale when only the container resizes — a remount is a
-    // fresh layout), so the zoom REPLACES the element: re-query it.
+    // Keep the Intel/WebKit fresh-layout guarantee at each zoom step.
     act(() => {
       listeners.get('pnds:projection-action')?.({ kind: 'zoom-in' })
     })
     const zoomedStage = screen.getByTestId('projection-cover-stage')
     expect(zoomedStage).not.toBe(stage)
-    expect(zoomedStage.style.width).toBe('93.5%')
-    expect(zoomedStage.style.height).toBe('88%')
+    expect(
+      screen
+        .getByTestId('project-cover-page')
+        .style.getPropertyValue('--cover-zoom')
+    ).toBe('1.1')
   })
 
   it('renders a cover-format README band text-only when the project ships no cover image', async () => {

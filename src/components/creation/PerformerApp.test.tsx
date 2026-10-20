@@ -32,6 +32,10 @@ let receive: (value: PerformerConfig) => Promise<void>
 beforeEach(async () => {
   await i18n.changeLanguage('en')
   vi.clearAllMocks()
+  vi.mocked(commands.creationPerformerPinned).mockResolvedValue({
+    status: 'ok',
+    data: false,
+  })
   vi.mocked(fitPerformerWindow).mockResolvedValue(undefined)
   vi.mocked(commands.preparePerformerWindow).mockResolvedValue({
     status: 'ok',
@@ -59,16 +63,49 @@ beforeEach(async () => {
   })
 })
 
+it('pins the native shell without changing its performer iframe, and retains native state on failure', async () => {
+  render(<PerformerApp />)
+  await waitFor(() =>
+    expect(commands.creationPerformerPinned).toHaveBeenCalledWith(
+      'performer-test',
+      null
+    )
+  )
+  await act(() => receive(first))
+  const frame = screen.getByTitle('Performer page #1')
+  const button = screen.getByRole('button', { name: 'Keep on top' })
+  await waitFor(() => expect(button).toBeEnabled())
+  vi.mocked(commands.creationPerformerPinned).mockResolvedValueOnce({
+    status: 'ok',
+    data: true,
+  })
+  fireEvent.click(button)
+  await waitFor(() => expect(button).toHaveAttribute('aria-pressed', 'true'))
+  expect(commands.creationPerformerPinned).toHaveBeenLastCalledWith(
+    'performer-test',
+    true
+  )
+  expect(screen.getByTitle('Performer page #1')).toBe(frame)
+  vi.mocked(commands.creationPerformerPinned).mockResolvedValueOnce({
+    status: 'error',
+    error: { code: 'io', detail: 'Native pin failed' },
+  })
+  fireEvent.click(button)
+  await screen.findByText(/Native pin failed/)
+  expect(button).toHaveAttribute('aria-pressed', 'true')
+  expect(screen.getByTitle('Performer page #1')).toBe(frame)
+})
+
 it.each([
   [
     'en',
-    'Connection status: see project page',
-    'Page navigation does not confirm a performer connection. Check the project page or monitor for connection status.',
+    'Connection status: see App performer list',
+    'Page navigation does not confirm a performer connection. Joined clients are reported by supporting projects in the App performer list.',
   ],
   [
     'zh-CN',
-    '连接状态见工程页面',
-    '页面导航不代表演奏连接成功；实际连接状态请查看工程页面或 monitor。',
+    '连接状态见 App 演奏端列表',
+    '页面加载不代表演奏者已加入；支持此功能的工程会在 App 演奏端列表报告连接状态。',
   ],
 ])(
   'explains the connection boundary in %s without reporting a disconnection',

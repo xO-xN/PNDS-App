@@ -56,6 +56,9 @@ export function utilityCoverPage(id: string, intro: string): ReadmeCoverPage {
   return {
     title: BUILTIN_UTILITY_DISPLAY_NAMES[id] ?? id,
     composer: null,
+    duration: null,
+    performers: null,
+    contact: null,
     composerUrl: null,
     githubUrl: null,
     websiteUrl: null,

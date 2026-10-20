@@ -10,6 +10,7 @@ import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 import { useWindowStore } from '@/store/window-store'
 import { useCreationStore } from '@/store/creation-store'
+import { useCreationTestStore } from '@/store/creation-test-store'
 import { AppShell } from './AppShell'
 import type { Manifest, SessionSnapshot } from '@/lib/tauri-bindings'
 
@@ -109,6 +110,7 @@ describe('AppShell', () => {
       preflightError: null,
     })
     useSessionStore.getState().resetSession()
+    useCreationTestStore.setState({ previewVisibility: 'auto' })
     useWindowStore.setState({
       fullscreen: false,
       showCustomTrafficLights: true,
@@ -208,7 +210,7 @@ describe('AppShell', () => {
       await useCreationStore.getState().enter()
     })
     expect(
-      screen.getByRole('button', { name: 'Project actions' })
+      screen.getByRole('button', { name: 'Switch to another project' })
     ).toBeInTheDocument()
     expect(screen.getByTitle('Project monitor')).toBe(monitor)
     expect(monitor.getAttribute('src')).toBe(src)
@@ -226,6 +228,154 @@ describe('AppShell', () => {
     expect(
       screen.getByRole('heading', { name: 'Hi! Welcome to PNDS' })
     ).toBeInTheDocument()
+  })
+
+  it('opens the idle preview by default, preserves an explicit close across reading pages and resets for another project', async () => {
+    vi.mocked(commands.getSessionState).mockResolvedValue({
+      status: 'ok',
+      data: {
+        ...readySnapshot,
+        status: 'idle',
+        health: null,
+        projectPath: null,
+      },
+    })
+    useCreationStore.setState({
+      active: true,
+      workspace: {
+        project: {
+          identity: 'idle-preview',
+          root: '/p',
+          source: 'folder',
+          name: 'Score',
+        },
+        files: [],
+      },
+    })
+    render(<AppShell />)
+    const hide = await screen.findByRole('button', {
+      name: 'Hide test preview',
+    })
+    expect(document.querySelector('[data-app-frame]')).not.toHaveClass(
+      'creation-preview-collapsed'
+    )
+    expect(
+      document.querySelector('[data-creation-test-idle]')
+    ).not.toHaveAttribute('hidden')
+    expect(
+      screen.getByRole('separator', { name: 'Discussion and monitor width' })
+    ).toBeInTheDocument()
+    await userEvent.click(hide)
+    expect(
+      screen.getByRole('button', { name: 'Show test preview' })
+    ).toHaveAttribute('aria-pressed', 'false')
+    await userEvent.click(screen.getByRole('button', { name: 'Git versions' }))
+    expect(document.querySelector('[data-creation-test-idle]')).toHaveAttribute(
+      'hidden'
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Discussion' }))
+    expect(document.querySelector('[data-creation-test-idle]')).toHaveAttribute(
+      'hidden'
+    )
+    act(() => {
+      useCreationStore.setState({
+        workspace: {
+          project: {
+            identity: 'other-preview',
+            root: '/other',
+            source: 'folder',
+            name: 'Other',
+          },
+          files: [],
+        },
+      })
+    })
+    expect(
+      screen.getByRole('button', { name: 'Hide test preview' })
+    ).toHaveAttribute('aria-pressed', 'true')
+    expect(commands.startProject).not.toHaveBeenCalled()
+    expect(commands.stopProject).not.toHaveBeenCalled()
+  })
+
+  it('keeps a manually hidden running preview mounted and ignores later snapshot refreshes', async () => {
+    vi.mocked(commands.getSessionState).mockResolvedValue({
+      status: 'ok',
+      data: readySnapshot,
+    })
+    useSessionStore.getState().applySnapshot(readySnapshot)
+    useCreationStore.setState({
+      active: true,
+      workspace: {
+        project: {
+          identity: 'live-preview',
+          root: '/p',
+          source: 'folder',
+          name: 'Running',
+        },
+        files: [],
+      },
+    })
+    render(<AppShell />)
+    const monitor = await screen.findByTitle('Project monitor')
+    const src = monitor.getAttribute('src')
+    const host = screen.getByTestId('monitor-host')
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Hide test preview' })
+    )
+    expect(host).toHaveAttribute('inert')
+    expect(host).toHaveAttribute('aria-hidden', 'true')
+    expect(host).not.toHaveAttribute('hidden')
+    const focused = document.activeElement
+    fireEvent.load(monitor)
+    expect(document.activeElement).toBe(focused)
+    act(() => useSessionStore.getState().applySnapshot(readySnapshot))
+    expect(host).toHaveAttribute('data-preview-hidden', 'true')
+    expect(screen.getByTitle('Project monitor')).toBe(monitor)
+    expect(monitor.getAttribute('src')).toBe(src)
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Show test preview' })
+    )
+    expect(host).not.toHaveAttribute('inert')
+    expect(host).not.toHaveAttribute('aria-hidden')
+    expect(screen.getByTitle('Project monitor')).toBe(monitor)
+    expect(
+      screen.getByRole('button', { name: 'Hide test preview' })
+    ).toHaveFocus()
+    expect(commands.startProject).not.toHaveBeenCalled()
+    expect(commands.stopProject).not.toHaveBeenCalled()
+  })
+
+  it('keeps the default preview open after a test returns to idle', async () => {
+    vi.mocked(commands.getSessionState).mockResolvedValue({
+      status: 'ok',
+      data: readySnapshot,
+    })
+    useSessionStore.getState().applySnapshot(readySnapshot)
+    useCreationStore.setState({
+      active: true,
+      workspace: {
+        project: {
+          identity: 'auto-preview',
+          root: '/p',
+          source: 'folder',
+          name: 'Running',
+        },
+        files: [],
+      },
+    })
+    render(<AppShell />)
+    await screen.findByRole('button', { name: 'Hide test preview' })
+    await act(async () => {
+      useSessionStore
+        .getState()
+        .applySnapshot({ ...readySnapshot, status: 'idle', health: null })
+    })
+    expect(
+      screen.getByRole('button', { name: 'Hide test preview' })
+    ).toBeInTheDocument()
+    expect(
+      document.querySelector('[data-creation-test-idle]')
+    ).not.toHaveAttribute('hidden')
   })
 
   it('adjusts discussion width by keyboard and keeps the same running monitor across file reading', async () => {
@@ -271,11 +421,11 @@ describe('AppShell', () => {
     )
     const wider = Number(divider.getAttribute('aria-valuenow'))
     expect(wider).toBeGreaterThan(40)
-    fireEvent.click(screen.getByRole('button', { name: 'score.js' }))
+    fireEvent.click(screen.getByRole('treeitem', { name: 'score.js' }))
     expect(
       await screen.findByRole('textbox', { name: 'score.js' })
     ).toBeVisible()
-    fireEvent.click(screen.getByRole('button', { name: 'Back to discussion' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Discussion' }))
     fireEvent.keyDown(divider, { key: 'Home' })
     expect(divider).toHaveAttribute('aria-valuenow', '40')
     expect(screen.getByTitle('Project monitor')).toBe(monitor)
@@ -312,7 +462,7 @@ describe('AppShell', () => {
       expect(topbar).toBeVisible()
       expect(document.querySelector('[data-creation-topbar]')).toBe(topbar)
       expect(
-        screen.getByRole('button', { name: 'Project actions' })
+        screen.getByRole('button', { name: 'Switch to another project' })
       ).toBeDisabled()
       expect(screen.getByTitle('Project monitor')).toBe(monitor)
       expect(monitor.getAttribute('src')).toBe(src)
@@ -327,7 +477,7 @@ describe('AppShell', () => {
       })
       fireEvent.keyDown(window, { key: 'Escape' })
       expect(
-        screen.getByRole('button', { name: 'Project actions' })
+        screen.getByRole('button', { name: 'Switch to another project' })
       ).toBeDisabled()
       expect(screen.getByTitle('Project monitor')).toBe(monitor)
       expect(monitor.getAttribute('src')).toBe(src)
@@ -337,7 +487,7 @@ describe('AppShell', () => {
       })
       fireEvent.keyDown(window, { key: 'Escape' })
       expect(
-        screen.getByRole('button', { name: 'Project actions' })
+        screen.getByRole('button', { name: 'Switch to another project' })
       ).toBeEnabled()
       expect(screen.getByTitle('Project monitor')).toBe(monitor)
       expect(monitor.getAttribute('src')).toBe(src)
@@ -462,7 +612,7 @@ describe('AppShell', () => {
     // first-frame parameters.
     expect(monitor).toHaveAttribute(
       'src',
-      'http://192.168.1.10:6869/?theme=pond&lang=en'
+      'http://192.168.1.10:6869/?theme=pond&lang=en&pndsHostOrigin=http%3A%2F%2Flocalhost%3A3000'
     )
     expect(screen.getByTestId('monitor-host')).toHaveAccessibleName(
       'Inarticulate III'
@@ -524,7 +674,7 @@ describe('AppShell', () => {
     const monitor = screen.getByTitle('Project monitor')
     expect(monitor).toHaveAttribute(
       'src',
-      'http://192.168.1.10:6869/?theme=pond&lang=en'
+      'http://192.168.1.10:6869/?theme=pond&lang=en&pndsHostOrigin=http%3A%2F%2Flocalhost%3A3000'
     )
     expect(useSessionStore.getState().sessionStatus).toBe('ready')
   })

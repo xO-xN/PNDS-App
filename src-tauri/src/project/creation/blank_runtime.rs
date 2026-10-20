@@ -378,6 +378,38 @@ fn blank_artifact_starts_restarts_and_releases_resources_in_all_three_audio_mode
                 assert!(page.contains("A &lt;silent&gt; score"));
                 assert!(!page.contains("<silent>"));
             }
+            if mode == "none" {
+                verify_blank_preview_snapshot(&root, monitor);
+                let page = root.join("public/monitor.html");
+                let original = fs::read_to_string(&page).unwrap();
+                fs::write(&page, format!("{original}\n<!-- saved after startup -->")).unwrap();
+                let body = ureq::get(format!("http://127.0.0.1:{monitor}/?_r=4"))
+                    .call()
+                    .unwrap()
+                    .body_mut()
+                    .read_to_string()
+                    .unwrap();
+                assert!(
+                    body.contains("saved after startup"),
+                    "refresh must read saved bytes"
+                );
+                fs::write(&page, original).unwrap();
+                fs::write(root.join("public/score.js"), "let size = 3;").unwrap();
+                let mut response = ureq::get(format!("http://127.0.0.1:{monitor}/score.js"))
+                    .call()
+                    .unwrap();
+                assert!(response
+                    .headers()
+                    .get("content-type")
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .contains("javascript"));
+                assert_eq!(
+                    response.body_mut().read_to_string().unwrap(),
+                    "let size = 3;"
+                );
+            }
             let mut malformed = TcpStream::connect(("127.0.0.1", performer)).unwrap();
             malformed
                 .set_read_timeout(Some(Duration::from_secs(1)))
@@ -453,4 +485,73 @@ fn blank_artifact_starts_restarts_and_releases_resources_in_all_three_audio_mode
             assert!(messages.is_empty(), "preview modes send no music messages");
         }
     }
+}
+
+fn verify_blank_preview_snapshot(root: &Path, monitor: u16) {
+    let base = format!("http://127.0.0.1:{monitor}");
+    let get = |path: &str| {
+        let mut response = ureq::get(format!("{base}{path}")).call().unwrap();
+        assert_eq!(response.headers().get("cache-control").unwrap(), "no-store");
+        response.body_mut().read_to_string().unwrap()
+    };
+    for (path, mime) in [
+        ("/monitor.js", "javascript"),
+        ("/performer.js", "javascript"),
+        ("/style.css", "text/css"),
+        ("/pnds-preview.mjs", "javascript"),
+    ] {
+        let response = ureq::get(format!("{base}{path}")).call().unwrap();
+        assert!(response
+            .headers()
+            .get("content-type")
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .contains(mime));
+    }
+    let page = get("/?pndsHostOrigin=http%3A%2F%2Fhost");
+    let context = page
+        .split("window.PNDS_PREVIEW_CONTEXT=")
+        .nth(1)
+        .expect("preview bootstrap")
+        .split("</script>")
+        .next()
+        .unwrap();
+    let context: serde_json::Value = serde_json::from_str(context).unwrap();
+    assert_eq!(context["hostOrigin"], "http://host");
+    let source = fs::read_to_string(root.join("public/monitor.js")).unwrap();
+    let contract = fs::read(root.join("pnds.preview.json")).unwrap();
+    let digest = |bytes: &[u8]| preview_digest(std::str::from_utf8(bytes).unwrap());
+    assert_eq!(
+        context["sources"]["public/monitor.js"],
+        digest(source.as_bytes())
+    );
+    assert_eq!(context["contractDigest"], digest(&contract));
+    let pinned = page
+        .split("src=\"")
+        .filter_map(|suffix| suffix.split('"').next())
+        .find(|path| path.starts_with("/monitor.js?pndsSnapshot="))
+        .unwrap();
+    let changed = format!("{source}\n// saved during page load\n");
+    fs::write(root.join("public/monitor.js"), &changed).unwrap();
+    assert_eq!(
+        get(pinned),
+        source,
+        "pinned response must contain exactly the declared source bytes"
+    );
+    assert_eq!(get("/monitor.js"), changed);
+    let refresh = get("/?pndsHostOrigin=http%3A%2F%2Fhost&_r=8");
+    assert!(refresh.contains(&digest(changed.as_bytes())));
+    assert!(!refresh.contains(&digest(source.as_bytes())));
+    assert!(ureq::get(format!("{base}/monitor.js?pndsSnapshot=unknown"))
+        .call()
+        .is_err());
+    assert!(get("/monitor.html?pndsHostOrigin=http%3A%2F%2Fhost")
+        .contains("window.PNDS_PREVIEW_CONTEXT="));
+    assert!(!get("/performer.html?pndsHostOrigin=http%3A%2F%2Fhost")
+        .contains("window.PNDS_PREVIEW_CONTEXT="));
+    let escaped = get("/?pndsHostOrigin=http%3A%2F%2Fhost%2F%3C%2Fscript%3E");
+    assert!(!escaped.contains("http://host/</script>"));
+    assert!(escaped.contains("\\u003c/script>"));
+    fs::write(root.join("public/monitor.js"), source).unwrap();
 }

@@ -1,0 +1,2089 @@
+<!doctype html>
+<!-- Throwaway prototype: three Git-diff layouts inside the existing creation workspace.
+     ?variant=A|B|C. Synthetic data, memory only; no filesystem, Git, model or runtime calls. -->
+<html lang="zh-CN" data-theme="pond">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>PNDS · Git 文件差异联动评审</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f1f5f8;
+        --side: #d2d8de;
+        --card: #fcfdff;
+        --pill: #e6edf3;
+        --hover: #dbe5ed;
+        --selection: #d4e3f0;
+        --ink: #293541;
+        --muted: #495b68;
+        --line: #bdcbd6;
+        --accent: #1476cc;
+        --on-accent: #fff;
+        --add: #186039;
+        --add-bg: #e7f3e9;
+        --add-word: #b5dfbf;
+        --del: #a12636;
+        --del-bg: #fcebed;
+        --del-word: #f2bec5;
+        --code: #7e22ce;
+        font:
+          12px -apple-system,
+          BlinkMacSystemFont,
+          'Helvetica Neue',
+          'PingFang SC',
+          sans-serif;
+      }
+      [data-theme='sand'] {
+        --bg: #e6ddcd;
+        --side: #d8ccba;
+        --card: #f1eadf;
+        --pill: #e5daca;
+        --hover: #daceba;
+        --selection: #ddc6a5;
+        --ink: #352e24;
+        --muted: #60523f;
+        --line: #b8aa92;
+        --accent: #93622e;
+        --add: #205a32;
+        --add-bg: #e1eada;
+        --add-word: #b8d7ad;
+        --del: #96322b;
+        --del-bg: #f3ddd5;
+        --del-word: #e9b6a9;
+      }
+      [data-theme='stage'] {
+        color-scheme: dark;
+        --bg: #171b1c;
+        --side: #1c2222;
+        --card: #232a29;
+        --pill: #2c3432;
+        --hover: #35403b;
+        --selection: #354d41;
+        --ink: #e7ece9;
+        --muted: #adbbb4;
+        --line: #46554e;
+        --accent: #a5c8b6;
+        --on-accent: #15231b;
+        --add: #a2e0b0;
+        --add-bg: #213b2b;
+        --add-word: #2e5739;
+        --del: #ffb0b7;
+        --del-bg: #43272c;
+        --del-word: #69343d;
+        --code: #ccafd9;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+      }
+      button,
+      input,
+      select {
+        font: inherit;
+        color: inherit;
+      }
+      button {
+        cursor: default;
+        border: 0;
+        background: transparent;
+        border-radius: 5px;
+        padding: 5px 8px;
+      }
+      button:hover:not(:disabled) {
+        background: var(--hover);
+      }
+      button:disabled {
+        opacity: 0.45;
+      }
+      button:focus-visible,
+      input:focus-visible,
+      select:focus-visible,
+      a:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+      button[aria-pressed='true'] {
+        background: var(--selection);
+        color: var(--ink);
+      }
+      input,
+      select {
+        border: 1px solid var(--line);
+        border-radius: 5px;
+        padding: 5px 7px;
+        background: var(--card);
+        min-width: 0;
+      }
+      svg {
+        width: 15px;
+        height: 15px;
+        flex: none;
+        vertical-align: middle;
+      }
+      svg path,
+      svg circle,
+      svg line,
+      svg polyline,
+      svg rect {
+        vector-effect: non-scaling-stroke;
+      }
+      .icon {
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.7;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .primary {
+        background: var(--accent);
+        color: var(--on-accent);
+      }
+      .primary:hover:not(:disabled) {
+        background: var(--accent);
+        filter: brightness(0.94);
+      }
+      .muted {
+        color: var(--muted);
+      }
+      .mono {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      .grow {
+        flex: 1;
+      }
+      .add-ink {
+        color: var(--add);
+      }
+      .del-ink {
+        color: var(--del);
+      }
+      .hidden,
+      [hidden] {
+        display: none !important;
+      }
+      .badge {
+        border: 1px solid var(--line);
+        border-radius: 4px;
+        padding: 1px 5px;
+        font-size: 10px;
+        white-space: nowrap;
+      }
+      .app {
+        display: grid;
+        grid-template-columns: 226px minmax(430px, 1fr) minmax(260px, 35%);
+        grid-template-rows: 32px minmax(0, 1fr) 50px;
+        height: calc(100dvh - 66px);
+        min-height: 600px;
+        min-width: 960px;
+      }
+      .topbar {
+        grid-column: 1/-1;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding-inline: 12px;
+        border-block-end: 1px solid var(--line);
+        font-size: 12px;
+      }
+      .traffic {
+        display: flex;
+        gap: 7px;
+        margin-inline-end: 10px;
+      }
+      .traffic i {
+        width: 11px;
+        height: 11px;
+        border: 1px solid var(--line);
+        border-radius: 50%;
+        background: var(--card);
+      }
+      .project-title {
+        font-weight: 600;
+      }
+      .git-location {
+        max-width: 390px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .top-end {
+        margin-inline-start: auto;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .sidebar {
+        background: var(--side);
+        border-inline-end: 1px solid var(--line);
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+      }
+      .sidebar-head {
+        padding: 13px 12px 9px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .sidebar-head strong {
+        font-size: 12px;
+      }
+      .tree-context {
+        padding: 0 12px 8px;
+        line-height: 1.6;
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .scope-tabs {
+        display: flex;
+        margin: 0 10px 8px;
+        padding: 2px;
+        background: var(--pill);
+        border-radius: 6px;
+      }
+      .scope-tabs button {
+        flex: 1;
+        font-size: 11px;
+        padding: 4px 2px;
+      }
+      .filter {
+        margin: 0 10px 9px;
+        flex: none;
+        width: calc(100% - 20px);
+        background: var(--bg);
+        font-size: 11px;
+      }
+      .tree {
+        overflow: auto;
+        flex: 1;
+        padding: 0 5px 20px;
+      }
+      .folder {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        padding: 8px 6px 5px;
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .file-row {
+        display: flex;
+        align-items: center;
+        width: 100%;
+        padding: 6px 7px;
+        gap: 6px;
+        text-align: start;
+        min-height: 31px;
+      }
+      .file-row[data-nested='true'] {
+        padding-inline-start: 21px;
+      }
+      .file-row[aria-current='true'] {
+        background: var(--selection);
+        box-shadow: inset 2px 0 var(--accent);
+      }
+      .file-row .name {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .file-row[data-unchanged='true'] {
+        color: var(--muted);
+      }
+      .file-row[data-status='D'] .name {
+        text-decoration: line-through;
+      }
+      .file-status {
+        font:
+          10px ui-monospace,
+          SFMono-Regular,
+          Menlo,
+          monospace;
+        margin-inline-start: auto;
+        font-weight: 700;
+      }
+      .counts {
+        display: flex;
+        gap: 4px;
+        white-space: nowrap;
+        font:
+          10px ui-monospace,
+          SFMono-Regular,
+          Menlo,
+          monospace;
+      }
+      .tree-note {
+        padding: 10px 12px;
+        border-block-start: 1px solid var(--line);
+        font-size: 10px;
+        line-height: 1.7;
+        color: var(--muted);
+      }
+      .middle {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        min-width: 0;
+        overflow: hidden;
+      }
+      .workspace-tabs {
+        height: 39px;
+        display: flex;
+        gap: 3px;
+        align-items: stretch;
+        padding-inline: 10px;
+        border-block-end: 1px solid var(--line);
+        flex: none;
+      }
+      .workspace-tabs > button {
+        border-radius: 0;
+        font-size: 12px;
+        padding: 7px 10px;
+        position: relative;
+      }
+      .workspace-tabs > button[aria-selected='true'] {
+        font-weight: 600;
+      }
+      .workspace-tabs > button[aria-selected='true']::after {
+        content: '';
+        position: absolute;
+        inset-inline: 10px;
+        bottom: 0;
+        height: 2px;
+        background: var(--accent);
+      }
+      .git-page {
+        min-height: 0;
+        min-width: 0;
+        display: flex;
+        flex: 1;
+        flex-direction: column;
+      }
+      .git-toolbar {
+        padding: 10px 12px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        border-block-end: 1px solid var(--line);
+        flex: none;
+      }
+      .git-toolbar h1 {
+        font-size: 13px;
+        margin: 0;
+        white-space: nowrap;
+      }
+      .git-toolbar input {
+        width: 150px;
+        font-size: 11px;
+      }
+      .git-toolbar .save {
+        font-size: 11px;
+        white-space: nowrap;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+      }
+      .git-layout {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-height: 0;
+        min-width: 0;
+      }
+      .graph-wrap {
+        border-block-end: 1px solid var(--line);
+        padding: 8px 12px 5px;
+        flex: none;
+        background: color-mix(in srgb, var(--card) 50%, var(--bg));
+      }
+      .graph-tools {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--muted);
+        font-size: 10px;
+      }
+      .graph {
+        height: 113px;
+        position: relative;
+        min-width: 500px;
+        margin-top: 5px;
+      }
+      .graph-scroll {
+        overflow: auto;
+      }
+      .graph-lines {
+        position: absolute;
+        width: 100%;
+        height: 105px;
+        inset: 0;
+        overflow: visible;
+        stroke: var(--line);
+        stroke-width: 2;
+        fill: none;
+        pointer-events: none;
+      }
+      .node {
+        position: absolute;
+        top: 7px;
+        width: 24%;
+        padding: 0 7px 7px;
+        text-align: start;
+        border-radius: 6px;
+        min-height: 73px;
+      }
+      .node::before {
+        content: '';
+        display: block;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: var(--card);
+        border: 2px solid var(--line);
+        margin: 0 0 9px 3px;
+      }
+      .node[data-current='true']::before {
+        background: var(--accent);
+        border-color: var(--accent);
+      }
+      .node[aria-pressed='true']::before {
+        outline: 2px solid var(--accent);
+        outline-offset: 3px;
+      }
+      .node .node-title {
+        display: block;
+        font-size: 11px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .node .node-sub {
+        display: block;
+        color: var(--muted);
+        font-size: 10px;
+        margin-top: 4px;
+      }
+      .node .node-current {
+        color: var(--accent);
+      }
+      .node[data-branch='true'] {
+        top: 63px;
+      }
+      .node[data-branch='true']::before {
+        position: absolute;
+        left: 10px;
+        top: 0;
+        width: 8px;
+        height: 8px;
+      }
+      .node[data-branch='true'] .node-title {
+        padding-inline-start: 17px;
+        font-size: 10px;
+      }
+      .node[data-branch='true'] .node-sub {
+        display: none;
+      }
+      .graph-folded .graph-scroll {
+        display: none;
+      }
+      .version-summary {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 9px 12px;
+        border-block-end: 1px solid var(--line);
+        min-width: 0;
+        flex: none;
+      }
+      .version-summary h2 {
+        font-size: 12px;
+        margin: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        min-width: 0;
+      }
+      .version-summary .summary-meta {
+        white-space: nowrap;
+        font-size: 10px;
+        color: var(--muted);
+      }
+      .version-summary button {
+        white-space: nowrap;
+        font-size: 10px;
+      }
+      .comparison {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        padding: 8px 12px;
+        flex: none;
+        border-block-end: 1px solid var(--line);
+        font-size: 11px;
+        flex-wrap: wrap;
+      }
+      .comparison select {
+        font-size: 11px;
+        max-width: 220px;
+      }
+      .compare-direction {
+        font-size: 10px;
+        color: var(--muted);
+        display: flex;
+        align-items: center;
+        gap: 5px;
+      }
+      .compare-direction span {
+        max-width: 170px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .diff-workspace {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        min-width: 0;
+        flex: 1;
+        overflow: hidden;
+      }
+      .file-header {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        padding: 9px 12px;
+        font-size: 11px;
+        border-block-end: 1px solid var(--line);
+        background: var(--card);
+        flex: none;
+        min-width: 0;
+      }
+      .file-header .path {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        min-width: 0;
+        font-weight: 600;
+      }
+      .file-header .seg {
+        display: flex;
+        background: var(--pill);
+        border-radius: 5px;
+        padding: 2px;
+      }
+      .seg button {
+        padding: 3px 6px;
+        font-size: 10px;
+        white-space: nowrap;
+      }
+      .diff-tools {
+        display: flex;
+        align-items: center;
+        gap: 3px;
+        padding: 5px 12px;
+        flex: none;
+        border-block-end: 1px solid var(--line);
+        font-size: 10px;
+        color: var(--muted);
+      }
+      .diff-tools button {
+        font-size: 10px;
+        padding: 3px 6px;
+      }
+      .diff-scroll {
+        overflow: auto;
+        flex: 1;
+        min-height: 0;
+        background: var(--card);
+        scroll-behavior: smooth;
+      }
+      .diff-file {
+        border-block-end: 1px solid var(--line);
+      }
+      .diff-file > header {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: var(--pill);
+        padding: 9px 12px;
+        border-block-end: 1px solid var(--line);
+        font-size: 11px;
+      }
+      .diff-table {
+        display: table;
+        border-collapse: collapse;
+        width: 100%;
+        font:
+          11px/1.85 ui-monospace,
+          SFMono-Regular,
+          Menlo,
+          monospace;
+        tab-size: 2;
+      }
+      .diff-table .row {
+        display: table-row;
+      }
+      .diff-table .num,
+      .diff-table .sign,
+      .diff-table .source {
+        display: table-cell;
+        vertical-align: top;
+      }
+      .diff-table .num {
+        width: 33px;
+        min-width: 30px;
+        text-align: end;
+        color: var(--muted);
+        user-select: none;
+        padding-inline: 5px;
+        border-inline-end: 1px solid
+          color-mix(in srgb, var(--line) 50%, transparent);
+        font-size: 10px;
+      }
+      .diff-table .sign {
+        width: 17px;
+        min-width: 17px;
+        text-align: center;
+        user-select: none;
+      }
+      .diff-table .source {
+        white-space: pre;
+        padding-inline: 5px 18px;
+        min-width: 130px;
+      }
+      .diff-table .add {
+        background: var(--add-bg);
+        color: var(--add);
+      }
+      .diff-table .del {
+        background: var(--del-bg);
+        color: var(--del);
+      }
+      .diff-table mark {
+        background: var(--add-word);
+        color: inherit;
+        border-radius: 2px;
+      }
+      .diff-table .del mark {
+        background: var(--del-word);
+      }
+      .diff-table .empty-cell {
+        background: color-mix(in srgb, var(--line) 20%, var(--card));
+      }
+      .split .source {
+        width: 50%;
+      }
+      .split .split-start {
+        border-inline-start: 1px solid var(--line);
+      }
+      .split-head {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        background: var(--pill);
+        border-block-end: 1px solid var(--line);
+        font-size: 10px;
+      }
+      .split-head div {
+        padding: 6px 12px;
+      }
+      .split-head div + div {
+        border-inline-start: 1px solid var(--line);
+      }
+      .change-focus {
+        outline: 2px solid var(--accent);
+        outline-offset: -2px;
+      }
+      .collapse-context {
+        width: 100%;
+        text-align: start;
+        background: var(--pill);
+        padding: 7px 12px;
+        color: var(--muted);
+        border-block: 1px solid var(--line);
+        font-size: 10px;
+      }
+      .empty-diff {
+        padding: 30px 22px;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.8;
+      }
+      .empty-diff strong {
+        display: block;
+        color: var(--ink);
+        margin-bottom: 6px;
+      }
+      .diff-status {
+        padding: 6px 12px;
+        font-size: 10px;
+        color: var(--muted);
+        border-block-start: 1px solid var(--line);
+        flex: none;
+        display: flex;
+        gap: 10px;
+      }
+      .file-open {
+        font-size: 10px;
+        white-space: nowrap;
+      }
+      .compact-summary {
+        display: none;
+      }
+      .app[data-variant='B'] .git-layout {
+        display: grid;
+        grid-template-columns: 156px minmax(0, 1fr);
+        grid-template-rows: auto auto minmax(0, 1fr);
+      }
+      .app[data-variant='B'] .graph-wrap {
+        grid-column: 1;
+        grid-row: 1/4;
+        border-inline-end: 1px solid var(--line);
+        border-block-end: 0;
+        padding: 9px 5px;
+      }
+      .app[data-variant='B'] .graph {
+        height: 400px;
+        min-width: 0;
+      }
+      .app[data-variant='B'] .graph-scroll {
+        overflow: visible;
+      }
+      .app[data-variant='B'] .graph-lines {
+        display: none;
+      }
+      .app[data-variant='B'] .node {
+        left: 0 !important;
+        top: auto !important;
+        position: relative;
+        display: block;
+        width: 100%;
+        padding: 8px 7px 8px 22px;
+        min-height: 67px;
+      }
+      .app[data-variant='B'] .node::before {
+        position: absolute;
+        left: 5px;
+        top: 12px;
+        width: 8px;
+        height: 8px;
+        margin: 0;
+      }
+      .app[data-variant='B'] .node[data-branch='true'] {
+        margin-left: 12px;
+        width: calc(100% - 12px);
+      }
+      .app[data-variant='B'] .node[data-branch='true'] .node-title {
+        padding: 0;
+      }
+      .app[data-variant='B'] .node .node-title {
+        white-space: normal;
+        font-size: 11px;
+      }
+      .app[data-variant='B'] .graph-tools .grow,
+      .app[data-variant='B'] .graph-tools button {
+        display: none;
+      }
+      .app[data-variant='B'] .version-summary {
+        grid-column: 2;
+        flex-wrap: wrap;
+        gap: 5px;
+      }
+      .app[data-variant='B'] .comparison {
+        grid-column: 2;
+      }
+      .app[data-variant='B'] .diff-workspace {
+        grid-column: 2;
+      }
+      .app[data-variant='B'] .summary-meta {
+        display: none;
+      }
+      .app[data-variant='B'] .file-header {
+        flex-wrap: wrap;
+      }
+      .app[data-variant='C'] .graph-wrap {
+        display: none;
+      }
+      .app[data-variant='C'][data-graph-open='true'] .graph-wrap {
+        display: block;
+      }
+      .app[data-variant='C'] .diff-workspace .file-header,
+      .app[data-variant='C'] .diff-workspace .diff-tools {
+        display: none;
+      }
+      .app[data-variant='C'] .compact-summary {
+        display: inline-block;
+      }
+      .all-files-overview {
+        display: flex;
+        gap: 8px;
+        padding: 8px 12px;
+        border-block-end: 1px solid var(--line);
+        background: var(--card);
+        align-items: center;
+        font-size: 10px;
+      }
+      .all-files-overview .seg {
+        margin-inline-start: auto;
+      }
+      .right {
+        border-inline-start: 1px solid var(--line);
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+      }
+      .right-head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 12px;
+        border-block-end: 1px solid var(--line);
+        height: 39px;
+      }
+      .right-head strong {
+        font-weight: 500;
+      }
+      .right-head button {
+        font-size: 10px;
+      }
+      .monitor {
+        padding: 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        min-height: 0;
+      }
+      .canvas {
+        background: #e7e8e4;
+        color: #343a37;
+        aspect-ratio: 4/5;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 14px;
+        padding: 22px;
+        border-radius: 6px;
+      }
+      .canvas-label {
+        font:
+          10px ui-monospace,
+          monospace;
+        letter-spacing: 0.15em;
+        color: #5b635f;
+      }
+      .canvas-row {
+        display: flex;
+        justify-content: space-between;
+        font:
+          30px Georgia,
+          serif;
+      }
+      .canvas-line {
+        height: 1px;
+        background: #929d96;
+        margin: 6px 0;
+      }
+      .monitor p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 10px;
+        line-height: 1.7;
+      }
+      .monitor-note {
+        border: 1px solid var(--line);
+        padding: 9px;
+        border-radius: 5px;
+      }
+      .footer {
+        grid-column: 1/-1;
+        border-block-start: 1px solid var(--line);
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding-inline: 14px;
+        height: 50px;
+      }
+      .footer .run {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        white-space: nowrap;
+        padding-inline: 10px;
+        height: 30px;
+      }
+      .gain {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 0;
+        border: 0;
+      }
+      .gain input {
+        width: 75px;
+        padding: 0;
+        accent-color: var(--accent);
+        height: 24px;
+        box-shadow: none;
+        border: 0;
+        background: transparent;
+      }
+      .gain output {
+        font-size: 10px;
+        min-width: 29px;
+      }
+      .footer .device,
+      .footer .network {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 11px;
+      }
+      .footer .mode {
+        border: 1px solid var(--line);
+        padding: 5px 10px;
+      }
+      .reviewbar {
+        position: fixed;
+        bottom: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+        height: 42px;
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        background: #18232c;
+        color: #f3f7fa;
+        box-shadow: 0 3px 15px #0002;
+        padding: 6px 9px;
+        border-radius: 9px;
+        font-size: 11px;
+        white-space: nowrap;
+        z-index: 80;
+      }
+      .reviewbar button {
+        color: inherit;
+        border: 1px solid #4f5e69;
+      }
+      .reviewbar button:hover {
+        background: #35434e;
+      }
+      .reviewbar select {
+        background: #263640;
+        border-color: #52616c;
+        color: inherit;
+        font-size: 11px;
+      }
+      .reviewbar .review-state {
+        color: #bfd0da;
+        max-width: 200px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .reviewbar a {
+        color: #d5e6f0;
+      }
+      .toast {
+        position: fixed;
+        bottom: 130px;
+        right: 25px;
+        z-index: 99;
+        background: var(--card);
+        border: 1px solid var(--line);
+        box-shadow: 0 8px 25px #0002;
+        border-radius: 8px;
+        padding: 12px 16px;
+        max-width: 330px;
+        opacity: 0;
+        transform: translateY(6px);
+        transition:
+          opacity 0.18s,
+          transform 0.18s;
+        pointer-events: none;
+      }
+      .toast[data-visible='true'] {
+        opacity: 1;
+        transform: translateY(0);
+      }
+      .file-view,
+      .discussion-view {
+        padding: 20px;
+        overflow: auto;
+        min-height: 0;
+        flex: 1;
+      }
+      .file-view pre {
+        font:
+          12px/1.9 ui-monospace,
+          SFMono-Regular,
+          Menlo,
+          monospace;
+        white-space: pre;
+        overflow: auto;
+      }
+      .file-view h2 {
+        font-size: 13px;
+      }
+      .file-view p,
+      .discussion-view p {
+        line-height: 1.8;
+        color: var(--muted);
+      }
+      dialog {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: var(--card);
+        color: var(--ink);
+        max-width: 620px;
+        width: calc(100% - 40px);
+        padding: 22px;
+        box-shadow: 0 15px 60px #0003;
+      }
+      dialog::backdrop {
+        background: #13202b50;
+      }
+      dialog h2 {
+        font-size: 16px;
+        margin: 0 0 14px;
+      }
+      dialog p,
+      dialog li {
+        line-height: 1.9;
+        font-size: 12px;
+      }
+      dialog code {
+        font-size: 11px;
+      }
+      .dialog-footer {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        margin-top: 20px;
+      }
+      dialog li {
+        margin-bottom: 6px;
+      }
+      .note-badge {
+        font-size: 10px;
+        color: var(--muted);
+        border: 1px solid var(--line);
+        padding: 2px 5px;
+        border-radius: 4px;
+      }
+      @media (max-width: 1120px) {
+        .app {
+          grid-template-columns: 210px minmax(430px, 1fr) 30%;
+        }
+        .summary-meta {
+          display: none;
+        }
+        .compare-direction span {
+          max-width: 120px;
+        }
+        .file-header .seg button {
+          padding: 3px 4px;
+        }
+        .review-state {
+          display: none;
+        }
+        .footer .network {
+          display: none;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          transition: none !important;
+          scroll-behavior: auto !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <svg style="display: none" aria-hidden="true">
+      <defs>
+        <symbol id="i-branch" viewBox="0 0 24 24">
+          <path d="M6 3v12M18 6a6 6 0 0 1-6 6H6" />
+          <circle cx="6" cy="18" r="3" />
+          <circle cx="18" cy="3" r="3" />
+        </symbol>
+        <symbol id="i-folder" viewBox="0 0 24 24">
+          <path d="M3 7V4h6l2 3h10v13H3Z" />
+        </symbol>
+        <symbol id="i-file" viewBox="0 0 24 24">
+          <path d="M5 3h9l5 5v13H5Z M14 3v6h5" />
+        </symbol>
+        <symbol id="i-code" viewBox="0 0 24 24">
+          <path d="m8 7-5 5 5 5m8-10 5 5-5 5m-3-14-2 18" />
+        </symbol>
+        <symbol id="i-play" viewBox="0 0 24 24">
+          <path d="m7 4 14 8-14 8Z" />
+        </symbol>
+        <symbol id="i-volume" viewBox="0 0 24 24">
+          <path
+            d="M3 9h4l5-5v16l-5-5H3Zm13-2a7 7 0 0 1 0 10m3-13a11 11 0 0 1 0 16"
+          />
+        </symbol>
+        <symbol id="i-save" viewBox="0 0 24 24">
+          <path d="M4 3h13l4 4v14H3V3Zm3 0v7h9V3M7 21v-7h10v7" />
+        </symbol>
+        <symbol id="i-chevron" viewBox="0 0 24 24">
+          <path d="m9 5 7 7-7 7" />
+        </symbol>
+      </defs>
+    </svg>
+    <div class="app" id="app" data-variant="A">
+      <header class="topbar">
+        <div class="traffic" aria-hidden="true"><i></i><i></i><i></i></div>
+        <svg class="icon"><use href="#i-folder" /></svg
+        ><span class="project-title">runes-pnds</span
+        ><span class="git-location" id="current-location"></span>
+        <div class="top-end">
+          <span class="muted">创作模式</span
+          ><button type="button" title="右侧预览保持当前运行内容">◧</button>
+        </div>
+      </header>
+      <aside class="sidebar" aria-label="工程文件">
+        <div class="sidebar-head">
+          <strong id="tree-heading">对比文件</strong><span class="grow"></span
+          ><span class="badge" id="tree-count"></span>
+        </div>
+        <div class="tree-context" id="tree-context"></div>
+        <div class="scope-tabs" aria-label="文件范围">
+          <button type="button" data-scope="changed" aria-pressed="true">
+            仅变更</button
+          ><button type="button" data-scope="all" aria-pressed="false">
+            全部文件
+          </button>
+        </div>
+        <input
+          class="filter"
+          id="file-filter"
+          type="search"
+          placeholder="筛选文件…"
+          aria-label="筛选文件"
+        />
+        <nav class="tree" id="tree" aria-label="对比文件列表"></nav>
+        <div class="tree-note" id="tree-note">
+          单击文件查看差异。<br />查看旧版本不会改变当前代码或预览。
+        </div>
+      </aside>
+      <main class="middle">
+        <nav class="workspace-tabs" role="tablist" aria-label="工作区">
+          <button
+            type="button"
+            data-page="discussion"
+            role="tab"
+            aria-selected="false"
+          >
+            讨论</button
+          ><button
+            type="button"
+            data-page="git"
+            role="tab"
+            aria-selected="true"
+          >
+            Git 版本</button
+          ><button
+            type="button"
+            data-page="handoff"
+            role="tab"
+            aria-selected="false"
+          >
+            交接</button
+          ><button
+            type="button"
+            data-page="file"
+            role="tab"
+            id="file-tab"
+            aria-selected="false"
+            hidden
+          >
+            monitor.js
+          </button>
+        </nav>
+        <section class="git-page" id="git-page" aria-label="Git 版本">
+          <header class="git-toolbar">
+            <h1>Git 版本</h1>
+            <span class="note-badge">本地</span><span class="grow"></span
+            ><input
+              id="version-name"
+              placeholder="版本名称（可选）"
+              aria-label="版本名称"
+            /><button type="button" class="primary save" id="save">
+              <svg class="icon"><use href="#i-save" /></svg>保存当前版本
+            </button>
+          </header>
+          <div class="git-layout">
+            <section class="graph-wrap" id="graph-wrap" aria-label="版本关系">
+              <div class="graph-tools">
+                <span>版本关系</span><span class="grow"></span
+                ><span>● 当前代码　◉ 正在查看</span
+                ><button id="fold-graph" type="button">收起</button>
+              </div>
+              <div class="graph-scroll">
+                <div class="graph" id="graph"></div>
+              </div>
+            </section>
+            <header class="version-summary" id="version-summary"></header>
+            <div class="comparison" id="comparison"></div>
+            <section class="diff-workspace" aria-label="代码变化">
+              <header class="file-header" id="file-header"></header>
+              <div class="diff-tools" id="diff-tools"></div>
+              <div
+                class="all-files-overview"
+                id="all-files-overview"
+                hidden
+              ></div>
+              <div class="diff-scroll" id="diff-scroll"></div>
+              <footer class="diff-status" id="diff-status"></footer>
+            </section>
+          </div>
+        </section>
+        <section id="file-page" class="file-view" hidden></section>
+        <section id="other-page" class="discussion-view" hidden></section>
+      </main>
+      <aside class="right" aria-label="调试预览">
+        <header class="right-head">
+          <strong>调试</strong
+          ><button type="button" aria-pressed="true">预览</button
+          ><span class="grow"></span
+          ><button type="button" id="preview-menu" aria-label="调试栏更多操作">
+            •••
+          </button>
+        </header>
+        <div class="monitor">
+          <div class="canvas">
+            <span class="canvas-label">RUNES / STUDY 04</span>
+            <div class="canvas-row">
+              <span>08</span><span>13</span><span>21</span>
+            </div>
+            <div class="canvas-line"></div>
+            <div class="canvas-row">
+              <span>34</span><span>55</span><span>89</span>
+            </div>
+            <div class="canvas-line"></div>
+            <span class="canvas-label">LISTEN · FOLLOW · REPEAT</span>
+          </div>
+          <p id="runtime-label"></p>
+          <p class="monitor-note">
+            这里只显示当前运行版本。<br />左边查看历史差异时，预览保持原样。
+          </p>
+        </div>
+      </aside>
+      <footer class="footer" aria-label="底部控制">
+        <button class="primary run" type="button" id="run">
+          <svg class="icon"><use href="#i-play" /></svg
+          ><span id="run-label">重启测试</span>
+        </button>
+        <div class="gain">
+          <svg class="icon" aria-hidden="true"><use href="#i-volume" /></svg
+          ><input
+            type="range"
+            id="volume"
+            aria-label="音量"
+            min="0"
+            max="100"
+            value="80"
+          /><output id="volume-label" for="volume">80%</output>
+        </div>
+        <span class="device">扬声器　<small class="muted">48 kHz</small></span
+        ><span class="network muted">192.168.1.24</span
+        ><span class="grow"></span
+        ><button type="button" id="console">控制台</button
+        ><button type="button" id="settings">设置</button
+        ><button type="button" class="mode" id="performance">演出模式 ↗</button>
+      </footer>
+    </div>
+    <div class="reviewbar" aria-label="原型评审工具">
+      <span>原型</span
+      ><button type="button" id="previous-variant" aria-label="上一个布局">
+        ←</button
+      ><select id="variant" aria-label="布局方案">
+        <option value="A">A · 版本图在上，文件差异为主（建议）</option>
+        <option value="B">B · 版本列表在旁，代码占满高度</option>
+        <option value="C">C · 连续查看全部变更文件</option></select
+      ><button type="button" id="next-variant" aria-label="下一个布局">→</button
+      ><select id="theme" aria-label="主题">
+        <option value="pond">池塘</option>
+        <option value="sand">暖沙</option>
+        <option value="stage">暗场</option></select
+      ><button type="button" id="review-notes">交互说明</button
+      ><span class="review-state" id="review-state"></span>
+    </div>
+    <div role="status" class="toast" id="toast" aria-live="polite"></div>
+    <dialog id="notes">
+      <h2>Git 文件差异 · 待核对方案</h2>
+      <p>
+        本原型仅核对文件导航、比较方向和阅读方式。所有版本与代码均为合成示例，不读取或修改真实
+        runes-pnds，不启动测试。
+      </p>
+      <ol>
+        <li>
+          <strong>保存反馈：</strong
+          >去掉常驻“本地版本已记录”回执；保存后短暂提示，并在图中定位新版本。必要的保存警告仍单独呈现。
+        </li>
+        <li>
+          <strong>左侧联动：</strong>在 Git
+          页，左栏明确标为“对比文件”。单击直接查看差异，保留 Git 页；离开 Git
+          后恢复当前工程文件。删除文件也可查看，不会伪装成当前存在的文件。
+        </li>
+        <li>
+          <strong>比较方向：</strong>默认“上一个版本 →
+          选中版本”，呈现此版本带来的改动；可切到“选中版本 →
+          当前保存文件”。当前未记录修改与 HEAD 比较，编辑器草稿不计入。
+        </li>
+        <li>
+          <strong>代码：</strong>删除为红色与 −，添加为绿色与
+          +；有行号、整行底色、局部变化加深、上下文展开、上一处／下一处跳转、逐行／左右对比。
+        </li>
+        <li>
+          <strong>打开文件：</strong
+          >明确点击“打开当前文件”才进入文件页签；这不等于载入历史内容、不切换代码版本，原有草稿保护不变。
+        </li>
+        <li>
+          <strong>三个布局：</strong>A 保留横向版本图、代码占主要空间；B
+          将图移到中间栏左边，增加代码高度；C
+          默认折叠图，连续查看所有差异，左栏用于定位。
+        </li>
+        <li>
+          <strong>底栏：</strong
+          >启动／重启按钮按内容占宽，紧接音量；取消音量两侧竖线，刷新仍在原生“窗口”菜单。
+        </li>
+      </ol>
+      <p class="muted">
+        原型中的完整版本文件差异、父版本对比和逐行渲染是拟议能力，需在正式实现中补齐原生读取契约与大文件限制；不是对现有
+        App 能力的验收结论。
+      </p>
+      <div class="dialog-footer">
+        <button class="primary" type="button" id="close-notes">继续核对</button>
+      </div>
+    </dialog>
+    <dialog id="switch-dialog">
+      <h2>切换到此版本</h2>
+      <p id="switch-copy"></p>
+      <p class="muted">
+        此处演示原有切换保护。正式实现继续核对草稿、未记录修改、运行状态与未完成助手任务。本次仅查看代码差异，不会替你切换。
+      </p>
+      <div class="dialog-footer">
+        <button type="button" id="cancel-switch">返回查看</button>
+      </div>
+    </dialog>
+    <script>
+      const $ = id => document.getElementById(id)
+      const esc = value =>
+        String(value).replace(
+          /[&<>"']/g,
+          c =>
+            ({
+              '&': '&amp;',
+              '<': '&lt;',
+              '>': '&gt;',
+              '"': '&quot;',
+              "'": '&#39;',
+            })[c]
+        )
+      const icon = id =>
+        `<svg class="icon" aria-hidden="true"><use href="#i-${id}"/></svg>`
+      const BASE = {
+        'manifest.json': '{\n  "name": "runes-pnds",\n  "version": "1.0.0"\n}',
+        'README.zh-CN.md':
+          '# Runes\n\n数字乐谱的演示工程。\n\n## 运行\n在创作模式中启动测试。',
+        'public/monitor.js':
+          '// 合成代码：仅用于界面评审\nconst cells = [];\nconst columns = 3;\nconst rows = 2;\n\nfunction setup() {\n  createCanvas(800, 960);\n  textAlign(CENTER, CENTER);\n  textFont("Georgia");\n  textSize(24);\n}\n\nfunction draw() {\n  background(232);\n  drawGrid(columns, rows);\n  drawCells(cells);\n}\n\nfunction windowResized() {\n  resizeCanvas(800, 960);\n}',
+        'public/Pattern.js':
+          'class Pattern {\n  constructor(values) {\n    this.values = values;\n  }\n\n  next(index) {\n    return this.values[index % this.values.length];\n  }\n}',
+        'public/Grid.js':
+          'class Grid {\n  constructor(columns, rows) {\n    this.columns = columns;\n    this.rows = rows;\n  }\n}',
+        'public/style.css':
+          'body {\n  margin: 0;\n  background: #e8e8e8;\n}\n\ncanvas {\n  display: block;\n  margin: 0 auto;\n}',
+        'public/legacy-labels.js':
+          '// 已被主程序接管的旧标签示例\nconst labelSize = 24;\nwindow.runesLabelSize = labelSize;',
+        'assets/score-cover.png': '[binary]',
+      }
+      const connected = {
+        ...BASE,
+        'public/monitor.js': BASE['public/monitor.js'].replace(
+          '  textSize(24);',
+          '  textSize(28);'
+        ),
+      }
+      const controls = {
+        ...connected,
+        'public/monitor.js': connected['public/monitor.js']
+          .replace(
+            'const cells = [];',
+            'const cells = [];\nconst params = { fontSize: 36 };'
+          )
+          .replace('  textSize(28);', '  textSize(params.fontSize);')
+          .replace(
+            '  background(232);',
+            '  background(232);\n  textSize(params.fontSize);'
+          ),
+        'public/style.css': BASE['public/style.css'].replace(
+          '  margin: 0 auto;',
+          '  margin: 16px auto;\n  max-width: 100%;'
+        ),
+        'pnds.preview.json':
+          '{\n  "parameters": [{\n    "id": "fontSize",\n    "label": "字号",\n    "type": "number",\n    "min": 12,\n    "max": 72\n  }]\n}',
+      }
+      delete controls['public/legacy-labels.js']
+      const current = {
+        ...controls,
+        'public/style.css': controls['public/style.css'].replace(
+          '16px',
+          '24px'
+        ),
+        'README.zh-CN.md':
+          BASE['README.zh-CN.md'] + '\n\n## 参数\n使用字号推子调整数字大小。',
+      }
+      const alternate = {
+        ...controls,
+        'public/monitor.js': controls['public/monitor.js'].replace(
+          'fontSize: 36',
+          'fontSize: 18'
+        ),
+      }
+      const versions = [
+        {
+          id: 'v0',
+          name: 'Initial project',
+          parent: null,
+          stamp: '10月19日 14:20',
+          files: BASE,
+        },
+        {
+          id: 'v1',
+          name: '跑通原始乐谱',
+          parent: 'v0',
+          stamp: '10月19日 14:36',
+          files: connected,
+        },
+        {
+          id: 'v2',
+          name: '让字号可以调整',
+          parent: 'v1',
+          stamp: '10月19日 15:02',
+          files: controls,
+        },
+        {
+          id: 'v3',
+          name: '微调画布留白',
+          parent: 'v2',
+          stamp: '10月19日 15:18',
+          files: current,
+        },
+        {
+          id: 'side',
+          name: '较小字号的尝试',
+          parent: 'v2',
+          stamp: '10月19日 15:08',
+          files: alternate,
+          branch: true,
+        },
+      ]
+      const state = {
+        variant: new URLSearchParams(location.search).get('variant') || 'A',
+        selected: 'v2',
+        head: 'v3',
+        file: 'public/monitor.js',
+        scope: 'changed',
+        comparison: 'parent',
+        mode: 'split',
+        allContext: false,
+        graphOpen: false,
+        page: 'git',
+        editorPath: null,
+        volume: 80,
+        running: true,
+        runtimeName: '微调画布留白',
+        dirty: true,
+        changeIndex: -1,
+      }
+      if (!['A', 'B', 'C'].includes(state.variant)) state.variant = 'A'
+      const find = id => versions.find(v => v.id === id)
+      const working = () => ({
+        ...find(state.head).files,
+        'public/monitor.js': find(state.head).files[
+          'public/monitor.js'
+        ].replace('fontSize: 36', 'fontSize: 40'),
+      })
+      function pair() {
+        const selected = find(state.selected)
+        if (state.selected === 'working')
+          return {
+            before: find(state.head).files,
+            after: working(),
+            left: find(state.head).name,
+            right: '当前保存文件（未记录）',
+          }
+        if (state.comparison === 'current')
+          return {
+            before: selected.files,
+            after: state.dirty ? working() : find(state.head).files,
+            left: selected.name,
+            right: '当前保存文件',
+          }
+        return {
+          before: selected.parent ? find(selected.parent).files : {},
+          after: selected.files,
+          left: selected.parent ? find(selected.parent).name : '空工程',
+          right: selected.name,
+        }
+      }
+      function diff(before, after) {
+        const a = (before ?? '').split('\n'),
+          b = (after ?? '').split('\n')
+        if (before === undefined) a.length = 0
+        if (after === undefined) b.length = 0
+        const table = Array.from({ length: a.length + 1 }, () =>
+          Array(b.length + 1).fill(0)
+        )
+        for (let i = a.length - 1; i >= 0; i--)
+          for (let j = b.length - 1; j >= 0; j--)
+            table[i][j] =
+              a[i] === b[j]
+                ? 1 + table[i + 1][j + 1]
+                : Math.max(table[i + 1][j], table[i][j + 1])
+        let i = 0,
+          j = 0,
+          out = []
+        while (i < a.length || j < b.length) {
+          if (i < a.length && j < b.length && a[i] === b[j]) {
+            out.push({ kind: 'same', text: a[i], old: ++i, new: ++j })
+          } else if (
+            i < a.length &&
+            (j === b.length || table[i + 1][j] >= table[i][j + 1])
+          )
+            out.push({ kind: 'del', text: a[i], old: ++i, new: null })
+          else out.push({ kind: 'add', text: b[j], old: null, new: ++j })
+        }
+        return out
+      }
+      function changes() {
+        const p = pair()
+        return [...new Set([...Object.keys(p.before), ...Object.keys(p.after)])]
+          .sort((a, b) => {
+            const rank = x =>
+              x === 'manifest.json'
+                ? 0
+                : /^README(?:\.[^/]+)?\.md$/.test(x)
+                  ? 1
+                  : 2
+            return rank(a) - rank(b) || a.localeCompare(b)
+          })
+          .map(path => {
+            const before = p.before[path],
+              after = p.after[path]
+            const rows =
+              before === '[binary]' || after === '[binary]'
+                ? []
+                : diff(before, after)
+            return {
+              path,
+              before,
+              after,
+              rows,
+              status:
+                before === after
+                  ? ''
+                  : before === undefined
+                    ? 'A'
+                    : after === undefined
+                      ? 'D'
+                      : 'M',
+              added: rows.filter(r => r.kind === 'add').length,
+              removed: rows.filter(r => r.kind === 'del').length,
+            }
+          })
+      }
+      function totals(files) {
+        return `<span class="counts"><span class="add-ink">+${files.reduce((n, f) => n + f.added, 0)}</span><span class="del-ink">−${files.reduce((n, f) => n + f.removed, 0)}</span></span>`
+      }
+      let toastTimer
+      function notify(message) {
+        $('toast').textContent = message
+        $('toast').dataset.visible = 'true'
+        clearTimeout(toastTimer)
+        toastTimer = setTimeout(
+          () => ($('toast').dataset.visible = 'false'),
+          3500
+        )
+      }
+      function renderGraph() {
+        const all = [
+          ...versions,
+          ...(state.dirty
+            ? [
+                {
+                  id: 'working',
+                  parent: state.head,
+                  name: '未记录修改',
+                  stamp: '保存版 · 草稿不计入',
+                },
+              ]
+            : []),
+        ]
+        const main = all.filter(v => !v.branch)
+        const width = 100 / (main.length - 1 || 1)
+        const position = v =>
+          v.branch
+            ? Math.min(72, 2 * width + 8)
+            : main.findIndex(x => x.id === v.id) * width * 0.78
+        const edges = all
+          .filter(v => v.parent)
+          .map(v => {
+            const parent = all.find(p => p.id === v.parent)
+            return parent
+              ? `<line x1="${position(parent)}%" y1="${parent.branch ? 68 : 12}" x2="${position(v)}%" y2="${v.branch ? 68 : 12}" />`
+              : ''
+          })
+          .join('')
+        $('graph').innerHTML =
+          `<svg class="graph-lines"><g transform="translate(15,0)">${edges}</g></svg>` +
+          all
+            .map(
+              v =>
+                `<button type="button" class="node" style="left:${position(v)}%;width:${Math.max(17, 100 / main.length)}%" data-version="${v.id}" data-current="${v.id === state.head}" data-branch="${!!v.branch}" aria-pressed="${v.id === state.selected}" title="${esc(v.name)}${v.parent ? ' · 来自 ' + esc(all.find(p => p.id === v.parent)?.name ?? '') : ''}${v.id === state.head ? ' · 当前代码' : ''}"><span class="node-title">${esc(v.name)}</span><span class="node-sub ${v.id === state.head ? 'node-current' : ''}">${v.id === state.head ? '当前代码 · main' : v.branch ? '试验分支' : esc(v.stamp)}</span></button>`
+            )
+            .join('')
+        $('graph-wrap').classList.toggle(
+          'graph-folded',
+          !state.graphOpen && state.variant === 'A' && state.folded
+        )
+        $('graph-wrap').querySelector('.graph-tools > span').textContent =
+          state.variant === 'B' ? '版本列表' : '版本关系'
+        $('fold-graph').textContent = state.folded ? '展开' : '收起'
+      }
+      function renderTree() {
+        const list =
+          state.page === 'git'
+            ? changes()
+            : Object.entries(find(state.head).files).map(([path, text]) => ({
+                path,
+                status: '',
+                before: text,
+                after: text,
+                added: 0,
+                removed: 0,
+              }))
+        const query = $('file-filter').value.trim().toLowerCase()
+        const visible = list.filter(
+          f =>
+            (state.page !== 'git' || state.scope === 'all' || f.status) &&
+            f.path.toLowerCase().includes(query)
+        )
+        $('tree-heading').textContent =
+          state.page === 'git' ? '对比文件' : '工程文件'
+        $('tree-context').textContent =
+          state.page === 'git'
+            ? `正在查看：${state.selected === 'working' ? '未记录修改' : find(state.selected).name}`
+            : '当前工程的保存版文件'
+        $('tree-count').textContent =
+          `${state.page === 'git' ? list.filter(f => f.status).length : list.length} 个${state.page === 'git' ? '变更' : '文件'}`
+        document.querySelector('.scope-tabs').hidden = state.page !== 'git'
+        document
+          .querySelectorAll('[data-scope]')
+          .forEach(b =>
+            b.setAttribute('aria-pressed', b.dataset.scope === state.scope)
+          )
+        let parent = ''
+        $('tree').innerHTML =
+          visible
+            .map(f => {
+              const folder = f.path.includes('/')
+                ? f.path.slice(0, f.path.lastIndexOf('/'))
+                : ''
+              let h = ''
+              if (folder && folder !== parent)
+                h = `<div class="folder">${icon('chevron')}${icon('folder')}${esc(folder)}</div>`
+              parent = folder
+              const selected =
+                state.page === 'git'
+                  ? state.file === f.path
+                  : state.editorPath === f.path
+              return (
+                h +
+                `<button type="button" class="file-row" data-path="${esc(f.path)}" data-status="${f.status}" data-nested="${!!folder}" data-unchanged="${!f.status}" aria-current="${selected}" title="${esc(f.path)}${f.status === 'D' ? ' · 已从对比目标删除' : ''}">${icon(/\.(js|css|json)$/.test(f.path) ? 'code' : 'file')}<span class="name">${esc(f.path.split('/').at(-1))}</span>${state.page === 'git' && f.status ? `${totals([f])}<span class="file-status ${f.status === 'A' ? 'add-ink' : f.status === 'D' ? 'del-ink' : ''}">${f.status}</span>` : ''}</button>`
+              )
+            })
+            .join('') || '<p class="empty-diff">没有匹配的文件。</p>'
+        $('tree-note').innerHTML =
+          state.page === 'git'
+            ? '单击文件查看差异。<br/>A 添加 · M 修改 · D 删除'
+            : '单击文件查看当前保存版。<br/>Git 页的选择与草稿不受影响。'
+      }
+      function modeButtons() {
+        return `<div class="seg"><button type="button" data-diff-mode="unified" aria-pressed="${state.mode === 'unified'}">逐行</button><button type="button" data-diff-mode="split" aria-pressed="${state.mode === 'split'}">左右对比</button></div>`
+      }
+      function renderSummary() {
+        const selected = find(state.selected)
+        const p = pair()
+        const changed = changes().filter(f => f.status)
+        $('version-summary').innerHTML =
+          `<svg class="icon" aria-hidden="true"><use href="#i-branch"/></svg><h2>${esc(selected?.name ?? '未记录修改')}</h2><span class="summary-meta">${esc(selected?.stamp ?? '当前保存版')}</span><span class="badge">${changed.length} 个文件</span>${totals(changed)}<span class="grow"></span><button class="compact-summary" type="button" id="toggle-graph">${state.graphOpen ? '收起' : '版本关系'} ▾</button><button type="button" id="request-switch" ${!selected || selected.id === state.head ? 'disabled' : ''}>切换到此版本…</button>`
+        $('comparison').innerHTML =
+          `<label class="muted" for="compare-select">比较</label><select id="compare-select" ${state.selected === 'working' ? 'disabled' : ''}><option value="parent" ${state.comparison === 'parent' ? 'selected' : ''}>此版本的变化（与上一个版本比）</option><option value="current" ${state.comparison === 'current' ? 'selected' : ''}>从此版本到当前保存文件</option></select><span class="compare-direction"><span title="${esc(p.left)}">${esc(p.left)}</span>→<span title="${esc(p.right)}">${esc(p.right)}</span></span>`
+      }
+      function marked(text, peer, kind) {
+        if (peer === undefined || text === peer) return esc(text)
+        let start = 0,
+          end = 0
+        while (
+          start < text.length &&
+          start < peer.length &&
+          text[start] === peer[start]
+        )
+          start++
+        while (
+          end < text.length - start &&
+          end < peer.length - start &&
+          text[text.length - 1 - end] === peer[peer.length - 1 - end]
+        )
+          end++
+        if (start === text.length - end) return esc(text)
+        return (
+          esc(text.slice(0, start)) +
+          `<mark>${esc(text.slice(start, text.length - end))}</mark>` +
+          esc(end ? text.slice(-end) : '')
+        )
+      }
+      function units(rows) {
+        const out = []
+        for (let i = 0; i < rows.length; ) {
+          if (rows[i].kind === 'same') {
+            out.push({ same: rows[i] })
+            i++
+            continue
+          }
+          const removed = [],
+            added = []
+          while (i < rows.length && rows[i].kind !== 'same') {
+            ;(rows[i].kind === 'del' ? removed : added).push(rows[i++])
+          }
+          out.push({ removed, added })
+        }
+        return out
+      }
+      function table(file) {
+        if (file.before === '[binary]' || file.after === '[binary]')
+          return '<div class="empty-diff"><strong>此文件无法显示文本差异</strong>保留文件状态和版本信息，不将二进制内容当作代码。</div>'
+        if (!file.status)
+          return '<div class="empty-diff"><strong>两个版本中的内容相同</strong>可从左栏选择带 M、A、D 标记的文件。</div>'
+        const grouped = units(file.rows)
+        let changeNumber = 0
+        let content = ''
+        for (let u = 0; u < grouped.length; u++) {
+          const unit = grouped[u]
+          if (unit.same) {
+            const run = []
+            while (u < grouped.length && grouped[u].same)
+              run.push(grouped[u++].same)
+            u--
+            const show =
+              run.length > 6 && !state.allContext
+                ? [...run.slice(0, 2), null, ...run.slice(-2)]
+                : run
+            for (const r of show) {
+              if (!r) {
+                content += `</div><button class="collapse-context" type="button" data-expand-context>⋯ 展开 ${run.length - 4} 行未变化内容</button><div class="diff-table ${state.mode === 'split' ? 'split' : ''}">`
+                continue
+              }
+              content +=
+                state.mode === 'split'
+                  ? `<div class="row"><span class="num">${r.old}</span><span class="sign"> </span><code class="source">${esc(r.text)}</code><span class="num split-start">${r.new}</span><span class="sign"> </span><code class="source">${esc(r.text)}</code></div>`
+                  : `<div class="row"><span class="num">${r.old}</span><span class="num">${r.new}</span><span class="sign"> </span><code class="source">${esc(r.text)}</code></div>`
+            }
+            continue
+          }
+          const max = Math.max(unit.removed.length, unit.added.length)
+          for (let n = 0; n < max; n++) {
+            const old = unit.removed[n],
+              next = unit.added[n]
+            if (state.mode === 'split') {
+              content += `<div class="row" data-change="${changeNumber++}"><span class="num ${old ? 'del' : 'empty-cell'}">${old?.old ?? ''}</span><span class="sign ${old ? 'del' : 'empty-cell'}">${old ? '−' : ''}</span><code class="source ${old ? 'del' : 'empty-cell'}">${old ? marked(old.text, next?.text, 'del') : ''}</code><span class="num split-start ${next ? 'add' : 'empty-cell'}">${next?.new ?? ''}</span><span class="sign ${next ? 'add' : 'empty-cell'}">${next ? '+' : ''}</span><code class="source ${next ? 'add' : 'empty-cell'}">${next ? marked(next.text, old?.text, 'add') : ''}</code></div>`
+            } else {
+              if (old)
+                content += `<div class="row del" data-change="${changeNumber++}"><span class="num">${old.old}</span><span class="num"></span><span class="sign">−</span><code class="source">${marked(old.text, next?.text, 'del')}</code></div>`
+              if (next)
+                content += `<div class="row add" data-change="${changeNumber++}"><span class="num"></span><span class="num">${next.new}</span><span class="sign">+</span><code class="source">${marked(next.text, old?.text, 'add')}</code></div>`
+            }
+          }
+        }
+        const p = pair()
+        return (
+          (state.mode === 'split'
+            ? `<div class="split-head"><div>之前 · ${esc(p.left)}</div><div>之后 · ${esc(p.right)}</div></div>`
+            : '') +
+          `<div class="diff-table ${state.mode === 'split' ? 'split' : ''}" aria-label="${esc(file.path)} 的代码差异">${content}</div>`
+        )
+      }
+      function openFileButton(file) {
+        const exists = Object.hasOwn(find(state.head).files, file.path)
+        return `<button type="button" class="file-open" data-open-file="${esc(file.path)}" ${exists ? '' : 'disabled'} title="${exists ? '打开当前工程中的保存版；不载入历史内容' : '此文件已不在当前工程中'}">打开当前文件 ↗</button>`
+      }
+      function renderDiff() {
+        const all = changes()
+        if (!all.some(f => f.path === state.file))
+          state.file = all.find(f => f.status)?.path ?? all[0]?.path ?? null
+        const file = all.find(f => f.path === state.file)
+        const changed = all.filter(f => f.status)
+        $('all-files-overview').hidden = state.variant !== 'C'
+        $('all-files-overview').innerHTML =
+          `<span>连续查看 ${changed.length} 个文件</span><span class="muted">左侧文件用于定位</span>${modeButtons()}`
+        $('file-header').innerHTML = file
+          ? `${icon('code')}<span class="path mono" title="${esc(file.path)}">${esc(file.path)}</span><span class="badge">${{ M: '修改', A: '添加', D: '删除', '': '未变化' }[file.status]}</span>${totals([file])}<span class="grow"></span>${modeButtons()}${openFileButton(file)}`
+          : ''
+        $('diff-tools').innerHTML =
+          `<button type="button" data-jump="-1">↑ 上一处</button><button type="button" data-jump="1">↓ 下一处</button><span id="change-position">选择文件查看具体行</span><span class="grow"></span><button type="button" data-context-toggle>${state.allContext ? '收起' : '展开'}全部上下文</button>`
+        $('diff-scroll').innerHTML =
+          state.variant === 'C'
+            ? changed
+                .map(
+                  f =>
+                    `<section class="diff-file" data-diff-path="${esc(f.path)}"><header>${icon('file')}<strong class="mono">${esc(f.path)}</strong><span class="badge">${{ M: '修改', A: '添加', D: '删除' }[f.status]}</span>${totals([f])}<span class="grow"></span>${openFileButton(f)}</header>${table(f)}</section>`
+                )
+                .join('') || '<p class="empty-diff">没有代码变化。</p>'
+            : file
+              ? table(file)
+              : '<p class="empty-diff">选择一个文件查看差异。</p>'
+        $('diff-status').innerHTML =
+          '<span>只读对比</span><span>− 删除　+ 添加</span><span class="grow"></span><span>保存版比较 · 不含编辑器草稿</span>'
+        state.changeIndex = -1
+      }
+      function renderPage() {
+        document
+          .querySelectorAll('[data-page]')
+          .forEach(b =>
+            b.setAttribute('aria-selected', b.dataset.page === state.page)
+          )
+        $('git-page').hidden = state.page !== 'git'
+        $('file-page').hidden = state.page !== 'file'
+        $('other-page').hidden = ['git', 'file'].includes(state.page)
+        if (state.page === 'file') {
+          const text = find(state.head).files[state.editorPath]
+          $('file-page').innerHTML =
+            `<h2>${esc(state.editorPath ?? '当前文件')}</h2><p>当前工程保存版 · 本原型仅查看。Git 中的版本选择与差异阅读位置仍保留。</p><button type="button" class="primary" data-page="git">返回 Git 差异</button><pre>${esc(text === '[binary]' ? '二进制文件' : (text ?? '此文件不在当前工程中。'))}</pre>`
+        } else if (state.page === 'handoff')
+          $('other-page').innerHTML =
+            '<h2>创作交接单</h2><p>此区域沿用现有 App，本轮不调整。返回 Git 后保留正在查看的文件、版本与比较方向。</p>'
+        else if (state.page === 'discussion')
+          $('other-page').innerHTML =
+            '<h2>讨论</h2><p>此区域沿用现有 App，本轮不调整。查看代码差异不会发送消息、继续助手任务或改变当前工程。</p>'
+        renderTree()
+      }
+      function render() {
+        if (!['A', 'B', 'C'].includes(state.variant)) state.variant = 'A'
+        $('app').dataset.variant = state.variant
+        $('app').dataset.graphOpen = state.graphOpen
+        $('variant').value = state.variant
+        renderGraph()
+        renderSummary()
+        renderDiff()
+        renderPage()
+        $('current-location').innerHTML =
+          `${icon('branch')} main · ${esc(find(state.head).name)}`
+        $('runtime-label').textContent = state.running
+          ? `当前运行：${state.runtimeName} · 合成预览`
+          : '测试已停止 · 合成预览'
+        $('run-label').textContent = state.running ? '重启测试' : '运行测试'
+        $('review-state').textContent =
+          `查看 ${state.selected} · 文件 ${state.file?.split('/').at(-1) ?? '无'} · ${state.mode === 'split' ? '左右' : '逐行'}`
+      }
+      function selectFile(path) {
+        state.file = path
+        if (state.page === 'git') {
+          if (state.variant === 'C') {
+            renderTree()
+            const section = [
+              ...document.querySelectorAll('[data-diff-path]'),
+            ].find(n => n.dataset.diffPath === path)
+            section?.scrollIntoView?.({ block: 'start', behavior: 'smooth' })
+            if (!section) notify('此文件在对比范围内没有变化。')
+          } else {
+            renderDiff()
+            renderTree()
+            $('diff-scroll').scrollTop = 0
+          }
+        } else openCurrentFile(path)
+        $('review-state').textContent =
+          `查看 ${state.selected} · 文件 ${path.split('/').at(-1)} · ${state.mode === 'split' ? '左右' : '逐行'}`
+      }
+      function openCurrentFile(path) {
+        if (!Object.hasOwn(find(state.head).files, path)) {
+          notify('此文件不在当前工程中。')
+          return
+        }
+        state.editorPath = path
+        state.page = 'file'
+        $('file-tab').hidden = false
+        $('file-tab').textContent = path.split('/').at(-1)
+        renderPage()
+      }
+      function variant(value) {
+        state.variant = value
+        const url = new URL(location.href)
+        url.searchParams.set('variant', value)
+        try {
+          history.replaceState(null, '', url)
+        } catch {}
+        render()
+      }
+      function jump(step) {
+        const nodes = [...$('diff-scroll').querySelectorAll('[data-change]')]
+        if (!nodes.length) return
+        state.changeIndex =
+          state.changeIndex < 0
+            ? step < 0
+              ? nodes.length - 1
+              : 0
+            : (state.changeIndex + step + nodes.length) % nodes.length
+        nodes.forEach(n => n.classList.remove('change-focus'))
+        nodes[state.changeIndex].classList.add('change-focus')
+        nodes[state.changeIndex].scrollIntoView?.({
+          block: 'center',
+          behavior: 'smooth',
+        })
+        $('change-position').textContent =
+          `第 ${state.changeIndex + 1} / ${nodes.length} 处变化`
+      }
+      document.addEventListener('click', event => {
+        const button = event.target.closest('button')
+        if (!button || button.disabled) return
+        const data = button.dataset
+        if (data.version) {
+          state.selected = data.version
+          state.comparison = 'parent'
+          state.allContext = false
+          render()
+        } else if (data.path) selectFile(data.path)
+        else if (data.scope) {
+          state.scope = data.scope
+          renderTree()
+        } else if (data.diffMode) {
+          const scroll = $('diff-scroll').scrollTop
+          state.mode = data.diffMode
+          renderDiff()
+          $('diff-scroll').scrollTop = scroll
+        } else if (data.openFile) openCurrentFile(data.openFile)
+        else if (data.page) {
+          state.page = data.page
+          renderPage()
+        } else if (data.jump) jump(Number(data.jump))
+        else if ('expandContext' in data || 'contextToggle' in data) {
+          state.allContext = !state.allContext
+          renderDiff()
+        } else if (button.id === 'toggle-graph') {
+          state.graphOpen = !state.graphOpen
+          $('app').dataset.graphOpen = state.graphOpen
+          button.textContent = state.graphOpen ? '收起' : '版本关系 ▾'
+        } else if (button.id === 'fold-graph') {
+          state.folded = !state.folded
+          renderGraph()
+        } else if (button.id === 'request-switch') {
+          $('switch-copy').textContent =
+            `正在查看“${find(state.selected).name}”，当前代码仍是“${find(state.head).name}”。`
+          if ($('switch-dialog').showModal) $('switch-dialog').showModal()
+          else $('switch-dialog').setAttribute('open', '')
+        }
+      })
+      $('file-filter').addEventListener('input', renderTree)
+      $('variant').addEventListener('change', e => variant(e.target.value))
+      $('theme').addEventListener(
+        'change',
+        e => (document.documentElement.dataset.theme = e.target.value)
+      )
+      $('previous-variant').onclick = () =>
+        variant(
+          ['A', 'B', 'C'][(['A', 'B', 'C'].indexOf(state.variant) + 2) % 3]
+        )
+      $('next-variant').onclick = () =>
+        variant(
+          ['A', 'B', 'C'][(['A', 'B', 'C'].indexOf(state.variant) + 1) % 3]
+        )
+      document.addEventListener('keydown', e => {
+        if (
+          !['ArrowLeft', 'ArrowRight'].includes(e.key) ||
+          e.target.closest('input,textarea,select,[contenteditable],dialog')
+        )
+          return
+        if (e.target.closest('.reviewbar') || e.target === document.body) {
+          e.preventDefault()
+          variant(
+            ['A', 'B', 'C'][
+              (['A', 'B', 'C'].indexOf(state.variant) +
+                (e.key === 'ArrowRight' ? 1 : 2)) %
+                3
+            ]
+          )
+        }
+      })
+      $('comparison').addEventListener('change', event => {
+        if (event.target.id === 'compare-select') {
+          state.comparison = event.target.value
+          state.allContext = false
+          renderSummary()
+          renderDiff()
+          renderTree()
+        }
+      })
+      $('save').onclick = () => {
+        if (!state.dirty) {
+          notify('没有新的改动，无需重复保存版本。')
+          return
+        }
+        const id = 'saved'
+        versions.push({
+          id,
+          name: $('version-name').value.trim() || '新的尝试',
+          parent: state.head,
+          stamp: '刚刚',
+          files: working(),
+        })
+        state.head = id
+        state.selected = id
+        state.dirty = false
+        state.comparison = 'parent'
+        $('version-name').value = ''
+        render()
+        notify('已保存当前版本，版本图已定位到新版本。')
+      }
+      $('volume').addEventListener('input', e => {
+        $('volume-label').textContent = `${e.target.value}%`
+        state.volume = Number(e.target.value)
+      })
+      $('run').onclick = () => {
+        state.running = true
+        state.runtimeName = state.dirty ? '当前保存文件' : find(state.head).name
+        render()
+        notify('已模拟重启当前工程。查看历史没有改变运行版本。')
+      }
+      $('review-notes').onclick = () => {
+        if ($('notes').showModal) $('notes').showModal()
+        else $('notes').setAttribute('open', '')
+      }
+      $('close-notes').onclick = () => {
+        if ($('notes').close) $('notes').close()
+        else $('notes').removeAttribute('open')
+      }
+      $('cancel-switch').onclick = () => {
+        if ($('switch-dialog').close) $('switch-dialog').close()
+        else $('switch-dialog').removeAttribute('open')
+      }
+      for (const id of ['console', 'settings', 'performance', 'preview-menu'])
+        $(id).onclick = () =>
+          notify('本轮只核对 Git 差异和底栏，其余入口沿用现有 App。')
+      render()
+    </script>
+  </body>
+</html>

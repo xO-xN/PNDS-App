@@ -6,6 +6,17 @@ review displays a line difference using the actual text, trimming only shared
 leading/trailing lines. Cancelling keeps the draft and writes nothing. Editing
 again invalidates the captured review and requires a fresh review.
 
+The review action appears when the file has a draft change. After a reviewed
+save, the header keeps a compact saved-change summary with **View changes** and
+**Undo saved change**. The difference starts collapsed for each saved change;
+opening it does not change the draft or its undo eligibility. Undo stays visible
+but disabled for a dirty draft, disk conflict, changed disk version or active
+operation. The ordinary file status, cursor position and language share one
+editor status bar. File metadata and less frequent editor actions live in their
+respective menus; find, draft undo/redo and selected-code discussion remain
+directly available. Keyboard help remains attached to the editor's accessible
+description and is also available in its tools menu.
+
 `saveCreationFileChange(identity, path, text, expectedVersion)` shares the
 existing bounded text read, trusted project identity, protected-source checks,
 manifest validation, disk fingerprint and atomic replacement used by manual

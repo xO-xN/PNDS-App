@@ -1,3 +1,4 @@
+import { AssistantResourceApproval } from './AssistantResourceApproval'
 import {
   useEffect,
   useLayoutEffect,
@@ -6,9 +7,8 @@ import {
   type ReactNode,
 } from 'react'
 import { useTranslation } from 'react-i18next'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
-import { Pencil } from 'lucide-react'
+import { AssistantMessageText } from './AssistantMessageText'
+import { Pencil, LoaderCircle } from 'lucide-react'
 import { conversationMessages } from '@/lib/assistant-conversations'
 import { useAssistantStore } from '@/store/assistant-store'
 import { useCreationReadingStore } from '@/store/creation-reading-store'
@@ -22,9 +22,11 @@ import { AssistantChats } from './AssistantChats'
 import { AssistantHandoffCard } from './AssistantHandoffCard'
 import { AssistantLiveProposals } from './AssistantLiveProposals'
 import { useAssistantProposalStore } from '@/store/assistant-proposal-store'
-import { AssistantProjectControls } from './AssistantProjectControls'
+import {
+  AssistantProjectControls,
+  AssistantProjectStatus,
+} from './AssistantProjectControls'
 import { AssistantAttachments } from './AssistantAttachments'
-import { AssistantProjectOverview } from './AssistantProjectOverview'
 import { useAssistantProjectStore } from '@/store/assistant-project-store'
 import { assistantSourceKey } from '@/lib/assistant-project'
 import { commands } from '@/lib/tauri-bindings'
@@ -44,11 +46,9 @@ const BOTTOM_THRESHOLD = 48
 export function CreationAssistant({
   identity,
   renderMessageCards,
-  onCheck,
 }: {
   identity: string
   renderMessageCards?: (message: AssistantMessage) => ReactNode
-  onCheck?: () => void
 }) {
   const { t } = useTranslation()
   const [sourceNote, setSourceNote] = useState<{
@@ -66,7 +66,14 @@ export function CreationAssistant({
   const messages = conversationMessages(allMessages, activeConversationId)
   const navigationIdentity = `${identity}:${activeConversationId ?? 'original'}`
   const phase = useAssistantStore(state => state.phase)
+  const modelName = useAssistantStore(state => state.modelConfig?.model)
+  const mode = useAssistantStore(state => state.mode)
   const error = useAssistantStore(state => state.error)
+  const canContinue = useAssistantStore(state => state.canContinue)
+  const paused = useAssistantStore(state => state.paused)
+  const resourceApproval = useAssistantStore(state => state.resourceApproval)
+  const resumeRestored = useAssistantStore(state => state.resumeRestored)
+  const resumeError = useAssistantStore(state => state.resumeError)
   const planning = useAssistantProjectStore(state => state.planning)
   const whole = useAssistantProjectStore(state => state.whole)
   const configured = useAssistantStore(state => state.configured)
@@ -101,6 +108,7 @@ export function CreationAssistant({
     pausedReading?.identity === navigationIdentity &&
     pausedReading.userMessage === userMessage
   const canSend =
+    !resourceApproval &&
     phase === 'idle' &&
     !planning &&
     !whole &&
@@ -109,6 +117,29 @@ export function CreationAssistant({
     historyState === 'ready' &&
     !historyBusy &&
     historySaveError !== 'staleHistory'
+  const workingMessage = messages
+    .filter(
+      message => message.role === 'assistant' && message.status === 'pending'
+    )
+    .at(-1)
+  const workingIndicator = phase !== 'idle' && (
+    <div
+      role="status"
+      className="my-1 flex min-h-8 items-center text-muted-foreground"
+    >
+      <LoaderCircle
+        className="size-5 animate-spin motion-reduce:animate-none"
+        aria-hidden="true"
+      />
+      <span className="sr-only">
+        {t(
+          phase === 'responding' && workingMessage?.text
+            ? 'assistant.outputting'
+            : `assistant.${phase}`
+        )}
+      </span>
+    </div>
+  )
   useEffect(() => {
     useAssistantStore.getState().syncWorkspace(identity)
   }, [identity])
@@ -191,9 +222,9 @@ export function CreationAssistant({
       aria-label={t('assistant.title')}
       className="creation-assistant flex min-h-0 flex-1 flex-col"
     >
-      <AssistantChats />
-      <AssistantHistoryControls identity={identity} />
-      <AssistantProjectOverview identity={identity} />
+      <AssistantHistoryControls identity={identity}>
+        <AssistantChats />
+      </AssistantHistoryControls>
       <div
         ref={transcript}
         className="pnds-focus-ring min-h-0 flex-1 overflow-auto p-4 [overflow-wrap:anywhere]"
@@ -237,21 +268,12 @@ export function CreationAssistant({
                   message.role === 'user' ? 'assistant.user' : 'assistant.title'
                 )}
               </p>
-              <div className="assistant-markdown min-w-0 text-sm">
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm]}
-                  components={{
-                    img: ({ alt }) => <span>{alt}</span>,
-                    // Model-authored destinations are displayed as text. Verified
-                    // corpus sources below are the only navigation actions.
-                    a: ({ children }) => <span>{children}</span>,
-                  }}
-                >
-                  {message.text}
-                </ReactMarkdown>
-              </div>
+              {message.id === workingMessage?.id && workingIndicator}
+              <AssistantMessageText message={message} />
+              {message.role === 'assistant' && (
+                <AssistantResourceApproval replyId={message.id} />
+              )}
               {message.role === 'user' &&
-                message.scope === 'platform' &&
                 !message.attachments?.length &&
                 !message.proposals?.length && (
                   <div className="mt-2 flex justify-end">
@@ -262,6 +284,7 @@ export function CreationAssistant({
                       title={t('assistant.chat.editQuestion')}
                       disabled={
                         phase !== 'idle' ||
+                        !!resourceApproval ||
                         historyState !== 'ready' ||
                         historyBusy ||
                         historySaveError === 'staleHistory'
@@ -274,17 +297,6 @@ export function CreationAssistant({
                       <Pencil className="size-3.5" aria-hidden="true" />
                     </button>
                   </div>
-                )}
-              {message.role === 'assistant' &&
-                message.status === 'pending' &&
-                !message.text && (
-                  <p className="text-muted-foreground text-sm">
-                    {t(
-                      phase === 'reading'
-                        ? 'assistant.reading'
-                        : 'assistant.waiting'
-                    )}
-                  </p>
                 )}
               {message.status === 'cancelled' && (
                 <p className="text-muted-foreground mt-2 text-xs">
@@ -491,6 +503,14 @@ export function CreationAssistant({
               )}
             </article>
           ))}
+          {!workingMessage && workingIndicator && (
+            <article className="mb-6 min-w-0 w-full py-1">
+              <p className="mb-2 text-xs text-muted-foreground">
+                {t('assistant.title')}
+              </p>
+              {workingIndicator}
+            </article>
+          )}
         </div>
       </div>
       {showLatest && (
@@ -514,17 +534,7 @@ export function CreationAssistant({
         </div>
       )}
       <div className="shrink-0 border-t border-(--pnds-border) p-3">
-        {onCheck && (
-          <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
-            <Button size="sm" variant="outline" onClick={onCheck}>
-              {t('assistant.check.open')}
-            </Button>
-            <span className="text-muted-foreground">
-              {t('assistant.check.independent')}
-            </span>
-          </div>
-        )}
-        <AssistantProjectControls identity={identity} />
+        <AssistantProjectStatus />
         <AssistantAttachments />
         {(configured === false ||
           (configured === null && error) ||
@@ -554,9 +564,16 @@ export function CreationAssistant({
             )}
           </div>
         )}
-        {phase !== 'idle' && (
-          <p role="status" className="mb-2 text-xs">
-            {t(`assistant.${phase}`)}
+        {phase === 'idle' && paused && canContinue && (
+          <p role="status" className="text-muted-foreground text-xs">
+            {t(
+              resumeRestored ? 'assistant.resume.restored' : 'assistant.paused'
+            )}
+          </p>
+        )}
+        {resumeError && (
+          <p role="alert" className="mb-2 text-sm text-destructive">
+            {t('assistant.resume.error')}
           </p>
         )}
         {error && (
@@ -590,9 +607,10 @@ export function CreationAssistant({
           <textarea
             ref={composer}
             id="creation-assistant-input"
-            className="pnds-focus-ring max-h-40 min-h-20 w-full resize-y rounded-md border border-(--pnds-border) bg-(--pnds-pill) p-2 text-sm"
+            className="pnds-focus-ring max-h-40 min-h-24 w-full resize-y rounded-md border border-(--pnds-border) bg-(--pnds-pill) p-3 text-sm"
+            title={t('assistant.sendHint')}
             value={input}
-            disabled={phase !== 'idle'}
+            disabled={phase !== 'idle' || !!resourceApproval || historyBusy}
             onChange={event =>
               useAssistantStore.getState().setInput(event.target.value)
             }
@@ -608,38 +626,94 @@ export function CreationAssistant({
               }
             }}
           />
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex min-w-0 items-center gap-2">
-              <AssistantContextUsage identity={identity}>
-                <AssistantContextControls identity={identity} compact />
-              </AssistantContextUsage>
-              <span className="text-muted-foreground text-xs">
-                {t('assistant.sendHint')}
-              </span>
+          <div className="flex min-w-0 items-center gap-1">
+            <div
+              role="radiogroup"
+              aria-label={t('assistant.mode.label')}
+              className="creation-assistant-mode"
+              onKeyDown={event => {
+                if (
+                  !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(
+                    event.key
+                  )
+                )
+                  return
+                event.preventDefault()
+                const next =
+                  event.key === 'Home'
+                    ? 'handoff'
+                    : event.key === 'End'
+                      ? 'edit'
+                      : mode === 'handoff'
+                        ? 'edit'
+                        : 'handoff'
+                if (phase !== 'idle' || !!resourceApproval || historyBusy)
+                  return
+                useAssistantStore.getState().setMode(next)
+                event.currentTarget
+                  .querySelector<HTMLButtonElement>(`[data-mode="${next}"]`)
+                  ?.focus()
+              }}
+            >
+              {(['handoff', 'edit'] as const).map(option => (
+                <button
+                  key={option}
+                  type="button"
+                  role="radio"
+                  data-mode={option}
+                  aria-label={t(`assistant.mode.${option}`)}
+                  aria-checked={mode === option}
+                  tabIndex={mode === option ? 0 : -1}
+                  disabled={
+                    phase !== 'idle' || !!resourceApproval || historyBusy
+                  }
+                  title={t(`assistant.mode.${option}Hint`)}
+                  onClick={() => useAssistantStore.getState().setMode(option)}
+                >
+                  {option}
+                </button>
+              ))}
             </div>
-            {phase === 'idle' ? (
-              <Button size="sm" type="submit" disabled={!canSend}>
-                {t(
-                  editing
-                    ? 'assistant.chat.sendBranch'
-                    : error
-                      ? 'assistant.retry'
-                      : 'assistant.send'
-                )}
-              </Button>
-            ) : (
-              <Button
-                size="sm"
-                type="button"
-                variant="outline"
-                onClick={event => {
-                  event.preventDefault()
-                  useAssistantStore.getState().stop()
-                }}
-              >
-                {t('assistant.stop')}
-              </Button>
-            )}
+            <AssistantContextUsage identity={identity}>
+              <AssistantContextControls identity={identity} compact />
+              <AssistantProjectControls identity={identity} />
+            </AssistantContextUsage>
+            <div className="ms-auto flex min-w-0 items-center gap-2">
+              {modelName && (
+                <span
+                  className="max-w-40 truncate text-xs text-muted-foreground"
+                  title={modelName}
+                >
+                  {modelName}
+                </span>
+              )}
+              {phase === 'idle' ? (
+                <Button size="sm" type="submit" disabled={!canSend}>
+                  {t(
+                    editing
+                      ? 'assistant.chat.sendBranch'
+                      : canContinue
+                        ? 'assistant.continue'
+                        : error
+                          ? 'assistant.retry'
+                          : 'assistant.send'
+                  )}
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                  disabled={phase === 'pausing'}
+                  onClick={event => {
+                    event.preventDefault()
+                    useAssistantStore.getState().pause()
+                  }}
+                >
+                  {t('assistant.pause')}
+                </Button>
+              )}
+            </div>
           </div>
         </form>
       </div>

@@ -18,7 +18,7 @@ App 只在 backend-issued 创作身份内独占发布新目录，再追加幂等
 
 ## 接线验证与技能资源
 
-添加模块使用「模块列表 → 详情」两步浏览：列表以双列卡片展示六项能力，窄窗口改为单列；详情展示真实版本、兼容信息、接线与验证说明及文件清单。窗口标题和操作区固定，正文独立滚动。进入详情聚焦标题，返回列表恢复原卡片焦点，关闭后恢复添加按钮焦点。
+添加模块使用「模块列表 → 详情」两步浏览：列表以双列卡片展示六项能力，窄窗口改为单列；详情先展示用途、边界、接线与验证说明，真实版本、兼容信息、来源与文件清单默认收在「版本、来源与文件」中；旧版提示、冲突与操作结果始终可见。窗口标题和操作区固定，正文独立滚动。进入详情聚焦标题，返回列表恢复原卡片焦点，关闭后恢复添加按钮焦点。
 
 首次打开先读取目录，再一次性展示内容；等待期间添加按钮显示忙碌状态并禁止重复请求。不要先展示只有加载文字的短弹窗，再填充卡片，否则居中布局会随高度突变而向上跳动。读取失败同样打开弹窗，保留重新读取入口；迟到结果仍受工程身份和请求代次保护。
 
@@ -29,3 +29,21 @@ App 的测试使用真实复制结果、来源记录与工作台 typed command�
 hub 配置按 Host 环境变量是否存在判断来源：四项中任一键存在（即使值为空），整组就由 Host 掌管，不用 standalone 值补齐；只有四项键都不存在时才采用工程明确提供的 standalone 配置。通过模块公开的配置解析与启动状态测试这个边界，空值配置报告未配置并保留本地控制自治。
 
 外部 PNDS Skills 是自愿安装的辅助能力。统一入口组合五项独立能力，通用移植先评估和作者确认，CM1 保留显式课程入口。普通任务默认交源工程、决定、验证与交接记录，明确分发才生成工程包；课程要求两者。资料优先读取装机 `help/<tree>/`，版本错位或缺资源如实记录。App 不安装或执行外部 Skills。独立能力的分发目录包含所需资料与工具，分发构建核对声明资源，不能隐式依赖已安装兄弟 Skill。
+
+### Assistant adoption
+
+The edit assistant discovers the standard catalog with `get_local_resources`,
+proposes new modules and shared packages as one creator-confirmed task plan, and
+uses `use_local_module` only after confirmation (or for an existing module).
+See [Creator-confirmed local resources](./creation-assistant.md#creator-confirmed-local-resources-2026-10-20).
+Manual module addition keeps its existing handoff workflow. Assistant adoption
+shares frozen assets, provenance and exclusive publication, but records the
+entire addition in task recovery/undo and wires it within the original edit goal.
+It does not assign itself a handoff TODO. Existing/custom module source is never
+replaced by frozen files just because it has an older version.
+
+For multiplayer identity and continuous performer/monitor interaction, the App
+now preflights local Socket.IO and players at higher priority before edit starts.
+It groups missing resources for creator confirmation; current references and
+same-task decisions are reused. A working HTTP prototype can be retained by an
+explicit creator choice. Pure visual changes do not trigger this migration.

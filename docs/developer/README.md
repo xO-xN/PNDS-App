@@ -41,7 +41,7 @@ App 开发的规则层：既定模式与系统做法，按问题检索——查�
 - **已有单文本差异、审阅保存与版本保护撤销** → [single-file-changes.md](./single-file-changes.md)（#207）。
 - **工程字面值绑定、受限临时预演协议与恢复** → [parameter-preview.md](./parameter-preview.md)（#231）。
 - **确认交接、保存版基线、部分失败恢复与交接后只读比较** → [handoff-baselines.md](./handoff-baselines.md)（#171 / #226 / #227）。
-- **创作草稿、手动保存、重命名与磁盘版本冲突** → [creation-workspace.md](./creation-workspace.md#manual-save-rename-and-disk-conflicts-154)
+- **创作草稿、手动保存、重命名与磁盘版本冲突** → [creation-workspace.md](./creation-workspace.md#manual-save-rename-and-disk-conflicts-154)；[手动新建代码与文本文件](./creation-workspace.md#manual-code-and-text-file-creation)。
 - **错误如何传播、用户反馈与重试模式** → [error-handling.md](./error-handling.md)
 
 ## 命令与系统桥
@@ -67,6 +67,7 @@ App 开发的规则层：既定模式与系统做法，按问题检索——查�
 - **HTTPS 准备操作时序、异常收尾与域名保存后的摘要重验** → [https-material.md](./https-material.md#前端准备流程)
 - **可信 HTTPS 入口网关：hyper/rustls 转发、生命周期接线与探测（#140）** → [https-gateway.md](./https-gateway.md)
 - **模型服务配置、钥匙串、连接测试与外部 HTTP 约定** → [external-apis.md](./external-apis.md)（#165）。
+- **handoff / edit 模式、直接保存、本地依赖、同任务检查修复与撤回** → [creation-assistant.md](./creation-assistant.md#explicit-creation-modes-2026-10-17)。
 - **创作助手请求编排、装机来源、取消归属与阅读布局** → [creation-assistant.md](./creation-assistant.md)（#166）。
 - **本机聊天历史、工程隔离、原子保存与旧授权不恢复** → [creation-assistant.md](./creation-assistant.md#private-project-history-167)（#167）。
 - **帮助语料装载、运行时渲染与离线搜索** → [help-center.md](./help-center.md)

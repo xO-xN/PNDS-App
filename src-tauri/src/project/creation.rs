@@ -14,6 +14,12 @@ use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 mod assistant;
+mod assistant_resume;
+pub use assistant_resume::*;
+mod assistant_tasks;
+pub use assistant_tasks::*;
+#[cfg(test)]
+mod assistant_tasks_tests;
 mod baselines;
 mod blank;
 pub use baselines::{HandoffBaselineCatalog, HandoffComparison};
@@ -37,10 +43,23 @@ mod compile;
 #[cfg(test)]
 mod compile_tests;
 mod git;
+mod git_comparison;
 mod git_history;
+pub use git_comparison::*;
+#[cfg(test)]
+mod git_comparison_tests;
+mod git_restore;
+mod git_versions;
+pub use git_versions::*;
+#[cfg(test)]
+mod git_versions_tests;
 mod local_git;
 mod native_git;
+mod text_creation;
+#[cfg(test)]
+mod text_creation_tests;
 pub use git_history::*;
+pub use git_restore::*;
 #[cfg(test)]
 mod local_git_tests;
 pub use local_git::*;
@@ -85,6 +104,7 @@ pub enum CreationErrorCode {
     InvalidProject,
     ManifestInvalid,
     TestValidation,
+    RuntimeBusy,
     TestStartup,
     VersionConflict,
     TargetExists,
@@ -139,6 +159,8 @@ pub struct CreationProject {
 pub struct CreationWorkspace {
     pub project: CreationProject,
     pub files: Vec<CreationFile>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub directories: Option<Vec<String>>,
 }
 
 /// Supplied only by the command adapter's App paths and embedded registry.
@@ -228,19 +250,29 @@ struct OpenProject {
 #[serde(rename_all = "camelCase")]
 pub struct CreationChanges {
     pub files: Vec<CreationFile>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub directories: Option<Vec<String>>,
     pub changed: Vec<String>,
     pub revision: u32,
+    /// Per-path observations stay stable when an unacknowledged batch is replayed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub change_revisions: Option<BTreeMap<String, u32>>,
 }
 
 /// One active identity; a successful replacement revokes the old capability.
 #[derive(Default)]
 pub struct CreationAccess {
+    assistant_grant: Option<(String, String, AssistantMode)>,
     project: Option<OpenProject>,
     prepared: Option<OpenProject>,
     generation: u64,
     last_change: Option<(String, CreationFileChange)>,
     change_sequence: u64,
     git_preview: Option<GitPreviewSession>,
+    git_comparison: Option<git_comparison::GitComparisonSession>,
+    git_restore_preview: Option<git_restore::GitRestoreSession>,
+    git_switch_preview: Option<git_versions::GitSwitchSession>,
+    git_ended_tasks: std::collections::BTreeSet<String>,
     handoff_review: Option<HandoffReview>,
     handoff_receipt: Option<(String, HandoffReceipt)>,
 }
@@ -334,7 +366,15 @@ impl CreationAccess {
         let mut candidate = candidate;
         candidate.descriptor.name = manifest.name;
         let mut files = Vec::new();
-        candidate.walk(Path::new(""), 0, &mut 0, &mut Vec::new(), &mut files)?;
+        let mut directories = Vec::new();
+        candidate.walk_entries(
+            Path::new(""),
+            0,
+            &mut 0,
+            &mut Vec::new(),
+            &mut files,
+            &mut directories,
+        )?;
         files.sort_by(|a, b| a.path.cmp(&b.path));
         candidate.watch = candidate.watch_versions(&files)?;
         self.generation += 1;
@@ -343,6 +383,7 @@ impl CreationAccess {
         Ok(CreationWorkspace {
             project: descriptor,
             files,
+            directories: Some(directories),
         })
     }
 
@@ -446,7 +487,19 @@ impl CreationAccess {
         since: u32,
         protection: &Protection,
     ) -> Result<CreationChanges, CreationError> {
-        let files = self.list(identity, protection)?;
+        let project = self.current(identity, protection)?;
+        let mut files = Vec::new();
+        let mut directories = Vec::new();
+        project.walk_entries(
+            Path::new(""),
+            0,
+            &mut 0,
+            &mut Vec::new(),
+            &mut files,
+            &mut directories,
+        )?;
+        files.sort_by(|a, b| a.path.cmp(&b.path));
+        directories.sort();
         let versions = self.current(identity, protection)?.watch_versions(&files)?;
         let project = self.project.as_mut().expect("identity validated");
         let mut changed: Vec<String> = versions
@@ -471,8 +524,10 @@ impl CreationAccess {
         project.watch = versions;
         Ok(CreationChanges {
             files,
+            directories: Some(directories),
             changed: project.pending.keys().cloned().collect(),
             revision: project.revision,
+            change_revisions: Some(project.pending.clone()),
         })
     }
 
@@ -509,6 +564,23 @@ impl CreationAccess {
                 Ok(CreationContent::Text { text, version })
             }
         }
+    }
+
+    pub fn drag_target(
+        &self,
+        identity: &str,
+        path: &str,
+        protection: &Protection,
+    ) -> Result<PathBuf, CreationError> {
+        let project = self.current(identity, protection)?;
+        let file = project.file(path)?;
+        if !file.metadata().map_err(io_error)?.is_file() {
+            return Err(CreationError::new(
+                CreationErrorCode::InvalidProject,
+                "Only saved regular files can be dragged",
+            ));
+        }
+        project.resolve(path)
     }
 
     pub fn finder_target(
@@ -861,6 +933,18 @@ impl OpenProject {
         ancestors: &mut Vec<PathBuf>,
         files: &mut Vec<CreationFile>,
     ) -> Result<(), CreationError> {
+        self.walk_entries(relative, depth, count, ancestors, files, &mut Vec::new())
+    }
+
+    fn walk_entries(
+        &self,
+        relative: &Path,
+        depth: usize,
+        count: &mut usize,
+        ancestors: &mut Vec<PathBuf>,
+        files: &mut Vec<CreationFile>,
+        directories: &mut Vec<String>,
+    ) -> Result<(), CreationError> {
         if depth > MAX_DEPTH {
             return Err(CreationError::new(
                 CreationErrorCode::TooLarge,
@@ -899,7 +983,8 @@ impl OpenProject {
             })?;
             let metadata = self.file(path)?.metadata().map_err(io_error)?;
             if metadata.is_dir() {
-                self.walk(&child, depth + 1, count, ancestors, files)?;
+                directories.push(path.into());
+                self.walk_entries(&child, depth + 1, count, ancestors, files, directories)?;
             } else if metadata.is_file() {
                 files.push(CreationFile {
                     path: path.into(),

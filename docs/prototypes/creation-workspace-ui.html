@@ -1,0 +1,2799 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="pond">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>PNDS · 创作工作台 UI 评审</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f1f5f8;
+        --side: #d2d8de;
+        --card: #fcfdff;
+        --pill: #e6edf3;
+        --hover: #dbe5ed;
+        --select: #d4e3f0;
+        --ink: #293541;
+        --muted: #495b68;
+        --line: #bdcbd6;
+        --accent: #1476cc;
+        --accent-ink: #285a8d;
+        --on-accent: #fff;
+        --good: #30634f;
+        --warn: #755015;
+        --bad: #9d3043;
+        --code: #7e22ce;
+        --sidebar: 226px;
+        font:
+          12px -apple-system,
+          BlinkMacSystemFont,
+          'Helvetica Neue',
+          'PingFang SC',
+          sans-serif;
+      }
+      [data-theme='sand'] {
+        --bg: #e6ddcd;
+        --side: #d8ccba;
+        --card: #f1eadf;
+        --pill: #e5daca;
+        --hover: #daceba;
+        --select: #ddc6a5;
+        --ink: #352e24;
+        --muted: #60523f;
+        --line: #b8aa92;
+        --accent: #93622e;
+        --accent-ink: #6f481e;
+        --good: #315943;
+        --warn: #6b4918;
+        --bad: #93332b;
+      }
+      [data-theme='stage'] {
+        color-scheme: dark;
+        --bg: #171b1c;
+        --side: #1c2222;
+        --card: #232a29;
+        --pill: #2c3432;
+        --hover: #35403b;
+        --select: #354d41;
+        --ink: #e7ece9;
+        --muted: #adbbb4;
+        --line: #46554e;
+        --accent: #a5c8b6;
+        --accent-ink: #b7d8c6;
+        --on-accent: #15231b;
+        --good: #a5c8b6;
+        --warn: #e4c388;
+        --bad: #f4a3ac;
+        --code: #ccafd9;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+      }
+      button,
+      input,
+      textarea,
+      select {
+        font: inherit;
+        color: inherit;
+      }
+      button {
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        border: 1px solid transparent;
+        background: transparent;
+        border-radius: 5px;
+        min-height: 28px;
+        padding: 4px 8px;
+        white-space: nowrap;
+      }
+      button:hover:not(:disabled) {
+        background: var(--hover);
+      }
+      button:disabled {
+        opacity: 0.42;
+        cursor: default;
+      }
+      button:focus-visible,
+      input:focus-visible,
+      textarea:focus-visible,
+      select:focus-visible,
+      [tabindex]:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+      input,
+      textarea,
+      select {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 5px;
+        padding: 6px 8px;
+      }
+      textarea {
+        resize: none;
+      }
+      svg.icon {
+        width: 15px;
+        height: 15px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.6;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        flex: none;
+      }
+      .icon-only {
+        width: 28px;
+        padding: 4px;
+      }
+      .muted {
+        color: var(--muted);
+      }
+      .grow {
+        flex: 1;
+      }
+      .mono,
+      code,
+      pre,
+      textarea.editor {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      .small {
+        font-size: 11px;
+      }
+      .primary {
+        background: var(--accent);
+        color: var(--on-accent);
+      }
+      .primary:hover:not(:disabled) {
+        background: var(--accent);
+        filter: brightness(0.94);
+      }
+      .outline {
+        border-color: var(--line);
+        background: var(--card);
+      }
+      .danger {
+        color: var(--bad);
+      }
+      .danger.primary {
+        color: white;
+        background: var(--bad);
+      }
+      .tag {
+        font-size: 10px;
+        border-radius: 4px;
+        padding: 2px 5px;
+        background: var(--pill);
+        color: var(--muted);
+      }
+      .dot {
+        display: inline-block;
+        width: 5px;
+        height: 5px;
+        background: currentColor;
+        border-radius: 50%;
+        flex: none;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      .app {
+        height: calc(100dvh - 42px);
+        min-height: 610px;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      .titlebar {
+        height: 32px;
+        min-height: 32px;
+        border-bottom: 1px solid var(--line);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 0 12px 0 16px;
+        background: var(--side);
+      }
+      .lights {
+        display: flex;
+        gap: 8px;
+        min-width: 70px;
+      }
+      .lights i {
+        width: 11px;
+        height: 11px;
+        background: #ff5f57;
+        border: 1px solid #0001;
+        border-radius: 50%;
+      }
+      .lights i:nth-child(2) {
+        background: #febc2e;
+      }
+      .lights i:nth-child(3) {
+        background: #28c840;
+      }
+      .titlebar button {
+        height: 24px;
+        min-height: 24px;
+        padding-block: 2px;
+      }
+      .project-name {
+        font-weight: 600;
+      }
+      .branch-button {
+        max-width: 440px;
+        gap: 7px;
+      }
+      .branch-button .version {
+        color: var(--muted);
+        font-size: 11px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .body {
+        display: flex;
+        flex: 1;
+        min-height: 0;
+      }
+      .sidebar {
+        width: var(--sidebar);
+        min-width: var(--sidebar);
+        background: var(--side);
+        border-right: 1px solid var(--line);
+        display: flex;
+        flex-direction: column;
+      }
+      .files-head {
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        padding: 9px 8px 5px 14px;
+      }
+      .files-head strong {
+        font-weight: 600;
+        flex: 1;
+      }
+      .file-search {
+        margin: 0 10px 8px;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        border-bottom: 1px solid var(--line);
+        color: var(--muted);
+      }
+      .file-search input {
+        width: 100%;
+        padding: 5px 0;
+        border: 0;
+        background: transparent;
+        font-size: 11px;
+        outline-offset: 0;
+      }
+      .tree {
+        overflow: auto;
+        flex: 1;
+        min-height: 0;
+        padding: 0 5px 12px;
+      }
+      .root-name {
+        padding: 8px 9px;
+        color: var(--muted);
+        font-size: 11px;
+        display: flex;
+        gap: 5px;
+        align-items: center;
+      }
+      .tree-row {
+        border-radius: 4px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-height: 29px;
+        width: 100%;
+        text-align: start;
+        justify-content: flex-start;
+        padding: 3px 7px;
+      }
+      .tree-row .basename {
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        flex: 1;
+      }
+      .tree-row[aria-selected='true'] {
+        background: var(--select);
+      }
+      .tree-row .kind {
+        font-size: 9px;
+        font-weight: 700;
+        width: 16px;
+        text-align: center;
+        color: var(--accent-ink);
+        flex: none;
+      }
+      .tree-row .kind.js {
+        color: var(--warn);
+      }
+      .tree-row .kind.scd {
+        color: var(--code);
+      }
+      .tree-row .git-mark {
+        font-size: 10px;
+        color: var(--warn);
+      }
+      .tree-row .chev {
+        width: 11px;
+        flex: none;
+      }
+      .tree-row input {
+        width: 100%;
+        min-width: 0;
+        padding: 3px 4px;
+        font-size: 12px;
+      }
+      .rename-hint {
+        font-size: 10px;
+        line-height: 1.5;
+        padding: 3px 8px 6px 28px;
+        color: var(--muted);
+      }
+      .side-footer {
+        padding: 10px 14px;
+        color: var(--muted);
+        font-size: 10px;
+        border-top: 1px solid var(--line);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .workspace {
+        display: flex;
+        flex: 1;
+        min-width: 340px;
+        flex-direction: column;
+        background: var(--card);
+      }
+      .nav {
+        height: 39px;
+        min-height: 39px;
+        display: flex;
+        align-items: stretch;
+        padding: 0 10px;
+        border-bottom: 1px solid var(--line);
+        gap: 3px;
+      }
+      .nav .tab {
+        border-radius: 0;
+        position: relative;
+        padding-inline: 10px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .nav .tab[aria-selected='true'] {
+        color: var(--ink);
+        font-weight: 600;
+      }
+      .nav .tab[aria-selected='true']:after {
+        content: '';
+        height: 2px;
+        background: var(--accent);
+        position: absolute;
+        bottom: 0;
+        left: 10px;
+        right: 10px;
+      }
+      .file-tab {
+        display: flex;
+        align-items: center;
+        min-width: 0;
+        max-width: 200px;
+        margin-left: 6px;
+        border-left: 1px solid var(--line);
+        padding-left: 5px;
+      }
+      .file-tab .tab {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: block;
+      }
+      .file-tab .icon-only {
+        width: 23px;
+        min-width: 23px;
+      }
+      .surface {
+        flex: 1;
+        min-height: 0;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+      }
+      .chat-head {
+        padding: 13px 22px;
+        color: var(--muted);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        border-bottom: 1px solid
+          color-mix(in srgb, var(--line) 55%, transparent);
+      }
+      .chat-messages {
+        flex: 1;
+        overflow: auto;
+        padding: 24px clamp(20px, 5%, 56px);
+      }
+      .message {
+        max-width: 720px;
+        margin: 0 auto 26px;
+        line-height: 1.85;
+        font-size: 13px;
+      }
+      .message.user {
+        background: var(--select);
+        border-radius: 14px 14px 4px 14px;
+        padding: 10px 15px;
+        margin-left: auto;
+        width: fit-content;
+        max-width: 90%;
+      }
+      .byline {
+        font-size: 11px;
+        color: var(--muted);
+        margin-bottom: 8px;
+      }
+      .message p {
+        margin: 0 0 10px;
+      }
+      .work-icon {
+        width: 20px;
+        height: 20px;
+        border: 2px solid var(--line);
+        border-top-color: var(--accent);
+        border-radius: 50%;
+        animation: spin 1.5s linear infinite;
+        margin-top: 10px;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      .work-log {
+        font-size: 11px;
+        color: var(--muted);
+        margin-top: 10px;
+      }
+      .composer {
+        margin: 0 18px 16px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: var(--card);
+      }
+      .composer textarea {
+        display: block;
+        width: 100%;
+        height: 76px;
+        border: 0;
+        background: transparent;
+        padding: 12px;
+        font-size: 13px;
+        line-height: 1.65;
+        border-radius: 10px;
+      }
+      .composer-footer {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 4px 9px 8px;
+      }
+      .assistant-mode {
+        display: inline-flex;
+        align-items: center;
+        gap: 2px;
+        padding: 2px;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        background: var(--pill);
+        flex-shrink: 0;
+      }
+      .assistant-mode button {
+        min-height: 25px;
+        padding: 3px 7px;
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .assistant-mode button[aria-checked='true'] {
+        background: var(--card);
+        border-color: var(--line);
+        color: var(--ink);
+        font-weight: 600;
+      }
+      .assistant-mode .icon {
+        width: 13px;
+        height: 13px;
+      }
+      @media (max-width: 1100px) {
+        .composer-footer .model-name {
+          display: none;
+        }
+      }
+      .context-ring {
+        width: 15px;
+        height: 15px;
+        border: 2px dashed var(--muted);
+        border-radius: 50%;
+        display: inline-block;
+      }
+      .doc-toolbar,
+      .file-toolbar,
+      .git-toolbar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 9px 16px;
+        border-bottom: 1px solid var(--line);
+        min-height: 46px;
+      }
+      .doc-path,
+      .file-path {
+        font-size: 11px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        min-width: 0;
+      }
+      .document {
+        overflow: auto;
+        padding: 28px clamp(22px, 7%, 65px) 60px;
+        flex: 1;
+        font-size: 13px;
+        line-height: 1.9;
+      }
+      .document h1 {
+        font-size: 25px;
+        font-weight: 600;
+        margin: 0 0 10px;
+        letter-spacing: -0.5px;
+      }
+      .document h2 {
+        font-size: 17px;
+        font-weight: 600;
+        margin: 28px 0 10px;
+        padding-top: 16px;
+        border-top: 1px solid var(--line);
+      }
+      .document h3 {
+        font-size: 14px;
+        margin: 20px 0 8px;
+      }
+      .document p {
+        margin: 8px 0 12px;
+      }
+      .document ul {
+        padding-left: 22px;
+      }
+      .document code {
+        font-size: 12px;
+        background: var(--pill);
+        border-radius: 3px;
+        padding: 2px 4px;
+      }
+      .document pre {
+        background: var(--pill);
+        padding: 14px;
+        border-radius: 6px;
+        overflow: auto;
+        line-height: 1.7;
+      }
+      .document pre code {
+        padding: 0;
+        background: none;
+      }
+      .document .check-item {
+        list-style: none;
+        margin-left: -20px;
+      }
+      .document .check-item input {
+        pointer-events: none;
+        vertical-align: middle;
+        margin-right: 7px;
+        accent-color: var(--accent);
+      }
+      .editor {
+        display: block;
+        width: 100%;
+        flex: 1;
+        min-height: 0;
+        padding: 18px 22px;
+        border: 0;
+        border-radius: 0;
+        font-size: 13px;
+        line-height: 1.8;
+        tab-size: 2;
+        outline-offset: -3px !important;
+        background: var(--card);
+      }
+      .editor-note {
+        padding: 7px 16px;
+        border-top: 1px solid var(--line);
+        font-size: 10px;
+        color: var(--muted);
+      }
+      .debug {
+        width: 35%;
+        min-width: 280px;
+        border-left: 1px solid var(--line);
+        background: var(--bg);
+        display: flex;
+        flex-direction: column;
+      }
+      .debug-head {
+        height: 39px;
+        min-height: 39px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 10px 0 14px;
+        border-bottom: 1px solid var(--line);
+      }
+      .debug-head strong {
+        font-size: 12px;
+        font-weight: 500;
+      }
+      .debug-tabs {
+        display: flex;
+        padding: 7px 10px;
+        gap: 3px;
+        border-bottom: 1px solid var(--line);
+      }
+      .debug-tabs button {
+        font-size: 11px;
+        min-height: 24px;
+      }
+      .debug-tabs button[aria-selected='true'] {
+        background: var(--select);
+      }
+      .preview {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 0;
+        padding: 22px;
+      }
+      .preview-frame {
+        border: 1px solid var(--line);
+        border-radius: 4px;
+        background: var(--card);
+        width: 100%;
+        aspect-ratio: 4/3;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 9px;
+        color: var(--muted);
+        text-align: center;
+      }
+      .preview-frame svg {
+        width: 33px;
+        height: 33px;
+        margin-bottom: 3px;
+        opacity: 0.6;
+      }
+      .debug-foot {
+        font-size: 10px;
+        color: var(--muted);
+        padding: 9px 14px;
+        border-top: 1px solid var(--line);
+      }
+      .issues {
+        padding: 15px;
+        overflow: auto;
+        flex: 1;
+        font-size: 12px;
+      }
+      .issues h3 {
+        font-size: 13px;
+        margin: 0 0 12px;
+      }
+      .issue {
+        padding: 12px 0;
+        border-bottom: 1px solid var(--line);
+        line-height: 1.7;
+      }
+      .issue button {
+        display: block;
+        padding: 0;
+        min-height: 22px;
+        color: var(--accent-ink);
+        font-size: 11px;
+      }
+      .issue-description {
+        color: var(--muted);
+        font-size: 11px;
+        line-height: 1.8;
+        margin-top: 10px;
+      }
+      .count {
+        padding: 1px 5px;
+        border-radius: 4px;
+        font-size: 10px;
+        background: var(--bad);
+        color: white;
+      }
+      .bottom {
+        height: 50px;
+        min-height: 50px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 0 12px;
+        border-top: 1px solid var(--line);
+        background: var(--side);
+      }
+      .bottom button {
+        font-size: 11px;
+        min-height: 28px;
+      }
+      .bottom .divider {
+        height: 18px;
+        width: 1px;
+        background: var(--line);
+        margin: 0 5px;
+      }
+      .bottom select {
+        font-size: 11px;
+        background: transparent;
+        border: 0;
+        max-width: 100px;
+        padding: 3px;
+      }
+      .mode {
+        border: 1px solid var(--line);
+        background: var(--pill);
+        margin-left: 4px;
+        font-weight: 500;
+      }
+      .git-toolbar input {
+        width: 160px;
+        min-width: 80px;
+        font-size: 11px;
+      }
+      .git-body {
+        display: flex;
+        min-height: 0;
+        flex: 1;
+      }
+      .git-map {
+        flex: 1;
+        min-width: 0;
+        padding: 25px 15px;
+        overflow: auto;
+      }
+      .version-row {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-height: 65px;
+        padding-left: 18px;
+      }
+      .version-row:before {
+        display: none;
+        position: absolute;
+        content: '';
+        width: 2px;
+        background: var(--line);
+        left: 25px;
+        top: 0;
+        bottom: 0;
+      }
+      .version-row:first-child:before {
+        top: 32px;
+      }
+      .version-row:last-child:before {
+        bottom: 32px;
+      }
+      .version-node {
+        height: 17px;
+        width: 17px;
+        min-width: 17px;
+        border: 2px solid var(--accent);
+        border-radius: 50%;
+        background: var(--card);
+        position: relative;
+        padding: 0;
+        min-height: 17px;
+        z-index: 1;
+      }
+      .version-label {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        align-items: flex-start;
+        padding: 7px 10px;
+        border: 1px solid transparent;
+        text-align: left;
+        min-width: 0;
+        white-space: normal;
+      }
+      .version-label[aria-selected='true'] {
+        background: var(--select);
+        border-color: var(--line);
+      }
+      .version-label small {
+        font-size: 10px;
+        color: var(--muted);
+      }
+      .git-details {
+        width: 220px;
+        max-width: 40%;
+        border-left: 1px solid var(--line);
+        padding: 18px 15px;
+        overflow: auto;
+      }
+      .git-details h3 {
+        font-size: 14px;
+        line-height: 1.7;
+        margin: 0 0 10px;
+      }
+      .git-details p {
+        font-size: 11px;
+        line-height: 1.8;
+      }
+      .git-details .primary {
+        font-size: 11px;
+        width: 100%;
+        margin-top: 10px;
+      }
+      .popover {
+        position: fixed;
+        z-index: 100;
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        padding: 5px;
+        box-shadow: 0 8px 28px #0002;
+        min-width: 180px;
+        max-width: min(380px, calc(100vw - 20px));
+        max-height: 70vh;
+        overflow: auto;
+      }
+      .popover button {
+        width: 100%;
+        justify-content: flex-start;
+        text-align: left;
+        min-height: 31px;
+        white-space: normal;
+      }
+      .popover .menu-label {
+        padding: 7px 8px;
+        font-size: 10px;
+        color: var(--muted);
+      }
+      .popover hr {
+        border: 0;
+        border-top: 1px solid var(--line);
+        margin: 4px 0;
+      }
+      .branch-row .branch-meta {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        flex: 1;
+      }
+      .branch-meta small {
+        font-size: 10px;
+        color: var(--muted);
+      }
+      .branch-row .check {
+        color: var(--accent-ink);
+      }
+      dialog {
+        width: min(520px, calc(100vw - 32px));
+        max-height: 85vh;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 0;
+        color: var(--ink);
+        background: var(--card);
+        box-shadow: 0 18px 70px #0003;
+      }
+      dialog::backdrop {
+        background: #1b273b55;
+        backdrop-filter: blur(2px);
+      }
+      .dialog-head {
+        display: flex;
+        align-items: center;
+        padding: 18px 20px 6px;
+        gap: 10px;
+      }
+      .dialog-head h2 {
+        font-size: 16px;
+        font-weight: 600;
+        margin: 0;
+      }
+      .dialog-content {
+        padding: 10px 20px 18px;
+        line-height: 1.8;
+      }
+      .dialog-content p {
+        font-size: 12px;
+        margin: 5px 0 12px;
+      }
+      .dialog-content input,
+      .dialog-content select {
+        width: 100%;
+        margin-bottom: 10px;
+      }
+      .dialog-content label {
+        display: block;
+        font-size: 11px;
+        margin: 5px 0;
+      }
+      .dialog-actions {
+        padding: 12px 20px;
+        border-top: 1px solid var(--line);
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        flex-wrap: wrap;
+        background: var(--bg);
+      }
+      .dialog-actions button {
+        font-size: 11px;
+      }
+      .resource-tabs {
+        display: flex;
+        gap: 6px;
+        margin-bottom: 13px;
+      }
+      .resource-tabs button[aria-selected='true'] {
+        background: var(--select);
+        font-weight: 600;
+      }
+      .resource-item {
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin: 8px 0;
+        padding: 10px 12px;
+      }
+      .resource-item p {
+        font-size: 11px;
+        margin: 4px 0 0;
+        line-height: 1.65;
+        color: var(--muted);
+      }
+      .resource-item button {
+        font-size: 11px;
+        min-width: 55px;
+      }
+      .resource-item .resource-name {
+        font-size: 12px;
+        font-weight: 500;
+      }
+      .prototype-bar {
+        height: 42px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        background: var(--ink);
+        color: var(--card);
+        padding: 0 14px;
+        font-size: 11px;
+      }
+      .prototype-bar strong {
+        font-weight: 500;
+      }
+      .prototype-bar select {
+        padding: 3px 6px;
+        font-size: 11px;
+        max-width: 180px;
+        color: var(--ink);
+        background: var(--card);
+      }
+      .prototype-bar button {
+        color: var(--card);
+        min-height: 25px;
+        font-size: 11px;
+        border: 1px solid color-mix(in srgb, var(--card) 30%, transparent);
+      }
+      .prototype-bar label {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .prototype-bar input {
+        margin: 0;
+      }
+      .toast {
+        position: fixed;
+        bottom: 58px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 200;
+        background: var(--ink);
+        color: var(--card);
+        padding: 9px 16px;
+        border-radius: 7px;
+        box-shadow: 0 4px 20px #0002;
+        font-size: 12px;
+        max-width: 80vw;
+        text-align: center;
+        pointer-events: none;
+      }
+      @media (max-width: 1100px) {
+        :root {
+          --sidebar: 210px;
+        }
+        .debug {
+          width: 31%;
+          min-width: 260px;
+        }
+        .branch-button {
+          max-width: 330px;
+        }
+        .bottom .optional {
+          display: none;
+        }
+        .nav {
+          padding: 0 5px;
+        }
+        .nav .tab {
+          padding-inline: 8px;
+        }
+        .prototype-bar .optional {
+          display: none;
+        }
+        .git-details {
+          width: 180px;
+        }
+        .doc-toolbar {
+          padding-inline: 12px;
+        }
+      }
+      @media (max-width: 870px) {
+        :root {
+          --sidebar: 190px;
+        }
+        .debug {
+          min-width: 235px;
+          width: 29%;
+        }
+        .branch-button .version {
+          max-width: 135px;
+        }
+        .titlebar {
+          gap: 2px;
+        }
+        .workspace {
+          min-width: 320px;
+        }
+        .bottom {
+          gap: 2px;
+          padding-inline: 6px;
+        }
+        .bottom .network {
+          display: none;
+        }
+        .chat-messages {
+          padding: 20px;
+        }
+        .nav .icon {
+          display: none;
+        }
+        .nav .tab {
+          padding-inline: 7px;
+        }
+        .file-tab {
+          max-width: 130px;
+        }
+        .git-details {
+          width: 145px;
+        }
+        .prototype-bar {
+          gap: 6px;
+        }
+        .prototype-bar strong {
+          font-size: 10px;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .work-icon {
+          animation: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Standalone UI prototype: sample state only; no real filesystem, Git, process or model access. -->
+    <svg width="0" height="0" aria-hidden="true" style="position: absolute">
+      <defs>
+        <symbol id="i-folder" viewBox="0 0 24 24">
+          <path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10H3Z" />
+        </symbol>
+        <symbol id="i-branch" viewBox="0 0 24 24">
+          <circle cx="6" cy="5" r="3" />
+          <circle cx="18" cy="6" r="3" />
+          <circle cx="6" cy="19" r="3" />
+          <path d="M6 8v8m0-3c9 0 12-1 12-4" />
+        </symbol>
+        <symbol id="i-chat" viewBox="0 0 24 24">
+          <path
+            d="M21 11a8 8 0 0 1-8 8H7l-4 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z"
+          />
+          <path d="M7 8h10M7 12h7" />
+        </symbol>
+        <symbol id="i-doc" viewBox="0 0 24 24">
+          <path d="M14 2H5v20h14V7Zm0 0v6h5M8 12h8M8 16h6" />
+        </symbol>
+        <symbol id="i-more" viewBox="0 0 24 24">
+          <circle cx="5" cy="12" r="1" />
+          <circle cx="12" cy="12" r="1" />
+          <circle cx="19" cy="12" r="1" />
+        </symbol>
+        <symbol id="i-plus" viewBox="0 0 24 24">
+          <path d="M12 5v14M5 12h14" />
+        </symbol>
+        <symbol id="i-package" viewBox="0 0 24 24">
+          <path d="m12 2 9 5v10l-9 5-9-5V7Zm0 10v10M3 7l9 5 9-5M7.5 4.5l9 5" />
+        </symbol>
+        <symbol id="i-chevron" viewBox="0 0 24 24">
+          <path d="m9 5 7 7-7 7" />
+        </symbol>
+        <symbol id="i-down" viewBox="0 0 24 24">
+          <path d="m6 9 6 6 6-6" />
+        </symbol>
+        <symbol id="i-close" viewBox="0 0 24 24">
+          <path d="m6 6 12 12M18 6 6 18" />
+        </symbol>
+        <symbol id="i-search" viewBox="0 0 24 24">
+          <circle cx="10" cy="10" r="6" />
+          <path d="m15 15 6 6" />
+        </symbol>
+        <symbol id="i-play" viewBox="0 0 24 24">
+          <path d="m7 4 14 8-14 8Z" />
+        </symbol>
+        <symbol id="i-stop" viewBox="0 0 24 24">
+          <rect x="5" y="5" width="14" height="14" rx="1" />
+        </symbol>
+        <symbol id="i-refresh" viewBox="0 0 24 24">
+          <path d="M20 8A8 8 0 1 0 20 16M20 3v6h-6" />
+        </symbol>
+        <symbol id="i-edit" viewBox="0 0 24 24">
+          <path d="m15 4 5 5M4 20l5-1L21 7l-5-5L4 14Z" />
+        </symbol>
+        <symbol id="i-check" viewBox="0 0 24 24">
+          <path d="m5 12 4 4L20 5" />
+        </symbol>
+        <symbol id="i-monitor" viewBox="0 0 24 24">
+          <rect x="2" y="3" width="20" height="14" rx="2" />
+          <path d="M8 21h8m-4-4v4" />
+        </symbol>
+        <symbol id="i-terminal" viewBox="0 0 24 24">
+          <rect x="2" y="3" width="20" height="18" rx="2" />
+          <path d="m6 8 4 4-4 4m7 0h5" />
+        </symbol>
+        <symbol id="i-settings" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="4" />
+          <path
+            d="M12 2v3m0 14v3M2 12h3m14 0h3M5 5l2 2m10 10 2 2M19 5l-2 2M7 17l-2 2"
+          />
+        </symbol>
+        <symbol id="i-save" viewBox="0 0 24 24">
+          <path
+            d="M19 21H5a2 2 0 0 1-2-2V3h14l4 4v12a2 2 0 0 1-2 2ZM7 3v6h10V3M7 21v-8h10v8"
+          />
+        </symbol>
+        <symbol id="i-sound" viewBox="0 0 24 24">
+          <path
+            d="M11 4 5 9H2v6h3l6 5ZM16 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"
+          />
+        </symbol>
+        <symbol id="i-globe" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="10" />
+          <ellipse cx="12" cy="12" rx="4" ry="10" />
+          <path d="M2 12h20" />
+        </symbol>
+      </defs>
+    </svg>
+    <div class="app">
+      <header class="titlebar">
+        <div class="lights" aria-hidden="true"><i></i><i></i><i></i></div>
+        <button
+          data-action="project-menu"
+          class="project-name"
+          title="工程菜单"
+        >
+          <svg class="icon"><use href="#i-folder" /></svg>runes-pnds<svg
+            class="icon"
+          >
+            <use href="#i-down" />
+          </svg>
+        </button>
+        <button
+          data-action="branch-menu"
+          class="branch-button"
+          id="branch-trigger"
+          aria-label="当前位置与本地分支"
+        ></button>
+        <span class="grow"></span>
+        <button
+          data-action="toggle-debug"
+          id="debug-toggle"
+          title="显示或隐藏调试栏"
+          aria-pressed="true"
+        >
+          <svg class="icon"><use href="#i-monitor" /></svg>调试栏
+        </button>
+        <button data-action="package" title="打包工程">
+          <svg class="icon"><use href="#i-package" /></svg>打包
+        </button>
+      </header>
+      <div class="body">
+        <aside class="sidebar" aria-label="工程文件">
+          <div class="files-head">
+            <strong>文件</strong
+            ><button
+              class="icon-only"
+              data-action="new-menu"
+              title="新建文件或文件夹"
+              aria-label="新建"
+            >
+              <svg class="icon"><use href="#i-plus" /></svg></button
+            ><button
+              class="icon-only"
+              data-action="resources"
+              title="添加模块或共享包"
+              aria-label="添加资源"
+            >
+              <svg class="icon"><use href="#i-package" /></svg></button
+            ><button
+              class="icon-only"
+              data-action="files-menu"
+              title="文件操作"
+              aria-label="文件更多操作"
+            >
+              <svg class="icon"><use href="#i-more" /></svg>
+            </button>
+          </div>
+          <label class="file-search"
+            ><svg class="icon"><use href="#i-search" /></svg
+            ><input
+              id="file-search"
+              placeholder="筛选文件…"
+              aria-label="筛选文件"
+          /></label>
+          <div
+            class="tree"
+            id="tree"
+            role="tree"
+            aria-label="runes-pnds 目录树"
+          ></div>
+          <div class="side-footer">
+            <span id="file-count"></span><span class="grow"></span
+            ><span class="dot" style="color: var(--good)"></span>自动同步
+          </div>
+        </aside>
+        <main class="workspace">
+          <nav class="nav" role="tablist" aria-label="工作区">
+            <button
+              class="tab"
+              data-action="view"
+              data-view="discussion"
+              id="tab-discussion"
+              role="tab"
+              aria-controls="view-discussion"
+              aria-selected="true"
+            >
+              <svg class="icon"><use href="#i-chat" /></svg>讨论
+            </button>
+            <button
+              class="tab"
+              data-action="view"
+              data-view="git"
+              id="tab-git"
+              role="tab"
+              aria-controls="view-git"
+              aria-selected="false"
+            >
+              <svg class="icon"><use href="#i-branch" /></svg>Git 版本
+            </button>
+            <button
+              class="tab"
+              data-action="view"
+              data-view="handoff"
+              id="tab-handoff"
+              role="tab"
+              aria-controls="view-handoff"
+              aria-selected="false"
+            >
+              <svg class="icon"><use href="#i-doc" /></svg>交接<span
+                id="handoff-dirty"
+                hidden
+                class="dot"
+                title="未保存"
+              ></span>
+            </button>
+            <div class="file-tab" id="current-file-tab" hidden>
+              <button
+                class="tab"
+                role="tab"
+                id="tab-file"
+                aria-controls="view-file"
+                data-action="view"
+                data-view="file"
+                aria-selected="false"
+              ></button
+              ><button
+                class="icon-only"
+                data-action="close-file"
+                title="关闭文件视图，保留草稿"
+                aria-label="关闭文件视图"
+              >
+                <svg class="icon"><use href="#i-close" /></svg>
+              </button>
+            </div>
+          </nav>
+          <section
+            class="surface"
+            id="view-discussion"
+            role="tabpanel"
+            aria-labelledby="tab-discussion"
+          >
+            <div class="chat-head">
+              <svg class="icon"><use href="#i-chat" /></svg
+              ><span>接通现有工程</span><span class="grow"></span
+              ><button
+                class="icon-only"
+                title="聊天记录"
+                data-action="chat-history"
+              >
+                <svg class="icon"><use href="#i-more" /></svg>
+              </button>
+            </div>
+            <div class="chat-messages" id="chat-messages">
+              <div class="message user">
+                让现有 monitor、Grid 和 Pattern 正确运行，保留原本的设计。
+              </div>
+              <article class="message">
+                <div class="byline">PNDS 助手</div>
+                <p>
+                  已将实现范围整理到交接文档：保留原始主程序与图形逻辑，只补齐本地依赖、页面入口和脚本加载顺序。
+                </p>
+                <p>
+                  交接文档现在可以直接预览和编辑。确认任务后，可以切换到 edit
+                  继续实现。
+                </p>
+                <details class="work-log">
+                  <summary>查看工作记录</summary>
+                  <p>这是一段用于评审界面的示例回复。</p>
+                </details>
+                <div
+                  class="work-icon"
+                  id="assistant-working"
+                  hidden
+                  aria-label="助手正在工作"
+                  role="status"
+                ></div>
+              </article>
+            </div>
+            <div class="composer">
+              <textarea
+                id="chat-input"
+                aria-label="给助手的消息"
+                placeholder="讨论创作方向，或描述希望完成的修改…"
+              ></textarea>
+              <div class="composer-footer">
+                <div
+                  id="assistant-mode"
+                  class="assistant-mode"
+                  role="radiogroup"
+                  aria-label="助手模式"
+                >
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked="true"
+                    tabindex="0"
+                    data-action="assistant-mode"
+                    data-mode="handoff"
+                    title="handoff · 讨论并维护交接文档"
+                  >
+                    <svg class="icon" aria-hidden="true">
+                      <use href="#i-chat" /></svg
+                    >handoff
+                  </button>
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked="false"
+                    tabindex="-1"
+                    data-action="assistant-mode"
+                    data-mode="edit"
+                    title="edit · 直接实现并保存"
+                  >
+                    <svg class="icon" aria-hidden="true">
+                      <use href="#i-edit" /></svg
+                    >edit
+                  </button>
+                </div>
+                <button
+                  data-action="context"
+                  class="small"
+                  title="上下文容量未知，可在模型设置中填写"
+                >
+                  <span class="context-ring"></span>上下文</button
+                ><span class="grow"></span
+                ><span class="small muted model-name">DeepSeek</span
+                ><button
+                  class="primary"
+                  data-action="send"
+                  title="发送示例消息"
+                >
+                  发送
+                </button>
+              </div>
+            </div>
+          </section>
+          <section
+            class="surface"
+            id="view-handoff"
+            role="tabpanel"
+            aria-labelledby="tab-handoff"
+            hidden
+          >
+            <div class="doc-toolbar">
+              <svg class="icon"><use href="#i-doc" /></svg
+              ><span class="doc-path" title="docs/creator-handoff.md"
+                >docs/creator-handoff.md</span
+              ><span class="grow"></span
+              ><span class="small muted" id="doc-status">已保存</span
+              ><button class="outline" id="doc-edit" data-action="edit-doc">
+                <svg class="icon"><use href="#i-edit" /></svg>编辑</button
+              ><button
+                class="outline"
+                id="doc-preview"
+                data-action="preview-doc"
+                hidden
+              >
+                预览</button
+              ><button
+                class="primary"
+                id="doc-save"
+                data-action="save-doc"
+                hidden
+              >
+                <svg class="icon"><use href="#i-save" /></svg>保存
+              </button>
+            </div>
+            <article class="document" id="handoff-preview"></article>
+            <textarea
+              class="editor"
+              id="handoff-editor"
+              aria-label="交接文档 Markdown 源码"
+              spellcheck="false"
+              hidden
+            ></textarea>
+            <div class="editor-note" id="doc-note">
+              Markdown 文档 · 点击编辑可修改正文
+            </div>
+          </section>
+          <section
+            class="surface"
+            id="view-file"
+            role="tabpanel"
+            aria-labelledby="tab-file"
+            hidden
+          >
+            <div class="file-toolbar">
+              <svg class="icon"><use href="#i-doc" /></svg
+              ><span class="file-path mono" id="file-path"></span
+              ><span class="grow"></span
+              ><span class="small muted" id="file-status"></span
+              ><button class="primary" data-action="save-file">
+                <svg class="icon"><use href="#i-save" /></svg>保存
+              </button>
+            </div>
+            <textarea
+              class="editor"
+              id="file-editor"
+              aria-label="文件内容"
+              spellcheck="false"
+            ></textarea>
+            <div class="editor-note">
+              ⌘S 保存 · 未保存的草稿会在切换页面或关闭文件视图后保留
+            </div>
+          </section>
+          <section
+            class="surface"
+            id="view-git"
+            role="tabpanel"
+            aria-labelledby="tab-git"
+            hidden
+          >
+            <div class="git-toolbar">
+              <strong>工程版本</strong><span class="tag">本地</span
+              ><span class="grow"></span
+              ><input
+                id="version-name"
+                placeholder="版本名称（可选）"
+                aria-label="版本名称"
+              /><button class="primary" data-action="save-version">
+                <svg class="icon"><use href="#i-save" /></svg>保存当前版本
+              </button>
+            </div>
+            <div class="git-body">
+              <div class="git-map" id="git-map"></div>
+              <aside class="git-details" id="git-details"></aside>
+            </div>
+          </section>
+        </main>
+        <aside class="debug" id="debug" aria-label="调试栏">
+          <div class="debug-head">
+            <strong>调试</strong><span class="tag" id="run-state">未运行</span
+            ><span class="grow"></span
+            ><button
+              class="icon-only"
+              data-action="checks-menu"
+              title="检查与调试"
+              aria-label="调试更多操作"
+            >
+              <svg class="icon"><use href="#i-more" /></svg></button
+            ><button
+              class="icon-only"
+              data-action="toggle-debug"
+              title="收起调试栏"
+              aria-label="收起调试栏"
+            >
+              <svg class="icon"><use href="#i-close" /></svg>
+            </button>
+          </div>
+          <div class="debug-tabs" role="tablist" aria-label="调试内容">
+            <button
+              data-action="debug-tab"
+              data-tab="preview"
+              role="tab"
+              id="debug-tab-preview"
+              aria-selected="true"
+              aria-controls="preview-panel"
+            >
+              预览</button
+            ><button
+              data-action="debug-tab"
+              data-tab="issues"
+              role="tab"
+              id="debug-tab-issues"
+              aria-selected="false"
+              aria-controls="issues-panel"
+            >
+              问题<span class="count" id="issue-count" hidden></span>
+            </button>
+          </div>
+          <div
+            class="preview"
+            id="preview-panel"
+            role="tabpanel"
+            aria-labelledby="debug-tab-preview"
+          >
+            <div class="preview-frame">
+              <svg class="icon"><use href="#i-monitor" /></svg
+              ><strong id="preview-title">工程尚未运行</strong
+              ><span class="small" id="preview-subtitle"
+                >运行后在此调试 monitor 页面</span
+              ><button class="outline" data-action="run" id="preview-run">
+                <svg class="icon"><use href="#i-play" /></svg>运行测试
+              </button>
+            </div>
+          </div>
+          <section
+            class="issues"
+            id="issues-panel"
+            role="tabpanel"
+            aria-labelledby="debug-tab-issues"
+            hidden
+          >
+            <h3>检查结果</h3>
+            <div id="check-result">
+              <p class="muted">尚未运行检查。</p>
+              <p class="issue-description">
+                在右上角更多菜单中选择静态检查或副本运行检查。
+              </p>
+            </div>
+          </section>
+          <div class="debug-foot" id="debug-foot">
+            预览已展开 · 测试只使用保存版文件
+          </div>
+        </aside>
+      </div>
+      <footer class="bottom">
+        <button class="outline" data-action="run" id="run-button">
+          <svg class="icon"><use href="#i-play" /></svg>运行测试</button
+        ><button
+          class="icon-only"
+          data-action="refresh-page"
+          id="page-refresh"
+          title="刷新页面：重新加载保存版，不重启工程进程"
+          aria-label="刷新页面"
+          disabled
+        >
+          <svg class="icon" aria-hidden="true">
+            <use href="#i-refresh" />
+          </svg></button
+        ><span class="divider"></span
+        ><button title="音频设置" data-action="audio">
+          <svg class="icon"><use href="#i-sound" /></svg
+          ><span class="optional">MacBook Pro 扬声器</span></button
+        ><select aria-label="测试音频模式">
+          <option>无音频</option>
+          <option>内置音频</option></select
+        ><button class="network" data-action="network" title="本地网络">
+          <svg class="icon"><use href="#i-globe" /></svg>192.168.1.8</button
+        ><span class="grow"></span
+        ><button data-action="debug-issues" id="bottom-issues" hidden>
+          <span class="count" id="bottom-count"></span>问题</button
+        ><span class="small muted optional" id="bottom-drafts"
+          >全部文件已保存</span
+        ><button data-action="console" title="控制台" aria-label="控制台">
+          <svg class="icon"><use href="#i-terminal" /></svg></button
+        ><button
+          class="icon-only"
+          data-action="settings"
+          title="设置"
+          aria-label="设置"
+        >
+          <svg class="icon"><use href="#i-settings" /></svg></button
+        ><button class="mode" data-action="creation-mode">创作模式</button>
+      </footer>
+    </div>
+    <footer class="prototype-bar">
+      <strong>创作工作台 · 交互原型</strong
+      ><span class="optional">示例数据仅保留在本页</span
+      ><span class="grow"></span
+      ><label
+        >主题<select id="theme">
+          <option value="pond">池塘</option>
+          <option value="sand">沙丘</option>
+          <option value="stage">舞台</option>
+        </select></label
+      ><label><input type="checkbox" id="task-scene" />助手任务进行中</label
+      ><label><input type="checkbox" id="issue-scene" />检查发现问题</label
+      ><button data-action="reset">重置示例</button>
+    </footer>
+    <div id="menu" class="popover" role="menu" hidden></div>
+    <dialog id="dialog" aria-labelledby="dialog-title">
+      <div class="dialog-head">
+        <h2 id="dialog-title"></h2>
+        <span class="grow"></span
+        ><button
+          class="icon-only"
+          data-action="close-dialog"
+          aria-label="关闭窗口"
+        >
+          <svg class="icon"><use href="#i-close" /></svg>
+        </button>
+      </div>
+      <div class="dialog-content" id="dialog-content"></div>
+      <div class="dialog-actions" id="dialog-actions"></div>
+    </dialog>
+    <div class="toast" id="toast" role="status" hidden></div>
+    <script>
+      'use strict'
+      const $ = id => document.getElementById(id)
+      const escape = value =>
+        String(value).replace(
+          /[&<>"']/g,
+          char =>
+            ({
+              '&': '&amp;',
+              '<': '&lt;',
+              '>': '&gt;',
+              '"': '&quot;',
+              "'": '&#39;',
+            })[char]
+        )
+      const icon = name =>
+        `<svg class="icon" aria-hidden="true"><use href="#i-${name}"/></svg>`
+      const docPath = 'docs/creator-handoff.md'
+      const handoff = `# 创作交接单\n\n## 当前目标\n\n让现有 runes 工程正确运行，保留原始图形、运动方式和交互设计。\n\n## 实现范围\n\n- 保留原始主程序内容，仅调整必要的文件位置与入口引用。\n- 保持 Grid.js、Pattern.js 的图形与网格算法不变。\n- 使用 App 提供的本地 p5 共享包，补齐加载顺序和本地路由。\n- 页面从磁盘读取保存版代码，刷新后可以看到最新修改。\n\n## 验收条件\n\n- [ ] monitor 页面无脚本或资源加载错误。\n- [ ] 画面与原始程序的设计一致，由创作者实机确认。\n- [ ] performer 页面可以正常访问。\n\n## 尚待确认\n\n修复运行接线不包含新增视觉效果或参数。若缺少原始代码，应先说明缺失的文件与内容。\n\n## 相关文件\n\n\`public/monitor.js\` · \`public/Grid.js\` · \`public/Pattern.js\` · \`server.js\`\n`
+      const samples = {
+        'manifest.json':
+          '{\n  "name": "runes",\n  "version": "0.1.0",\n  "entry": "server.js"\n}\n',
+        'README.md': '# Runes\n\n网络数字乐谱工程。\n',
+        'server.js':
+          "// 工程入口（原型示例）\nimport http from 'node:http';\n\n// 现有项目使用本地依赖与保存版页面。\n",
+        'public/monitor.html':
+          '<!doctype html>\n<html lang="zh-CN">\n  <head>\n    <meta charset="utf-8">\n    <title>Runes · monitor</title>\n  </head>\n  <body>\n    <script src="/local/p5.js"><\/script>\n    <script src="/Grid.js"><\/script>\n    <script src="/Pattern.js"><\/script>\n    <script src="/monitor.js"><\/script>\n  </body>\n</html>\n',
+        'public/monitor.js':
+          '// 原型中的文件示例，不代表真实作品源码。\n// 实际接线任务需要保留原始 p5 主程序。\n\nfunction setup() {\n  createCanvas(windowWidth, windowHeight);\n}\n\nfunction draw() {\n  // 原始作品逻辑保留在此。\n}\n',
+        'public/performer.html':
+          '<!doctype html>\n<title>Runes · performer</title>\n<main id="performer"></main>\n',
+        'public/Grid.js':
+          '// Grid.js · 原型示例\n// 原始网格算法保持不变。\nclass Grid {\n  constructor(columns, rows) {\n    this.columns = columns;\n    this.rows = rows;\n  }\n}\n',
+        'public/Pattern.js':
+          '// Pattern.js · 原型示例\n// 原始图形算法保持不变。\nclass Pattern {\n  constructor(name) {\n    this.name = name;\n  }\n}\n',
+        'supercollider/main.scd':
+          '// SuperCollider 入口（示例）\n(\n  // 保留工程已有声音设计。\n)\n',
+        [docPath]: handoff,
+      }
+      const nodes = [
+        {
+          id: 'initial',
+          name: 'Initial project',
+          parent: null,
+          branch: '',
+          when: '初始版本',
+          snapshot: { ...samples },
+        },
+        {
+          id: 'starting',
+          name: 'starting point',
+          parent: 'initial',
+          branch: '',
+          when: '原始程序已保存',
+          snapshot: { ...samples },
+        },
+        {
+          id: 'wired',
+          name: '本地运行接线',
+          parent: 'starting',
+          branch: 'main',
+          when: '今天 14:30',
+          snapshot: { ...samples },
+        },
+        {
+          id: 'breathe',
+          name: '呼吸速度试验',
+          parent: 'starting',
+          branch: 'breathing',
+          when: '今天 14:45',
+          snapshot: { ...samples },
+        },
+      ]
+      const state = {
+        view: 'discussion',
+        assistantMode: 'handoff',
+        file: null,
+        selected: 'public/monitor.js',
+        saved: { ...samples },
+        drafts: {},
+        dirs: new Set(['public', 'docs', 'supercollider']),
+        expanded: new Set(['public', 'docs']),
+        rename: null,
+        docEdit: false,
+        debugVisible: true,
+        debugTab: 'preview',
+        running: false,
+        pageLoads: 0,
+        processStarts: 0,
+        task: false,
+        issueScene: false,
+        check: null,
+        branch: 'main',
+        head: 'wired',
+        inspected: 'wired',
+        branches: { main: 'wired', breathing: 'breathe' },
+        resourceTab: 'modules',
+        resources: new Set(['library:p5']),
+        pendingSwitch: null,
+        contextPath: null,
+      }
+      let toastTimer
+      function toast(message) {
+        $('toast').textContent = message
+        $('toast').hidden = false
+        clearTimeout(toastTimer)
+        toastTimer = setTimeout(() => ($('toast').hidden = true), 3600)
+      }
+      function dirtyPaths() {
+        return Object.keys(state.drafts).filter(
+          path => state.drafts[path] !== state.saved[path]
+        )
+      }
+      function versionChanges() {
+        const snapshot = nodes.find(node => node.id === state.head).snapshot
+        return [
+          ...new Set([...Object.keys(snapshot), ...Object.keys(state.saved)]),
+        ].filter(path => snapshot[path] !== state.saved[path])
+      }
+      function hasChanges() {
+        return dirtyPaths().length > 0 || versionChanges().length > 0
+      }
+      function dirty(path) {
+        return (
+          Object.hasOwn(state.drafts, path) &&
+          state.drafts[path] !== state.saved[path]
+        )
+      }
+      function textFor(path) {
+        return state.drafts[path] ?? state.saved[path] ?? ''
+      }
+      function markdown(text) {
+        const lines = text.replace(/\r\n/g, '\n').split('\n')
+        let output = '',
+          list = false,
+          fenced = false,
+          code = []
+        const inline = line =>
+          escape(line)
+            .replace(/`([^`]+)`/g, '<code>$1</code>')
+            .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+        for (const line of lines) {
+          if (line.startsWith('```')) {
+            if (list) {
+              output += '</ul>'
+              list = false
+            }
+            if (fenced) {
+              output +=
+                '<pre><code>' + escape(code.join('\n')) + '</code></pre>'
+              code = []
+            }
+            fenced = !fenced
+            continue
+          }
+          if (fenced) {
+            code.push(line)
+            continue
+          }
+          const heading = line.match(/^(#{1,3})\s+(.+)/)
+          const item = line.match(/^-\s+(.*)/)
+          if (!item && list) {
+            output += '</ul>'
+            list = false
+          }
+          if (heading)
+            output += `<h${heading[1].length}>${inline(heading[2])}</h${heading[1].length}>`
+          else if (item) {
+            if (!list) {
+              output += '<ul>'
+              list = true
+            }
+            const check = item[1].match(/^\[([ xX])\]\s+(.*)/)
+            output += check
+              ? `<li class="check-item"><input type="checkbox" disabled ${check[1] !== ' ' ? 'checked' : ''}/>${inline(check[2])}</li>`
+              : `<li>${inline(item[1])}</li>`
+          } else if (line.trim()) output += '<p>' + inline(line) + '</p>'
+        }
+        if (list) output += '</ul>'
+        if (fenced)
+          output += '<pre><code>' + escape(code.join('\n')) + '</code></pre>'
+        return output
+      }
+      function renderStatus() {
+        $('handoff-dirty').hidden = !dirty(docPath)
+        $('doc-status').textContent = dirty(docPath) ? '未保存' : '已保存'
+        const count = dirtyPaths().length
+        $('bottom-drafts').textContent = count
+          ? `${count} 个文件未保存`
+          : '全部文件已保存'
+        $('file-status').textContent =
+          state.file && dirty(state.file) ? '未保存' : '已保存'
+        if (state.file)
+          $('tab-file').textContent =
+            state.file.split('/').at(-1) + (dirty(state.file) ? ' ·' : '')
+        $('file-count').textContent =
+          Object.keys(state.saved).length + ' 个文件'
+      }
+      function renderTree() {
+        const query = $('file-search').value.trim().toLowerCase()
+        const all = [...state.dirs, ...Object.keys(state.saved)]
+        const rows = []
+        const branch = (parent, depth) => {
+          const children = all
+            .filter(
+              path =>
+                (path.includes('/')
+                  ? path.slice(0, path.lastIndexOf('/'))
+                  : '') === parent
+            )
+            .sort((a, b) => {
+              const priority = path =>
+                path === 'manifest.json' ? 0 : path === 'README.md' ? 1 : 2
+              return (
+                priority(a) - priority(b) ||
+                Number(state.dirs.has(b)) - Number(state.dirs.has(a)) ||
+                a.localeCompare(b)
+              )
+            })
+          for (const path of children) {
+            const folder = state.dirs.has(path),
+              name = path.split('/').at(-1)
+            if (
+              query &&
+              !path.toLowerCase().includes(query) &&
+              !(
+                folder &&
+                all.some(
+                  p =>
+                    p.startsWith(path + '/') && p.toLowerCase().includes(query)
+                )
+              )
+            )
+              continue
+            const selected = state.selected === path
+            const extension = name.split('.').at(-1)
+            const kind = folder
+              ? ''
+              : extension === 'js'
+                ? 'JS'
+                : extension === 'html'
+                  ? '<>'
+                  : extension === 'scd'
+                    ? 'SC'
+                    : extension === 'json'
+                      ? '{}'
+                      : 'MD'
+            rows.push(
+              `<div role="none"><div class="tree-row" role="treeitem" tabindex="${selected ? 0 : -1}" aria-selected="${selected}" ${folder ? `aria-expanded="${state.expanded.has(path) || !!query}"` : ''} data-path="${escape(path)}" data-folder="${folder}" title="${escape(path)}" style="padding-left:${7 + depth * 15}px"><span class="chev">${folder ? icon(state.expanded.has(path) || query ? 'down' : 'chevron') : ''}</span>${folder ? icon('folder') : `<span class="kind ${escape(extension)}">${kind}</span>`}${state.rename === path ? `<input id="rename-input" aria-label="新文件名" value="${escape(name)}"/>` : `<span class="basename">${escape(name)}</span>${dirty(path) ? '<span class="dot" title="未保存"></span>' : ''}`}</div>${state.rename === path ? '<div class="rename-hint">Enter 确认 · Esc 取消<br>代码中的引用不会自动更新。</div>' : ''}</div>`
+            )
+            if (folder && (state.expanded.has(path) || query))
+              branch(path, depth + 1)
+          }
+        }
+        rows.push(
+          '<div class="root-name">' +
+            icon('down') +
+            '<strong>runes-pnds</strong></div>'
+        )
+        branch('', 0)
+        $('tree').innerHTML = rows.join('')
+        renderStatus()
+        if (state.rename) {
+          const field = $('rename-input')
+          field?.focus()
+          const dot = field?.value.lastIndexOf('.') ?? -1
+          field?.setSelectionRange(0, dot > 0 ? dot : field.value.length)
+        }
+      }
+      function show(view) {
+        hideMenu()
+        if (view === 'file' && !state.file) view = 'discussion'
+        state.view = view
+        for (const key of ['discussion', 'git', 'handoff', 'file']) {
+          $('view-' + key).hidden = key !== view
+          $('tab-' + key).setAttribute('aria-selected', String(key === view))
+        }
+        $('current-file-tab').hidden = !state.file
+        if (view === 'handoff') renderDoc()
+        if (view === 'git') renderGit()
+        renderStatus()
+      }
+      function openFile(path) {
+        if (state.dirs.has(path)) return
+        if (path === docPath) {
+          state.selected = path
+          renderTree()
+          show('handoff')
+          return
+        }
+        state.file = path
+        state.selected = path
+        $('file-path').textContent = path
+        $('file-editor').value = textFor(path)
+        renderTree()
+        show('file')
+      }
+      function renderDoc() {
+        $('doc-edit').hidden = state.docEdit
+        $('doc-preview').hidden = !state.docEdit
+        $('doc-save').hidden = !state.docEdit
+        $('handoff-preview').hidden = state.docEdit
+        $('handoff-editor').hidden = !state.docEdit
+        if (state.docEdit) {
+          if ($('handoff-editor').value !== textFor(docPath))
+            $('handoff-editor').value = textFor(docPath)
+        } else $('handoff-preview').innerHTML = markdown(textFor(docPath))
+        $('doc-note').textContent = state.docEdit
+          ? 'Markdown 源码 · ⌘S 保存 · 切页保留草稿'
+          : dirty(docPath)
+            ? '当前预览包含未保存草稿'
+            : 'Markdown 文档 · 点击编辑可修改正文'
+        renderStatus()
+      }
+      function savePath(path) {
+        state.saved[path] = textFor(path)
+        delete state.drafts[path]
+        renderTree()
+        renderStatus()
+      }
+      function saveDoc() {
+        savePath(docPath)
+        state.docEdit = false
+        renderDoc()
+        toast('交接文档已保存（本页示例）')
+      }
+      function branchTrigger() {
+        const current = nodes.find(n => n.id === state.head)
+        $('branch-trigger').innerHTML =
+          icon('branch') +
+          `<span>${escape(state.branch ?? '历史位置')}</span><span class="version">${escape(current?.name ?? '—')}</span>` +
+          (state.branch ? '' : `<span class="tag">历史位置</span>`) +
+          icon('down')
+      }
+      function renderGit() {
+        branchTrigger()
+        const ordered = [...nodes].reverse()
+        const offset = node => (node.branch && node.branch !== 'main' ? 28 : 0)
+        const edges = ordered
+          .filter(node => node.parent)
+          .map(node => {
+            const parent = ordered.find(other => other.id === node.parent)
+            const x = 27 + offset(node),
+              y = ordered.indexOf(node) * 65 + 32.5
+            const px = 27 + offset(parent),
+              py = ordered.indexOf(parent) * 65 + 32.5
+            return `<path d="M${x} ${y} C${x} ${py - 25} ${px} ${y + 25} ${px} ${py}"/>`
+          })
+          .join('')
+        $('git-map').innerHTML =
+          `<div style="position:relative"><svg width="90" height="${ordered.length * 65}" aria-hidden="true" style="position:absolute;top:0;left:0;fill:none;stroke:var(--line);stroke-width:2;pointer-events:none">${edges}</svg>` +
+          ordered
+            .map(
+              node =>
+                `<div class="version-row" style="margin-left:${offset(node)}px"><button class="version-node" data-action="inspect" data-id="${node.id}" title="查看 ${escape(node.name)}" style="${node.id === state.head ? 'background:var(--accent)' : ''}"></button><button class="version-label" data-action="inspect" data-id="${node.id}" aria-selected="${node.id === state.inspected}"><span>${escape(node.name)} ${node.id === state.head ? '<span class="tag">当前位置</span>' : ''}</span><small>${escape(node.when)}${node.branch ? ' · ' + escape(node.branch) : ''}</small></button></div>`
+            )
+            .join('') +
+          '</div>'
+        const node = nodes.find(n => n.id === state.inspected)
+        $('git-details').innerHTML =
+          `<span class="tag">查看详情</span><h3 style="margin-top:12px">${escape(node.name)}</h3><p class="muted">${escape(node.id)}<br>父版本：${escape(node.parent ?? '无')}</p><p>选择版本只查看详情。切换后，工程文件才会采用该版本的内容。</p><button class="primary" data-action="request-version" data-id="${node.id}" ${node.id === state.head && !hasChanges() ? 'disabled' : ''}>${node.id === state.head ? (hasChanges() ? '恢复此版本内容' : '已位于此版本') : '切换到此版本'}</button><p class="muted">当前示例未展示完整差异与版本图布局；此页用于核对入口与切换保护。</p>`
+      }
+      function renderRuntime() {
+        $('debug').hidden = !state.debugVisible
+        $('debug-toggle').setAttribute(
+          'aria-pressed',
+          String(state.debugVisible)
+        )
+        $('run-state').textContent = state.running ? '运行中' : '未运行'
+        $('run-state').style.color = state.running ? 'var(--good)' : ''
+        $('run-button').innerHTML =
+          icon(state.running ? 'refresh' : 'play') +
+          (state.running ? '重启测试' : '运行测试')
+        $('page-refresh').disabled = !state.running
+        $('preview-title').textContent = state.running
+          ? 'monitor 测试页面'
+          : '工程尚未运行'
+        $('preview-subtitle').textContent = state.running
+          ? '此处为界面占位，未运行真实工程'
+          : '运行后在此调试 monitor 页面'
+        $('preview-run').hidden = state.running
+        $('debug-foot').textContent = state.running
+          ? `页面加载 ${state.pageLoads} 次 · 进程启动 ${state.processStarts} 次（示例）`
+          : '预览已展开 · 测试只使用保存版文件'
+        $('assistant-working').hidden = !state.task
+      }
+      function debugTab(tab) {
+        state.debugTab = tab
+        $('preview-panel').hidden = tab !== 'preview'
+        $('issues-panel').hidden = tab !== 'issues'
+        for (const key of ['preview', 'issues'])
+          $('debug-tab-' + key).setAttribute(
+            'aria-selected',
+            String(key === tab)
+          )
+      }
+      function renderChecks() {
+        const errors = state.check?.errors ?? 0
+        $('issue-count').hidden = !errors
+        $('bottom-issues').hidden = !errors
+        $('issue-count').textContent = errors
+        $('bottom-count').textContent = errors
+        if (!state.check) return
+        $('check-result').innerHTML =
+          `<p style="color:${errors ? 'var(--bad)' : 'var(--good)'}">${escape(state.check.kind)} · ${errors ? errors + ' 个问题' : '未发现阻断问题'}</p>` +
+          (errors
+            ? '<div class="issue"><strong>脚本引用路径需要核对</strong><button data-action="open-problem" data-path="public/monitor.html">public/monitor.html</button><span class="small muted">页面引用的脚本路径与当前文件名不一致。</span></div><div class="issue"><strong>加载顺序需要核对</strong><button data-action="open-problem" data-path="public/monitor.js">public/monitor.js</button><span class="small muted">主程序应在其依赖脚本之后加载。</span></div>'
+            : '') +
+          `<p class="issue-description">${state.check.kind === '副本运行检查' ? '基于保存版临时副本；未改变当前测试。画面、交互与声音仍需实机验收。' : '仅检查保存版文件，不启动工程。'}</p>` +
+          (dirtyPaths().length
+            ? `<p class="issue-description">${dirtyPaths().length} 个未保存草稿未纳入本次检查。</p>`
+            : '')
+      }
+      function menuFor(button, html, point) {
+        const menu = $('menu')
+        menu.innerHTML = html
+        menu.hidden = false
+        const rect = button?.getBoundingClientRect()
+        const left = point?.x ?? rect.left,
+          top = point?.y ?? rect.bottom + 5
+        menu.style.left =
+          Math.max(8, Math.min(left, innerWidth - menu.offsetWidth - 8)) + 'px'
+        menu.style.top =
+          Math.max(8, Math.min(top, innerHeight - menu.offsetHeight - 48)) +
+          'px'
+        menu.querySelector('button:not(:disabled)')?.focus()
+      }
+      function hideMenu() {
+        $('menu').hidden = true
+      }
+      function menuItem(action, label, extra = '') {
+        return `<button role="menuitem" data-action="${action}" ${extra}>${label}</button>`
+      }
+      function dialog(title, body, actions) {
+        hideMenu()
+        $('dialog-title').textContent = title
+        $('dialog-content').innerHTML = body
+        $('dialog-actions').innerHTML = actions
+        if (!$('dialog').open) $('dialog').showModal()
+      }
+      function closeDialog() {
+        if ($('dialog').open) $('dialog').close()
+      }
+      function resources(tab = state.resourceTab) {
+        state.resourceTab = tab
+        const entries =
+          tab === 'modules'
+            ? [
+                ['qr', '二维码', '加入工程源码，提供 performer 连接入口。'],
+                [
+                  'players',
+                  '演奏者状态',
+                  '加入状态模块，仍需按工程入口完成接线。',
+                ],
+                ['theme-follow', '主题跟随', '加入本地页面主题同步模块。'],
+              ]
+            : [
+                ['p5', 'p5', '本地共享图形库 · 示例工程已引用。'],
+                ['socket.io', 'Socket.IO', '本地共享依赖 · 用于实时通信。'],
+                ['qrcode', 'QRCode', '本地共享依赖 · 用于生成二维码。'],
+              ]
+        const kind = tab === 'modules' ? 'module' : 'library'
+        dialog(
+          '添加资源',
+          `<div class="resource-tabs" role="tablist" aria-label="资源类型"><button data-action="resource-tab" data-tab="modules" role="tab" aria-selected="${tab === 'modules'}">本地模块</button><button data-action="resource-tab" data-tab="libraries" role="tab" aria-selected="${tab === 'libraries'}">共享包</button></div><p class="muted">${tab === 'modules' ? '模块源码加入工程后由工程维护；加入后还需接线。' : '采用 App 提供的本地依赖，不下载网络包。'}</p>${entries.map(([id, name, note]) => `<div class="resource-item">${icon('package')}<div class="grow"><span class="resource-name">${escape(name)}</span><p>${escape(note)}</p></div><button class="outline" data-action="add-resource" data-kind="${kind}" data-id="${id}" ${state.resources.has(kind + ':' + id) ? 'disabled' : ''}>${state.resources.has(kind + ':' + id) ? '已添加' : '添加'}</button></div>`).join('')}<p class="small muted">资源名与添加状态用于界面演示，实际目录和版本以 App 随附资源为准。</p>`,
+          menuItem('close-dialog', '完成', 'class="primary"')
+        )
+      }
+      function startRename(path) {
+        hideMenu()
+        if (state.dirs.has(path) || path === 'manifest.json') {
+          toast('此原型仅演示普通文件重命名')
+          return
+        }
+        state.selected = path
+        state.rename = path
+        renderTree()
+      }
+      function finishRename() {
+        const before = state.rename,
+          field = $('rename-input')
+        if (!before || !field) return
+        const name = field.value.trim()
+        if (
+          !name ||
+          name === '.' ||
+          name === '..' ||
+          /[\\/\x00-\x1f]/.test(name)
+        ) {
+          toast('请输入当前文件夹内的有效文件名')
+          return
+        }
+        const parent = before.includes('/')
+            ? before.slice(0, before.lastIndexOf('/') + 1)
+            : '',
+          next = parent + name
+        if (next !== before && Object.hasOwn(state.saved, next)) {
+          toast('同名文件已存在')
+          return
+        }
+        if (next !== before) {
+          state.saved[next] = state.saved[before]
+          delete state.saved[before]
+          if (Object.hasOwn(state.drafts, before)) {
+            state.drafts[next] = state.drafts[before]
+            delete state.drafts[before]
+          }
+          if (state.file === before) {
+            state.file = next
+            $('file-path').textContent = next
+          }
+          state.selected = next
+        }
+        state.rename = null
+        renderTree()
+        if (state.file) show(state.view)
+        toast(
+          next === before
+            ? '文件名未变化'
+            : '已重命名；代码中的引用未自动更新（示例）'
+        )
+      }
+      function newDialog(folder) {
+        const suggested =
+          state.selected && state.dirs.has(state.selected)
+            ? state.selected
+            : state.selected?.includes('/')
+              ? state.selected.slice(0, state.selected.lastIndexOf('/'))
+              : ''
+        dialog(
+          folder ? '新建文件夹' : '新建文件',
+          `<label for="new-parent">创建位置</label><select id="new-parent"><option value="">runes-pnds /</option>${[...state.dirs].map(path => `<option value="${escape(path)}" ${suggested === path ? 'selected' : ''}>${escape(path)} /</option>`).join('')}</select><label for="new-name">${folder ? '文件夹名' : '文件名'}</label><input id="new-name" placeholder="${folder ? 'sketches' : 'sketch.js'}" autocomplete="off"/><p class="small muted">${folder ? '在选定目录中创建文件夹。' : '创建空白文件后可直接输入或粘贴代码。'}</p>`,
+          menuItem('close-dialog', '取消', 'class="outline"') +
+            menuItem(
+              folder ? 'create-folder' : 'create-file',
+              '创建',
+              'class="primary"'
+            )
+        )
+        $('new-name').focus()
+      }
+      function createNew(folder) {
+        const name = $('new-name').value.trim(),
+          parent = $('new-parent').value
+        if (!name || /[/\\]/.test(name) || name === '.' || name === '..') {
+          toast('请输入不含路径分隔符的名称')
+          return
+        }
+        const path = parent ? parent + '/' + name : name
+        if (Object.hasOwn(state.saved, path) || state.dirs.has(path)) {
+          toast('此位置已存在同名文件或文件夹')
+          return
+        }
+        if (folder) state.dirs.add(path)
+        else state.saved[path] = ''
+        if (parent) state.expanded.add(parent)
+        state.selected = path
+        closeDialog()
+        renderTree()
+        if (!folder) openFile(path)
+        toast('已在 ' + (parent || '工程根目录') + ' 创建 ' + name + '（示例）')
+      }
+      function saveVersion(name) {
+        for (const path of dirtyPaths()) savePath(path)
+        const id = 'v' + (nodes.length + 1),
+          branch =
+            state.branch ??
+            'experiment-' + (Object.keys(state.branches).length + 1)
+        nodes.push({
+          id,
+          name: name || '创作版本 ' + (nodes.length - 3),
+          parent: state.head,
+          branch,
+          when: '刚刚',
+          snapshot: { ...state.saved },
+        })
+        state.head = id
+        state.branch = branch
+        state.branches[branch] = id
+        state.inspected = id
+        renderGit()
+        return id
+      }
+      function requestSwitch(target) {
+        if (target.id === state.head && !target.branch)
+          target.branch = state.branch
+        state.pendingSwitch = target
+        if (state.task) {
+          dialog(
+            '先结束当前助手任务',
+            `<p>当前助手任务尚未完成。结束后保留已保存的修改，再继续切换到“${escape(nodes.find(n => n.id === target.id)?.name ?? '')}”。</p><p class="muted">旧任务不会在另一个版本自动继续执行。</p>`,
+            menuItem('close-dialog', '取消', 'class="outline"') +
+              menuItem('end-task-switch', '结束任务并继续', 'class="primary"')
+          )
+          return
+        }
+        switchDialog(false)
+      }
+      function switchDialog(discard) {
+        const target = nodes.find(n => n.id === state.pendingSwitch.id)
+        const dirtyCount = dirtyPaths().length
+        const savedCount = versionChanges().length
+        const changes = hasChanges()
+        const restore = state.pendingSwitch.id === state.head
+        dialog(
+          discard
+            ? '确认放弃修改'
+            : restore
+              ? '恢复此版本内容'
+              : '切换工程版本',
+          `<p><strong>${escape(target.name)}</strong>${state.pendingSwitch.branch ? ' · ' + escape(state.pendingSwitch.branch) : ' · 历史位置'}</p><p>${discard ? '将放弃尚未记录为工程版本的示例修改，包括草稿和已保存文件。' : changes ? `当前有 ${dirtyCount} 个未保存草稿，${savedCount} 项已保存但未记录的更改。建议先保存当前版本，再继续。` : '当前没有未保存的文件草稿。'}</p>${state.running ? '<p style="color:var(--warn)">切换前将停止当前测试；完成后由你手动运行目标版本。</p>' : ''}`,
+          menuItem('close-dialog', '取消', 'class="outline"') +
+            (!discard && changes
+              ? menuItem('discard-step', '放弃修改…', 'class="danger"')
+              : '') +
+            menuItem(
+              discard
+                ? 'discard-switch'
+                : changes
+                  ? 'save-switch'
+                  : 'confirm-switch',
+              discard
+                ? '放弃修改并' + (restore ? '恢复' : '切换')
+                : changes
+                  ? '保存当前版本并' + (restore ? '恢复' : '切换')
+                  : state.running
+                    ? '停止运行并切换'
+                    : restore
+                      ? '恢复内容'
+                      : '切换到此版本',
+              `class="primary ${discard ? 'danger' : ''}"`
+            )
+        )
+      }
+      function performSwitch(save) {
+        const target = { ...state.pendingSwitch }
+        if (save) saveVersion('切换前保存')
+        const node = nodes.find(n => n.id === target.id)
+        state.saved = { ...node.snapshot }
+        state.drafts = {}
+        state.rename = null
+        state.head = target.id
+        state.inspected = target.id
+        state.branch =
+          target.branch && state.branches[target.branch] === target.id
+            ? target.branch
+            : null
+        state.running = false
+        if (state.file && !Object.hasOwn(state.saved, state.file))
+          state.file = null
+        else if (state.file) $('file-editor').value = textFor(state.file)
+        state.pendingSwitch = null
+        closeDialog()
+        renderTree()
+        renderGit()
+        renderRuntime()
+        renderDoc()
+        show(state.view)
+        toast('已切换到 ' + node.name + '；测试保持停止（示例）')
+      }
+      function runCheck(kind) {
+        state.check = { kind, errors: state.issueScene ? 2 : 0 }
+        state.debugVisible = true
+        renderRuntime()
+        renderChecks()
+        debugTab('issues')
+        toast(kind + '已完成（示例）')
+      }
+      function action(target) {
+        const name = target.dataset.action
+        const menuRectSource = target
+        hideMenu()
+        switch (name) {
+          case 'assistant-mode':
+            state.assistantMode = target.dataset.mode
+            for (const button of $('assistant-mode').querySelectorAll(
+              '[role=radio]'
+            )) {
+              const selected = button.dataset.mode === state.assistantMode
+              button.setAttribute('aria-checked', String(selected))
+              button.tabIndex = selected ? 0 : -1
+            }
+            $('chat-input').placeholder =
+              state.assistantMode === 'handoff'
+                ? '讨论创作方向，整理希望交接的需求…'
+                : '描述希望直接实现并保存的修改…'
+            break
+          case 'view':
+            show(target.dataset.view)
+            break
+          case 'close-file':
+            state.file = null
+            show(state.view === 'file' ? 'discussion' : state.view)
+            break
+          case 'edit-doc':
+            state.docEdit = true
+            renderDoc()
+            $('handoff-editor').focus()
+            break
+          case 'preview-doc':
+            state.docEdit = false
+            renderDoc()
+            break
+          case 'save-doc':
+            saveDoc()
+            break
+          case 'save-file':
+            if (state.file) {
+              savePath(state.file)
+              toast('文件已保存（示例）')
+            }
+            break
+          case 'new-menu':
+            menuFor(
+              menuRectSource,
+              menuItem('new-file', '新建文件') +
+                menuItem('new-folder', '新建文件夹')
+            )
+            break
+          case 'files-menu':
+            menuFor(
+              menuRectSource,
+              menuItem('scan', '重新扫描文件') +
+                menuItem('finder', '在 Finder 中打开工程') +
+                '<hr>' +
+                menuItem('rename-selected', '重命名选中文件　F2')
+            )
+            break
+          case 'project-menu':
+            menuFor(
+              menuRectSource,
+              '<div class="menu-label">runes-pnds</div>' +
+                menuItem('project-info', '工程信息') +
+                menuItem('finder', '在 Finder 中打开工程')
+            )
+            break
+          case 'scan':
+            renderTree()
+            toast('文件列表已重新扫描；没有刷新运行页面（示例）')
+            break
+          case 'finder':
+            toast('原型仅展示此入口；不打开真实工程')
+            break
+          case 'new-file':
+            newDialog(false)
+            break
+          case 'new-folder':
+            newDialog(true)
+            break
+          case 'create-file':
+            createNew(false)
+            break
+          case 'create-folder':
+            createNew(true)
+            break
+          case 'resources':
+            resources()
+            break
+          case 'resource-tab':
+            resources(target.dataset.tab)
+            break
+          case 'add-resource': {
+            const { kind, id } = target.dataset
+            state.resources.add(kind + ':' + id)
+            if (kind === 'module') {
+              const folder = 'modules/' + id
+              state.dirs.add('modules')
+              state.dirs.add(folder)
+              state.expanded.add('modules')
+              state.expanded.add(folder)
+              state.saved[folder + '/index.js'] =
+                '// 本地模块示例；加入后仍需完成工程接线。\n'
+              state.saved[folder + '/pnds-module.json'] =
+                '{ "module": "' + id + '", "wiring": "pending" }\n'
+              renderTree()
+            }
+            resources()
+            toast(
+              kind === 'module'
+                ? '模块源码已加入示例目录，待完成接线'
+                : '已采用本地共享包（示例）'
+            )
+            break
+          }
+          case 'rename-selected':
+          case 'rename-context':
+            startRename(
+              name === 'rename-context' ? state.contextPath : state.selected
+            )
+            break
+          case 'open-context':
+            openFile(state.contextPath)
+            break
+          case 'path-context':
+            toast('工程内路径：' + state.contextPath)
+            break
+          case 'toggle-debug':
+            state.debugVisible = !state.debugVisible
+            renderRuntime()
+            break
+          case 'debug-tab':
+            debugTab(target.dataset.tab)
+            break
+          case 'debug-issues':
+            state.debugVisible = true
+            renderRuntime()
+            debugTab('issues')
+            break
+          case 'checks-menu':
+            menuFor(
+              menuRectSource,
+              '<div class="menu-label">检查保存版工程</div>' +
+                menuItem('static-check', '静态检查') +
+                menuItem('copy-check', '副本运行检查…') +
+                '<hr>' +
+                menuItem('debug-issues', '查看问题')
+            )
+            break
+          case 'static-check':
+            runCheck('静态检查')
+            break
+          case 'copy-check':
+            dialog(
+              '副本运行检查',
+              '<p>在保存版临时副本中检查，不重启正在运行的工程。</p><label for="check-audio">检查音频模式</label><select id="check-audio"><option>无音频</option><option>内置音频</option></select><p class="muted">画面、交互与声音仍需实机验收。</p>',
+              menuItem('close-dialog', '取消', 'class="outline"') +
+                menuItem('run-copy-check', '开始检查', 'class="primary"')
+            )
+            break
+          case 'run-copy-check':
+            closeDialog()
+            runCheck('副本运行检查')
+            break
+          case 'open-problem':
+            openFile(target.dataset.path)
+            break
+          case 'run':
+            state.running = true
+            state.processStarts++
+            state.pageLoads++
+            renderRuntime()
+            toast(
+              state.processStarts > 1
+                ? '已重新启动测试进程（示例）'
+                : '已开始测试（示例）'
+            )
+            break
+          case 'refresh-page':
+            if (state.running) {
+              state.pageLoads++
+              renderRuntime()
+              toast('已重新加载保存版页面；进程未重启（示例）')
+            }
+            break
+          case 'branch-menu':
+            menuFor(
+              menuRectSource,
+              '<div class="menu-label">当前位置</div><div style="padding:2px 8px 8px">' +
+                escape(nodes.find(n => n.id === state.head).name) +
+                (state.branch ? ' · ' + escape(state.branch) : ' · 历史位置') +
+                '</div><hr><div class="menu-label">本地分支</div>' +
+                Object.entries(state.branches)
+                  .map(
+                    ([branch, id]) =>
+                      `<button class="branch-row" role="menuitem" data-action="request-branch" data-branch="${escape(branch)}" data-id="${id}">${icon('branch')}<span class="branch-meta"><span>${escape(branch)}</span><small>${escape(nodes.find(n => n.id === id)?.name ?? id)}</small></span>${branch === state.branch ? '<span class="check">' + icon('check') + '</span>' : ''}</button>`
+                  )
+                  .join('') +
+                '<hr>' +
+                menuItem('open-git', '查看完整版本图')
+            )
+            break
+          case 'request-branch':
+            if (
+              state.head === target.dataset.id &&
+              state.branch === target.dataset.branch
+            )
+              break
+            requestSwitch({
+              id: target.dataset.id,
+              branch: target.dataset.branch,
+            })
+            break
+          case 'open-git':
+            show('git')
+            break
+          case 'inspect':
+            state.inspected = target.dataset.id
+            renderGit()
+            break
+          case 'request-version':
+            requestSwitch({ id: target.dataset.id })
+            break
+          case 'save-version':
+            saveVersion($('version-name').value.trim())
+            $('version-name').value = ''
+            toast('当前内容已记录为工程版本（示例）')
+            break
+          case 'end-task-switch':
+            state.task = false
+            $('task-scene').checked = false
+            renderRuntime()
+            switchDialog(false)
+            break
+          case 'discard-step':
+            switchDialog(true)
+            break
+          case 'discard-switch':
+          case 'confirm-switch':
+            performSwitch(false)
+            break
+          case 'save-switch':
+            performSwitch(true)
+            break
+          case 'close-dialog':
+            closeDialog()
+            break
+          case 'send': {
+            const input = $('chat-input')
+            if (!input.value.trim()) {
+              toast('请输入一条示例消息')
+              break
+            }
+            const item = document.createElement('div')
+            item.className = 'message user'
+            item.textContent = input.value
+            $('chat-messages').append(item)
+            input.value = ''
+            toast('消息已加入本页示例，未调用模型')
+            break
+          }
+          case 'context':
+            dialog(
+              '上下文',
+              '<p>最大上下文容量未设置，显示静态虚线环。</p><p class="muted">可在模型设置中填写模型最大上下文，用于显示占用率。自动模式下不作为输入预算。</p>',
+              menuItem('close-dialog', '知道了', 'class="primary"')
+            )
+            break
+          case 'console':
+            state.debugVisible = true
+            renderRuntime()
+            debugTab('issues')
+            toast('控制台入口保留；原型重点展示问题与检查入口')
+            break
+          case 'reset':
+            location.reload()
+            break
+          default:
+            toast('此入口保持现有功能，本轮只评审导航与文件操作')
+        }
+      }
+      document.addEventListener('click', event => {
+        const target = event.target.closest('[data-action]')
+        if (target) action(target)
+        else if (!$('menu').contains(event.target)) hideMenu()
+      })
+      $('tree').addEventListener('click', event => {
+        if (event.target.closest('input')) return
+        const row = event.target.closest('[data-path]')
+        if (!row) return
+        const path = row.dataset.path
+        state.selected = path
+        if (row.dataset.folder === 'true') {
+          if (state.expanded.has(path)) state.expanded.delete(path)
+          else state.expanded.add(path)
+          renderTree()
+        } else openFile(path)
+      })
+      $('tree').addEventListener('contextmenu', event => {
+        const row = event.target.closest('[data-path]')
+        if (!row) return
+        event.preventDefault()
+        state.selected = row.dataset.path
+        state.contextPath = row.dataset.path
+        const folder = row.dataset.folder === 'true'
+        renderTree()
+        menuFor(
+          null,
+          (folder ? '' : menuItem('open-context', '打开文件')) +
+            menuItem(
+              'rename-context',
+              '重命名　F2',
+              folder || state.contextPath === 'manifest.json' ? 'disabled' : ''
+            ) +
+            '<hr>' +
+            menuItem('path-context', '查看工程内路径'),
+          { x: event.clientX, y: event.clientY }
+        )
+      })
+      $('tree').addEventListener('keydown', event => {
+        if (event.target.id === 'rename-input') {
+          if (event.key === 'Enter') {
+            event.preventDefault()
+            finishRename()
+          } else if (event.key === 'Escape') {
+            event.preventDefault()
+            state.rename = null
+            renderTree()
+          }
+          return
+        }
+        const rows = [...$('tree').querySelectorAll('[role=treeitem]')],
+          index = rows.indexOf(document.activeElement)
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+          event.preventDefault()
+          const next =
+            rows[
+              Math.min(
+                rows.length - 1,
+                Math.max(0, index + (event.key === 'ArrowDown' ? 1 : -1))
+              )
+            ]
+          next?.focus()
+          if (next) state.selected = next.dataset.path
+        } else if (event.key === 'Enter') {
+          event.preventDefault()
+          document.activeElement.click()
+        }
+      })
+      document.addEventListener('keydown', event => {
+        const editable = event.target.closest(
+          'input,textarea,[contenteditable]'
+        )
+        if (
+          (event.metaKey || event.ctrlKey) &&
+          event.key.toLowerCase() === 's'
+        ) {
+          event.preventDefault()
+          if (state.view === 'handoff') saveDoc()
+          else if (state.view === 'file' && state.file) {
+            savePath(state.file)
+            toast('文件已保存（示例）')
+          }
+        } else if (event.key === 'F2' && !editable && !$('dialog').open) {
+          event.preventDefault()
+          startRename(state.selected)
+        } else if (event.key === 'Escape') hideMenu()
+        if (event.key === 'Escape' && state.rename) {
+          state.rename = null
+          renderTree()
+        }
+      })
+      $('assistant-mode').addEventListener('keydown', event => {
+        if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key))
+          return
+        event.preventDefault()
+        const buttons = [
+          ...$('assistant-mode').querySelectorAll('[role=radio]'),
+        ]
+        const index =
+          event.key === 'Home'
+            ? 0
+            : event.key === 'End'
+              ? buttons.length - 1
+              : (buttons.indexOf(event.target) +
+                  (event.key === 'ArrowRight' ? 1 : -1) +
+                  buttons.length) %
+                buttons.length
+        buttons[index].click()
+        buttons[index].focus()
+      })
+      $('file-search').addEventListener('input', renderTree)
+      $('handoff-editor').addEventListener('input', () => {
+        state.drafts[docPath] = $('handoff-editor').value
+        renderTree()
+      })
+      $('file-editor').addEventListener('input', () => {
+        if (state.file) {
+          state.drafts[state.file] = $('file-editor').value
+          renderTree()
+        }
+      })
+      $('theme').addEventListener(
+        'change',
+        event => (document.documentElement.dataset.theme = event.target.value)
+      )
+      $('task-scene').addEventListener('change', event => {
+        state.task = event.target.checked
+        renderRuntime()
+      })
+      $('issue-scene').addEventListener('change', event => {
+        state.issueScene = event.target.checked
+        if (state.check) {
+          state.check.errors = state.issueScene ? 2 : 0
+          renderChecks()
+        }
+      })
+      $('dialog').addEventListener('click', event => {
+        if (event.target === $('dialog')) {
+          const r = $('dialog').getBoundingClientRect()
+          if (
+            event.clientX < r.left ||
+            event.clientX > r.right ||
+            event.clientY < r.top ||
+            event.clientY > r.bottom
+          )
+            closeDialog()
+        }
+      })
+      renderTree()
+      renderDoc()
+      renderGit()
+      renderRuntime()
+      show('discussion')
+    </script>
+  </body>
+</html>

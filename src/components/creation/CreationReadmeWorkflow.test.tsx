@@ -1,8 +1,5 @@
 import { editText, editorView } from '@/test/text-editor'
-import {
-  creationProjectAction,
-  creationFileButton,
-} from '@/test/desktop-actions'
+import { creationFileButton } from '@/test/desktop-actions'
 import { beforeEach, expect, it, vi } from 'vitest'
 import {
   act,
@@ -17,6 +14,7 @@ import { useCreationStore } from '@/store/creation-store'
 import { useCreationFilesStore } from '@/store/creation-files-store'
 import { useCreationTestStore } from '@/store/creation-test-store'
 import { useCreationHandoffStore } from '@/store/creation-handoff-store'
+import { useCreationReadingStore } from '@/store/creation-reading-store'
 import { CreationView } from './CreationView'
 import { DesktopBar } from '@/components/shell/DesktopBar'
 import { within } from '@testing-library/react'
@@ -43,6 +41,7 @@ const workspace: CreationWorkspace = {
 beforeEach(async () => {
   await i18n.changeLanguage('en')
   vi.clearAllMocks()
+  useCreationReadingStore.getState().syncWorkspace(null)
   vi.mocked(commands.previewCreationHandoff).mockImplementation(
     async (identity, task) => {
       const document = await commands.readCreationHandoff(identity)
@@ -71,6 +70,76 @@ beforeEach(async () => {
   })
 })
 
+async function openReadmeSync() {
+  const pending = await waitFor(() => {
+    const item = useCreationHandoffStore
+      .getState()
+      .pending.find(item => item.readme)
+    if (!item) throw new Error('Expected a pending README synchronization task')
+    return item
+  })
+  await act(async () =>
+    useCreationHandoffStore.getState().open(pending.task.id)
+  )
+}
+
+async function coverField(name: string) {
+  const current = screen.queryByRole('textbox', { name })
+  if (current) return current
+  const done = screen.queryByRole('button', {
+    name: i18n.t('creation.readme.done'),
+  })
+  if (done) fireEvent.click(done)
+  fireEvent.click(
+    await screen.findByRole('button', {
+      name: i18n.t('creation.readme.editElement', { field: name }),
+    })
+  )
+  return screen.findByRole('textbox', { name })
+}
+
+it('edits on the finished cover while retaining the same artwork and unsaved draft', async () => {
+  render(<CreationView />)
+  fireEvent.click(creationFileButton('README.md'))
+  const artwork = await screen.findByTestId('project-cover-page')
+  expect(
+    screen.queryByRole('textbox', { name: 'Cover title' })
+  ).not.toBeInTheDocument()
+  fireEvent.change(await coverField('Cover title'), {
+    target: { value: 'Draft title' },
+  })
+  expect(screen.getByTestId('project-cover-page')).toBe(artwork)
+  expect(artwork).toHaveTextContent('Draft title')
+  fireEvent.click(screen.getByRole('button', { name: 'Done' }))
+  expect(
+    screen.queryByRole('textbox', { name: 'Cover title' })
+  ).not.toBeInTheDocument()
+  expect(await coverField('Cover title')).toHaveValue('Draft title')
+  expect(commands.saveCreationFile).not.toHaveBeenCalled()
+})
+
+it('keeps empty title and section fields editable on the same cover without resetting its palette', async () => {
+  render(<CreationView />)
+  fireEvent.click(creationFileButton('README.md'))
+  const artwork = await screen.findByTestId('project-cover-page')
+  const title = await coverField('Cover title')
+  fireEvent.change(title, { target: { value: '' } })
+  expect(title).toHaveValue('')
+  expect(screen.getByTestId('project-cover-page')).toBe(artwork)
+  const label = await coverField('First section heading')
+  fireEvent.change(label, { target: { value: '' } })
+  expect(screen.getByTestId('project-cover-page')).toBe(artwork)
+  expect(label).toHaveValue('')
+  expect(
+    screen.getByTestId('cover-diamond').querySelector(':scope > span > span')
+  ).toHaveStyle({ backgroundColor: '#123456' })
+  fireEvent.change(label, { target: { value: 'New introduction' } })
+  expect(screen.getByTestId('cover-label')).toHaveTextContent(
+    'New introduction'
+  )
+  expect(commands.saveCreationFile).not.toHaveBeenCalled()
+})
+
 it('selects the App language variant, retains edits across language switches and offers the other existing README as the target', async () => {
   useCreationStore.setState({
     workspace: {
@@ -91,7 +160,7 @@ it('selects the App language variant, retains edits across language switches and
     </>
   )
   fireEvent.click(creationFileButton('README.zh-CN.md'))
-  await screen.findByRole('textbox', { name: '封面标题' })
+  await coverField('封面标题')
   expect(commands.readCreationFile).toHaveBeenCalledWith(
     'readme',
     'README.zh-CN.md'
@@ -100,17 +169,15 @@ it('selects the App language variant, retains edits across language switches and
     target: { value: '中文作品' },
   })
   await chooseSelectOption('README 语言', 'English')
-  await screen.findByDisplayValue('Original')
+  expect(await coverField('封面标题')).toHaveValue('Original')
   await chooseSelectOption('README 语言', '简体中文')
-  expect(await screen.findByRole('textbox', { name: '封面标题' })).toHaveValue(
-    '中文作品'
-  )
+  expect(await coverField('封面标题')).toHaveValue('中文作品')
   vi.mocked(commands.saveCreationFile).mockResolvedValueOnce({
     status: 'ok',
     data: 'zh-v2',
   })
   fireEvent.click(screen.getByRole('button', { name: '保存' }))
-  await creationProjectAction('记录 README 语言同步')
+  await openReadmeSync()
   expect(
     await screen.findByRole('textbox', { name: '涉及文件（每行一个）' })
   ).toHaveValue('README.zh-CN.md\nREADME.md')
@@ -171,10 +238,9 @@ it('adds content to an empty first section while preserving its separator and la
     </>
   )
   fireEvent.click(creationFileButton('README.md'))
-  fireEvent.change(
-    await screen.findByRole('textbox', { name: 'First section content' }),
-    { target: { value: 'New introduction.' } }
-  )
+  fireEvent.change(await coverField('First section content'), {
+    target: { value: 'New introduction.' },
+  })
   expect(useCreationFilesStore.getState().drafts['README.md']?.text).toBe(
     '# Work\n\ncomposer: Author\n\n## Intro\n\nNew introduction.\n\n---\n\n## Notes\n\nKeep me.\n'
   )
@@ -188,19 +254,16 @@ it('keeps a recognized section editable while typing a code fence and after swit
     </>
   )
   fireEvent.click(creationFileButton('README.md'))
-  const body = await screen.findByRole('textbox', {
-    name: 'First section content',
-  })
+  const body = await coverField('First section content')
   fireEvent.change(body, { target: { value: '```text\nNew work' } })
-  fireEvent.change(screen.getByRole('textbox', { name: 'Cover title' }), {
+  fireEvent.change(await coverField('Cover title'), {
     target: { value: 'Changed title' },
   })
   fireEvent.click(screen.getByRole('button', { name: 'Console' }))
   fireEvent.click(creationFileButton('README.md'))
-  fireEvent.change(
-    screen.getByRole('textbox', { name: 'First section content' }),
-    { target: { value: '```text\nNew work\n```' } }
-  )
+  fireEvent.change(await coverField('First section content'), {
+    target: { value: '```text\nNew work\n```' },
+  })
   expect(useCreationFilesStore.getState().drafts['README.md']?.text).toBe(
     edited.replace(
       'An original introduction.\n\n```text\n## A heading inside a fence\ntitle: not metadata\n```',
@@ -221,10 +284,9 @@ it('adds the first body on a cover whose heading ends at EOF', async () => {
     </>
   )
   fireEvent.click(creationFileButton('README.md'))
-  fireEvent.change(
-    await screen.findByRole('textbox', { name: 'First section content' }),
-    { target: { value: 'New introduction.' } }
-  )
+  fireEvent.change(await coverField('First section content'), {
+    target: { value: 'New introduction.' },
+  })
   expect(useCreationFilesStore.getState().drafts['README.md']?.text).toBe(
     'title: Work\n\n## Intro\n\nNew introduction.\n\n'
   )
@@ -252,6 +314,7 @@ it('edits a recognized cover after renaming a generic document into README.md', 
     </>
   )
   fireEvent.click(creationFileButton('notes.md'))
+  fireEvent.click(await screen.findByRole('button', { name: 'Edit text' }))
   await waitFor(() =>
     expect(
       editorView(
@@ -270,10 +333,9 @@ it('edits a recognized cover after renaming a generic document into README.md', 
   await act(async () => {
     await useCreationFilesStore.getState().rename('notes.md', 'README.md')
   })
-  fireEvent.change(
-    await screen.findByRole('textbox', { name: 'Cover title' }),
-    { target: { value: 'Changed title' } }
-  )
+  fireEvent.change(await coverField('Cover title'), {
+    target: { value: 'Changed title' },
+  })
   expect(useCreationFilesStore.getState().drafts['README.md']?.text).toBe(
     edited
   )
@@ -286,7 +348,7 @@ it('keeps a manual task when cancelled or when the creator declines switching pr
       <DesktopBar />
     </>
   )
-  await creationProjectAction('Record a manual task')
+  await act(async () => useCreationHandoffStore.getState().open())
   const dialog = await screen.findByRole('dialog')
   fireEvent.change(within(dialog).getByRole('textbox', { name: 'Intent' }), {
     target: { value: 'Connect the new sound mapping' },
@@ -325,7 +387,7 @@ it('keeps a manual task when cancelled or when the creator declines switching pr
   })
   expect(confirm).toHaveBeenCalled()
   expect(useCreationStore.getState().workspace?.project.identity).toBe('readme')
-  await creationProjectAction('Record a manual task')
+  await act(async () => useCreationHandoffStore.getState().open())
   expect(await screen.findByRole('textbox', { name: 'Intent' })).toHaveValue(
     'Connect the new sound mapping'
   )
@@ -371,7 +433,7 @@ it('edits the recognized cover through the workspace and saves every unknown byt
     </>
   )
   fireEvent.click(creationFileButton('README.md'))
-  const title = await screen.findByRole('textbox', { name: 'Cover title' })
+  const title = await coverField('Cover title')
   fireEvent.change(title, { target: { value: 'Changed title' } })
   expect(useCreationFilesStore.getState().drafts['README.md']?.text).toBe(
     edited
@@ -399,10 +461,9 @@ it('offers saved README language sync and preserves the task on conflict, cancel
     </>
   )
   fireEvent.click(creationFileButton('README.md'))
-  fireEvent.change(
-    await screen.findByRole('textbox', { name: 'Cover title' }),
-    { target: { value: 'Changed title' } }
-  )
+  fireEvent.change(await coverField('Cover title'), {
+    target: { value: 'Changed title' },
+  })
   vi.mocked(commands.saveCreationFile).mockResolvedValueOnce({
     status: 'ok',
     data: 'saved-v2',
@@ -412,7 +473,7 @@ it('offers saved README language sync and preserves the task on conflict, cancel
     data: { text: 'Existing agent work', version: 'handoff-v1' },
   })
   fireEvent.click(screen.getByRole('button', { name: 'Save' }))
-  await creationProjectAction('Record README language sync')
+  await openReadmeSync()
   const dialog = await screen.findByRole('dialog')
   expect(
     within(dialog).getByRole('textbox', {
@@ -439,7 +500,7 @@ it('offers saved README language sync and preserves the task on conflict, cancel
   await screen.findByText('Agent marked previous task complete')
   fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-  await creationProjectAction('Record README language sync')
+  await openReadmeSync()
   const reopened = await screen.findByRole('dialog')
   expect(
     within(reopened).getByRole('textbox', {
@@ -532,12 +593,10 @@ it('reads a plain README with safe links, edits text, and keeps the chosen langu
   ).toHaveTextContent('简体中文')
   fireEvent.click(screen.getByRole('button', { name: 'Edit text' }))
   editText(
-    screen.getByRole('textbox', { name: 'README.md' }),
+    await screen.findByRole('textbox', { name: 'README.md' }),
     plain + '\nNew paragraph.\n'
   )
-  fireEvent.click(
-    screen.getByRole('button', { name: 'Preview / cover editor' })
-  )
+  fireEvent.click(screen.getByRole('button', { name: 'Reading preview' }))
   expect(await screen.findByText('New paragraph.')).toBeInTheDocument()
   expect(commands.saveCreationFile).not.toHaveBeenCalled()
 })
@@ -585,19 +644,57 @@ it('targets the English locale variant when both it and the default README exist
     </>
   )
   fireEvent.click(creationFileButton('README.zh-CN.md'))
-  fireEvent.change(
-    await screen.findByRole('textbox', { name: 'Cover title' }),
-    { target: { value: '中文' } }
-  )
+  fireEvent.change(await coverField('Cover title'), {
+    target: { value: '中文' },
+  })
   vi.mocked(commands.saveCreationFile).mockResolvedValueOnce({
     status: 'ok',
     data: 'zh-saved',
   })
   fireEvent.click(screen.getByRole('button', { name: 'Save' }))
-  await creationProjectAction('Record README language sync')
+  await openReadmeSync()
   expect(
     await screen.findByRole('textbox', {
       name: 'Affected files (one per line)',
     })
   ).toHaveValue('README.zh-CN.md\nREADME.en.md')
+})
+
+it('edits and saves all four top metadata values through the finished cover', async () => {
+  render(<CreationView />)
+  fireEvent.click(creationFileButton('README.md'))
+  const artwork = await screen.findByTestId('project-cover-page')
+  for (const [label, value] of [
+    ['Composer', 'New author'],
+    ['Duration', '6′32″'],
+    ['Performers', 'A、B、C、D'],
+    ['Contact', '@mail.com'],
+  ]) {
+    fireEvent.change(await coverField(label ?? ''), { target: { value } })
+    expect(screen.getByTestId('project-cover-page')).toBe(artwork)
+  }
+  fireEvent.click(screen.getByRole('button', { name: 'Done' }))
+  expect(commands.saveCreationFile).not.toHaveBeenCalled()
+  const draft = useCreationFilesStore.getState().drafts['README.md']?.text
+  expect(draft).toContain('composer: New author')
+  expect(draft).toContain('duration: 6′32″')
+  expect(draft).toContain('performers: A、B、C、D')
+  expect(draft).toContain('contact: @mail.com')
+  expect(draft).toContain('custom_credit: Preserve exactly:  two spaces')
+  expect(draft?.slice(draft.indexOf('## About the piece'))).toBe(
+    cover.slice(cover.indexOf('## About the piece'))
+  )
+  vi.mocked(commands.saveCreationFile).mockResolvedValueOnce({
+    status: 'ok',
+    data: 'metadata-v2',
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+  await waitFor(() =>
+    expect(commands.saveCreationFile).toHaveBeenCalledWith(
+      'readme',
+      'README.md',
+      draft,
+      'readme-v1'
+    )
+  )
 })

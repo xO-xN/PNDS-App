@@ -8,6 +8,9 @@ use specta::Type;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 
+mod receipts;
+pub(crate) use receipts::{load_report_receipt, persist_report_receipt};
+
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ControlledCheckOptions {
@@ -198,6 +201,19 @@ pub fn run_controlled_check(
     cancelled: &AtomicBool,
     progress: impl Fn(ControlledCheckProgress),
 ) -> ControlledCheckReport {
+    run_controlled_check_observed(root, options, context, cancelled, progress, |_, _| Ok(()))
+}
+
+/// The desktop adapter may inspect the live temporary HTTP pages before cleanup.
+/// CLI callers retain explicit unverified page-rendering evidence.
+pub fn run_controlled_check_observed(
+    root: &Path,
+    options: &ControlledCheckOptions,
+    context: &ControlledCheckContext,
+    cancelled: &AtomicBool,
+    progress: impl Fn(ControlledCheckProgress),
+    browser: impl Fn(&super::manifest::Manifest, &mut ControlledCheckReport) -> Result<(), String>,
+) -> ControlledCheckReport {
     let root = root.to_path_buf();
     let mut report =
         ControlledCheckReport::not_executed(&context.task_id, &root, options.mode, String::new());
@@ -258,7 +274,8 @@ pub fn run_controlled_check(
             &tail,
             &mut resources,
             &mut report,
-        )
+        )?;
+        browser(&load_manifest_lenient(&snapshot.project_root)?, &mut report)
     })();
     if let Err(error) = result {
         report.status = if cancelled.load(Ordering::Acquire) {

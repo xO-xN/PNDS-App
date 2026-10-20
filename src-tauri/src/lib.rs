@@ -8,9 +8,11 @@ mod bindings;
 mod commands;
 mod dns;
 mod events;
+mod file_drag;
 mod gateway;
 mod https;
 mod model;
+mod notification_plugin;
 mod open_panel;
 mod performer;
 mod process_activity;
@@ -88,7 +90,7 @@ pub fn run() {
     }
 
     app_builder = app_builder
-        .plugin(tauri_plugin_notification::init())
+        .plugin(notification_plugin::init())
         .manage(crate::project::session::SessionManager::default())
         .manage(crate::window::WindowManager::default())
         .manage(crate::performer::VisibilityIntent::default())

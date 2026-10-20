@@ -1,3 +1,4 @@
+import { CreationGitRestore } from './CreationGitRestore'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
@@ -24,10 +25,12 @@ export function CreationGitHistory({
   identity,
   onBack,
   onLoaded,
+  onBusyChange,
 }: {
   identity: string
   onBack: () => void
   onLoaded: () => void
+  onBusyChange?: (busy: boolean) => void
 }) {
   const { t, i18n } = useTranslation()
   const [history, setHistory] = useState<GitHistory | null>(null)
@@ -38,6 +41,7 @@ export function CreationGitHistory({
   const [fileReading, setFileReading] = useState(false)
   const [refresh, setRefresh] = useState(0)
   const [loaded, setLoaded] = useState(false)
+  const [restoredCommit, setRestoredCommit] = useState<string | null>(null)
   const [confirmation, setConfirmation] = useState<{
     source: GitHistoryFile
     draft: CreationDraft | undefined
@@ -137,6 +141,13 @@ export function CreationGitHistory({
       aria-busy={(!history && !error) || fileReading || busy}
     >
       <p className="text-xs">{t('creation.history.limit')}</p>
+      {restoredCommit && (
+        <p role="status">
+          {t('creation.history.restored', {
+            commit: restoredCommit.slice(0, 8),
+          })}
+        </p>
+      )}
       {history?.limited && (
         <p role="status" className="text-xs">
           {t('creation.history.more')}
@@ -172,30 +183,56 @@ export function CreationGitHistory({
             >
               {item.message}
             </Button>
-            <p className="mt-2 break-all font-mono text-xs">{item.id}</p>
-            <p className="text-xs">
-              {item.author} &lt;{item.email}&gt; ·{' '}
-              {new Date(item.timestamp * 1000).toLocaleString(
+            <p className="mt-2 text-xs text-muted-foreground">
+              {new Date(item.timestamp * 1000).toLocaleDateString(
                 i18n.resolvedLanguage
               )}
+              {' · '}
+              {t('creation.history.changedFiles', { count: item.files.length })}
             </p>
+            <details className="creation-details">
+              <summary className="pnds-focus-ring">
+                {t('creation.version.recordDetails')}
+              </summary>
+              <p className="mt-2 break-all font-mono text-xs">{item.id}</p>
+              <p className="text-xs">
+                {item.author} &lt;{item.email}&gt; ·{' '}
+                {new Date(item.timestamp * 1000).toLocaleString(
+                  i18n.resolvedLanguage
+                )}
+              </p>
+            </details>
             {commit === item.id && (
-              <ul className="mt-2 grid gap-2">
-                {item.files.map(path => (
-                  <li key={path}>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-auto max-w-full whitespace-normal text-start break-all"
-                      disabled={busy}
-                      aria-label={`${path} — ${t('creation.history.view')}`}
-                      onClick={() => void showFile(item.id, path)}
-                    >
-                      {path}
-                    </Button>
-                  </li>
-                ))}
-              </ul>
+              <div className="mt-2 grid gap-2">
+                <CreationGitRestore
+                  identity={identity}
+                  commit={item.id}
+                  onBusyChange={value => {
+                    setBusy(value)
+                    onBusyChange?.(value)
+                  }}
+                  onRestored={() => {
+                    setRestoredCommit(item.id)
+                    reload()
+                  }}
+                />
+                <ul className="mt-2 grid gap-2">
+                  {item.files.map(path => (
+                    <li key={path}>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-auto max-w-full whitespace-normal text-start break-all"
+                        disabled={busy}
+                        aria-label={`${path} — ${t('creation.history.view')}`}
+                        onClick={() => void showFile(item.id, path)}
+                      >
+                        {path}
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             )}
           </li>
         ))}
@@ -203,17 +240,30 @@ export function CreationGitHistory({
       {fileReading && <p role="status">{t('creation.git.loadingDiff')}</p>}
       {file && (
         <section className="grid gap-3 rounded border border-border p-3">
-          <h3 className="break-all font-mono">
-            {file.path} · {file.commit}
-          </h3>
-          <p className="text-xs">
-            {t('creation.history.size', { size: file.historicalSize })}
-          </p>
+          <h3 className="break-all font-mono">{file.path}</h3>
           {file.reason && (
             <p role="status">{t(`creation.history.reason.${file.reason}`)}</p>
           )}
+          <details className="creation-details">
+            <summary className="pnds-focus-ring">
+              {t('creation.version.recordDetails')}
+            </summary>
+            <p className="break-all font-mono text-xs">{file.commit}</p>
+            <p className="text-xs">
+              {t('creation.history.size', { size: file.historicalSize })}
+            </p>
+          </details>
+          {file.historicalText !== null && file.savedText !== null && (
+            <div>
+              <h4>{t('creation.history.compareSaved')}</h4>
+              <TextDifference
+                before={file.historicalText}
+                after={file.savedText}
+              />
+            </div>
+          )}
           {file.historicalText !== null && (
-            <details open>
+            <details>
               <summary>{t('creation.history.selected')}</summary>
               <pre
                 tabIndex={0}
@@ -233,15 +283,6 @@ export function CreationGitHistory({
                 {file.savedText}
               </pre>
             </details>
-          )}
-          {file.historicalText !== null && file.savedText !== null && (
-            <div>
-              <h4>{t('creation.history.compareSaved')}</h4>
-              <TextDifference
-                before={file.historicalText}
-                after={file.savedText}
-              />
-            </div>
           )}
           {draft && (
             <details>

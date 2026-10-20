@@ -84,6 +84,7 @@ export function CreationFileChangeControls({
     version: string
   } | null>(null)
   const [undone, setUndone] = useState(false)
+  const [expandedChange, setExpandedChange] = useState<string | null>(null)
   const current = saved?.path === path ? saved : null
   const candidate =
     review?.identity === identity && review.path === path ? review : null
@@ -95,64 +96,91 @@ export function CreationFileChangeControls({
     candidate.version === draft.diskVersion &&
     !draft.diskChanged &&
     !draft.conflict
+  if (
+    !draft ||
+    (!isDraftDirty(draft) && !current && !undone && !error && !candidate)
+  )
+    return null
   return (
     <div className="space-y-2">
-      <Button
-        size="sm"
-        variant="outline"
-        disabled={
-          !draft ||
-          !isDraftDirty(draft) ||
-          !!draft.conflict ||
-          draft.diskChanged ||
-          draft.saving ||
-          busy
-        }
-        onClick={() => {
-          if (!draft) return
-          setUndone(false)
-          setReview({
-            identity,
-            path,
-            before: draft.diskText,
-            after: draft.text,
-            version: draft.diskVersion,
-          })
-        }}
-      >
-        {t('creation.change.review')}
-      </Button>
+      {draft && isDraftDirty(draft) && (
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={
+            !draft ||
+            !isDraftDirty(draft) ||
+            !!draft.conflict ||
+            draft.diskChanged ||
+            draft.saving ||
+            busy
+          }
+          onClick={() => {
+            if (!draft) return
+            setUndone(false)
+            setReview({
+              identity,
+              path,
+              before: draft.diskText,
+              after: draft.text,
+              version: draft.diskVersion,
+            })
+          }}
+        >
+          {t('creation.change.review')}
+        </Button>
+      )}
       {current && (
-        <details open className="space-y-2">
-          <summary>{t('creation.change.saved')}</summary>
-          <TextDifference
-            before={current.beforeText}
-            after={current.afterText}
-          />
-          <p className="text-xs">{t('creation.change.scope')}</p>
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={
-              busy ||
-              !draft ||
-              isDraftDirty(draft) ||
-              draft.diskVersion !== current.afterVersion
-            }
-            onClick={async () => {
-              await useCreationFilesStore
-                .getState()
-                .undoChange(identity, current.id)
-              if (
-                !useCreationFilesStore.getState().lastChange &&
-                !useCreationFilesStore.getState().changeError
-              )
-                setUndone(true)
-            }}
-          >
-            {t('creation.change.undo')}
-          </Button>
-        </details>
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs">{t('creation.change.saved')}</span>
+            <Button
+              size="sm"
+              variant="ghost"
+              aria-expanded={expandedChange === current.id}
+              onClick={() =>
+                setExpandedChange(
+                  expandedChange === current.id ? null : current.id
+                )
+              }
+            >
+              {t('creation.change.view')}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={
+                busy ||
+                !draft ||
+                isDraftDirty(draft) ||
+                draft.diskChanged ||
+                !!draft.conflict ||
+                draft.diskVersion !== current.afterVersion
+              }
+              onClick={async () => {
+                await useCreationFilesStore
+                  .getState()
+                  .undoChange(identity, current.id)
+                if (
+                  !useCreationFilesStore.getState().lastChange &&
+                  !useCreationFilesStore.getState().changeError
+                )
+                  setUndone(true)
+              }}
+            >
+              {t('creation.change.undo')}
+            </Button>
+          </div>
+          {expandedChange === current.id && (
+            <>
+              <TextDifference
+                before={current.beforeText}
+                after={current.afterText}
+              />
+              <p className="text-xs">{t('creation.change.scope')}</p>
+            </>
+          )}
+        </div>
       )}
       {undone && <p role="status">{t('creation.change.undone')}</p>}
       {error && !candidate && <CreationErrorNotice error={error} />}

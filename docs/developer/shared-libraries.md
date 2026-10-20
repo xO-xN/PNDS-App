@@ -106,6 +106,16 @@ returns a `DataView`, so UDP transport must use the view's actual `byteOffset` a
 `byteLength`. Wiring examples must preserve the project's own OSC and musical
 policy rather than copying a generic sound mapping.
 
+Adoption does not put packages in the project's `node_modules`. In an ESM
+server that needs a CommonJS-compatible entry, parse `PNDS_SHARED_LIBRARIES`
+before loading packages, then use `createRequire(import.meta.url)(shared[id].path)`;
+for Socket.IO, destructure `Server` from that returned module. A bare
+`require('socket.io')` still fails when no local install exists, even when the
+manifest correctly adopts the library. The assistant's tool contract, adoption
+reply and edit policy all carry this rule. The Runes startup regression was this
+resolution error; the corrected server was exercised in an isolated no-audio
+copy with the exact shipped entry and no project `node_modules`.
+
 ## Build and validation evidence
 
 On a fresh checkout, run `npm run libraries:fetch` before checks that need the

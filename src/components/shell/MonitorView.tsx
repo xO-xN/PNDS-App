@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useEffectEvent, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   sessionConnectionAddress,
@@ -9,6 +9,7 @@ import { useCreationStore } from '@/store/creation-store'
 import { useCreationTestStore } from '@/store/creation-test-store'
 import { CreationTestControls } from '@/components/creation/CreationTestControls'
 import { CreationPerformers } from '@/components/creation/CreationPerformers'
+import { CreationPerformerLauncher } from '@/components/creation/CreationPerformerLauncher'
 import { Maximize2, Minimize2 } from 'lucide-react'
 import {
   useSettingsStore,
@@ -40,7 +41,11 @@ import { bindPreviewMonitor } from '@/lib/parameter-preview'
  * The floating sidebar pops in from the left edge (Zen-browser-style
  * slide + fade) and slides back out when the pointer leaves.
  */
-export function MonitorView() {
+export function MonitorView({
+  previewHidden = false,
+}: {
+  previewHidden?: boolean
+}) {
   const creationActive = useCreationStore(state => state.active)
   const expanded = useCreationTestStore(state => state.expanded)
   const { viewportRef, surfaceStyle, preview } = useMonitorPreview(
@@ -121,6 +126,7 @@ export function MonitorView() {
       theme: currentColorThemeSetting(),
       lang: currentResolvedLanguage(),
       reload: reloadNonce,
+      previewHostOrigin: window.location.origin,
     })
   }, [hostAddress, monitorPort, reloadNonce])
   // v1.3.0 (#50): the reveal gate. Every navigation reports readiness
@@ -155,12 +161,23 @@ export function MonitorView() {
   // keeps the shell's keyboard layer alive. This never fights the page:
   // while the guest page holds focus on an interactive element, every
   // reclaim below stands down (the guest-focus gate).
+  const debugView = useCreationTestStore(state => state.debugView)
+  const reportCovered = creationActive && debugView !== 'preview' && !expanded
   const reclaimKeyboardFocus = () => {
+    if (
+      previewHidden ||
+      (useCreationStore.getState().active &&
+        useCreationTestStore.getState().debugView !== 'preview' &&
+        !useCreationTestStore.getState().expanded)
+    )
+      return
     window.focus()
     hostRef.current?.focus()
   }
+  // Mount may reclaim focus; a visibility toggle must leave it on its control.
+  const reclaimOnMount = useEffectEvent(reclaimKeyboardFocus)
   useEffect(() => {
-    reclaimKeyboardFocus()
+    reclaimOnMount()
   }, [])
   // #44/#54: the bridges ride every regain moment the gate reports — a
   // suspended OOPIF drops messages, so each regain re-pushes the theme
@@ -197,7 +214,10 @@ export function MonitorView() {
       ref={hostRef}
       tabIndex={-1}
       data-testid="monitor-host"
+      data-preview-hidden={previewHidden || undefined}
       role="region"
+      aria-hidden={previewHidden || reportCovered || undefined}
+      inert={previewHidden || reportCovered}
       aria-label={displayOverride ?? projectName ?? undefined}
       className={cn(
         'overflow-hidden bg-black outline-none',
@@ -263,7 +283,11 @@ export function MonitorView() {
           />
         </div>
         {creationActive && (
-          <div data-tauri-drag-region className="creation-monitor-strip">
+          <div
+            hidden={!expanded}
+            data-tauri-drag-region
+            className="creation-monitor-strip"
+          >
             <span className="min-w-0 truncate">
               monitor
               <span className="creation-monitor-mode">
@@ -273,6 +297,7 @@ export function MonitorView() {
             <span className="creation-monitor-address" dir="ltr">
               {monitorOrigin}
             </span>
+            {expanded && <CreationPerformerLauncher />}
             <button
               disabled={layoutBlocked || pendingCommand}
               data-tauri-drag-region="false"
@@ -301,7 +326,7 @@ export function MonitorView() {
           </div>
         )}
       </div>
-      {creationActive && <CreationPerformers />}
+      {creationActive && !expanded && <CreationPerformers />}
     </div>
   )
 }

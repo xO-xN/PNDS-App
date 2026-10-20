@@ -8,7 +8,93 @@ session generation or publishes session snapshots. Relative cache and compile
 writes stay in the copy; no artifacts are adopted automatically. This is a
 saved-file execution workflow, not an operating-system sandbox for hostile code.
 
+## Desktop page observation
+
+The desktop adapter uses `run_controlled_check_observed` to inspect the live
+saved-copy HTTP pages before child cleanup. Hidden incognito WebKit windows
+capture script exceptions, resource load failures, unhandled Promise rejections,
+console errors and local-resource CSP violations. Each page gets a bounded load
+wait and a 1.5-second post-load observation. Reports add `browserScripts` evidence;
+a failure makes the check fail and is available to the edit assistant's repair
+loop. Windows are destroyed after observation/cancellation. Visual appearance,
+later interactions and sound remain explicitly unverified. `notification_plugin.rs` delegates the
+notification plugin lifecycle and command routing, but skips its Web API
+bootstrap in `check-page-*` windows. These windows receive no additional native
+permissions. Without that scope, the plugin eagerly calls
+`is_permission_granted`, producing a denied IPC Promise that is unrelated to
+the score. A regression executes the actual installed plugin initialization
+script: Host pages invoke it; check pages do not. The browser observer still
+reports all project Promise failures. CLI uses the same
+service without a browser observer and does not claim this evidence.
+
+The edit assistant projects this report into bounded diagnostic JSON rather
+than sending complete file/dependency inventories to the model. The original
+report and native freshness checks are unchanged. Within one logical assistant
+task, a previous check is reused only after native content freshness validation;
+new writes invalidate the cached receipt. Stale/unverifiable input requires a new
+check. See [creation-assistant.md](./creation-assistant.md) for pause and receipt
+ownership.
+
+The edit tool runs `diagnoseCreationProject` before requesting the runtime lease.
+Saved-file static diagnostics are read-only and remain available during an
+active performance. A blocked runtime is separate from static pass/failure;
+`runtimeBusy` is a typed command error rather than a generic validation failure.
+For a ready session owned by the current workspace, the assistant now uses
+`inspectCreationRuntime(identity, true)` instead of requesting a second lease.
+This bounded read-only observation GETs the existing local health endpoint and
+HEADs both existing page roots. It checks project identity, audio mode/target and
+ports against the ready session. It creates no webviews, sockets that join music
+protocols, processes or audio services. The native adapter fences both creation
+identity and runtime generation after I/O. Starting/stopping and another
+controlled check still remain blockers; unchanged occupancy is not retried.
+
+Live observations are explicitly `kind: liveObservation` with
+`savedChangesVerified: false`. They are neither saved-copy receipts nor proof
+that modified server/JS files have loaded. Static diagnostics still verify saved
+contracts; browser execution, sound and fidelity remain outside this observation.
+Server changes require a creator restart to load. The assistant reports that
+scope once and finishes rather than repeatedly requesting an exclusive run.
+Pause/restart cannot reuse this observation as fresh saved-input evidence; old
+`activeSession` blockers are also invalidated once ready observations are possible.
+The explicit static-only tool still makes no browser, sound or execution claim.
+
 ## Ownership and lifecycle
+
+### Shared frontend scheduling
+
+`CreationCheckRunner` is the frontend module shared by the manual dialog and
+assistant tools. Its interface owns submission, 300 ms progress polling,
+task/workspace reply validation, cancellation and native freshness queries.
+The visible manual dialog also uses its 10-second/focus freshness watcher;
+assistant completion and receipt reuse request a single verification. Failed
+or superseded verification is `unknown`, never fresh. A failed manual query
+retains its error and can retry without submitting another check.
+
+Each runner belongs to one creation identity and one caller lifetime. Duplicate
+submission cannot start another native task. Cancellation during manual option
+preparation prevents submission; cancellation during native submission waits for
+the returned task ID and cancels that exact task. Explicit cancellation keeps
+collecting the cleanup report, including while the dialog is hidden. Disposal
+revokes publication and requests cancellation even if startup returns later.
+Workspace replacement fences late progress, reports and freshness replies.
+None of these frontend facts imply confirmed native cleanup.
+
+The two adapters retain their product policies. The manual dialog captures its
+explicit audio/compile choices and current preference snapshot, submits
+`startCreationCheck`, displays the complete report and tolerates transient
+polling errors. The assistant retains draft protection, static-first diagnostics,
+occupied-runtime suppression, bounded report projection and receipt reuse;
+it submits `startAssistantCheck` with the current authorized task ID and returns
+polling failures to the model loop. Assistant submissions never fall back to the
+manual command after an authorization or runtime refusal. Native task grants,
+runtime leases, source evidence and cleanup remain authoritative and unchanged.
+
+Tests cross the runner's interface for late startup cancellation, owner changes,
+reply mismatch, cancellation cleanup, unknown freshness and detached watchers.
+The dialog and assistant tests retain their distinct policy and presentation
+assertions; native checks still test real temporary files and process ownership.
+
+### Native runtime ownership
 
 `RuntimeLease` uses a nonblocking exclusive OS file lock at the user's
 `Library/Application Support/com.xo-xn.pnds-app/runtime.lock`. Both App runtime
@@ -46,6 +132,14 @@ report and cancellation by that task ID. Workspace replacement or close cancels
 the former owner's task. UI requests and stale checks fence task and workspace
 ownership; a late result cannot replace a newer report. Actual App exit requests
 cancellation and waits for bounded cleanup before exiting.
+
+Results lead with outcome, the actual error, failed/skipped check reasons and
+repair actions. Confirmed checks, task/project/checker metadata, cleanup facts,
+environment, input evidence, unverified items and output tails expand under Full
+check report. Unconfirmed cleanup and cleanup errors remain visible outside it.
+Settings are open before a report, then collapsed below results; changing their
+visibility never starts a check. Copy report still includes the complete original
+envelope, independent of disclosure state.
 
 The dialog stays mounted for the current creation identity while hidden. Closing
 an active check still requests cancellation and collects its final cleanup
@@ -136,3 +230,10 @@ input and offer continue editing, the existing latest guarded undo, or confirmat
 to prepare a separate editable repair handoff. The handoff still needs its own
 Record action. Decline leaves all state intact. No failure automatically starts a
 model request, repairs input, adopts copy artifacts or changes Git.
+
+The creation workspace's manual Static Doctor and saved-copy check entries now live
+in the right debug panel menu (2026-10-19), using `CreationInspectionFrame` for an
+embedded report. Standalone consumers retain the dialog frame. This is presentation
+only: the shared scheduling, saved-disk evidence, running-project static policy,
+copy-check confirmation and native runtime exclusion are unchanged. Closing or
+switching the middle page does not remount an active report or launch another run.

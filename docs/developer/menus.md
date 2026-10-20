@@ -45,10 +45,10 @@ View
 ├── Zoom Out                 (Cmd+-)
 ├── Actual Size              (Cmd+0)
 ├── ────────────────────
-├── Mute / Unmute            (Cmd+M)
-└── Reload Monitor           (Cmd+Shift+R)
+└── Mute / Unmute            (Cmd+M)
 
 Window
+├── Refresh Score Pages      (Cmd+Shift+R — saved monitor/test pages, with projection refresh)
 ├── Performer — http://<lanIp>:<performerPort>/   (copies the URL; disabled with no project/LAN)
 ├── Conductor — http://<lanIp>:<monitorPort>/     (same)
 ├── ────────────────────
@@ -269,3 +269,12 @@ This is a macOS-only app: the menu lives in the system menu bar, and accelerator
 | Translations not updating | Verify `setupMenuLanguageListener()` is called              |
 | Action not working        | Check handler uses `getState()` for current values          |
 | Accelerator conflicts     | Verify shortcut isn't used elsewhere in the app             |
+
+### Saved-page refresh location (2026-10-19)
+
+Refresh Score Pages lives only in the Window menu, with the existing `⌘⇧R`
+accelerator. The desktop transport and saved-change prompt have no refresh button.
+This preserves the saved-page refresh flow: no draft save, project restart or Host
+webview reload. In creation it uses `creation-test-store.refresh` for the same
+ownership/busy guards and surfaced failures; performance retains its runtime guard.
+Projection monitor refresh still shares the action.

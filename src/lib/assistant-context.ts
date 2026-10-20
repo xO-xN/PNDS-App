@@ -57,9 +57,7 @@ export function completeContextRounds(
       user.role === 'user' &&
       reply.role === 'assistant' &&
       eligible(user, serviceKey, project) &&
-      eligible(reply, serviceKey, project) &&
-      ((user.scope === 'platform' && reply.scope === 'platform') ||
-        reply.sources.some(source => source.project))
+      eligible(reply, serviceKey, project)
     ) {
       rounds.push([user, reply])
       index++
@@ -87,13 +85,13 @@ export function selectAssistantContext(
           return (
             marker?.type === 'summary' &&
             marker.serviceKey === key &&
-            message.scope === 'platform' &&
+            (message.scope === 'platform' || project !== undefined) &&
             marker.sourceIds.every(id => {
               const source = history.find(source => source.id === id)
               return (
                 source &&
                 history.indexOf(source) > boundary &&
-                eligible(source, key)
+                eligible(source, key, project)
               )
             })
           )
@@ -124,12 +122,14 @@ export function selectAssistantContext(
 export function summaryInput(
   history: readonly AssistantMessage[],
   config: ModelServiceConfig,
-  roundLimit = 8
+  roundLimit = 8,
+  project?: AssistantProjectSnapshot
 ) {
-  const older = completeContextRounds(history, modelProfileKey(config)).slice(
-    0,
-    -2
-  )
+  const older = completeContextRounds(
+    history,
+    modelProfileKey(config),
+    project
+  ).slice(0, -2)
   const source = older
     .slice(-Math.max(1, Math.min(200, Math.trunc(roundLimit))))
     .flat()

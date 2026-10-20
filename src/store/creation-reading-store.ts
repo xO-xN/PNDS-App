@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { ReactNode } from 'react'
+import type { GitComparison } from '@/lib/tauri-bindings'
 
 export interface CreationReadingExtension {
   id: string
@@ -10,7 +11,24 @@ export interface CreationReadingExtension {
 
 interface CreationReadingState {
   owner: string | null
-  view: 'discussion' | 'file' | 'handoff' | 'extension'
+  view: 'discussion' | 'file' | 'handoff' | 'extension' | 'git'
+  gitIntent: 'record' | 'history' | 'status'
+  gitIntentRevision: number
+  gitVisited: boolean
+  gitRevision: number
+  gitComparison: GitComparison | null
+  gitComparisonPhase: 'idle' | 'loading' | 'ready' | 'error'
+  gitPath: string | null
+  setGitComparison: (
+    comparison: GitComparison | null,
+    phase?: 'loading' | 'error'
+  ) => void
+  selectGitPath: (path: string) => void
+  gitChanged: () => void
+  handoffVisited: boolean
+  gitTarget: { commit: string; branch: string } | null
+  switchBranch: (commit: string, branch: string) => void
+  showGit: (intent?: 'record' | 'history' | 'status') => void
   returnMessageId: string | null
   extension: CreationReadingExtension | null
   syncWorkspace: (identity: string | null) => void
@@ -27,6 +45,43 @@ export const useCreationReadingStore = create<CreationReadingState>(
   (set, get) => ({
     owner: null,
     view: 'discussion',
+    gitIntent: 'history',
+    gitIntentRevision: 0,
+    gitVisited: false,
+    gitRevision: 0,
+    gitComparison: null,
+    gitComparisonPhase: 'idle',
+    gitPath: null,
+    setGitComparison: (gitComparison, phase) =>
+      set(state => ({
+        gitComparison,
+        gitComparisonPhase: gitComparison ? 'ready' : (phase ?? 'loading'),
+        gitPath: !gitComparison
+          ? state.gitPath
+          : gitComparison.files.some(file => file.path === state.gitPath)
+            ? state.gitPath
+            : (gitComparison.files.find(file => file.status !== 'unchanged')
+                ?.path ??
+              gitComparison.files[0]?.path ??
+              null),
+      })),
+    selectGitPath: gitPath =>
+      set(state =>
+        state.gitComparison?.files.some(file => file.path === gitPath)
+          ? { gitPath }
+          : {}
+      ),
+    gitChanged: () => set(state => ({ gitRevision: state.gitRevision + 1 })),
+    handoffVisited: false,
+    gitTarget: null,
+    switchBranch: (commit, branch) =>
+      set(state => ({
+        view: 'git',
+        gitVisited: true,
+        gitIntent: 'history',
+        gitIntentRevision: state.gitIntentRevision + 1,
+        gitTarget: { commit, branch },
+      })),
     returnMessageId: null,
     extension: null,
     syncWorkspace: owner => {
@@ -36,8 +91,25 @@ export const useCreationReadingStore = create<CreationReadingState>(
           view: 'discussion',
           returnMessageId: null,
           extension: null,
+          gitIntent: 'history',
+          gitIntentRevision: 0,
+          gitVisited: false,
+          gitRevision: 0,
+          gitComparison: null,
+          gitComparisonPhase: 'idle',
+          gitPath: null,
+          handoffVisited: false,
+          gitTarget: null,
         })
     },
+    showGit: (gitIntent = 'history') =>
+      set(state => ({
+        view: 'git',
+        gitIntent,
+        gitIntentRevision: state.gitIntentRevision + 1,
+        gitVisited: true,
+        gitTarget: null,
+      })),
     showDiscussion: messageId =>
       set(state => ({
         view: 'discussion',
@@ -51,6 +123,7 @@ export const useCreationReadingStore = create<CreationReadingState>(
     showHandoff: messageId =>
       set(state => ({
         view: 'handoff',
+        handoffVisited: true,
         returnMessageId: messageId ?? state.returnMessageId,
       })),
     showExtension: (extension, messageId) =>

@@ -58,7 +58,11 @@ it('shows saved differences and refuses external staged selection without touchi
   render(
     <CreationGitRecord identity="score" onRecorded={vi.fn()} onBack={vi.fn()} />
   )
-  await screen.findByRole('textbox', { name: 'Version author name' })
+  await screen.findByRole('textbox', { name: 'Version message' })
+  const author = screen.getByLabelText('Version author name')
+  expect(author).not.toBeVisible()
+  fireEvent.click(screen.getByText('Version author and email'))
+  expect(author).toBeVisible()
   expect(screen.getByRole('checkbox', { name: /other.js/ })).toBeDisabled()
   fireEvent.click(
     screen.getByRole('button', { name: 'server.js — View saved difference' })

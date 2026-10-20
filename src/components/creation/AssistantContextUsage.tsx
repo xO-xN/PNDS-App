@@ -14,7 +14,6 @@ import {
 import { buildAssistantMessages } from '@/lib/assistant-flow'
 import { useAssistantStore } from '@/store/assistant-store'
 import { useAssistantProjectStore } from '@/store/assistant-project-store'
-import { modelConfigurationKey } from '@/lib/model-context-settings'
 import { useAssistantOverviewStore } from '@/store/assistant-overview-store'
 
 export function AssistantContextUsage({
@@ -26,6 +25,7 @@ export function AssistantContextUsage({
 }) {
   const { t, i18n } = useTranslation()
   const input = useAssistantStore(state => state.input)
+  const mode = useAssistantStore(state => state.mode)
   const messages = useAssistantStore(state => state.messages)
   const active = useAssistantStore(state => state.activeConversationId)
   const editing = useAssistantStore(state => state.editing)
@@ -33,9 +33,7 @@ export function AssistantContextUsage({
   const phase = useAssistantStore(state => state.phase)
   const live = useAssistantStore(state => state.contextMeasurement)
   const historyState = useAssistantStore(state => state.historyState)
-  const reading = useAssistantProjectStore(state => state.reading)
   const project = useAssistantProjectStore(state => state.snapshot)
-  const authorization = useAssistantProjectStore(state => state.authorization)
   const attachments = useAssistantProjectStore(state => state.attachments)
   const overview = useAssistantOverviewStore(state => state.overview)
   const overviewStale = useAssistantOverviewStore(state => state.stale)
@@ -51,28 +49,20 @@ export function AssistantContextUsage({
   ])
   const [preview, setPreview] = useState<{
     input: string
+    mode: typeof mode
     messages: typeof messages
     config: typeof config
     active: typeof active
     editing: typeof editing
     project: typeof project
     attachments: typeof attachments
-    authorization: typeof authorization
-    reading: boolean
     contextKey: string
     measurement: ContextMeasurement | null
   } | null>(null)
   useEffect(() => {
     if (!config || phase !== 'idle' || historyState !== 'ready') return
     const currentProject = overview?.snapshot ?? project
-    const authorized =
-      reading &&
-      authorization?.owner === identity &&
-      authorization.service === modelConfigurationKey(config) &&
-      !!currentProject &&
-      !currentProject.files.some(
-        file => !file.reason && !authorization.paths.includes(file.path)
-      )
+    const authorized = !!currentProject
     if (authorized && overviewStale) return
     let stale = false
     let history = conversationMessages(messages, active)
@@ -95,6 +85,7 @@ export function AssistantContextUsage({
         .measureAssistantContext(
           config,
           buildAssistantMessages(history, input, {
+            mode,
             owner: identity,
             config,
             projectReading: authorized,
@@ -107,14 +98,13 @@ export function AssistantContextUsage({
           if (!stale && useAssistantStore.getState().owner === identity)
             setPreview({
               input,
+              mode,
               messages,
               config,
               active,
               editing,
               project,
               attachments,
-              authorization,
-              reading,
               contextKey,
               measurement: result.status === 'ok' ? result.data : null,
             })
@@ -123,14 +113,13 @@ export function AssistantContextUsage({
           if (!stale)
             setPreview({
               input,
+              mode,
               messages,
               config,
               active,
               editing,
               project,
               attachments,
-              authorization,
-              reading,
               contextKey,
               measurement: null,
             })
@@ -144,14 +133,13 @@ export function AssistantContextUsage({
     config,
     identity,
     input,
+    mode,
     messages,
     active,
     editing,
     phase,
     historyState,
     project,
-    reading,
-    authorization,
     attachments,
     contextKey,
     overview,
@@ -162,19 +150,19 @@ export function AssistantContextUsage({
     phase !== 'idle'
       ? live
       : preview?.input === input &&
+          preview.mode === mode &&
           preview.messages === messages &&
           preview.config === config &&
           preview.active === active &&
           preview.editing === editing &&
           preview.project === project &&
           preview.attachments === attachments &&
-          preview.authorization === authorization &&
-          preview.reading === reading &&
           preview.contextKey === contextKey
         ? preview.measurement
         : null
   const tokens =
     measurement?.estimatedTokens ?? measurement?.referenceEstimatedTokens
+  const manual = config?.context?.mode === 'manual'
   const capacity = measurement?.capacity ?? config?.context?.capacity
   const percent = tokens != null && capacity ? (tokens / capacity) * 100 : null
   const number = new Intl.NumberFormat(i18n.resolvedLanguage, {
@@ -217,7 +205,7 @@ export function AssistantContextUsage({
           <svg
             aria-hidden="true"
             viewBox="0 0 24 24"
-            className="size-5 -rotate-90 fill-none"
+            className="size-5 shrink-0 -rotate-90 fill-none"
             strokeWidth="3"
           >
             <circle
@@ -225,7 +213,9 @@ export function AssistantContextUsage({
               cy="12"
               r="9"
               stroke="currentColor"
-              opacity="0.25"
+              opacity={percent === null ? 0.7 : 0.35}
+              pathLength="100"
+              strokeDasharray={percent === null ? '4 4' : undefined}
               className="text-muted-foreground"
             />
             {percent !== null && (
@@ -250,6 +240,9 @@ export function AssistantContextUsage({
         className="max-h-[70vh] w-80 max-w-[calc(100vw-2rem)] space-y-3 overflow-auto text-sm"
       >
         <p className="font-medium">{t('assistant.chat.contextTitle')}</p>
+        {!manual && (
+          <p className="text-xs">{t('settings.modelContext.automatic')}</p>
+        )}
         <p className="text-lg tabular-nums">
           {percent === null ? (
             <span className="block text-sm">{status}</span>
@@ -271,6 +264,14 @@ export function AssistantContextUsage({
               )
             : t('assistant.context.unavailable')}
         </p>
+        {measurement?.effectiveInput != null && (
+          <p className="text-xs text-muted-foreground">
+            {t('assistant.chat.inputBudget', {
+              used: measurement.admissionEstimate.toLocaleString(),
+              budget: measurement.effectiveInput.toLocaleString(),
+            })}
+          </p>
+        )}
         {percent !== null && !measurement?.exceeded && (
           <p className="text-xs">
             {t(

@@ -11,6 +11,7 @@ import {
   creationFileAction,
 } from '@/test/desktop-actions'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import userEvent from '@testing-library/user-event'
 import { open } from '@tauri-apps/plugin-dialog'
 import { within } from '@testing-library/react'
 import { writeText } from '@tauri-apps/plugin-clipboard-manager'
@@ -23,6 +24,7 @@ import {
   type CreationWorkspace,
   type Result,
 } from '@/lib/tauri-bindings'
+import { useCreationReadingStore } from '@/store/creation-reading-store'
 import { useCreationStore } from '@/store/creation-store'
 import { useCreationFilesStore } from '@/store/creation-files-store'
 import { useSessionStore } from '@/store/session-store'
@@ -42,8 +44,60 @@ const first: CreationWorkspace = {
 }
 
 describe('creation reading workspace', () => {
+  it('creates a code file from the sidebar, opens its editor and saves pasted code', async () => {
+    useCreationStore.setState({ workspace: first })
+    vi.mocked(commands.createCreationFile).mockResolvedValueOnce({
+      status: 'ok',
+      data: {
+        path: 'public/Grid.js',
+        kind: 'text',
+        category: 'pages',
+        size: 0,
+      },
+    })
+    vi.mocked(commands.readCreationFile).mockResolvedValue({
+      status: 'ok',
+      data: { kind: 'text', text: '', version: 'empty-version' },
+    })
+    vi.mocked(commands.saveCreationFile).mockResolvedValueOnce({
+      status: 'ok',
+      data: 'saved-version',
+    })
+    render(<CreationView />)
+    await userEvent.click(screen.getByRole('button', { name: 'New…' }))
+    await userEvent.click(screen.getByRole('menuitem', { name: 'New file' }))
+    const dialog = screen.getByRole('form', { name: 'New file' })
+    fireEvent.change(
+      within(dialog).getByRole('textbox', { name: 'Path inside the project' }),
+      { target: { value: 'public/Grid.js' } }
+    )
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create file' }))
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    )
+    const editor = await screen.findByRole('textbox', {
+      name: 'public/Grid.js',
+    })
+    editText(editor, 'class Grid {}')
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() =>
+      expect(commands.saveCreationFile).toHaveBeenCalledWith(
+        'first',
+        'public/Grid.js',
+        'class Grid {}',
+        'empty-version'
+      )
+    )
+    expect(creationFileButton('public/Grid.js')).toHaveAttribute(
+      'aria-selected',
+      'true'
+    )
+    expect(commands.startProject).not.toHaveBeenCalled()
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
+    useCreationReadingStore.getState().syncWorkspace(null)
     useSessionStore.setState({ sessionStatus: 'idle' })
     useCreationStore.setState({
       modePhase: 'idle',
@@ -84,7 +138,7 @@ describe('creation reading workspace', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: 'Open folder project' }))
     fireEvent.click(
-      await screen.findByRole('button', { name: 'public/score.js' })
+      await screen.findByRole('treeitem', { name: 'public/score.js' })
     )
     await findEditorWithText('alpha beta alpha')
     fireEvent.click(screen.getByRole('button', { name: 'Find and replace' }))
@@ -98,8 +152,11 @@ describe('creation reading workspace', () => {
     })
     expect(editorView(editor).state.selection.main.from).toBe(0)
     expect(editorView(editor).state.selection.main.to).toBe(5)
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Open project folder in Finder' })
+    await userEvent.click(
+      screen.getByRole('button', { name: 'File list actions' })
+    )
+    await userEvent.click(
+      screen.getByRole('menuitem', { name: 'Open project folder in Finder' })
     )
     await waitFor(() =>
       expect(commands.revealCreationPath).toHaveBeenCalledWith('first', null)
@@ -131,7 +188,7 @@ describe('creation reading workspace', () => {
     expect(commands.stopProject).not.toHaveBeenCalled()
   })
 
-  it('opens the existing project picker from the titlebar while retaining the file draft', async () => {
+  it('opens an anchored project menu from the titlebar while retaining the file draft', async () => {
     useCreationStore.setState({ workspace: first })
     seedCreationDraft('public/score.js', 'saved', 'v1')
     useCreationFilesStore.getState().edit('public/score.js', 'unsaved')
@@ -140,7 +197,7 @@ describe('creation reading workspace', () => {
     const topbar = document.querySelector<HTMLElement>('[data-creation-topbar]')
     if (!topbar) throw new Error('Expected the creation titlebar')
     expect(
-      within(topbar).getByRole('button', { name: 'Project actions' })
+      within(topbar).getByRole('button', { name: 'Switch to another project' })
     ).toBeEnabled()
     expect(topbar).toHaveTextContent('Draft')
     expect(
@@ -148,13 +205,22 @@ describe('creation reading workspace', () => {
     ).toBeEnabled()
     const editor = await findEditorWithText('unsaved')
     await creationProjectAction('Switch to another project')
-    const picker = await screen.findByRole('dialog', {
+    const picker = await screen.findByRole('menu', {
       name: 'Switch to another project',
     })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(
       useCreationFilesStore.getState().drafts['public/score.js']?.text
     ).toBe('unsaved')
-    fireEvent.click(within(picker).getByRole('button', { name: 'Cancel' }))
+    fireEvent.keyDown(picker, { key: 'Escape' })
+    await waitFor(() =>
+      expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    )
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Switch to another project' })
+      ).toHaveFocus()
+    )
     expect(editorWithText('unsaved')).toBe(editor)
     expect(commands.prepareCreationProject).not.toHaveBeenCalled()
     expect(commands.startProject).not.toHaveBeenCalled()
@@ -260,7 +326,10 @@ describe('creation reading workspace', () => {
     )
     await creationProjectAction('Switch to another project')
     await screen.findByText('Read-only · installed .pnds bundle')
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    fireEvent.keyDown(
+      screen.getByRole('menu', { name: 'Switch to another project' }),
+      { key: 'Escape' }
+    )
     expect(useCreationStore.getState().workspace).toEqual(first)
     expect(commands.prepareCreationProject).not.toHaveBeenCalled()
   })
@@ -318,6 +387,7 @@ describe('creation reading workspace', () => {
   })
 
   it('previews images on demand and falls back after decoding fails; audio has only file information', async () => {
+    const user = userEvent.setup()
     useCreationStore.setState({
       workspace: {
         ...first,
@@ -341,12 +411,16 @@ describe('creation reading workspace', () => {
     fireEvent.click(creationFileButton('image.gif'))
     fireEvent.error(await screen.findByRole('img', { name: 'image.gif' }))
     await screen.findByText(/could not be decoded/)
+    await user.click(screen.getByRole('button', { name: 'File actions' }))
+    expect(await screen.findByText('GIF · 12 bytes')).toBeVisible()
+    await user.keyboard('{Escape}')
     vi.mocked(commands.readCreationFile).mockResolvedValueOnce({
       status: 'ok',
       data: { kind: 'binary' },
     })
     fireEvent.click(creationFileButton('audio.wav'))
-    await screen.findByText('WAV · 100 bytes')
+    await user.click(screen.getByRole('button', { name: 'File actions' }))
+    expect(await screen.findByText('WAV · 100 bytes')).toBeVisible()
     expect(document.querySelector('audio')).toBeNull()
   })
 
@@ -575,7 +649,7 @@ describe('creation reading workspace', () => {
       )
       expect(creationFileButton('public/renamed.js')).toBeInTheDocument()
       expect(
-        screen.queryByRole('button', { name: 'public/score.js' })
+        screen.queryByRole('treeitem', { name: 'public/score.js' })
       ).not.toBeInTheDocument()
       expect(screen.getByText(/File renamed\./)).toBeInTheDocument()
       expect(
@@ -668,6 +742,9 @@ describe('creation reading workspace', () => {
       expect(
         screen.getByText('File reading · edits continue externally')
       ).toBeInTheDocument()
+      expect(
+        screen.queryByRole('button', { name: 'New file' })
+      ).not.toBeInTheDocument()
     })
   })
 
@@ -754,7 +831,7 @@ describe('creation reading workspace', () => {
           <DesktopBar />
         </>
       )
-      fireEvent.click(screen.getByRole('button', { name: 'manifest.json' }))
+      fireEvent.click(screen.getByRole('treeitem', { name: 'manifest.json' }))
       const name = (await screen.findByLabelText(
         'Work title'
       )) as HTMLInputElement
@@ -808,7 +885,7 @@ describe('creation reading workspace', () => {
           <DesktopBar />
         </>
       )
-      fireEvent.click(screen.getByRole('button', { name: 'manifest.json' }))
+      fireEvent.click(screen.getByRole('treeitem', { name: 'manifest.json' }))
       await screen.findByLabelText('Work title')
       fireEvent.click(screen.getByRole('checkbox', { name: 'Internal' }))
       fireEvent.click(screen.getByRole('checkbox', { name: 'External' }))
@@ -835,7 +912,7 @@ describe('creation reading workspace', () => {
           <DesktopBar />
         </>
       )
-      fireEvent.click(screen.getByRole('button', { name: 'manifest.json' }))
+      fireEvent.click(screen.getByRole('treeitem', { name: 'manifest.json' }))
       expect(
         await screen.findByText(/not an editable JSON object/i)
       ).toBeInTheDocument()
@@ -862,7 +939,7 @@ describe('creation reading workspace', () => {
           <DesktopBar />
         </>
       )
-      fireEvent.click(screen.getByRole('button', { name: 'manifest.json' }))
+      fireEvent.click(screen.getByRole('treeitem', { name: 'manifest.json' }))
       fireEvent.change(await screen.findByLabelText('Work title'), {
         target: { value: 'Form edit' },
       })
@@ -913,7 +990,7 @@ describe('creation reading workspace', () => {
           <DesktopBar />
         </>
       )
-      fireEvent.click(screen.getByRole('button', { name: 'manifest.json' }))
+      fireEvent.click(screen.getByRole('treeitem', { name: 'manifest.json' }))
       fireEvent.change(await screen.findByLabelText('Work title'), {
         target: { value: 'Renamed III' },
       })
@@ -940,7 +1017,7 @@ describe('creation reading workspace', () => {
           <DesktopBar />
         </>
       )
-      fireEvent.click(screen.getByRole('button', { name: 'manifest.json' }))
+      fireEvent.click(screen.getByRole('treeitem', { name: 'manifest.json' }))
       const port = (await screen.findByLabelText(
         'Performer port'
       )) as HTMLInputElement
@@ -957,4 +1034,16 @@ describe('creation reading workspace', () => {
       expect(port.value).toBe('')
     })
   })
+})
+
+it('exports a dragged file through its issued identity and project-relative path', () => {
+  useCreationStore.setState({ workspace: first })
+  render(<CreationView />)
+  const row = screen.getByRole('treeitem', { name: 'public/score.js' })
+  expect(row).toHaveAttribute('draggable', 'true')
+  fireEvent.dragStart(row)
+  expect(commands.dragCreationFile).toHaveBeenCalledExactlyOnceWith(
+    'first',
+    'public/score.js'
+  )
 })

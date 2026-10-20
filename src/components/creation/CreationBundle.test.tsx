@@ -175,7 +175,9 @@ it('ignores a late destination after switching projects and prevents duplicate c
   expect(
     screen.queryByText('/delivery/old-project.pnds')
   ).not.toBeInTheDocument()
-  expect(screen.getByRole('button', { name: 'Project actions' })).toBeEnabled()
+  expect(
+    screen.getByRole('button', { name: 'Switch to another project' })
+  ).toBeEnabled()
 })
 
 it('offers packaging only for a writable source folder', async () => {
@@ -191,7 +193,9 @@ it('offers packaging only for a writable source folder', async () => {
   expect(
     screen.queryByRole('button', { name: 'Generate .pnds' })
   ).not.toBeInTheDocument()
-  await userEvent.click(screen.getByRole('button', { name: 'Project actions' }))
+  await userEvent.click(
+    screen.getByRole('button', { name: 'Switch to another project' })
+  )
   expect(
     screen.queryByRole('menuitem', { name: 'Generate .pnds' })
   ).not.toBeInTheDocument()

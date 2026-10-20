@@ -9,6 +9,12 @@ the Doctor dialog explicitly starts a check, including during runtime startup or
 shutdown. The dialog labels known check, severity and unverified categories in
 English and Chinese and retains contract error details and machine codes.
 
+The dialog leads with pass/fail, issue reasons/severity and file actions. Machine
+codes, fields and paths expand per issue. Project identity/version, checker,
+category checks, unverified items and input fingerprints live under Full static
+report. The runtime-verification limitation and stale/error states remain visible;
+folding report details never reruns diagnosis or changes the captured report.
+
 The report schema is version 1. `project` contains saved manifest ID, name and
 version when schema parsing succeeds; otherwise it is null. `projectPath` is the
 checked root and `checkerVersion` identifies the compiled checker. `inputs` lists

@@ -33,15 +33,17 @@ import { CreationErrorNotice } from './CreationErrorNotice'
 export function CreationGit({
   identity,
   onClose,
+  initialView = 'status',
 }: {
+  initialView?: 'status' | 'record' | 'history'
   identity: string
   onClose: () => void
 }) {
   const { t } = useTranslation()
   const recordOperation = useRef(false)
   const [recordBusy, setRecordBusy] = useState(false)
-  const [historyOpen, setHistoryOpen] = useState(false)
-  const [recording, setRecording] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(initialView === 'history')
+  const [recording, setRecording] = useState(initialView === 'record')
   const [refresh, setRefresh] = useState(0)
   const [status, setStatus] = useState<CreationGitStatus | null>(null)
   const [diff, setDiff] = useState<CreationGitDiff | null>(null)
@@ -152,15 +154,21 @@ export function CreationGit({
             useCreationStore.getState().workspace?.project.identity === identity
           )
             document
-              .querySelector<HTMLButtonElement>(
-                '[data-creation-topbar] button[aria-haspopup="menu"]'
-              )
+              .querySelector<HTMLButtonElement>('[data-creation-git]')
               ?.focus()
         }}
         showCloseButton={false}
         className="flex h-160 max-h-[85vh] flex-col overflow-hidden text-start sm:max-w-3xl"
       >
-        <DialogTitle>{t('creation.git.action')}</DialogTitle>
+        <DialogTitle>
+          {t(
+            initialView === 'record'
+              ? 'creation.version.saveCurrent'
+              : initialView === 'history'
+                ? 'creation.history.action'
+                : 'creation.git.action'
+          )}
+        </DialogTitle>
         <DialogDescription>{t('creation.git.scope')}</DialogDescription>
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
           <span>{t('creation.git.drafts', { count: drafts })}</span>
@@ -204,6 +212,10 @@ export function CreationGit({
               identity={identity}
               onBack={() => setHistoryOpen(false)}
               onLoaded={onClose}
+              onBusyChange={busy => {
+                recordOperation.current = busy
+                setRecordBusy(busy)
+              }}
             />
           ) : recording ? (
             <CreationGitRecord
@@ -237,14 +249,6 @@ export function CreationGit({
               )}
               {status?.state === 'available' && (
                 <div className="flex flex-col gap-3">
-                  <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-xs">
-                    <dt>{t('creation.git.branch')}</dt>
-                    <dd>{status.branch ?? t('creation.git.detached')}</dd>
-                    <dt>{t('creation.git.head')}</dt>
-                    <dd className="break-all font-mono">
-                      {status.head ?? t('creation.git.unborn')}
-                    </dd>
-                  </dl>
                   {status.changes.length === 0 && (
                     <p className="text-sm">{t('creation.git.clean')}</p>
                   )}
@@ -315,6 +319,19 @@ export function CreationGit({
                       )}
                     </section>
                   )}
+                  <details className="creation-details">
+                    <summary className="pnds-focus-ring">
+                      {t('creation.git.repositoryDetails')}
+                    </summary>
+                    <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-xs">
+                      <dt>{t('creation.git.branch')}</dt>
+                      <dd>{status.branch ?? t('creation.git.detached')}</dd>
+                      <dt>{t('creation.git.head')}</dt>
+                      <dd className="break-all font-mono">
+                        {status.head ?? t('creation.git.unborn')}
+                      </dd>
+                    </dl>
+                  </details>
                 </div>
               )}
             </>

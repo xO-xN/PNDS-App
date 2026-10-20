@@ -1,10 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import userEvent from '@testing-library/user-event'
-import { act, render, screen, waitFor } from '@/test/test-utils'
+import { act, fireEvent, render, screen, waitFor } from '@/test/test-utils'
 import { commands, type AppPreferences } from '@/lib/tauri-bindings'
 import { useSettingsStore } from '@/store/settings-store'
 import i18n from '@/i18n/config'
 import { SettingsPanel } from './SettingsPanel'
+
+function modelForm() {
+  const form = screen.getByLabelText('Model name').closest('form')
+  if (!form) throw new Error('Missing model settings form')
+  return form
+}
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -36,6 +42,54 @@ afterEach(async () => {
 })
 
 describe('model service settings (#165)', () => {
+  it('shows provider-default output and saves basic DeepSeek settings without an implicit cap', async () => {
+    const user = userEvent.setup()
+    render(<SettingsPanel />)
+    await user.click(screen.getByRole('button', { name: 'Model service' }))
+    await user.type(
+      screen.getByLabelText('API base URL'),
+      'https://api.deepseek.com'
+    )
+    await user.type(screen.getByLabelText('Model name'), 'deepseek-flash')
+    const output = screen.getByLabelText('Maximum visible output (tokens)')
+    expect(output).toHaveValue(null)
+    expect(output).toHaveAttribute('placeholder', 'Provider default')
+    fireEvent.submit(modelForm())
+    await waitFor(() =>
+      expect(commands.savePreferences).toHaveBeenCalledWith(
+        expect.objectContaining({
+          modelService: {
+            baseUrl: 'https://api.deepseek.com',
+            model: 'deepseek-flash',
+          },
+        })
+      )
+    )
+    await user.type(output, '8192')
+    fireEvent.submit(modelForm())
+    await waitFor(() =>
+      expect(commands.savePreferences).toHaveBeenCalledWith(
+        expect.objectContaining({
+          modelService: expect.objectContaining({
+            context: expect.objectContaining({ maxOutput: 8192 }),
+          }),
+        })
+      )
+    )
+    await user.clear(output)
+    fireEvent.submit(modelForm())
+    await waitFor(() =>
+      expect(commands.savePreferences).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          modelService: {
+            baseUrl: 'https://api.deepseek.com',
+            model: 'deepseek-flash',
+          },
+        })
+      )
+    )
+  })
+
   it('restores context profiles only for the normalized endpoint and exact model', async () => {
     vi.mocked(commands.loadPreferences).mockResolvedValue({
       status: 'ok',
@@ -48,6 +102,7 @@ describe('model service settings (#165)', () => {
             baseUrl: 'https://MODEL.example:443/v1/',
             model: 'second',
             context: {
+              mode: 'manual',
               capacity: 32000,
               inputTarget: 20000,
               maxOutput: 2000,
@@ -76,6 +131,38 @@ describe('model service settings (#165)', () => {
     await user.type(screen.getByLabelText('Model name'), 'SECOND')
     expect(screen.getByLabelText('Context capacity (tokens)')).toHaveValue(null)
   })
+
+  it('shows optional capacity outside advanced settings without enabling an input budget', async () => {
+    const user = userEvent.setup()
+    render(<SettingsPanel />)
+    await user.click(screen.getByRole('button', { name: 'Model service' }))
+    await user.type(
+      screen.getByLabelText('API base URL'),
+      'https://api.deepseek.com'
+    )
+    await user.type(screen.getByLabelText('Model name'), 'deepseek-flash')
+    const capacity = screen.getByLabelText('Context capacity (tokens)')
+    expect(capacity.closest('details')).toBeNull()
+    expect(
+      screen.getByLabelText('Limit input manually (advanced)')
+    ).not.toBeChecked()
+    await user.type(capacity, '64000')
+    fireEvent.submit(modelForm())
+    await waitFor(() =>
+      expect(commands.savePreferences).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          modelService: expect.objectContaining({
+            context: expect.objectContaining({
+              mode: 'auto',
+              capacity: 64000,
+              inputTarget: null,
+              maxOutput: null,
+            }),
+          }),
+        })
+      )
+    )
+  })
   it('rejects contradictory capacity before changing a key and retains correctable values', async () => {
     const user = userEvent.setup()
     render(<SettingsPanel />)
@@ -85,13 +172,21 @@ describe('model service settings (#165)', () => {
       'https://model.example/v1'
     )
     await user.type(screen.getByLabelText('Model name'), 'small')
+    await user.click(screen.getByLabelText('Limit input manually (advanced)'))
+    await user.click(screen.getByText('Advanced settings'))
     await user.type(screen.getByLabelText('Context capacity (tokens)'), '1000')
     await user.type(screen.getByLabelText('API key'), 'retain-key')
-    await user.click(screen.getByRole('button', { name: 'Save configuration' }))
+    fireEvent.submit(modelForm())
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Output, reasoning and safety reserves must leave room for input'
     )
-    expect(commands.savePreferences).not.toHaveBeenCalled()
+    expect(
+      vi
+        .mocked(commands.savePreferences)
+        .mock.calls.every(
+          ([prefs]) => prefs.modelService?.context?.capacity !== 1000
+        )
+    ).toBe(true)
     expect(commands.saveModelCredential).not.toHaveBeenCalled()
     expect(screen.getByLabelText('Context capacity (tokens)')).toHaveValue(1000)
     expect(screen.getByLabelText('API key')).toHaveValue('retain-key')
@@ -220,7 +315,7 @@ describe('model service settings (#165)', () => {
     )
     await user.type(screen.getByLabelText('Model name'), 'model-one')
     await user.type(screen.getByLabelText('API key'), 'private-key')
-    await user.click(screen.getByRole('button', { name: 'Save configuration' }))
+    fireEvent.submit(modelForm())
     await user.keyboard('{Escape}')
     act(() => useSettingsStore.getState().openSettings('modelService'))
     expect(await screen.findByLabelText('API base URL')).toBeDisabled()
@@ -269,10 +364,13 @@ describe('model service settings (#165)', () => {
     expect(screen.getByRole('status')).toHaveTextContent(
       'Testing text response and tool round trip…'
     )
+    expect(screen.getByRole('status').querySelector('svg')).toHaveClass(
+      'animate-spin'
+    )
     expect(screen.getByLabelText('Model name')).toBeDisabled()
     expect(
-      screen.getByRole('button', { name: 'Save configuration' })
-    ).toBeDisabled()
+      screen.queryByRole('button', { name: 'Save configuration' })
+    ).not.toBeInTheDocument()
     expect(
       screen.getByRole('button', { name: 'Test connection' })
     ).toBeDisabled()
@@ -306,9 +404,7 @@ describe('model service settings (#165)', () => {
       )
       await user.type(screen.getByLabelText('Model name'), 'model-one')
       await user.type(screen.getByLabelText('API key'), 'retain-me')
-      await user.click(
-        screen.getByRole('button', { name: 'Save configuration' })
-      )
+      fireEvent.submit(modelForm())
       expect(await screen.findByRole('alert')).toHaveTextContent(
         'Configuration was not saved'
       )
@@ -342,18 +438,14 @@ describe('model service settings (#165)', () => {
       )
       await user.type(screen.getByLabelText('Model name'), 'model-one')
       await user.type(screen.getByLabelText('API key'), 'replacement-key')
-      await user.click(
-        screen.getByRole('button', { name: 'Save configuration' })
-      )
+      fireEvent.submit(modelForm())
       expect(await screen.findByRole('alert')).toHaveTextContent(
         'Configuration saved, but the API key was not saved'
       )
       expect(screen.getByLabelText('API key')).toHaveValue('replacement-key')
       expect(screen.queryByText('sensitive-response')).not.toBeInTheDocument()
       expect(screen.getByText('API key saved in macOS Keychain.')).toBeVisible()
-      await user.click(
-        screen.getByRole('button', { name: 'Save configuration' })
-      )
+      fireEvent.submit(modelForm())
       expect(await screen.findByText('Configuration saved.')).toBeVisible()
       expect(screen.getByLabelText('API key')).toHaveValue('')
     }
@@ -500,7 +592,7 @@ describe('model service settings (#165)', () => {
     expect(commands.savePreferences).not.toHaveBeenCalled()
   })
 
-  it('tests the current unsaved fields without persisting or sending project contents, and invalidates old success on edits', async () => {
+  it('tests the current unsaved fields while autosaving without sending project contents, and invalidates old success on edits', async () => {
     vi.mocked(commands.testModelConnection).mockResolvedValue({
       status: 'ok',
       data: { text: true, toolCall: true },
@@ -523,8 +615,10 @@ describe('model service settings (#165)', () => {
       { baseUrl: 'https://draft.example/v1', model: 'unsaved-model' },
       'unsaved-private-key'
     )
-    expect(commands.savePreferences).not.toHaveBeenCalled()
-    expect(commands.saveModelCredential).not.toHaveBeenCalled()
+    expect(commands.savePreferences).toHaveBeenCalled()
+    expect(commands.saveModelCredential).toHaveBeenCalledWith(
+      'unsaved-private-key'
+    )
     await user.type(screen.getByLabelText('Model name'), '-edited')
     expect(
       screen.queryByText('Text response and tool round trip passed.')
@@ -588,4 +682,52 @@ describe('model service settings (#165)', () => {
     expect(screen.getByLabelText('API key')).toHaveAttribute('type', 'password')
     expect(screen.getByText('API key saved in macOS Keychain.')).toBeVisible()
   })
+})
+
+it('autosaves the latest input after typing pauses and has no Save configuration button', async () => {
+  render(<SettingsPanel />)
+  const user = userEvent.setup()
+  await user.click(screen.getByRole('button', { name: 'Model service' }))
+  fireEvent.change(screen.getByLabelText('API base URL'), {
+    target: { value: 'https://auto.example/v1' },
+  })
+  fireEvent.change(screen.getByLabelText('Model name'), {
+    target: { value: 'auto-model' },
+  })
+  expect(
+    screen.queryByRole('button', { name: 'Save configuration' })
+  ).not.toBeInTheDocument()
+  await waitFor(() =>
+    expect(commands.savePreferences).toHaveBeenCalledWith(
+      expect.objectContaining({
+        modelService: {
+          baseUrl: 'https://auto.example/v1',
+          model: 'auto-model',
+        },
+      })
+    )
+  )
+})
+
+it('flushes a pending autosave when the settings panel unmounts', async () => {
+  const user = userEvent.setup()
+  const view = render(<SettingsPanel />)
+  await user.click(screen.getByRole('button', { name: 'Model service' }))
+  fireEvent.change(screen.getByLabelText('API base URL'), {
+    target: { value: 'https://close.example/v1' },
+  })
+  fireEvent.change(screen.getByLabelText('Model name'), {
+    target: { value: 'latest-model' },
+  })
+  view.unmount()
+  await waitFor(() =>
+    expect(commands.savePreferences).toHaveBeenCalledWith(
+      expect.objectContaining({
+        modelService: {
+          baseUrl: 'https://close.example/v1',
+          model: 'latest-model',
+        },
+      })
+    )
+  )
 })

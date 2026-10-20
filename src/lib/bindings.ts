@@ -332,6 +332,18 @@ async startCreationCheck(identity: string, options: ControlledCheckOptions) : Pr
     else return { status: "error", error: e  as any };
 }
 },
+/**
+ * Observe only the ready session owned by this creation workspace. Never
+ * launch an extra runtime or create a browser client in a live performance.
+ */
+async inspectCreationRuntime(identity: string, pages: boolean) : Promise<Result<LiveRuntimeReport, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("inspect_creation_runtime", { identity, pages }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async getCreationCheck(identity: string, taskId: string) : Promise<Result<CreationCheckTask, CreationError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("get_creation_check", { identity, taskId }) };
@@ -420,6 +432,14 @@ async preparePerformerWindow(label: string, ok: string, cancel: string) : Promis
     else return { status: "error", error: e  as any };
 }
 },
+async creationPerformerPinned(label: string, pinned: boolean | null) : Promise<Result<boolean, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("creation_performer_pinned", { label, pinned }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async commitCreationProject(identity: string | null, generation: string) : Promise<Result<CreationRuntime, CreationError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("commit_creation_project", { identity, generation }) };
@@ -471,6 +491,134 @@ async addCreationModule(identity: string, moduleId: string, expectedRecord: stri
 async listCreationFiles(identity: string) : Promise<Result<CreationFile[], CreationError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("list_creation_files", { identity }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async beginCreationAssistantTask(identity: string, mode: AssistantMode, resume: string | null) : Promise<Result<AssistantTask, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("begin_creation_assistant_task", { identity, mode, resume }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async saveCreationAssistantResume(identity: string, record: AssistantTaskResume) : Promise<Result<null, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("save_creation_assistant_resume", { identity, record }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async loadCreationAssistantResume(identity: string) : Promise<Result<AssistantTaskResumeRecovery | null, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("load_creation_assistant_resume", { identity }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async clearCreationAssistantResume(identity: string, taskId: string | null) : Promise<Result<null, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("clear_creation_assistant_resume", { identity, taskId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async writeCreationAssistantFile(identity: string, taskId: string, write: AssistantWrite) : Promise<Result<AssistantTask, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("write_creation_assistant_file", { identity, taskId, write }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async adoptCreationAssistantLibrary(identity: string, taskId: string, library: string) : Promise<Result<AssistantTask, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("adopt_creation_assistant_library", { identity, taskId, library }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async proposeCreationAssistantResources(identity: string, taskId: string, request: AssistantResourceRequest) : Promise<Result<AssistantTask, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("propose_creation_assistant_resources", { identity, taskId, request }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async getCreationAssistantResourcePlans(identity: string, taskId: string) : Promise<Result<AssistantResourcePlan[], CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_creation_assistant_resource_plans", { identity, taskId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async decideCreationAssistantResources(identity: string, taskId: string, planId: string, decision: AssistantResourceDecision) : Promise<Result<AssistantResourcePlan, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("decide_creation_assistant_resources", { identity, taskId, planId, decision }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async adoptCreationAssistantModule(identity: string, taskId: string, module: string) : Promise<Result<AssistantTask, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("adopt_creation_assistant_module", { identity, taskId, module }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async removeCreationAssistantFile(identity: string, taskId: string, path: string, version: string) : Promise<Result<AssistantTask, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("remove_creation_assistant_file", { identity, taskId, path, version }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async installCreationAssistantPreview(identity: string, taskId: string) : Promise<Result<AssistantTask, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("install_creation_assistant_preview", { identity, taskId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async endCreationAssistantTask(identity: string, taskId: string) : Promise<Result<null, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("end_creation_assistant_task", { identity, taskId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async listCreationAssistantTasks(identity: string) : Promise<Result<AssistantTask[], CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("list_creation_assistant_tasks", { identity }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async undoCreationAssistantTask(identity: string, taskId: string, path: string | null) : Promise<Result<AssistantTask, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("undo_creation_assistant_task", { identity, taskId, path }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async startAssistantCheck(identity: string, taskId: string) : Promise<Result<string, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("start_assistant_check", { identity, taskId }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -564,6 +712,110 @@ async getCreationGitHistory(identity: string) : Promise<Result<GitHistory, Creat
     else return { status: "error", error: e  as any };
 }
 },
+async getCreationGitVersions(identity: string, offset: number) : Promise<Result<GitVersionGraph, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_creation_git_versions", { identity, offset }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async getCreationGitComparison(identity: string, request: GitComparisonRequest) : Promise<Result<GitComparison, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_creation_git_comparison", { identity, request }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async readCreationGitComparisonFile(identity: string, request: GitComparisonFileRequest) : Promise<Result<GitComparisonDiff, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("read_creation_git_comparison_file", { identity, request }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async getCreationGitTaskPending(identity: string) : Promise<Result<boolean, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_creation_git_task_pending", { identity }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async getCreationGitVersionPaths(identity: string, commit: string) : Promise<Result<string[], CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_creation_git_version_paths", { identity, commit }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async readCreationGitVersionFile(identity: string, commit: string, path: string) : Promise<Result<GitHistoryFile, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("read_creation_git_version_file", { identity, commit, path }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async confirmCreationGitVersion(identity: string, token: string, request: GitRecordRequest, branchName: string | null) : Promise<Result<GitRecordReceipt, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("confirm_creation_git_version", { identity, token, request, branchName }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async endCreationGitAssistantTask(identity: string) : Promise<Result<null, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("end_creation_git_assistant_task", { identity }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async previewCreationGitSwitch(identity: string, commit: string, discard: boolean) : Promise<Result<GitSwitchPreview, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("preview_creation_git_switch", { identity, commit, discard }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async previewCreationGitBranchSwitch(identity: string, branch: string, commit: string, discard: boolean) : Promise<Result<GitSwitchPreview, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("preview_creation_git_branch_switch", { identity, branch, commit, discard }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async confirmCreationGitSwitch(identity: string, token: string) : Promise<Result<null, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("confirm_creation_git_switch", { identity, token }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async previewCreationGitRestore(identity: string, commit: string) : Promise<Result<GitRestorePreview, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("preview_creation_git_restore", { identity, commit }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async confirmCreationGitRestore(identity: string, token: string) : Promise<Result<null, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("confirm_creation_git_restore", { identity, token }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async readCreationGitHistoryFile(identity: string, commit: string, path: string) : Promise<Result<GitHistoryFile, CreationError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("read_creation_git_history_file", { identity, commit, path }) };
@@ -607,6 +859,22 @@ async readCreationFile(identity: string, path: string) : Promise<Result<Creation
 async saveCreationFile(identity: string, path: string, text: string, expectedVersion: string) : Promise<Result<string, CreationError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("save_creation_file", { identity, path, text, expectedVersion }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async createCreationFile(identity: string, path: string, draftPaths: string[]) : Promise<Result<CreationFile, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("create_creation_file", { identity, path, draftPaths }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async createCreationDirectory(identity: string, path: string, draftPaths: string[]) : Promise<Result<string, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("create_creation_directory", { identity, path, draftPaths }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -735,6 +1003,14 @@ async renameCreationFile(identity: string, path: string, nextPath: string, draft
 async revealCreationPath(identity: string, path: string | null) : Promise<Result<null, CreationError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("reveal_creation_path", { identity, path }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async dragCreationFile(identity: string, path: string) : Promise<Result<null, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("drag_creation_file", { identity, path }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -1470,7 +1746,7 @@ lanIp?: string | null;
 /**
  * #165: app-local endpoint/model only; the credential lives in Keychain.
  */
-modelService?: ModelServiceConfig | null; modelContextProfiles?: ModelServiceConfig[]; 
+modelService?: ModelServiceConfig | null; gitName?: string | null; gitEmail?: string | null; modelContextProfiles?: ModelServiceConfig[]; 
 /**
  * Monitor fraction within the resizable creation workspace (not sidebar).
  */
@@ -1478,22 +1754,40 @@ assistantMonitorRatio?: number | null }
 export type AssistantAttachmentSource = "saved" | "draft" | "proposal"
 export type AssistantContextMarker = { type: "topic" } | { type: "summary"; sourceIds: string[]; serviceKey: string; sections: AssistantSummarySections }
 export type AssistantDocumentMetrics = { returnedCharacters: number; reusedCharacters: number; resultCharacters: number }
+export type AssistantEdit = { oldText: string; newText: string }
 export type AssistantHistory = { epoch: string; projectKey: string; appVersion: string; messages: AssistantHistoryMessage[] }
 export type AssistantHistoryAppliedDiff = { before: string; after: string }
 export type AssistantHistoryAttachment = { id: string; projectKey: string; path: string; startLine: number; endLine: number; source: AssistantAttachmentSource; version: string; candidateRevision?: number | null; proposalId?: string | null; sourceVersion?: string | null; text: string }
 export type AssistantHistoryError = { type: "invalidIdentity" } | { type: "io" } | { type: "invalidFormat" } | { type: "unsupportedVersion" } | { type: "staleHistory" } | { type: "tooLarge" }
 export type AssistantHistoryLocale = "en" | "zh-CN"
-export type AssistantHistoryMessage = { id: string; role: AssistantHistoryRole; text: string; status: AssistantHistoryStatus; sources: AssistantHistorySource[]; scope: AssistantHistoryScope; error?: AssistantHistoryRequestError | null; appVersion?: string | null; attachments?: AssistantHistoryAttachment[] | null; proposals?: AssistantHistoryProposal[] | null; usage?: AssistantRoundUsage | null; contextMarker?: AssistantContextMarker | null; contextServiceKey?: string | null }
+export type AssistantHistoryMessage = { id: string; role: AssistantHistoryRole; text: string; 
+/**
+ * Private provider protocol data, excluded from rendering and summaries.
+ */
+reasoningContent?: string | null; status: AssistantHistoryStatus; 
+/**
+ * Display-only tool-turn commentary, never execution authority or private reasoning.
+ */
+activity?: string[] | null; sources: AssistantHistorySource[]; scope: AssistantHistoryScope; error?: AssistantHistoryRequestError | null; appVersion?: string | null; attachments?: AssistantHistoryAttachment[] | null; proposals?: AssistantHistoryProposal[] | null; usage?: AssistantRoundUsage | null; contextMarker?: AssistantContextMarker | null; contextServiceKey?: string | null }
 export type AssistantHistoryProposal = { id: string; projectKey: string; path: string; sourceVersion: string; candidateRevision: number; text: string; appliedDiff?: AssistantHistoryAppliedDiff | null; preview: AssistantProposalPreview; pendingRefresh: boolean }
-export type AssistantHistoryRequestError = "invalidConfig" | "missingCredential" | "credentialStore" | "authentication" | "network" | "timeout" | "protocol" | "toolsUnsupported" | "rateLimited" | "serviceUnavailable" | "cancelled" | "budgetExceeded" | "contextTokensExceeded" | "contextBytesExceeded" | "contextMessagesExceeded" | "toolCallsExceeded" | "toolCharactersExceeded" | "requestBusy" | "invalidIdentity" | "invalidTool" | "noProgress" | "corpusUnavailable" | "notConfigured" | "requestFailed" | "invalidSummary" | "projectReadingDisabled" | "projectScopeChanged" | "projectUnavailable" | "attachmentExcluded" | "wholeProjectExceeded"
+export type AssistantHistoryRequestError = "invalidConfig" | "missingCredential" | "credentialStore" | "authentication" | "network" | "timeout" | "requestDeadline" | "protocol" | "requestRejected" | "outputTruncated" | "responseInterrupted" | "responseTooLarge" | "toolsUnsupported" | "rateLimited" | "serviceUnavailable" | "cancelled" | "budgetExceeded" | "contextTokensExceeded" | "contextWindowExceeded" | "contextBytesExceeded" | "contextMessagesExceeded" | "toolCallsExceeded" | "toolCharactersExceeded" | "requestBusy" | "invalidIdentity" | "invalidTool" | "noProgress" | "corpusUnavailable" | "notConfigured" | "requestFailed" | "invalidSummary" | "projectReadingDisabled" | "projectScopeChanged" | "projectUnavailable" | "attachmentExcluded" | "wholeProjectExceeded"
 export type AssistantHistoryRole = "user" | "assistant"
 export type AssistantHistoryScope = "platform" | "project"
 export type AssistantHistorySource = { docId: string; sectionId: string; title: string; locale: AssistantHistoryLocale; version?: string | null; offset?: number | null; endOffset?: number | null; totalCharacters?: number | null; format?: AssistantSourceFormat | null; project?: AssistantProjectPage | null }
 export type AssistantHistoryStatus = "pending" | "completed" | "failed" | "cancelled"
 export type AssistantMessageRole = "system" | "user" | "assistant" | "tool"
-export type AssistantModelMessage = { role: AssistantMessageRole; content: string | null; toolCalls?: AssistantToolCall[] | null; toolCallId?: string | null; contextKind?: ContextContentKind | null }
-export type AssistantModelTurn = { text: string | null; toolCalls: AssistantToolCall[]; usage?: ModelUsage | null; measurement?: ContextMeasurement | null }
-export type AssistantProjectFile = { path: string; bytes: number; version: string | null; reason: string | null }
+export type AssistantMode = "handoff" | "edit"
+export type AssistantModelMessage = { role: AssistantMessageRole; content: string | null; 
+/**
+ * Internal provider replay data; never answer text or display activity.
+ */
+reasoningContent?: string | null; toolCalls?: AssistantToolCall[] | null; toolCallId?: string | null; contextKind?: ContextContentKind | null }
+export type AssistantModelTurn = { text: string | null; reasoningContent?: string | null; toolCalls: AssistantToolCall[]; usage?: ModelUsage | null; measurement?: ContextMeasurement | null }
+export type AssistantProjectFile = { path: string; 
+/**
+ * Unknown for excluded/unreadable entries; zero is a measured empty file.
+ */
+bytes: number | null; version: string | null; reason: string | null }
 export type AssistantProjectOverview = { snapshot: AssistantProjectSnapshot; manifestStatus: string; contentPaths: string[]; evidence: AssistantProjectPage[] }
 export type AssistantProjectPage = { source?: AssistantAttachmentSource | null; path: string; version: string; text: string; offset: number; endOffset: number; totalCharacters: number; nextOffset: number | null; startLine: number; endLine: number }
 export type AssistantProjectRead = { path: string; version: string | null; offset: number; pageLength: number }
@@ -1501,16 +1795,37 @@ export type AssistantProjectSearch = { pages: AssistantProjectPage[]; skipped: A
 export type AssistantProjectSnapshot = { files: AssistantProjectFile[]; fingerprint: string }
 export type AssistantProposalPreview = "none" | "temporary" | "stale" | "historical"
 export type AssistantRequestSnapshot = { requestId: string; model: string; baseUrl: string; config: ModelServiceConfig }
+export type AssistantResource = { kind: AssistantResourceKind; id: string; version: string; 
+/**
+ * Exact shipped provenance, not a model-supplied source.
+ */
+source: string }
+export type AssistantResourceDecision = "pending" | "approved" | "alternative"
+export type AssistantResourceKind = "module" | "library"
+export type AssistantResourcePlan = { id: string; resources: AssistantResource[]; reason: string; alternative: string | null; decision: AssistantResourceDecision }
+export type AssistantResourceRequest = { modules: string[]; libraries: string[]; reason: string; alternative: string | null }
 export type AssistantRoundUsage = { calls: (ModelUsage | null)[]; complete: boolean; documentMetrics?: AssistantDocumentMetrics | null }
 export type AssistantSourceFormat = "plainText" | "markdown"
 export type AssistantSummaryItem = { text: string; sourceIds: string[] }
 export type AssistantSummarySections = { userDecisions: AssistantSummaryItem[]; assistantSuggestions: AssistantSummaryItem[]; verifiedFacts: AssistantSummaryItem[]; unverifiedFacts: AssistantSummaryItem[]; openQuestions: AssistantSummaryItem[] }
+export type AssistantTask = { id: string; mode: AssistantMode; files: AssistantTaskFile[]; resourcePlans?: AssistantResourcePlan[] }
+export type AssistantTaskFile = { path: string; created: boolean; undone: boolean; removed?: boolean | null }
+export type AssistantTaskResume = { taskId: string; mode: AssistantMode; userMessageId: string; replyMessageId: string; conversationId: string | null; input: string; locale: string; modelKey: string; state: AssistantTaskResumeState; 
+/**
+ * An explicit frontend checkpoint DTO, without callbacks or credentials.
+ * Native code validates its shape/bounds but never executes its contents.
+ */
+payload: string }
+export type AssistantTaskResumeFile = { path: string; version: string | null }
+export type AssistantTaskResumeRecovery = { record: AssistantTaskResume; files: AssistantTaskResumeFile[] }
+export type AssistantTaskResumeState = "running" | "paused" | "awaitingResources" | "failed"
 /**
  * Cumulative answer text for exactly one model turn. No credential, provider
  * reasoning or tool arguments cross this progress channel.
  */
 export type AssistantTextEvent = { requestId: string; turnId: string; text: string }
 export type AssistantToolCall = { id: string; name: string; arguments: string }
+export type AssistantWrite = { path: string; version: string | null; text: string | null; edits: AssistantEdit[] | null }
 export type AudioConfig = { 
 /**
  * The raw-JSON validation below has already rejected unknown mode
@@ -1591,12 +1906,14 @@ bridgedChannels: number;
  * B: first private project bus; equals K.
  */
 privateBusStart: number }
-export type ContextContentKind = "projectPolicy" | "history" | "input" | "documents" | "summary" | "projectOverview" | "projectFragment" | "attachment"
+export type ConnectedPerformer = { id: string; label: string; testClient: string | null }
+export type ContextContentKind = "projectPolicy" | "handoffPolicy" | "editPolicy" | "history" | "input" | "documents" | "summary" | "projectOverview" | "projectFragment" | "attachment"
 export type ContextMeasurement = { characters: number; utf8Bytes: number; estimatedTokens: number | null; 
 /**
- * Portable display-only fallback. Never used for admission or server usage.
+ * Portable token estimate for unknown encoders; never measured server usage.
  */
-referenceEstimatedTokens?: number | null; admissionEstimate: number; tokenizer: ContextTokenizer; capacity: number | null; effectiveInput: number | null; outputReserve: number; safetyMargin: number; parts: ContextPart[]; exceeded: string | null }
+referenceEstimatedTokens?: number | null; admissionEstimate: number; tokenizer: ContextTokenizer; capacity: number | null; effectiveInput: number | null; outputReserve: number | null; safetyMargin: number; parts: ContextPart[]; exceeded: string | null }
+export type ContextMode = "auto" | "manual"
 export type ContextPart = { kind: string; characters: number; utf8Bytes: number; estimatedTokens: number | null }
 export type ContextTokenizer = "unknown" | "cl100kBase" | "o200kBase"
 export type ControlledCheckCleanup = { nodeConfirmed: boolean; audioConfirmed: boolean; temporaryFilesRemoved: boolean; errors: string[] }
@@ -1607,7 +1924,11 @@ export type ControlledCheckProgress = { taskId: string; projectPath: string; pha
 export type ControlledCheckReport = { schemaVersion: number; checkerVersion: string; taskId: string; projectPath: string; mode: AudioMode; status: ControlledCheckStatus; error: string | null; diagnostics: DiagnosticReport | null; evidence: InputEvidence | null; freshness: Freshness | null; environment: ControlledCheckEnvironment; checks: DiagnosticCheck[]; health: HealthPayload | null; outputTail: string[]; cleanup: ControlledCheckCleanup; unverified: string[] }
 export type ControlledCheckStatus = "passed" | "failed" | "cancelled" | "notExecuted"
 export type CreationCategory = "audio" | "pages" | "modules" | "assets" | "system"
-export type CreationChanges = { files: CreationFile[]; changed: string[]; revision: number }
+export type CreationChanges = { files: CreationFile[]; directories?: string[] | null; changed: string[]; revision: number; 
+/**
+ * Per-path observations stay stable when an unacknowledged batch is replayed.
+ */
+changeRevisions?: Partial<{ [key in string]: number }> | null }
 export type CreationCheckTask = { taskId: string; identity: string; progress: ControlledCheckProgress | null; report: ControlledCheckReport | null }
 export type CreationContent = 
 /**
@@ -1616,7 +1937,7 @@ export type CreationContent =
  */
 { kind: "text"; text: string; version: string } | { kind: "image"; url: string } | { kind: "binary" }
 export type CreationError = { code: CreationErrorCode; detail: string }
-export type CreationErrorCode = "missing" | "cancelled" | "permission" | "invalidUtf8" | "tooLarge" | "invalidIdentity" | "pathEscape" | "invalidProject" | "manifestInvalid" | "testValidation" | "testStartup" | "versionConflict" | "targetExists" | "io"
+export type CreationErrorCode = "missing" | "cancelled" | "permission" | "invalidUtf8" | "tooLarge" | "invalidIdentity" | "pathEscape" | "invalidProject" | "manifestInvalid" | "testValidation" | "runtimeBusy" | "testStartup" | "versionConflict" | "targetExists" | "io"
 export type CreationFile = { path: string; size: number; kind: CreationFileKind; category: CreationCategory }
 /**
  * One successfully written existing text file. Content is retained only in
@@ -1638,7 +1959,7 @@ export type CreationOption = { path: string; project: CreationProject | null; er
 export type CreationProject = { identity: string; root: string; name: string; source: CreationSource }
 export type CreationRuntime = { generation: string; snapshot: SessionSnapshot; projectRoot: string | null }
 export type CreationSource = "folder" | "bundle" | "utility" | "readOnlyFolder"
-export type CreationWorkspace = { project: CreationProject; files: CreationFile[] }
+export type CreationWorkspace = { project: CreationProject; files: CreationFile[]; directories?: string[] | null }
 export type DependencyEvidence = { name: string; declaration: string; optional: boolean; installedVersion: string | null; exactSharedVersion: string | null }
 export type DiagnosticCheck = { code: string; status: DiagnosticStatus; reason: string }
 export type DiagnosticInput = { path: string; kind: string; fingerprint: string }
@@ -1722,6 +2043,17 @@ daemon: boolean;
 plistPresent: boolean; listeners: DnsListeners | null; bindError: string | null; upstreams: string[]; mapping: DnsMappingFacts | null; knownDomains: string[]; stats: JsonValue | null }
 export type EvidenceFile = { path: string; directory: boolean; bytes: number; sha256: string; mode: number }
 export type Freshness = { stale: boolean; complete: boolean; reasons: string[] }
+export type GitComparison = { token: string; before: GitComparisonSide; after: GitComparisonSide; files: GitComparisonFile[] }
+export type GitComparisonDiff = { token: string; path: string; hunks: GitComparisonHunk[]; added: number; deleted: number; reason: GitHistoryReason | null }
+export type GitComparisonFile = { path: string; status: GitComparisonStatus }
+export type GitComparisonFileRequest = { token: string; path: string; fullContext: boolean }
+export type GitComparisonHunk = { oldStart: number; oldLines: number; newStart: number; newLines: number; lines: GitComparisonLine[] }
+export type GitComparisonLine = { oldLine: number | null; newLine: number | null; kind: GitComparisonLineKind; content: string; noNewline: boolean }
+export type GitComparisonLineKind = "context" | "addition" | "deletion"
+export type GitComparisonMode = "parent" | "saved"
+export type GitComparisonRequest = { commit: string | null; mode: GitComparisonMode; parent: string | null }
+export type GitComparisonSide = { commit: string | null; message: string | null; saved: boolean }
+export type GitComparisonStatus = "unchanged" | "added" | "deleted" | "modified"
 export type GitDiffLayer = "staged" | "unstaged" | "untracked"
 export type GitDiffState = "text" | "binary" | "unreadable" | "tooLarge" | "unavailable" | "noChange"
 export type GitEvidence = { head: string | null; dirty: boolean | null; state: string; detail: string | null }
@@ -1735,7 +2067,12 @@ export type GitRecordPreview = { token: string; initial: boolean; branch: string
 export type GitRecordReceipt = { commit: string; message: string; paths: string[]; warning: string | null }
 export type GitRecordRequest = { paths: string[]; name: string; email: string; message: string }
 export type GitRecordStatus = "added" | "modified" | "deleted"
+export type GitRestorePreview = { token: string; commit: string; paths: string[] }
 export type GitState = "available" | "notRepository" | "unreadable" | "tooLarge"
+export type GitSwitchPreview = { token: string; commit: string; paths: string[]; discardedPaths: string[] }
+export type GitVersion = { id: string; parents: string[]; message: string; timestamp: number; files: string[] }
+export type GitVersionBranch = { name: string; tip: string; message?: string | null }
+export type GitVersionGraph = { head: string | null; branches: GitVersionBranch[]; versions: GitVersion[]; nextOffset: number | null; limited: boolean }
 export type HandoffBaselineCatalog = { baselines: HandoffBaselineSummary[]; usedBytes: number; limitBytes: number }
 export type HandoffBaselineSummary = { id: string; taskId: string; task: HandoffTask | null; intent: string; revision: string; capturedAt: number; complete: boolean; bytes: number; files: number; excluded: BaselineExclusion[]; error: CreationError | null }
 export type HandoffChangeKind = "added" | "modified" | "deleted"
@@ -1912,6 +2249,11 @@ export type HttpsValidationOutcome = { summary: HttpsCertificateSummary | null; 
 export type InputEvidence = { sourceRoot: string; sourceIdentity: string; sharedSourceRoot: string | null; projectSha256: string; sharedSha256: string | null; projectFiles: EvidenceFile[]; sharedFiles: EvidenceFile[]; productionDependencies: DependencyEvidence[]; installedPackages: InstalledPackageEvidence[]; sharedLibraries: SharedLibraryReference[]; git: GitEvidence; changedDuringPreparation: boolean; scope: string; notes: string[] }
 export type InstalledPackageEvidence = { path: string; name: string | null; version: string | null }
 export type JsonValue = null | boolean | number | string | JsonValue[] | Partial<{ [key in string]: JsonValue }>
+export type LiveRuntimeReport = { generation: string; passed: boolean; checks: DiagnosticCheck[]; 
+/**
+ * None means unsupported/invalid/unavailable, not zero connected devices.
+ */
+performers: PerformerRoster | null; savedChangesVerified: boolean }
 export type Manifest = { 
 /**
  * Exact App-provided libraries. Schema 2 advertises this required Host capability.
@@ -1941,10 +2283,14 @@ performerAddress?: string | null }
  */
 export type ModelConfigurationChangedEvent = Record<string, never>
 export type ModelConnectionReport = { text: boolean; toolCall: boolean }
-export type ModelContextConfig = { capacity: number | null; inputTarget: number | null; maxOutput: number; reasoningReserve: number; safetyMargin: number; tokenizer: ContextTokenizer; source: CapacitySource }
+export type ModelContextConfig = { mode?: ContextMode | null; capacity: number | null; inputTarget: number | null; 
+/**
+ * None leaves the output limit to the provider, including reasoning.
+ */
+maxOutput?: number | null; reasoningReserve: number; safetyMargin: number; tokenizer: ContextTokenizer; source: CapacitySource }
 export type ModelCredentialStatus = { hasKey: boolean }
 export type ModelServiceConfig = { baseUrl: string; model: string; context?: ModelContextConfig | null }
-export type ModelServiceError = { type: "invalidConfig" } | { type: "missingCredential" } | { type: "credentialStore" } | { type: "authentication" } | { type: "network" } | { type: "timeout" } | { type: "protocol" } | { type: "toolsUnsupported" } | { type: "rateLimited" } | { type: "serviceUnavailable" } | { type: "cancelled" } | { type: "budgetExceeded" } | { type: "contextTokensExceeded" } | { type: "contextBytesExceeded" } | { type: "contextMessagesExceeded" } | { type: "requestBusy" } | { type: "invalidIdentity" }
+export type ModelServiceError = { type: "invalidConfig" } | { type: "missingCredential" } | { type: "credentialStore" } | { type: "authentication" } | { type: "network" } | { type: "timeout" } | { type: "protocol" } | { type: "requestRejected" } | { type: "outputTruncated" } | { type: "responseInterrupted" } | { type: "responseTooLarge" } | { type: "toolsUnsupported" } | { type: "rateLimited" } | { type: "serviceUnavailable" } | { type: "cancelled" } | { type: "budgetExceeded" } | { type: "contextTokensExceeded" } | { type: "contextWindowExceeded" } | { type: "contextBytesExceeded" } | { type: "contextMessagesExceeded" } | { type: "requestBusy" } | { type: "invalidIdentity" }
 export type ModelUsage = { inputTokens: number | null; outputTokens: number | null; cachedInputTokens: number | null; reasoningTokens: number | null }
 export type ModuleCompatibility = { version: string; hostProtocol: number; runtime: string[]; adaptation: string[] }
 export type ModuleSource = { repository: string; revision: string; version: string }
@@ -1972,6 +2318,7 @@ export type ParameterSpec = { id: string; path: string;
  */
 prefix: string; suffix: string; kind: ParameterKind; limits: ParameterLimits; preview: ParameterPreview }
 export type PerformerDestroyedEvent = { label: string }
+export type PerformerRoster = { schemaVersion: number; clients: ConnectedPerformer[] }
 export type PerformerVisibilityEvent = { label: string; visible: boolean }
 /**
  * Who is listening on a project port.

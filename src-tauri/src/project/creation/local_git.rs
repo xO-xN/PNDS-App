@@ -201,7 +201,7 @@ fn local_signature(name: &str, email: &str) -> Result<git2::Signature<'static>, 
     git2::Signature::now(name, email).map_err(git_error)
 }
 
-fn excluded(path: &str, size: u64) -> Option<GitExclusion> {
+pub(super) fn excluded(path: &str, size: u64) -> Option<GitExclusion> {
     let lower = path.to_ascii_lowercase();
     let parts: Vec<_> = lower.split('/').collect();
     if parts.iter().any(|part| {
@@ -498,11 +498,11 @@ pub(super) struct GitPreviewSession {
     fingerprint: String,
 }
 
-struct RecordSnapshot {
-    repo: Option<Repository>,
+pub(super) struct RecordSnapshot {
+    pub(super) repo: Option<Repository>,
     bytes: SavedFiles,
-    files: Vec<GitRecordFile>,
-    fingerprint: String,
+    pub(super) files: Vec<GitRecordFile>,
+    pub(super) fingerprint: String,
     content_fingerprint: String,
     head: Option<String>,
     branch: Option<String>,
@@ -510,7 +510,7 @@ struct RecordSnapshot {
 fn snapshot(project: &OpenProject) -> Result<RecordSnapshot, CreationError> {
     snapshot_with_locks(project, false)
 }
-fn snapshot_with_locks(
+pub(super) fn snapshot_with_locks(
     project: &OpenProject,
     owned_locks: bool,
 ) -> Result<RecordSnapshot, CreationError> {
@@ -734,6 +734,16 @@ impl CreationAccess {
         request: GitRecordRequest,
         protection: &Protection,
     ) -> Result<GitRecordReceipt, CreationError> {
+        self.confirm_git_record_named(identity, token, request, None, protection)
+    }
+    pub fn confirm_git_record_named(
+        &mut self,
+        identity: &str,
+        token: &str,
+        request: GitRecordRequest,
+        branch_name: Option<&str>,
+        protection: &Protection,
+    ) -> Result<GitRecordReceipt, CreationError> {
         let session = self
             .git_preview
             .take()
@@ -821,16 +831,23 @@ impl CreationAccess {
                     }
                 }
             }
-            record_saved(&repo, &current.bytes, &request, &signature, || {
-                validate_identity(project, protection)?;
-                if snapshot_with_locks(project, true)?.fingerprint != expected {
-                    return Err(CreationError::new(
-                        CreationErrorCode::VersionConflict,
-                        "Files, HEAD, index or configuration changed. Preview again.",
-                    ));
-                }
-                Ok(())
-            })
+            record_saved(
+                &repo,
+                &current.bytes,
+                &request,
+                &signature,
+                branch_name,
+                || {
+                    validate_identity(project, protection)?;
+                    if snapshot_with_locks(project, true)?.fingerprint != expected {
+                        return Err(CreationError::new(
+                            CreationErrorCode::VersionConflict,
+                            "Files, HEAD, index or configuration changed. Preview again.",
+                        ));
+                    }
+                    Ok(())
+                },
+            )
         })();
         if current.head.is_none() {
             result.map_err(|error| CreationError::new(error.code, format!("Repository established; initial version incomplete. Preview and retry without deleting the folder. {}", error.detail)))
@@ -847,6 +864,7 @@ fn record_saved(
     files: &SavedFiles,
     request: &GitRecordRequest,
     signature: &git2::Signature<'_>,
+    branch_name: Option<&str>,
     revalidate: impl FnOnce() -> Result<(), CreationError>,
 ) -> Result<GitRecordReceipt, CreationError> {
     struct IndexLock(PathBuf);
@@ -866,11 +884,16 @@ fn record_saved(
     let mut transaction = repo.transaction().map_err(git_error)?;
     transaction.lock_ref("HEAD").map_err(git_error)?;
     let head_ref = repo.find_reference("HEAD").map_err(git_error)?;
-    let target_ref = head_ref
-        .symbolic_target()
-        .map_err(git_error)?
-        .unwrap_or("HEAD")
-        .to_owned();
+    let detached = head_ref.symbolic_target().map_err(git_error)?.is_none();
+    let target_ref = if detached {
+        super::git_versions::new_branch_ref(repo, branch_name)?
+    } else {
+        head_ref
+            .symbolic_target()
+            .map_err(git_error)?
+            .expect("symbolic HEAD")
+            .to_owned()
+    };
     if target_ref != "HEAD" {
         transaction.lock_ref(&target_ref).map_err(git_error)?;
     }
@@ -927,6 +950,9 @@ fn record_saved(
         .map_err(io_error)?;
     locked.sync_all().map_err(io_error)?;
     revalidate()?;
+    if detached && repo.find_reference(&target_ref).is_ok() {
+        return Err(refuse("A branch was created while saving. Preview again."));
+    }
     let parents: Vec<_> = parent.iter().collect();
     let commit = repo
         .commit(
@@ -941,6 +967,16 @@ fn record_saved(
     transaction
         .set_target(&target_ref, commit, Some(signature), request.message.trim())
         .map_err(git_error)?;
+    if detached {
+        transaction
+            .set_symbolic_target(
+                "HEAD",
+                &target_ref,
+                Some(signature),
+                "Continue from project version",
+            )
+            .map_err(git_error)?;
+    }
     let reference_warning = if let Err(error) = transaction.commit() {
         if repo
             .find_reference(&target_ref)
@@ -978,4 +1014,30 @@ fn record_saved(
         paths: request.paths.clone(),
         warning,
     })
+}
+
+pub(super) fn clean_restore_snapshot(
+    project: &OpenProject,
+    owned_locks: bool,
+) -> Result<(Repository, String), CreationError> {
+    let snapshot = snapshot_with_locks(project, owned_locks)?;
+    let repo = snapshot
+        .repo
+        .ok_or_else(|| refuse("No local Git repository"))?;
+    let mut options = git2::StatusOptions::new();
+    options
+        .include_untracked(true)
+        .recurse_untracked_dirs(true)
+        .include_ignored(false)
+        .update_index(false);
+    if !repo
+        .statuses(Some(&mut options))
+        .map_err(git_error)?
+        .is_empty()
+    {
+        return Err(refuse(
+            "Save a version of all current changes before returning to history.",
+        ));
+    }
+    Ok((repo, snapshot.fingerprint))
 }

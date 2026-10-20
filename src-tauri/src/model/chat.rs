@@ -1,6 +1,6 @@
 //! One bounded, cancellable authenticated request. Document execution remains
 //! in the shared installed-corpus frontend flow; this layer exposes no I/O tools.
-use super::{stream, transport, CredentialStore, ModelService, ModelServiceError};
+use super::{provider, stream, transport, CredentialStore, ModelService, ModelServiceError};
 use crate::project::creation::{CreationAccess, CreationSource, Protection};
 use crate::types::ModelServiceConfig;
 use serde::{Deserialize, Serialize};
@@ -9,13 +9,11 @@ use specta::Type;
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
-use std::time::Duration;
 use tokio::sync::watch;
 use tokio::time::Instant;
 
-const MAX_CONTEXT_BYTES: usize = 128 * 1024;
-const MAX_TURNS: usize = 12;
-const MAX_REQUEST_DURATION: Duration = Duration::from_secs(120);
+const MAX_CONTEXT_BYTES: usize = 512 * 1024;
+const MAX_TURNS: usize = 128;
 
 #[derive(Clone, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -39,6 +37,9 @@ pub enum AssistantMessageRole {
 pub struct AssistantModelMessage {
     pub role: AssistantMessageRole,
     pub content: Option<String>,
+    /// Internal provider replay data; never answer text or display activity.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_content: Option<String>,
     #[serde(default)]
     pub tool_calls: Option<Vec<AssistantToolCall>>,
     #[serde(default)]
@@ -51,6 +52,8 @@ pub struct AssistantModelMessage {
 #[serde(rename_all = "camelCase")]
 pub enum ContextContentKind {
     ProjectPolicy,
+    HandoffPolicy,
+    EditPolicy,
     History,
     Input,
     Documents,
@@ -64,6 +67,8 @@ pub enum ContextContentKind {
 #[serde(rename_all = "camelCase")]
 pub struct AssistantModelTurn {
     pub text: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_content: Option<String>,
     pub tool_calls: Vec<AssistantToolCall>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub usage: Option<super::ModelUsage>,
@@ -87,7 +92,6 @@ struct AssistantSession {
     key: OnceLock<String>,
     client: reqwest::Client,
     cancel: watch::Sender<bool>,
-    deadline: Instant,
     busy: AtomicBool,
     turns: AtomicUsize,
 }
@@ -212,7 +216,7 @@ impl<S: CredentialStore + Clone + 'static> ModelService<S> {
             return Err(ModelServiceError::Protocol);
         }
         transport::validate_config(&config)?;
-        let client = transport::client(MAX_REQUEST_DURATION)?;
+        let client = transport::client(None)?;
         let session = {
             let mut state = self
                 .assistant
@@ -237,7 +241,6 @@ impl<S: CredentialStore + Clone + 'static> ModelService<S> {
                 client,
                 key: OnceLock::new(),
                 cancel,
-                deadline: Instant::now() + MAX_REQUEST_DURATION,
                 busy: AtomicBool::new(false),
                 turns: AtomicUsize::new(0),
             });
@@ -250,7 +253,6 @@ impl<S: CredentialStore + Clone + 'static> ModelService<S> {
             biased;
             _ = cancelled.changed() => Err(ModelServiceError::Cancelled),
             result = self.with_credentials(|store| store.read()) => result.and_then(|key| key.ok_or(ModelServiceError::MissingCredential)),
-            _ = tokio::time::sleep_until(session.deadline) => Err(ModelServiceError::Timeout),
         };
         let outcome = key.and_then(|key| {
             super::validate_key(&key)?;
@@ -309,7 +311,6 @@ impl<S: CredentialStore + Clone + 'static> ModelService<S> {
         let outcome = tokio::select! {
             biased;
             _ = cancelled.changed() => Err(ModelServiceError::Cancelled),
-            _ = tokio::time::sleep_until(session.deadline) => Err(ModelServiceError::Timeout),
             result = stream::request(&session.client, &endpoint, key, body, |text| {
                 if self.assistant_session(request_id).is_ok() {
                     on_text(text);
@@ -322,7 +323,15 @@ impl<S: CredentialStore + Clone + 'static> ModelService<S> {
             Err(error) => log::warn!("[assistant-request] turn={turn_number} failed elapsed_ms={elapsed_ms} error={error:?}"),
         }
         self.assistant_session(request_id)?;
-        if outcome.is_err() {
+        // The frontend discards incomplete generations and bounds recovery.
+        // Keep the captured native session for those two recoverable limits;
+        // ownership/config checks and explicit cancellation still apply.
+        if outcome.is_err()
+            && !matches!(
+                outcome,
+                Err(ModelServiceError::ContextWindowExceeded | ModelServiceError::OutputTruncated)
+            )
+        {
             self.cancel_assistant(request_id);
         }
         outcome.map(|mut turn| {
@@ -358,6 +367,7 @@ fn valid_request_id(id: &str) -> bool {
 
 pub(super) fn wire_messages(
     messages: Vec<AssistantModelMessage>,
+    retain_reasoning: bool,
 ) -> Result<Vec<Value>, ModelServiceError> {
     if messages.is_empty() || messages.len() > 128 {
         return Err(ModelServiceError::ContextMessagesExceeded);
@@ -377,6 +387,19 @@ pub(super) fn wire_messages(
             || (message.content.as_deref().is_none_or(str::is_empty) && !has_calls)
         { return Err(ModelServiceError::Protocol); }
         let mut wire = json!({"role":message.role,"content":message.content});
+        if let Some(reasoning) = &message.reasoning_content {
+            if message.role != AssistantMessageRole::Assistant {
+                return Err(ModelServiceError::Protocol);
+            }
+            if reasoning.len() > provider::MAX_REASONING_BYTES {
+                return Err(ModelServiceError::ResponseTooLarge);
+            }
+        }
+        if retain_reasoning && message.role == AssistantMessageRole::Assistant {
+            // Older display-only history has no reasoning. An empty protocol
+            // value preserves compatibility without inventing missing thought.
+            wire["reasoning_content"] = json!(message.reasoning_content.unwrap_or_default());
+        }
         if let Some(calls) = message.tool_calls.filter(|calls| !calls.is_empty()) {
             wire["tool_calls"] = Value::Array(calls.into_iter().map(|call| json!({"id":call.id,"type":"function","function":{"name":call.name,"arguments":call.arguments}})).collect());
         }
@@ -385,7 +408,7 @@ pub(super) fn wire_messages(
     }).collect()
 }
 
-fn parse_turn(message: Value) -> Result<AssistantModelTurn, ModelServiceError> {
+pub(super) fn parse_turn(message: Value) -> Result<AssistantModelTurn, ModelServiceError> {
     let text = match message.get("content") {
         None | Some(Value::Null) => None,
         Some(Value::String(text)) => Some(text.clone()),
@@ -397,6 +420,9 @@ fn parse_turn(message: Value) -> Result<AssistantModelTurn, ModelServiceError> {
         _ => return Err(ModelServiceError::Protocol),
     };
     let mut tool_calls = Vec::new();
+    if text.as_ref().is_some_and(|text| text.len() > 64 * 1024) {
+        return Err(ModelServiceError::ResponseTooLarge);
+    }
     for call in calls {
         if call["type"] != "function" {
             return Err(ModelServiceError::Protocol);
@@ -408,10 +434,16 @@ fn parse_turn(message: Value) -> Result<AssistantModelTurn, ModelServiceError> {
                 .map(str::to_owned)
                 .ok_or(ModelServiceError::Protocol)
         };
+        if call["function"]["arguments"]
+            .as_str()
+            .is_some_and(|args| args.len() > 256 * 1024)
+        {
+            return Err(ModelServiceError::ResponseTooLarge);
+        }
         tool_calls.push(AssistantToolCall {
             id: field(&call["id"], 256)?,
             name: field(&call["function"]["name"], 128)?,
-            arguments: field(&call["function"]["arguments"], 8192)?,
+            arguments: field(&call["function"]["arguments"], 256 * 1024)?,
         });
     }
     if tool_calls.is_empty() && text.as_deref().is_none_or(|text| text.trim().is_empty()) {
@@ -419,40 +451,128 @@ fn parse_turn(message: Value) -> Result<AssistantModelTurn, ModelServiceError> {
     }
     Ok(AssistantModelTurn {
         text,
+        reasoning_content: provider::reasoning(&message)?,
         tool_calls,
         usage: super::usage::parse(&message["usage"]),
         measurement: None,
     })
 }
 
+// Shared with the frontend dispatcher. Tool descriptions, schemas and mode
+// availability are authored once; native write authorization remains separate.
+fn tools_for_mode(mode: &str) -> Value {
+    static CONTRACTS: OnceLock<Value> = OnceLock::new();
+    let manifest = CONTRACTS.get_or_init(|| {
+        serde_json::from_str(include_str!("../../resources/assistant-tools.json"))
+            .expect("installed assistant tool contracts")
+    });
+    Value::Array(
+        manifest["tools"]
+            .as_array()
+            .expect("assistant tool array")
+            .iter()
+            .filter(|tool| {
+                tool["modes"]
+                    .as_array()
+                    .is_some_and(|modes| modes.iter().any(|value| value == mode))
+            })
+            .map(|tool| {
+                json!({"type":"function","function":{
+                    "name":tool["name"],
+                    "description":tool["description"],
+                    "parameters":tool["schema"]
+                }})
+            })
+            .collect(),
+    )
+}
+
 pub(super) fn document_tools(project_reading: bool) -> Value {
-    let mut tools = json!([
-        {"type":"function","function":{"name":"search_help","description":"Search installed PNDS help sections. No project content is available.","parameters":{"type":"object","properties":{"query":{"type":"string","maxLength":256}},"required":["query"],"additionalProperties":false}}},
-        {"type":"function","function":{"name":"read_help_section","description":"Read a short page of an installed PNDS help section. Default 1200 UTF-16 units, maximum 2000. Only segments are new evidence; reusedRanges reference previous tool results without duplicating text. Follow nextOffset only when needed. Unreturned ranges remain unread.","parameters":{"type":"object","properties":{"docId":{"type":"string"},"sectionId":{"type":"string"},"offset":{"type":"integer","minimum":0},"pageLength":{"type":"integer","minimum":64,"maximum":2000}},"required":["docId","sectionId"],"additionalProperties":false}}}
-    ]);
-    if project_reading {
-        tools.as_array_mut().expect("array").extend([
-            json!({"type":"function","function":{"name":"propose_handoff","description":"Offer a preview for complex, new/delete/rename or cross-file work, including preview adapters and module wiring. Explain why and ask whether to hand off. This writes nothing and dispatches nothing. Use explicit task requirements only, never private conversation, credentials or request internals. Mark unadopted suggestions as not implemented. Do not also propose a text change for this task.","parameters":{"type":"object","properties":{"reason":{"type":"string"},"intent":{"type":"string"},"files":{"type":"array","items":{"type":"string"}},"knownProblems":{"type":"string"},"acceptance":{"type":"string"}},"required":["reason","intent","files","knownProblems","acceptance"],"additionalProperties":false}}}),
-            json!({"type":"function","function":{"name":"list_project_files","description":"List the confirmed saved-text scope and exclusions. Inventory is not evidence of having read file content.","parameters":{"type":"object","properties":{},"additionalProperties":false}}}),
-            json!({"type":"function","function":{"name":"search_project_text","description":"Search allowed saved project text, at most 64 files and 6 short hits per call. remainingFiles are not searched. Never read drafts.","parameters":{"type":"object","properties":{"query":{"type":"string","maxLength":256}},"required":["query"],"additionalProperties":false}}}),
-            json!({"type":"function","function":{"name":"read_project_text","description":"Read a saved-text page in the confirmed project. UTF-16 offset, pageLength 64–2000 (default 1200). Supply returned version for subsequent pages; changed versions must be re-read. Unreturned ranges are unread.","parameters":{"type":"object","properties":{"path":{"type":"string"},"version":{"type":"string"},"offset":{"type":"integer","minimum":0},"pageLength":{"type":"integer","minimum":64,"maximum":2000}},"required":["path"],"additionalProperties":false}}}),
-            json!({"type":"function","function":{
-                "name":"propose_text_change",
-                "description":"Offer one pending change to one existing fully read saved text at its actual version. No write, execution or preview. Clarify ambiguous intent first. Return the complete candidate. Use a few accurately located JSON primitive whole-line controls only when relevant, or parameters:[] for code. Copy project limits/capabilities exactly from pnds.preview.json; undeclared controls require empty limits and unsupported preview. New/delete/rename/multi-file or complex adaptation requires confirmed external handoff; never split a cross-file task into this tool.",
-                "parameters":{"type":"object","properties":{
-                    "path":{"type":"string"},"version":{"type":"string"},"text":{"type":"string"},
-                    "parameters":{"type":"array","maxItems":16,"items":{"type":"object","properties":{
-                        "spec":{"type":"object","properties":{
-                            "id":{"type":"string"},"path":{"type":"string"},"prefix":{"type":"string"},"suffix":{"type":"string"},
-                            "kind":{"enum":["number","boolean","text","color","option"]},
-                            "preview":{"enum":["live","refresh","restart","unsupported"]},
-                            "limits":{"type":"object","properties":{"min":{"type":"number"},"max":{"type":"number"},"step":{"type":"number"},"options":{"type":"array","items":{"type":"string"}},"maxLength":{"type":"integer","minimum":0}},"additionalProperties":false}
-                        },"required":["id","path","prefix","suffix","kind","preview","limits"],"additionalProperties":false},
-                        "current":{"type":["number","boolean","string"]},"suggestedMin":{"type":"number"},"suggestedMax":{"type":"number"}
-                    },"required":["spec","current"],"additionalProperties":false}}
-                },"required":["path","version","text","parameters"],"additionalProperties":false}
-            }})
-        ]);
+    tools_for_mode(if project_reading {
+        "legacy"
+    } else {
+        "platform"
+    })
+}
+
+/// Explicit creation modes replace the legacy candidate-only wire tools.
+pub(super) fn task_tools(mode: ContextContentKind) -> Value {
+    tools_for_mode(if matches!(mode, ContextContentKind::EditPolicy) {
+        "edit"
+    } else {
+        "handoff"
+    })
+}
+
+#[cfg(test)]
+mod tool_contract_tests {
+    use super::*;
+    use std::collections::HashSet;
+
+    #[test]
+    fn shared_contract_modes_and_wire_schemas_agree() {
+        let manifest: Value =
+            serde_json::from_str(include_str!("../../resources/assistant-tools.json")).unwrap();
+        assert_eq!(manifest["version"], 1);
+        let tools = manifest["tools"].as_array().unwrap();
+        let mut names = HashSet::new();
+        for tool in tools {
+            assert!(names.insert(tool["name"].as_str().unwrap()));
+            assert!(matches!(
+                tool["handler"].as_str().unwrap(),
+                "documents" | "project" | "proposal" | "task"
+            ));
+            assert!(matches!(
+                tool["effect"].as_str().unwrap(),
+                "read" | "write" | "check" | "parameter"
+            ));
+            assert_eq!(tool["schema"]["additionalProperties"], false);
+        }
+        assert_eq!(tools.len(), 19);
+        for mode in ["platform", "legacy", "handoff", "edit"] {
+            let wire = tools_for_mode(mode);
+            let selected: Vec<_> = tools
+                .iter()
+                .filter(|tool| tool["modes"].as_array().unwrap().iter().any(|m| m == mode))
+                .collect();
+            assert_eq!(wire.as_array().unwrap().len(), selected.len());
+            for (published, contract) in wire.as_array().unwrap().iter().zip(selected) {
+                assert_eq!(published["function"]["name"], contract["name"]);
+                assert_eq!(published["function"]["parameters"], contract["schema"]);
+                assert!(published["function"].get("handler").is_none());
+            }
+        }
     }
-    tools
+
+    #[test]
+    fn mode_specific_write_and_parameter_contracts_remain_distinct() {
+        let handoff = task_tools(ContextContentKind::HandoffPolicy);
+        let edit = task_tools(ContextContentKind::EditPolicy);
+        let find = |tools: &Value, name: &str| {
+            tools
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|tool| tool["function"]["name"] == name)
+                .unwrap()["function"]["parameters"]
+                .clone()
+        };
+        assert_eq!(
+            find(&handoff, "write_handoff")["properties"]["version"]["type"],
+            json!(["string", "null"])
+        );
+        assert_eq!(
+            find(&edit, "write_project_file")["properties"]["version"]["type"],
+            "string"
+        );
+        assert_eq!(
+            find(&edit, "create_project_file")["required"],
+            json!(["path", "text"])
+        );
+        let legacy = document_tools(true);
+        assert_eq!(
+            find(&legacy, "propose_text_change")["properties"]["parameters"],
+            find(&edit, "expose_project_parameters")["properties"]["parameters"]
+        );
+    }
 }

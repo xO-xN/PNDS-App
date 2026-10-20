@@ -10,6 +10,7 @@ pub mod cover;
 pub mod creation;
 pub mod diagnostics;
 pub mod handoff;
+pub mod live_checks;
 pub mod logs;
 pub mod manifest;
 pub mod ports;

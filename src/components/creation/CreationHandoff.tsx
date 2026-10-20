@@ -18,14 +18,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import {
-  HANDOFF_PATH,
-  useCreationHandoffStore,
-} from '@/store/creation-handoff-store'
+import { useCreationHandoffStore } from '@/store/creation-handoff-store'
 import {
   isDraftDirty,
   useCreationFilesStore,
 } from '@/store/creation-files-store'
+import { useCreationReadingStore } from '@/store/creation-reading-store'
 import { useCreationTestStore } from '@/store/creation-test-store'
 import { CreationErrorNotice } from './CreationErrorNotice'
 import { cn } from '@/lib/utils'
@@ -35,11 +33,13 @@ export function CreationHandoff({
   exists,
   className,
   menuOnly = false,
+  onCloseAutoFocus,
 }: {
   editable: boolean
   exists: boolean
   className?: string
   menuOnly?: boolean
+  onCloseAutoFocus?: (event: Event) => void
 }) {
   const { t } = useTranslation()
   const pending = useCreationHandoffStore(state => state.pending)
@@ -71,7 +71,7 @@ export function CreationHandoff({
             size="sm"
             variant="outline"
             onClick={() => {
-              useCreationFilesStore.getState().setActivePath(HANDOFF_PATH)
+              useCreationReadingStore.getState().showHandoff()
               useCreationTestStore.getState().setTab('file')
             }}
           >
@@ -164,6 +164,7 @@ export function CreationHandoff({
         }}
       >
         <DialogContent
+          onCloseAutoFocus={onCloseAutoFocus}
           showCloseButton={false}
           className="max-h-[85vh] overflow-auto"
         >

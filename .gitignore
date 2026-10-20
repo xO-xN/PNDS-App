@@ -43,3 +43,9 @@ src-tauri/resources/utilities/
 
 # Fixed npm libraries staged for offline App resources (npm run libraries:fetch)
 src-tauri/resources/shared-libraries/
+
+# Machine-local Cargo storage (absolute external-drive paths)
+/.cargo/config.toml
+
+# Machine-local Codex sandbox access to the external build cache
+/.codex/config.toml

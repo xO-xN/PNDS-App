@@ -20,7 +20,7 @@ export type { AssistantToolCall }
 export type AssistantWireMessage = AssistantModelMessage
 export type AssistantTurn = AssistantModelTurn
 
-/** Trusted consumers must obtain fresh consent in their own workflow. Merely
+/** Trusted consumers must validate fresh workspace and service scope. Merely
  * restoring a local snapshot never constructs this capability. */
 export interface AssistantContextConsumer {
   id: string

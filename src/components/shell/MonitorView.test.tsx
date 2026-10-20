@@ -560,7 +560,9 @@ describe('MonitorView iframe URL (#49)', () => {
   it('navigates to the monitor address with the current theme and language on first frame', () => {
     render(<MonitorView />)
 
-    expect(frameSrc()).toBe('http://192.168.1.10:6869/?theme=brutal&lang=en')
+    expect(frameSrc()).toBe(
+      'http://192.168.1.10:6869/?theme=brutal&lang=en&pndsHostOrigin=http%3A%2F%2Flocalhost%3A3000'
+    )
   })
 
   it('navigates to a manifest-declared performer address over the LAN IP (#62)', () => {
@@ -574,7 +576,9 @@ describe('MonitorView iframe URL (#49)', () => {
 
     // The origin follows the address actually injected as PNDS_HOST_IP —
     // never the numeric selection it replaced.
-    expect(frameSrc()).toBe('http://mywork.local:6869/?theme=brutal&lang=en')
+    expect(frameSrc()).toBe(
+      'http://mywork.local:6869/?theme=brutal&lang=en&pndsHostOrigin=http%3A%2F%2Flocalhost%3A3000'
+    )
   })
 
   it('keeps the src frozen across a live theme switch (the bridge owns updates)', () => {
@@ -586,7 +590,9 @@ describe('MonitorView iframe URL (#49)', () => {
 
     // Still the snapshot from the last navigation — retargeting the src
     // would reload the live monitor page.
-    expect(frameSrc()).toBe('http://192.168.1.10:6869/?theme=brutal&lang=en')
+    expect(frameSrc()).toBe(
+      'http://192.168.1.10:6869/?theme=brutal&lang=en&pndsHostOrigin=http%3A%2F%2Flocalhost%3A3000'
+    )
   })
 
   it('keeps the src frozen across a live language switch (the bridge owns updates)', async () => {
@@ -596,7 +602,9 @@ describe('MonitorView iframe URL (#49)', () => {
       await i18n.changeLanguage('zh-CN')
     })
 
-    expect(frameSrc()).toBe('http://192.168.1.10:6869/?theme=brutal&lang=en')
+    expect(frameSrc()).toBe(
+      'http://192.168.1.10:6869/?theme=brutal&lang=en&pndsHostOrigin=http%3A%2F%2Flocalhost%3A3000'
+    )
   })
 
   it('re-snapshots the theme and language when the monitor reloads', async () => {
@@ -609,7 +617,7 @@ describe('MonitorView iframe URL (#49)', () => {
     })
 
     expect(frameSrc()).toBe(
-      'http://192.168.1.10:6869/?theme=stage&lang=zh-CN&_r=1'
+      'http://192.168.1.10:6869/?theme=stage&lang=zh-CN&pndsHostOrigin=http%3A%2F%2Flocalhost%3A3000&_r=1'
     )
   })
 
@@ -619,20 +627,22 @@ describe('MonitorView iframe URL (#49)', () => {
     // reload must change the query string to be a true cold fetch — and
     // change nothing else, so the page still consumes the same snapshot.
     render(<MonitorView />)
-    expect(frameSrc()).toBe('http://192.168.1.10:6869/?theme=brutal&lang=en')
-
-    act(() => {
-      useSessionStore.getState().bumpMonitorReload()
-    })
     expect(frameSrc()).toBe(
-      'http://192.168.1.10:6869/?theme=brutal&lang=en&_r=1'
+      'http://192.168.1.10:6869/?theme=brutal&lang=en&pndsHostOrigin=http%3A%2F%2Flocalhost%3A3000'
     )
 
     act(() => {
       useSessionStore.getState().bumpMonitorReload()
     })
     expect(frameSrc()).toBe(
-      'http://192.168.1.10:6869/?theme=brutal&lang=en&_r=2'
+      'http://192.168.1.10:6869/?theme=brutal&lang=en&pndsHostOrigin=http%3A%2F%2Flocalhost%3A3000&_r=1'
+    )
+
+    act(() => {
+      useSessionStore.getState().bumpMonitorReload()
+    })
+    expect(frameSrc()).toBe(
+      'http://192.168.1.10:6869/?theme=brutal&lang=en&pndsHostOrigin=http%3A%2F%2Flocalhost%3A3000&_r=2'
     )
   })
 })

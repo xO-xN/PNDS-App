@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { PerformerRoster } from '@/lib/tauri-bindings'
 import type {
   PerformerConfig,
   PerformerPageStatus,
@@ -11,4 +12,16 @@ export interface CreationPerformer extends PerformerConfig {
 export const useCreationPerformersStore = create<{
   windows: CreationPerformer[]
   error: string | null
-}>()(() => ({ windows: [], error: null }))
+  connections: PerformerRoster | null
+  connectionStatus:
+    | 'standby'
+    | 'loading'
+    | 'available'
+    | 'unsupported'
+    | 'unavailable'
+}>()(() => ({
+  windows: [],
+  error: null,
+  connections: null,
+  connectionStatus: 'standby',
+}))

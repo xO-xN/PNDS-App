@@ -6,6 +6,8 @@ use specta::Type;
 use std::sync::Arc;
 
 mod context;
+mod provider;
+pub(crate) use provider::MAX_REASONING_BYTES;
 mod transport;
 mod usage;
 pub use context::{measure_context, ContextMeasurement, ModelContextConfig};
@@ -34,12 +36,17 @@ pub enum ModelServiceError {
     Network,
     Timeout,
     Protocol,
+    RequestRejected,
+    OutputTruncated,
+    ResponseInterrupted,
+    ResponseTooLarge,
     ToolsUnsupported,
     RateLimited,
     ServiceUnavailable,
     Cancelled,
     BudgetExceeded,
     ContextTokensExceeded,
+    ContextWindowExceeded,
     ContextBytesExceeded,
     ContextMessagesExceeded,
     RequestBusy,

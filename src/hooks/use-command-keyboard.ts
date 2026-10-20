@@ -1,3 +1,5 @@
+import { useCreationReadingStore } from '@/store/creation-reading-store'
+import { HANDOFF_PATH } from '@/store/creation-handoff-store'
 import { useEffect } from 'react'
 import { useKeyboardStore } from '@/store/keyboard-store'
 import { useSettingsStore } from '@/store/settings-store'
@@ -187,7 +189,10 @@ export function useCommandKeyboard(): void {
             !event.target.closest('[data-file-draft]')
           )
             return
-          const path = useCreationFilesStore.getState().activePath
+          const path =
+            useCreationReadingStore.getState().view === 'handoff'
+              ? HANDOFF_PATH
+              : useCreationFilesStore.getState().activePath
           if (path) void useCreationFilesStore.getState().save(path)
         }
         return

@@ -274,8 +274,8 @@ function ProjectionStandby() {
  * SAME composition as the main window's README panel (user report after
  * #130: the venue screen must show the cover page, not raw markdown): a
  * cover-format README renders the creator-designed title page
- * (ProjectCoverPage — PNDS wordmark + composer/github pills, the huge
- * title, the cover band with the cover image); any other README stays
+ * (ProjectCoverPage — fixed canvas, top metadata, lower-left rippling
+ * title and right-side introduction); any other README stays
  * the plain document view, still text-only (v1.5 scope — images hidden,
  * anchor clicks never navigate this webview). No README (or an
  * unreadable one) falls back to the project-name card — a missing file
@@ -380,19 +380,9 @@ function ProjectionIntro({
       >
         <div
           data-testid="projection-cover-stage"
-          // Keyed by zoom (Intel / macOS 13 report: zooming resized the
-          // stage box but old WebKit never RE-RESOLVED the cq units of
-          // its descendants — the composition sat at its boot scale on
-          // Intel while Apple Silicon's WebKit scaled fine). A key
-          // change remounts the box: every zoom step is a FRESH layout
-          // with the cq sizes resolved against the new frame from
-          // scratch — engine-independent by construction.
+          // A fresh layout per zoom repairs old WebKit cq invalidation.
           key={`utility-stage:${zoom}`}
-          className="absolute top-1/2 left-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col [container-type:size]"
-          style={{
-            width: `${(85 * zoom) / 100}%`,
-            height: `${(80 * zoom) / 100}%`,
-          }}
+          className="absolute inset-0 flex flex-col"
         >
           <ProjectCoverPage
             page={utilityCoverPage(
@@ -402,6 +392,8 @@ function ProjectionIntro({
             cover={null}
             headerNote="PNDS Utility"
             centerBandText
+            surface="projection"
+            zoom={zoom}
           />
         </div>
       </div>
@@ -424,21 +416,8 @@ function ProjectionIntro({
     )
   }
   if (coverPage !== null) {
-    // The creator-designed title page, framed for the venue screen
-    // (user report: 大屏要更多四周留白) — the composition lives inside a
-    // generously inset STAGE box (a poster on the wall, not
-    // edge-to-edge), and the cover's own container queries scale the
-    // whole layout to the frame. The zoom scales the STAGE BOX ITSELF
-    // (base 85% × 80% of the window × zoom): real layout, text crisp at
-    // every step, the cq composition riding along — the monitor's
-    // inverse-sized transform frame would self-compensate here (the
-    // visual size would never move, user report). Above 100% the box
-    // outgrows the window and the root's overflow-hidden crops it —
-    // first into the frame's own margins, then the edges: poster zoom.
-    // The stage is also the composition's SIZE container — the cover
-    // root is inline-size only, so every cqh inside resolves against
-    // this definite box (zoom-stable), while the app panel's copy
-    // keeps its viewport fallback (its approved original look).
+    // ProjectCoverPage fits the same fixed canvas and safety gutters as the App,
+    // then applies the operator's remembered projection zoom.
     return (
       <div
         data-testid="projection-intro"
@@ -447,36 +426,15 @@ function ProjectionIntro({
       >
         <div
           data-testid="projection-cover-stage"
-          // Same zoom key as the utility stage above: the remount is the
-          // Intel zoom fix — a fresh layout per zoom step re-resolves
-          // every cq size against the resized frame (old WebKit leaves
-          // descendant cq units stale when only the container resizes).
+          // Retain a fresh layout per zoom step for older WebKit versions.
           key={`cover-stage:${zoom}`}
-          className="absolute top-1/2 left-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col [container-type:size]"
-          style={{
-            width: `${(85 * zoom) / 100}%`,
-            height: `${(80 * zoom) / 100}%`,
-          }}
+          className="absolute inset-0 flex flex-col"
         >
-          {/* Venue-screen only (user request): a ROOMIER band — the
-             taller share holds more of the first section before the
-             in-band scroll takes over; the title's open field shrinks
-             by the same amount, so the title rides higher while the
-             composition stays vertically centered (the reserve reads
-             the same token). The main window's README panel keeps the
-             stock 26cqh band. */}
           <ProjectCoverPage
             page={coverPage}
             cover={coverImage}
-            bandHeight="min(40cqh,42cqw)"
-            /* The venue screen's title breathing room (user request:
-               title 与上下两部分的间距增大) rides a TIGHTER edge inset:
-               the header lifts and the band drops by the same amount,
-               so the centered title's field grows both ways and each
-               visible gap widens symmetrically — pt/pb overrides
-               cannot do this (the centering slack absorbs them). The
-               stage frame already provides the outer whitespace. */
-            edgeInset="2cqh"
+            surface="projection"
+            zoom={zoom}
           />
         </div>
       </div>

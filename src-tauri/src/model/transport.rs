@@ -3,11 +3,11 @@ use std::time::Duration;
 use reqwest::{Client, Url};
 use serde_json::{json, Value};
 
-use super::{ModelConnectionReport, ModelServiceError};
+use super::{provider, ModelConnectionReport, ModelServiceError};
 use crate::types::ModelServiceConfig;
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
-const MAX_RESPONSE_BYTES: usize = 64 * 1024;
+const MAX_RESPONSE_BYTES: usize = 1024 * 1024;
 const PROBE_NAME: &str = "pnds_connection_probe";
 const PROBE_VALUE: &str = "pnds-connection-check";
 
@@ -46,7 +46,7 @@ pub(super) async fn test_connection(
     key: &str,
 ) -> Result<ModelConnectionReport, ModelServiceError> {
     validate_config(config)?;
-    let client = client(REQUEST_TIMEOUT)?;
+    let client = client(Some(REQUEST_TIMEOUT))?;
     let endpoint = format!("{}/chat/completions", config.base_url.trim_end_matches('/'));
     tokio::time::timeout(
         REQUEST_TIMEOUT,
@@ -56,16 +56,17 @@ pub(super) async fn test_connection(
     .map_err(|_| probe_failure("request_deadline", ModelServiceError::Timeout))?
 }
 
-pub(super) fn client(timeout: Duration) -> Result<Client, ModelServiceError> {
+pub(super) fn client(timeout: Option<Duration>) -> Result<Client, ModelServiceError> {
     // reqwest 0.13's rustls-no-provider edge reuses the App's ring stack.
     let _ = rustls::crypto::ring::default_provider().install_default();
-    Client::builder()
+    let mut builder = Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .retry(reqwest::retry::never())
-        .timeout(timeout)
-        .connect_timeout(Duration::from_secs(10))
-        .build()
-        .map_err(|_| ModelServiceError::Network)
+        .connect_timeout(Duration::from_secs(10));
+    if let Some(timeout) = timeout {
+        builder = builder.timeout(timeout);
+    }
+    builder.build().map_err(|_| ModelServiceError::Network)
 }
 
 async fn probe(
@@ -74,13 +75,18 @@ async fn probe(
     model: &str,
     key: &str,
 ) -> Result<ModelConnectionReport, ModelServiceError> {
+    // A forced tool is unsupported in DeepSeek's default thinking mode. Probe
+    // the small controlled exchange without thinking; real tasks retain it.
+    let send = |mut body: Value, tool_phase| {
+        if provider::is_deepseek(endpoint) {
+            body["thinking"] = json!({"type":"disabled"});
+        }
+        request(client, endpoint, key, body, tool_phase)
+    };
     let mut messages = vec![
         json!({"role":"user","content":"This is a connection check. Reply with a short greeting."}),
     ];
-    let text = request(
-        client,
-        endpoint,
-        key,
+    let text = send(
         json!({"model":model,"messages":messages,"stream":false,"max_tokens":128}),
         false,
     )
@@ -92,13 +98,13 @@ async fn probe(
         json!({"role":"user","content":"Call pnds_connection_probe exactly once with value pnds-connection-check. After receiving the tool result, give a short confirmation."}),
     ];
     let tools = json!([{"type":"function","function":{"name":PROBE_NAME,"description":"A harmless connection capability check.","parameters":{"type":"object","properties":{"value":{"type":"string","enum":[PROBE_VALUE]}},"required":["value"],"additionalProperties":false}}}]);
-    let response = request(client, endpoint, key, json!({"model":model,"messages":messages,"stream":false,"max_tokens":128,"tools":tools,"tool_choice":{"type":"function","function":{"name":PROBE_NAME}}}), true).await.map_err(|error| probe_failure("tool_call", error))?;
+    let response = send(json!({"model":model,"messages":messages,"stream":false,"max_tokens":128,"tools":tools,"tool_choice":{"type":"function","function":{"name":PROBE_NAME}}}), true).await.map_err(|error| probe_failure("tool_call", error))?;
     let id = probe_call_id(&response).map_err(|error| probe_failure("tool_response", error))?;
     // Reconstruct only the validated protocol fields. Provider metadata never
     // becomes another message, tool or instruction in the follow-up request.
     messages.push(json!({"role":"assistant","content":null,"tool_calls":[{"id":id,"type":"function","function":{"name":PROBE_NAME,"arguments":json!({"value":PROBE_VALUE}).to_string()}}]}));
     messages.push(json!({"role":"tool","tool_call_id":id,"content":json!({"value":PROBE_VALUE,"ok":true}).to_string()}));
-    let final_text = request(client, endpoint, key, json!({"model":model,"messages":messages,"stream":false,"max_tokens":128,"tools":tools,"tool_choice":"none"}), true).await.map_err(|error| probe_failure("tool_result", error))?;
+    let final_text = send(json!({"model":model,"messages":messages,"stream":false,"max_tokens":128,"tools":tools,"tool_choice":"none"}), true).await.map_err(|error| probe_failure("tool_result", error))?;
     require_text(&final_text).map_err(|error| probe_failure("final_text", error))?;
     log::info!("[model-connection] passed text=true tool_call=true");
     Ok(ModelConnectionReport {
@@ -170,7 +176,11 @@ pub(super) async fn request(
     body: Value,
     tool_phase: bool,
 ) -> Result<Value, ModelServiceError> {
-    read_message(response(client, endpoint, key, body, tool_phase).await?).await
+    read_message(
+        response(client, endpoint, key, body, tool_phase).await?,
+        false,
+    )
+    .await
 }
 
 pub(super) async fn response(
@@ -183,7 +193,7 @@ pub(super) async fn response(
     let mut authorization = reqwest::header::HeaderValue::from_str(&format!("Bearer {key}"))
         .map_err(|_| ModelServiceError::InvalidConfig)?;
     authorization.set_sensitive(true);
-    let response = client
+    let mut response = client
         .post(endpoint)
         .header(reqwest::header::AUTHORIZATION, authorization)
         .json(&body)
@@ -197,7 +207,27 @@ pub(super) async fn response(
         401 | 403 => return Err(ModelServiceError::Authentication),
         429 => return Err(ModelServiceError::RateLimited),
         500..=599 => return Err(ModelServiceError::ServiceUnavailable),
-        400 | 422 if tool_phase => return Err(ModelServiceError::ToolsUnsupported),
+        400 | 413 | 422 => {
+            // Only structured, recognized context errors permit automatic recovery.
+            // Never surface or log provider bodies (they may echo private input).
+            let mut bytes = Vec::new();
+            while let Some(chunk) = response.chunk().await.map_err(transport_error)? {
+                if bytes.len() + chunk.len() > 16 * 1024 {
+                    return Err(protocol_failure("oversized_error_body"));
+                }
+                bytes.extend_from_slice(&chunk);
+            }
+            let value: Value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
+            if context_overflow(&value) {
+                return Err(ModelServiceError::ContextWindowExceeded);
+            }
+            return Err(if tool_phase && unsupported_tools(&value) {
+                ModelServiceError::ToolsUnsupported
+            } else {
+                log::warn!("[model-transport] rejected reason=request_parameters");
+                ModelServiceError::RequestRejected
+            });
+        }
         _ => return Err(protocol_failure("unexpected_http_status")),
     }
     Ok(response)
@@ -205,22 +235,32 @@ pub(super) async fn response(
 
 pub(super) async fn read_message(
     mut response: reqwest::Response,
+    retain_reasoning: bool,
 ) -> Result<Value, ModelServiceError> {
+    let maximum = MAX_RESPONSE_BYTES
+        + if retain_reasoning {
+            provider::MAX_REASONING_BYTES
+        } else {
+            0
+        };
     if response
         .content_length()
-        .is_some_and(|length| length > MAX_RESPONSE_BYTES as u64)
+        .is_some_and(|length| length > maximum as u64)
     {
-        return Err(protocol_failure("response_size_limit"));
+        return Err(ModelServiceError::ResponseTooLarge);
     }
     let mut bytes = Vec::new();
     while let Some(chunk) = response.chunk().await.map_err(transport_error)? {
-        if bytes.len() + chunk.len() > MAX_RESPONSE_BYTES {
-            return Err(protocol_failure("response_size_limit"));
+        if bytes.len() + chunk.len() > maximum {
+            return Err(ModelServiceError::ResponseTooLarge);
         }
         bytes.extend_from_slice(&chunk);
     }
     let value: Value =
         serde_json::from_slice(&bytes).map_err(|_| protocol_failure("invalid_json"))?;
+    if let Some(error) = structured_error(&value) {
+        return Err(error);
+    }
     let choices = value["choices"]
         .as_array()
         .filter(|choices| choices.len() == 1)
@@ -231,20 +271,82 @@ pub(super) async fn read_message(
         .is_some_and(|calls| !calls.is_empty());
     let finish_reason = if calls { "tool_calls" } else { "stop" };
     if message["role"] != "assistant" || choices[0]["finish_reason"] != finish_reason {
-        let finish = match choices[0]["finish_reason"].as_str() {
-            Some("stop") => "stop",
-            Some("tool_calls") => "tool_calls",
-            Some("length") => "length",
-            Some("content_filter") => "content_filter",
-            Some(_) => "other",
-            None => "missing",
-        };
-        log::warn!("[model-transport] rejected reason=role_or_finish_reason finish={finish}");
-        return Err(ModelServiceError::Protocol);
+        return Err(finish_failure(&choices[0]["finish_reason"]));
     }
     let mut message = message.clone();
+    if retain_reasoning {
+        provider::reasoning(&message)?;
+    } else if let Some(fields) = message.as_object_mut() {
+        fields.remove("reasoning_content");
+    }
     message["usage"] = value["usage"].clone();
     Ok(message)
+}
+
+fn unsupported_tools(value: &Value) -> bool {
+    [
+        value["error"]["code"].as_str(),
+        value["error"]["type"].as_str(),
+    ]
+    .into_iter()
+    .flatten()
+    .any(|code| {
+        matches!(
+            code,
+            "unsupported_tools"
+                | "tools_not_supported"
+                | "tool_calls_not_supported"
+                | "unsupported_tool_use"
+        )
+    })
+}
+
+/// Interpret fixed structured categories only. Free-form provider messages can
+/// echo private requests and must never be used as diagnostics or instructions.
+pub(super) fn structured_error(value: &Value) -> Option<ModelServiceError> {
+    if context_overflow(value) {
+        return Some(ModelServiceError::ContextWindowExceeded);
+    }
+    if unsupported_tools(value) {
+        return Some(ModelServiceError::ToolsUnsupported);
+    }
+    [
+        value["error"]["code"].as_str(),
+        value["error"]["type"].as_str(),
+    ]
+    .into_iter()
+    .flatten()
+    .find_map(|code| match code {
+        "invalid_request_error"
+        | "invalid_request"
+        | "invalid_parameter"
+        | "unsupported_parameter" => Some(ModelServiceError::RequestRejected),
+        "insufficient_system_resource" | "server_error" => {
+            Some(ModelServiceError::ServiceUnavailable)
+        }
+        _ => None,
+    })
+}
+
+/// Log only fixed categories, never provider text, prompts or credentials.
+pub(super) fn finish_failure(reason: &Value) -> ModelServiceError {
+    let (finish, error) = match reason.as_str() {
+        Some("model_context_window_exceeded") => {
+            ("context_window", ModelServiceError::ContextWindowExceeded)
+        }
+        Some("length") => ("length", ModelServiceError::OutputTruncated),
+        Some("insufficient_system_resource") => {
+            ("service_resource", ModelServiceError::ServiceUnavailable)
+        }
+        Some("aborted") => ("aborted", ModelServiceError::ResponseInterrupted),
+        Some("stop") => ("stop", ModelServiceError::Protocol),
+        Some("tool_calls") => ("tool_calls", ModelServiceError::Protocol),
+        Some("content_filter") => ("content_filter", ModelServiceError::Protocol),
+        Some(_) => ("other", ModelServiceError::Protocol),
+        None => ("missing", ModelServiceError::ResponseInterrupted),
+    };
+    log::warn!("[model-transport] rejected reason=finish_reason finish={finish} error={error:?}");
+    error
 }
 
 pub(super) fn transport_error(error: reqwest::Error) -> ModelServiceError {
@@ -254,3 +356,28 @@ pub(super) fn transport_error(error: reqwest::Error) -> ModelServiceError {
         ModelServiceError::Network
     }
 }
+
+/// Codes only: provider messages may echo private prompts or credentials.
+pub(super) fn context_overflow(value: &Value) -> bool {
+    [
+        value["error"]["code"].as_str(),
+        value["error"]["type"].as_str(),
+    ]
+    .into_iter()
+    .flatten()
+    .any(|code| {
+        matches!(
+            code,
+            "context_length_exceeded"
+                | "context_window_exceeded"
+                | "max_context_length_exceeded"
+                | "input_tokens_exceeded"
+                | "model_context_window_exceeded"
+                | "1261"
+        )
+    })
+}
+
+#[cfg(test)]
+#[path = "transport_tests.rs"]
+mod deepseek_tests;

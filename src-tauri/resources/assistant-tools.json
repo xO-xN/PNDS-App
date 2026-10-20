@@ -1,0 +1,615 @@
+{
+  "version": 1,
+  "tools": [
+    {
+      "name": "search_help",
+      "description": "Search installed PNDS help sections. No project content is available.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "maxLength": 256
+          }
+        },
+        "required": ["query"],
+        "additionalProperties": false
+      },
+      "handler": "documents",
+      "effect": "read",
+      "modes": ["platform", "legacy", "handoff", "edit"]
+    },
+    {
+      "name": "read_help_section",
+      "description": "Read a short page of an installed PNDS help section. Default 1200 UTF-16 units, maximum 2000. Only segments are new evidence; reusedRanges reference previous tool results without duplicating text. Follow nextOffset only when needed. Unreturned ranges remain unread.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "docId": {
+            "type": "string"
+          },
+          "sectionId": {
+            "type": "string"
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "pageLength": {
+            "type": "integer",
+            "minimum": 64,
+            "maximum": 2000
+          }
+        },
+        "required": ["docId", "sectionId"],
+        "additionalProperties": false
+      },
+      "handler": "documents",
+      "effect": "read",
+      "modes": ["platform", "legacy", "handoff", "edit"]
+    },
+    {
+      "name": "propose_handoff",
+      "description": "Offer a preview only for work the creator cannot complete with manual file creation and independently reviewed existing-file candidates, such as unsupported execution, deletion, renaming or extensive refactoring. Do not force handoff solely for new files or coordinated file candidates. Explain why and ask whether to hand off. This writes nothing and dispatches nothing. Use explicit task requirements only, never private conversation, credentials or request internals. Mark unadopted suggestions as not implemented. Do not also propose a text change for this task.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string"
+          },
+          "intent": {
+            "type": "string"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "knownProblems": {
+            "type": "string"
+          },
+          "acceptance": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason",
+          "intent",
+          "files",
+          "knownProblems",
+          "acceptance"
+        ],
+        "additionalProperties": false
+      },
+      "handler": "proposal",
+      "effect": "read",
+      "modes": ["legacy"]
+    },
+    {
+      "name": "list_project_files",
+      "description": "List the confirmed saved-text scope and exclusions. Inventory is not evidence of having read file content.",
+      "schema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "handler": "project",
+      "effect": "read",
+      "modes": ["legacy", "handoff", "edit"]
+    },
+    {
+      "name": "search_project_text",
+      "description": "Search allowed saved project text, at most 64 files and 6 short hits per call. remainingFiles are not searched. Never read drafts.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "maxLength": 256
+          }
+        },
+        "required": ["query"],
+        "additionalProperties": false
+      },
+      "handler": "project",
+      "effect": "read",
+      "modes": ["legacy", "handoff", "edit"]
+    },
+    {
+      "name": "read_project_text",
+      "description": "Read a saved-text page in the current project. UTF-16 offset, pageLength 64–65536 (default 32768). Supply returned version for subsequent pages; changed versions must be re-read. Unreturned ranges are unread.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "pageLength": {
+            "type": "integer",
+            "minimum": 64,
+            "maximum": 65536
+          }
+        },
+        "required": ["path"],
+        "additionalProperties": false
+      },
+      "handler": "project",
+      "effect": "read",
+      "modes": ["legacy", "handoff", "edit"]
+    },
+    {
+      "name": "propose_text_change",
+      "description": "Offer a pending change to an existing fully read saved text at its actual version. Up to eight distinct files can be proposed per request, each applied independently. No write, execution or preview. Clarify ambiguous intent first. Supply either complete text or edits (never both). Prefer small edits for large files: oldText must occur exactly once in the original saved file; anchors must not overlap. The App constructs the complete candidate. Use a few accurately located JSON primitive whole-line controls only when relevant, or parameters:[] for code. Copy project limits/capabilities exactly from pnds.preview.json; undeclared controls require empty limits and unsupported preview. For new files explain manual New file creation and supply code. Explain ordering/dependencies of coordinated candidates. No automatic multi-file write.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "edits": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 64,
+            "items": {
+              "type": "object",
+              "properties": {
+                "oldText": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "newText": {
+                  "type": "string"
+                }
+              },
+              "required": ["oldText", "newText"],
+              "additionalProperties": false
+            }
+          },
+          "parameters": {
+            "type": "array",
+            "maxItems": 16,
+            "items": {
+              "type": "object",
+              "properties": {
+                "spec": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "path": {
+                      "type": "string"
+                    },
+                    "prefix": {
+                      "type": "string"
+                    },
+                    "suffix": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "enum": ["number", "boolean", "text", "color", "option"]
+                    },
+                    "preview": {
+                      "enum": ["live", "refresh", "restart", "unsupported"]
+                    },
+                    "limits": {
+                      "type": "object",
+                      "properties": {
+                        "min": {
+                          "type": ["number", "null"]
+                        },
+                        "max": {
+                          "type": ["number", "null"]
+                        },
+                        "step": {
+                          "type": ["number", "null"]
+                        },
+                        "options": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "maxLength": {
+                          "type": ["integer", "null"],
+                          "minimum": 0
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "path",
+                    "prefix",
+                    "suffix",
+                    "kind",
+                    "preview",
+                    "limits"
+                  ],
+                  "additionalProperties": false
+                },
+                "current": {
+                  "type": ["number", "boolean", "string"]
+                },
+                "suggestedMin": {
+                  "type": ["number", "null"]
+                },
+                "suggestedMax": {
+                  "type": ["number", "null"]
+                }
+              },
+              "required": ["spec", "current"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": ["path", "version", "parameters"],
+        "additionalProperties": false
+      },
+      "handler": "proposal",
+      "effect": "read",
+      "modes": ["legacy"]
+    },
+    {
+      "name": "write_handoff",
+      "description": "Directly maintain docs/creator-handoff.md ONLY. Read it first if present and preserve existing agent tasks, statuses and unrelated content. Use version:null only for a new document. Supply complete text OR exact unique replacement edits. Distinguish confirmed requirements, suggestions, open questions and acceptance. Never record private conversation or secrets.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "version": {
+            "type": ["string", "null"]
+          },
+          "text": {
+            "type": "string"
+          },
+          "edits": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 64,
+            "items": {
+              "type": "object",
+              "properties": {
+                "oldText": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "newText": {
+                  "type": "string"
+                }
+              },
+              "required": ["oldText", "newText"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": ["path", "version"],
+        "additionalProperties": false
+      },
+      "handler": "task",
+      "effect": "write",
+      "modes": ["handoff"]
+    },
+    {
+      "name": "write_project_file",
+      "description": "Directly save an EXISTING text file at the exact version returned by its saved read. For NEW files use create_project_file instead; never fabricate a version. Supply complete text OR unique non-overlapping exact oldText/newText edits. Edits can use read ranges without reproducing a large file. Coordinate as many files as needed, including code, config and documentation. Existing parent directory required. Files are saved immediately and tracked for task undo. Never overwrite user drafts. After changes run_project_check and repair failures in this task. For repair, preserve the existing artwork and files the user explicitly says not to change; use minimal wiring or compatibility edits instead of redesigning its source.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1
+          },
+          "text": {
+            "type": "string"
+          },
+          "edits": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 64,
+            "items": {
+              "type": "object",
+              "properties": {
+                "oldText": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "newText": {
+                  "type": "string"
+                }
+              },
+              "required": ["oldText", "newText"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": ["path", "version"],
+        "additionalProperties": false
+      },
+      "handler": "task",
+      "effect": "write",
+      "modes": ["edit"]
+    },
+    {
+      "name": "run_project_static_check",
+      "description": "Run read-only saved-project contract diagnostics, including while the project is running. No runtime or visual success is implied.",
+      "schema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "handler": "task",
+      "effect": "check",
+      "modes": ["edit"]
+    },
+    {
+      "name": "remove_project_file",
+      "description": "Remove one obsolete or duplicated saved text file at its exact saved version. Inspect references first and update them as part of this task. Originals are recorded for task undo; drafts, manifest, symlinks and external changes are protected. To rename, create the correct new path, update references, then remove the obsolete path.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": ["path", "version"],
+        "additionalProperties": false
+      },
+      "handler": "task",
+      "effect": "write",
+      "modes": ["edit"]
+    },
+    {
+      "name": "install_preview_adapter",
+      "description": "Install the App's local preview adapter as public/pnds-preview.mjs with task undo, preserving existing custom files. Then wire the project's actual parameter callbacks, pnds.preview.json, local routes and digests from the exact served source bytes. The tool returns API guidance. Use this only when the current task requests adjustable behavior or controls, not merely to repair or run a work. Do the requested wiring yourself; no CDN or creator setup is needed.",
+      "schema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "handler": "task",
+      "effect": "write",
+      "modes": ["edit"]
+    },
+    {
+      "name": "expose_project_parameters",
+      "description": "Publish parameter controls for already SAVED code in the edit reply. Supply the saved CODE file path/version and exact primitive bindings; path must equal every parameters[].spec.path. The JSON declaration file is not the source path for script variables. Separate calls for the same saved source merge their controls; prefer one complete set. Use this when the current task requests changing size, speed, color or other tunable values so the creator receives a fader/control. Do not invent unrequested parameters for a repair task. For live preview first wire the local adapter, actual get/set callbacks and pnds.preview.json, then use its exact declared spec. This reads and binds saved text locally; do not reproduce the file. Controls are temporary while dragging and can be saved with task undo.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "parameters": {
+            "type": "array",
+            "maxItems": 16,
+            "items": {
+              "type": "object",
+              "properties": {
+                "spec": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "path": {
+                      "type": "string"
+                    },
+                    "prefix": {
+                      "type": "string"
+                    },
+                    "suffix": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "enum": ["number", "boolean", "text", "color", "option"]
+                    },
+                    "preview": {
+                      "enum": ["live", "refresh", "restart", "unsupported"]
+                    },
+                    "limits": {
+                      "type": "object",
+                      "properties": {
+                        "min": {
+                          "type": ["number", "null"]
+                        },
+                        "max": {
+                          "type": ["number", "null"]
+                        },
+                        "step": {
+                          "type": ["number", "null"]
+                        },
+                        "options": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "maxLength": {
+                          "type": ["integer", "null"],
+                          "minimum": 0
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "path",
+                    "prefix",
+                    "suffix",
+                    "kind",
+                    "preview",
+                    "limits"
+                  ],
+                  "additionalProperties": false
+                },
+                "current": {
+                  "type": ["number", "boolean", "string"]
+                },
+                "suggestedMin": {
+                  "type": ["number", "null"]
+                },
+                "suggestedMax": {
+                  "type": ["number", "null"]
+                }
+              },
+              "required": ["spec", "current"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": ["path", "version", "parameters"],
+        "additionalProperties": false
+      },
+      "handler": "task",
+      "effect": "parameter",
+      "modes": ["edit"]
+    },
+    {
+      "name": "create_project_file",
+      "description": "Create a NEW code/text file in an existing project directory. Supply only path and complete text; no version is needed. Existing files, symlinks and creator drafts are never overwritten. Saves immediately with task undo. Use write_project_file for existing files. For repair, create necessary wrappers and wiring around the actual original source, including moving a script with a misleading extension without rewriting its content; never invent a replacement artwork or demo when the original is unavailable. Explicit new-creation requests remain supported.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": ["path", "text"],
+        "additionalProperties": false
+      },
+      "handler": "task",
+      "effect": "write",
+      "modes": ["edit"]
+    },
+    {
+      "name": "use_local_library",
+      "description": "Adopt a creator-approved App-shipped local shared library. Existing exact references need no approval; new unapproved references trigger a task confirmation card. Prefer propose_local_resources first, grouping modules and their dependencies. After approval perform local wiring and checks yourself; no CDN or online installation. Node packages are NOT installed in project node_modules: parse PNDS_SHARED_LIBRARIES before imports; CommonJS uses require(shared[id].path), ESM uses createRequire(import.meta.url)(shared[id].path) or import(pathToFileURL(shared[id].path).href). A bare require/import of socket.io does not resolve an App-shipped shared package.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      },
+      "handler": "task",
+      "effect": "write",
+      "modes": ["edit"]
+    },
+    {
+      "name": "run_project_check",
+      "description": "Run saved-project diagnostics and a temporary-copy None-mode runtime check. Read structured errors and repair them in this task, then check again. Report unverified browser/artistic/audio behavior honestly. A passing smoke check does not establish fidelity to the original artwork or restore missing original source. This does not launch the user's performance. While this project is ready, App instead performs saved-file static diagnostics and read-only health/HTTP HEAD observation of the existing runtime. No extra browser, performer or process is started; saved changes are not proven loaded. Finish after this scoped evidence and mention a user restart only when server changes require it.",
+      "schema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "handler": "task",
+      "effect": "check",
+      "modes": ["edit"]
+    },
+    {
+      "name": "get_local_resources",
+      "description": "Discover all App-shipped offline standard modules and shared libraries, existing references, module capabilities, boundaries, local docs and required wiring. Use before designing connection/identity/state synchronization, QR, theme, locale, control or dependency work. Catalog data is not permission to add resources. HIGH priority for multi-performer identity, continuous touch and bidirectional score synchronization: prefer local socket.io plus players and present a grouped creator recommendation. A working single-client HTTP poll does not settle multiplayer concurrency or recovery. Reuse the App preflight and its existing decision; do not duplicate it. Purely visual edits do not require a communication migration.",
+      "handler": "task",
+      "effect": "read",
+      "modes": ["handoff", "edit"],
+      "schema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "propose_local_resources",
+      "description": "Propose one grouped plan for NEW offline standard modules and shared libraries before implementation. Include why they fit the original goal and which code/behavior will change. The App pauses this SAME task for creator confirmation. List all related modules and their dependencies together. alternative is optional and must describe a viable explicit option without these additions; never silently choose a different design after rejection. Existing/approved resources need no repeated confirmation. No project mutation happens here.",
+      "handler": "task",
+      "effect": "read",
+      "modes": ["edit"],
+      "schema": {
+        "type": "object",
+        "properties": {
+          "modules": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "maxItems": 6
+          },
+          "libraries": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "maxItems": 6
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "alternative": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          }
+        },
+        "required": ["modules", "libraries", "reason"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "use_local_module",
+      "description": "Add an existing or creator-approved offline standard module with its frozen provenance. New unapproved additions trigger a task confirmation card. Copies files only; then read the local README, wire dependencies/server/pages while preserving the work-specific behavior, and check/fix in the same task. All files belong to task undo.",
+      "handler": "task",
+      "effect": "write",
+      "modes": ["edit"],
+      "schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      }
+    }
+  ]
+}

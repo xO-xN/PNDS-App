@@ -172,17 +172,25 @@ available when the model service is unconfigured or unavailable.
 ### Asking about installed PNDS documentation
 
 An editable project opens on the discussion surface. After configuring the model
-service, enter a question and click Send or press `⌘ Enter`; plain Enter adds a
-line break. Platform questions use the local help shipped with this App version
-without reading or sending project content. Verified source buttons open the
+service, enter a question and click Send or press Enter; Shift+Enter adds a line
+break. The assistant consults the local help shipped with this App version and
+sends the project overview and saved text it reads as needed to your configured
+model service. Unsaved content is sent only in selections you attach. Verified source buttons open the
 actual section in its original language. Replies that did not consult local
 sources are marked accordingly; model-written citations are not verified sources.
+
+The default Discuss & hand off mode discusses the project and updates the handoff
+document as needed, without editing code or running checks. Edit & save writes
+changes directly and automatically checks a saved-file copy. Failed checks feed
+diagnosis and repair within the same task; blockers are reported explicitly.
+When the runtime is busy, only static checks run, without stopping the existing
+performance. You can also start a manual check from the topbar's Checks menu.
 
 Stop while the assistant reads or prepares a reply to keep your input, produced
 text and sources. Correct an error and retry manually. Changing projects, returning
 to performance mode or changing model configuration cancels the request; late
-responses cannot enter a new context. Tool, document and context budgets fail
-explicitly without hidden paid retries.
+responses cannot enter a new context. Tool, document and context resource limits
+are reported explicitly when exceeded.
 
 Open a file for full editing and return to the discussion without losing input,
 replies or individual file drafts. Existing handoff documents remain available

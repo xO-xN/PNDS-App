@@ -407,6 +407,8 @@ v1.4.1：显式刷新（侧栏刷新按钮、「重新加载监视窗」⌘⇧R�
 - `_r` 是 App 内部信号，工程必须忽略未知查询参数（与 §11 对 `?theme=` / `?lang=` 的容忍要求一致）；普通导航（加载、地址变化）不携带该参数。
 - 需要精细控制缓存行为的工程应在 server 响应上发送显式 `Cache-Control`；`_r` 只保证显式刷新取回最新页面，不改变普通导航的缓存语义。
 
+创作参数预演：主窗口 monitor 地址可携带 `pndsHostOrigin=<origin>`，值为宿主当前的精确 origin，按导航快照，用于本地预演适配器的 postMessage 目标。它可能出现在演出与创作模式中，以避免切换模式导致页面重载；它不授予预演权限。App 仍验证同一工程的就绪运行身份、保存版本和实际加载字节摘要。未接线的工程忽略它，直接浏览器打开时容忍其缺席。适配器通过 `pnds.preview` 版本 1 通道协商，参数回调归工程所有。公共页面、脚本、样式应在请求时读取保存文件，并设置适当的 MIME 与缓存策略；仅改变页面 `_r` 无法刷新 server 启动时缓存的字节或仍被缓存的脚本资源。
+
 ## 11. 主题与语言推送（Theme / Locale Bridge）
 
 App 以同一机制向 monitor 页单向推送当前主题与语言，工程**可选**支持：不监听的工程行为完全不变。用法层面的零配置路径与进阶选项见模块手册的[主题跟随](../modules/theme-follow.md)与[语言跟随](../modules/locale-follow.md)——本节是协议规范出处。
@@ -628,3 +630,45 @@ color、option）、适用的工程硬限制 `limits`（min/max/step/options/max
 版本不符、超时、局部支持和恢复未确认均保持可见。预演不会保存、检查、刷新或重启，
 也不能回退时间及已发生效果。来源变化撤销旧授权，不用旧基准覆盖新状态。保存代码
 仍需手动刷新／重启才进入实际运行。
+
+## Optional connected performer roster
+
+创作模式可在既有 `GET /__pnds/health` 返回值中读取可选的 `performers` 字段，
+原有健康协议不变；没有此字段的工程仍可运行，App 显示“未提供连接状态”。
+
+```json
+{
+  "performers": {
+    "schemaVersion": 1,
+    "clients": [
+      {
+        "id": "ephemeral-connection-id",
+        "label": "Performer 3",
+        "testClient": null
+      },
+      {
+        "id": "test-connection-id",
+        "label": "Performer 1",
+        "testClient": "performer-00000000-0000-4000-8000-000000000001"
+      }
+    ]
+  }
+}
+```
+
+工程只列出已被自身加入策略接受、仍然在线的演奏端；monitor/observer 不计入。
+断开或释放后及时删除，重连以新连接替换旧连接；不要只在触摸活跃时才上报。
+`id` 为临时连接标识，不是 claim token；`label` 是供用户阅读的名称。禁止上报
+恢复凭据、认证 token、IP、触摸数据或任意工程状态。最多 128 项，id 最多 128
+UTF-8 字节，label 最多 160 字节，均非空、不含控制字符，id 不重复。
+
+App 虚拟 performer 的页面 URL 携带 `pndsTestClient=<窗口 UUID label>`。
+工程可在自己的加入 payload 中传递它，并将合法 marker 作为 `testClient` 原样
+返回；普通手机/浏览器为 null（也可省略）。marker 仅用于诊断列表去重，不是
+身份或授权，不影响乐谱协议。无法与当前窗口匹配的测试端不提供窗口操作。
+App 不推断硬件种类，也不通过页面加载或 HTTP 请求次数推断演奏者已加入。
+
+Host 每约 2 秒对当前 ready 工程的本地 performer 端口做只读健康请求，核对
+工程身份、音频模式和端口，并在异步返回后核对同一工程与运行代次。健康响应
+限制 64 KiB，连接名册非法时仅忽略该可选字段。请求失败清除过期名册，不冒充
+零连接。此观察不会新建演奏者、打开验证网页或启动第二套音频/工程进程。

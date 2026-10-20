@@ -127,10 +127,11 @@ remain conditional. Sidebar visibility never enters the monitor URL, iframe key
 or viewport derivation. Use deferred-command workflow and real portal tests.
 
 The creation titlebar is 32px high, following the Zed layout: native controls
-on the left, the existing project menu immediately beside them, and a dedicated saved-file `.pnds` packaging entry on the right. Read-only
+on the left, followed by the project-switch button and Git menu. Checks, preview
+visibility and saved-file `.pnds` entries stay on the right. Read-only
 projects and the empty workspace do not offer packaging. `CreationView` keeps the titlebar outside the
-hidden editing surface; `ReadingWorkspace` portals its existing menu into the
-stable titlebar slot, retaining menu actions, draft owners and dialogs. The menu
+hidden editing surface; `ReadingWorkspace` portals its project trigger into the
+stable titlebar slot, retaining draft owners and dialogs. The project trigger
 is disabled while the Monitor is expanded or a mode/session operation is
 pending. The native container padding is 18px in creation and 34px in performance; the
 backend retains padding and horizontal offset across resize/layout updates. Actual AppKit geometry showed
@@ -142,8 +143,54 @@ its own styles, with primary text, transparent rest, an 8% neutral hover tint
 and a 12% open/pressed tint. Retired sidebar-title hover/fade rules are removed.
 The packaging button opens the existing `CreationBundle` dialog, with draft/test
 warnings, native destination and overwrite confirmation unchanged. Packaging
-has moved out of the project dropdown; project-switch/new/Finder/rescan/handoff
-entries remain in that dropdown.
+has its own entry. The project trigger opens an anchored DropdownMenu with
+recent projects, Open folder and New project. Finder/rescan remain at the file-sidebar footer, and handoff actions
+remain in their dedicated workspace surface.
+
+Creation's compact pass keeps the 32px titlebar, 50px bottom bar and 226px file
+sidebar. Checks groups the static and runtime-check entries without changing
+their actions. Handoff opens from the pinned document in the file list. Titlebar actions
+no longer use a 240px clipping box. Pinned files are single-line rows; ordinary
+file names and header actions use 12px text, file paths/code use 13px, and editor
+status uses 11px. Empty file groups disappear while creation/addition actions stay
+at the file-list heading. The normal assistant surface has one conversation row
+and a compact composer; explicit errors and in-progress cancellation remain visible.
+While a reply is pending, its body owns one working icon across model and tool
+turns. The phase label is available to assistive technology; provisional text
+stays in the closed work log. Reduced motion stops icon rotation. The composer
+keeps its controls without a second progress indicator. Its context ring stays
+visible when usage or capacity is unknown; a dashed ring denotes that state.
+Configured maximum capacity can show reference occupancy in automatic context
+mode without creating an input admission limit.
+
+Secondary data uses native `details` / `summary` with `creation-details` styling:
+a quiet top separator, a keyboard-focusable summary and consistent open spacing.
+Keep the useful change, purpose, issue reason or parameter control outside it.
+Keep fields mounted so collapse preserves edits; native validation must reveal
+hidden invalid inputs before focusing them. A disclosure only changes visibility,
+never authorizes a save, check, version record or module installation. README
+uses hover/focus edit targets on its finished composition, with portaled field
+editors over the same source-span draft and the shared fixed 1200 × 800 canvas.
+
+The preview toggle collapses the grid without unmounting a running Monitor. Its
+invisible surface preserves the existing thumbnail width, is inert and excluded
+from accessibility, and cannot reclaim keyboard focus. Idle preview content uses
+`hidden`; the splitter stays mounted but hidden in either collapsed layout. A new
+workspace starts with the test preview open, including before its first run and
+after stopping. An explicit toggle stays local to that workspace across discussion,
+file and Git pages; opening another workspace restores the open default. The
+splitter owns the sole 1px pane divider inside its unchanged 8px
+drag/keyboard target; the preview host adds no second edge. Its logical inset
+also supports RTL, and expanded preview hides the divider with the splitter.
+UI tests cover DOM identity, focus and menu behavior, while physical
+layout at 1000x700, themes and native rendering require the user-run App.
+
+Windowed native buttons use the same content-owned AppKit overlay for every
+theme. Its autoresizing mask preserves the top margin and stretches the width,
+so AppKit live titlebar relayout cannot temporarily reposition the buttons.
+Resize reconciliation uses the actual superview height. Fullscreen retains
+system-owned controls; the standard native button actions and hidden state
+remain the existing window lifecycle's responsibility.
 
 The network trigger uses Globe. Its popover keeps LAN, OSC, Room and HTTPS
 feedback in `SettingsCard`, and reuses compact `NodeSection` identity inputs for
@@ -581,8 +628,12 @@ The first visible dialog frame must already have its intended layout. The
 module and shared-package browsers read their catalogs before opening and show
 loading on their triggers. They share the card/detail shell, fixed title and
 footer, scrolling body, and title/card/trigger focus restoration.
-The creation project picker reserves a bounded list area for loading, errors,
-empty results and project choices; only that area scrolls as content arrives.
+The project selector is an anchored, height-bounded DropdownMenu. Loading,
+errors and recent projects stay beneath its stable Open folder/New project
+entries. Actions that open a form or native picker run after menu dismissal;
+Escape restores trigger focus without changing the workspace. Dialog returns
+use named trigger markers (for example `data-creation-git`), never the first
+button with `aria-haspopup`, since both project and Git now have menus.
 Git inspection likewise keeps loading, errors and results in a reserved scrolling
 body inside one bounded fixed-height shell, including delayed diff previews.
 Settings and project introduction use fixed shells with scrolling content.
@@ -591,7 +642,7 @@ async read returns: changing the height moves its top edge abruptly.
 
 Check real browser frames with a delayed command response. jsdom does not
 measure layout. The October 2026 audit reproduced a 123px frame jump in the
-project picker and fixed it by keeping loading and results in the same region.
+former project-picker dialog; that surface is now an anchored menu.
 Handoff, new project, settings, port confirmation and initial bundle dialogs
 had no async jump in the same audit; normal entrance scaling stays centered.
 
@@ -718,6 +769,40 @@ normally delivers every missing frame and cannot reproduce issue #34.
   `pnds-focus-ring` class
 - Use viewport-based responsive design (this is a fixed-size desktop app)
 
+## README cover composition
+
+The audience-facing `ProjectCoverPage` implements the approved Brutalist HTML
+composition: four small two-line metadata blocks across the top, a PNDS池谱
+wordmark with palette swatches, left cover, right introduction and a single-line
+large title in the lower left. It shares the App background without a paper card,
+border or shadow. Foreground and atmospheric layers belong to one **1200 × 800**
+logical canvas. `cover-frame.ts` observes only its definite viewport, fits both
+axes with 24 screen-pixel gutters, and multiplies the uniform scale by projection
+zoom. It never reflows content at viewport breakpoints. 4:3 and ultrawide windows
+center the same artwork. Creation supplies the same viewport without a second
+aspect-ratio frame. Keyed projection zoom and ordinary document/name-card zoom
+retain their existing ownership and persistence.
+
+`composer`, `duration`, `performers` and `contact` feed the top row. Labels and
+empty-value dashes never become README values; the author's leading `@` is removed
+only for display. Missing metadata stays editable on old covers. All four fields
+use the existing source-span draft editor and explicit Save boundary. Missing
+lines are inserted before the first `##`; unknown fields, CRLF, later sections and
+existing URL metadata are preserved. No manifest or runtime contract is added.
+
+The palette's strongest chromatic hue produces the reference's fluorescent island
+and pastel companion. The two layers loop independently at 61/79 seconds with at
+most 10 logical pixels of displacement and 0.99–1.03 scaling; grain remains still.
+The canvas background follows the App; Stage reduces fog/grain strength. Reduced
+motion disables fog, title motion and automatic prose scrolling.
+
+`CoverMarkdown` retains GFM structure and inert link labels, strips standalone
+navigation paragraphs, embedded images and active HTML. The fence-aware first
+section parser owns the README/`---` boundary; ordinary documents retain their
+existing renderer. `attachCoverIntroFit` fits only the prose within the fixed band
+between 18px and 15px. Longer content retains native/slow automatic scrolling;
+editing pauses it. Window resizing cannot change the logical prose measure.
+
 ## Cover title fitting
 
 `ProjectCoverPage` attaches `attachCoverTitleFit(title)` from
@@ -733,7 +818,11 @@ style a fresh hidden clone before inserting it in the same cq context; derive
 em from its line height; converge only from probes; center by half the trailing
 spacing (reverse for RTL). Computed title font size and settled scroll overflow
 are diagnostics. Never replace these with live-title or Range geometry without
-real-machine evidence. Main-panel and projection cq frames stay distinct.
+real-machine evidence. All embeddings use the same fixed stage. The component passes -0.055em design
+tracking. Probe rectangles are normalized by the parent's actual transform scale
+before measuring logical em/width, so resizing and projection zoom do not change
+the fitted title. Negative tracking fits by a proportional font-size reduction;
+existing nonnegative tracking and optical-centering behavior remain supported.
 
 Motion allowed reveals synchronously unless fonts are loading (ready or 400ms
 cap). Reduced motion with ResizeObserver uses a 150ms mount hold and 90ms quiet
@@ -758,3 +847,58 @@ thresholds. The neutral background track remains continuous. The number is
 labelled as estimated and the popup gives textual Smart zone / growing /
 new-chat guidance, so color is not the only signal. Palette tests check all
 three surfaces and intermediate blends for readable percentage text.
+
+Creation assistant output uses a persistent live status with a small rotating
+icon and a softly pulsing phase label; after streamed text arrives it says
+Generating. The stop/pause action stays available. The model ID is shown beside
+the send/pause control with ellipsis and a full-value title. Reduced motion
+removes spin/pulse while retaining the text status.
+
+### Creation workspace navigation (2026-10-19)
+
+The reviewed prototype's fixed middle navigation and directory tree are implemented
+in `CreationView`, `CreationFileTree` and `CreationGitLocation`. Handoff/Edit is a
+visible radio segment in the composer, with arrow/Home/End keyboard selection; a
+running task keeps its send-time mode and disables switching. New labels use locale
+keys and new layout uses logical CSS properties. Real tree rows expose treeitem
+semantics, full paths and inline F2 rename; root declarations precede directories.
+Explicit `[hidden]` rules accompany flex rows/panels so browser layout cannot
+accidentally reveal a retained view.
+
+`CreationDebugPanel` stays mounted outside the runtime iframe. Its menu opens static
+or controlled-check views within the right pane; opening the menu runs no check.
+Visited reports retain state across middle-page navigation. Their original native
+runners and authorization stay unchanged. Covered runtime/idle content is inert,
+and closing a report returns focus to the debug menu. The underlying runtime iframe
+remains mounted; expanded preview retains its own restore-workspace control.
+The bottom transport starts with Run/Restart and has no refresh or separate stop
+button; saved-page refresh is in the native Window menu. Guarded version/project changes retain native shutdown.
+
+The Git titlebar control keeps branch and version on one line. Both labels can
+shrink with ellipsis, and the full position is available in its title and menu;
+SVG affordances stay fixed. Shell errors use the existing themed Sonner fade
+transitions, appear above the 50px transport, and never allocate a content row.
+Long feedback is bounded and scrollable. Reduced-motion handling remains Sonner's
+existing behavior. Root README language variants stay beside the default README
+at the top of the real file tree.
+
+2026-10-19 底栏细调：`.desktop-transport` 使用内容宽度，不再保留 190px 空槽；
+音量组取消两侧边线与内边距，让运行按钮、音量及音频设备按现有 gap 相邻。
+此调整不改变主音量的运行归属、静音/固定增益与重启保护。
+
+### Compact Git graph and pinned project documents (2026-10-19)
+
+The version surface uses a vertical branch log with fixed-height rows and a
+resizable graph/difference boundary. The single 1px separator sits inside an 8px
+row-resize target with a centered grip and keyboard focus. Pointer capture keeps
+resizing stable; cancel restores the starting ratio. Context-menu height actions
+provide a single-pointer alternative. The redundant current-version strip and
+filled-circle legend are removed; the graph retains current/selected markers.
+
+Discussion / Git versions are the only fixed reading controls. Handoff is an
+ordinary closable Markdown file view. The file list pins manifest, root README
+translations and the real handoff path once, with a medium-weight purpose, quiet
+separator and smaller monospace basename. This does not move files or relabel
+API paths. Names truncate on one line and expose full relative paths on hover.
+Ordinary tree and comparison rows share the same label component; comparison
+selection still does not open or edit a current file.

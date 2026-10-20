@@ -34,6 +34,8 @@
 
 监听地址变更由 `config.set` 保存配置并请求进程自重启。`run()` 必须先设置所有工作线程共用的 `stop`，再 join UDP/TCP 与租约巡检线程；只设置 `restart` 会让旧进程永远等在 join，launchd 无法拉起采用新地址的进程。`dnsd/tests/restart.rs` 在临时路径与高端口运行真实 daemon 子进程，覆盖正常监听和旧地址绑定失败后的配置重启。
 
+TCP 监听器保持非阻塞；接收连接后，每个查询线程显式把自己的 socket 改为阻塞模式，沿用 5 秒读写超时。不能依赖 accepted socket 的平台默认模式，否则客户端稍后发送查询时会先遇到 `WouldBlock` 并被提前断开。延迟发送查询的真实 socket 回归锁定这一边界；测试不访问系统 daemon 或端口 53。
+
 ## 发行与验证边界
 
 - `npm run dnsd:build`（当前架构）/ `dnsd:build:all`（双架构）产出 `src-tauri/binaries/pnds-dnsd-<triple>`；

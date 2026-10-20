@@ -1,10 +1,12 @@
 import { beforeEach, expect, it, vi } from 'vitest'
+import userEvent from '@testing-library/user-event'
 import { act, fireEvent, render, screen, waitFor } from '@/test/test-utils'
 import { commands } from '@/lib/tauri-bindings'
 import { useCreationStore } from '@/store/creation-store'
 import { useCreationFilesStore } from '@/store/creation-files-store'
 import { useAssistantOverviewStore } from '@/store/assistant-overview-store'
-import { AssistantProjectOverview } from './AssistantProjectOverview'
+import { AssistantHistoryControls } from './AssistantHistoryControls'
+import i18n from '@/i18n/config'
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -49,33 +51,31 @@ beforeEach(() => {
   })
 })
 
-it('expands on hover and keyboard focus, refreshes saved facts and never starts models or runtime (#169)', async () => {
-  render(<AssistantProjectOverview identity="overview" />)
+it('opens only through the conversation menu and refreshes saved facts without starting a model or runtime', async () => {
+  const user = userEvent.setup()
+  render(<AssistantHistoryControls identity="overview" />)
   await waitFor(() =>
-    expect(
-      screen.getByRole('button', { name: /Project overview/ })
-    ).toHaveTextContent('Up to date')
+    expect(useAssistantOverviewStore.getState().overview).not.toBeNull()
   )
-  const trigger = screen.getByRole('button', { name: /Project overview/ })
-  const container = trigger.parentElement
-  if (!container) throw new Error('Overview container is missing')
-  expect(trigger).toHaveAttribute('aria-expanded', 'false')
-  fireEvent.mouseEnter(container)
-  expect(
-    screen.getByRole('region', { name: 'Project overview' })
-  ).toHaveTextContent('No current evidence')
-  fireEvent.mouseLeave(container)
+  const trigger = screen.getByRole('button', {
+    name: i18n.t('assistant.chat.more'),
+  })
+  fireEvent.mouseEnter(trigger)
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   expect(trigger).toHaveAttribute('aria-expanded', 'false')
   act(() => trigger.focus())
-  expect(trigger).toHaveAttribute('aria-expanded', 'true')
-  expect(
-    screen.getByRole('region', { name: 'Project overview' })
-  ).toHaveTextContent('README.md')
-  act(() => trigger.blur())
   expect(trigger).toHaveAttribute('aria-expanded', 'false')
+  await user.keyboard('{Enter}')
+  await user.click(screen.getByRole('menuitem', { name: 'Project overview' }))
+  const overview = screen.getByRole('dialog', { name: 'Project overview' })
+  expect(overview).toHaveTextContent('No current evidence')
+  expect(overview).toHaveTextContent('README.md')
   act(() => useCreationFilesStore.getState().changed(['README.md']))
-  expect(trigger).toHaveTextContent('Out of date')
-  await waitFor(() => expect(trigger).toHaveTextContent('Up to date'))
+  expect(overview).toHaveTextContent('Out of date')
+  await waitFor(() => expect(overview).toHaveTextContent('Up to date'))
+  await user.keyboard('{Escape}')
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(trigger).toHaveFocus()
   expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
   expect(commands.preflightCreationProject).not.toHaveBeenCalled()
   expect(commands.startCreationProject).not.toHaveBeenCalled()

@@ -16,6 +16,14 @@ _Avoid_: PNDS Pool、Pool Score、PNDS Stage
 乐手打开并演出的操作单元：一个包含 manifest、谱面页面与音频配置的目录（或安装后的 .pnds 包）。中文 UI 用「工程」或「PNDS 池谱工程」。
 _Avoid_: 池谱（当作物体名）、score（指工程）、作品
 
+**工程版本 / Project version**:
+创作者主动保存的某个工程内容状态，是比较、切换及继续创作的起点。它与 App 自身的发布版本、聊天记录和交接基线分别独立。
+_Avoid_: 聊天快照、工程副本（指已保存的工程版本时）
+
+**当前工程版本 / Current project version**:
+当前工程内容所处的已保存版本，尚未记录的修改可以叠加其上。仅选中一个历史版本查看详情，不会改变当前工程版本。
+_Avoid_: 选中版本（指当前工程版本时）、运行中版本（运行状态未经核对时）
+
 **数字乐谱 / Digital Score**:
 网络原生的数字乐谱——工程所实现的艺术形式（领域标准用法：Craig Vear, _The Digital Score_；EU DigiScore 项目）。
 _Avoid_: electronic score、digital sheet、e-score

@@ -5,7 +5,6 @@ import {
   Globe,
   Settings,
   Projector,
-  RefreshCw,
   Volume2,
   VolumeX,
   Terminal,
@@ -24,7 +23,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
-import { refreshMonitorFromDisk } from '@/lib/creation-runtime-updates'
 import { projectionStartButton } from '@/lib/projection-state'
 import {
   openProjectionWindow,
@@ -152,20 +150,7 @@ export function DesktopBar({
         {creation ? (
           <CreationTestControls placement="bar" />
         ) : (
-          <>
-            <SessionActionButton onDialogOpenChange={setSessionDialogOpen} />
-            <button
-              type="button"
-              data-tauri-drag-region="false"
-              className="desktop-icon-button pnds-focus-ring active:opacity-70"
-              disabled={status !== 'ready'}
-              aria-label={t('sidebar.refresh')}
-              title={t('sidebar.refreshHint')}
-              onClick={() => void refreshMonitorFromDisk()}
-            >
-              <RefreshCw aria-hidden="true" />
-            </button>
-          </>
+          <SessionActionButton onDialogOpenChange={setSessionDialogOpen} />
         )}
       </div>
       <MasterGain />

@@ -1,3 +1,4 @@
+import { CreationDebugPanel } from '@/components/creation/CreationDebugPanel'
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { onWindowState } from '@/lib/events'
 import { Toaster } from 'sonner'
@@ -55,8 +56,14 @@ export function AppShell() {
   // §7.4: fullscreen has no rounded corners — the window fills the screen.
   const fullscreen = useWindowStore(state => state.fullscreen)
   const creationActive = useCreationStore(state => state.active)
-  const creationWorkspace = useCreationStore(state => state.workspace !== null)
+  const creationIdentity = useCreationStore(
+    state => state.workspace?.project.identity
+  )
+  const creationWorkspace = !!creationIdentity
   const monitorExpanded = useCreationTestStore(state => state.expanded)
+  const previewVisibility = useCreationTestStore(
+    state => state.previewVisibility
+  )
   // loadingDone gates the dissolve; if the page renders with a ready session
   // already in store (test escape hatch — real app never does this), skip it.
   const [loadingDone, setLoadingDone] = useState(sessionStatus === 'ready')
@@ -189,6 +196,10 @@ export function AppShell() {
     sessionStatus === 'ready' ||
     (sessionStatus === 'stopping' && health !== null)
   const preparing = sessionStatus === 'starting' || sessionStatus === 'stopping'
+  const creationPreviewVisible =
+    monitorExpanded ||
+    previewVisibility === 'visible' ||
+    (previewVisibility === 'auto' && (monitorVisible || preparing))
   return (
     <>
       <div
@@ -198,18 +209,46 @@ export function AppShell() {
           'desktop-frame relative h-screen w-screen overflow-hidden bg-(--pnds-bg)',
           creationActive && 'creation-shell-frame',
           creationActive && creationWorkspace && 'creation-runtime-frame',
+          creationActive &&
+            creationWorkspace &&
+            !creationPreviewVisible &&
+            'creation-preview-collapsed',
           creationActive && monitorExpanded && 'creation-monitor-expanded',
           !fullscreen && 'rounded-[var(--app-corner-radius)]'
         )}
       >
         {/* Fixed sibling and key: chrome, layout and fullscreen never remount the runtime page. */}
-        {monitorVisible && <MonitorView />}
-        {creationActive && creationWorkspace && !monitorVisible && (
-          <CreationTestIdle />
+        {monitorVisible && (
+          <MonitorView
+            previewHidden={creationActive && !creationPreviewVisible}
+          />
         )}
-        {creationActive && <CreationView />}
+        {creationActive && creationWorkspace && !monitorVisible && (
+          <CreationTestIdle hidden={!creationPreviewVisible} />
+        )}
+        {creationActive && (
+          <CreationView
+            previewVisible={creationPreviewVisible}
+            onPreviewToggle={() =>
+              useCreationTestStore
+                .getState()
+                .setPreviewVisibility(
+                  creationPreviewVisible ? 'hidden' : 'visible'
+                )
+            }
+          />
+        )}
         {creationActive && creationWorkspace && (
-          <CreationSplitter frame={frameRef} hidden={monitorExpanded} />
+          <CreationDebugPanel
+            key={creationIdentity}
+            hidden={!creationPreviewVisible}
+          />
+        )}
+        {creationActive && creationWorkspace && (
+          <CreationSplitter
+            frame={frameRef}
+            hidden={monitorExpanded || !creationPreviewVisible}
+          />
         )}
         {!creationActive && !monitorVisible && !preparing && (
           <main className="desktop-performance-main">
@@ -254,6 +293,7 @@ export function AppShell() {
         </DialogContent>
       </Dialog>
       <Toaster
+        offset={64}
         position="bottom-right"
         style={
           {

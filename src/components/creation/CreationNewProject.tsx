@@ -16,6 +16,8 @@ import {
   useCreationStore,
 } from '@/store/creation-store'
 import type { CreationError } from '@/lib/tauri-bindings'
+import { loadPreferences } from '@/lib/preferences'
+import { creationProjectFolderName } from '@/lib/creation-project-name'
 import { cn } from '@/lib/utils'
 import { CreationErrorNotice } from './CreationErrorNotice'
 
@@ -28,10 +30,14 @@ export function CreationNewProject({
 }) {
   const { t, i18n } = useTranslation()
   const [name, setName] = useState(t('creation.newProject.defaultName'))
-  const [folderName, setFolderName] = useState('untitled-score')
+  const [folderName, setFolderName] = useState(() =>
+    creationProjectFolderName(t('creation.newProject.defaultName'))
+  )
+  const [folderEdited, setFolderEdited] = useState(false)
   const [author, setAuthor] = useState('')
   const [gitName, setGitName] = useState<string | null>(null)
-  const [gitEmail, setGitEmail] = useState('')
+  const [gitEmail, setGitEmail] = useState<string | null>(null)
+  const [gitDefaults, setGitDefaults] = useState({ name: '', email: '' })
   const [description, setDescription] = useState('')
   const lastParent = useCreationStore(state => state.lastCreationParent)
   const [selectedParent, setSelectedParent] = useState<string | null>(null)
@@ -46,6 +52,19 @@ export function CreationNewProject({
     live.current = true
     return () => {
       live.current = false
+    }
+  }, [])
+  useEffect(() => {
+    let live = true
+    void loadPreferences().then(prefs => {
+      if (live && prefs)
+        setGitDefaults({
+          name: prefs.gitName ?? '',
+          email: prefs.gitEmail ?? '',
+        })
+    })
+    return () => {
+      live = false
     }
   }, [])
   const chooseParent = async () => {
@@ -76,9 +95,9 @@ export function CreationNewProject({
   }
   const folderError = !folderName
     ? 'creation.newProject.folderError.required'
-    : folderName.length > 64
+    : [...folderName].length > 64
       ? 'creation.newProject.folderError.length'
-      : !/^[a-z0-9-]+$/.test(folderName)
+      : !/^[\p{L}\p{N}-]+$/u.test(folderName)
         ? 'creation.newProject.folderError.characters'
         : folderName.startsWith('-') || folderName.endsWith('-')
           ? 'creation.newProject.folderError.boundary'
@@ -94,8 +113,8 @@ export function CreationNewProject({
       folderName,
       name,
       author,
-      ...(gitName !== null ? { gitName } : {}),
-      ...(gitEmail ? { gitEmail } : {}),
+      gitName: gitName ?? (gitDefaults.name || author.trim() || 'PNDS Creator'),
+      gitEmail: gitEmail ?? gitDefaults.email,
       description,
       locale: i18n.resolvedLanguage ?? 'en',
     })
@@ -159,7 +178,11 @@ export function CreationNewProject({
                 spellCheck={false}
                 maxLength={128}
                 value={name}
-                onChange={event => setName(event.target.value)}
+                onChange={event => {
+                  setName(event.target.value)
+                  if (!folderEdited)
+                    setFolderName(creationProjectFolderName(event.target.value))
+                }}
               />
             </label>
             <label className="grid gap-1 text-sm">
@@ -179,13 +202,10 @@ export function CreationNewProject({
                     ? 'creation-folder-name-hint creation-folder-name-error'
                     : 'creation-folder-name-hint'
                 }
-                onChange={event =>
-                  setFolderName(
-                    event.target.value.replace(/[A-Z]/g, letter =>
-                      letter.toLowerCase()
-                    )
-                  )
-                }
+                onChange={event => {
+                  setFolderEdited(true)
+                  setFolderName(event.target.value.toLowerCase())
+                }}
               />
               <small id="creation-folder-name-hint">
                 {t('creation.newProject.folderHint')}
@@ -200,48 +220,6 @@ export function CreationNewProject({
                 </small>
               )}
             </label>
-            <label className="grid gap-1 text-sm">
-              <span>{t('creation.newProject.author')}</span>
-              <Input
-                maxLength={128}
-                value={author}
-                onChange={event => setAuthor(event.target.value)}
-              />
-            </label>
-            <label className="grid gap-1 text-sm">
-              <span>{t('creation.newProject.description')}</span>
-              <textarea
-                className="creation-editor-textarea pnds-focus-ring min-h-20"
-                maxLength={4096}
-                value={description}
-                onChange={event => setDescription(event.target.value)}
-              />
-            </label>
-            <fieldset className="grid gap-2 rounded border border-border p-3">
-              <legend className="text-sm">
-                {t('creation.version.initial')}
-              </legend>
-              <p className="text-xs">{t('creation.version.newScope')}</p>
-              <label className="grid gap-1 text-sm">
-                <span>{t('creation.version.name')}</span>
-                <Input
-                  required
-                  maxLength={128}
-                  value={gitName ?? (author.trim() || 'PNDS Creator')}
-                  onChange={event => setGitName(event.target.value)}
-                />
-              </label>
-              <label className="grid gap-1 text-sm">
-                <span>{t('creation.version.email')}</span>
-                <Input
-                  type="email"
-                  maxLength={254}
-                  value={gitEmail}
-                  onChange={event => setGitEmail(event.target.value)}
-                />
-              </label>
-              <p className="text-xs">{t('creation.version.placeholder')}</p>
-            </fieldset>
             <label className="grid gap-1 text-sm">
               <span>{t('creation.newProject.parent')}</span>
               <Input readOnly value={parent} />
@@ -260,6 +238,63 @@ export function CreationNewProject({
                 })}
               </p>
             )}
+            <details
+              className="creation-details"
+              onInvalidCapture={event => {
+                event.currentTarget.open = true
+              }}
+            >
+              <summary className="pnds-focus-ring">
+                {t('creation.newProject.moreOptions')}
+              </summary>
+              <div className="grid gap-4">
+                <label className="grid gap-1 text-sm">
+                  <span>{t('creation.newProject.author')}</span>
+                  <Input
+                    maxLength={128}
+                    value={author}
+                    onChange={event => setAuthor(event.target.value)}
+                  />
+                </label>
+                <label className="grid gap-1 text-sm">
+                  <span>{t('creation.newProject.description')}</span>
+                  <textarea
+                    className="creation-editor-textarea pnds-focus-ring min-h-20"
+                    maxLength={4096}
+                    value={description}
+                    onChange={event => setDescription(event.target.value)}
+                  />
+                </label>
+                <fieldset className="grid gap-2 rounded border border-border p-3">
+                  <legend className="text-sm">
+                    {t('creation.version.initial')}
+                  </legend>
+                  <p className="text-xs">{t('creation.version.newScope')}</p>
+                  <label className="grid gap-1 text-sm">
+                    <span>{t('creation.version.name')}</span>
+                    <Input
+                      required
+                      maxLength={128}
+                      value={
+                        gitName ??
+                        (gitDefaults.name || author.trim() || 'PNDS Creator')
+                      }
+                      onChange={event => setGitName(event.target.value)}
+                    />
+                  </label>
+                  <label className="grid gap-1 text-sm">
+                    <span>{t('creation.version.email')}</span>
+                    <Input
+                      type="email"
+                      maxLength={254}
+                      value={gitEmail ?? gitDefaults.email}
+                      onChange={event => setGitEmail(event.target.value)}
+                    />
+                  </label>
+                  <p className="text-xs">{t('creation.version.placeholder')}</p>
+                </fieldset>
+              </div>
+            </details>
           </fieldset>
           <p className="text-xs">
             {t(

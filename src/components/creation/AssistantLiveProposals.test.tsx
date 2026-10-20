@@ -7,6 +7,7 @@ import { useCreationFilesStore } from '@/store/creation-files-store'
 import { useAssistantProposalStore } from '@/store/assistant-proposal-store'
 import { useSessionStore } from '@/store/session-store'
 import { useParameterPreviewStore } from '@/store/parameter-preview-store'
+import { useAssistantStore } from '@/store/assistant-store'
 import { seedCreationDraft } from '@/test/creation-files'
 import { AssistantLiveProposals } from './AssistantLiveProposals'
 
@@ -49,6 +50,7 @@ beforeEach(() => {
   useCreationFilesStore.getState().clear()
   useAssistantProposalStore.getState().clear()
   useSessionStore.setState({ sessionStatus: 'idle' })
+  useAssistantStore.setState({ phase: 'idle' })
   seedCreationDraft('score.js', source, 'v1')
 })
 function installProposal(candidate: string, control = request) {
@@ -74,6 +76,120 @@ function installProposal(candidate: string, control = request) {
     vi.fn()
   )
 }
+it('shows a fader for an already saved edit parameter and previews dragging without another model request', async () => {
+  const control = {
+    ...request,
+    spec: { ...request.spec, preview: 'live' as const },
+  }
+  useAssistantProposalStore.getState().install(
+    'p',
+    'reply',
+    'key',
+    [
+      {
+        id: 'offer',
+        taskId: 'native-task',
+        path: 'score.js',
+        version: 'v1',
+        sourceText: source,
+        text: source,
+        parameters: [control],
+        binding: {
+          parameters: [{ request: control, value: 2 }],
+          contractVersion: null,
+          partial: false,
+        },
+      },
+    ],
+    vi.fn()
+  )
+  vi.mocked(commands.bindCreationParameters).mockResolvedValue({
+    status: 'ok',
+    data: {
+      parameters: [{ request: control, value: 6 }],
+      contractVersion: null,
+      partial: false,
+    },
+  })
+  const preview = vi
+    .spyOn(useParameterPreviewStore.getState(), 'preview')
+    .mockResolvedValue(undefined)
+  render(<AssistantLiveProposals messageId="reply" />)
+  const slider = screen.getByRole('slider', { name: 'Adjust speed' })
+  expect(slider).toHaveValue('2')
+  const limits = screen.getByText(/Project hard limits:/)
+  expect(limits).not.toBeVisible()
+  expect(screen.getByRole('spinbutton', { name: 'speed' })).toBeVisible()
+  fireEvent.click(screen.getByText('Range and limits'))
+  expect(limits).toBeVisible()
+
+  fireEvent.change(slider, { target: { value: '6' } })
+  await waitFor(() => expect(preview).toHaveBeenCalledOnce())
+  expect(
+    useAssistantProposalStore.getState().items.offer?.candidate.text
+  ).toContain('const speed = 6;')
+  expect(screen.getByRole('button', { name: 'Save parameters' })).toBeEnabled()
+  expect(commands.writeCreationAssistantFile).not.toHaveBeenCalled()
+  expect(commands.assistantModelTurn).not.toHaveBeenCalled()
+  act(() => useAssistantStore.setState({ phase: 'reading' }))
+  expect(slider).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Save parameters' })).toBeDisabled()
+  preview.mockRestore()
+})
+it('keeps a mouse-dragged fader enabled while live-preview validation is pending', async () => {
+  const control = {
+    ...request,
+    spec: { ...request.spec, preview: 'live' as const },
+  }
+  installProposal(source.replace('speed = 2', 'speed = 3'), control)
+  let resolveValidation!: () => void
+  let calls = 0
+  vi.mocked(commands.bindCreationParameters).mockImplementation(
+    async (_identity, _path, _version, text, requests) => {
+      calls++
+      if (calls === 2)
+        await new Promise<void>(resolve => {
+          resolveValidation = resolve
+        })
+      const value = Number(text.match(/speed = (\d+)/)?.[1])
+      return {
+        status: 'ok',
+        data: {
+          parameters: requests.map(request => ({ request, value })),
+          contractVersion: null,
+          partial: false,
+        },
+      }
+    }
+  )
+  const preview = vi
+    .spyOn(useParameterPreviewStore.getState(), 'preview')
+    .mockResolvedValue(undefined)
+  render(<AssistantLiveProposals messageId="reply" />)
+  const slider = screen.getByRole('slider', { name: 'Adjust speed' })
+  fireEvent.pointerDown(slider, { pointerId: 1, buttons: 1 })
+  fireEvent.change(slider, { target: { value: '6' } })
+  await waitFor(() => expect(calls).toBe(1))
+  expect(slider).toBeEnabled()
+  fireEvent.change(slider, { target: { value: '8' } })
+  fireEvent.pointerUp(slider, { pointerId: 1 })
+  await waitFor(() =>
+    expect(
+      useAssistantProposalStore.getState().items.offer?.candidate.text
+    ).toContain('speed = 8;')
+  )
+  resolveValidation()
+  await waitFor(() =>
+    expect(
+      useAssistantProposalStore.getState().items.offer?.binding?.parameters[0]
+        ?.value
+    ).toBe(8)
+  )
+  expect(commands.writeCreationAssistantFile).not.toHaveBeenCalled()
+  expect(commands.bindCreationParameters).toHaveBeenCalledTimes(2)
+  preview.mockRestore()
+})
+
 it('shares the editor candidate with controls, disables an expression and still applies valid code without a runtime', async () => {
   const candidate = 'const speed = 3;\nconst title = "Blue";\n'
   installProposal(candidate)
@@ -157,7 +273,7 @@ it('keeps a control edit bound when the mounted editor publishes the synchronize
     revision: 2,
     text: 'const speed = 7;\nconst title = "Blue";\n',
   })
-  expect(commands.bindCreationParameters).toHaveBeenCalledTimes(2)
+  expect(commands.bindCreationParameters).toHaveBeenCalledTimes(1)
   expect(preview).toHaveBeenCalledTimes(1)
   expect(commands.startProject).not.toHaveBeenCalled()
   end.mockRestore()

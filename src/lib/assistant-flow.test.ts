@@ -6,10 +6,10 @@ import {
   AssistantFlowError,
   runAssistantRequest,
   type AssistantDependencies,
+  type AssistantContinuation,
 } from './assistant-flow'
 import type { AssistantTurn, AssistantWireMessage } from './assistant-types'
 import type { RawHelpDocument } from './help-corpus'
-import { logger } from './logger'
 import { parseAssistantSummary } from './assistant-context'
 import { modelProfileKey } from './model-context-settings'
 import {
@@ -219,6 +219,146 @@ describe('highest platform assistant request (#166)', () => {
       text: 'const speed = 3;\n',
     })
   })
+  it('reads a large sketch in one page and prepares coordinated small patches without rewriting its contents', async () => {
+    const sketch = `// ${'drawing '.repeat(3000)}\nconst tempo = 80;\n`
+    const server = "const page = 'monitor.html';\n"
+    const texts: Record<string, string> = {
+      'public/monitor.js': sketch,
+      'server.js': server,
+    }
+    const paths = Object.keys(texts)
+    const turn = vi
+      .fn<AssistantDependencies['turn']>()
+      .mockResolvedValueOnce({
+        text: null,
+        toolCalls: paths.map((path, i) => ({
+          id: `read-${i}`,
+          name: 'read_project_text',
+          arguments: JSON.stringify({ path }),
+        })),
+      })
+      .mockRejectedValueOnce(new AssistantFlowError('outputTruncated'))
+      .mockResolvedValueOnce({
+        text: null,
+        toolCalls: [
+          {
+            id: 'sketch-patch',
+            name: 'propose_text_change',
+            arguments: JSON.stringify({
+              path: paths[0],
+              version: 'v1',
+              edits: [
+                { oldText: 'const tempo = 80;', newText: 'const tempo = 96;' },
+              ],
+              parameters: [],
+            }),
+          },
+          {
+            id: 'server-patch',
+            name: 'propose_text_change',
+            arguments: JSON.stringify({
+              path: paths[1],
+              version: 'v1',
+              edits: [
+                { oldText: 'monitor.html', newText: 'monitor-shell.html' },
+              ],
+              parameters: [],
+            }),
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        text: 'Review each file, then run the project check.',
+        toolCalls: [],
+      })
+    const deps = fixture(turn)
+    deps.readProject = vi.fn(async (_owner, read) => {
+      const text = texts[read.path] ?? ''
+      expect(read.pageLength).toBeGreaterThanOrEqual(text.length)
+      return {
+        path: read.path,
+        version: 'v1',
+        text,
+        offset: 0,
+        endOffset: text.length,
+        totalCharacters: text.length,
+        nextOffset: null,
+        startLine: 1,
+        endLine: 3,
+      }
+    })
+    let continuation: AssistantContinuation | null = null
+    const request = {
+      ...input(),
+      projectReading: true,
+      project: {
+        fingerprint: 'scope',
+        files: paths.map(path => ({
+          path,
+          version: 'v1',
+          bytes: texts[path]?.length ?? 0,
+          reason: null,
+        })),
+      },
+      onContinuation: (value: AssistantContinuation | null) => {
+        continuation = value
+      },
+    }
+    await expect(runAssistantRequest(request, deps)).rejects.toMatchObject({
+      code: 'outputTruncated',
+    })
+    const result = await runAssistantRequest(
+      { ...request, continuation: continuation ?? undefined },
+      deps
+    )
+    expect(deps.readProject).toHaveBeenCalledTimes(2)
+    expect(result.proposals).toHaveLength(2)
+    expect(result.proposals?.[0]?.text).toBe(sketch.replace('80;', '96;'))
+    expect(result.proposals?.[1]?.text).toBe(
+      server.replace('monitor.html', 'monitor-shell.html')
+    )
+  })
+  it('sends unknown excluded sizes as unknown evidence, separately from empty saved text', async () => {
+    const { deps, payloads } = await service([
+      {
+        text: null,
+        toolCalls: [
+          { id: 'inventory', name: 'list_project_files', arguments: '{}' },
+        ],
+      },
+      {
+        text: 'The binary size is unknown; the script is empty.',
+        toolCalls: [],
+      },
+    ])
+    await runAssistantRequest(
+      {
+        ...input(),
+        projectReading: true,
+        project: {
+          fingerprint: 'saved',
+          files: [
+            {
+              path: 'voice.scsyndef',
+              bytes: null,
+              version: null,
+              reason: 'binary',
+            },
+            { path: 'empty.js', bytes: 0, version: 'empty', reason: null },
+          ],
+        },
+      },
+      deps
+    )
+    const evidence = JSON.parse(
+      payloads[1]?.messages.find(message => message.toolCallId === 'inventory')
+        ?.content ?? '{}'
+    )
+    expect(evidence.data.files[0].bytes).toBeNull()
+    expect(evidence.data.files[1].bytes).toBe(0)
+    expect(evidence.data.note).toContain('unknown, not an empty file')
+  })
+
   it('reports a changed saved source as typed tool evidence without inventing its content (#168)', async () => {
     const { deps, payloads } = await service([
       {
@@ -444,38 +584,53 @@ describe('highest platform assistant request (#166)', () => {
     expect(payloads).toHaveLength(1)
   })
 
-  it('keeps the independent result-size limit even when pages fit the token and call budgets', async () => {
+  it('organizes large escaped project pages instead of stopping at the old cumulative result budget', async () => {
     let ordinal = 0
-    const onSources = vi.fn()
-    const deps = fixture(async () => ({
-      text: null,
-      toolCalls: [
-        {
-          id: `escaped-${ordinal}`,
-          name: 'read_help_section',
-          arguments: JSON.stringify({
-            docId: 'reference-manifest',
-            sectionId: 'json',
-            offset: ordinal++ * 2000,
-            pageLength: 2000,
-          }),
-        },
-      ],
-    }))
-    deps.corpus = async () =>
-      corpus.map(doc =>
-        doc.id === 'reference-manifest'
-          ? {
-              ...doc,
-              markdown: `# Manifest\n\n## JSON\n${'\\"'.repeat(20000)}`,
-            }
-          : doc
-      )
+    const deps = fixture(async () =>
+      ordinal >= 4
+        ? { text: 'Read all four saved pages.', toolCalls: [] }
+        : {
+            text: null,
+            toolCalls: [
+              {
+                id: `page-${ordinal}`,
+                name: 'read_project_text',
+                arguments: JSON.stringify({
+                  path: 'score.js',
+                  offset: ordinal++ * 65536,
+                  pageLength: 65536,
+                }),
+              },
+            ],
+          }
+    )
+    deps.readProject = async (_owner, read) => ({
+      path: 'score.js',
+      version: 'v1',
+      text: '"'.repeat(65536),
+      offset: read.offset,
+      endOffset: read.offset + 65536,
+      totalCharacters: 262144,
+      nextOffset: read.offset + 65536,
+      startLine: 1,
+      endLine: 1,
+    })
     await expect(
-      runAssistantRequest({ ...input(), onSources }, deps)
-    ).rejects.toMatchObject({ code: 'toolCharactersExceeded' })
-    expect(ordinal).toBeLessThanOrEqual(8)
-    expect(onSources.mock.calls.at(-1)?.[0].length).toBeGreaterThan(0)
+      runAssistantRequest(
+        {
+          ...input(),
+          projectReading: true,
+          project: {
+            fingerprint: 'scope',
+            files: [
+              { path: 'score.js', version: 'v1', bytes: 262144, reason: null },
+            ],
+          },
+        },
+        deps
+      )
+    ).resolves.toMatchObject({ text: 'Read all four saved pages.' })
+    expect(ordinal).toBe(4)
   })
   it('returns short bounded document pages and references overlapping text without resending it', async () => {
     const sent: AssistantWireMessage[][] = []
@@ -759,17 +914,27 @@ describe('highest platform assistant request (#166)', () => {
       '{"docId":"reference-manifest","sectionId":"unknown","offset":-1}',
     ],
   ])(
-    'rejects untrusted %s arguments without a follow-up request',
+    'returns a corrective refusal for untrusted %s arguments without executing them',
     async (name, args) => {
-      const turn = vi.fn().mockResolvedValue({
-        text: null,
-        toolCalls: [{ id: 'one', name, arguments: args }],
-      })
+      const turn = vi
+        .fn()
+        .mockResolvedValueOnce({
+          text: null,
+          toolCalls: [{ id: 'one', name, arguments: args }],
+        })
+        .mockImplementationOnce(async (_id, messages) => {
+          const refusal = JSON.parse(messages.at(-1)?.content ?? '{}')
+          expect(refusal.status).toBe('refused')
+          expect(refusal.reason).toMatch(
+            /unknownTool|invalidToolArguments|invalidDocumentReference/
+          )
+          return { text: 'The invalid operation did not run.', toolCalls: [] }
+        })
       const deps = fixture(turn)
-      await expect(runAssistantRequest(input(), deps)).rejects.toMatchObject({
-        code: 'invalidTool',
-      })
-      expect(turn).toHaveBeenCalledTimes(1)
+      const result = await runAssistantRequest(input(), deps)
+      expect(result.text).toBe('The invalid operation did not run.')
+      expect(result.sources).toEqual([])
+      expect(turn).toHaveBeenCalledTimes(2)
       expect(deps.cancel).toHaveBeenCalled()
     }
   )
@@ -804,7 +969,7 @@ describe('highest platform assistant request (#166)', () => {
     const begin = vi.fn(deps.begin)
     deps.begin = begin
     await expect(
-      runAssistantRequest({ ...input(), input: '大'.repeat(50000) }, deps)
+      runAssistantRequest({ ...input(), input: '大'.repeat(200000) }, deps)
     ).rejects.toMatchObject({ code: 'contextBytesExceeded' })
     expect(begin).not.toHaveBeenCalled()
     const hidden = 'historical-private-file-snapshot'
@@ -871,8 +1036,7 @@ describe('highest platform assistant request (#166)', () => {
     )
   })
 
-  it('stops at the tool-call budget without an automatic retry', async () => {
-    const warn = vi.spyOn(logger, 'warn')
+  it('keeps a finite loop backstop when a model makes only unrelated searches', async () => {
     let call = 0
     const turn = vi.fn(async () => ({
       text: null,
@@ -880,114 +1044,14 @@ describe('highest platform assistant request (#166)', () => {
         {
           id: String(++call),
           name: 'search_help',
-          arguments: JSON.stringify({ query: `absent-query-${call}` }),
+          arguments: JSON.stringify({ query: `absent-${call}` }),
         },
       ],
     }))
     await expect(
       runAssistantRequest(input(), fixture(turn))
-    ).rejects.toMatchObject({ code: 'toolCallsExceeded' })
-    expect(turn).toHaveBeenCalledTimes(9)
-    expect(warn).toHaveBeenCalledWith('[assistant-budget] limit reached', {
-      kind: 'toolCalls',
-      used: 9,
-      limit: 8,
-    })
-    warn.mockRestore()
-  })
-
-  it('allows a budget-aware model to finish at the tool limit and resets the budget for an explicit new request', async () => {
-    let calls = 0
-    const remaining: number[] = []
-    const characters: number[] = []
-    const turn = vi.fn<AssistantDependencies['turn']>(async (_id, messages) => {
-      const policy = messages[0]?.content ?? ''
-      const raw = policy.split('\nDocument tool budget: ')[1]
-      const budget = raw ? JSON.parse(raw) : null
-      remaining.push(budget?.remainingCalls ?? -1)
-      characters.push(budget?.remainingResultCharacters ?? -1)
-      if (budget?.remainingCalls === 0)
-        return {
-          text: 'No matching section was found; please narrow the question.',
-          toolCalls: [],
-        }
-      return {
-        text: null,
-        toolCalls: [
-          {
-            id: `call-${++calls}`,
-            name: 'search_help',
-            arguments: JSON.stringify({ query: `absent-query-${calls}` }),
-          },
-        ],
-      }
-    })
-    const deps = fixture(turn)
-    await expect(runAssistantRequest(input(), deps)).resolves.toMatchObject({
-      text: 'No matching section was found; please narrow the question.',
-    })
-    expect(remaining).toEqual([8, 7, 6, 5, 4, 3, 2, 1, 0])
-    expect(characters).toEqual(
-      remaining.map(
-        (_, index) =>
-          24000 -
-          index *
-            '{"locale":"en","offsetUnit":"utf16CodeUnits","hits":[]}'.length
-      )
-    )
-    remaining.length = 0
-    characters.length = 0
-    await runAssistantRequest(input(), deps)
-    expect(remaining).toEqual([8, 7, 6, 5, 4, 3, 2, 1, 0])
-    expect(characters[0]).toBe(24000)
-  })
-
-  it('returns explicit short section offsets and stops at the independent tool-call budget', async () => {
-    let offset = 0
-    const supplied: AssistantWireMessage[][] = []
-    const deps = fixture(async (_id, messages) => {
-      supplied.push(structuredClone(messages))
-      const current = offset
-      offset += 1200
-      return {
-        text: null,
-        toolCalls: [
-          {
-            id: `read-${current}`,
-            name: 'read_help_section',
-            arguments: JSON.stringify({
-              docId: 'reference-manifest',
-              sectionId: 'long-section',
-              offset: current,
-            }),
-          },
-        ],
-      }
-    })
-    deps.corpus = async () =>
-      corpus.map(doc =>
-        doc.id === 'reference-manifest'
-          ? {
-              ...doc,
-              markdown: `# Manifest\n\n## Long section\n${'x'.repeat(30000)}`,
-            }
-          : doc
-      )
-    await expect(runAssistantRequest(input(), deps)).rejects.toMatchObject({
-      code: 'toolCallsExceeded',
-    })
-    expect(supplied).toHaveLength(9)
-    const firstResult = supplied[1]?.find(
-      message => message.role === 'tool'
-    )?.content
-    const section = JSON.parse(firstResult ?? '{}')
-    expect(section.segments[0].markdown).toHaveLength(1200)
-    expect(section.nextOffset).toBe(1200)
-    expect(section.totalCharacters).toBeGreaterThan(1200)
-    // The ninth call is rejected locally; all earlier pages stay complete.
-    expect(
-      supplied.at(-1)?.filter(message => message.role === 'tool')
-    ).toHaveLength(8)
+    ).rejects.toMatchObject({ code: 'budgetExceeded' })
+    expect(turn).toHaveBeenCalledTimes(128)
   })
 
   it('keeps produced text when stopped and ignores a released response from the old owner', async () => {
@@ -1017,8 +1081,14 @@ describe('highest platform assistant request (#166)', () => {
     const controller = new AbortController()
     let current = true
     const onText = vi.fn()
+    const onActivity = vi.fn()
     const result = runAssistantRequest(
-      { ...input(controller.signal), isCurrent: () => current, onText },
+      {
+        ...input(controller.signal),
+        isCurrent: () => current,
+        onText,
+        onActivity,
+      },
       fixture(turn)
     )
     await secondTurn
@@ -1030,28 +1100,220 @@ describe('highest platform assistant request (#166)', () => {
       toolCalls: [],
     })
     await Promise.resolve()
-    expect(onText).toHaveBeenCalledExactlyOnceWith(
-      'I am checking the audio declaration.'
-    )
+    expect(onText).toHaveBeenCalledExactlyOnceWith('')
+    expect(onActivity).toHaveBeenLastCalledWith([
+      'I am checking the audio declaration.',
+    ])
   })
 
-  it('bounds the entire request and cancels the native session on timeout', async () => {
+  it('keeps a long request active beyond two minutes until explicitly stopped', async () => {
     vi.useFakeTimers()
     try {
       const deps = fixture(() => new Promise(() => undefined))
-      const result = runAssistantRequest(input(), deps)
-      const assertion = expect(result).rejects.toMatchObject({
-        code: 'timeout',
-      })
-      await vi.advanceTimersByTimeAsync(120000)
-      await assertion
+      const controller = new AbortController()
+      const result = runAssistantRequest(input(controller.signal), deps).then(
+        () => 'completed',
+        (error: AssistantFlowError) => error.code
+      )
+      await vi.advanceTimersByTimeAsync(300000)
+      expect(deps.cancel).not.toHaveBeenCalled()
+      controller.abort()
+      expect(await result).toBe('cancelled')
       expect(deps.cancel).toHaveBeenCalled()
     } finally {
       vi.useRealTimers()
     }
   })
 
-  it('shows streamed text before completion and joins tool turns once', async () => {
+  it('continues after a transport timeout with completed tools, original budgets and no incomplete streamed turn', async () => {
+    vi.useFakeTimers()
+    try {
+      let continuation: AssistantContinuation | null = null
+      const turn = vi
+        .fn<AssistantDependencies['turn']>()
+        .mockResolvedValueOnce({
+          text: 'Checking routing.',
+          toolCalls: [
+            {
+              id: 'read-once',
+              name: 'search_help',
+              arguments: '{"query":"outputChannels"}',
+            },
+          ],
+        })
+        .mockImplementationOnce((_id, _messages, onText) => {
+          onText?.('Unfinished response must not become completed context.')
+          throw new AssistantFlowError('timeout')
+        })
+        .mockResolvedValueOnce({
+          text: 'The documented answer.',
+          toolCalls: [],
+        })
+      const deps = fixture(turn)
+      deps.begin = vi.fn(deps.begin)
+      const request = {
+        ...input(),
+        onContinuation: (value: AssistantContinuation | null) => {
+          continuation = value
+        },
+      }
+      const first = runAssistantRequest(request, deps)
+      const failure = expect(first).rejects.toMatchObject({
+        code: 'timeout',
+      })
+      await vi.advanceTimersByTimeAsync(0)
+      await failure
+      expect(continuation).not.toBeNull()
+      expect(continuation).toMatchObject({ activity: ['Checking routing.'] })
+      const result = await runAssistantRequest(
+        { ...request, continuation: continuation ?? undefined },
+        deps
+      )
+      expect(result.text).toBe('The documented answer.')
+      const payload = turn.mock.calls.at(-1)?.[1] ?? []
+      expect(
+        payload.filter(message => message.content === request.input)
+      ).toHaveLength(1)
+      expect(
+        payload.some(
+          message =>
+            message.role === 'tool' && message.toolCallId === 'read-once'
+        )
+      ).toBe(true)
+      expect(payload[0]?.content).toContain('"remainingCalls":255')
+      expect(JSON.stringify(payload)).not.toContain('Unfinished response')
+      expect(deps.begin).toHaveBeenCalledTimes(2)
+      expect(turn.mock.calls[0]?.[0]).not.toBe(turn.mock.calls[2]?.[0])
+      expect(continuation).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it.each([
+    'identity',
+    'input',
+    'locale',
+    'projectReading',
+    'expectedConfig',
+    'project',
+    'attachments',
+  ] as const)(
+    'rejects changed %s before starting a continuation session',
+    async field => {
+      let continuation: AssistantContinuation | null = null
+      const deps = fixture(async () => {
+        throw new AssistantFlowError('timeout')
+      })
+      deps.begin = vi.fn(deps.begin)
+      const request = {
+        ...input(),
+        onContinuation: (value: AssistantContinuation | null) => {
+          continuation = value
+        },
+      }
+      await expect(runAssistantRequest(request, deps)).rejects.toMatchObject({
+        code: 'timeout',
+      })
+      expect(continuation).not.toBeNull()
+      const changed = {
+        identity: 'another-owner',
+        input: 'Another question',
+        locale: 'zh-CN',
+        projectReading: true,
+        expectedConfig: { baseUrl: 'https://another.example', model: 'other' },
+        project: { fingerprint: 'changed-saved-version', files: [] },
+        attachments: [],
+      }
+      await expect(
+        runAssistantRequest(
+          {
+            ...request,
+            [field]: changed[field],
+            continuation: continuation ?? undefined,
+          },
+          deps
+        )
+      ).rejects.toMatchObject({ code: 'projectScopeChanged' })
+      expect(deps.begin).toHaveBeenCalledOnce()
+    }
+  )
+
+  it('cannot reset the hard tool-call budget by continuing an interrupted task', async () => {
+    let continuation: AssistantContinuation | null = null
+    const turn = vi
+      .fn<AssistantDependencies['turn']>()
+      .mockResolvedValueOnce({
+        text: null,
+        toolCalls: [
+          {
+            id: 'first',
+            name: 'search_help',
+            arguments: '{"query":"outputChannels"}',
+          },
+        ],
+      })
+      .mockRejectedValueOnce(new AssistantFlowError('timeout'))
+      .mockResolvedValueOnce({
+        text: null,
+        toolCalls: Array.from({ length: 256 }, (_, i) => ({
+          id: `next-${i}`,
+          name: 'search_help',
+          arguments: JSON.stringify({ query: `unique-query-${i}` }),
+        })),
+      })
+    const deps = fixture(turn)
+    const request = {
+      ...input(),
+      onContinuation: (value: AssistantContinuation | null) => {
+        continuation = value
+      },
+    }
+    await expect(runAssistantRequest(request, deps)).rejects.toMatchObject({
+      code: 'timeout',
+    })
+    expect(continuation).not.toBeNull()
+    await expect(
+      runAssistantRequest(
+        { ...request, continuation: continuation ?? undefined },
+        deps
+      )
+    ).rejects.toMatchObject({ code: 'toolCallsExceeded' })
+    expect(turn).toHaveBeenCalledTimes(3)
+  })
+
+  it('bounds cumulative failed model attempts across continuations to the native and history limit', async () => {
+    let continuation: AssistantContinuation | null = null
+    const turn = vi
+      .fn<AssistantDependencies['turn']>()
+      .mockRejectedValue(new AssistantFlowError('timeout'))
+    const deps = fixture(turn)
+    deps.begin = vi.fn(deps.begin)
+    const request = {
+      ...input(),
+      onContinuation: (value: AssistantContinuation | null) => {
+        continuation = value
+      },
+    }
+    for (let attempt = 0; attempt < 128; attempt++) {
+      await expect(
+        runAssistantRequest(
+          { ...request, continuation: continuation ?? undefined },
+          deps
+        )
+      ).rejects.toMatchObject({ code: 'timeout' })
+    }
+    await expect(
+      runAssistantRequest(
+        { ...request, continuation: continuation ?? undefined },
+        deps
+      )
+    ).rejects.toMatchObject({ code: 'budgetExceeded' })
+    expect(deps.begin).toHaveBeenCalledTimes(128)
+    expect(turn).toHaveBeenCalledTimes(128)
+  })
+
+  it('streams the current reply separately from completed tool-turn commentary', async () => {
     let progress!: (text: string) => void
     let finish!: (turn: AssistantTurn) => void
     const turn = vi
@@ -1081,16 +1343,14 @@ describe('highest platform assistant request (#166)', () => {
     )
     await vi.waitFor(() => expect(progress).toBeDefined())
     progress('The declared count')
-    expect(onText).toHaveBeenLastCalledWith(
-      'Checking the declaration.\n\nThe declared count'
-    )
+    expect(onText).toHaveBeenLastCalledWith('The declared count')
     progress('The declared count is not a hardware test.')
     finish({
       text: 'The declared count is not a hardware test.',
       toolCalls: [],
     })
     await expect(result).resolves.toMatchObject({
-      text: 'Checking the declaration.\n\nThe declared count is not a hardware test.',
+      text: 'The declared count is not a hardware test.',
     })
     const updates = onText.mock.calls.length
     progress('A queued partial event after completion')

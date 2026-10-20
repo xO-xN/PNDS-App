@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, fireEvent, render, screen, within } from '@/test/test-utils'
+import userEvent from '@testing-library/user-event'
+import { act, fireEvent, render, screen, waitFor } from '@/test/test-utils'
 import { editorView, editText } from '@/test/text-editor'
 import { TextBuffer } from '@/lib/text-buffer'
 import { TextEditor } from './TextEditor'
@@ -37,11 +38,17 @@ describe('reusable text editing surface', () => {
     expect(buffer.text).toBe('const wave = "波浪"\n// 波浪')
   })
 
-  it('navigates lines, indents a selection and supports keyboard focus escape', () => {
+  it('navigates lines and changes indentation from the compact tools menu without losing the selection', async () => {
+    const user = userEvent.setup()
     const buffer = new TextBuffer('first\nsecond\nthird', 'unknown.xyz')
     render(<Draft buffer={buffer} />)
     expect(screen.getByText('Plain text · UTF-8')).toBeVisible()
-    fireEvent.click(screen.getByRole('button', { name: 'Go to line' }))
+    expect(screen.queryByRole('button', { name: 'Go to line' })).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'More editing tools' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Go to line' }))
+    await waitFor(() =>
+      expect(screen.getByRole('textbox', { name: 'Line number' })).toHaveFocus()
+    )
     fireEvent.change(screen.getByRole('textbox', { name: 'Line number' }), {
       target: { value: '3' },
     })
@@ -51,16 +58,24 @@ describe('reusable text editing surface', () => {
     if (!form) throw new Error('Expected line navigation form')
     fireEvent.submit(form)
     expect(buffer.selection).toEqual({ from: 13, to: 13 })
-    fireEvent.click(screen.getByRole('button', { name: 'Indent selection' }))
+    await user.click(screen.getByRole('button', { name: 'More editing tools' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Indent selection' }))
     expect(buffer.text).toBe('first\nsecond\n  third')
-    fireEvent.click(screen.getByRole('button', { name: 'Unindent selection' }))
+    await waitFor(() =>
+      expect(screen.getByRole('textbox', { name: 'unknown.xyz' })).toHaveFocus()
+    )
+    await user.click(screen.getByRole('button', { name: 'More editing tools' }))
+    await user.click(
+      screen.getByRole('menuitem', { name: 'Unindent selection' })
+    )
     expect(buffer.text).toBe('first\nsecond\nthird')
     const editor = screen.getByRole('textbox', { name: 'unknown.xyz' })
     fireEvent.keyDown(editor, { key: 'Escape' })
     expect(editorView(editor).state.doc.lines).toBe(3)
   })
 
-  it('resets history on external adoption while keeping the new text read-only', () => {
+  it('resets history on external adoption while keeping the new text read-only', async () => {
+    const user = userEvent.setup()
     const buffer = new TextBuffer('saved', 'score.scd')
     const view = render(<TextEditor buffer={buffer} value="saved" />)
     editText(screen.getByRole('textbox', { name: 'score.scd' }), 'my draft')
@@ -76,11 +91,10 @@ describe('reusable text editing surface', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Find and replace' }))
     expect(screen.queryByRole('textbox', { name: 'Replace with' })).toBeNull()
     expect(screen.getByRole('status')).toHaveTextContent('history was reset')
+    await user.click(screen.getByRole('button', { name: 'More editing tools' }))
     expect(
-      within(
-        screen.getByRole('group', { name: 'Text editing tools' })
-      ).getByRole('button', { name: 'Indent selection' })
-    ).toBeDisabled()
+      screen.getByRole('menuitem', { name: 'Indent selection' })
+    ).toHaveAttribute('aria-disabled', 'true')
   })
 
   it('groups controlled composition transactions into one undo without mixing another buffer', () => {

@@ -24,7 +24,10 @@ All data goes through Rust for type safety and security. The frontend reads via 
 ```
 ~/Library/Application Support/com.xo-xn.pnds-app/  (macOS)
 ├── preferences.json    # App preferences (the app identifier comes from src-tauri/tauri.conf.json)
-└── assistant-history/  # Versioned private per-source-directory chat snapshots (#167)
+├── assistant-history/  # Versioned private per-source-directory chat snapshots (#167)
+├── assistant-tasks/    # Original/after/pending bytes for task undo
+├── assistant-resume/   # Private schema-1 execution checkpoints, canonical root + inode
+└── controlled-check-reports/ # Completed native check evidence, revalidated on resume
 ```
 
 Logs are not stored here — `tauri-plugin-log` writes to the OS log directory (see [logging.md](./logging.md)).
@@ -33,6 +36,33 @@ Chat history uses its own bounded schema and atomic publication, rather than the
 preferences queue. Canonical directory identity, captured write epochs, corruption
 recovery and authority-free restoration are documented in
 [Creation assistant](./creation-assistant.md#private-project-history-167).
+
+Private chat schema 4 adds bounded assistant-only display activity, separate
+from final reply text and runtime checkpoints. Schemas 1–3 still load without
+inventing missing activity or splitting old concatenated prose. Activity never
+restores execution authority or enters model-history text.
+
+Schema 5 adds optional assistant-only `reasoningContent` for DeepSeek protocol
+replay. Schemas 1–4 still load without inventing missing reasoning. It is separate
+from visible text/activity and is never rendered or used as summary prose. Each
+reasoning field is bounded at 1 MiB and private chat files at 8 MiB/400 messages.
+Execution checkpoints permit this field only on assistant entries in the exact
+`history` and `continuation.messages` lists; credentials remain forbidden at every
+depth. Atomic publication, owner checks and fresh native authorization still apply.
+
+Execution checkpoints are separate from chat history and preferences. Native
+atomic publication, owner/inode validation, task-journal reconciliation and an
+8 MiB payload bound protect resumption. The frontend save/clear queue waits at
+completed tool boundaries; live grants and in-flight responses are not persisted.
+Opening a record displays a continuation opportunity, while explicit Continue
+revalidates saved bytes and acquires a fresh task grant. See
+[durable task continuation](./creation-assistant.md#shared-tool-contracts-and-durable-task-continuation-2026-10-18).
+
+The version-1 frontend checkpoint has an explicit persisted-field allowlist;
+runtime continuation additions are never serialized implicitly. The task
+lifecycle module coordinates boundary publication, pause/teardown retention and
+final-chat-before-checkpoint-clear ordering. Chat snapshots, execution recovery
+and native task journals remain separate records with separate authority.
 
 ## Atomic Write Pattern (Critical)
 
@@ -324,3 +354,12 @@ Save-boundary validation rejects relative paths and NUL, without checking whethe
 the directory currently exists or is writable. The creation command owns those
 filesystem failures and retry. Preference save failures follow the shared queue's
 existing logging and no automatic rollback contract.
+
+### Automatic context migration
+
+Legacy `ModelContextConfig` without `mode` decodes as automatic. Old input targets
+and capacities remain loadable but are inactive; both active configuration and
+stored per-model profiles use the same native interpretation. The next settings
+save writes explicit `auto` and clears capacity/inputTarget while preserving
+output/reasoning options. Only explicit `manual` restores token admission limits.
+No credentials or unrelated preferences are rewritten by migration.

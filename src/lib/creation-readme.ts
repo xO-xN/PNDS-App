@@ -3,6 +3,9 @@ import { parseReadmeCoverPage } from './readme-cover-page'
 export const coverFields = [
   'title',
   'composer',
+  'duration',
+  'performers',
+  'contact',
   'composer_url',
   'github_url',
   'website_url',
@@ -14,6 +17,9 @@ export type CoverField = (typeof coverFields)[number]
 export const coverFieldLabels: Record<CoverField, string> = {
   title: 'title',
   composer: 'composer',
+  duration: 'duration',
+  performers: 'performers',
+  contact: 'contact',
   composer_url: 'composerUrl',
   github_url: 'githubUrl',
   website_url: 'websiteUrl',
@@ -36,7 +42,11 @@ export type EditableReadme =
   | CoverDocument
   | { kind: 'document' }
   | { kind: 'unsafe'; reason: 'duplicate' | 'structure' | 'fence' }
-const metadataKeys = new Set<string>(coverFields.slice(0, 6))
+const metadataKeys = new Set<string>(
+  coverFields.filter(
+    field => field !== 'sectionLabel' && field !== 'sectionMarkdown'
+  )
+)
 
 /** Editing uses source spans; presentation's lenient parser never serializes a README. */
 export function inspectEditableReadme(text: string): EditableReadme {

@@ -674,7 +674,11 @@ unsafe fn position_main_controls(native: &objc2_app_kit::NSWindow, offset: f64) 
     let mut frame = parent.frame();
     frame.size.height =
         close_frame.size.height + f64::from(MAIN_CONTROLS_TOP.load(Ordering::Relaxed));
-    frame.origin.y = native.frame().size.height - frame.size.height;
+    let height = parent
+        .superview()
+        .map(|view| view.bounds().size.height)
+        .unwrap_or(native.frame().size.height);
+    frame.origin.y = height - frame.size.height;
     parent.setFrame(frame);
     for (index, kind) in [
         NSWindowButton::CloseButton,
@@ -1662,7 +1666,7 @@ mod square_chrome {
         square: bool,
     ) -> Result<(), String> {
         let fullscreen = window.is_fullscreen().unwrap_or(false);
-        if square && CHROME.with(|chrome| chrome.borrow().is_none()) {
+        if CHROME.with(|chrome| chrome.borrow().is_none()) {
             let originals = [
                 native.standardWindowButton(NSWindowButton::CloseButton),
                 native.standardWindowButton(NSWindowButton::MiniaturizeButton),
@@ -1679,6 +1683,13 @@ mod square_chrome {
             let titlebar: Retained<ControlsView> =
                 msg_send![ControlsView::alloc(mtm), initWithFrame: original_parent.frame()];
             let titlebar: Retained<NSView> = titlebar.into_super();
+            // AppKit relays out its standard titlebar during live resize. Our
+            // native buttons use a content-owned overlay anchored to the top,
+            // so no frame briefly lands at the system titlebar position.
+            titlebar.setAutoresizingMask(
+                objc2_app_kit::NSAutoresizingMaskOptions::ViewWidthSizable
+                    | objc2_app_kit::NSAutoresizingMaskOptions::ViewMinYMargin,
+            );
             let buttons = [
                 NSWindow::standardWindowButton_forStyleMask(
                     NSWindowButton::CloseButton,

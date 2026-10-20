@@ -78,7 +78,10 @@ fn repository_prefix(repo: &Repository, project: &OpenProject) -> Result<PathBuf
             )
         })
 }
-fn reachable<'a>(repo: &'a Repository, commit: &str) -> Result<git2::Commit<'a>, CreationError> {
+pub(super) fn reachable<'a>(
+    repo: &'a Repository,
+    commit: &str,
+) -> Result<git2::Commit<'a>, CreationError> {
     let selected = Oid::from_str(commit).map_err(local_git::git_error)?;
     let mut next = repo.head().map_err(local_git::git_error)?.target();
     let mut budget = native_git::GitReadBudget::default();
@@ -94,7 +97,7 @@ fn reachable<'a>(repo: &'a Repository, commit: &str) -> Result<git2::Commit<'a>,
         next = current.parent_ids().next();
     }
     if next.is_some() {
-        return Err(CreationError::new(CreationErrorCode::TooLarge,"Selected history is beyond the supported 300 first-parent commits. Use an external Git tool."));
+        return Err(CreationError::new(CreationErrorCode::TooLarge, "Selected history is beyond the supported 300 first-parent commits. Use an external Git tool."));
     }
     Err(unavailable("The selected history is no longer reachable in the supported first-parent history. Refresh local history."))
 }
@@ -207,10 +210,33 @@ impl CreationAccess {
         path: &str,
         protection: &Protection,
     ) -> Result<GitHistoryFile, CreationError> {
+        self.git_history_file_at(identity, commit, path, false, protection)
+    }
+    pub fn git_version_file(
+        &self,
+        identity: &str,
+        commit: &str,
+        path: &str,
+        protection: &Protection,
+    ) -> Result<GitHistoryFile, CreationError> {
+        self.git_history_file_at(identity, commit, path, true, protection)
+    }
+    fn git_history_file_at(
+        &self,
+        identity: &str,
+        commit: &str,
+        path: &str,
+        all_routes: bool,
+        protection: &Protection,
+    ) -> Result<GitHistoryFile, CreationError> {
         relative(path)?;
         let project = self.current(identity, protection)?;
         let repo = native_git::repository(&project.root)?;
-        let selected = reachable(&repo, commit)?;
+        let selected = if all_routes {
+            git_versions::reachable(&repo, commit)?
+        } else {
+            reachable(&repo, commit)?
+        };
         let tree = selected.tree().map_err(local_git::git_error)?;
         let mut result = GitHistoryFile {
             commit: commit.into(),

@@ -177,7 +177,10 @@ it.each(['clear', 'reload'] as const)(
             finish = resolve
           })
       )
-    useAssistantStore.setState({ configured: true })
+    useAssistantStore.setState({
+      configured: true,
+      modelConfig: { model: 'fixture', baseUrl: 'https://model.example' },
+    })
     useAssistantStore.getState().setInput('Old question')
     const sending = useAssistantStore.getState().send()
     await vi.waitFor(() => expect(finish).toBeDefined())

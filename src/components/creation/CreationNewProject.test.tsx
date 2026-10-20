@@ -4,7 +4,11 @@ import { beforeEach, expect, it, vi } from 'vitest'
 import userEvent from '@testing-library/user-event'
 import { open, confirm } from '@tauri-apps/plugin-dialog'
 import { act, fireEvent, render, screen, waitFor } from '@/test/test-utils'
-import { commands, type CreationWorkspace } from '@/lib/tauri-bindings'
+import {
+  commands,
+  type AppPreferences,
+  type CreationWorkspace,
+} from '@/lib/tauri-bindings'
 import { useCreationStore } from '@/store/creation-store'
 import { useCreationFilesStore } from '@/store/creation-files-store'
 import { useCreationHandoffStore } from '@/store/creation-handoff-store'
@@ -52,6 +56,17 @@ beforeEach(async () => {
   })
 })
 
+async function openNewProject() {
+  const name = i18n.t('creation.newProject.open')
+  const entry =
+    screen.queryByRole('menuitem', { name }) ??
+    screen.getByRole('button', { name })
+  fireEvent.click(entry)
+  await screen.findByRole('dialog', {
+    name: i18n.t('creation.newProject.title'),
+  })
+}
+
 it.each(['Blank', 'PNDS Classic'])(
   'preserves the live project on directory, form and discard cancellation with %s',
   async template => {
@@ -73,7 +88,10 @@ it.each(['Blank', 'PNDS Classic'])(
     useCreationFilesStore.getState().edit('README.md', 'Unsaved old intro')
     render(<CreationView />)
     await creationProjectAction('Switch to another project')
-    fireEvent.click(await screen.findByRole('button', { name: 'New project' }))
+    await openNewProject()
+    expect(
+      screen.getByText('Source: PNDS App Blank · v1.7.0')
+    ).toBeInTheDocument()
     fireEvent.click(screen.getByRole('radio', { name: new RegExp(template) }))
     vi.mocked(open).mockResolvedValueOnce(null)
     fireEvent.click(
@@ -154,7 +172,7 @@ it('reports creation failure before stopping the live project and keeps the form
     .mockResolvedValueOnce({ status: 'ok', data: live })
   render(<CreationView />)
   await creationProjectAction('Switch to another project')
-  fireEvent.click(await screen.findByRole('button', { name: 'New project' }))
+  await openNewProject()
   vi.mocked(open).mockResolvedValueOnce('/scores')
   fireEvent.click(screen.getByRole('button', { name: 'Choose parent folder' }))
   await screen.findByDisplayValue('/scores')
@@ -175,7 +193,7 @@ it('reports creation failure before stopping the live project and keeps the form
 it('keeps all creation inputs when a late native selection belongs to an old workspace', async () => {
   useCreationStore.setState({ lastCreationParent: '/remembered' })
   render(<CreationView />)
-  fireEvent.click(screen.getByRole('button', { name: 'New project' }))
+  await openNewProject()
   let selected: ((path: string) => void) | undefined
   vi.mocked(open).mockImplementationOnce(
     () =>
@@ -206,7 +224,7 @@ it('creates from the home form using the chosen parent and enters the new worksp
     activeFolderId: 'set',
   })
   render(<CreationView />)
-  fireEvent.click(screen.getByRole('button', { name: 'New project' }))
+  await openNewProject()
   fireEvent.change(screen.getByRole('textbox', { name: 'Work name' }), {
     target: { value: 'New Score' },
   })
@@ -221,7 +239,7 @@ it('creates from the home form using the chosen parent and enters the new worksp
     data: created,
   })
   fireEvent.click(screen.getByRole('button', { name: 'Create project' }))
-  await screen.findByRole('button', { name: 'README.md' })
+  await screen.findByRole('treeitem', { name: 'README.md' })
   await waitFor(() =>
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   )
@@ -230,6 +248,8 @@ it('creates from the home form using the chosen parent and enters the new worksp
     folderName: 'new-score',
     name: 'New Score',
     author: '',
+    gitName: 'PNDS Creator',
+    gitEmail: '',
     description: '',
     locale: 'en',
   })
@@ -277,7 +297,7 @@ it('names the completed directory and preserves the old drafts when generation s
   useCreationFilesStore.getState().edit('README.md', 'Unsaved old intro')
   render(<CreationView />)
   await creationProjectAction('Switch to another project')
-  fireEvent.click(await screen.findByRole('button', { name: 'New project' }))
+  await openNewProject()
   vi.mocked(open).mockResolvedValueOnce('/scores')
   fireEvent.click(screen.getByRole('button', { name: 'Choose parent folder' }))
   await screen.findByDisplayValue('/scores')
@@ -333,7 +353,7 @@ it('keeps all existing Home entries when registering a completed creation beyond
 
 it('selects the fixed Classic source, creates it and enters the workbench without starting', async () => {
   render(<CreationView />)
-  fireEvent.click(screen.getByRole('button', { name: 'New project' }))
+  await openNewProject()
   const classic = screen.getByRole('radio', { name: /PNDS Classic/ })
   classic.focus()
   await userEvent.keyboard(' ')
@@ -348,7 +368,7 @@ it('selects the fixed Classic source, creates it and enters the workbench withou
     data: created,
   })
   fireEvent.click(screen.getByRole('button', { name: 'Create project' }))
-  await screen.findByRole('button', { name: 'README.md' })
+  await screen.findByRole('treeitem', { name: 'README.md' })
   expect(useCreationStore.getState().workspace).toEqual(created)
   expect(commands.createBlankProject).not.toHaveBeenCalled()
   expect(commands.startCreationProject).not.toHaveBeenCalled()
@@ -377,7 +397,7 @@ it('shows the required Classic shared versions and preserves the running workspa
   })
   render(<CreationView />)
   await creationProjectAction('Switch to another project')
-  fireEvent.click(await screen.findByRole('button', { name: 'New project' }))
+  await openNewProject()
   fireEvent.click(screen.getByRole('radio', { name: /PNDS Classic/ }))
   vi.mocked(open).mockResolvedValueOnce('/scores')
   fireEvent.click(screen.getByRole('button', { name: 'Choose parent folder' }))
@@ -406,13 +426,13 @@ it.each(['Blank', 'PNDS Classic'])(
   async template => {
     const user = userEvent.setup()
     render(<CreationView />)
-    await user.click(screen.getByRole('button', { name: 'New project' }))
+    await openNewProject()
     await user.click(screen.getByRole('radio', { name: new RegExp(template) }))
     const name = screen.getByRole('textbox', { name: 'Work name' })
     const folder = screen.getByRole('textbox', { name: 'Folder name' })
     await user.clear(name)
     await user.type(name, 'Test')
-    expect(folder).toHaveValue('untitled-score')
+    expect(folder).toHaveValue('test-pnds')
     await user.clear(folder)
     await user.type(folder, 'Test')
     vi.mocked(open).mockResolvedValueOnce('/scores')
@@ -431,12 +451,14 @@ it.each(['Blank', 'PNDS Classic'])(
         : commands.createClassicProject
     vi.mocked(command).mockResolvedValueOnce({ status: 'ok', data: created })
     await user.click(create)
-    await screen.findByRole('button', { name: 'README.md' })
+    await screen.findByRole('treeitem', { name: 'README.md' })
     expect(command).toHaveBeenCalledWith({
       parent: '/scores',
       folderName: 'test',
       name: 'Test',
       author: '',
+      gitName: 'PNDS Creator',
+      gitEmail: '',
       description: '',
       locale: 'en',
     })
@@ -447,7 +469,7 @@ it.each(['Blank', 'PNDS Classic'])(
 it('explains invalid folder characters and boundaries inline until the creator corrects them', async () => {
   const user = userEvent.setup()
   render(<CreationView />)
-  await user.click(screen.getByRole('button', { name: 'New project' }))
+  await openNewProject()
   vi.mocked(open).mockResolvedValueOnce('/scores')
   await user.click(screen.getByRole('button', { name: 'Choose parent folder' }))
   await screen.findByDisplayValue('/scores')
@@ -456,10 +478,10 @@ it('explains invalid folder characters and boundaries inline until the creator c
   await user.clear(folder)
   expect(screen.getByRole('alert')).toHaveTextContent('Enter a folder name.')
   expect(folder).toHaveAccessibleDescription(/Enter a folder name/)
-  for (const invalid of ['test score', 'test/score', '工程', 'Ä']) {
+  for (const invalid of ['test score', 'test/score', 'test_score', 'test.']) {
     await user.type(folder, invalid)
     expect(screen.getByRole('alert')).toHaveTextContent(
-      'Use only English letters, digits and hyphens; spaces and other characters are not allowed.'
+      'Use letters, digits and hyphens.'
     )
     expect(folder).toHaveAttribute('aria-invalid', 'true')
     expect(create).toBeDisabled()
@@ -494,7 +516,7 @@ it('explains invalid folder characters and boundaries inline until the creator c
 it('remembers an owned native parent selection after cancelling and reopening the form', async () => {
   const user = userEvent.setup()
   render(<CreationView />)
-  await user.click(screen.getByRole('button', { name: 'New project' }))
+  await openNewProject()
   vi.mocked(open).mockResolvedValueOnce('/scores')
   await user.click(screen.getByRole('button', { name: 'Choose parent folder' }))
   await screen.findByDisplayValue('/scores')
@@ -504,12 +526,12 @@ it('remembers an owned native parent selection after cancelling and reopening th
     )
   )
   await user.click(screen.getByRole('button', { name: 'Cancel' }))
-  await user.click(screen.getByRole('button', { name: 'New project' }))
+  await openNewProject()
   expect(screen.getByRole('textbox', { name: 'Parent folder' })).toHaveValue(
     '/scores'
   )
   expect(
-    screen.getByText('New project: /scores/untitled-score')
+    screen.getByText('New project: /scores/untitled-score-pnds')
   ).toBeInTheDocument()
   expect(commands.createBlankProject).not.toHaveBeenCalled()
   expect(commands.createClassicProject).not.toHaveBeenCalled()
@@ -521,7 +543,7 @@ it.each(['Blank', 'PNDS Classic'])(
     await i18n.changeLanguage('zh-CN')
     const user = userEvent.setup()
     render(<CreationView />)
-    await user.click(screen.getByRole('button', { name: '新建工程' }))
+    await openNewProject()
     await user.click(screen.getByRole('radio', { name: new RegExp(template) }))
     const name = screen.getByRole('textbox', { name: '作品名称' })
     const folder = screen.getByRole('textbox', { name: '文件夹名称' })
@@ -530,9 +552,9 @@ it.each(['Blank', 'PNDS Classic'])(
     await user.clear(folder)
     await user.type(folder, 'Test Score')
     expect(screen.getByRole('alert')).toHaveTextContent(
-      '只能使用英文字母、数字和连字符，不能包含空格或其他字符。'
+      '请使用字母、数字与连字符。'
     )
-    expect(folder).toHaveAccessibleDescription(/不能包含空格/)
+    expect(folder).toHaveAccessibleDescription(/请使用字母/)
     expect(screen.getByRole('button', { name: '创建工程' })).toBeDisabled()
     await user.clear(folder)
     await user.type(folder, 'Test')
@@ -551,12 +573,14 @@ it.each(['Blank', 'PNDS Classic'])(
         : commands.createClassicProject
     vi.mocked(command).mockResolvedValueOnce({ status: 'ok', data: created })
     await user.click(create)
-    await screen.findByRole('button', { name: 'README.md' })
+    await screen.findByRole('treeitem', { name: 'README.md' })
     expect(command).toHaveBeenCalledWith({
       parent: '/scores',
       folderName: 'test',
       name: 'Test',
       author: '',
+      gitName: 'PNDS Creator',
+      gitEmail: '',
       description: '',
       locale: 'zh-CN',
     })
@@ -567,7 +591,7 @@ it('keeps the remembered parent when its native picker is cancelled', async () =
   useCreationStore.setState({ lastCreationParent: '/remembered' })
   const user = userEvent.setup()
   render(<CreationView />)
-  await user.click(screen.getByRole('button', { name: 'New project' }))
+  await openNewProject()
   vi.mocked(open).mockResolvedValueOnce(null)
   await user.click(screen.getByRole('button', { name: 'Choose parent folder' }))
   expect(screen.getByRole('textbox', { name: 'Parent folder' })).toHaveValue(
@@ -576,7 +600,7 @@ it('keeps the remembered parent when its native picker is cancelled', async () =
   expect(useCreationStore.getState().lastCreationParent).toBe('/remembered')
   expect(commands.savePreferences).not.toHaveBeenCalled()
   await user.click(screen.getByRole('button', { name: 'Cancel' }))
-  await user.click(screen.getByRole('button', { name: 'New project' }))
+  await openNewProject()
   expect(screen.getByRole('textbox', { name: 'Parent folder' })).toHaveValue(
     '/remembered'
   )
@@ -586,7 +610,7 @@ it('leaves a removed remembered parent available for retry when creation reports
   useCreationStore.setState({ lastCreationParent: '/removed' })
   const user = userEvent.setup()
   render(<CreationView />)
-  await user.click(screen.getByRole('button', { name: 'New project' }))
+  await openNewProject()
   vi.mocked(commands.createBlankProject).mockResolvedValueOnce({
     status: 'error',
     error: { code: 'missing', detail: '/removed is no longer available' },
@@ -603,7 +627,11 @@ it('leaves a removed remembered parent available for retry when creation reports
 
 it('shows an independent editable local Git identity and the placeholder before creation', async () => {
   render(<CreationView />)
-  fireEvent.click(await screen.findByRole('button', { name: 'New project' }))
+  await openNewProject()
+  expect(
+    screen.getByRole('textbox', { name: 'Version author name' })
+  ).not.toBeVisible()
+  fireEvent.click(screen.getByText('Author, description and version identity'))
   const name = screen.getByRole('textbox', { name: 'Version author name' })
   expect(name).toHaveValue('PNDS Creator')
   fireEvent.change(
@@ -618,4 +646,56 @@ it('shows an independent editable local Git identity and the placeholder before 
   )
   expect(name).toHaveValue('Version Author')
   expect(screen.getByText(/creator@pnds.local/)).toBeInTheDocument()
+})
+
+it('prefills saved Git identity and preserves a manually chosen folder when the work name changes', async () => {
+  vi.mocked(commands.loadPreferences).mockResolvedValueOnce({
+    status: 'ok',
+    data: {
+      theme: 'system',
+      gitName: 'Composer',
+      gitEmail: 'composer@example.com',
+    } as AppPreferences,
+  })
+  const user = userEvent.setup()
+  render(<CreationView />)
+  await openNewProject()
+  await user.click(screen.getByText('Author, description and version identity'))
+  await waitFor(() =>
+    expect(screen.getByLabelText('Version author name')).toHaveValue('Composer')
+  )
+  expect(screen.getByLabelText('Version email (optional)')).toHaveValue(
+    'composer@example.com'
+  )
+  const name = screen.getByRole('textbox', { name: 'Work name' })
+  const folder = screen.getByRole('textbox', { name: 'Folder name' })
+  await user.clear(name)
+  await user.type(name, 'My Score')
+  expect(folder).toHaveValue('my-score-pnds')
+  await user.clear(folder)
+  await user.type(folder, 'custom-folder')
+  await user.type(name, ' II')
+  expect(folder).toHaveValue('custom-folder')
+})
+
+it('keeps optional metadata when collapsed and reveals invalid identity fields before submission', async () => {
+  render(<CreationView />)
+  await openNewProject()
+  const summary = screen.getByText('Author, description and version identity')
+  const details = summary.closest('details')
+  expect(details).not.toHaveAttribute('open')
+  expect(screen.getByRole('textbox', { name: 'Work name' })).toBeVisible()
+  expect(screen.getByRole('textbox', { name: 'Parent folder' })).toBeVisible()
+  fireEvent.click(summary)
+  const author = screen.getByLabelText('Creator (optional)')
+  const email = screen.getByLabelText('Version email (optional)')
+  fireEvent.change(author, { target: { value: 'Composer' } })
+  fireEvent.change(email, { target: { value: 'bad-email' } })
+  fireEvent.click(summary)
+  expect(author).not.toBeVisible()
+  fireEvent.invalid(email)
+  expect(details).toHaveAttribute('open')
+  expect(author).toHaveValue('Composer')
+  expect(email).toHaveValue('bad-email')
+  expect(commands.createBlankProject).not.toHaveBeenCalled()
 })

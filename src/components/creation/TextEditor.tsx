@@ -6,7 +6,9 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
+  type ReactNode,
 } from 'react'
+import { MoreHorizontal, Redo2, Search, Undo2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { EditorState } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
@@ -15,6 +17,14 @@ import { getSearchQuery } from '@codemirror/search'
 import type { TextBuffer } from '@/lib/text-buffer'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 
 /** Reusable local editing surface. A caller owns the buffer and any save action. */
 export function TextEditor({
@@ -26,6 +36,7 @@ export function TextEditor({
   resetKey = 0,
   location,
   selectionAction,
+  statusContent,
 }: {
   buffer: TextBuffer
   path?: string
@@ -35,12 +46,14 @@ export function TextEditor({
   resetKey?: number
   location?: { line: number } | null
   selectionAction?: { label: string; onSelect: () => void }
+  statusContent?: ReactNode
 }) {
   const { t } = useTranslation()
   const hintId = useId()
   const host = useRef<HTMLDivElement>(null)
   const findInput = useRef<HTMLInputElement>(null)
   const lineInput = useRef<HTMLInputElement>(null)
+  const menuAction = useRef<(() => void) | null>(null)
   const [findOpen, setFindOpen] = useState(false)
   const [lineOpen, setLineOpen] = useState(false)
   const [query, setQuery] = useState(
@@ -142,63 +155,108 @@ export function TextEditor({
           </Button>
         )}
         <Button
-          size="sm"
-          variant="outline"
+          size="icon-sm"
+          variant="ghost"
+          aria-label={t('creation.editor.undo')}
+          title={t('creation.editor.undo')}
           disabled={readOnly || !buffer.canUndo}
           onClick={() => buffer.undo()}
         >
-          {t('creation.editor.undo')}
+          <Undo2 aria-hidden="true" />
         </Button>
         <Button
-          size="sm"
-          variant="outline"
+          size="icon-sm"
+          variant="ghost"
+          aria-label={t('creation.editor.redo')}
+          title={t('creation.editor.redo')}
           disabled={readOnly || !buffer.canRedo}
           onClick={() => buffer.redo()}
         >
-          {t('creation.editor.redo')}
+          <Redo2 aria-hidden="true" />
         </Button>
         <Button
-          size="sm"
-          variant="outline"
+          size="icon-sm"
+          variant="ghost"
+          aria-label={t('creation.editor.find')}
+          title={t('creation.editor.find')}
           onClick={() => setFindOpen(!findOpen)}
           aria-expanded={findOpen}
         >
-          {t('creation.editor.find')}
+          <Search aria-hidden="true" />
         </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => setLineOpen(!lineOpen)}
-          aria-expanded={lineOpen}
-        >
-          {t('creation.editor.goLine')}
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={readOnly}
-          onClick={() =>
-            indentMore({
-              state,
-              dispatch: transaction => buffer.apply(transaction),
-            })
-          }
-        >
-          {t('creation.editor.indent')}
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={readOnly}
-          onClick={() =>
-            indentLess({
-              state,
-              dispatch: transaction => buffer.apply(transaction),
-            })
-          }
-        >
-          {t('creation.editor.outdent')}
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              size="icon-sm"
+              variant="ghost"
+              aria-label={t('creation.editor.more')}
+              title={t('creation.editor.more')}
+            >
+              <MoreHorizontal aria-hidden="true" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="end"
+            onCloseAutoFocus={event => {
+              const action = menuAction.current
+              menuAction.current = null
+              if (action) {
+                event.preventDefault()
+                action()
+              }
+            }}
+          >
+            <DropdownMenuItem
+              onSelect={() => {
+                menuAction.current = () => {
+                  setLineOpen(true)
+                  lineInput.current?.focus()
+                }
+              }}
+            >
+              {t('creation.editor.goLine')}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={readOnly}
+              onSelect={() => {
+                menuAction.current = () => {
+                  indentMore({
+                    state: buffer.getSnapshot(),
+                    dispatch: transaction => buffer.apply(transaction),
+                  })
+                  host.current
+                    ?.querySelector<HTMLElement>('.cm-content')
+                    ?.focus()
+                }
+              }}
+            >
+              {t('creation.editor.indent')}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={readOnly}
+              onSelect={() => {
+                menuAction.current = () => {
+                  indentLess({
+                    state: buffer.getSnapshot(),
+                    dispatch: transaction => buffer.apply(transaction),
+                  })
+                  host.current
+                    ?.querySelector<HTMLElement>('.cm-content')
+                    ?.focus()
+                }
+              }}
+            >
+              {t('creation.editor.outdent')}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="max-w-72 text-xs font-normal">
+              {t('creation.editor.keyboardHint')}
+            </DropdownMenuLabel>
+            <DropdownMenuLabel className="max-w-72 text-xs font-normal">
+              {t('creation.editor.syntaxHint')}
+            </DropdownMenuLabel>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
       {findOpen && (
         <div
@@ -296,7 +354,8 @@ export function TextEditor({
         </form>
       )}
       <div ref={host} className="creation-editor-host" dir="ltr" />
-      <div className="creation-editor-tools creation-editor-detail">
+      <div className="creation-editor-status creation-editor-detail">
+        {statusContent}
         <span>
           {t('creation.editor.position', {
             line: cursor.number,
@@ -304,9 +363,10 @@ export function TextEditor({
           })}
         </span>
         <span>{buffer.language || t('creation.editor.plainText')} · UTF-8</span>
-        <span id={hintId}>{t('creation.editor.keyboardHint')}</span>
-        <span>{t('creation.editor.syntaxHint')}</span>
       </div>
+      <span id={hintId} className="sr-only">
+        {t('creation.editor.keyboardHint')}
+      </span>
       {(message || buffer.resetCount > 0) && (
         <p role="status" className="px-3 text-xs">
           {message || t('creation.editor.historyReset')}

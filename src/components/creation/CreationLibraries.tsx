@@ -1,4 +1,11 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import {
+  useEffect,
+  useEffectEvent,
+  useId,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   ArrowLeft,
@@ -52,9 +59,17 @@ const libraryIcons: Record<string, LucideIcon> = {
 export function CreationLibraries({
   identity,
   disabled,
+  active,
+  onClose,
+  navigation,
+  onReturnFocus,
 }: {
   identity: string
   disabled: boolean
+  active?: boolean
+  onClose?: () => void
+  onReturnFocus?: () => void
+  navigation?: (busy: boolean) => ReactNode
 }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
@@ -94,6 +109,7 @@ export function CreationLibraries({
     if (submitting.current) return
     request.current++
     setOpen(false)
+    onClose?.()
   }
   const choose = (id: string | null) => {
     if (busy) return
@@ -179,8 +195,11 @@ export function CreationLibraries({
         return
       }
       setComplete(true)
-      await useCreationFilesStore.getState().poll()
+      const savedFilesSynced = await useCreationFilesStore
+        .getState()
+        .synchronizeSaved(identity)
       if (!owns(captured)) return
+      if (!savedFilesSynced) setError(useCreationFilesStore.getState().error)
       const fresh = await commands.getCreationLibraries(identity)
       if (!owns(captured)) return
       if (fresh.status === 'ok') setCatalog(fresh.data)
@@ -192,9 +211,28 @@ export function CreationLibraries({
       if (owns(captured)) setBusy(false)
     }
   }
+  const synchronizeOpen = useEffectEvent((next: boolean) => {
+    if (next) {
+      returnFocus.current = null
+      setSelected(null)
+      setCatalog(null)
+      setComplete(false)
+      setProjectVersion('')
+      setOpen(true)
+      void load()
+    } else {
+      request.current++
+      setOpen(false)
+      setBusy(false)
+    }
+  })
+  useEffect(() => {
+    if (active !== undefined) synchronizeOpen(active)
+  }, [active])
   return (
     <>
       <button
+        hidden={active !== undefined}
         type="button"
         ref={trigger}
         className="creation-icon-button pnds-focus-ring"
@@ -235,10 +273,12 @@ export function CreationLibraries({
           }}
           onCloseAutoFocus={event => {
             event.preventDefault()
-            trigger.current?.focus()
+            if (active === undefined) trigger.current?.focus()
+            else onReturnFocus?.()
           }}
         >
           <DialogHeader className="creation-modules-header">
+            {navigation?.(busy)}
             <DialogTitle
               ref={title}
               tabIndex={-1}

@@ -58,7 +58,7 @@ afterEach(() => {
 /** Exercise the real DOM adapter. Each probe's geometry is frozen on insertion,
  * as in the older WebKit intrinsic-width cache; changing it later cannot work.
  * Deliberately dishonest h1 widths/font-size must never drive the fit. */
-function fixture(available = 1100) {
+function fixture(available = 1100, tracking = 0.37) {
   const zone = document.createElement('div')
   zone.style.paddingLeft = '20px'
   zone.style.paddingRight = '30px'
@@ -73,9 +73,13 @@ function fixture(available = 1100) {
     slope: 10,
     valid: true,
     resizedExtra: 0,
+    rectScale: 1,
   }
   Object.defineProperty(zone, 'clientWidth', {
     get: () => metrics.available + 50,
+  })
+  Object.defineProperty(zone, 'offsetWidth', {
+    get: () => (metrics.rectScale === 1 ? 0 : metrics.available + 50),
   })
   Object.defineProperty(title, 'scrollWidth', { value: 9999 })
   Object.defineProperty(title, 'clientWidth', { value: 9999 })
@@ -97,7 +101,7 @@ function fixture(available = 1100) {
     const em = parseFloat(probe.style.fontSize) || metrics.em
     const spacing = probe.style.letterSpacing
       ? parseFloat(probe.style.letterSpacing)
-      : 0.37 * em
+      : tracking * em
     const extra = probe.style.fontSize ? metrics.resizedExtra : 0
     const width =
       ((metrics.zeroWidth + extra) * em) / metrics.em + metrics.slope * spacing
@@ -115,13 +119,25 @@ function fixture(available = 1100) {
   vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(
     function (this: Element) {
       expect(this.isConnected).toBe(true)
+      if (this === zone && metrics.rectScale !== 1)
+        return new DOMRect(
+          0,
+          0,
+          (metrics.available + 50) * metrics.rectScale,
+          100
+        )
       const rect = rects.get(this)
       if (!rect) throw new Error('Only fresh title probes may be measured')
-      return rect
+      return new DOMRect(
+        0,
+        0,
+        rect.width * metrics.rectScale,
+        rect.height * metrics.rectScale
+      )
     }
   )
   const attach = () => {
-    const dispose = attachCoverTitleFit(title)
+    const dispose = attachCoverTitleFit(title, tracking)
     disposers.push(dispose)
     return dispose
   }
@@ -138,6 +154,16 @@ function fixture(available = 1100) {
 }
 
 describe('cover title fit lifetime', () => {
+  it('fits and optically centers the approved tighter title spacing', () => {
+    const f = fixture(900, 0.12)
+    f.attach()
+    expect(f.title.style.letterSpacing).toBe('12px')
+    expect(f.title.style.transform).toBe('translateX(6px)')
+    expect(f.width()).toBeLessThanOrEqual(900.5)
+    resize()
+    expect(f.title.style.letterSpacing).toBe('12px')
+  })
+
   it.each([
     ['design tracking', 1100],
     ['squeezed tracking', 900],
@@ -358,4 +384,20 @@ describe('cover title fit lifetime', () => {
     expect(f.rects.size).toBe(probes)
     expect(vi.getTimerCount()).toBe(0)
   })
+})
+
+it('fits negative tracking in logical pixels inside a scaled canvas', () => {
+  const f = fixture(800, -0.055)
+  f.metrics.rectScale = 0.5
+  f.attach()
+  expect(f.title.style.letterSpacing).toBe('-5.5px')
+  expect(f.title.style.fontSize).toBe('')
+  f.metrics.available = 300
+  resize()
+  expect(Number.parseFloat(f.title.style.fontSize)).toBeLessThan(100)
+  expect(f.width()).toBeLessThanOrEqual(300.5)
+  const size = f.title.style.fontSize
+  f.metrics.rectScale = 1.7
+  resize()
+  expect(f.title.style.fontSize).toBe(size)
 })

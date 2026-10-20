@@ -588,17 +588,7 @@ fn publish_module(
         name,
         published: false,
     };
-    let files: Vec<_> = module.files.iter().map(|(path, bytes)| serde_json::json!({ "path": path, "sha256": format!("{:x}", Sha256::digest(bytes)) })).collect();
-    let record = serde_json::to_vec_pretty(&serde_json::json!({
-        "formatVersion": 1, "id": module.id, "version": VERSION, "source": source(),
-        "files": files, "compatibility": module.compatibility(), "wiring": "pending", "validation": "pending", "handoffTaskId": module.task(VERSION, module.files()).id,
-    })).expect("module record");
-    for (name, bytes) in module
-        .files
-        .iter()
-        .copied()
-        .chain(std::iter::once(("pnds-module.json", record.as_slice())))
-    {
+    for (name, bytes) in frozen_assets(module) {
         let name = CString::new(name).expect("fixed asset name");
         let mut file = open(
             &staging.directory,
@@ -606,7 +596,7 @@ fn publish_module(
             libc::O_WRONLY | libc::O_CREAT | libc::O_EXCL,
         )?
         .expect("created file");
-        file.write_all(bytes).map_err(io_error)?;
+        file.write_all(&bytes).map_err(io_error)?;
         file.sync_all().map_err(io_error)?;
     }
     use std::os::unix::fs::PermissionsExt;
@@ -679,4 +669,91 @@ fn same_directory(parent: &File, name: &CStr, held: &File) -> Result<(), Creatio
         ));
     }
     Ok(())
+}
+
+fn frozen_assets(module: &Module) -> Vec<(String, Vec<u8>)> {
+    let files: Vec<_> = module.files.iter().map(|(path, bytes)| serde_json::json!({ "path": path, "sha256": format!("{:x}", Sha256::digest(bytes)) })).collect();
+    let record = serde_json::to_vec_pretty(&serde_json::json!({
+        "formatVersion": 1, "id": module.id, "version": VERSION, "source": source(),
+        "files": files, "compatibility": module.compatibility(), "wiring": "pending", "validation": "pending", "handoffTaskId": module.task(VERSION, module.files()).id,
+    })).expect("module record");
+    module
+        .files
+        .iter()
+        .map(|(name, bytes)| (name.to_string(), bytes.to_vec()))
+        .chain(std::iter::once(("pnds-module.json".into(), record)))
+        .collect()
+}
+
+pub(super) fn assistant_module_assets(id: &str) -> Result<Vec<(String, String)>, CreationError> {
+    let module = MODULES
+        .iter()
+        .find(|module| module.id == id)
+        .ok_or_else(|| {
+            CreationError::new(CreationErrorCode::TestValidation, "Unknown offline module")
+        })?;
+    Ok(frozen_assets(module)
+        .into_iter()
+        .map(|(name, bytes)| {
+            (
+                format!("modules/pnds-{id}/{name}"),
+                String::from_utf8(bytes).expect("frozen text asset"),
+            )
+        })
+        .collect())
+}
+
+impl CreationAccess {
+    pub(super) fn publish_assistant_module(
+        &self,
+        identity: &str,
+        id: &str,
+        protection: &Protection,
+    ) -> Result<(), CreationError> {
+        let project = self.current(identity, protection)?;
+        ensure_editable(project)?;
+        let module = MODULES
+            .iter()
+            .find(|module| module.id == id)
+            .ok_or_else(|| {
+                CreationError::new(CreationErrorCode::TestValidation, "Unknown offline module")
+            })?;
+        publish_module(project, module, protection)
+    }
+}
+
+impl CreationAccess {
+    pub(super) fn cleanup_assistant_module(
+        &self,
+        identity: &str,
+        id: &str,
+        protection: &Protection,
+    ) -> Result<(), CreationError> {
+        let project = self.current(identity, protection)?;
+        let Some(module) = MODULES.iter().find(|module| module.id == id) else {
+            return Ok(());
+        };
+        let Some(parent) = open(
+            &project.directory,
+            c"modules",
+            libc::O_RDONLY | libc::O_DIRECTORY,
+        )?
+        else {
+            return Ok(());
+        };
+        let name = module.directory();
+        let Some(directory) = open(&parent, &name, libc::O_RDONLY | libc::O_DIRECTORY)? else {
+            return Ok(());
+        };
+        if !directory_names(directory.try_clone().map_err(io_error)?)?.is_empty() {
+            return Ok(());
+        }
+        validate_identity(project, protection)?;
+        same_directory(&project.directory, c"modules", &parent)?;
+        same_directory(&parent, &name, &directory)?;
+        if unsafe { libc::unlinkat(parent.as_raw_fd(), name.as_ptr(), libc::AT_REMOVEDIR) } != 0 {
+            return Err(io_error(io::Error::last_os_error()));
+        }
+        Ok(())
+    }
 }

@@ -117,13 +117,14 @@ it('keeps creation transport and console visible but unavailable on the empty ho
   useSessionStore.setState({ lanIp: '192.168.1.10' })
   render(<KeyboardBar />)
   const start = screen.getByRole('button', { name: 'Start test' })
-  const close = screen.getByRole('button', { name: 'Close test' })
-  const refresh = screen.getByRole('button', {
-    name: 'Refresh saved test pages',
-  })
+  expect(
+    screen.queryByRole('button', { name: 'Close test' })
+  ).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('button', { name: 'Refresh saved test pages' })
+  ).not.toBeInTheDocument()
   const consoleControl = screen.getByRole('button', { name: 'Console' })
-  for (const control of [start, close, refresh, consoleControl])
-    expect(control).toBeDisabled()
+  for (const control of [start, consoleControl]) expect(control).toBeDisabled()
   fireEvent.click(start)
   fireEvent.keyDown(window, { key: '`', code: 'Backquote', metaKey: true })
   expect(useCreationTestStore.getState().tab).toBe('file')
@@ -147,7 +148,7 @@ it('keeps creation transport and console visible but unavailable on the empty ho
   expect(screen.getByRole('button', { name: 'Console' })).toBe(consoleControl)
   expect(consoleControl).toBeEnabled()
   act(() => useCreationTestStore.setState({ expanded: true }))
-  for (const control of [start, close, refresh, consoleControl]) {
+  for (const control of [start, consoleControl]) {
     expect(control).toBeVisible()
     expect(control).toBeDisabled()
   }

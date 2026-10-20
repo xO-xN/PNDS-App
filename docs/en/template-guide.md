@@ -22,8 +22,10 @@ an App restart. Cancelling the form or native picker keeps that choice. If the
 remembered folder was removed or is no longer accessible, creation reports the
 actual error; choose a new parent to retry.
 
-- **Blank** — the original PNDS App v1.6.0 minimal runnable structure, with no
-  artistic preset or production dependencies. Internal writes zeros to the
+- **Blank** — the PNDS App Blank v1.7.0 minimal runnable structure, with no
+  artistic preset or production dependencies. Pages, scripts and initial shared
+  styles are separate. A local preview adapter, empty parameter declaration and
+  monitor wiring are ready for the assistant to add real controls. Internal writes zeros to the
   injected private buses; External sends no piece messages. SCD source and its
   matching compiled SynthDef are included.
 - **PNDS Classic** — a fixed verified PNDS Template 0.7.0 source snapshot. It
@@ -52,7 +54,12 @@ rerunning `docs/start.md` initialization.
 Blank's initial README uses the creation-time App language; its other language
 is a pending task in `docs/creator-handoff.md`. AGENTS points to that handoff
 and the installed App's contracts. Handoffs and provenance stay in source;
-root docs are excluded from `.pnds`. After editing SCD, compile it in the App
+root docs are excluded from `.pnds`. Generated `docs/implementation.md` explains
+which files to edit, how to register actual preview callbacks, and when to refresh
+or restart. Public HTML/JS/CSS changes need save and refresh; Node server changes
+need a project restart. Dependencies such as p5 are added locally when a task
+needs them. Existing projects keep their layout and recorded template version.
+After editing SCD, compile it in the App
 with the required local SuperCollider setup.
 
 Cancelling the picker, form or draft-discard confirmation preserves the old
@@ -213,9 +220,17 @@ Ordinary tasks deliver editable source with decisions, verification and creator 
 
 ## Discuss, edit and check independently
 
-After explicitly authorizing saved Project reading, the creation assistant can
-offer one pending change to one fully read existing text file. The same card's
-Parameters and Code tabs share a candidate buffer, separate from file drafts.
+When you send a question, the assistant sends the Project overview and saved text
+it reads as needed to your configured model service. Unsaved content is sent only
+in selections you attach. The default Discuss & hand off mode discusses the
+Project and updates the handoff document as needed, without editing code or running
+checks. Edit & save writes changes directly for the current task and automatically
+checks a saved-file copy. Failed checks feed diagnosis and repair within the same
+task; blockers are reported explicitly. Static checks remain available when the
+runtime is busy, without stopping the existing performance.
+
+In existing proposal cards, Parameters and Code tabs share a candidate buffer,
+separate from file drafts.
 Expressions or changed anchors disable affected controls; code remains editable.
 Restore one suggested parameter without replacing unrelated edits, or confirm
 discarding the whole candidate before restoring the full suggestion/reloading disk.
@@ -233,15 +248,15 @@ Existing drafts or external/version conflicts stop it and preserve your work.
 Preview failure or an idle runtime does not block a valid explicit application.
 Actual differences retain immutable before/after versions and offer guarded undo
 while still current. Adopting saved code still requires manual refresh/restart.
-New/delete/rename, multiple files and complex adaptation belong in a confirmed
-external handoff. Restored chat history contains inert snapshots, never old apply
-or preview permission.
+Proposal-card actions are separate from direct writes in Edit & save mode.
+Restored chat history contains inert snapshots, never old apply or preview permission.
 
-Run independent check opens the existing saved-copy check workflow. None is the
-default, Internal is explicitly chosen, and External stays manual. Chatting,
-editing and saving never start it. An active performance/check is not stopped to
-make room for another. Progress, Stop, actual input evidence, freshness and cleanup
-remain in the report. Failure preserves edits: continue editing, undo the last
-guarded save or confirm preparing an editable repair handoff. Record that handoff
-only after review. Nothing automatically retries the model, repairs files, adopts
-copy outputs or commits Git. Native pages, devices and sound still need real tests.
+You can also open the saved-copy check workflow manually from the topbar's Checks
+menu. None is the default, Internal is explicitly chosen, and External stays
+manual. Manual edits and saves in the editor do not start this check; the assistant
+checks automatically after changes in Edit & save mode. An active performance or
+check is not stopped to make room for another. Progress, Stop, actual input
+evidence, freshness and cleanup remain in the report. A failed manual check
+preserves edits: continue editing, undo the last guarded save or prepare a repair
+handoff. Copy outputs are not automatically written back, and no Git commit is
+created automatically. Actual page appearance, devices and sound still need real tests.

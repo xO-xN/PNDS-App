@@ -1,4 +1,11 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import {
+  useEffect,
+  useEffectEvent,
+  useId,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   ArrowLeft,
@@ -7,7 +14,6 @@ import {
   Network,
   Palette,
   PanelsTopLeft,
-  Plus,
   Puzzle,
   QrCode,
   Smartphone,
@@ -38,6 +44,7 @@ import {
   useCreationFilesStore,
 } from '@/store/creation-files-store'
 import { HANDOFF_PATH } from '@/store/creation-handoff-store'
+import { useCreationReadingStore } from '@/store/creation-reading-store'
 import { useCreationTestStore } from '@/store/creation-test-store'
 import { CreationErrorNotice } from './CreationErrorNotice'
 
@@ -69,9 +76,17 @@ function moduleDefinition(id: string) {
 export function CreationModules({
   identity,
   disabled,
+  active,
+  onClose,
+  navigation,
+  onReturnFocus,
 }: {
   identity: string
   disabled: boolean
+  active?: boolean
+  onClose?: () => void
+  onReturnFocus?: () => void
+  navigation?: (busy: boolean) => ReactNode
 }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
@@ -112,6 +127,7 @@ export function CreationModules({
     if (submitting.current) return
     request.current++
     setOpen(false)
+    onClose?.()
   }
   const choose = (id: string | null) => {
     if (busy) return
@@ -122,7 +138,7 @@ export function CreationModules({
   }
   const viewHandoff = () => {
     if (busy || disabled || !owns(request.current)) return
-    useCreationFilesStore.getState().setActivePath(HANDOFF_PATH)
+    useCreationReadingStore.getState().showHandoff()
     useCreationTestStore.getState().setTab('file')
     close()
   }
@@ -207,15 +223,35 @@ export function CreationModules({
       if (owns(captured)) setBusy(false)
     }
   }
+  const synchronizeOpen = useEffectEvent((next: boolean) => {
+    if (next) {
+      returnFocus.current = null
+      setSelected(null)
+      setCatalog(null)
+      setResult(null)
+      setOpen(true)
+      void load()
+    } else {
+      request.current++
+      setOpen(false)
+      setBusy(false)
+    }
+  })
+  useEffect(() => {
+    if (active !== undefined) synchronizeOpen(active)
+  }, [active])
   return (
     <>
       <button
+        hidden={active !== undefined}
         type="button"
         ref={trigger}
         className="creation-icon-button pnds-focus-ring"
         aria-label={t('creation.modules.open')}
         aria-busy={busy && !open}
-        title={busy && !open ? t('creation.loading') : undefined}
+        title={
+          busy && !open ? t('creation.loading') : t('creation.modules.open')
+        }
         disabled={disabled || busy}
         onClick={() => {
           returnFocus.current = null
@@ -228,7 +264,7 @@ export function CreationModules({
         {busy && !open ? (
           <LoaderCircle className="animate-spin" aria-hidden="true" />
         ) : (
-          <Plus aria-hidden="true" />
+          <Puzzle aria-hidden="true" />
         )}
       </button>
       <Dialog
@@ -247,10 +283,12 @@ export function CreationModules({
           }}
           onCloseAutoFocus={event => {
             event.preventDefault()
-            trigger.current?.focus()
+            if (active === undefined) trigger.current?.focus()
+            else onReturnFocus?.()
           }}
         >
           <DialogHeader className="creation-modules-header">
+            {navigation?.(busy)}
             <DialogTitle
               ref={title}
               tabIndex={-1}
@@ -361,11 +399,6 @@ export function CreationModules({
             {selected && entry && (
               <>
                 <div className="creation-modules-release">
-                  <span className="creation-modules-badge">
-                    {t('creation.modules.moduleVersion', {
-                      version: entry.version,
-                    })}
-                  </span>
                   <span>{t(`creation.modules.scope.${definition.scope}`)}</span>
                   {entry.state !== 'available' && (
                     <span
@@ -377,38 +410,6 @@ export function CreationModules({
                   )}
                 </div>
                 <dl className="creation-module-facts">
-                  <dt>{t('creation.modules.facts.source')}</dt>
-                  <dd>
-                    {entry.compatibility && (
-                      <p>
-                        {t('creation.modules.compatibility', {
-                          protocol: entry.compatibility.hostProtocol,
-                          runtime: entry.compatibility.runtime.join(', '),
-                        })}
-                      </p>
-                    )}
-                    <p>
-                      {t('creation.modules.sourceVersion', {
-                        version: entry.source.version,
-                      })}
-                    </p>
-                    {entry.version !== entry.shippedVersion && (
-                      <p className="creation-modules-version-note">
-                        {t('creation.modules.olderVersion', {
-                          version: entry.shippedVersion,
-                        })}
-                      </p>
-                    )}
-                    <details className="creation-module-source">
-                      <summary className="pnds-focus-ring">
-                        {t('creation.modules.sourceDetails')}
-                      </summary>
-                      <p>{entry.source.repository}</p>
-                      <p className="creation-module-path">
-                        {entry.source.revision}
-                      </p>
-                    </details>
-                  </dd>
                   <dt>{t('creation.modules.facts.dependencies')}</dt>
                   <dd>
                     {t(`creation.modules.description.${definition.copyKey}`)}
@@ -423,17 +424,58 @@ export function CreationModules({
                   <dd>
                     {t(`creation.modules.verification.${definition.copyKey}`)}
                   </dd>
-                  <dt>{t('creation.modules.facts.files')}</dt>
-                  <dd>
-                    <ul className="creation-module-paths">
-                      {entry.files.map(path => (
-                        <li key={path} className="creation-module-path">
-                          {path}
-                        </li>
-                      ))}
-                    </ul>
-                  </dd>
                 </dl>
+                {entry.version !== entry.shippedVersion && (
+                  <p className="creation-modules-version-note">
+                    {t('creation.modules.olderVersion', {
+                      version: entry.shippedVersion,
+                    })}
+                  </p>
+                )}
+                <details key={entry.id} className="creation-details">
+                  <summary className="pnds-focus-ring">
+                    {t('creation.modules.technicalDetails')}
+                  </summary>
+                  <span className="creation-modules-badge">
+                    {t('creation.modules.moduleVersion', {
+                      version: entry.version,
+                    })}
+                  </span>
+                  <dl className="creation-module-facts">
+                    <dt>{t('creation.modules.facts.source')}</dt>
+                    <dd>
+                      {entry.compatibility && (
+                        <p>
+                          {t('creation.modules.compatibility', {
+                            protocol: entry.compatibility.hostProtocol,
+                            runtime: entry.compatibility.runtime.join(', '),
+                          })}
+                        </p>
+                      )}
+                      <p>
+                        {t('creation.modules.sourceVersion', {
+                          version: entry.source.version,
+                        })}
+                      </p>
+                      <div className="creation-module-source">
+                        <p>{entry.source.repository}</p>
+                        <p className="creation-module-path">
+                          {entry.source.revision}
+                        </p>
+                      </div>
+                    </dd>
+                    <dt>{t('creation.modules.facts.files')}</dt>
+                    <dd>
+                      <ul className="creation-module-paths">
+                        {entry.files.map(path => (
+                          <li key={path} className="creation-module-path">
+                            {path}
+                          </li>
+                        ))}
+                      </ul>
+                    </dd>
+                  </dl>
+                </details>
                 <p className="creation-modules-note">
                   {t('creation.modules.handoffNote')}
                 </p>

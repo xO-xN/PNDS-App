@@ -1,6 +1,6 @@
 # Writing a Project README
 
-Your project's root directory may carry a `README.md` — a one-pager written for **the people at the performance venue**. It has two audiences: the **preparer at the sidebar** (the operator, the venue technician) and the **audience sitting in front of the venue screen before the show starts** (since v1.5.0 the projection window's intro shows the very same file — see "On the venue screen"). When the project's card is selected, the App renders it as a **cover page**: the huge title, the composer pill, the four-dot mark's colors, the cover image and the section text are all composed by the App — you only fill in the format (see "The cover-page format"). The performance folder's 自述 (the intro written through the App's in-app form) is a different species — don't confuse the two. This guide is about the project-side file.
+Your project's root directory may carry a `README.md` — a one-pager written for **the people at the performance venue**. It has two audiences: the **preparer at the sidebar** (the operator, the venue technician) and the **audience sitting in front of the venue screen before the show starts** (since v1.5.0 the projection window's intro shows the very same file — see "On the venue screen"). When the project's card is selected, the App renders it as a **cover page**: the lower-left single-line rippling title, two-line top metadata, animated grain gradient, cover and section text are all composed by the App — you only fill in the format (see "The cover-page format"). The performance folder's 自述 (the intro written through the App's in-app form) is a different species — don't confuse the two. This guide is about the project-side file.
 
 ## Why it is worth writing
 
@@ -26,6 +26,9 @@ The README has two parts: everything before the `---` feeds the App's cover page
 
 title: Inarticulate III
 composer: @XiaoXiang
+duration: 6′32″
+performers: A、B、C、D
+contact: music@example.com
 composer_url: https://…
 github_url: https://github.com/…
 website_url: https://…
@@ -44,16 +47,19 @@ color_palette: [#000000, #C9D8B6, #F1ECC3, #57837B]
 
 The metadata lines sit at the top, before any prose — they are not markdown syntax; write them verbatim, one `key: value` per line:
 
-| Key             | Purpose                                                               | When missing                                                             |
-| --------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| `title`         | the cover page's huge title                                           | falls back to the README's H1                                            |
-| `composer`      | the composer pill top-right (e.g. `@XiaoXiang`)                       | the pill is not shown                                                    |
-| `composer_url`  | the pill becomes a button opening it in the default browser           | the pill shows but is not clickable                                      |
-| `github_url`    | a `github` button joins the header, opening the repository            | the button is not shown                                                  |
-| `website_url`   | a `website` button joins the header, opening the work/project page    | the button is not shown                                                  |
-| `color_palette` | the four-dot diamond mark's colors, in order left, top, right, bottom | fewer than four valid `#hex` values falls back to the App's brand colors |
+| Key             | Purpose                                                             | When missing                                            |
+| --------------- | ------------------------------------------------------------------- | ------------------------------------------------------- |
+| `title`         | the cover page's huge title                                         | falls back to the README's H1                           |
+| `composer`      | top author field; leading @ omitted on screen                       | shows —                                                 |
+| `duration`      | top duration text, e.g. 6′32″                                       | shows —                                                 |
+| `performers`    | top performer credits                                               | shows —                                                 |
+| `contact`       | top contact text, without a link                                    | shows —                                                 |
+| `composer_url`  | retained author metadata; no cover link control                     | optional                                                |
+| `github_url`    | retained repository metadata; no cover link control                 | optional                                                |
+| `website_url`   | retained work-page metadata; no cover link control                  | optional                                                |
+| `color_palette` | palette swatches; strongest hue generates the animated grain island | fewer than four valid colors falls back to brand colors |
 
-The URL keys (`composer_url` / `github_url` / `website_url`) accept `http(s)://` addresses only — anything else (`ftp:`, a mistyped string) is treated as missing and never handed to the browser.
+URL keys recognize only `http(s)://` values and remain available for editing and format compatibility. App and projection covers are audience displays, so they show no link buttons. Markdown links retain their readable text; standalone link-only navigation paragraphs are omitted.
 
 Rules:
 
@@ -71,7 +77,7 @@ This work is a PNDS project. PNDS (Platform for Networked Digital Score) is an o
 
 ## Cover image cover.png
 
-The cover page band's left side is a square cover image — the creator's screenshot of the work. The cover lives at the project root, named `cover.png` (the App probes `cover.png` → `cover.jpg` → `cover.jpeg` → `cover.webp` in order — first hit wins):
+The introduction has a square cover image on its left — the creator's screenshot of the work. The cover lives at the project root, named `cover.png` (the App probes `cover.png` → `cover.jpg` → `cover.jpeg` → `cover.webp` in order — first hit wins):
 
 - **1:1 square recommended**: the panel shows the image as a square, and 1:1 is never cropped at any window width;
 - **pick the frame that says "this work"**: the monitor page's generative graphics or a performer page mid-performance say more than a directory listing ever will;
@@ -98,12 +104,12 @@ The editor names the actual file and keeps separate drafts when switching
 languages or files. A plain `README.md` has no language tag; your language choice
 supplies the source language for a sync task.
 
-Recognized covers expose the title, composer, links, four colors, first heading
+Recognized covers expose hover editors for the title, author, duration, performers, contact, link metadata, four colors, first heading
 and section content. Editing changes only the selected field and preserves
 unknown metadata, extra paragraphs, language links and later sections. Duplicate
 metadata, a missing first section or an unclosed code fence produces an explained
 read-only preview. Ordinary READMEs render as documents and offer Edit text.
-Links follow the existing external-opening and main-window navigation policy.
+Ordinary-document links retain the external-opening and main-window navigation policy; cover links display text only.
 
 Save is manual and shares the ordinary draft, disk-version and conflict flow.
 After saving, Record README language sync lets you review the affected files,
@@ -127,10 +133,12 @@ record actual status and verification evidence after implementation.
 
 ## On the venue screen
 
+App, creation preview and projection share a fixed 1200 × 800 composition. Window changes uniformly scale and center the whole canvas with at least 24 screen pixels of safety space, so 4:3, 16:9 and ultrawide screens never stretch the content. The background continues the App surface; the lower-right colors move subtly and independently while grain stays still. Reduced motion disables animation.
+
 Until the projection start (▶ / ⌘⏎), the projection window holds its **intro** — and the intro shows this README: the cover-page format shows the cover page (the huge title, the band); a plain README shows the full, static document view. The first screen the arriving audience sees is what you wrote, which adds one discipline to everything that goes up:
 
 - **do not spoil the score's visuals, structure, or key interactions.** Suspense is part of the performance: what the monitor will look like, how the score pages turn, which gesture triggers what — leave those for the audience to live through after the start. What goes on screen says what the work **is** — instrumentation, duration, character; "how it is played" is for the operator (below).
-- **write for a standing skim.** The cover band's text auto-scrolls slowly when it overflows, but a paragraph readable while standing beats an endlessly crawling wall; a plain README's document view does **not** auto-scroll — what fits the first screen is all that shows. Compress long content, or move it past the cover format's `---` (that part never goes up).
+- **write for a standing skim.** Long introductions first receive more layout space and fitted type; text exceeding the readable minimum falls back to slow internal scrolling, but a paragraph readable while standing beats an endlessly crawling wall; a plain README's document view does **not** auto-scroll — what fits the first screen is all that shows. Compress long content, or move it past the cover format's `---` (that part never goes up).
 - **keep operator-facing content out of the on-screen zone.** The cover-page format contains it naturally: the "How to perform" and "Technical needs" sections after the first never reach the projection; a plain README puts the **whole file** on screen — if yours carries operational detail, switch it to the cover-page format or move what the audience shouldn't see yet past the `---`.
 - **the bilingual variant follows the App's UI language.** The intro opens the same variant as the main window's panel — whichever language the operator sets the App to is the one the audience sees. The venue's language should decide which variant you verify for the screen (see "Bilingual READMEs").
 

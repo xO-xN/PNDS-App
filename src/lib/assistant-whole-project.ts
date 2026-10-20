@@ -1,4 +1,9 @@
 import {
+  compactWorkingContext,
+  contextBytes,
+  WORKING_CONTEXT_BYTES,
+} from './assistant-working-context'
+import {
   commands,
   type AssistantProjectSnapshot,
   type AssistantProjectPage,
@@ -12,7 +17,10 @@ import type {
   AssistantErrorCode,
 } from './assistant-types'
 import { AssistantFlowError } from './assistant-types'
-import { buildAssistantMessages, MAX_TOOL_CHARACTERS } from './assistant-flow'
+import {
+  buildAssistantMessages,
+  MAX_REQUEST_TOOL_CHARACTERS,
+} from './assistant-flow'
 import { projectPageSource } from './assistant-project'
 import { modelProfileKey } from './model-context-settings'
 import type { HelpTree } from './help-corpus'
@@ -64,7 +72,7 @@ export async function collectWholeProject(request: {
         path: file.path,
         version: file.version,
         offset,
-        pageLength: 2000,
+        pageLength: 65536,
       })
       check()
       if (result.status === 'error')
@@ -78,7 +86,7 @@ export async function collectWholeProject(request: {
         throw new AssistantFlowError('projectScopeChanged')
       pages.push(page)
       characters += page.text.length
-      if (characters > MAX_TOOL_CHARACTERS)
+      if (characters > MAX_REQUEST_TOOL_CHARACTERS || pages.length > 256)
         throw new AssistantFlowError('wholeProjectExceeded')
       if (page.nextOffset === null) break
       if (page.nextOffset <= offset) throw new AssistantFlowError('noProgress')
@@ -102,20 +110,37 @@ export async function collectWholeProject(request: {
     }),
     sources: pages.map(page => projectPageSource(page, request.locale)),
   }
-  if (consumer.text.length > MAX_TOOL_CHARACTERS)
-    throw new AssistantFlowError('wholeProjectExceeded')
   check()
-  const measured = await commands.measureAssistantContext(
+  const messages = buildAssistantMessages(request.history, request.input, {
+    owner,
     config,
-    buildAssistantMessages(request.history, request.input, {
-      owner,
-      config,
-      projectReading: true,
-      project: snapshot,
-      attachments: request.attachments,
-      consumers: [...request.consumers, consumer],
-    })
+    projectReading: true,
+    project: snapshot,
+    attachments: request.attachments,
+    consumers: [...request.consumers, consumer],
+  })
+  const evidence = {
+    sources: consumer.sources ?? [],
+    completedText: '',
+    pendingCandidates: [],
+    handoff: null,
+  }
+  if (contextBytes(messages) > WORKING_CONTEXT_BYTES || messages.length > 60)
+    compactWorkingContext(messages, evidence)
+  let measured = await commands.measureAssistantContext(config, messages)
+  if (
+    measured.status === 'ok' &&
+    measured.data.exceeded &&
+    compactWorkingContext(messages, evidence, contextBytes(messages) / 2)
   )
+    measured = await commands.measureAssistantContext(config, messages)
+  const checkpoint = messages.find(
+    message =>
+      message.contextKind === 'summary' &&
+      message.content?.startsWith('{"workingCheckpoint":')
+  )
+  if (checkpoint?.content) consumer.text = checkpoint.content
+
   check()
   if (measured.status === 'error')
     throw new AssistantFlowError('projectUnavailable')

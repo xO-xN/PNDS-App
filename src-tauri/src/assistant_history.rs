@@ -15,8 +15,8 @@ use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-const MAX_HISTORY_BYTES: usize = 2 * 1024 * 1024;
-const HISTORY_VERSION: u32 = 3;
+const MAX_HISTORY_BYTES: usize = 8 * 1024 * 1024;
+const HISTORY_VERSION: u32 = 5;
 type Publish = fn(&Path, &[u8]) -> Result<(), AssistantHistoryError>;
 
 pub struct AssistantHistoryStore {

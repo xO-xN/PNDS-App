@@ -18,6 +18,7 @@ pub struct NewProjectOptions {
     pub git_email: Option<String>,
 }
 
+const TEMPLATE_VERSION: &str = "1.7.0";
 const ASSETS: &[(&str, &[u8])] = &[
     (
         "server.js",
@@ -26,6 +27,26 @@ const ASSETS: &[(&str, &[u8])] = &[
     (
         "audio/controller.js",
         include_bytes!("../../../resources/blank-project/audio/controller.js"),
+    ),
+    (
+        "public/monitor.js",
+        include_bytes!("../../../resources/blank-project/public/monitor.js"),
+    ),
+    (
+        "public/performer.js",
+        include_bytes!("../../../resources/blank-project/public/performer.js"),
+    ),
+    (
+        "public/style.css",
+        include_bytes!("../../../resources/blank-project/public/style.css"),
+    ),
+    (
+        "public/pnds-preview.mjs",
+        include_bytes!("../../../resources/parameter-preview/adapter.mjs"),
+    ),
+    (
+        "pnds.preview.json",
+        include_bytes!("../../../resources/blank-project/pnds.preview.json"),
     ),
     (
         "supercollider/source/pndsBlank.scd",
@@ -62,6 +83,14 @@ pub(super) fn is_blank_source(path: &str, bytes: &[u8], name: &str) -> bool {
         include_str!("../../../resources/blank-project/public/page.html")
             .replace("{{lang}}", locale)
             .replace("{{message}}", message)
+            .replace(
+                "{{role}}",
+                if path == "public/monitor.html" {
+                    "monitor"
+                } else {
+                    "performer"
+                },
+            )
             .replace("{{name}}", &html(name))
             .as_bytes()
             == bytes
@@ -182,10 +211,10 @@ fn validate(options: &NewProjectOptions) -> Result<(), CreationError> {
     let single_line =
         |text: &str| text.chars().count() <= 128 && !text.contains(['\r', '\n', '\0']);
     if id.is_empty()
-        || id.len() > 64
+        || id.chars().count() > 64
         || !id
-            .bytes()
-            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+            .chars()
+            .all(|char| (char.is_alphanumeric() && !char.is_uppercase()) || char == '-')
         || id.starts_with('-')
         || id.ends_with('-')
         || options.name.trim().is_empty()
@@ -279,7 +308,13 @@ pub(super) fn project_id(folder: &str) -> Result<String, CreationError> {
         )
     })?;
     let suffix: String = random.iter().map(|byte| format!("{byte:02x}")).collect();
-    Ok(format!("{folder}-{suffix}"))
+    let stem: String = folder
+        .chars()
+        .filter(|char| char.is_ascii_lowercase() || char.is_ascii_digit() || *char == '-')
+        .collect();
+    let stem = stem.trim_matches('-');
+    let stem = if stem.is_empty() { "score" } else { stem };
+    Ok(format!("{stem}-{suffix}"))
 }
 
 fn write_project(root: &File, options: &NewProjectOptions) -> Result<(), CreationError> {
@@ -362,11 +397,34 @@ fn write_project(root: &File, options: &NewProjectOptions) -> Result<(), Creatio
         "AGENTS.md",
         format!("# {name}\n\n{AGENT_ENTRY}\n\n{agent_hint}\n").as_bytes(),
     )?;
-    let page = include_str!("../../../resources/blank-project/public/page.html")
-        .replace("{{lang}}", &options.locale)
-        .replace("{{message}}", page_message)
-        .replace("{{name}}", &html(name));
-    write(root, "public/monitor.html", page.as_bytes())?;
-    write(root, "public/performer.html", page.as_bytes())?;
-    write(root, "docs/template-source.json", b"{\n  \"template\": \"Blank\",\n  \"version\": \"1.6.0\",\n  \"source\": \"PNDS App embedded blank-project\"\n}\n")
+    let guide = if chinese {
+        include_str!("../../../resources/blank-project/docs/implementation.zh-CN.md")
+    } else {
+        include_str!("../../../resources/blank-project/docs/implementation.en.md")
+    };
+    write(
+        root,
+        "docs/implementation.md",
+        guide
+            .replace("{{templateVersion}}", TEMPLATE_VERSION)
+            .as_bytes(),
+    )?;
+    for role in ["monitor", "performer"] {
+        let page = include_str!("../../../resources/blank-project/public/page.html")
+            .replace("{{lang}}", &options.locale)
+            .replace("{{message}}", page_message)
+            .replace("{{role}}", role)
+            .replace("{{name}}", &html(name));
+        write(root, &format!("public/{role}.html"), page.as_bytes())?;
+    }
+    let source = serde_json::json!({"template":"Blank","version":TEMPLATE_VERSION,"source":"PNDS App embedded blank-project"});
+    write(
+        root,
+        "docs/template-source.json",
+        format!(
+            "{}\n",
+            serde_json::to_string_pretty(&source).expect("literal source")
+        )
+        .as_bytes(),
+    )
 }

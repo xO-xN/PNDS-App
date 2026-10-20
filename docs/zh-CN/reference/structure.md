@@ -69,7 +69,7 @@ Inarticulate III/
 - 它随 `.pnds` 原样旅行（打包排除清单从不清除它），接收方装包后在 App 里看到的就是它。
 - 可选语言变体：`README.<locale>.md`（如 `README.zh-CN.md`）——App 按界面语言自适应优先打开对应变体，没有则回落到 `README.md`；
 - 可选封面图 `cover.png`：README 面板横带的工程截图（依序探测 `.png` → `.jpg` → `.jpeg` → `.webp`，语言无关，建议 1:1）；与 README.md 一样随 `.pnds` 原样旅行，preflight 同样不检查；
-- 封面页格式：README 顶部可携带元数据块（`title` / `composer` / `composer_url` / `github_url` / `website_url` / `color_palette`），App 据此把首个 `##` 小节渲染成设计好的封面页（面板内容止于首个 `---`）；无元数据块的 README 按普通文档渲染，旧工程不受影响。细则见帮助中心《给工程写 README》；
+- 封面页格式：README 顶部可携带元数据块（`title` / `composer` / `duration` / `performers` / `contact` / `composer_url` / `github_url` / `website_url` / `color_palette`），App 据此把首个 `##` 小节渲染成设计好的封面页（面板内容止于首个 `---`）；无元数据块的 README 按普通文档渲染，旧工程不受影响。细则见帮助中心《给工程写 README》；
 
 推荐大纲（作品名称、作者、简介、演奏方式，可选技术需求）：
 
@@ -122,3 +122,5 @@ ASBS 2.1.0 仅引用共享 Express 5.3.0、qrcode 1.5.4 和 Socket.IO／client 4
 
 Blank 与 PNDS Classic 是固定起点。两种起点均初始化独立 manifest 身份和版本 0.1.0，Classic 同时初始化独立客户端存储键。`docs/template-source.json` 记录起点来源与版本，和可选模块加入记录分开；它属于创作资料，不是运行 manifest 字段，根 docs 不进入 `.pnds`。
 打开已有工程保留原身份与 Git 历史，Host 升级不会自动改写已创建工程的模板来源。创建与离线要求见[创作指南](../template-guide.md)。
+
+新建 Blank 1.7.0 将 `public/monitor.html` 与 `monitor.js`、`public/performer.html` 与 `performer.js` 分离，初始共享样式位于 `public/style.css`。工程自带本地 `public/pnds-preview.mjs` 和根目录空的 `pnds.preview.json`，监视页已接好预演基础设施，具体参数回调、依赖和作品内容按需添加。生成的 `docs/implementation.md` 说明文件分工与保存、刷新、重启边界。这是新建工程的默认布局，不是已有工程的新合规要求。

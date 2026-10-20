@@ -295,3 +295,90 @@ fn adoption_resource_failures_name_the_requested_exact_library_and_preserve_mani
         );
     }
 }
+
+#[test]
+fn edit_task_adopts_only_shipped_local_versions_and_undo_restores_the_original_manifest() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = tests::project(temp.path(), "score");
+    let libraries = temp.path().join("libraries");
+    let data = temp.path().join("data");
+    library_fixture(&libraries);
+    let protection = Protection::default();
+    let before = fs::read_to_string(root.join("manifest.json")).unwrap();
+    let mut access = CreationAccess::default();
+    let identity = access.open(&root, &protection).unwrap().project.identity;
+    let task = access
+        .begin_assistant_task(&identity, AssistantMode::Edit, None, &data, &protection)
+        .unwrap();
+    assert!(access
+        .adopt_assistant_library(
+            &identity,
+            &task.id,
+            "online-only-package",
+            &data,
+            &libraries,
+            &protection
+        )
+        .is_err());
+    assert!(access
+        .adopt_assistant_library(&identity, &task.id, "p5", &data, &libraries, &protection)
+        .is_err());
+    let proposal = access
+        .propose_assistant_resources(
+            &identity,
+            &task.id,
+            &AssistantResourceRequest {
+                modules: vec![],
+                libraries: vec!["p5".into()],
+                reason: "Local graphics runtime".into(),
+                alternative: None,
+            },
+            &data,
+            &libraries,
+            &protection,
+        )
+        .unwrap();
+    access
+        .decide_assistant_resources(
+            &identity,
+            &task.id,
+            &proposal.resource_plans[0].id,
+            AssistantResourceDecision::Approved,
+            &data,
+            &protection,
+        )
+        .unwrap();
+    // Even an approved item must go through the catalog-validating adoption
+    // tool; generic manifest writes cannot bypass its provenance check.
+    let mut value: serde_json::Value = serde_json::from_str(&before).unwrap();
+    value["schemaVersion"] = serde_json::json!(2);
+    value["sharedLibraries"] = serde_json::json!([{"id":"p5","version":"2.3.4"}]);
+    assert!(access
+        .write_assistant_file(
+            &identity,
+            &task.id,
+            &AssistantWrite {
+                path: "manifest.json".into(),
+                version: Some(file_version(before.as_bytes())),
+                text: Some(value.to_string()),
+                edits: None,
+            },
+            &data,
+            &protection
+        )
+        .is_err());
+    access
+        .adopt_assistant_library(&identity, &task.id, "p5", &data, &libraries, &protection)
+        .unwrap();
+    let manifest = crate::project::manifest::load_manifest_lenient(&root).unwrap();
+    assert_eq!(manifest.shared_libraries[0].version, "2.3.4");
+    assert_ne!(manifest.version, "0.1.0");
+    access.end_assistant_task(&identity, &task.id);
+    access
+        .undo_assistant_task(&identity, &task.id, None, &data, &protection)
+        .unwrap();
+    assert_eq!(
+        fs::read_to_string(root.join("manifest.json")).unwrap(),
+        before
+    );
+}

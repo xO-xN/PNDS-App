@@ -29,6 +29,7 @@ export function AssistantProposalCard({
   onApply,
   onPreview,
   busy = false,
+  savedParameters = false,
 }: {
   proposal: AssistantProposal
   parameters: ReactNode
@@ -37,6 +38,7 @@ export function AssistantProposalCard({
   onApply?: () => void
   onPreview?: () => void
   busy?: boolean
+  savedParameters?: boolean
 }) {
   const { t } = useTranslation()
   const owner = useCreationStore(state => state.workspace?.project.identity)
@@ -44,18 +46,19 @@ export function AssistantProposalCard({
   const current = owner === proposal.identity
   return (
     <section
-      aria-label={t('assistant.proposal.title')}
+      aria-label={t(
+        savedParameters
+          ? 'assistant.proposal.savedParameters'
+          : 'assistant.proposal.title'
+      )}
       className="my-3 min-w-0 rounded-md border border-(--pnds-border) p-3"
       data-proposal-id={proposal.id}
     >
-      <p className="break-all text-xs">
-        {t('assistant.proposal.source', proposal.source)}
-      </p>
-      <p className="text-muted-foreground mt-1 text-xs">
-        {t('assistant.proposal.revision', {
-          revision: proposal.candidate.revision,
-        })}
-      </p>
+      {savedParameters && (
+        <p className="mb-2 text-sm font-semibold">
+          {t('assistant.proposal.savedParameters')}
+        </p>
+      )}
       {!current && (
         <p role="status" className="text-xs">
           {t('assistant.proposal.unavailable')}
@@ -118,7 +121,11 @@ export function AssistantProposalCard({
           )}
           {onApply && (
             <Button size="sm" onClick={onApply}>
-              {t('assistant.proposal.apply')}
+              {t(
+                savedParameters
+                  ? 'assistant.proposal.saveParameters'
+                  : 'assistant.proposal.apply'
+              )}
             </Button>
           )}
           <Button
@@ -139,6 +146,21 @@ export function AssistantProposalCard({
           </Button>
         </div>
       </fieldset>
+      <details className="creation-details mt-3">
+        <summary className="pnds-focus-ring">
+          {t('assistant.proposal.sourceDetails')}
+        </summary>
+        <p className="break-all text-xs">
+          {t('assistant.proposal.source', proposal.source)}
+        </p>
+        {!savedParameters && (
+          <p className="text-muted-foreground mt-1 text-xs">
+            {t('assistant.proposal.revision', {
+              revision: proposal.candidate.revision,
+            })}
+          </p>
+        )}
+      </details>
       {proposal.preview !== 'none' && (
         <p role="status" className="mt-2 text-xs">
           {t(`assistant.proposal.${proposal.preview}`)}

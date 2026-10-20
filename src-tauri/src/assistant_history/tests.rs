@@ -13,6 +13,121 @@ fn message(id: &str) -> AssistantHistoryMessage {
 }
 
 #[test]
+fn activity_is_bounded_display_history_and_legacy_snapshots_still_load() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = project(temp.path(), "activity");
+    let data = temp.path().join("app");
+    let store = AssistantHistoryStore::default();
+    let initial = store.load(&data, &root).unwrap();
+    let mut reply = message("reply");
+    reply.activity = Some(vec!["Checked the saved parameter source.".into()]);
+    store
+        .save(&data, &root, &initial.epoch, vec![reply.clone()])
+        .unwrap();
+    let loaded = store.load(&data, &root).unwrap();
+    assert_eq!(
+        loaded.messages[0].activity.as_ref().unwrap(),
+        &vec!["Checked the saved parameter source."]
+    );
+    assert_eq!(loaded.messages[0].text, "Saved answer");
+    let path = history_path(&data, &initial.project_key).unwrap();
+    let mut legacy: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    assert_eq!(legacy["version"], 5);
+    legacy["version"] = json!(3);
+    legacy["messages"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("activity");
+    fs::write(&path, serde_json::to_vec(&legacy).unwrap()).unwrap();
+    assert!(store.load(&data, &root).unwrap().messages[0]
+        .activity
+        .is_none());
+    reply.activity = Some(vec!["x".repeat(65537)]);
+    assert!(matches!(
+        store.save(&data, &root, &initial.epoch, vec![reply]),
+        Err(AssistantHistoryError::TooLarge)
+    ));
+}
+
+#[test]
+fn reasoning_is_private_assistant_data_and_legacy_history_remains_readable() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = project(temp.path(), "deepseek");
+    let data = temp.path().join("app");
+    let store = AssistantHistoryStore::default();
+    let initial = store.load(&data, &root).unwrap();
+    let mut reply = message("reply");
+    reply.reasoning_content = Some("private protocol reasoning".into());
+    store
+        .save(&data, &root, &initial.epoch, vec![reply.clone()])
+        .unwrap();
+    let reopened = AssistantHistoryStore::default().load(&data, &root).unwrap();
+    assert_eq!(
+        reopened.messages[0].reasoning_content.as_deref(),
+        Some("private protocol reasoning")
+    );
+    assert_eq!(reopened.messages[0].text, "Saved answer");
+    assert!(reopened.messages[0].activity.is_none());
+    let path = history_path(&data, &initial.project_key).unwrap();
+    let mut legacy: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    legacy["version"] = json!(4);
+    legacy["messages"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("reasoningContent");
+    fs::write(&path, serde_json::to_vec(&legacy).unwrap()).unwrap();
+    assert!(store.load(&data, &root).unwrap().messages[0]
+        .reasoning_content
+        .is_none());
+    reply.role = AssistantHistoryRole::User;
+    assert_eq!(
+        store.save(&data, &root, &initial.epoch, vec![reply.clone()]),
+        Err(AssistantHistoryError::InvalidFormat)
+    );
+    reply.role = AssistantHistoryRole::Assistant;
+    reply.reasoning_content = Some("x".repeat(crate::model::MAX_REASONING_BYTES + 1));
+    assert_eq!(
+        store.save(&data, &root, &initial.epoch, vec![reply]),
+        Err(AssistantHistoryError::TooLarge)
+    );
+}
+
+#[test]
+fn large_read_pages_candidates_and_new_interruption_errors_survive_history_round_trips() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = project(temp.path(), "large-score");
+    let app_data = temp.path().join("app");
+    let store = AssistantHistoryStore::default();
+    let initial = store.load(&app_data, &root).unwrap();
+    let text = "// saved sketch\n".repeat(5000);
+    let records = ["protocol", "outputTruncated", "responseInterrupted", "responseTooLarge"].into_iter().enumerate().map(|(index, error)| {
+        serde_json::from_value(json!({
+            "id":format!("large-{index}"), "role":"assistant", "text":"partial", "status":"failed", "scope":"project", "error":error,
+            "sources":[{"docId":"monitor.js", "sectionId":"L1", "title":"Sketch", "locale":"en", "project":{
+                "path":"monitor.js", "version":"v1", "text":text, "offset":0, "endOffset":text.len(), "totalCharacters":text.len(), "nextOffset":null, "startLine":1, "endLine":5001
+            }}],
+            "proposals":[{"id":format!("candidate-{index}"), "projectKey":initial.project_key, "path":"monitor.js", "sourceVersion":"v1", "candidateRevision":1, "text":text, "preview":"none", "pendingRefresh":false}],
+            "usage":{"calls":vec![serde_json::Value::Null;40],"complete":false,"documentMetrics":{"returnedCharacters":80000,"reusedCharacters":524288,"resultCharacters":100000}}
+        })).unwrap()
+    }).collect();
+    store
+        .save(&app_data, &root, &initial.epoch, records)
+        .unwrap();
+    let reopened = AssistantHistoryStore::default()
+        .load(&app_data, &root)
+        .unwrap();
+    assert_eq!(reopened.messages.len(), 4);
+    assert_eq!(
+        reopened.messages[0].sources[0]
+            .project
+            .as_ref()
+            .unwrap()
+            .text,
+        text
+    );
+}
+
+#[test]
 fn history_restores_across_store_restart_and_uses_real_source_roots() {
     let temp = tempfile::tempdir().unwrap();
     let app_data = temp.path().join("app");
@@ -411,7 +526,7 @@ fn storage_and_context_limits_preserve_previous_history_without_partial_writes()
         store.save(&app_data, &root, &first.epoch, too_many),
         Err(AssistantHistoryError::TooLarge)
     );
-    let total: Vec<_> = (0..40)
+    let total: Vec<_> = (0..=MAX_HISTORY_BYTES / (64 * 1024))
         .map(|index| {
             let mut message = message(&format!("message-{index}"));
             message.text = "x".repeat(64 * 1024);

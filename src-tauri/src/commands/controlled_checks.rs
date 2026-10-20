@@ -1,7 +1,7 @@
 //! Desktop adapter for the independent saved-copy workflow.
 use crate::project::controlled_checks::{
-    run_controlled_check, ControlledCheckContext, ControlledCheckOptions, ControlledCheckProgress,
-    ControlledCheckReport,
+    load_report_receipt, persist_report_receipt, run_controlled_check_observed,
+    ControlledCheckContext, ControlledCheckOptions, ControlledCheckProgress, ControlledCheckReport,
 };
 use crate::project::creation::{CreationError, CreationErrorCode};
 use crate::project::runtime_gate::RuntimeLease;
@@ -34,6 +34,45 @@ pub struct ControlledCheckState(Arc<Mutex<Option<Task>>>);
 
 fn error(detail: impl Into<String>) -> CreationError {
     CreationError::new(CreationErrorCode::TestValidation, detail)
+}
+
+/// Observe only the ready session owned by this creation workspace. Never
+/// launch an extra runtime or create a browser client in a live performance.
+#[tauri::command]
+#[specta::specta]
+pub async fn inspect_creation_runtime(
+    app: AppHandle,
+    creation: State<'_, super::creation::CreationState>,
+    identity: String,
+    pages: bool,
+) -> Result<crate::project::live_checks::LiveRuntimeReport, CreationError> {
+    let access = creation.access.clone();
+    super::creation::run_blocking(move || {
+        let protection = super::creation::protection(&app)?;
+        let project = access
+            .lock()
+            .map_err(|_| error("Creation lock failed"))?
+            .descriptor(&identity, &protection)?;
+        let manager = app.state::<crate::project::session::SessionManager>();
+        let before = manager.creation_runtime();
+        if before.project_root.as_deref() != Some(project.root.as_str())
+            || before.snapshot.status != crate::types::SessionStatus::Ready
+        {
+            return Err(error("No ready runtime belongs to this creation workspace"));
+        }
+        let report = crate::project::live_checks::observe(&before, pages);
+        access
+            .lock()
+            .map_err(|_| error("Creation lock failed"))?
+            .descriptor(&identity, &protection)?;
+        if !crate::project::live_checks::same_runtime(&before, &manager.creation_runtime()) {
+            return Err(error(
+                "Runtime changed during observation; discard this observation",
+            ));
+        }
+        Ok(report)
+    })
+    .await
 }
 
 impl ControlledCheckState {
@@ -109,12 +148,21 @@ pub async fn start_creation_check(
         let expected_source_identity = Some(format!("{}:{}", source.dev(), source.ino()));
         access.descriptor(&identity, &protection)?;
         let data = super::project::app_data_dir(&app).map_err(error)?;
-        let lease = RuntimeLease::acquire(&data.join("runtime.lock")).map_err(error)?;
+        let lease = RuntimeLease::acquire(&data.join("runtime.lock")).map_err(|cause| {
+            if cause == crate::project::runtime_gate::RUNTIME_BUSY {
+                CreationError::new(CreationErrorCode::RuntimeBusy, cause)
+            } else {
+                error(cause)
+            }
+        })?;
         if app
             .state::<crate::project::session::SessionManager>()
             .has_active_session()
         {
-            return Err(error("A PNDS performance is active; wait for it to finish"));
+            return Err(CreationError::new(
+                CreationErrorCode::RuntimeBusy,
+                "A PNDS performance is active; wait for it to finish",
+            ));
         }
         let task_id = format!(
             "app-{}-{}",
@@ -169,7 +217,7 @@ pub async fn start_creation_check(
         drop(access);
         let returned_id = task_id.clone();
         tauri::async_runtime::spawn_blocking(move || {
-            let mut report = run_controlled_check(
+            let mut report = run_controlled_check_observed(
                 Path::new(&project.root),
                 &options,
                 &context,
@@ -184,10 +232,14 @@ pub async fn start_creation_check(
                         }
                     }
                 },
+                |manifest, report| super::check_browser::inspect(&app, manifest, &cancel, report),
             );
             let confirmed = report.cleanup.node_confirmed && report.cleanup.audio_confirmed;
             report
                 .record_ownership_result(lease.finish_check(confirmed, &report.unresolved_groups));
+            if persist_report_receipt(&data, &report).is_err() {
+                log::warn!("Completed check has no durable input receipt; restart will recheck");
+            }
             if let Ok(mut task) = checks.0.lock() {
                 if let Some(task) = task
                     .as_mut()
@@ -279,8 +331,18 @@ pub async fn creation_check_is_stale(
             .as_ref()
             .filter(|task| task.snapshot.task_id == task_id && task.snapshot.identity == identity)
             .and_then(|task| task.snapshot.report.as_ref())
-            .and_then(|report| report.evidence.clone())
-            .ok_or_else(|| error("No input evidence exists for this task"))?;
+            .and_then(|report| report.evidence.clone());
+        let evidence = match evidence {
+            Some(evidence) => evidence,
+            None => load_report_receipt(
+                &super::project::app_data_dir(&app).map_err(error)?,
+                Path::new(&project.root),
+                &task_id,
+            )
+            .map_err(error)?
+            .evidence
+            .ok_or_else(|| error("No input evidence exists for this task"))?,
+        };
         let shared = crate::project::shared_libraries::shipped_root(&app).ok();
         let freshness = crate::project::check_evidence::source_freshness(
             Path::new(&project.root),
@@ -294,5 +356,36 @@ pub async fn creation_check_is_stale(
             .descriptor(&identity, &protection)?;
         Ok(freshness.stale || !freshness.complete)
     })
+    .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn start_assistant_check(
+    app: AppHandle,
+    creation: State<'_, super::creation::CreationState>,
+    checks: State<'_, ControlledCheckState>,
+    identity: String,
+    task_id: String,
+) -> Result<String, CreationError> {
+    {
+        let access = creation
+            .access
+            .lock()
+            .map_err(|_| error("Creation lock failed"))?;
+        access.authorize_assistant_task(
+            &identity,
+            &task_id,
+            true,
+            &super::creation::protection(&app)?,
+        )?;
+    }
+    start_creation_check(
+        app,
+        creation,
+        checks,
+        identity,
+        ControlledCheckOptions::default(),
+    )
     .await
 }

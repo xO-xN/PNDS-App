@@ -1,118 +1,66 @@
-import { useEffect, useLayoutEffect, useRef, type CSSProperties } from 'react'
-import { openUrl } from '@tauri-apps/plugin-opener'
-import { HelpMarkdown } from '@/components/help/HelpMarkdown'
-import { logger } from '@/lib/logger'
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  type CSSProperties,
+  type ReactNode,
+} from 'react'
+import { useTranslation } from 'react-i18next'
 import type { ReadmeCoverPage } from '@/lib/readme-cover-page'
+import { CoverMarkdown } from './CoverMarkdown'
+import { coverFogColors } from './cover-colors'
+import { attachCoverFrame } from './cover-frame'
+import { attachCoverIntroFit } from './cover-intro-fit'
 import { attachCoverTitleFit } from './title-fit'
+import './cover-page.css'
 
-/**
- * v1.5.0 (README cover page): the creator-designed title page the main
- * area shows for the cover README format (the user's Frames 1/2,
- * mapped onto theme tokens so every theme carries it). Top to bottom:
- * the four-dot diamond mark in the project's palette beside the PNDS
- * wordmark, the composer pill, a hairline; the huge wide-tracked title;
- * and the bordered band — cover square left, the first section's label
- * and body right.
- *
- * Fluid layout (user report after the first build): the page FITS the
- * panel — never taller, never page-scrolling. Horizontal metrics track
- * the panel's width (cqw), vertical metrics its height (cqh), so every
- * element keeps its frame-relative position whichever axis the window
- * moves on; the title zone flexes to absorb the remainder, and the
- * band's text column scrolls INSIDE the band when the window is short.
- * The band is pinned ABSOLUTELY to the panel's bottom edge; its offset
- * and the header's top padding resolve the SAME --cover-edge-inset
- * token, so the band's gap to the window bottom equals the PNDS row's
- * gap to the window top by construction, not by matched constants.
- * The composer and link pills (github / website) are buttons when
- * their README URL metadata (composer_url / github_url / website_url,
- * http(s) only) parsed — a click hands off to the system browser,
- * never the webview.
- *
- * The cq reference frames are split per axis, deliberately: the root
- * is an inline-size container (Tailwind `@container`) so every cqw
- * tracks the panel's width, while the block axis resolves against the
- * EMBEDDING — the projection's stage box carries
- * `[container-type:size]` (zoom-stable cq layout), and the README
- * panel has no size container, so its cqh falls back to the viewport.
- * That fallback is not a leak but the composition's approved original
- * look: a size-carrying root re-referenced every cqh to the p-8-inset
- * panel and shrank the whole vertical rhythm by roughly the chrome
- * share (user report: app 端的间距被扩大) — the stage box gives the
- * projection its stable frame without touching the panel's rendering.
- * The title is centered under the hairline's column, and its tracking
- * is the flexible variable: the design's 0.37em when it fits, squeezed
- * toward 0 for long titles, and only then does the type scale down —
- * measured imperatively (the style is the state; no React re-render),
- * re-run on panel resize. The glyphs each carry a slow, staggered
- * ripple (see .cover-title-glyph in App.css) — one gentle crest
- * traveling across the word; joined-script titles stay whole.
- */
+export type CoverEditableField =
+  | 'title'
+  | 'composer'
+  | 'duration'
+  | 'performers'
+  | 'contact'
+  | 'color_palette'
+  | 'sectionLabel'
+  | 'sectionMarkdown'
+
+/** The approved 1200 × 800 artwork, shared by performance, projection and
+ * inline creation editing. Window geometry changes only the whole-canvas scale. */
 export function ProjectCoverPage({
   page,
   cover,
-  bandHeight,
-  edgeInset,
+  surface = 'app',
+  zoom = 100,
   headerNote,
   centerBandText,
+  renderEditor,
+  editorActive = false,
 }: {
   page: ReadmeCoverPage
-  /** The cover image as a data URL; null renders the band text-only. */
   cover: string | null
-  /** Overrides the band's height token (`--cover-band-h`, default
-   *  `min(26cqh,42cqw)`) for embeddings that want a roomier band — the
-   *  projection screen (user request: 带内容上下增长、可容纳更多) passes
-   *  a taller share; the title's open field shrinks by the same amount,
-   *  so the title rides higher while the composition stays vertically
-   *  centered. Keep the cqw cap when overriding — it bounds the square
-   *  cover by the band's width. */
-  bandHeight?: string
-  /** Overrides the edge inset token (`--cover-edge-inset`, default
-   *  `5cqh`) — the ONE number that pins both window-edge gaps (the
-   *  header's top padding and the band's bottom offset) and feeds the
-   *  title's bottom reserve. It is the honest lever for roomier title
-   *  spacing: the title centers in its open field, so pt/pb overrides
-   *  cannot widen the visible gaps (symmetric growth is absorbed by the
-   *  centering slack; asymmetric growth merely shifts the
-   *  midpoint), while a SMALLER inset lifts the header and drops the
-   *  band by the same amount — the field grows 2Δ and each visible
-   *  title gap grows Δ with the title still dead-center. The
-   *  projection screen (user request: title 与上下两部分的间距增大)
-   *  passes a tighter inset; the app panel passes nothing. */
-  edgeInset?: string
-  /** Plain-text pill on the header's RIGHT for pill-less pages — the
-   *  utility intro's "PNDS Utility" tag (v1.5.0 polish; same pill
-   *  background as the project cover's pills per the follow-up
-   *  report). Renders only when the page carries neither a composer
-   *  pill nor a link button (github / website). */
+  surface?: 'app' | 'projection'
+  zoom?: number
   headerNote?: string
-  /** Centers the band's text column (both axes) instead of the
-   *  document-flow start alignment — the utility intro's one-liner
-   *  (follow-up report: 上下左右居中). A column that overflows still
-   *  auto-scrolls; centered text that fits never moves. */
   centerBandText?: boolean
+  editorActive?: boolean
+  renderEditor?: (field: CoverEditableField) => ReactNode
 }) {
+  const { t } = useTranslation()
+  const viewportRef = useRef<HTMLDivElement>(null)
   const titleRef = useRef<HTMLHeadingElement>(null)
-  // Destructured so the null-guards below narrow inside the click
-  // closures too (property narrowing doesn't survive into callbacks).
-  const { composerUrl, githubUrl, websiteUrl } = page
+  const stageRef = useRef<HTMLDivElement>(null)
+  const bandRef = useRef<HTMLElement>(null)
+  const markdownRef = useRef<HTMLDivElement>(null)
 
-  // The header's link pills share one shape; a pill only becomes a
-  // button when the README gave it an http(s) URL.
-  const pillClass =
-    'rounded-full bg-(--pnds-sidebar-bg) px-[2cqw] py-[0.9cqw] font-hans text-[1.8cqw] tracking-[0.1em] text-(--pnds-text) shadow-(--pnds-card-shadow)'
-  const openExternal = (url: string) => {
-    // Same failure posture as the README panel's link handoff — a
-    // browser that refuses to open logs, it never rejects unhandled.
-    openUrl(url).catch((error: unknown) => {
-      logger.warn('Failed to open a cover link in the browser', { error })
-    })
-  }
+  useLayoutEffect(() => {
+    const viewport = viewportRef.current
+    const stage = stageRef.current
+    if (viewport && stage) return attachCoverFrame(viewport, stage, zoom)
+  }, [zoom])
 
-  // Fit synchronously before paint; the module owns all late measurements and cleanup.
   useLayoutEffect(() => {
     const title = titleRef.current
-    if (title) return attachCoverTitleFit(title)
+    if (title) return attachCoverTitleFit(title, -0.055)
   }, [page.title])
 
   // The band's text auto-scrolls in the reading direction when the
@@ -128,7 +76,7 @@ export function ProjectCoverPage({
   useEffect(() => {
     const column = bandColumnRef.current
     const inner = rollInnerRef.current
-    if (!column || !inner) return
+    if (!column || !inner || editorActive) return
     const SPEED_PX_PER_S = 12
     const HOLD_MS = 3500
     const RESUME_MS = 2500
@@ -196,200 +144,178 @@ export function ProjectCoverPage({
       column.removeEventListener('wheel', markUser)
       column.removeEventListener('pointerdown', markUser)
     }
-  }, [page.sectionMarkdown, page.sectionLabel])
+  }, [page.sectionMarkdown, page.sectionLabel, editorActive])
+
+  useLayoutEffect(() => {
+    const stage = stageRef.current
+    const region = bandRef.current
+    const column = bandColumnRef.current
+    const copy = rollInnerRef.current
+    const body = markdownRef.current
+    if (stage && region && column && copy && body)
+      return attachCoverIntroFit({
+        stage,
+        region,
+        column,
+        copy,
+        body,
+        maximum: 18,
+        minimum: 15,
+      })
+  }, [page.sectionMarkdown, page.sectionLabel, cover, surface])
+
+  const [primary, mid] = coverFogColors(page.palette)
+  const composer = page.composer?.replace(/^@\s*/, '').trim()
+  const metadata = [
+    {
+      field: 'composer',
+      label: 'author',
+      value: composer === 'PNDS' ? t('projectReadme.cover.brand') : composer,
+    },
+    { field: 'duration', label: 'duration', value: page.duration },
+    { field: 'performers', label: 'performers', value: page.performers },
+    { field: 'contact', label: 'contact', value: page.contact },
+  ] as const
 
   return (
     <div
+      ref={viewportRef}
       data-testid="project-cover-page"
-      className="@container relative flex min-h-0 w-full flex-1 flex-col overflow-hidden [--cover-edge-inset:5cqh] [--cover-band-h:min(26cqh,42cqw)]"
-      // An embedding's overrides ride the SAME tokens as the class
-      // defaults — the title zone's bottom reserve reads both
-      // variables, so the whole composition re-balances around them.
+      data-surface={surface}
+      data-has-cover={cover !== null}
+      className="project-cover-page"
       style={
-        bandHeight !== undefined || edgeInset !== undefined
-          ? ({
-              ...(bandHeight !== undefined
-                ? { '--cover-band-h': bandHeight }
-                : {}),
-              ...(edgeInset !== undefined
-                ? { '--cover-edge-inset': edgeInset }
-                : {}),
-            } as CSSProperties)
-          : undefined
+        {
+          '--cover-fog-primary': primary,
+          '--cover-fog-mid': mid,
+          '--cover-zoom': zoom / 100,
+        } as CSSProperties
       }
     >
-      {/* Header: diamond mark + wordmark left; the composer and github
-          pills right (a pill is a button only when its URL metadata
-          parsed; the click hands off to the system browser). The row's
-          top padding is --cover-edge-inset — the ONE token that also
-          pins the band at the bottom — so this row's gap to the window
-          top and the band's gap to the window bottom are the same
-          number. Change the token on the root, never one side. */}
       <div
-        data-testid="cover-header"
-        className="flex shrink-0 items-center justify-between px-[8cqw] pt-(--cover-edge-inset)"
+        ref={stageRef}
+        data-testid="cover-content-stage"
+        className="cover-content-stage"
       >
-        <div className="flex items-center gap-[2cqw]">
-          <DiamondMark palette={page.palette} />
-          <span className="font-[family-name:Comfortaa] text-[2.2cqw] font-medium text-(--pnds-text)">
-            PNDS
-          </span>
+        <div className="cover-fog" aria-hidden="true">
+          <div className="cover-fog-color cover-fog-mid" />
+          <div className="cover-fog-color cover-fog-primary" />
         </div>
-        <div className="flex items-center gap-[1.6cqw]">
-          {page.composer !== null &&
-            (composerUrl !== null ? (
-              <button
-                type="button"
-                data-testid="cover-composer"
-                className={`cursor-pointer ${pillClass}`}
-                onClick={() => openExternal(composerUrl)}
-              >
-                {page.composer}
-              </button>
-            ) : (
-              <span data-testid="cover-composer" className={pillClass}>
-                {page.composer}
-              </span>
+        <div className="cover-grain" aria-hidden="true" />
+        <div className="cover-guides" aria-hidden="true">
+          <i className="cover-guide-v" />
+          <i className="cover-guide-h" />
+        </div>
+        {headerNote === undefined ? (
+          <dl data-testid="cover-metadata" className="cover-metadata">
+            {metadata.map(({ field, label, value }) => (
+              <div key={field} className="cover-meta-field">
+                <dt>{t(`projectReadme.cover.${label}`)}</dt>
+                <dd
+                  data-testid={`cover-${field}`}
+                  className="cover-meta-value"
+                  dir="auto"
+                  data-cover-editable={renderEditor ? field : undefined}
+                >
+                  {value || '—'}
+                  {renderEditor?.(field)}
+                </dd>
+              </div>
             ))}
-          {githubUrl !== null && (
-            <button
-              type="button"
-              data-testid="cover-github"
-              className={`cursor-pointer ${pillClass}`}
-              onClick={() => openExternal(githubUrl)}
-            >
-              github
-            </button>
-          )}
-          {websiteUrl !== null && (
-            <button
-              type="button"
-              data-testid="cover-website"
-              className={`cursor-pointer ${pillClass}`}
-              onClick={() => openExternal(websiteUrl)}
-            >
-              website
-            </button>
-          )}
-          {page.composer === null &&
-            githubUrl === null &&
-            websiteUrl === null &&
-            headerNote !== undefined && (
-              // The pill-less corner's tag (v1.5.0 polish + follow-up:
-              // the user asked for the SAME pill background the project
-              // cover's pills carry) — the utility intro's "PNDS
-              // Utility" (brand label, verbatim like the wordmark).
-              <span data-testid="cover-header-note" className={pillClass}>
-                {headerNote}
-              </span>
-            )}
-        </div>
-      </div>
-      <div className="mx-[8cqw] mt-[4.4cqh] shrink-0 border-t border-(--pnds-text)/40" />
-
-      {/* The title, vertically CENTERED in the open field between the
-          hairline and the band: the zone's bottom reserve (edge inset
-          + band height + gap) excludes the band's footprint, so
-          items-center centers on the true open field, never over the
-          band. Its column is the hairline's width (same inset), its
-          size caps against BOTH panel axes, and the tracking flexes
-          to fit. */}
-      <div className="flex min-h-0 flex-1 items-center overflow-hidden px-[8cqw] pt-[2cqh] pb-[calc(var(--cover-edge-inset)_+_var(--cover-band-h)_+_4.5cqh)]">
-        <h1
-          ref={titleRef}
-          data-testid="cover-title"
-          dir="auto"
-          aria-label={page.title}
-          className="w-full text-center font-hans text-[min(16.8cqw,20.5cqh)] font-bold leading-[1.05] tracking-[0.37em] whitespace-nowrap text-(--pnds-text)"
-        >
-          {JOINED_SCRIPT.test(page.title)
-            ? page.title
-            : titleGlyphs(page.title).map((glyph, index, all) => {
-                if (glyph === ' ') return ' '
-                // One crest reads as ONE crest only while the glyphs'
-                // phase spread stays a small slice of the cycle: a
-                // fixed per-glyph step on a long title (the utility
-                // aliases' 15+ letters) smears across half the 5.2s
-                // period and the wave dissolves into random bobbing
-                // (user report: 波浪运动顺序杂乱). The step therefore
-                // normalizes by the glyph count — short titles keep
-                // the original 0.16s cadence, long ones cap the TOTAL
-                // spread at 0.8s (≈15% of the cycle).
-                const spread = Math.min(0.16 * Math.max(0, all.length - 1), 0.8)
-                const step = all.length > 1 ? spread / (all.length - 1) : 0
-                return (
-                  <span
-                    // The title rides the key: an index-keyed span is
-                    // REUSED when the selection moves to another work
-                    // and its CSS animation never restarts — it keeps
-                    // the start time of the work that created it, while
-                    // spans for newly-reached indexes start NOW. A few
-                    // selections later the elements' timelines have
-                    // skewed arbitrarily and the wave reads as chaos
-                    // (user report: 多选几次不同的工程，逐渐变杂乱). A
-                    // fresh element set per title keeps every glyph on
-                    // ONE shared timeline.
-                    key={`${page.title}:${index}`}
-                    aria-hidden="true"
-                    className="cover-title-glyph"
-                    style={{ animationDelay: `${-(step * index)}s` }}
-                  >
-                    {glyph}
-                  </span>
-                )
-              })}
-        </h1>
-      </div>
-
-      {/* The band: ABSOLUTELY pinned to the panel's bottom edge at
-          --cover-edge-inset — its gap to the window bottom is the
-          token itself, independent of the flow above and of anything
-          the panel grows around it. Its height is a frame share of
-          the panel (capped so the square cover can never outgrow the
-          band's width), the cover fills that height flush against the
-          band's left edge, and the text column scrolls inside when
-          the window is short. The panel's content ends here (the
-          README's --- boundary). */}
-      <div
-        data-testid="cover-band"
-        className="absolute bottom-(--cover-edge-inset) left-1/2 flex h-(--cover-band-h) w-[84cqw] -translate-x-1/2 gap-[5.9cqw] border border-(--pnds-text)/40"
-      >
-        {cover !== null && (
-          <img
-            data-testid="cover-image"
-            src={cover}
-            alt=""
-            className="aspect-square h-full shrink-0 object-cover"
-          />
+          </dl>
+        ) : (
+          <span data-testid="cover-header-note" className="cover-header-note">
+            {headerNote}
+          </span>
         )}
         <div
-          ref={bandColumnRef}
-          data-testid="cover-band-text"
-          className={
-            centerBandText
-              ? // The utility one-liner rides centered on both axes —
-                // flex centering of the inner layer; the column keeps
-                // its overflow/auto-scroll contract for the day a
-                // translation outgrows it.
-                'cover-band-text flex min-w-0 flex-1 flex-col items-center justify-center overflow-y-auto py-[3.2cqh] text-center'
-              : 'cover-band-text min-w-0 flex-1 overflow-y-auto py-[3.2cqh] pe-[5.5cqw]'
-          }
+          data-testid="cover-header"
+          className="cover-brand"
+          data-cover-editable={renderEditor ? 'color_palette' : undefined}
         >
-          <div ref={rollInnerRef} className="will-change-transform">
-            {page.sectionLabel !== '' && (
-              <p
-                data-testid="cover-label"
-                className="font-hans text-[1.92cqw] font-[250] leading-[1.45] text-(--pnds-text)"
-              >
-                {page.sectionLabel}
-              </p>
-            )}
-            <HelpMarkdown
-              markdown={page.sectionMarkdown}
-              className="text-[1.92cqw] leading-[1.45] text-(--pnds-text) [&_li]:my-[0.5cqw] [&_p]:my-0 [&_ul]:my-[1cqw]"
-            />
-          </div>
+          <span className="cover-wordmark">
+            {t('projectReadme.cover.brand')}
+          </span>
+          <DiamondMark palette={page.palette} />
+          {renderEditor?.('color_palette')}
         </div>
+        <header className="cover-heading">
+          <h1
+            ref={titleRef}
+            data-testid="cover-title"
+            dir="auto"
+            aria-label={page.title}
+            className="cover-title"
+            data-cover-editable={renderEditor ? 'title' : undefined}
+          >
+            {JOINED_SCRIPT.test(page.title)
+              ? page.title
+              : titleGlyphs(page.title).map((glyph, index, all) => {
+                  if (glyph === ' ') return ' '
+                  const spread = Math.min(
+                    0.16 * Math.max(0, all.length - 1),
+                    0.8
+                  )
+                  const step = all.length > 1 ? spread / (all.length - 1) : 0
+                  return (
+                    <span
+                      key={`${page.title}:${index}`}
+                      aria-hidden="true"
+                      className="cover-title-glyph"
+                      style={{ animationDelay: `${-(step * index)}s` }}
+                    >
+                      {glyph}
+                    </span>
+                  )
+                })}
+            {renderEditor?.('title')}
+          </h1>
+        </header>
+        <section ref={bandRef} data-testid="cover-band" className="cover-band">
+          {cover !== null && (
+            <img
+              data-testid="cover-image"
+              src={cover}
+              alt=""
+              className="cover-band-image"
+            />
+          )}
+          <div
+            ref={bandColumnRef}
+            data-testid="cover-band-text"
+            className={
+              centerBandText
+                ? 'cover-band-text text-center'
+                : 'cover-band-text text-start'
+            }
+          >
+            <div ref={rollInnerRef} className="cover-band-copy">
+              {(page.sectionLabel !== '' || renderEditor) && (
+                <h2
+                  data-testid="cover-label"
+                  className="cover-section-label"
+                  data-cover-editable={
+                    renderEditor ? 'sectionLabel' : undefined
+                  }
+                >
+                  {page.sectionLabel.replace(/[：:]$/u, '') || ' '}
+                  {renderEditor?.('sectionLabel')}
+                </h2>
+              )}
+              <div
+                ref={markdownRef}
+                data-cover-markdown
+                data-cover-editable={
+                  renderEditor ? 'sectionMarkdown' : undefined
+                }
+                className="cover-section-markdown"
+              >
+                <CoverMarkdown markdown={page.sectionMarkdown} />
+                {renderEditor?.('sectionMarkdown')}
+              </div>
+            </div>
+          </div>
+        </section>
       </div>
     </div>
   )
@@ -414,32 +340,13 @@ function titleGlyphs(title: string): string[] {
   return [...title]
 }
 
-/**
- * The four-dot diamond mark — the app logo's arrangement in the
- * project's own palette. Palette order is panel order (left, top,
- * right, bottom); the 45° rotation maps the unrotated corners
- * TL→top, TR→right, BR→bottom, BL→left.
- */
+/** Keep the four work colors beside the wordmark, in their source order. */
 function DiamondMark({ palette }: { palette: readonly string[] }) {
-  const corners = [
-    { left: '0%', top: '58%' }, // BL — the left dot
-    { left: '0%', top: '0%' }, // TL — the top dot
-    { left: '58%', top: '0%' }, // TR — the right dot
-    { left: '58%', top: '58%' }, // BR — the bottom dot
-  ] as const
   return (
-    <span
-      data-testid="cover-diamond"
-      aria-hidden
-      className="relative block size-[3.4cqw] shrink-0"
-    >
-      <span className="absolute inset-0 rotate-45">
+    <span data-testid="cover-diamond" aria-hidden className="cover-diamond">
+      <span>
         {palette.map((color, index) => (
-          <span
-            key={index}
-            className="absolute size-[42%] rounded-full"
-            style={{ backgroundColor: color, ...corners[index] }}
-          />
+          <span key={index} style={{ backgroundColor: color }} />
         ))}
       </span>
     </span>

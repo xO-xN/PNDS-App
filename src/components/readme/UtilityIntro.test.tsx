@@ -77,14 +77,14 @@ describe('UtilityIntro', () => {
   // Follow-up round: the corner tag carries the projects' pill
   // background, the diamond mark goes monochrome in the theme's ink,
   // and the band text centers on both axes.
-  it('styles the PNDS Utility tag as a pill like the project cover', () => {
+  it('keeps the PNDS Utility tag as a plain display label', () => {
     render(<UtilityIntro id="local-network-diagnostics" />)
 
     expect(screen.getByTestId('cover-header-note')).toHaveTextContent(
       'PNDS Utility'
     )
     expect(screen.getByTestId('cover-header-note').className).toContain(
-      'rounded-full'
+      'cover-header-note'
     )
   })
 
@@ -107,8 +107,6 @@ describe('UtilityIntro', () => {
     render(<UtilityIntro id="local-network-diagnostics" />)
 
     const column = screen.getByTestId('cover-band-text')
-    expect(column.className).toContain('items-center')
-    expect(column.className).toContain('justify-center')
     expect(column.className).toContain('text-center')
   })
 

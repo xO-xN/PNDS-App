@@ -2,6 +2,87 @@ use super::*;
 use std::os::unix::fs::symlink;
 
 #[test]
+fn excluded_nonempty_assets_never_claim_to_be_empty_files() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = tests::project(temp.path(), "score");
+    fs::write(root.join("voice.scsyndef"), b"SCgf\0nonempty synthdef").unwrap();
+    fs::write(root.join("empty.js"), "").unwrap();
+    let protection = Protection::default();
+    let mut access = CreationAccess::default();
+    let identity = access.open(&root, &protection).unwrap().project.identity;
+    let inventory = access.assistant_inventory(&identity, &protection).unwrap();
+    let serialized = serde_json::to_value(&inventory).unwrap();
+    let find = |path| {
+        serialized["files"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|file| file["path"] == path)
+            .unwrap()
+    };
+    let binary = find("voice.scsyndef");
+    assert!(binary["reason"].is_string());
+    assert!(
+        binary["bytes"].is_null(),
+        "an excluded size is unknown, not zero"
+    );
+    assert_eq!(find("empty.js")["bytes"], 0);
+    let legacy = serde_json::to_string(&inventory.files)
+        .unwrap()
+        .replace("\"bytes\":null", "\"bytes\":0");
+    assert_eq!(inventory.fingerprint, file_version(legacy.as_bytes()));
+    let search = access
+        .assistant_search(&identity, &["voice.scsyndef".into()], "voice", &protection)
+        .unwrap();
+    assert!(serde_json::to_value(search).unwrap()["skipped"][0]["bytes"].is_null());
+}
+
+#[test]
+fn large_saved_sketches_use_complete_pages_and_keep_utf16_offsets_and_versions() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = tests::project(temp.path(), "large-score");
+    let text = format!("// 曲🎵\n{}", "const value = 1;\n".repeat(6000));
+    fs::write(root.join("monitor.js"), &text).unwrap();
+    let protection = Protection::default();
+    let mut access = CreationAccess::default();
+    let identity = access.open(&root, &protection).unwrap().project.identity;
+    let scope = access.assistant_inventory(&identity, &protection).unwrap();
+    let file = scope
+        .files
+        .iter()
+        .find(|file| file.path == "monitor.js")
+        .unwrap();
+    assert!(file.reason.is_none());
+    let mut collected = String::new();
+    let mut offset = 0;
+    loop {
+        let page = access
+            .assistant_read(
+                &identity,
+                &AssistantProjectRead {
+                    path: "monitor.js".into(),
+                    version: file.version.clone(),
+                    offset,
+                    page_length: 65536,
+                },
+                &protection,
+            )
+            .unwrap();
+        assert_eq!(page.offset, offset);
+        collected.push_str(&page.text);
+        match page.next_offset {
+            Some(next) => {
+                assert!(next > offset);
+                offset = next;
+            }
+            None => break,
+        }
+    }
+    assert_eq!(collected, text);
+    assert_eq!(offset, 65536);
+}
+
+#[test]
 fn assistant_reads_saved_pages_and_reports_exclusions_through_the_creation_capability() {
     let temp = tempfile::tempdir().unwrap();
     let root = tests::project(temp.path(), "score");
@@ -101,7 +182,7 @@ fn assistant_refuses_external_entry_even_when_it_points_back_inside_and_caps_rea
     let external = temp.path().join("external.js");
     symlink(root.join("server.js"), &external).unwrap();
     symlink(&external, root.join("escape.js")).unwrap();
-    fs::write(root.join("large.js"), "x".repeat(65537)).unwrap();
+    fs::write(root.join("large.js"), "x".repeat(1024 * 1024 + 1)).unwrap();
     fs::write(root.join("package-lock.json"), "secret lock data").unwrap();
     for path in [
         "../external.js",

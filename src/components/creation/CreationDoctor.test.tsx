@@ -1,3 +1,5 @@
+import { useCreationTestStore } from '@/store/creation-test-store'
+import { CreationDebugPanel } from './CreationDebugPanel'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen, waitFor } from '@/test/test-utils'
 import {
@@ -10,6 +12,8 @@ import { useCreationFilesStore } from '@/store/creation-files-store'
 import { useSessionStore } from '@/store/session-store'
 import { seedCreationDraft } from '@/test/creation-files'
 import { CreationView } from './CreationView'
+import { creationProjectAction } from '@/test/desktop-actions'
+import i18n from '@/i18n/config'
 
 const workspace: CreationWorkspace = {
   project: {
@@ -55,6 +59,10 @@ const report: DiagnosticReport = {
   staticPassed: false,
 }
 beforeEach(() => {
+  useCreationTestStore.setState({
+    debugView: 'preview',
+    debugVisited: { static: false, controlled: false },
+  })
   vi.clearAllMocks()
   useCreationStore.setState({
     active: true,
@@ -83,11 +91,21 @@ beforeEach(() => {
 it('diagnoses saved disk during startup and locates issues without saving drafts or changing the run', async () => {
   seedCreationDraft('server.js', 'disk text', 'v1')
   useCreationFilesStore.getState().edit('server.js', 'unsaved draft')
-  render(<CreationView />)
-  fireEvent.click(screen.getByRole('button', { name: 'Static Doctor' }))
-  await screen.findByRole('dialog', { name: 'Static Doctor' })
+  render(
+    <>
+      <CreationView />
+      <CreationDebugPanel hidden={false} />
+    </>
+  )
+  await creationProjectAction('Static Doctor')
+  await screen.findByRole('region', { name: 'Static Doctor' })
   await screen.findByText('Entry is missing')
-  expect(screen.getByText('Unknown declaration')).toBeInTheDocument()
+  expect(screen.getByText('Unknown declaration')).toBeVisible()
+  expect(screen.getByText('0.1.0')).not.toBeVisible()
+  expect(screen.getByText('scoreServer.entry')).not.toBeVisible()
+  fireEvent.click(screen.getByText('Full static report'))
+  expect(screen.getByText('0.1.0')).toBeVisible()
+  expect(screen.getByText('Entry is missing')).toBeVisible()
   expect(screen.getByText('Manifest prerequisite missing')).toBeInTheDocument()
   expect(screen.getByText('Real sound and devices')).toBeInTheDocument()
   expect(screen.getByText('scoreServer.entry')).toBeInTheDocument()
@@ -113,8 +131,13 @@ it('diagnoses saved disk during startup and locates issues without saving drafts
 
 it('retains a report across drafts but marks real saved changes stale until explicit recheck', async () => {
   seedCreationDraft('server.js', 'disk text', 'v1')
-  render(<CreationView />)
-  fireEvent.click(screen.getByRole('button', { name: 'Static Doctor' }))
+  render(
+    <>
+      <CreationView />
+      <CreationDebugPanel hidden={false} />
+    </>
+  )
+  await creationProjectAction('Static Doctor')
   await screen.findByText('Entry is missing')
   act(() => useCreationFilesStore.getState().edit('server.js', 'another draft'))
   expect(
@@ -144,8 +167,13 @@ it('retains a report across drafts but marks real saved changes stale until expl
 })
 
 it('detects changed diagnostic inputs outside the ordinary file watcher when focus returns', async () => {
-  render(<CreationView />)
-  fireEvent.click(screen.getByRole('button', { name: 'Static Doctor' }))
+  render(
+    <>
+      <CreationView />
+      <CreationDebugPanel hidden={false} />
+    </>
+  )
+  await creationProjectAction('Static Doctor')
   await screen.findByText('Entry is missing')
   await waitFor(() =>
     expect(commands.creationDiagnosticIsStale).toHaveBeenCalledWith(
@@ -172,8 +200,13 @@ it('ignores late diagnostics after a workspace switch and diagnoses the new iden
       complete = resolve
     })
   )
-  render(<CreationView />)
-  fireEvent.click(screen.getByRole('button', { name: 'Static Doctor' }))
+  render(
+    <>
+      <CreationView />
+      <CreationDebugPanel hidden={false} />
+    </>
+  )
+  await creationProjectAction('Static Doctor')
   await screen.findByText('Reading saved project…')
   act(() =>
     useCreationStore.setState({
@@ -196,8 +229,10 @@ it('ignores late diagnostics after a workspace switch and diagnoses the new iden
       },
     })
   )
-  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-  fireEvent.click(screen.getByRole('button', { name: 'Static Doctor' }))
+  expect(
+    screen.queryByRole('region', { name: 'Static Doctor' })
+  ).not.toBeInTheDocument()
+  await creationProjectAction('Static Doctor')
   await screen.findByText('Entry is missing')
   expect(screen.queryByText('Old project')).not.toBeInTheDocument()
   expect(commands.diagnoseCreationProject).toHaveBeenLastCalledWith(
@@ -216,8 +251,13 @@ it('retains old disk changes that arrive while diagnostics are being read', asyn
       complete = resolve
     })
   )
-  render(<CreationView />)
-  fireEvent.click(screen.getByRole('button', { name: 'Static Doctor' }))
+  render(
+    <>
+      <CreationView />
+      <CreationDebugPanel hidden={false} />
+    </>
+  )
+  await creationProjectAction('Static Doctor')
   await screen.findByText('Reading saved project…')
   act(() => useCreationFilesStore.getState().changed(['server.js']))
   await act(async () => complete?.({ status: 'ok', data: report }))
@@ -233,15 +273,27 @@ it('offers keyboard diagnosis during shutdown for read-only sources and restores
       project: { ...workspace.project, source: 'bundle' },
     },
   })
-  render(<CreationView />)
-  const entrance = screen.getByRole('button', { name: 'Static Doctor' })
+  render(
+    <>
+      <CreationView />
+      <CreationDebugPanel hidden={false} />
+    </>
+  )
+  const entrance = screen.getByRole('button', {
+    name: i18n.t('creation.debug.more'),
+  })
   expect(entrance).toBeEnabled()
   entrance.focus()
   await userEvent.keyboard('{Enter}')
+  const item = await screen.findByRole('menuitem', { name: 'Static Doctor' })
+  item.focus()
+  await userEvent.keyboard('{Enter}')
   await screen.findByText('Entry is missing')
-  await userEvent.keyboard('{Escape}')
+  await userEvent.click(screen.getByRole('button', { name: 'Close' }))
   await waitFor(() =>
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('region', { name: 'Static Doctor' })
+    ).not.toBeInTheDocument()
   )
   expect(entrance).toHaveFocus()
   expect(commands.saveCreationFile).not.toHaveBeenCalled()
@@ -253,8 +305,13 @@ it('explains command failures and allows explicit retry without claiming a compl
     status: 'error',
     error: { code: 'permission', detail: 'Cannot read project' },
   })
-  render(<CreationView />)
-  fireEvent.click(screen.getByRole('button', { name: 'Static Doctor' }))
+  render(
+    <>
+      <CreationView />
+      <CreationDebugPanel hidden={false} />
+    </>
+  )
+  await creationProjectAction('Static Doctor')
   await screen.findByText('Cannot read project')
   expect(
     screen.queryByText('The selected static checks passed.')

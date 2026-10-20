@@ -10,6 +10,15 @@ import { CreationView } from './CreationView'
 import { AssistantHistoryControls } from './AssistantHistoryControls'
 import i18n from '@/i18n/config'
 
+async function openClearHistory(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(
+    screen.getByRole('button', { name: i18n.t('assistant.chat.more') })
+  )
+  await user.click(
+    screen.getByRole('menuitem', { name: 'Clear project history' })
+  )
+}
+
 beforeEach(async () => {
   await i18n.changeLanguage('en')
   vi.clearAllMocks()
@@ -57,6 +66,67 @@ beforeEach(async () => {
 })
 
 describe('project assistant history (#167)', () => {
+  it('keeps restored provider reasoning out of the answer and collapsed work log', async () => {
+    useAssistantStore.setState({
+      messages: [
+        {
+          id: 'reasoning-reply',
+          role: 'assistant',
+          text: 'Saved and checked.',
+          reasoningContent: 'private provider reasoning',
+          activity: ['Checked the saved files.'],
+          status: 'completed',
+          scope: 'project',
+          sources: [],
+        },
+      ],
+    })
+    const user = userEvent.setup()
+    render(<CreationView />)
+    expect(screen.getByText('Saved and checked.')).toBeVisible()
+    expect(
+      screen.queryByText('private provider reasoning')
+    ).not.toBeInTheDocument()
+    await user.click(screen.getByText('Work log'))
+    expect(screen.getByText('Checked the saved files.')).toBeVisible()
+    expect(
+      screen.queryByText('private provider reasoning')
+    ).not.toBeInTheDocument()
+  })
+
+  it('keeps recovered task undo in conversation options after the transcript is empty', async () => {
+    vi.mocked(commands.listCreationAssistantTasks).mockResolvedValueOnce({
+      status: 'ok',
+      data: [
+        {
+          id: 'recovered-task',
+          mode: 'edit',
+          files: [{ path: 'score.js', created: false, undone: false }],
+        },
+      ],
+    })
+    const user = userEvent.setup()
+    render(<AssistantHistoryControls identity="history-ui" />)
+    const more = screen.getByRole('button', {
+      name: i18n.t('assistant.chat.more'),
+    })
+    expect(
+      screen.queryByText('Assistant changes and undo')
+    ).not.toBeInTheDocument()
+    await user.click(more)
+    await user.click(
+      screen.getByRole('menuitem', { name: 'Assistant changes and undo' })
+    )
+    expect(
+      await screen.findByRole('button', { name: 'Undo score.js' })
+    ).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Undo task' })).toBeEnabled()
+    await user.keyboard('{Escape}')
+    expect(more).toHaveFocus()
+    expect(commands.undoCreationAssistantTask).not.toHaveBeenCalled()
+    expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
+  })
+
   it.each([
     [
       'en',
@@ -139,12 +209,12 @@ describe('project assistant history (#167)', () => {
     vi.mocked(commands.loadAssistantHistory).mockClear()
     const user = userEvent.setup()
     render(<CreationView />)
-    await user.click(screen.getByRole('button', { name: 'score.js' }))
+    await user.click(screen.getByRole('treeitem', { name: 'score.js' }))
     await screen.findByRole('textbox', { name: 'score.js' })
     act(() =>
       useCreationFilesStore.getState().edit('score.js', 'draft survives reload')
     )
-    await user.click(screen.getByRole('button', { name: 'Back to discussion' }))
+    await user.click(screen.getByRole('button', { name: 'Discussion' }))
     expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled()
     expect(
       screen.queryByRole('button', { name: 'Retry saving history' })
@@ -160,7 +230,7 @@ describe('project assistant history (#167)', () => {
     expect(screen.getByText('Unsaved in-memory reply')).toBeVisible()
     await user.keyboard('{Enter}{Tab}{Enter}')
     expect(commands.loadAssistantHistory).toHaveBeenCalledWith('history-ui')
-    expect(await screen.findByText(/Discuss your musical ideas/)).toBeVisible()
+    expect(await screen.findByText(i18n.t('assistant.welcome'))).toBeVisible()
     expect(
       screen.getByRole('textbox', { name: 'Ask the assistant' })
     ).toHaveValue('Continue this question')
@@ -246,17 +316,19 @@ describe('project assistant history (#167)', () => {
     )
     const user = userEvent.setup()
     render(<CreationView />)
-    await user.click(
-      screen.getByRole('button', { name: 'Clear project history' })
-    )
+    await openClearHistory(user)
     await user.click(screen.getByRole('button', { name: 'Clear this history' }))
     expect(
       screen.getByText('Updating this project’s chat history…')
     ).toBeVisible()
     expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled()
+    await user.click(
+      screen.getByRole('button', { name: i18n.t('assistant.chat.more') })
+    )
     expect(
-      screen.getByRole('button', { name: 'Clear project history' })
-    ).toBeDisabled()
+      screen.getByRole('menuitem', { name: 'Clear project history' })
+    ).toHaveAttribute('aria-disabled', 'true')
+    await user.keyboard('{Escape}')
     await act(async () => finish({ status: 'error', error: { type: 'io' } }))
     expect(screen.getByRole('alert')).toHaveTextContent(
       'The history operation failed.'
@@ -265,9 +337,7 @@ describe('project assistant history (#167)', () => {
     expect(
       screen.queryByRole('button', { name: 'Reload chat history' })
     ).not.toBeInTheDocument()
-    await user.click(
-      screen.getByRole('button', { name: 'Clear project history' })
-    )
+    await openClearHistory(user)
     expect(commands.clearAssistantHistory).toHaveBeenCalledTimes(1)
     await user.click(screen.getByRole('button', { name: 'Clear this history' }))
     expect(commands.clearAssistantHistory).toHaveBeenCalledTimes(2)
@@ -342,23 +412,28 @@ describe('project assistant history (#167)', () => {
     })
     const user = userEvent.setup()
     render(<CreationView />)
-    await user.click(screen.getByRole('button', { name: 'score.js' }))
+    await user.click(screen.getByRole('treeitem', { name: 'score.js' }))
     await screen.findByRole('textbox', { name: 'score.js' })
     act(() =>
       useCreationFilesStore.getState().edit('score.js', 'keep this draft')
     )
-    await user.click(screen.getByRole('button', { name: 'Back to discussion' }))
-    const clear = screen.getByRole('button', { name: 'Clear project history' })
-    clear.focus()
-    await user.keyboard('{Enter}')
+    await user.click(screen.getByRole('button', { name: 'Discussion' }))
+    const more = screen.getByRole('button', {
+      name: i18n.t('assistant.chat.more'),
+    })
+    more.focus()
+    await user.keyboard('{Enter}{End}{Enter}')
     expect(screen.getByRole('alertdialog')).toHaveTextContent('History project')
     expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus()
     await user.keyboard('{Escape}')
     expect(commands.clearAssistantHistory).not.toHaveBeenCalled()
-    expect(clear).toHaveFocus()
-    await user.keyboard('{Enter}{Tab}{Enter}')
+    expect(more).toHaveFocus()
+    await user.keyboard('{Enter}{End}{Enter}')
+    expect(await screen.findByRole('alertdialog')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus()
+    await user.keyboard('{Tab}{Enter}')
     expect(commands.clearAssistantHistory).toHaveBeenCalledWith('history-ui')
-    expect(await screen.findByText(/Discuss your musical ideas/)).toBeVisible()
+    expect(await screen.findByText(i18n.t('assistant.welcome'))).toBeVisible()
     expect(
       screen.getByRole('textbox', { name: 'Ask the assistant' })
     ).toHaveValue('Continue this question')
@@ -442,14 +517,14 @@ describe('project assistant history (#167)', () => {
       'earlier after'
     )
     expect(commands.saveCreationFile).not.toHaveBeenCalled()
-    await user.click(screen.getByRole('button', { name: 'score.js' }))
+    await user.click(screen.getByRole('treeitem', { name: 'score.js' }))
     expect(
       await screen.findByRole('textbox', { name: 'score.js' })
     ).toHaveTextContent('current disk')
     act(() =>
       useCreationFilesStore.getState().edit('score.js', 'new local draft')
     )
-    await user.click(screen.getByRole('button', { name: 'Back to discussion' }))
+    await user.click(screen.getByRole('button', { name: 'Discussion' }))
     expect(screen.getByText('old proposal code')).toBeVisible()
     expect(useCreationFilesStore.getState().drafts['score.js']?.text).toBe(
       'new local draft'
@@ -475,11 +550,11 @@ describe('project assistant history (#167)', () => {
     )
     await user.keyboard('{Meta>}{Enter}{/Meta}')
     expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
-    await user.click(screen.getByRole('button', { name: 'score.js' }))
+    await user.click(screen.getByRole('treeitem', { name: 'score.js' }))
     expect(
       await screen.findByRole('textbox', { name: 'score.js' })
     ).toBeVisible()
-    await user.click(screen.getByRole('button', { name: 'Back to discussion' }))
+    await user.click(screen.getByRole('button', { name: 'Discussion' }))
     expect(
       screen.getByRole('textbox', { name: 'Ask the assistant' })
     ).toHaveValue('Continue this question while loading')

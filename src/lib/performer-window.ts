@@ -13,6 +13,7 @@ import type { BackgroundThrottlingPolicy } from '@tauri-apps/api/window'
 import i18n, { currentResolvedLanguage } from '@/i18n/config'
 import { commands } from '@/lib/tauri-bindings'
 import { logger } from '@/lib/logger'
+import { setupPerformerConnections } from '@/lib/performer-connections'
 import { buildMonitorUrl } from '@/lib/monitor-url'
 import { MONITOR_REVEAL_TIMEOUT_MS } from '@/lib/monitor-reveal'
 import {
@@ -173,6 +174,7 @@ function syncClient(client: Client): void {
                   theme,
                   lang: locale,
                   reload: navigation,
+                  testClient: client.state.label,
                 })
               : null,
           pageStatus: running ? 'loading' : 'standby',
@@ -481,6 +483,7 @@ export async function closeAllPerformerWindows(): Promise<void> {
 }
 export function setupPerformerWindowBridge(): () => void {
   if (disposeBridge) return disposeBridge
+  const offConnections = setupPerformerConnections()
   const pending = [
     onPerformerReady(label => {
       const client = clients.get(label)
@@ -577,6 +580,7 @@ export function setupPerformerWindowBridge(): () => void {
     offSettings()
     offCreation()
     offParticipant()
+    offConnections()
     i18n.off('languageChanged', sync)
     for (const label of clients.keys()) retire(label)
     nextNumber = 0

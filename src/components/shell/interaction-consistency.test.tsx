@@ -56,7 +56,6 @@ const SECOND_PATH = '/Users/test/PNDS Score 1'
 const NAMED_CONTROLS = [
   'Remove from history',
   'Open projection window',
-  'Reload monitor',
 ] as const
 
 describe('interaction consistency (v1.2.2, issue #32)', () => {
@@ -101,7 +100,7 @@ describe('interaction consistency (v1.2.2, issue #32)', () => {
       expect(tab.className).toContain('pnds-focus-ring')
     }
 
-    // The list-tail import entry, the ✕, share/refresh, and the mute toggle.
+    // The list-tail import entry, the ✕, projection, and the mute toggle.
     for (const testId of ['add-project-button', 'mute-toggle'] as const) {
       expect(screen.getByTestId(testId).className).toContain('pnds-focus-ring')
     }
@@ -139,7 +138,7 @@ describe('interaction consistency (v1.2.2, issue #32)', () => {
       expect(tab.className).toContain('active:bg-(--pnds-text)/10')
     }
 
-    // Plain buttons micro-shrink: ghost import entry, ✕, share/refresh,
+    // Plain buttons micro-shrink: ghost import entry, ✕, projection,
     // mute — each by its own scale magnitude.
     expect(screen.getByTestId('add-project-button').className).toContain(
       'active:scale-[0.98]'

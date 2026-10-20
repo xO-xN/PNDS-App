@@ -32,6 +32,16 @@ notify('Update Available', 'Click to install', { native: true })
 | `notifications.info()`              | Info toast or native notification    |
 | `notifications.warning()`           | Warning toast or native notification |
 
+## Project check windows
+
+`notification_plugin.rs` keeps the upstream Rust lifecycle and command handling,
+but does not initialize its Web Notification shim in generated `check-page-*`
+webviews. They are isolated project pages without Host notification permission;
+the plugin's automatic permission query otherwise becomes an unrelated
+unhandled rejection in the script checker. Main/Host pages retain the upstream
+shim and permissions. Do not grant notification permissions to check windows or
+filter score Promise errors to hide bootstrap errors.
+
 ## Configuration
 
 ### Toast Notifications (Sonner)
@@ -170,3 +180,14 @@ Native notifications require the `notification:default` permission in `src-tauri
 1. **Check Toaster component**: Ensure `<Toaster />` is rendered in AppShell
 2. **Check theme**: Toasts should adapt to current theme automatically
 3. **Check positioning**: Default position is bottom-right
+
+## Creation shell failures (2026-10-19)
+
+`CreationErrorToast` uses one stable Sonner id per workspace/error source with a
+4-second lifetime. Dependencies are the error code/detail strings, so repeated
+polling of the same failure does not stack or continually renew the notification.
+Clearing the error or leaving its owner dismisses it. Runtime details can open the
+console explicitly after checking the project identity; errors do not open or
+resize the console by themselves. Error records and conflict protections are not
+cleared when a toast expires. Validation/confirmation errors remain local to the
+form. The main Toaster is offset above the bottom transport.

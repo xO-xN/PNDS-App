@@ -1,3 +1,8 @@
+import { openUrl } from '@tauri-apps/plugin-opener'
+import { resolveProjectReadmeLink } from '@/lib/project-readme'
+import { HelpMarkdown } from '@/components/help/HelpMarkdown'
+import { parseReadmeCoverPage } from '@/lib/readme-cover-page'
+import { cn } from '@/lib/utils'
 import { CreationFileChangeControls } from './CreationFileChangeControls'
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -43,6 +48,8 @@ import {
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
 import { CreationErrorNotice } from './CreationErrorNotice'
 import { CreationManifestForm } from './CreationManifestForm'
@@ -152,6 +159,12 @@ export function CreationFileEditor({
       ? content.text
       : ''
   const isReadme = file.kind === 'text' && isProjectReadme(file.path)
+  const isMarkdown =
+    file.kind === 'text' && /\.md$/i.test(file.path) && !isReadme
+  const showMarkdown =
+    isMarkdown &&
+    readmeView === 'preview' &&
+    !!(draft || content?.kind === 'text')
   const readmeDocument = draft?.readme ?? inspectEditableReadme(text)
   const unsafeReadme = isReadme && readmeDocument.kind === 'unsafe'
   const reveal = async () => {
@@ -206,108 +219,58 @@ export function CreationFileEditor({
           ? t('creation.unsaved')
           : t('creation.saved')
     : t('creation.saved')
+  const showReadme =
+    isReadme &&
+    (draft || content?.kind === 'text') &&
+    !(location && readmeView === 'text') &&
+    (readmeView !== 'text' || unsafeReadme || !editableText)
+  const codeView =
+    !showReadme &&
+    !showMarkdown &&
+    (editableText
+      ? !!draft && !(isManifest && manifestView === 'form')
+      : content?.kind === 'text')
+  const statusContent = (
+    <>
+      <span
+        aria-live="polite"
+        data-state={
+          draft?.conflict || draft?.diskChanged
+            ? 'conflict'
+            : dirty
+              ? 'dirty'
+              : 'clean'
+        }
+        title={dirty ? t('creation.draftHint') : undefined}
+      >
+        {statusLabel}
+      </span>
+      {renameNote === file.path && (
+        <span role="status" className="creation-rename-note">
+          {t('creation.renamed')} {t('creation.renameHint')}
+        </span>
+      )}
+    </>
+  )
   return (
     <section
       className="flex min-h-0 min-w-0 flex-1 flex-col"
       aria-label={file.path}
     >
       <header className="desktop-file-header space-y-2 border-b border-(--pnds-border) p-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <h2 className="break-all font-medium">{file.path}</h2>
-          {dirty && (
-            <span
-              aria-label={t('creation.unsaved')}
-              title={t('creation.unsaved')}
-              className="creation-dirty-dot"
-            />
-          )}
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          {isReadme && (
-            <>
-              <label className="flex items-center gap-2 text-sm">
-                {t('creation.readme.language')}
-                <Select
-                  value={projectReadmeLocale(file.path) ?? readmeLocale}
-                  onValueChange={locale => {
-                    useCreationFilesStore.getState().setReadmeLocale(locale)
-                    const next = resolveCreationReadme(
-                      workspace?.files.map(file => file.path) ?? [],
-                      locale
-                    )
-                    if (next)
-                      useCreationFilesStore.getState().setActivePath(next)
-                  }}
-                >
-                  <SelectTrigger
-                    aria-label={t('creation.readme.language')}
-                    size="sm"
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="en">English</SelectItem>
-                    <SelectItem value="zh-CN">简体中文</SelectItem>
-                  </SelectContent>
-                </Select>
-              </label>
-              <p className="text-xs">
-                {t('creation.readme.resolvedFile', { path: file.path })}
-              </p>
-              {editableText && !unsafeReadme && (
-                <div
-                  role="group"
-                  aria-label={t('creation.readme.view')}
-                  className="flex gap-1"
-                >
-                  <Button
-                    size="sm"
-                    variant={readmeView === 'preview' ? 'default' : 'outline'}
-                    onClick={() => setReadmeView('preview')}
-                  >
-                    {t('creation.readme.viewPreview')}
-                  </Button>
-                  {readmeDocument.kind === 'document' && (
-                    <Button
-                      size="sm"
-                      variant={readmeView === 'text' ? 'default' : 'outline'}
-                      onClick={() => setReadmeView('text')}
-                    >
-                      {t('creation.readme.viewText')}
-                    </Button>
-                  )}
-                </div>
-              )}
-            </>
-          )}
-          {isManifest && (
-            <div
-              className="flex items-center gap-1"
-              role="group"
-              aria-label={t('creation.manifest.viewLabel')}
-            >
-              <Button
-                size="sm"
-                variant={manifestView === 'form' ? 'default' : 'outline'}
-                onClick={() => setManifestView('form')}
-              >
-                {t('creation.manifest.viewForm')}
-              </Button>
-              <Button
-                size="sm"
-                variant={manifestView === 'text' ? 'default' : 'outline'}
-                onClick={() => setManifestView('text')}
-              >
-                {t('creation.manifest.viewText')}
-              </Button>
-            </div>
-          )}
-          <p className="text-sm">
-            {t('creation.fileInfo', {
-              type: file.path.split('.').pop()?.toUpperCase() ?? file.kind,
-              size: file.size,
-            })}
-          </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <h2 className="truncate font-medium" title={file.path}>
+              {file.path}
+            </h2>
+            {dirty && (
+              <span
+                aria-label={t('creation.unsaved')}
+                title={t('creation.unsaved')}
+                className="creation-dirty-dot"
+              />
+            )}
+          </div>
           {editableText && (
             <>
               <Button
@@ -353,6 +316,13 @@ export function CreationFileEditor({
                 }
               }}
             >
+              <DropdownMenuLabel className="text-xs font-normal">
+                {t('creation.fileInfo', {
+                  type: file.path.split('.').pop()?.toUpperCase() ?? file.kind,
+                  size: file.size,
+                })}
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
               {editableText && (
                 <DropdownMenuItem
                   disabled={dirty || draft?.saving}
@@ -380,10 +350,126 @@ export function CreationFileEditor({
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
+        {isMarkdown && (
+          <div
+            role="group"
+            aria-label={t('creation.readme.view')}
+            className="flex gap-1"
+          >
+            <Button
+              size="sm"
+              variant={readmeView === 'preview' ? 'default' : 'outline'}
+              aria-pressed={readmeView === 'preview'}
+              onClick={() => setReadmeView('preview')}
+            >
+              {t('creation.readme.viewPreview')}
+            </Button>
+            {editableText && (
+              <Button
+                size="sm"
+                variant={readmeView === 'text' ? 'default' : 'outline'}
+                aria-pressed={readmeView === 'text'}
+                onClick={() => setReadmeView('text')}
+              >
+                {t('creation.readme.viewText')}
+              </Button>
+            )}
+          </div>
+        )}
+        {(isReadme || isManifest) && (
+          <div className="flex flex-wrap items-center gap-3">
+            {isReadme && (
+              <>
+                <label className="flex items-center gap-2 text-sm">
+                  {t('creation.readme.language')}
+                  <Select
+                    value={projectReadmeLocale(file.path) ?? readmeLocale}
+                    onValueChange={locale => {
+                      useCreationFilesStore.getState().setReadmeLocale(locale)
+                      const next = resolveCreationReadme(
+                        workspace?.files.map(file => file.path) ?? [],
+                        locale
+                      )
+                      if (next)
+                        useCreationFilesStore.getState().setActivePath(next)
+                    }}
+                  >
+                    <SelectTrigger
+                      aria-label={t('creation.readme.language')}
+                      size="sm"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="en">English</SelectItem>
+                      <SelectItem value="zh-CN">简体中文</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </label>
+                <p className="text-xs">
+                  {t('creation.readme.resolvedFile', { path: file.path })}
+                </p>
+                {editableText && readmeDocument.kind === 'cover' && (
+                  <p className="text-xs text-muted-foreground">
+                    {t('creation.readme.inlineHint')}
+                  </p>
+                )}
+                {editableText && readmeDocument.kind === 'document' && (
+                  <div
+                    role="group"
+                    aria-label={t('creation.readme.view')}
+                    className="flex gap-1"
+                  >
+                    <Button
+                      size="sm"
+                      variant={readmeView === 'preview' ? 'default' : 'outline'}
+                      aria-pressed={readmeView === 'preview'}
+                      onClick={() => setReadmeView('preview')}
+                    >
+                      {t('creation.readme.viewPreview')}
+                    </Button>
+                    {readmeDocument.kind === 'document' && (
+                      <Button
+                        size="sm"
+                        variant={readmeView === 'text' ? 'default' : 'outline'}
+                        aria-pressed={readmeView === 'text'}
+                        onClick={() => setReadmeView('text')}
+                      >
+                        {t('creation.readme.viewText')}
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+            {isManifest && (
+              <div
+                className="flex items-center gap-1"
+                role="group"
+                aria-label={t('creation.manifest.viewLabel')}
+              >
+                <Button
+                  size="sm"
+                  variant={manifestView === 'form' ? 'default' : 'outline'}
+                  onClick={() => setManifestView('form')}
+                >
+                  {t('creation.manifest.viewForm')}
+                </Button>
+                <Button
+                  size="sm"
+                  variant={manifestView === 'text' ? 'default' : 'outline'}
+                  onClick={() => setManifestView('text')}
+                >
+                  {t('creation.manifest.viewText')}
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
         {!editable && <p className="text-xs">{t('creation.readOnly')}</p>}
-        {isScd && (
+        {isScd && compileReason && (
           <p role="status" className="text-xs">
-            {compileReason ?? t('creation.compile.scope')}
+            {compileReason}
           </p>
         )}
         {editableText && !unsafeReadme && (
@@ -393,11 +479,16 @@ export function CreationFileEditor({
             path={file.path}
           />
         )}
-        {editableText && dirty && (
-          <p className="text-xs">{t('creation.draftHint')}</p>
-        )}
       </header>
-      <div className="creation-file-content min-h-0 flex-1 overflow-auto p-4">
+      <div
+        className={cn(
+          'creation-file-content min-h-0 flex-1 overflow-auto p-4',
+          showReadme &&
+            (readmeDocument.kind === 'cover' ||
+              parseReadmeCoverPage(text) !== null) &&
+            'creation-file-content-cover'
+        )}
+      >
         {(error || draft?.error) && (
           <CreationErrorNotice
             error={(error ?? draft?.error) as CreationError}
@@ -417,10 +508,27 @@ export function CreationFileEditor({
         {!content && !draft && !error && (
           <p role="status">{t('creation.loading')}</p>
         )}
-        {isReadme &&
-        (draft || content?.kind === 'text') &&
-        !(location && readmeView === 'text') &&
-        (readmeView === 'preview' || unsafeReadme || !editableText) ? (
+        {showMarkdown ? (
+          <div
+            onClick={event => {
+              const anchor = (event.target as HTMLElement).closest('a')
+              if (!anchor) return
+              event.preventDefault()
+              const target = resolveProjectReadmeLink(
+                anchor.getAttribute('href') ?? ''
+              )
+              if (target)
+                void openUrl(target.url).catch(cause =>
+                  setError(creationTransportError(cause))
+                )
+            }}
+          >
+            <HelpMarkdown
+              markdown={text}
+              className="creation-markdown-preview"
+            />
+          </div>
+        ) : showReadme ? (
           <CreationReadme
             text={text}
             root={workspace?.project.root ?? ''}
@@ -454,6 +562,7 @@ export function CreationFileEditor({
                   text={draft.text}
                   location={location}
                   version={draft.diskVersion}
+                  statusContent={statusContent}
                 />
               </Suspense>
             )
@@ -466,6 +575,7 @@ export function CreationFileEditor({
               text={text}
               location={location}
               version={content.version}
+              statusContent={statusContent}
             />
           </Suspense>
         ) : content?.kind === 'image' && !imageFailed ? (
@@ -481,19 +591,9 @@ export function CreationFileEditor({
           <p>{t('creation.binaryHint')}</p>
         ) : null}
       </div>
-      <footer className="creation-editor-status">
-        <span
-          data-state={draft?.conflict ? 'conflict' : dirty ? 'dirty' : 'clean'}
-        >
-          {statusLabel}
-        </span>
-        <span>UTF-8</span>
-        {renameNote === file.path && (
-          <span role="status" className="creation-rename-note">
-            {t('creation.renamed')} {t('creation.renameHint')}
-          </span>
-        )}
-      </footer>
+      {!codeView && (
+        <footer className="creation-editor-status">{statusContent}</footer>
+      )}
       <Dialog
         open={conflictOpen}
         onOpenChange={open => {

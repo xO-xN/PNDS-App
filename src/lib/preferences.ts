@@ -86,6 +86,8 @@ export type PreferencesPatch = Partial<
     AppPreferences,
     | 'language'
     | 'modelService'
+    | 'gitName'
+    | 'gitEmail'
     | 'assistantMonitorRatio'
     | 'colorTheme'
     | 'sampleRate'

@@ -18,7 +18,10 @@ beforeEach(async () => {
   useAssistantStore.getState().syncWorkspace(null)
   useAssistantStore.getState().syncWorkspace('workspace-one')
   await useAssistantStore.getState().refreshConfiguration()
-  useAssistantStore.setState({ configured: true })
+  useAssistantStore.setState({
+    configured: true,
+    modelConfig: { model: 'chosen', baseUrl: 'https://model.example/v1' },
+  })
   vi.mocked(commands.beginAssistantRequest).mockImplementation(
     async (_identity, requestId) => ({
       status: 'ok',
@@ -40,7 +43,7 @@ beforeEach(async () => {
   })
 })
 
-it('requires fresh scope consent, preserves cancelled input, refreshes saved versions and filters project history when reading is disabled (#168)', async () => {
+it('reads saved scope by default and refreshes versions without a consent step (#168)', async () => {
   const config = { model: 'chosen', baseUrl: 'https://model.example/v1' }
   const store = useAssistantStore.getState
   const project = useAssistantProjectStore.getState
@@ -51,17 +54,7 @@ it('requires fresh scope consent, preserves cancelled input, refreshes saved ver
     data: { files, fingerprint: '1' },
   })
   vi.mocked(commands.assistantModelTurn).mockClear()
-  project().setReading(true)
   store().setInput('What is the saved tempo?')
-  await store().send()
-  expect(project().consent?.snapshot.files).toEqual(files)
-  expect(commands.assistantModelTurn).not.toHaveBeenCalled()
-  project().cancelConsent()
-  expect(store().input).toBe('What is the saved tempo?')
-  await store().send()
-  expect(project().confirmConsent('workspace-one', config, store().input)).toBe(
-    true
-  )
   vi.mocked(commands.assistantProjectRead).mockResolvedValue({
     status: 'ok',
     data: {
@@ -99,23 +92,11 @@ it('requires fresh scope consent, preserves cancelled input, refreshes saved ver
   file.version = 'v2'
   store().setInput('Read the new save')
   await store().send()
-  expect(project().consent).toBeNull()
-  project().setReading(false)
-  vi.mocked(commands.assistantModelTurn).mockClear()
-  store().setInput('How does PNDS work?')
-  await store().send()
-  const payload = JSON.stringify(
-    vi.mocked(commands.assistantModelTurn).mock.calls
-  )
-  expect(payload).not.toContain('PRIVATE-SAVED-TEMPO')
-  expect(payload).not.toContain('score.js')
-  project().setReading(true)
-  store().setInput('Read it again')
-  await store().send()
-  expect(project().consent).not.toBeNull()
+  expect(project().snapshot?.files[0]?.version).toBe('v2')
+  expect(store().error).toBeNull()
 })
 
-it('sends only an explicitly selected immutable draft snapshot after consent and preserves disabled-reading input (#225)', async () => {
+it('sends only an explicitly selected immutable draft snapshot without including unselected draft text (#225)', async () => {
   const { TextBuffer } = await import('@/lib/text-buffer')
   const config = { model: 'chosen', baseUrl: 'https://model.example/v1' }
   const store = useAssistantStore.getState
@@ -160,14 +141,6 @@ it('sends only an explicitly selected immutable draft snapshot after consent and
   buffer.select(0, 18)
   buffer.replaceSelection('NEW-UNSELECTED')
   store().setInput('Discuss my selection')
-  await store().send()
-  expect(store().error).toBe('projectReadingDisabled')
-  expect(store().input).toBe('Discuss my selection')
-  expect(project().attachments).toHaveLength(1)
-  project().setReading(true)
-  await store().send()
-  project().confirmConsent('workspace-one', config, store().input)
-  vi.mocked(commands.assistantModelTurn).mockClear()
   await store().send()
   const sent = JSON.stringify(vi.mocked(commands.assistantModelTurn).mock.calls)
   expect(sent).toContain('const tempo = 99;')
@@ -235,7 +208,16 @@ it('previews the actual whole-project range, rejects changed confirmation and se
     await project().confirmWhole('workspace-one', config, store().input)
   ).toBe(true)
   vi.mocked(commands.assistantModelTurn).mockClear()
+  vi.mocked(commands.assistantModelTurn).mockResolvedValueOnce({
+    status: 'error',
+    error: { type: 'timeout' },
+  })
   await store().send(true)
+  expect(store().canContinue).toBe(true)
+  const messageIds = store().messages.map(message => message.id)
+  await store().send()
+  expect(store().messages.map(message => message.id)).toEqual(messageIds)
+  expect(store().messages.at(-1)?.status).toBe('completed')
   expect(
     JSON.stringify(vi.mocked(commands.assistantModelTurn).mock.calls)
   ).toContain('WHOLE-SAVED-SCORE')
@@ -301,8 +283,8 @@ it('clears the composer on send and restores the submitted question on stop', as
   )
   useAssistantStore.getState().setInput('Keep the submitted question')
   const sending = useAssistantStore.getState().send()
-  expect(useAssistantStore.getState().input).toBe('')
   await vi.waitFor(() => expect(finish).toBeDefined())
+  expect(useAssistantStore.getState().input).toBe('')
   useAssistantStore.getState().stop()
   expect(useAssistantStore.getState().input).toBe('Keep the submitted question')
   finish({ status: 'ok', data: { text: 'Late', toolCalls: [] } })
@@ -321,6 +303,7 @@ it('can return to an older chat and continues only that chat while saving every 
   store().setInput('Separate chat question')
   await store().send()
   store().switchConversation(null)
+  await vi.waitFor(() => expect(store().historyBusy).toBe(false))
   store().setInput('Continue the original chat')
   await store().send()
   const sent = vi.mocked(commands.assistantModelTurn).mock.calls.at(-1)?.[1]
@@ -388,7 +371,7 @@ it('remaps reviewed summary sources inside a fork and restores all chats after r
         id: 'reviewed-summary',
         role: 'assistant',
         text: 'Reviewed summary',
-        scope: 'platform',
+        scope: 'project',
         status: 'completed',
         sources: [],
         contextMarker: {
@@ -473,6 +456,7 @@ it('switching chats stops a request, preserves each draft and rejects the late r
   expect(
     store().messages.some(message => message.text === 'A late answer')
   ).toBe(false)
+  await vi.waitFor(() => expect(store().historyBusy).toBe(false))
   store().switchConversation(newerId)
   expect(store().input).toBe('Question in newer chat')
   expect(conversationMessages(store().messages, newerId).at(-1)?.status).toBe(
@@ -511,15 +495,75 @@ it('stopping retains produced text and input, and ignores the released cancelled
   await sending
   expect(useAssistantStore.getState().input).toBe('Explain channels')
   expect(useAssistantStore.getState().messages.at(-1)).toMatchObject({
-    text: 'Checking output routing.',
+    text: '',
+    activity: ['Checking output routing.'],
     status: 'cancelled',
   })
   finish({ status: 'ok', data: { text: 'A late answer.', toolCalls: [] } })
   await Promise.resolve()
-  expect(useAssistantStore.getState().messages.at(-1)?.text).toBe(
-    'Checking output routing.'
-  )
+  expect(useAssistantStore.getState().messages.at(-1)?.text).toBe('')
 })
+
+it.each(['继续', 'Continue', 'Resume.'])(
+  'resumes a paused task with %s without losing its goal, evidence or message pair',
+  async input => {
+    const store = useAssistantStore.getState
+    let finish!: (
+      value: Awaited<ReturnType<typeof commands.assistantModelTurn>>
+    ) => void
+    vi.mocked(commands.assistantModelTurn)
+      .mockResolvedValueOnce({
+        status: 'ok',
+        data: {
+          text: 'Read the routing contract.',
+          toolCalls: [
+            {
+              id: 'pause-read',
+              name: 'search_help',
+              arguments: '{"query":"outputChannels"}',
+            },
+          ],
+        },
+      })
+      .mockImplementationOnce(
+        () =>
+          new Promise(resolve => {
+            finish = resolve
+          })
+      )
+    store().setMode('edit')
+    store().setInput('Repair monitor startup using local p5')
+    const sending = store().send()
+    await vi.waitFor(() => expect(finish).toBeDefined())
+    const ids = store().messages.map(message => message.id)
+    store().pause()
+    await sending
+    expect(store().canContinue).toBe(true)
+    expect(store().paused).toBe(true)
+    store().setInput(input)
+    await store().send()
+    const packet =
+      vi.mocked(commands.assistantModelTurn).mock.calls.at(-1)?.[1] ?? []
+    expect(
+      packet.some(
+        message => message.content === 'Repair monitor startup using local p5'
+      )
+    ).toBe(true)
+    expect(packet.some(message => message.toolCallId === 'pause-read')).toBe(
+      true
+    )
+    expect(store().messages.map(message => message.id)).toEqual(ids)
+    expect(store().messages.at(-1)?.status).toBe('completed')
+    finish({
+      status: 'ok',
+      data: { text: 'Late cancelled generation', toolCalls: [] },
+    })
+    await Promise.resolve()
+    expect(store().messages.at(-1)?.text).not.toContain(
+      'Late cancelled generation'
+    )
+  }
+)
 
 it('a switch away and back rejects the old generation and retains only the current conversation', async () => {
   let finish!: (
@@ -581,6 +625,93 @@ it('a corpus failure keeps the draft and failed record without automatically ret
   expect(useAssistantStore.getState().error).toBe('corpusUnavailable')
   expect(useAssistantStore.getState().messages.at(-1)?.status).toBe('failed')
 })
+
+it.each([
+  'timeout',
+  'protocol',
+  'outputTruncated',
+  'responseInterrupted',
+  'responseTooLarge',
+] as const)(
+  'continues after %s with completed tools in the same message pair',
+  async error => {
+    const store = useAssistantStore.getState
+    vi.mocked(commands.assistantModelTurn)
+      .mockResolvedValueOnce({
+        status: 'ok',
+        data: {
+          text: 'Checking the documented routing.',
+          toolCalls: [
+            {
+              id: 'read-once',
+              name: 'search_help',
+              arguments: '{"query":"outputChannels"}',
+            },
+          ],
+        },
+      })
+      .mockResolvedValueOnce({ status: 'error', error: { type: error } })
+    store().setInput('Continue this question')
+    await store().send()
+    const ids = store().messages.map(message => message.id)
+    const sources = store().messages.at(-1)?.sources
+    expect(sources?.length).toBeGreaterThan(0)
+    store().setInput('继续')
+    await store().send()
+    expect(store().messages.map(message => message.id)).toEqual(ids)
+    const payload =
+      vi.mocked(commands.assistantModelTurn).mock.calls.at(-1)?.[1] ?? []
+    expect(payload[0]?.content).toContain(`manual continuation after ${error}`)
+    expect(
+      payload.filter(message => message.content === 'Continue this question')
+    ).toHaveLength(1)
+    expect(
+      payload.some(
+        message => message.role === 'tool' && message.toolCallId === 'read-once'
+      )
+    ).toBe(true)
+    expect(store().messages.at(-1)?.text).toBe('A documented answer.')
+    expect(store().messages.at(-1)?.activity).toEqual([
+      'Checking the documented routing.',
+    ])
+    expect(store().messages.at(-1)?.sources).toEqual(sources)
+  }
+)
+
+it.each(['edit', 'stop', 'reload'] as const)(
+  'discards the memory-only continuation after %s',
+  async action => {
+    const store = useAssistantStore.getState
+    vi.mocked(commands.assistantModelTurn)
+      .mockResolvedValueOnce({
+        status: 'ok',
+        data: {
+          text: 'Checking.',
+          toolCalls: [
+            {
+              id: 'old-read',
+              name: 'search_help',
+              arguments: '{"query":"outputChannels"}',
+            },
+          ],
+        },
+      })
+      .mockResolvedValueOnce({ status: 'error', error: { type: 'timeout' } })
+    store().setInput('A question')
+    await store().send()
+    expect(store().canContinue).toBe(true)
+    if (action === 'edit') store().setInput('A different question')
+    else if (action === 'stop') store().stop()
+    else await store().retryHistory()
+    expect(store().canContinue).toBe(false)
+    await store().send()
+    const payload =
+      vi.mocked(commands.assistantModelTurn).mock.calls.at(-1)?.[1] ?? []
+    expect(payload.some(message => message.toolCallId === 'old-read')).toBe(
+      false
+    )
+  }
+)
 
 it('routes streamed text to the current turn, bounds history writes and saves the latest text on stop', async () => {
   let deliver!: (requestId: string, turnId: string, text: string) => void
@@ -796,3 +927,90 @@ it('stamps service identity and excludes earlier-service and unknown-origin hist
   expect(JSON.stringify(sent)).toContain('Question for B')
   await flushAssistantHistory()
 })
+
+it.each(['original', 'current'] as const)(
+  'deleting the %s chat preserves only a retained paused task continuation',
+  async target => {
+    const store = useAssistantStore.getState
+    store().setInput('Original discussion')
+    await store().send()
+    store().newTopic()
+    const topicId = store().activeConversationId
+    let finish!: (
+      value: Awaited<ReturnType<typeof commands.assistantModelTurn>>
+    ) => void
+    vi.mocked(commands.assistantModelTurn)
+      .mockResolvedValueOnce({
+        status: 'ok',
+        data: {
+          text: 'Read routing evidence.',
+          toolCalls: [
+            {
+              id: 'retained-evidence',
+              name: 'search_help',
+              arguments: '{"query":"outputChannels"}',
+            },
+          ],
+        },
+      })
+      .mockImplementationOnce(
+        () =>
+          new Promise(resolve => {
+            finish = resolve
+          })
+      )
+    store().setMode('edit')
+    store().setInput('Repair the retained monitor')
+    const sending = store().send()
+    await vi.waitFor(() => expect(finish).toBeDefined())
+    store().pause()
+    await sending
+    expect(store().paused).toBe(true)
+    const pausedIds = conversationMessages(store().messages, topicId).map(
+      message => message.id
+    )
+    expect(
+      await store().deleteConversation(target === 'original' ? null : topicId)
+    ).toBe(true)
+    expect(store().activeConversationId).toBeNull()
+    if (target === 'original') {
+      expect(store().paused).toBe(true)
+      expect(store().canContinue).toBe(true)
+      store().setInput('Continue')
+      await store().send()
+      expect(store().messages.map(message => message.id)).toEqual(pausedIds)
+      const packet =
+        vi.mocked(commands.assistantModelTurn).mock.calls.at(-1)?.[1] ?? []
+      expect(
+        packet.some(
+          message => message.content === 'Repair the retained monitor'
+        )
+      ).toBe(true)
+      expect(
+        packet.some(message => message.toolCallId === 'retained-evidence')
+      ).toBe(true)
+    } else {
+      expect(store().paused).toBe(false)
+      expect(store().canContinue).toBe(false)
+      store().setInput('A new question')
+      await store().send()
+      const packet = JSON.stringify(
+        vi.mocked(commands.assistantModelTurn).mock.calls.at(-1)?.[1]
+      )
+      expect(packet).not.toContain('Repair the retained monitor')
+      expect(packet).not.toContain('retained-evidence')
+      expect(
+        store().messages.some(message => pausedIds.includes(message.id))
+      ).toBe(false)
+    }
+    finish({
+      status: 'ok',
+      data: { text: 'Late removed response', toolCalls: [] },
+    })
+    await Promise.resolve()
+    expect(JSON.stringify(store().messages)).not.toContain(
+      'Late removed response'
+    )
+    await flushAssistantHistory()
+  }
+)

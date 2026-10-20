@@ -24,6 +24,15 @@ describe('buildMonitorUrl', () => {
     )
   })
 
+  it('carries the exact preview Host origin before the refresh nonce', () => {
+    expect(
+      buildMonitorUrl('127.0.0.1', 6869, {
+        previewHostOrigin: 'tauri://localhost',
+        reload: 2,
+      })
+    ).toBe('http://127.0.0.1:6869/?pndsHostOrigin=tauri%3A%2F%2Flocalhost&_r=2')
+  })
+
   it('combines theme and lang in a stable order (lang slot reserved for T2)', () => {
     expect(
       buildMonitorUrl('192.168.1.10', 6869, { theme: 'stage', lang: 'zh-CN' })

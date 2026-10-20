@@ -60,6 +60,12 @@ fn reviewed_handoff_requires_current_files_and_preserves_task_identity_on_retry(
 fn blank_project_is_complete_localized_and_prepared_without_replacing_the_old_workspace() {
     let temp = tempfile::tempdir().unwrap();
     let old = project(temp.path(), "old");
+    fs::create_dir_all(old.join("public")).unwrap();
+    fs::write(
+        old.join("public/monitor.html"),
+        "legacy page with its own layout",
+    )
+    .unwrap();
     let mut access = CreationAccess::default();
     let protection = Protection::default();
     let old_identity = access.open(&old, &protection).unwrap().project.identity;
@@ -74,6 +80,11 @@ fn blank_project_is_complete_localized_and_prepared_without_replacing_the_old_wo
         git_email: None,
     };
     let prepared = access.create_blank(&options, &protection).unwrap();
+    assert_eq!(
+        fs::read_to_string(old.join("public/monitor.html")).unwrap(),
+        "legacy page with its own layout"
+    );
+    assert!(!old.join("pnds.preview.json").exists());
     assert_eq!(prepared.project.source, CreationSource::Folder);
     assert_eq!(prepared.project.name, "My New Score");
     assert!(access.read(&old_identity, "server.js", &protection).is_ok());
@@ -109,6 +120,42 @@ fn blank_project_is_complete_localized_and_prepared_without_replacing_the_old_wo
     assert_eq!(manifest.audio.output_channels, 2);
     crate::project::bundle::validate_packable(&root).unwrap();
     assert!(!root.join("node_modules").exists());
+    for path in [
+        "public/monitor.js",
+        "public/performer.js",
+        "public/style.css",
+        "public/pnds-preview.mjs",
+        "pnds.preview.json",
+        "docs/implementation.md",
+    ] {
+        assert!(root.join(path).is_file(), "missing Blank entry: {path}");
+    }
+    assert_eq!(
+        fs::read_to_string(root.join("public/pnds-preview.mjs")).unwrap(),
+        include_str!("../../../resources/parameter-preview/adapter.mjs")
+    );
+    let declaration: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(root.join("pnds.preview.json")).unwrap()).unwrap();
+    assert_eq!(
+        declaration,
+        serde_json::json!({"schemaVersion":1,"parameters":[]})
+    );
+    let provenance: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(root.join("docs/template-source.json")).unwrap())
+            .unwrap();
+    assert_eq!(provenance["version"], "1.7.0");
+    for role in ["monitor", "performer"] {
+        let page = fs::read_to_string(root.join(format!("public/{role}.html"))).unwrap();
+        assert!(page.contains("href=\"/style.css\""));
+        assert!(page.contains(&format!("src=\"/{role}.js\"")));
+        assert!(!page.contains("<style>"));
+    }
+    let guide = fs::read_to_string(root.join("docs/implementation.md")).unwrap();
+    assert!(guide.contains("public/monitor.js") && guide.contains("pnds.preview.json"));
+    assert!(guide.contains("刷新") && guide.contains("重启"));
+    assert!(access
+        .assistant_overview(&old_identity, &protection)
+        .is_ok());
     assert!(root.join("README.zh-CN.md").is_file());
     assert!(!root.join("README.md").exists());
     let readme = crate::project::readme::read_project_readme(root.clone(), Some("zh-CN"))
@@ -135,6 +182,94 @@ fn blank_project_is_complete_localized_and_prepared_without_replacing_the_old_wo
             .code,
         CreationErrorCode::InvalidIdentity
     );
+}
+
+#[test]
+fn blank_preview_recipe_binds_saved_literals_and_distinguishes_authored_files_from_template_assets()
+{
+    let temp = tempfile::tempdir().unwrap();
+    for locale in ["en", "zh-CN"] {
+        let mut access = CreationAccess::default();
+        let protection = Protection::default();
+        let options = NewProjectOptions {
+            parent: temp.path().to_string_lossy().into_owned(),
+            folder_name: format!("recipe-{locale}").to_lowercase(),
+            name: "Recipe".into(),
+            author: String::new(),
+            description: String::new(),
+            locale: locale.into(),
+            git_name: None,
+            git_email: None,
+        };
+        let prepared = access.create_blank(&options, &protection).unwrap();
+        let identity = prepared.project.identity;
+        access.commit(&identity, &protection).unwrap();
+        let root = PathBuf::from(prepared.project.root);
+        assert!(access
+            .assistant_overview(&identity, &protection)
+            .unwrap()
+            .content_paths
+            .is_empty());
+        let guide = fs::read_to_string(root.join("docs/implementation.md")).unwrap();
+        assert!(guide.contains("1.7.0") && !guide.contains("{{templateVersion}}"));
+        let example = |language: &str| {
+            guide
+                .split(&format!("```{language}\n"))
+                .nth(1)
+                .unwrap()
+                .split("```")
+                .next()
+                .unwrap()
+                .lines()
+                .map(|line| line.strip_prefix("   ").unwrap_or(line))
+                .collect::<Vec<_>>()
+                .join("\n")
+                .trim_end()
+                .to_owned()
+        };
+        let code = example("js");
+        let declaration = example("json");
+        let source = fs::read_to_string(root.join("public/monitor.js"))
+            .unwrap()
+            .replace("const previewParameters = {}", &code);
+        fs::write(root.join("public/monitor.js"), &source).unwrap();
+        fs::write(root.join("pnds.preview.json"), &declaration).unwrap();
+        let contract: ParameterContract = serde_json::from_str(&declaration).unwrap();
+        let request = ParameterRequest {
+            spec: contract.parameters[0].clone(),
+            current: serde_json::json!(48),
+            suggested_min: None,
+            suggested_max: None,
+        };
+        let binding = access
+            .bind_parameters(
+                &identity,
+                "public/monitor.js",
+                &file_version(source.as_bytes()),
+                &source,
+                &[request],
+                &protection,
+            )
+            .unwrap();
+        assert_eq!(binding.parameters[0].value, Some(serde_json::json!(48)));
+        fs::write(root.join("public/style.css"), "h1 { color: red; }\n").unwrap();
+        fs::write(
+            root.join("public/helper.mjs"),
+            "export const authored = true\n",
+        )
+        .unwrap();
+        let paths = access
+            .assistant_overview(&identity, &protection)
+            .unwrap()
+            .content_paths;
+        for path in ["public/monitor.js", "public/style.css", "public/helper.mjs"] {
+            assert!(
+                paths.iter().any(|entry| entry == path),
+                "missing authored source {path}"
+            )
+        }
+        assert!(!paths.iter().any(|entry| entry == "public/pnds-preview.mjs"));
+    }
 }
 
 #[test]
@@ -530,6 +665,32 @@ fn watch_reports_add_remove_and_same_size_edits_without_losing_unacknowledged_ch
         access.poll(identity, 0, &protection).unwrap_err().code,
         CreationErrorCode::InvalidIdentity
     );
+}
+
+#[test]
+fn watch_keeps_each_pending_path_revision_until_that_path_changes_again() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = project(temp.path(), "watched-paths");
+    let protection = Protection::default();
+    let mut access = CreationAccess::default();
+    let opened = access.open(&root, &protection).unwrap();
+    let identity = &opened.project.identity;
+    fs::write(root.join("first.js"), "first").unwrap();
+    let first = access.poll(identity, 0, &protection).unwrap();
+    let first_revision = first.change_revisions.as_ref().unwrap()["first.js"];
+    let replay = access.poll(identity, 0, &protection).unwrap();
+    assert_eq!(first.change_revisions, replay.change_revisions);
+    fs::write(root.join("second.js"), "second").unwrap();
+    let second = access.poll(identity, 0, &protection).unwrap();
+    let revisions = second.change_revisions.as_ref().unwrap();
+    assert_eq!(revisions["first.js"], first_revision);
+    assert!(revisions["second.js"] > first_revision);
+    fs::write(root.join("first.js"), "changed first").unwrap();
+    let third = access.poll(identity, 0, &protection).unwrap();
+    assert!(third.change_revisions.as_ref().unwrap()["first.js"] > first_revision);
+    let acknowledged = access.poll(identity, third.revision, &protection).unwrap();
+    assert!(acknowledged.changed.is_empty());
+    assert!(acknowledged.change_revisions.unwrap().is_empty());
 }
 
 #[test]
@@ -1418,4 +1579,58 @@ fn renames_move_files_without_overwriting_targets_or_fixing_references() {
             .code,
         CreationErrorCode::InvalidIdentity
     );
+}
+
+#[test]
+fn native_drag_exports_only_current_saved_contained_files() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = project(temp.path(), "drag-source");
+    let mut access = CreationAccess::default();
+    let protection = Protection::default();
+    let id = access.open(&root, &protection).unwrap().project.identity;
+    assert_eq!(
+        access.drag_target(&id, "server.js", &protection).unwrap(),
+        fs::canonicalize(root.join("server.js")).unwrap()
+    );
+    assert!(access.drag_target(&id, ".", &protection).is_err());
+    assert!(access
+        .drag_target(&id, "../outside.txt", &protection)
+        .is_err());
+    assert!(access.drag_target(&id, "missing.js", &protection).is_err());
+    std::os::unix::fs::symlink(temp.path(), root.join("escape")).unwrap();
+    assert!(access
+        .drag_target(&id, "escape/outside.txt", &protection)
+        .is_err());
+    access
+        .open(&project(temp.path(), "another"), &protection)
+        .unwrap();
+    assert!(access.drag_target(&id, "server.js", &protection).is_err());
+}
+
+#[test]
+fn unicode_work_folders_keep_independent_ascii_manifest_and_package_ids() {
+    let temp = tempfile::tempdir().unwrap();
+    let mut access = CreationAccess::default();
+    let options = NewProjectOptions {
+        parent: temp.path().to_string_lossy().into_owned(),
+        folder_name: "我的作品-pnds".into(),
+        name: "我的作品".into(),
+        author: "Composer".into(),
+        description: "".into(),
+        locale: "zh-CN".into(),
+        git_name: Some("Git Composer".into()),
+        git_email: Some("composer@example.com".into()),
+    };
+    let project = access
+        .create_blank(&options, &Protection::default())
+        .unwrap();
+    assert_eq!(project.project.name, "我的作品");
+    let manifest: serde_json::Value =
+        serde_json::from_slice(&fs::read(temp.path().join("我的作品-pnds/manifest.json")).unwrap())
+            .unwrap();
+    assert!(manifest["id"].as_str().unwrap().is_ascii());
+    let repo = git2::Repository::open(temp.path().join("我的作品-pnds")).unwrap();
+    let commit = repo.head().unwrap().peel_to_commit().unwrap();
+    assert_eq!(commit.author().name().unwrap(), "Git Composer");
+    assert_eq!(commit.author().email().unwrap(), "composer@example.com");
 }

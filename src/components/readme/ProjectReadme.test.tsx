@@ -243,11 +243,11 @@ describe('ProjectReadme cover format', () => {
     expect(
       screen.getByRole('heading', { name: '失语 III' })
     ).toBeInTheDocument()
-    expect(screen.getByTestId('cover-composer')).toHaveTextContent('@肖翔')
-    // The website_url metadata renders its link button in the header.
-    expect(screen.getByTestId('cover-website')).toHaveTextContent('website')
+    expect(screen.getByTestId('cover-composer')).toHaveTextContent('肖翔')
+    // Audience covers omit external navigation metadata.
+    expect(screen.queryByTestId('cover-website')).not.toBeInTheDocument()
     expect(screen.queryByTestId('cover-github')).not.toBeInTheDocument()
-    expect(screen.getByTestId('cover-label')).toHaveTextContent('作品简介：')
+    expect(screen.getByTestId('cover-label')).toHaveTextContent('作品简介')
     // The band body is the FIRST section only.
     expect(
       screen.getByText(/失语III 是为三个手机演奏者而作的数字乐谱作品/)
@@ -280,7 +280,7 @@ describe('ProjectReadme cover format', () => {
     })
   })
 
-  it('keeps a cover-format README under the link policy of the panel', async () => {
+  it('renders cover links as text without navigating or launching the browser', async () => {
     mockReadme(
       COVER_FIXTURE.replace(
         '失语III 是为三个手机演奏者而作的数字乐谱作品。',
@@ -289,11 +289,10 @@ describe('ProjectReadme cover format', () => {
     )
 
     render(<ProjectReadme path="/p" />)
-    const external = await screen.findByRole('link', { name: 'releases' })
-
+    const external = await screen.findByText('releases')
     fireEvent.click(external)
-    expect(openUrl).toHaveBeenCalledWith('https://example.com/rel')
-    fireEvent.click(screen.getByRole('link', { name: '中文' }))
-    expect(openUrl).toHaveBeenCalledTimes(1)
+    fireEvent.click(screen.getByText('中文'))
+    expect(screen.queryByRole('link')).not.toBeInTheDocument()
+    expect(openUrl).not.toHaveBeenCalled()
   })
 })

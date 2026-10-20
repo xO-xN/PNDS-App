@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useEffectEvent, useReducer, useRef, useState } from 'react'
+import { LoaderCircle } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { loadPreferences, updateModelService } from '@/lib/preferences'
 import {
@@ -22,6 +23,11 @@ let pendingOperation: Promise<void> | null = null
 
 export function ModelServiceSection() {
   const { t } = useTranslation()
+  const [editRevision, markEdited] = useReducer(value => value + 1, 0)
+  const autosave = useRef<(() => void) | null>(null)
+  const autosaveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined
+  )
   const [baseUrl, setBaseUrl] = useState('')
   const [model, setModel] = useState('')
   const [key, setKey] = useState('')
@@ -74,15 +80,43 @@ export function ModelServiceSection() {
     setError(null)
   }
 
+  function cancelAutosave() {
+    clearTimeout(autosaveTimer.current)
+    autosave.current = null
+  }
+
   function runOperation(action: () => Promise<void>) {
-    if (pendingOperation) return
-    const operation = action()
+    cancelAutosave()
+    const operation = Promise.resolve(pendingOperation)
+      .then(action)
       .catch(() => setError('commandFailed'))
       .finally(() => {
         if (pendingOperation === operation) pendingOperation = null
       })
     pendingOperation = operation
   }
+
+  function flushAutosave() {
+    const action = autosave.current
+    if (action) action()
+  }
+
+  const prepareAutosave = useEffectEvent(() => () => runOperation(save))
+  useEffect(() => {
+    if (!editRevision || loading || credentialLoading) return
+    const action = prepareAutosave()
+    autosave.current = action
+    autosaveTimer.current = setTimeout(action, 600)
+    return () => clearTimeout(autosaveTimer.current)
+  }, [editRevision, loading, credentialLoading])
+  useEffect(
+    () => () => {
+      clearTimeout(autosaveTimer.current)
+      const action = autosave.current
+      if (action) action()
+    },
+    []
+  )
 
   async function retryCredential() {
     setPending('checkingKey')
@@ -171,6 +205,8 @@ export function ModelServiceSection() {
   }
 
   async function save() {
+    if (!baseUrl.trim() || !model.trim()) return
+    const enteredKey = key
     setPending('saving')
     clearFeedback()
     try {
@@ -201,7 +237,7 @@ export function ModelServiceSection() {
             setError('configSavedKeyFailed')
             return
           }
-          setKey('')
+          setKey(current => (current === enteredKey ? '' : current))
           setHasKey(true)
           setCredentialError(false)
         } catch {
@@ -283,10 +319,18 @@ export function ModelServiceSection() {
           event.preventDefault()
           runOperation(save)
         }}
+        onBlur={event => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null))
+            flushAutosave()
+        }}
         className="flex flex-col gap-3"
       >
         <fieldset
-          disabled={pending !== null || loading || credentialLoading}
+          disabled={
+            (pending !== null && pending !== 'saving') ||
+            loading ||
+            credentialLoading
+          }
           className="flex min-w-0 flex-col gap-4"
         >
           <div className="flex flex-col gap-1.5">
@@ -306,6 +350,7 @@ export function ModelServiceSection() {
               onChange={event => {
                 setBaseUrl(event.target.value)
                 clearFeedback()
+                markEdited()
               }}
             />
             <p
@@ -329,6 +374,7 @@ export function ModelServiceSection() {
               onChange={event => {
                 setModel(event.target.value)
                 clearFeedback()
+                markEdited()
               }}
             />
           </div>
@@ -337,6 +383,7 @@ export function ModelServiceSection() {
             onChange={value => {
               setDrafts(current => ({ ...current, [profileKey]: value }))
               clearFeedback()
+              markEdited()
             }}
           />
           <div className="flex flex-col gap-1.5">
@@ -359,6 +406,7 @@ export function ModelServiceSection() {
               onChange={event => {
                 setKey(event.target.value)
                 clearFeedback()
+                markEdited()
               }}
             />
             <p
@@ -384,7 +432,10 @@ export function ModelServiceSection() {
                 type="button"
                 variant="outline"
                 className="self-start"
-                onClick={() => runOperation(retryCredential)}
+                onClick={() => {
+                  flushAutosave()
+                  runOperation(retryCredential)
+                }}
               >
                 {t('settings.modelService.retryCredential')}
               </Button>
@@ -393,23 +444,28 @@ export function ModelServiceSection() {
           <div className="flex flex-wrap gap-2">
             <Button
               size="sm"
-              type="submit"
-              disabled={!baseUrl.trim() || !model.trim()}
-            >
-              {t('settings.modelService.save')}
-            </Button>
-            <Button
-              size="sm"
               type="button"
               variant="outline"
               disabled={
                 !baseUrl.trim() || !model.trim() || (!hasKey && !key.trim())
               }
-              onClick={() => runOperation(testConnection)}
+              onClick={() => {
+                flushAutosave()
+                runOperation(testConnection)
+              }}
             >
+              {pending === 'testing' && (
+                <LoaderCircle
+                  aria-hidden="true"
+                  className="size-4 animate-spin motion-reduce:animate-none"
+                />
+              )}
               {t('settings.modelService.test')}
             </Button>
           </div>
+          <p className="text-muted-foreground text-xs">
+            {t('settings.modelService.autoSave')}
+          </p>
           <p className="text-muted-foreground text-xs">
             {t('settings.modelService.testHint')}
           </p>
@@ -428,15 +484,33 @@ export function ModelServiceSection() {
               type="button"
               variant="outline"
               disabled={hasKey === false}
-              onClick={() => runOperation(removeKey)}
+              onClick={() => {
+                flushAutosave()
+                runOperation(removeKey)
+              }}
             >
               {t('settings.modelService.removeKey')}
             </Button>
           </div>
         </fieldset>
         {pending && (
-          <p role="status" className="text-muted-foreground text-sm">
-            {t(`settings.modelService.${pending}`)}
+          <p
+            role="status"
+            className="flex items-center gap-2 text-muted-foreground text-sm"
+          >
+            {pending === 'testing' ? (
+              <>
+                <LoaderCircle
+                  aria-hidden="true"
+                  className="size-4 animate-spin motion-reduce:animate-none"
+                />
+                <span className="sr-only">
+                  {t('settings.modelService.testing')}
+                </span>
+              </>
+            ) : (
+              t(`settings.modelService.${pending}`)
+            )}
           </p>
         )}
         {notice && (

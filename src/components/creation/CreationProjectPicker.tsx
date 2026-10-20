@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Check, ChevronDown, Folder, FolderOpen, Plus } from 'lucide-react'
 import {
   commands,
   type CreationError,
@@ -10,31 +11,39 @@ import {
   useCreationStore,
 } from '@/store/creation-store'
 import { useProjectStore } from '@/store/project-store'
-import { Button } from '@/components/ui/button'
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-} from '@/components/ui/dialog'
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu'
 import { CreationErrorNotice } from './CreationErrorNotice'
 
 export function CreationProjectPicker({
-  onClose,
+  open,
+  onOpenChange,
   onNewProject,
+  disabled,
 }: {
-  onClose: () => void
+  open: boolean
+  onOpenChange: (open: boolean) => void
   onNewProject: () => void
+  disabled: boolean
 }) {
   const { t } = useTranslation()
   const recent = useCreationStore(state => state.recentPaths)
   const performance = useProjectStore(state => state.recentProjectPaths)
   const utilities = useProjectStore(state => state.utilityPaths)
+  const project = useCreationStore(state => state.workspace?.project)
   const opening = useCreationStore(state => state.opening)
-  const openingError = useCreationStore(state => state.error)
   const [options, setOptions] = useState<CreationOption[] | null>(null)
   const [error, setError] = useState<CreationError | null>(null)
+  const trigger = useRef<HTMLButtonElement>(null)
+  const action = useRef<(() => void) | null>(null)
   useEffect(() => {
+    if (!open) return
     let live = true
     void commands
       .describeCreationProjects(
@@ -42,83 +51,123 @@ export function CreationProjectPicker({
       )
       .then(result => {
         if (!live) return
-        if (result.status === 'ok') setOptions(result.data)
-        else setError(result.error)
+        if (result.status === 'ok') {
+          setOptions(result.data)
+          setError(null)
+        } else setError(result.error)
       })
-      .catch(error => {
-        if (live) setError(creationTransportError(error))
+      .catch(cause => {
+        if (live) setError(creationTransportError(cause))
       })
     return () => {
       live = false
     }
-  }, [recent, performance, utilities])
+  }, [open, recent, performance, utilities])
   return (
-    <Dialog
-      open
-      onOpenChange={open => {
-        if (!open && !opening) onClose()
-      }}
-    >
-      <DialogContent
-        showCloseButton={false}
-        className="creation-project-picker"
-      >
-        <DialogTitle>{t('creation.switchProject')}</DialogTitle>
-        <DialogDescription>{t('creation.selectorHint')}</DialogDescription>
-        <div
-          className="creation-project-picker-list space-y-2"
-          aria-busy={!options && !error}
+    <DropdownMenu open={open} onOpenChange={onOpenChange}>
+      <DropdownMenuTrigger asChild>
+        <button
+          ref={trigger}
+          type="button"
+          data-tauri-drag-region="false"
+          className="creation-titlebar-trigger pnds-focus-ring"
+          aria-label={t('creation.switchProject')}
+          title={project?.root}
+          disabled={disabled || opening}
         >
-          {error && <CreationErrorNotice error={error} />}
-          {openingError && <CreationErrorNotice error={openingError} />}
-          {!options && !error && <p role="status">{t('creation.loading')}</p>}
-          {options?.map(option => (
-            <Button
-              key={option.path}
-              variant="outline"
-              disabled={opening || !option.project}
-              className="h-auto w-full flex-col items-start whitespace-normal p-3 text-start"
-              onClick={() => {
-                void useCreationStore
-                  .getState()
-                  .open(option.path)
-                  .then(success => {
-                    if (success) onClose()
-                  })
-              }}
-            >
-              <span>{option.project?.name ?? option.path}</span>
-              <span className="break-all text-xs">{option.path}</span>
-              <span className="text-xs">
+          <Folder aria-hidden="true" />
+          <span className="creation-titlebar-name">
+            {project?.name ?? t('creation.switchProject')}
+          </span>
+          <ChevronDown aria-hidden="true" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="start"
+        className="creation-project-menu"
+        aria-label={t('creation.switchProject')}
+        onCloseAutoFocus={event => {
+          const next = action.current
+          action.current = null
+          if (next) {
+            event.preventDefault()
+            trigger.current?.focus()
+            next()
+          }
+        }}
+      >
+        <DropdownMenuItem
+          disabled={opening}
+          onSelect={() => {
+            action.current = () => {
+              void useCreationStore.getState().pick()
+            }
+          }}
+        >
+          <FolderOpen aria-hidden="true" />
+          {t('creation.openFolder')}
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          disabled={opening}
+          onSelect={() => {
+            action.current = onNewProject
+          }}
+        >
+          <Plus aria-hidden="true" />
+          {t('creation.newProject.open')}
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+          {t('creation.recent')}
+        </DropdownMenuLabel>
+        {error && <CreationErrorNotice error={error} />}
+        {!options && !error && (
+          <p role="status" className="px-2 py-3 text-xs">
+            {t('creation.loading')}
+          </p>
+        )}
+        {options?.length === 0 && (
+          <p className="px-2 py-3 text-xs text-muted-foreground">
+            {t('creation.noRecent')}
+          </p>
+        )}
+        {options?.map(option => (
+          <DropdownMenuItem
+            key={option.path}
+            disabled={opening || !option.project}
+            aria-label={option.project?.name ?? option.path}
+            title={option.path}
+            className="items-start py-2"
+            onSelect={() => {
+              action.current = () => {
+                void useCreationStore.getState().open(option.path)
+              }
+            }}
+          >
+            <Check
+              className={
+                project?.root === option.path ? 'mt-0.5' : 'mt-0.5 opacity-0'
+              }
+              aria-hidden="true"
+            />
+            <span className="grid min-w-0 gap-0.5">
+              <span className="truncate">
+                {option.project?.name ?? option.path}
+              </span>
+              <span className="truncate text-xs text-muted-foreground">
+                {option.path}
+              </span>
+              <span className="text-xs text-muted-foreground">
                 {option.project
                   ? t(`creation.source.${option.project.source}`)
                   : option.error
                     ? t(`creation.error.${option.error.code}`)
                     : ''}
               </span>
-            </Button>
-          ))}
-        </div>
-        <Button
-          disabled={opening}
-          onClick={() => {
-            void useCreationStore
-              .getState()
-              .pick()
-              .then(success => {
-                if (success) onClose()
-              })
-          }}
-        >
-          {t('creation.openFolder')}
-        </Button>
-        <Button variant="outline" disabled={opening} onClick={onClose}>
-          {t('creation.cancel')}
-        </Button>
-        <Button variant="outline" disabled={opening} onClick={onNewProject}>
-          {t('creation.newProject.open')}
-        </Button>
-      </DialogContent>
-    </Dialog>
+            </span>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }

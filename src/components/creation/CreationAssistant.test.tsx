@@ -6,6 +6,7 @@ import { TextBuffer } from '@/lib/text-buffer'
 import { editText } from '@/test/text-editor'
 import { act, fireEvent, render, screen } from '@/test/test-utils'
 import { commands } from '@/lib/tauri-bindings'
+import { HELP_BOOKS } from '@/lib/help-corpus'
 import { useCreationStore } from '@/store/creation-store'
 import { useCreationFilesStore } from '@/store/creation-files-store'
 import { CreationView } from './CreationView'
@@ -14,6 +15,7 @@ import { useAssistantProjectStore } from '@/store/assistant-project-store'
 import { CreationAssistant } from './CreationAssistant'
 import { useCreationReadingStore } from '@/store/creation-reading-store'
 import { useSettingsStore } from '@/store/settings-store'
+import i18n from '@/i18n/config'
 import {
   AssistantProposalCard,
   type AssistantProposal,
@@ -21,6 +23,16 @@ import {
 
 beforeEach(async () => {
   vi.clearAllMocks()
+  vi.mocked(commands.helpCorpus).mockResolvedValue({
+    status: 'ok',
+    data: HELP_BOOKS.flatMap(book =>
+      book.documentIds.map(id => ({
+        id,
+        path: `${id}.md`,
+        markdown: `# ${id}\n\nInstalled contract.`,
+      }))
+    ),
+  })
   useAssistantProjectStore.getState().syncWorkspace(null)
   useAssistantProjectStore.getState().syncWorkspace('assistant-test')
   useCreationStore.setState({
@@ -58,7 +70,30 @@ beforeEach(async () => {
 })
 
 describe('creation discussion reading (#166)', () => {
-  it('opens whole-project scope only on explicit action and Escape preserves the composer (#170)', async () => {
+  it('labels a resumable interruption as Continue task and retires it when the question changes', async () => {
+    const user = userEvent.setup()
+    useAssistantStore.setState({
+      configured: true,
+      input: 'Original question',
+      error: 'requestDeadline',
+      canContinue: true,
+    })
+    render(<CreationAssistant identity="assistant-test" />)
+    expect(screen.getByRole('button', { name: 'Continue task' })).toBeEnabled()
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'previous app time limit'
+    )
+    await user.type(
+      screen.getByRole('textbox', { name: 'Ask the assistant' }),
+      ' edited'
+    )
+    expect(screen.getByRole('button', { name: 'Send' })).toBeEnabled()
+    expect(
+      screen.queryByRole('button', { name: 'Continue task' })
+    ).not.toBeInTheDocument()
+  })
+
+  it('reads the whole project on explicit action without a sending confirmation (#170)', async () => {
     const user = userEvent.setup()
     useAssistantStore.setState({
       configured: true,
@@ -66,7 +101,7 @@ describe('creation discussion reading (#166)', () => {
         model: 'whole-model',
         baseUrl: 'https://model.example/v1',
       },
-      input: 'Keep original input',
+      input: 'Read all saved files',
     })
     vi.mocked(commands.assistantProjectInventory).mockResolvedValue({
       status: 'ok',
@@ -74,26 +109,21 @@ describe('creation discussion reading (#166)', () => {
     })
     render(<CreationAssistant identity="assistant-test" />)
     expect(
-      screen.queryByRole('dialog', { name: 'Confirm whole-project reading' })
+      screen.queryByRole('checkbox', { name: 'Read current project' })
     ).not.toBeInTheDocument()
-    expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
+    expect(
+      screen.queryByRole('button', { name: 'Read whole project' })
+    ).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /^Context:/ }))
     await user.click(screen.getByRole('button', { name: 'Read whole project' }))
-    expect(
-      await screen.findByRole('dialog', {
-        name: 'Confirm whole-project reading',
-      })
-    ).toHaveTextContent('whole-model')
-    await vi.waitFor(() =>
-      expect(useAssistantProjectStore.getState().planning).toBe(false)
-    )
-    expect(screen.getByRole('dialog')).toHaveTextContent('not provider usage')
-    expect(screen.getByRole('button', { name: 'Cancel' })).toBeVisible()
+    await vi.waitFor(() => {
+      expect(
+        useAssistantProjectStore.getState().whole?.error ?? null
+      ).toBeNull()
+      expect(commands.beginAssistantRequest).toHaveBeenCalled()
+    })
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
     await user.keyboard('{Escape}')
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    expect(
-      screen.getByRole('textbox', { name: 'Ask the assistant' })
-    ).toHaveValue('Keep original input')
-    expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
   })
   it('captures a selected pending suggestion with proposal identity and candidate revision (#225)', async () => {
     const buffer = new TextBuffer(
@@ -154,46 +184,27 @@ describe('creation discussion reading (#166)', () => {
     expect(onPreview).not.toHaveBeenCalled()
     expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
   })
-  it('shows project, service and scope before sending and keeps the question on Escape (#168)', async () => {
+  it('sends with saved-project access by default and no content confirmation (#168)', async () => {
     const user = userEvent.setup()
-    useAssistantProjectStore.getState().syncWorkspace('assistant-test')
-    useAssistantProjectStore.getState().setReading(false)
     useAssistantStore.setState({
       configured: true,
       modelConfig: { model: 'test-model', baseUrl: 'https://model.example/v1' },
     })
-    vi.mocked(commands.assistantProjectInventory).mockResolvedValue({
-      status: 'ok',
-      data: {
-        files: [
-          { path: 'score.js', bytes: 10, version: 'v1', reason: null },
-          { path: '.env', bytes: 0, version: null, reason: 'sensitive' },
-        ],
-        fingerprint: 'scope',
-      },
-    })
     render(<CreationAssistant identity="assistant-test" />)
-    await user.click(
-      screen.getByRole('checkbox', { name: 'Read current project' })
-    )
+    expect(
+      screen.queryByRole('checkbox', { name: 'Read current project' })
+    ).not.toBeInTheDocument()
     await user.type(
       screen.getByRole('textbox', { name: 'Ask the assistant' }),
       'Explain the saved score{Enter}'
     )
-    expect(
-      await screen.findByRole('dialog', { name: 'Send project content' })
-    ).toHaveTextContent('test-model')
-    expect(screen.getByRole('dialog')).toHaveTextContent(
-      'Sensitive configuration'
-    )
-    expect(screen.getByRole('button', { name: 'Cancel' })).toBeVisible()
-    expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
-    await user.keyboard('{Escape}')
+    await vi.waitFor(() => {
+      expect(
+        useAssistantProjectStore.getState().whole?.error ?? null
+      ).toBeNull()
+      expect(commands.beginAssistantRequest).toHaveBeenCalled()
+    })
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    expect(
-      screen.getByRole('textbox', { name: 'Ask the assistant' })
-    ).toHaveValue('Explain the saved score')
-    useAssistantProjectStore.getState().setReading(false)
   })
   it('sends with Enter and inserts a line break with Shift+Enter', async () => {
     useAssistantStore.setState({ configured: true })
@@ -267,9 +278,9 @@ describe('creation discussion reading (#166)', () => {
     ).toHaveValue('')
     await user.click(screen.getByRole('button', { name: 'New chat' }))
     expect(screen.queryByText('Original question')).not.toBeInTheDocument()
-    await user.click(screen.getByRole('combobox', { name: 'Chats' }))
+    await user.click(screen.getByRole('button', { name: 'Chats' }))
     await user.click(
-      screen.getByRole('option', { name: /1 · Original question/ })
+      screen.getByRole('button', { name: /^1 · Original question/ })
     )
     expect(screen.getByText('Original question')).toBeVisible()
   })
@@ -293,7 +304,7 @@ describe('creation discussion reading (#166)', () => {
       expect(
         screen.queryByRole('navigation', { name: 'Reading views' })
       ).not.toBeInTheDocument()
-      await user.click(screen.getByRole('button', { name: 'score.js' }))
+      await user.click(screen.getByRole('treeitem', { name: 'score.js' }))
       const reader = await screen.findByRole('textbox', { name: 'score.js' })
       expect(reader).toBeVisible()
       expect(reader).toHaveTextContent('const saved = 1')
@@ -332,7 +343,7 @@ describe('creation discussion reading (#166)', () => {
     )
     expect(useSettingsStore.getState().focusSection).toBe('modelService')
     expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled()
-    await user.click(screen.getByRole('button', { name: 'score.js' }))
+    await user.click(screen.getByRole('treeitem', { name: 'score.js' }))
     expect(
       await screen.findByRole('textbox', { name: 'score.js' })
     ).toBeVisible()
@@ -381,18 +392,101 @@ describe('creation discussion reading (#166)', () => {
     })
     const user = userEvent.setup()
     render(<CreationView />)
-    expect(screen.getByRole('status')).toHaveTextContent(
+    expect(screen.getByRole('status', { name: '' })).toHaveTextContent(
       'Reading installed PNDS help'
     )
     expect(
       screen.getByRole('textbox', { name: 'Ask the assistant' })
     ).toBeDisabled()
-    await user.click(screen.getByRole('button', { name: 'Stop' }))
+    await user.click(screen.getByRole('button', { name: 'Pause' }))
     expect(
       screen.getByRole('textbox', { name: 'Ask the assistant' })
     ).toHaveValue('How does PNDS work?')
-    expect(screen.getByText('Partial answer')).toBeVisible()
+    expect(screen.queryByText('Partial answer')).not.toBeInTheDocument()
+    await user.click(screen.getByText('Work log'))
+    expect(await screen.findByText('Partial answer')).toBeVisible()
     expect(screen.getByRole('button', { name: 'Send' })).toBeEnabled()
+  })
+
+  it('keeps whole-project preparation cancellable after closing the context popover', async () => {
+    const user = userEvent.setup()
+    useAssistantStore.setState({
+      configured: true,
+      modelConfig: {
+        model: 'whole-model',
+        baseUrl: 'https://model.example/v1',
+      },
+      input: 'Read all saved files',
+    })
+    let finish!: (
+      result: Awaited<ReturnType<typeof commands.assistantProjectInventory>>
+    ) => void
+    vi.mocked(commands.assistantProjectInventory).mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          finish = resolve
+        })
+    )
+    render(<CreationAssistant identity="assistant-test" />)
+    await user.click(screen.getByRole('button', { name: /^Context:/ }))
+    await user.click(screen.getByRole('button', { name: 'Read whole project' }))
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByRole('status', { name: '' })).toHaveTextContent(
+      i18n.t('assistant.whole.preparing')
+    )
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(useAssistantProjectStore.getState().planning).toBe(false)
+    await act(async () =>
+      finish({ status: 'ok', data: { files: [], fingerprint: 'empty' } })
+    )
+    expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
+    expect(
+      screen.queryByRole('button', { name: 'Cancel' })
+    ).not.toBeInTheDocument()
+  })
+
+  it('lets a failed whole-project read be cancelled so the edited question can be sent normally', async () => {
+    const user = userEvent.setup()
+    useAssistantStore.setState({
+      configured: true,
+      modelConfig: {
+        model: 'whole-model',
+        baseUrl: 'https://model.example/v1',
+      },
+      input: 'Read all saved files',
+    })
+    vi.mocked(commands.assistantProjectInventory).mockResolvedValueOnce({
+      status: 'ok',
+      data: { files: [], fingerprint: 'before-change' },
+    })
+    vi.mocked(commands.assistantProjectOverview).mockResolvedValue({
+      status: 'ok',
+      data: {
+        snapshot: { files: [], fingerprint: 'after-change' },
+        manifestStatus: 'valid',
+        contentPaths: [],
+        evidence: [],
+      },
+    })
+    render(<CreationAssistant identity="assistant-test" />)
+    await user.click(screen.getByRole('button', { name: /^Context:/ }))
+    await user.click(screen.getByRole('button', { name: 'Read whole project' }))
+    await user.keyboard('{Escape}')
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      i18n.t('assistant.error.projectScopeChanged')
+    )
+    expect(useAssistantProjectStore.getState().planning).toBe(false)
+    const input = screen.getByRole('textbox', { name: 'Ask the assistant' })
+    await user.clear(input)
+    await user.type(input, 'Explain only the score structure')
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(useAssistantProjectStore.getState().whole).toBeNull()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(input).toHaveValue('Explain only the score structure')
+    expect(screen.getByRole('button', { name: 'Send' })).toBeEnabled()
+    expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
   })
 
   it.each(
@@ -417,11 +511,11 @@ describe('creation discussion reading (#166)', () => {
       const send = vi.fn().mockResolvedValue(undefined)
       useAssistantStore.setState({
         send,
-        stop: () => flushSync(original.stop),
+        pause: () => flushSync(original.pause),
       })
       try {
         const user = userEvent.setup()
-        const stop = screen.getByRole('button', { name: 'Stop' })
+        const stop = screen.getByRole('button', { name: 'Pause' })
         if (activation === 'click') await user.click(stop)
         else {
           stop.focus()
@@ -431,7 +525,10 @@ describe('creation discussion reading (#166)', () => {
         expect(useAssistantStore.getState().input).toBe('Keep this question')
         expect(screen.getByRole('button', { name: 'Send' })).toBeEnabled()
       } finally {
-        useAssistantStore.setState({ send: original.send, stop: original.stop })
+        useAssistantStore.setState({
+          send: original.send,
+          pause: original.pause,
+        })
       }
     }
   )
@@ -462,7 +559,9 @@ describe('creation discussion reading (#166)', () => {
     const user = userEvent.setup()
     render(<CreationView />)
     expect(screen.getByText('Consulted documents (1)')).toBeVisible()
-    expect(screen.getByText('Waiting for the model reply…')).toBeVisible()
+    expect(screen.getByRole('status', { name: '' })).toHaveTextContent(
+      'Preparing a reply…'
+    )
     const source = screen.getByText('Manifest · Fields')
     expect(source).not.toBeVisible()
     await user.click(screen.getByText('Consulted documents (1)'))
@@ -539,7 +638,7 @@ describe('creation discussion reading (#166)', () => {
         .getState()
         .edit('score.js', 'independent file draft')
     )
-    await user.click(screen.getByRole('button', { name: 'Back to discussion' }))
+    await user.click(screen.getByRole('button', { name: 'Discussion' }))
     expect(screen.getByRole('textbox', { name: 'score.js' })).toHaveTextContent(
       'new unapplied code'
     )
@@ -556,7 +655,7 @@ describe('creation discussion reading (#166)', () => {
       screen.getByRole('textbox', { name: 'Comparison note' }),
       ' retained'
     )
-    await user.click(screen.getByRole('button', { name: 'Back to discussion' }))
+    await user.click(screen.getByRole('button', { name: 'Discussion' }))
     expect(screen.getByText('A proposed change')).toBeVisible()
     expect(useCreationFilesStore.getState().drafts['score.js']?.text).toBe(
       'independent file draft'
@@ -569,15 +668,15 @@ describe('creation discussion reading (#166)', () => {
     render(<CreationView />)
     const input = screen.getByRole('textbox', { name: 'Ask the assistant' })
     await user.type(input, 'How do audio buses work?')
-    await user.click(screen.getByRole('button', { name: 'score.js' }))
+    await user.click(screen.getByRole('treeitem', { name: 'score.js' }))
     expect(
       await screen.findByRole('textbox', { name: 'score.js' })
     ).toBeVisible()
-    await user.click(screen.getByRole('button', { name: 'Back to discussion' }))
+    await user.click(screen.getByRole('button', { name: 'Discussion' }))
     expect(
       screen.getByRole('textbox', { name: 'Ask the assistant' })
     ).toHaveValue('How do audio buses work?')
-    await user.click(screen.getByRole('button', { name: 'score.js' }))
+    await user.click(screen.getByRole('treeitem', { name: 'score.js' }))
     expect(screen.getByRole('textbox', { name: 'score.js' })).toBeVisible()
   })
 })
@@ -649,3 +748,72 @@ function ControlledProposal() {
     />
   )
 }
+
+it('defaults to handoff and keeps the mode visible and fixed while a task runs', async () => {
+  useAssistantStore.setState({ mode: 'handoff', phase: 'idle' })
+  render(<CreationAssistant identity="assistant-test" />)
+  const mode = screen.getByRole('radio', {
+    name: i18n.t('assistant.mode.handoff'),
+  })
+  expect(mode).toHaveAttribute('aria-checked', 'true')
+  await userEvent.click(
+    screen.getByRole('radio', { name: i18n.t('assistant.mode.edit') })
+  )
+  expect(useAssistantStore.getState().mode).toBe('edit')
+  act(() => useAssistantStore.setState({ phase: 'responding' }))
+  expect(mode).toBeDisabled()
+  act(() => useAssistantStore.getState().setMode('handoff'))
+  expect(useAssistantStore.getState().mode).toBe('edit')
+})
+
+it('keeps one accessible working indicator in the active reply across tool turns', () => {
+  useAssistantStore.setState({
+    configured: true,
+    phase: 'responding',
+    modelConfig: {
+      baseUrl: 'https://model.example/v1',
+      model: 'composer-model',
+    },
+    messages: [
+      {
+        id: 'streaming',
+        role: 'assistant',
+        text: 'Partial answer',
+        status: 'pending',
+        scope: 'platform',
+        sources: [],
+      },
+    ],
+  })
+  render(<CreationAssistant identity="assistant-test" />)
+  expect(screen.getByText('composer-model')).toBeVisible()
+  const status = screen.getByRole('status', { name: '' })
+  expect(status).toHaveTextContent('Generating…')
+  expect(status?.closest('[data-message-id]')).toHaveAttribute(
+    'data-message-id',
+    'streaming'
+  )
+  expect(status?.querySelector('svg')).toHaveClass('animate-spin')
+  expect(status?.querySelector('svg')).toHaveClass('motion-reduce:animate-none')
+  expect(status?.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
+  expect(status?.querySelector('span')).toHaveClass('sr-only')
+  act(() => useAssistantStore.setState({ phase: 'reading' }))
+  expect(screen.getAllByRole('status', { name: '' })).toHaveLength(1)
+  expect(screen.getByRole('status', { name: '' })).toBe(status)
+  expect(status).toHaveTextContent('Reading installed PNDS help')
+  act(() => useAssistantStore.setState({ phase: 'responding' }))
+  expect(screen.getByRole('status', { name: '' })).toBe(status)
+  expect(screen.queryByText('Partial answer')).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Pause' })).toBeEnabled()
+  act(() =>
+    useAssistantStore.setState(state => ({
+      phase: 'idle',
+      messages: state.messages.map(message => ({
+        ...message,
+        status: 'completed',
+      })),
+    }))
+  )
+  expect(screen.queryByRole('status', { name: '' })).not.toBeInTheDocument()
+  expect(screen.getByText('Partial answer')).toBeVisible()
+})

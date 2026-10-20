@@ -1,3 +1,5 @@
+import { useCreationTestStore } from '@/store/creation-test-store'
+import { CreationDebugPanel } from './CreationDebugPanel'
 import { beforeEach, expect, it, vi } from 'vitest'
 import userEvent from '@testing-library/user-event'
 import { writeText } from '@tauri-apps/plugin-clipboard-manager'
@@ -10,6 +12,7 @@ import { useCreationFilesStore } from '@/store/creation-files-store'
 import { useSessionStore } from '@/store/session-store'
 import { seedCreationDraft } from '@/test/creation-files'
 import { CreationView } from './CreationView'
+import { creationProjectAction } from '@/test/desktop-actions'
 
 type Task = Extract<
   Awaited<ReturnType<typeof commands.getCreationCheck>>,
@@ -67,6 +70,10 @@ const completed: Task = {
   report,
 }
 beforeEach(() => {
+  useCreationTestStore.setState({
+    debugView: 'preview',
+    debugVisited: { static: false, controlled: false },
+  })
   vi.clearAllMocks()
   useCreationStore.setState({
     active: true,
@@ -101,10 +108,10 @@ beforeEach(() => {
   })
 })
 async function openCheck() {
-  fireEvent.click(screen.getByRole('button', { name: 'Controlled check' }))
-  await screen.findByRole('dialog', { name: 'Controlled check' })
+  await creationProjectAction('Controlled check')
+  await screen.findByRole('region', { name: 'Controlled check' })
 }
-it('offers an independent discussion check and leaves failed input for the user to edit, undo or hand off (#209)', async () => {
+it('offers an independent check from the workspace menu and leaves failed input for the user to edit, undo or hand off (#209)', async () => {
   useCreationReadingStore.getState().showDiscussion()
   seedCreationDraft('server.js', 'saved', 'v1')
   useCreationFilesStore.getState().edit('server.js', 'my next edit')
@@ -119,9 +126,14 @@ it('offers an independent discussion check and leaves failed input for the user 
       },
     },
   })
-  render(<CreationView />)
-  fireEvent.click(screen.getByRole('button', { name: 'Run independent check' }))
-  await screen.findByRole('dialog', { name: 'Controlled check' })
+  render(
+    <>
+      <CreationView />
+      <CreationDebugPanel hidden={false} />
+    </>
+  )
+  await creationProjectAction('Controlled check')
+  await screen.findByRole('region', { name: 'Controlled check' })
   expect(commands.startCreationCheck).not.toHaveBeenCalled()
   fireEvent.click(screen.getByRole('button', { name: 'Start check' }))
   await screen.findByText('Controlled health failure')
@@ -145,7 +157,12 @@ it('offers an independent discussion check and leaves failed input for the user 
 it('opens without starting, then checks saved inputs in None and shows cleanup without saving drafts', async () => {
   seedCreationDraft('server.js', 'saved', 'v1')
   useCreationFilesStore.getState().edit('server.js', 'draft')
-  render(<CreationView />)
+  render(
+    <>
+      <CreationView />
+      <CreationDebugPanel hidden={false} />
+    </>
+  )
   await openCheck()
   expect(commands.startCreationCheck).not.toHaveBeenCalled()
   expect(
@@ -154,6 +171,17 @@ it('opens without starting, then checks saved inputs in None and shows cleanup w
   expect(screen.getByText(/1 unsaved draft/)).toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: 'Start check' }))
   await screen.findByText('The controlled check passed.')
+  expect(
+    screen.getByText('Full check report').closest('details')
+  ).not.toHaveAttribute('open')
+  expect(
+    screen.getByText('Health matched the copied project identity')
+  ).not.toBeVisible()
+  fireEvent.click(screen.getByText('Full check report'))
+  expect(
+    screen.getByText('Health matched the copied project identity')
+  ).toBeVisible()
+
   expect(commands.startCreationCheck).toHaveBeenCalledWith('check-score', {
     mode: 'none',
     compile: false,
@@ -184,7 +212,12 @@ it('uses explicit Internal and compilation choices with a current preference sna
       sampleRate: 96000,
     },
   })
-  render(<CreationView />)
+  render(
+    <>
+      <CreationView />
+      <CreationDebugPanel hidden={false} />
+    </>
+  )
   await openCheck()
   const user = userEvent.setup()
   await user.click(screen.getByRole('combobox', { name: 'Audio mode' }))
@@ -213,7 +246,12 @@ it('keeps a backend refusal visible while an existing performance remains untouc
     status: 'error',
     error: { code: 'testValidation', detail: 'A PNDS performance is active' },
   })
-  render(<CreationView />)
+  render(
+    <>
+      <CreationView />
+      <CreationDebugPanel hidden={false} />
+    </>
+  )
   await openCheck()
   fireEvent.click(screen.getByRole('button', { name: 'Start check' }))
   await screen.findByText('A PNDS performance is active')
@@ -254,12 +292,19 @@ it('retains a failed report when the dialog is dismissed and reopened without re
       },
     },
   })
-  render(<CreationView />)
+  render(
+    <>
+      <CreationView />
+      <CreationDebugPanel hidden={false} />
+    </>
+  )
   await openCheck()
   fireEvent.click(screen.getByRole('button', { name: 'Start check' }))
   await screen.findByText('Test saved snapshot is missing a required SynthDef')
   fireEvent.click(screen.getByRole('button', { name: 'Close' }))
-  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('region', { name: 'Controlled check' })
+  ).not.toBeInTheDocument()
   await openCheck()
   expect(
     await screen.findByText(
@@ -279,7 +324,12 @@ it('copies the complete failed report including the original error and cleanup a
     status: 'ok',
     data: { ...completed, report: failed },
   })
-  render(<CreationView />)
+  render(
+    <>
+      <CreationView />
+      <CreationDebugPanel hidden={false} />
+    </>
+  )
   await openCheck()
   fireEvent.click(screen.getByRole('button', { name: 'Start check' }))
   await screen.findByText('Missing Test dependency')
@@ -316,7 +366,12 @@ it('stops the owned task and waits for the cancellation report with cleanup', as
       },
     },
   })
-  render(<CreationView />)
+  render(
+    <>
+      <CreationView />
+      <CreationDebugPanel hidden={false} />
+    </>
+  )
   await openCheck()
   fireEvent.click(screen.getByRole('button', { name: 'Start check' }))
   await screen.findByText('Verifying health identity and configuration…')
@@ -325,7 +380,9 @@ it('stops the owned task and waits for the cancellation report with cleanup', as
     data: { ...completed, report: { ...report, status: 'cancelled' } },
   })
   fireEvent.click(screen.getByRole('button', { name: 'Stop check' }))
-  await screen.findByText('The check was cancelled. Review cleanup below.')
+  await screen.findByText(
+    'The check was cancelled. Open the full report to review cleanup.'
+  )
   expect(commands.cancelCreationCheck).toHaveBeenCalledWith('check-1')
   expect(
     screen.getByText('Temporary files removed: Confirmed')
@@ -340,7 +397,12 @@ it('cancels a task whose start finishes after its dialog closes', async () => {
       finish = resolve
     })
   )
-  render(<CreationView />)
+  render(
+    <>
+      <CreationView />
+      <CreationDebugPanel hidden={false} />
+    </>
+  )
   await openCheck()
   fireEvent.click(screen.getByRole('button', { name: 'Start check' }))
   await waitFor(() => expect(commands.startCreationCheck).toHaveBeenCalled())
@@ -357,9 +419,13 @@ it('cancels a task whose start finishes after its dialog closes', async () => {
   await waitFor(() =>
     expect(commands.cancelCreationCheck).toHaveBeenCalledWith('late-check')
   )
-  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('region', { name: 'Controlled check' })
+  ).not.toBeInTheDocument()
   await openCheck()
-  await screen.findByText('The check was cancelled. Review cleanup below.')
+  await screen.findByText(
+    'The check was cancelled. Open the full report to review cleanup.'
+  )
   expect(commands.startCreationCheck).toHaveBeenCalledTimes(1)
 })
 it('cancels on workspace switch and ignores a late report from the previous identity', async () => {
@@ -371,7 +437,12 @@ it('cancels on workspace switch and ignores a late report from the previous iden
       finish = resolve
     })
   )
-  render(<CreationView />)
+  render(
+    <>
+      <CreationView />
+      <CreationDebugPanel hidden={false} />
+    </>
+  )
   await openCheck()
   fireEvent.click(screen.getByRole('button', { name: 'Start check' }))
   await waitFor(() => expect(commands.getCreationCheck).toHaveBeenCalled())
@@ -388,10 +459,17 @@ it('cancels on workspace switch and ignores a late report from the previous iden
   expect(
     screen.queryByText('The controlled check passed.')
   ).not.toBeInTheDocument()
-  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('region', { name: 'Controlled check' })
+  ).not.toBeInTheDocument()
 })
 it('checks actual backend freshness on focus and marks disk changes stale', async () => {
-  render(<CreationView />)
+  render(
+    <>
+      <CreationView />
+      <CreationDebugPanel hidden={false} />
+    </>
+  )
   await openCheck()
   fireEvent.click(screen.getByRole('button', { name: 'Start check' }))
   await screen.findByText('The controlled check passed.')
@@ -408,4 +486,51 @@ it('checks actual backend freshness on focus and marks disk changes stale', asyn
   fireEvent(window, new Event('focus'))
   await screen.findByText(/This result is out of date/)
   expect(commands.startCreationCheck).toHaveBeenCalledTimes(1)
+})
+
+it('keeps failed checks and unconfirmed cleanup visible while the full report is collapsed', async () => {
+  vi.mocked(commands.getCreationCheck).mockResolvedValue({
+    status: 'ok',
+    data: {
+      ...completed,
+      report: {
+        ...report,
+        status: 'failed',
+        checks: [
+          {
+            code: 'health',
+            status: 'failed',
+            reason: 'Monitor health did not respond',
+          },
+        ],
+        cleanup: {
+          ...report.cleanup,
+          nodeConfirmed: false,
+          errors: ['Node stop was not confirmed'],
+        },
+      },
+    },
+  })
+  render(
+    <>
+      <CreationView />
+      <CreationDebugPanel hidden={false} />
+    </>
+  )
+  await openCheck()
+  fireEvent.click(screen.getByRole('button', { name: 'Start check' }))
+  expect(
+    await screen.findByText('Monitor health did not respond')
+  ).toBeVisible()
+  expect(
+    screen.getByText('Full check report').closest('details')
+  ).not.toHaveAttribute('open')
+  expect(screen.getByText(/Cleanup is not fully confirmed/)).toBeVisible()
+  expect(
+    screen
+      .getAllByText('Node stop was not confirmed')
+      .some(element => !element.closest('details'))
+  ).toBe(true)
+  expect(screen.getByRole('button', { name: 'Continue editing' })).toBeVisible()
+  expect(screen.getByText('1.6.5')).not.toBeVisible()
 })

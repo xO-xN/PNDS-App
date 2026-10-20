@@ -20,6 +20,7 @@ import { CreationErrorNotice } from './CreationErrorNotice'
 import { TextDifference } from './CreationFileChangeControls'
 import type { BoundParameter } from '@/lib/tauri-bindings'
 import { prepareAssistantHandoff } from '@/lib/assistant-handoff'
+import { useAssistantStore } from '@/store/assistant-store'
 
 function ParameterControl({
   proposal,
@@ -31,20 +32,25 @@ function ParameterControl({
   const { t } = useTranslation()
   const { spec, suggestedMin, suggestedMax } = parameter.request
   const value = parameter.value
-  const disabled = value === null || proposal.applying || proposal.bindingBusy
+  const phase = useAssistantStore(s => s.phase)
+  const disabled =
+    value === null ||
+    proposal.applying ||
+    proposal.bindingBusy ||
+    (!!proposal.taskId && phase !== 'idle')
   const change = (next: number | string | boolean) =>
     void useAssistantProposalStore
       .getState()
       .setParameter(proposal.id, spec.id, next)
   const label = `${proposal.id}-${spec.id}`
   const controlClass =
-    'pnds-focus-ring min-w-0 rounded border border-(--pnds-border) bg-(--pnds-pill) px-2 py-1 text-sm'
+    'creation-parameter-value pnds-focus-ring min-w-0 rounded border border-(--pnds-border) bg-(--pnds-pill) px-3 py-2 text-base tabular-nums'
   return (
     <fieldset
       disabled={disabled}
-      className="min-w-0 space-y-2 rounded border border-(--pnds-border) p-2"
+      className="creation-parameter-control min-w-0 space-y-3 rounded border border-(--pnds-border) p-3"
     >
-      <legend className="px-1 text-xs font-semibold">{spec.id}</legend>
+      <legend className="px-1 text-sm font-semibold">{spec.id}</legend>
       <label htmlFor={label} className="sr-only">
         {spec.id}
       </label>
@@ -107,7 +113,7 @@ function ParameterControl({
         (spec.limits.min ?? suggestedMin) != null &&
         (spec.limits.max ?? suggestedMax) != null && (
           <input
-            className="pnds-focus-ring block w-full"
+            className="creation-parameter-fader pnds-focus-ring block w-full"
             aria-label={t('assistant.proposal.fader', { id: spec.id })}
             type="range"
             min={spec.limits.min ?? suggestedMin ?? undefined}
@@ -117,22 +123,27 @@ function ParameterControl({
             onChange={event => change(Number(event.target.value))}
           />
         )}
-      <p className="break-all text-xs text-muted-foreground">
-        {t('assistant.proposal.hardLimits', {
-          limits: JSON.stringify(spec.limits),
-        })}
-      </p>
-      {(suggestedMin != null || suggestedMax != null) && (
-        <p className="text-xs text-muted-foreground">
-          {t('assistant.proposal.suggestedRange', {
-            min: suggestedMin ?? '…',
-            max: suggestedMax ?? '…',
-          })}
-        </p>
-      )}
       <p className="text-xs">
         {t(`assistant.proposal.capability.${spec.preview}`)}
       </p>
+      <details className="creation-details">
+        <summary className="pnds-focus-ring">
+          {t('assistant.proposal.parameterDetails')}
+        </summary>
+        <p className="break-all text-xs text-muted-foreground">
+          {t('assistant.proposal.hardLimits', {
+            limits: JSON.stringify(spec.limits),
+          })}
+        </p>
+        {(suggestedMin != null || suggestedMax != null) && (
+          <p className="text-xs text-muted-foreground">
+            {t('assistant.proposal.suggestedRange', {
+              min: suggestedMin ?? '…',
+              max: suggestedMax ?? '…',
+            })}
+          </p>
+        )}
+      </details>
       {disabled && !proposal.applying && (
         <p role="status" className="text-xs">
           {t('assistant.proposal.bindingUnavailable')}
@@ -171,6 +182,7 @@ function ParameterControl({
 
 function LiveCard({ proposal }: { proposal: LiveProposal }) {
   const { t } = useTranslation()
+  const phase = useAssistantStore(s => s.phase)
   const preview = useParameterPreviewStore(state =>
     state.owner?.proposalId === proposal.id ? state : null
   )
@@ -186,7 +198,8 @@ function LiveCard({ proposal }: { proposal: LiveProposal }) {
           preview: preview?.status === 'temporary' ? 'temporary' : 'none',
         }}
         buffer={proposal.buffer}
-        busy={proposal.applying}
+        busy={proposal.applying || (!!proposal.taskId && phase !== 'idle')}
+        savedParameters={!!proposal.taskId}
         parameters={
           <div className="space-y-2">
             {proposal.binding?.parameters.length ? (
@@ -215,25 +228,31 @@ function LiveCard({ proposal }: { proposal: LiveProposal }) {
         }
       />
       <p className="text-xs text-muted-foreground">
-        {t('assistant.proposal.scope')}
+        {t(
+          proposal.taskId
+            ? 'assistant.proposal.savedScope'
+            : 'assistant.proposal.scope'
+        )}
       </p>
       <div className="my-2 flex flex-wrap gap-2">
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() =>
-            void prepareAssistantHandoff(
-              proposal.identity,
-              t('assistant.proposal.handoffIntent', {
-                path: proposal.source.path,
-              }),
-              [proposal.source.path],
-              t('assistant.check.handoffAcceptance', { task: '—' })
-            )
-          }
-        >
-          {t('assistant.proposal.handoff')}
-        </Button>
+        {!proposal.taskId && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() =>
+              void prepareAssistantHandoff(
+                proposal.identity,
+                t('assistant.proposal.handoffIntent', {
+                  path: proposal.source.path,
+                }),
+                [proposal.source.path],
+                t('assistant.check.handoffAcceptance', { task: '—' })
+              )
+            }
+          >
+            {t('assistant.proposal.handoff')}
+          </Button>
+        )}
         <Button
           size="sm"
           variant="outline"

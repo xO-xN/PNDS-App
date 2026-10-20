@@ -410,6 +410,13 @@ for schema, limits, exclusions, partial outcomes and retry rules.
 
 ## Local Git (#228–#230)
 
+`getCreationGitComparison(identity, request)` issues a read-only comparison
+catalog for parent → selected or selected/HEAD → saved disk.
+`readCreationGitComparisonFile(identity, request)` requires that catalog token
+and returns bounded hunks/line numbers for one catalog path. It does not adopt
+historical text into a draft or acquire a switch/write permission. See the
+[comparison contract](./local-git.md#git-comparison-files-and-code-layout-a-2026-10-19).
+
 `previewCreationGitRecord` issues a one-use saved-scope token;
 `confirmCreationGitRecord` consumes it with complete selected paths, local
 identity and message. A successful commit always returns its real ID, including

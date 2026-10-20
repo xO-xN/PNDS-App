@@ -53,6 +53,11 @@
 
 /* Pond / 池塘 — cool grey, lake blue; the logo and water are the reference. */
 :root {
+  /* Audience README artwork has one approved light surface in every App theme. */
+  --pnds-readme-bg: #fafbf8;
+  --pnds-readme-text: #233238;
+  --pnds-readme-text-secondary: #4b5d61;
+  --pnds-readme-veil: #ffffff70;
   color-scheme: light;
   /* Shared component mapping. Resolve on the same root as the palette so
      dialogs, menus, native inputs and PNDS controls always switch together. */

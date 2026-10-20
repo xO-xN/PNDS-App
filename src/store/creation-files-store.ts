@@ -54,6 +54,11 @@ export interface CreationUpdateToken {
   revision: number
 }
 interface CreationFilesState {
+  creating: boolean
+  createDirectory: (
+    path: string
+  ) => Promise<Result<string, CreationError> | null>
+  create: (path: string) => Promise<Result<CreationFile, CreationError> | null>
   loadHistory: (
     identity: string,
     source: GitHistoryFile,
@@ -79,6 +84,9 @@ interface CreationFilesState {
   pending: Record<UpdateKind, number>
   error: CreationError | null
   poll: () => Promise<boolean>
+  /** Observe saved disk facts after an external mutation, never its cumulative
+   * task summary. A scan dispatched before the mutation cannot satisfy this. */
+  synchronizeSaved: (identity: string) => Promise<boolean>
   changed: (paths: string[]) => void
   capture: (root: string) => Promise<CreationUpdateToken | null>
   complete: (token: CreationUpdateToken | null, kind: UpdateKind) => void
@@ -176,6 +184,7 @@ export function isCreationWorkspacePath(path: string | null): boolean {
 
 let operationEpoch = 0
 const operations = new Map<string, number>()
+const observedChanges = new Map<string, number>()
 /** Read/write ownership within the same workspace; editing stays independent. */
 function beginCreationFileOperation(path: string): () => boolean {
   const identity = useCreationStore.getState().workspace?.project.identity
@@ -203,7 +212,7 @@ function commitFileList(
   )
     return false
   useCreationStore.setState({
-    workspace: { project: workspace.project, files },
+    workspace: { ...workspace, files },
   })
   return true
 }
@@ -225,6 +234,7 @@ export const useCreationFilesStore = create<CreationFilesState>((set, get) => {
         set(state =>
           patch(state, path, { error: result.error, diskChanged: true })
         )
+        return result.error.code === 'missing'
       } else if (result.data.kind === 'text') {
         const disk = result.data
         set(state =>
@@ -266,10 +276,98 @@ export const useCreationFilesStore = create<CreationFilesState>((set, get) => {
         set(state =>
           patch(state, path, { error: creationTransportError(error) })
         )
-      return ownsOperation()
+      return false
     }
   }
   return {
+    creating: false,
+    createDirectory: async path => {
+      const workspace = useCreationStore.getState().workspace
+      if (!workspace || workspace.project.source !== 'folder')
+        return { status: 'error', error: { code: 'permission', detail: path } }
+      if (get().creating) return null
+      const identity = workspace.project.identity
+      const epoch = operationEpoch
+      const owns = () => ownsWorkspace(identity) && epoch === operationEpoch
+      set({ creating: true })
+      try {
+        const result = await commands.createCreationDirectory(
+          identity,
+          path,
+          Object.keys(get().drafts)
+        )
+        if (!owns()) return null
+        if (result.status === 'ok') {
+          useCreationStore.setState(state =>
+            state.workspace?.project.identity === identity
+              ? {
+                  workspace: {
+                    ...state.workspace,
+                    directories: [
+                      ...new Set([
+                        ...(state.workspace.directories ?? []),
+                        result.data,
+                      ]),
+                    ].sort(),
+                  },
+                }
+              : {}
+          )
+          await get().poll()
+        }
+        return owns() ? result : null
+      } catch (error) {
+        return owns()
+          ? { status: 'error', error: creationTransportError(error) }
+          : null
+      } finally {
+        if (owns()) set({ creating: false })
+      }
+    },
+    create: async path => {
+      const workspace = useCreationStore.getState().workspace
+      if (!workspace || workspace.project.source !== 'folder')
+        return { status: 'error', error: { code: 'permission', detail: path } }
+      if (get().creating) return null
+      if (get().drafts[path])
+        return {
+          status: 'error',
+          error: { code: 'targetExists', detail: path },
+        }
+      const identity = workspace.project.identity
+      const epoch = operationEpoch
+      beginCreationFileOperation(path)
+      const owns = () => ownsWorkspace(identity) && epoch === operationEpoch
+      set({ creating: true })
+      try {
+        const result = await commands.createCreationFile(
+          workspace.project.identity,
+          path,
+          Object.keys(get().drafts)
+        )
+        if (!owns()) return null
+        if (result.status === 'error') return result
+        const file = result.data
+        set({ lastChange: null })
+        get().changed([file.path])
+        const files = useCreationStore.getState().workspace?.files ?? []
+        commitFileList(
+          files.some(item => item.path === file.path)
+            ? files
+            : [...files, file].sort((a, b) => a.path.localeCompare(b.path)),
+          owns,
+          get().revision
+        )
+        get().setActivePath(file.path)
+        return result
+      } catch (error) {
+        return owns()
+          ? { status: 'error', error: creationTransportError(error) }
+          : null
+      } finally {
+        if (owns()) set({ creating: false })
+      }
+    },
     loadHistory: async (
       identity,
       source,
@@ -576,11 +674,33 @@ export const useCreationFilesStore = create<CreationFilesState>((set, get) => {
             return false
           }
           const change = result.data
+          if (
+            JSON.stringify(
+              useCreationStore.getState().workspace?.directories ?? []
+            ) !== JSON.stringify(change.directories ?? [])
+          ) {
+            useCreationStore.setState(state =>
+              state.workspace?.project.identity === identity
+                ? {
+                    workspace: {
+                      ...state.workspace,
+                      directories: change.directories ?? [],
+                    },
+                  }
+                : {}
+            )
+          }
           const listed =
             get().revision === revision &&
             (!change.changed.length ||
               commitFileList(change.files, owns, revision))
-          get().changed(change.changed)
+          const newlyObserved = change.changed.filter(path => {
+            const observed = change.changeRevisions?.[path] ?? change.revision
+            if ((observedChanges.get(path) ?? -1) >= observed) return false
+            observedChanges.set(path, observed)
+            return true
+          })
+          get().changed(newlyObserved)
           set({ error: null })
           const synchronized = await Promise.all(
             change.changed.map(path => observeDisk(path))
@@ -601,6 +721,25 @@ export const useCreationFilesStore = create<CreationFilesState>((set, get) => {
       })()
       polling = { identity, epoch, promise }
       return promise
+    },
+    synchronizeSaved: async identity => {
+      const epoch = operationEpoch
+      const owns = () => epoch === operationEpoch && ownsWorkspace(identity)
+      if (!owns()) return false
+      // A periodic scan may already have captured pre-save files. Drain it,
+      // then require a new scan dispatched after this saved mutation.
+      if (polling?.identity === identity) await polling.promise
+      if (!owns()) return false
+      const complete = await get().poll()
+      if (!owns()) return false
+      if (!complete && !get().error)
+        set({
+          error: {
+            code: 'io',
+            detail: i18n.t('creation.files.syncPending'),
+          },
+        })
+      return complete
     },
     capture: async root => {
       const workspace = useCreationStore.getState().workspace
@@ -951,12 +1090,14 @@ export const useCreationFilesStore = create<CreationFilesState>((set, get) => {
     clear: () => {
       operationEpoch += 1
       operations.clear()
+      observedChanges.clear()
       polling = null
       set({
         ...initialChanges(),
         lastChange: null,
         changeError: null,
         changeBusy: false,
+        creating: false,
         drafts: {},
         activePath: null,
         location: null,

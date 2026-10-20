@@ -196,7 +196,7 @@ async fn http_stub(
     (config, task)
 }
 
-async fn read_http_request(socket: &mut tokio::net::TcpStream) -> (String, Value) {
+pub(super) async fn read_http_request(socket: &mut tokio::net::TcpStream) -> (String, Value) {
     let mut buffer = Vec::new();
     let header_end = loop {
         let mut chunk = [0; 1024];
@@ -324,7 +324,7 @@ async fn truncated_completions_are_not_reported_as_connection_success() {
     let service = ModelService::new(MemoryCredentials::default());
     let result = service.test_connection(&config, Some("test-secret")).await;
     server.abort();
-    assert_eq!(result, Err(ModelServiceError::Protocol));
+    assert_eq!(result, Err(ModelServiceError::OutputTruncated));
 }
 
 #[tokio::test]
@@ -452,8 +452,14 @@ async fn http_failures_are_actionable_and_never_echo_service_errors_or_credentia
 async fn unsupported_tools_are_distinct_from_bad_protocol() {
     for reply in [
         text_response(),
-        (400, "unsupported tools".into()),
-        (422, "unsupported tool_choice".into()),
+        (
+            400,
+            json!({"error":{"code":"unsupported_tools"}}).to_string(),
+        ),
+        (
+            422,
+            json!({"error":{"type":"tools_not_supported"}}).to_string(),
+        ),
     ] {
         let (config, server) = http_stub(vec![text_response(), reply]).await;
         let service = ModelService::new(MemoryCredentials::default());
@@ -461,6 +467,22 @@ async fn unsupported_tools_are_distinct_from_bad_protocol() {
             service.test_connection(&config, Some("test-secret")).await,
             Err(ModelServiceError::ToolsUnsupported)
         );
+        assert_eq!(server.await.unwrap().len(), 2);
+    }
+}
+
+#[tokio::test]
+async fn invalid_tool_parameters_are_not_reported_as_unsupported_tools_or_bad_credentials() {
+    for body in [
+        json!({"error":{"code":"invalid_request_error","param":"tool_choice","message":"private provider text and fixture-secret"}}).to_string(),
+        json!({"error":{"type":"invalid_request_error","param":"messages.reasoning_content"}}).to_string(),
+        "unsupported tool_choice".into(),
+    ] {
+        let (config, server) = http_stub(vec![text_response(), (400, body)]).await;
+        let service = ModelService::new(MemoryCredentials::default());
+        let error = service.test_connection(&config, Some("fixture-secret")).await.unwrap_err();
+        assert_eq!(error, ModelServiceError::RequestRejected);
+        assert_eq!(serde_json::to_string(&error).unwrap(), "{\"type\":\"requestRejected\"}");
         assert_eq!(server.await.unwrap().len(), 2);
     }
 }
@@ -609,7 +631,7 @@ async fn chunked_responses_without_a_content_length_are_also_bounded() {
             )
             .await
             .unwrap();
-        let body = "x".repeat(64 * 1024 + 1);
+        let body = "x".repeat(1024 * 1024 + 1);
         // The client may close as soon as the byte budget is exhausted.
         let _ = socket
             .write_all(format!("{:X}\r\n{body}\r\n0\r\n\r\n", body.len()).as_bytes())
@@ -618,7 +640,7 @@ async fn chunked_responses_without_a_content_length_are_also_bounded() {
     let service = ModelService::new(MemoryCredentials::default());
     assert_eq!(
         service.test_connection(&config, Some("test-secret")).await,
-        Err(ModelServiceError::Protocol)
+        Err(ModelServiceError::ResponseTooLarge)
     );
     server.await.unwrap();
 }
@@ -684,7 +706,7 @@ async fn context_configuration_limits_the_actual_request_and_rejects_contradicto
     let (mut config, server) = http_stub(vec![text_response()]).await;
     let configured = |capacity, output| {
         json!({
-            "capacity":capacity,"inputTarget":12000,"maxOutput":output,
+            "mode":"manual","capacity":capacity,"inputTarget":12000,"maxOutput":output,
             "reasoningReserve":256,"safetyMargin":128,"tokenizer":"cl100kBase",
             "source":"manualUnverified"
         })
@@ -719,11 +741,95 @@ async fn context_configuration_limits_the_actual_request_and_rejects_contradicto
     );
 }
 
+#[test]
+fn provider_default_output_has_no_hidden_limit_and_explicit_limits_remain_authoritative() {
+    use super::context::{self, ContextMode, ModelContextConfig};
+    for base in ["https://api.deepseek.com", "https://model.example/v1"] {
+        let mut config = ModelServiceConfig {
+            base_url: base.into(),
+            model: "selected-model".into(),
+            context: None,
+        };
+        for context in [None, Some(ModelContextConfig::default())] {
+            config.context = context;
+            let (body, measurement) = context::assemble(&config, assistant_question()).unwrap();
+            assert!(body.get("max_tokens").is_none());
+            assert!(body.get("max_completion_tokens").is_none());
+            assert_eq!(measurement.output_reserve, None);
+            assert_eq!(measurement.effective_input, None);
+        }
+        for mode in [None, Some(ContextMode::Auto), Some(ContextMode::Manual)] {
+            for reasoning_reserve in [0, 1024] {
+                config.context = Some(ModelContextConfig {
+                    mode,
+                    max_output: Some(8192),
+                    reasoning_reserve,
+                    capacity: Some(64000),
+                    input_target: Some(12000),
+                    ..ModelContextConfig::default()
+                });
+                let (body, measurement) = context::assemble(&config, assistant_question()).unwrap();
+                let parameter = if reasoning_reserve > 0 && !provider::is_deepseek(base) {
+                    "max_completion_tokens"
+                } else {
+                    "max_tokens"
+                };
+                assert_eq!(body[parameter], 8192 + reasoning_reserve);
+                assert_eq!(measurement.output_reserve, Some(8192 + reasoning_reserve));
+                assert_eq!(
+                    measurement.effective_input,
+                    (mode == Some(ContextMode::Manual)).then_some(12000)
+                );
+            }
+        }
+        for context in [
+            ModelContextConfig {
+                mode: Some(ContextMode::Manual),
+                capacity: Some(16000),
+                ..ModelContextConfig::default()
+            },
+            ModelContextConfig {
+                reasoning_reserve: 1024,
+                ..ModelContextConfig::default()
+            },
+        ] {
+            config.context = Some(context);
+            assert_eq!(
+                validate_config(&config),
+                Err(ModelServiceError::InvalidConfig)
+            );
+        }
+    }
+}
+
+#[test]
+fn automatic_capacity_is_display_only_without_implicit_input_or_output_limits() {
+    use super::context::{self, ContextMode, ModelContextConfig};
+    for capacity in [128, 64000] {
+        let config = ModelServiceConfig {
+            base_url: "https://api.deepseek.com".into(),
+            model: "selected-model".into(),
+            context: Some(ModelContextConfig {
+                mode: Some(ContextMode::Auto),
+                capacity: Some(capacity),
+                ..ModelContextConfig::default()
+            }),
+        };
+        validate_config(&config).unwrap();
+        let (body, measurement) = context::assemble(&config, assistant_question()).unwrap();
+        assert_eq!(measurement.capacity, Some(capacity));
+        assert_eq!(measurement.effective_input, None);
+        assert_eq!(measurement.output_reserve, None);
+        assert!(body.get("max_tokens").is_none());
+        assert!(body.get("max_completion_tokens").is_none());
+    }
+}
+
 #[tokio::test]
 async fn a_small_input_target_rejects_tools_before_any_http_request_even_without_a_tokenizer() {
     let (config, server) = http_stub(vec![text_response()]).await;
     let mut value = serde_json::to_value(config).unwrap();
-    value["context"] = json!({"capacity":null,"inputTarget":100,"maxOutput":64,"reasoningReserve":0,"safetyMargin":0,"tokenizer":"unknown","source":"manualUnverified"});
+    value["context"] = json!({"mode":"manual","capacity":null,"inputTarget":100,"maxOutput":64,"reasoningReserve":0,"safetyMargin":0,"tokenizer":"unknown","source":"manualUnverified"});
     let config: ModelServiceConfig = serde_json::from_value(value).unwrap();
     let measurement = measure_context(config.clone(), assistant_question()).unwrap();
     assert!(measurement.estimated_tokens.is_none());
@@ -731,7 +837,7 @@ async fn a_small_input_target_rejects_tools_before_any_http_request_even_without
         .as_u64()
         .expect("unknown tokenizers still provide a portable display estimate");
     assert!(display > 0 && display < u64::from(measurement.utf8_bytes));
-    assert_eq!(measurement.admission_estimate, measurement.utf8_bytes);
+    assert_eq!(measurement.admission_estimate, display as u32);
     assert_eq!(measurement.exceeded.as_deref(), Some("contextTokens"));
     let service = ModelService::new(MemoryCredentials::default());
     service.save_credential("fixture-secret").await.unwrap();
@@ -752,6 +858,85 @@ async fn a_small_input_target_rejects_tools_before_any_http_request_even_without
     ));
     assert!(!server.is_finished());
     server.abort();
+}
+
+#[tokio::test]
+#[ignore = "local acceptance: requires PNDS_ASSISTANT_REPLAY_PACKETS from the highest frontend flow"]
+async fn assistant_project_replay_fits_configured_input_through_the_final_candidate() {
+    // Local acceptance capture from the highest frontend flow; no credentials.
+    let path = std::env::var("PNDS_ASSISTANT_REPLAY_PACKETS").expect("set the local capture path");
+    let captured: Value = serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
+    let config: ModelServiceConfig = serde_json::from_value(captured["config"].clone()).unwrap();
+    let count = captured["packets"].as_array().unwrap().len();
+    let (local_config, server) = http_stub(vec![text_response(); count]).await;
+    let mut local = config.clone();
+    local.base_url = local_config.base_url;
+    let service = ModelService::new(MemoryCredentials::default());
+    service.save_credential("local-replay-only").await.unwrap();
+    let session = service
+        .begin_assistant(
+            "score".into(),
+            "score-replay".into(),
+            local,
+            service.assistant_revision(),
+        )
+        .await
+        .unwrap();
+    for (index, packet) in captured["packets"].as_array().unwrap().iter().enumerate() {
+        let measurement = measure_context(
+            config.clone(),
+            serde_json::from_value(packet.clone()).unwrap(),
+        )
+        .unwrap();
+        println!(
+            "replay turn={} bytes={} reference={:?} admission={} budget={:?}",
+            index + 1,
+            measurement.utf8_bytes,
+            measurement.reference_estimated_tokens,
+            measurement.admission_estimate,
+            measurement.effective_input
+        );
+        assert_eq!(
+            measurement.exceeded,
+            None,
+            "saved-score turn {} must reach the model",
+            index + 1
+        );
+        if let Err(error) = service
+            .assistant_turn(
+                &session.request_id,
+                serde_json::from_value(packet.clone()).unwrap(),
+                |_| {},
+            )
+            .await
+        {
+            server.abort();
+            panic!("saved-score turn {} failed: {error:?}", index + 1);
+        }
+    }
+    assert_eq!(server.await.unwrap().len(), count);
+}
+
+#[test]
+fn unknown_encoder_admits_large_code_under_a_token_budget_without_treating_bytes_as_tokens() {
+    let config = serde_json::from_value(json!({
+        "baseUrl":"https://model.example/v1", "model":"glm-5.3-flash",
+        "context":{"capacity":1_000_000,"inputTarget":32000,"maxOutput":8192,
+        "reasoningReserve":0,"safetyMargin":2048,"tokenizer":"unknown","source":"manualUnverified"}
+    }))
+    .unwrap();
+    let messages = serde_json::from_value(json!([
+        {"role":"system","content":"Read the saved project and propose small patches.","contextKind":"projectPolicy"},
+        {"role":"user","content":"// saved large monitor sketch\nconst tempo = 80;\n".repeat(800),"contextKind":"projectFragment"}
+    ])).unwrap();
+    let measurement = measure_context(config, messages).unwrap();
+    assert!(measurement.utf8_bytes > 32000);
+    assert!(measurement.estimated_tokens.is_none());
+    assert_eq!(measurement.exceeded, None);
+    assert_eq!(
+        measurement.admission_estimate,
+        measurement.reference_estimated_tokens.unwrap()
+    );
 }
 
 #[test]
@@ -787,7 +972,10 @@ fn reference_context_estimates_are_provider_independent_and_leave_budgets_conser
             .reference_estimated_tokens
             .is_some_and(|count| count > 0));
         assert!(unknown.estimated_tokens.is_none());
-        assert_eq!(unknown.admission_estimate, unknown.utf8_bytes);
+        assert_eq!(
+            unknown.admission_estimate,
+            unknown.reference_estimated_tokens.unwrap()
+        );
         assert!(selected.reference_estimated_tokens.is_none());
         assert_eq!(unknown.capacity, Some(1_000_000));
     }
@@ -983,7 +1171,7 @@ fn assistant_question() -> Vec<AssistantModelMessage> {
 }
 
 #[tokio::test]
-async fn assistant_reply_can_take_longer_than_the_connection_probe_timeout() {
+async fn assistant_reply_can_take_longer_than_the_previous_two_minute_limit() {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let config = ModelServiceConfig {
         context: None,
@@ -1024,7 +1212,7 @@ async fn assistant_reply_can_take_longer_than_the_connection_probe_timeout() {
     });
     accepted.await.unwrap();
     tokio::time::pause();
-    tokio::time::advance(std::time::Duration::from_secs(31)).await;
+    tokio::time::advance(std::time::Duration::from_secs(301)).await;
     tokio::task::yield_now().await;
     tokio::time::resume();
     release.send(()).unwrap();
@@ -1032,14 +1220,15 @@ async fn assistant_reply_can_take_longer_than_the_connection_probe_timeout() {
     server.await.unwrap();
     assert!(
         result.is_ok(),
-        "a reply within the 120-second assistant budget must not use the 30-second probe deadline: {:?}",
+        "an assistant reply must not inherit a probe or total request deadline: {:?}",
         result.err()
     );
 }
 
 #[tokio::test]
-async fn assistant_stream_delivers_text_before_completion_and_retains_cancellation_and_deadlines() {
-    for action in ["complete", "truncated", "cancel", "deadline"] {
+async fn assistant_stream_delivers_text_before_completion_and_stays_cancellable_without_a_deadline()
+{
+    for action in ["complete", "truncated", "cancel", "long_wait"] {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let config = ModelServiceConfig {
             context: None,
@@ -1070,8 +1259,8 @@ async fn assistant_stream_delivers_text_before_completion_and_retains_cancellati
             )
             .await
             .unwrap();
-        // Time spent between document/model turns counts against the same budget.
-        if action == "deadline" {
+        // Long gaps between tool/model turns must not expire the session.
+        if action == "long_wait" {
             tokio::time::pause();
             tokio::time::advance(std::time::Duration::from_secs(90)).await;
             tokio::time::resume();
@@ -1103,9 +1292,9 @@ async fn assistant_stream_delivers_text_before_completion_and_retains_cancellati
         if action == "cancel" {
             service.cancel_assistant("stream");
         }
-        if action == "deadline" {
+        if action == "long_wait" {
             tokio::time::pause();
-            tokio::time::advance(std::time::Duration::from_secs(31)).await;
+            tokio::time::advance(std::time::Duration::from_secs(301)).await;
             tokio::task::yield_now().await;
             tokio::time::resume();
         }
@@ -1114,12 +1303,15 @@ async fn assistant_stream_delivers_text_before_completion_and_retains_cancellati
         server.await.unwrap();
         match action {
             "complete" => assert_eq!(outcome.unwrap().text.as_deref(), Some("第一段 second")),
-            "truncated" => assert!(matches!(outcome, Err(ModelServiceError::Protocol))),
+            "truncated" => assert!(matches!(
+                outcome,
+                Err(ModelServiceError::ResponseInterrupted)
+            )),
             "cancel" => assert!(matches!(outcome, Err(ModelServiceError::Cancelled))),
-            "deadline" => assert!(matches!(outcome, Err(ModelServiceError::Timeout))),
+            "long_wait" => assert_eq!(outcome.unwrap().text.as_deref(), Some("第一段 second")),
             _ => unreachable!(),
         }
-        if action != "complete" {
+        if action != "complete" && action != "long_wait" {
             assert_eq!(*progress.lock().unwrap(), ["第一段"]);
         }
     }
@@ -1144,7 +1336,7 @@ async fn assistant_budget_failure_ends_the_request_without_sending_an_http_reque
         .await
         .unwrap();
     let messages =
-        serde_json::from_value(json!([{"role":"user","content":"x".repeat(128 * 1024 + 1)}]))
+        serde_json::from_value(json!([{"role":"user","content":"x".repeat(512 * 1024 + 1)}]))
             .unwrap();
     assert!(matches!(
         service
@@ -1432,7 +1624,7 @@ async fn assistant_cancel_before_begin_and_reused_ids_cannot_start_a_request() {
 async fn assistant_turn_budget_and_protocol_failures_end_the_session_without_retry() {
     let service = ModelService::new(MemoryCredentials::default());
     service.save_credential("secret").await.unwrap();
-    let (config, server) = http_stub(vec![text_response(); 12]).await;
+    let (config, server) = http_stub(vec![text_response(); 128]).await;
     let request = service
         .begin_assistant(
             "project-a".into(),
@@ -1442,7 +1634,7 @@ async fn assistant_turn_budget_and_protocol_failures_end_the_session_without_ret
         )
         .await
         .unwrap();
-    for _ in 0..12 {
+    for _ in 0..128 {
         service
             .assistant_turn(&request.request_id, assistant_question(), |_| {})
             .await
@@ -1458,7 +1650,7 @@ async fn assistant_turn_budget_and_protocol_failures_end_the_session_without_ret
         service.assistant_identity(&request.request_id),
         Err(ModelServiceError::Cancelled)
     ));
-    assert_eq!(server.await.unwrap().len(), 12);
+    assert_eq!(server.await.unwrap().len(), 128);
 
     let (config, server) = http_stub(vec![(
         200,
@@ -1486,6 +1678,49 @@ async fn assistant_turn_budget_and_protocol_failures_end_the_session_without_ret
         Err(ModelServiceError::Cancelled)
     ));
     assert_eq!(server.await.unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn truncated_output_retains_the_native_session_for_bounded_task_continuation() {
+    let mut truncated: Value = serde_json::from_str(&tool_response().1).unwrap();
+    truncated["choices"][0]["finish_reason"] = json!("length");
+    truncated["choices"][0]["message"]["tool_calls"][0]["function"]["arguments"] =
+        json!("{\"query\":");
+    let (config, server) = http_stub(vec![(200, truncated.to_string()), text_response()]).await;
+    let service = ModelService::new(MemoryCredentials::default());
+    service.save_credential("fixture-secret").await.unwrap();
+    let session = service
+        .begin_assistant(
+            "owner".into(),
+            "output-recovery".into(),
+            config,
+            service.assistant_revision(),
+        )
+        .await
+        .unwrap();
+    assert!(matches!(
+        service
+            .assistant_turn(&session.request_id, assistant_question(), |_| {})
+            .await,
+        Err(ModelServiceError::OutputTruncated)
+    ));
+    let continuation = service
+        .assistant_turn(&session.request_id, assistant_question(), |_| {})
+        .await;
+    if continuation.is_err() {
+        server.abort();
+    }
+    assert!(
+        continuation.is_ok(),
+        "output recovery lost its native session: {:?}",
+        continuation.err()
+    );
+    assert_eq!(server.await.unwrap().len(), 2);
+    service.cancel_assistant(&session.request_id);
+    assert!(matches!(
+        service.assistant_identity(&session.request_id),
+        Err(ModelServiceError::Cancelled)
+    ));
 }
 
 #[test]
@@ -1533,5 +1768,173 @@ fn assistant_owner_requires_the_live_native_folder_capability() {
             validate_assistant_owner(&access, &readonly.project.identity, &protection),
             Err(ModelServiceError::InvalidIdentity)
         );
+    }
+}
+
+#[test]
+fn legacy_input_targets_are_automatic_until_manual_limits_are_explicitly_enabled() {
+    for tokenizer in ["unknown", "cl100kBase", "o200kBase"] {
+        let mut value = json!({"baseUrl":"https://model.example/v1","model":"fixture",
+            "context":{"capacity":16000,"inputTarget":100,"maxOutput":512,
+            "reasoningReserve":0,"safetyMargin":256,"tokenizer":tokenizer,"source":"manualUnverified"}});
+        let automatic = measure_context(
+            serde_json::from_value(value.clone()).unwrap(),
+            assistant_question(),
+        )
+        .unwrap();
+        assert!(automatic.admission_estimate > 100);
+        assert_eq!(automatic.effective_input, None);
+        assert_eq!(automatic.exceeded, None);
+        assert_eq!(automatic.output_reserve, Some(512));
+        value["context"]["mode"] = json!("manual");
+        let manual =
+            measure_context(serde_json::from_value(value).unwrap(), assistant_question()).unwrap();
+        assert_eq!(manual.effective_input, Some(100));
+        assert_eq!(manual.exceeded.as_deref(), Some("contextTokens"));
+    }
+}
+
+#[tokio::test]
+async fn explicit_provider_context_errors_allow_a_smaller_turn_on_the_same_session() {
+    for code in ["context_length_exceeded", "context_window_exceeded", "1261"] {
+        let (config, server) = http_stub(vec![
+            (
+                400,
+                json!({"error":{"code":code,"message":"private prompt must never escape"}})
+                    .to_string(),
+            ),
+            text_response(),
+        ])
+        .await;
+        let service = ModelService::new(MemoryCredentials::default());
+        service.save_credential("fixture-secret").await.unwrap();
+        let session = service
+            .begin_assistant(
+                "owner".into(),
+                "context-recovery".into(),
+                config,
+                service.assistant_revision(),
+            )
+            .await
+            .unwrap();
+        assert!(matches!(
+            service
+                .assistant_turn(&session.request_id, assistant_question(), |_| {})
+                .await,
+            Err(ModelServiceError::ContextWindowExceeded)
+        ));
+        service
+            .assistant_turn(&session.request_id, assistant_question(), |_| {})
+            .await
+            .unwrap();
+        assert_eq!(server.await.unwrap().len(), 2);
+    }
+    assert_eq!(
+        super::transport::finish_failure(&json!("model_context_window_exceeded")),
+        ModelServiceError::ContextWindowExceeded
+    );
+    assert_eq!(
+        super::transport::finish_failure(&json!("unknown_private_reason")),
+        ModelServiceError::Protocol
+    );
+}
+
+#[tokio::test]
+async fn native_chat_accepts_long_reasoning_streams_with_two_file_candidates_and_usage() {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let config = ModelServiceConfig {
+        base_url: format!("http://{}/v1", listener.local_addr().unwrap()),
+        model: "fixture".into(),
+        context: None,
+    };
+    let server = tokio::spawn(async move {
+        let (mut socket, _) = listener.accept().await.unwrap();
+        let (_, request) = read_http_request(&mut socket).await;
+        assert_eq!(request["stream"], true);
+        let reasoning = format!(
+            "data: {}\n\n",
+            json!({
+                "id":"metadata-".repeat(20), "model":"fixture",
+                "choices":[{"index":0,"delta":{"reasoning_content":"discarded reasoning"},"finish_reason":null}]
+            })
+        );
+        let mut body = reasoning.repeat(4000);
+        body.push_str(&format!("data: {}\n\n", json!({"choices":[{"index":0,"delta":{"tool_calls":[
+            {"index":0,"id":"server","type":"function","function":{"name":"propose_text_change","arguments":json!({"path":"server.js","version":"v1","text":"new server","parameters":[]}).to_string()}},
+            {"index":1,"id":"manifest","type":"function","function":{"name":"propose_text_change","arguments":json!({"path":"manifest.json","version":"v2","text":"{}","parameters":[]}).to_string()}}
+        ]},"finish_reason":"tool_calls"}]})));
+        body.push_str(&format!(
+            "data: {}\n\ndata: [DONE]\n\n",
+            json!({"choices":[],"usage":{"prompt_tokens":21000,"completion_tokens":4000}})
+        ));
+        assert!(body.len() > 1024 * 1024);
+        socket.write_all(format!("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", body.len()).as_bytes()).await.unwrap();
+        for chunk in body.as_bytes().chunks(4096) {
+            socket.write_all(chunk).await.unwrap();
+        }
+    });
+    let service = ModelService::new(MemoryCredentials::default());
+    service
+        .save_credential("local-fixture-secret")
+        .await
+        .unwrap();
+    let session = service
+        .begin_assistant(
+            "owner".into(),
+            "long-reasoning".into(),
+            config,
+            service.assistant_revision(),
+        )
+        .await
+        .unwrap();
+    let mut progress = Vec::new();
+    let turn = service
+        .assistant_turn(&session.request_id, assistant_question(), |text| {
+            progress.push(text.to_owned())
+        })
+        .await
+        .unwrap();
+    assert!(progress.is_empty());
+    assert_eq!(turn.tool_calls.len(), 2);
+    assert_eq!(turn.tool_calls[0].name, "propose_text_change");
+    assert_eq!(turn.usage.unwrap().output_tokens, Some(4000));
+    assert!(!serde_json::to_string(&turn.tool_calls)
+        .unwrap()
+        .contains("discarded reasoning"));
+    server.await.unwrap();
+}
+
+#[test]
+fn explicit_creation_modes_advertise_separate_native_tool_schemas() {
+    let handoff = chat::task_tools(chat::ContextContentKind::HandoffPolicy);
+    let edit = chat::task_tools(chat::ContextContentKind::EditPolicy);
+    let names = |value: &serde_json::Value| {
+        value
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|tool| tool["function"]["name"].as_str().unwrap().to_owned())
+            .collect::<Vec<_>>()
+    };
+    let handoff_names = names(&handoff);
+    let edit_names = names(&edit);
+    assert!(handoff_names.iter().any(|name| name == "write_handoff"));
+    for name in [
+        "write_project_file",
+        "create_project_file",
+        "use_local_library",
+        "run_project_check",
+        "run_project_static_check",
+        "remove_project_file",
+        "install_preview_adapter",
+        "expose_project_parameters",
+    ] {
+        assert!(edit_names.iter().any(|entry| entry == name));
+        assert!(!handoff_names.iter().any(|entry| entry == name));
+    }
+    for mode in [handoff_names, edit_names] {
+        assert!(!mode
+            .iter()
+            .any(|name| name == "propose_text_change" || name == "propose_handoff"));
     }
 }

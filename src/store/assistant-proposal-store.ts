@@ -17,6 +17,7 @@ import { useSessionStore } from './session-store'
 import { parameterValueValid } from '@/lib/parameter-values'
 
 export interface LiveProposal extends AssistantProposal {
+  taskId?: string
   before: string
   recommended: string
   requests: ParameterRequest[]
@@ -48,6 +49,7 @@ interface ProposalState {
   preview: (id: string) => Promise<void>
   apply: (id: string) => Promise<void>
   reload: (id: string) => Promise<void>
+  removeMessages: (messageIds: readonly string[]) => void
   clear: () => void
 }
 const publishers = new Map<string, Publish>()
@@ -82,6 +84,34 @@ export const useAssistantProposalStore = create<ProposalState>((set, get) => {
     set(state => ({ items: { ...state.items, [id]: next } }))
     if (publish) publishers.get(id)?.(snapshot(next))
   }
+  const previewBound = async (id: string) => {
+    const item = get().items[id]
+    if (!item?.binding || !owned(item) || item.applying) return
+    const owner = {
+      identity: item.identity,
+      proposalId: id,
+      revision: item.candidate.revision,
+      path: item.source.path,
+      version: item.source.version,
+    }
+    // A replacement can wait for another proposal's restoration before it
+    // becomes the owner. Deleting it must also revoke that queued preview.
+    const unsubscribe = useParameterPreviewStore.subscribe(
+      (state, previous) => {
+        if (
+          state.owner !== previous.owner &&
+          state.owner === owner &&
+          get().items[id]?.source !== item.source
+        )
+          void state.end()
+      }
+    )
+    try {
+      await useParameterPreviewStore.getState().preview(owner, item.binding)
+    } finally {
+      unsubscribe()
+    }
+  }
   return {
     items: {},
     install: (identity, messageId, projectKey, proposals, publish) => {
@@ -90,6 +120,7 @@ export const useAssistantProposalStore = create<ProposalState>((set, get) => {
       for (const proposal of proposals) {
         publishers.set(proposal.id, publish)
         const item: LiveProposal = {
+          taskId: proposal.taskId,
           id: proposal.id,
           messageId,
           identity,
@@ -244,25 +275,13 @@ export const useAssistantProposalStore = create<ProposalState>((set, get) => {
           return
         }
         patch(id, { binding: result.data }, false)
-        if (spec.preview === 'live') await get().preview(id)
+        if (spec.preview === 'live') await previewBound(id)
       } catch {
         /* Preserve the current buffer on invalid or late controls. */
       }
     },
     preview: async id => {
-      if (!(await get().rebind(id))) return
-      const item = get().items[id]
-      if (!item?.binding || !owned(item) || item.applying) return
-      await useParameterPreviewStore.getState().preview(
-        {
-          identity: item.identity,
-          proposalId: id,
-          revision: item.candidate.revision,
-          path: item.source.path,
-          version: item.source.version,
-        },
-        item.binding
-      )
+      if (await get().rebind(id)) await previewBound(id)
     },
     apply: async id => {
       const item = get().items[id]
@@ -280,7 +299,7 @@ export const useAssistantProposalStore = create<ProposalState>((set, get) => {
         get().items[id]?.source === item.source
       patch(id, { applying: true, error: null })
       try {
-        await useParameterPreviewStore.getState().end()
+        if (!(await useParameterPreviewStore.getState().end())) return
         if (!current() || get().items[id]?.candidate !== item.candidate) return
         const files = useCreationFilesStore.getState()
         if (!files.drafts[item.source.path])
@@ -294,6 +313,76 @@ export const useAssistantProposalStore = create<ProposalState>((set, get) => {
           draft.diskText !== item.before
         ) {
           patch(id, { error: { code: 'versionConflict', detail: '' } })
+          return
+        }
+        if (item.taskId) {
+          const begun = await commands.beginCreationAssistantTask(
+            item.identity,
+            'edit',
+            item.taskId
+          )
+          if (begun.status === 'error') {
+            patch(id, { error: begun.error })
+            return
+          }
+          try {
+            if (!current() || get().items[id]?.candidate !== item.candidate)
+              return
+            const latest =
+              useCreationFilesStore.getState().drafts[item.source.path]
+            if (
+              !latest ||
+              isDraftDirty(latest) ||
+              latest.diskVersion !== item.source.version ||
+              latest.diskText !== item.before
+            ) {
+              patch(id, { error: { code: 'versionConflict', detail: '' } })
+              return
+            }
+            const saved = await commands.writeCreationAssistantFile(
+              item.identity,
+              item.taskId,
+              {
+                path: item.source.path,
+                version: item.source.version,
+                text: item.candidate.text,
+                edits: null,
+              }
+            )
+            if (saved.status === 'error') {
+              if (current()) patch(id, { error: saved.error })
+              return
+            }
+          } finally {
+            await commands.endCreationAssistantTask(item.identity, item.taskId)
+          }
+          if (!current()) return
+          const synchronized = await files.synchronizeSaved(item.identity)
+          if (!current()) return
+          const saved = await commands.readCreationFile(
+            item.identity,
+            item.source.path
+          )
+          if (!current() || saved.status !== 'ok' || saved.data.kind !== 'text')
+            return
+          if (saved.data.text !== item.candidate.text) {
+            patch(id, { error: { code: 'versionConflict', detail: '' } })
+            return
+          }
+          const requests = (item.binding?.parameters ?? []).flatMap(p =>
+            p.value !== null ? [{ ...p.request, current: p.value }] : []
+          )
+          patch(id, {
+            source: { path: item.source.path, version: saved.data.version },
+            before: saved.data.text,
+            requests,
+            binding: null,
+            preview: 'none',
+            pendingRefresh: true,
+            appliedDiff: { before: item.before, after: saved.data.text },
+            error: synchronized ? null : useCreationFilesStore.getState().error,
+          })
+          void get().rebind(id)
           return
         }
         const success = await useCreationFilesStore
@@ -378,6 +467,30 @@ export const useAssistantProposalStore = create<ProposalState>((set, get) => {
       } catch (cause) {
         if (current()) patch(id, { error: creationTransportError(cause) })
       }
+    },
+    removeMessages: messageIds => {
+      const messages = new Set(messageIds)
+      const removed = Object.values(get().items).filter(item =>
+        messages.has(item.messageId)
+      )
+      if (!removed.length) return
+      const items = Object.fromEntries(
+        Object.entries(get().items).filter(
+          ([, item]) => !messages.has(item.messageId)
+        )
+      )
+      const preview = useParameterPreviewStore.getState()
+      const endsPreview = removed.some(
+        item =>
+          preview.owner?.identity === item.identity &&
+          preview.owner.proposalId === item.id
+      )
+      for (const item of removed) {
+        publishers.delete(item.id)
+        parameterTickets.delete(item.id)
+      }
+      set({ items })
+      if (endsPreview) void preview.end()
     },
     clear: () => {
       epoch++

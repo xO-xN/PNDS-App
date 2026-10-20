@@ -817,3 +817,142 @@ fn repeated_subtrees_cannot_expand_past_the_history_reader_budget() {
         CreationErrorCode::TooLarge
     );
 }
+
+#[test]
+fn returns_saved_files_to_a_version_without_changing_head_or_index() {
+    let (_temp, root, mut access, id) = enabled();
+    let repo = git2::Repository::open(&root).unwrap();
+    let original = repo.head().unwrap().target().unwrap();
+    let old_server = fs::read(root.join("server.js")).unwrap();
+    fs::write(root.join("server.js"), "new server").unwrap();
+    fs::remove_file(root.join("remove.txt")).unwrap();
+    fs::write(root.join("new.png"), [0, 1, 2, 255]).unwrap();
+    let preview = access
+        .preview_git_record(&id, &Protection::default())
+        .unwrap();
+    access
+        .confirm_git_record(
+            &id,
+            &preview.token,
+            GitRecordRequest {
+                paths: preview
+                    .files
+                    .iter()
+                    .filter(|file| file.default_selected)
+                    .map(|file| file.path.clone())
+                    .collect(),
+                name: "Creator".into(),
+                email: "".into(),
+                message: "Second version".into(),
+            },
+            &Protection::default(),
+        )
+        .unwrap();
+    let head = repo.head().unwrap().target().unwrap();
+    let index = fs::read(root.join(".git/index")).unwrap();
+    let preview = access
+        .preview_git_restore(&id, &original.to_string(), &Protection::default())
+        .unwrap();
+    assert!(preview.paths.contains(&"remove.txt".into()));
+    assert!(preview.paths.contains(&"new.png".into()));
+    access
+        .confirm_git_restore(&id, &preview.token, &Protection::default())
+        .unwrap();
+    assert_eq!(fs::read(root.join("server.js")).unwrap(), old_server);
+    assert!(root.join("remove.txt").exists());
+    assert!(!root.join("new.png").exists());
+    assert_eq!(repo.head().unwrap().target().unwrap(), head);
+    assert_eq!(fs::read(root.join(".git/index")).unwrap(), index);
+    assert!(repo.find_commit(original).is_ok());
+    assert!(access
+        .confirm_git_restore(&id, &preview.token, &Protection::default())
+        .is_err());
+}
+
+#[test]
+fn historical_restore_refuses_dirty_files_and_stale_previews() {
+    let (_temp, root, mut access, id) = enabled();
+    let repo = git2::Repository::open(&root).unwrap();
+    let original = repo.head().unwrap().target().unwrap();
+    fs::write(root.join("server.js"), "new server").unwrap();
+    assert!(access
+        .preview_git_restore(&id, &original.to_string(), &Protection::default())
+        .is_err());
+    let preview = access
+        .preview_git_record(&id, &Protection::default())
+        .unwrap();
+    access
+        .confirm_git_record(
+            &id,
+            &preview.token,
+            GitRecordRequest {
+                paths: vec!["server.js".into()],
+                name: "Creator".into(),
+                email: "".into(),
+                message: "Second".into(),
+            },
+            &Protection::default(),
+        )
+        .unwrap();
+    let preview = access
+        .preview_git_restore(&id, &original.to_string(), &Protection::default())
+        .unwrap();
+    fs::write(root.join("server.js"), "keep this work").unwrap();
+    assert!(access
+        .confirm_git_restore(&id, &preview.token, &Protection::default())
+        .is_err());
+    assert_eq!(
+        fs::read_to_string(root.join("server.js")).unwrap(),
+        "keep this work"
+    );
+}
+
+#[test]
+fn historical_restore_never_overwrites_an_ignored_local_file() {
+    let (_temp, root, mut access, id) = enabled();
+    fs::write(root.join("old.png"), [0, 1, 255]).unwrap();
+    let preview = access
+        .preview_git_record(&id, &Protection::default())
+        .unwrap();
+    access
+        .confirm_git_record(
+            &id,
+            &preview.token,
+            GitRecordRequest {
+                paths: vec!["old.png".into()],
+                name: "Creator".into(),
+                email: "".into(),
+                message: "Resource".into(),
+            },
+            &Protection::default(),
+        )
+        .unwrap();
+    let repo = git2::Repository::open(&root).unwrap();
+    let selected = repo.head().unwrap().target().unwrap();
+    fs::remove_file(root.join("old.png")).unwrap();
+    let preview = access
+        .preview_git_record(&id, &Protection::default())
+        .unwrap();
+    access
+        .confirm_git_record(
+            &id,
+            &preview.token,
+            GitRecordRequest {
+                paths: vec!["old.png".into()],
+                name: "Creator".into(),
+                email: "".into(),
+                message: "Remove resource".into(),
+            },
+            &Protection::default(),
+        )
+        .unwrap();
+    fs::write(root.join(".git/info/exclude"), "old.png\n").unwrap();
+    fs::write(root.join("old.png"), "local work").unwrap();
+    assert!(access
+        .preview_git_restore(&id, &selected.to_string(), &Protection::default())
+        .is_err());
+    assert_eq!(
+        fs::read_to_string(root.join("old.png")).unwrap(),
+        "local work"
+    );
+}

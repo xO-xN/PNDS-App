@@ -172,8 +172,8 @@ describe('Sidebar', () => {
       screen.getByRole('button', { name: /open projection window/i })
     ).toBeInTheDocument()
     expect(
-      screen.getByRole('button', { name: /reload monitor/i })
-    ).toBeInTheDocument()
+      screen.queryByRole('button', { name: /reload monitor/i })
+    ).not.toBeInTheDocument()
     expect(screen.queryByText('Performance projects')).not.toBeInTheDocument()
     expect(
       screen.queryByRole('button', { name: 'Project actions' })
@@ -260,10 +260,10 @@ describe('Sidebar', () => {
     expect(
       screen.queryByRole('button', { name: /close window/i })
     ).not.toBeInTheDocument()
-    // Projection/refresh remain available in fullscreen.
+    // Projection remains available; page refresh is in the native Window menu.
     expect(
-      screen.getByRole('button', { name: /reload monitor/i })
-    ).toBeInTheDocument()
+      screen.queryByRole('button', { name: /reload monitor/i })
+    ).not.toBeInTheDocument()
   })
 
   it('selects a project on click, then starts it via the Load button', async () => {

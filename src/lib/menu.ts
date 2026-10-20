@@ -164,7 +164,13 @@ async function dispatchMonitorZoom(
  * showing 简介/待机 has no monitor to reload and no-ops).
  */
 function reloadBothMonitors(): void {
-  void refreshMonitorFromDisk()
+  if (useCreationStore.getState().active)
+    void useCreationTestStore.getState().refresh()
+  else
+    void refreshMonitorFromDisk().catch(error => {
+      logger.warn('Could not refresh monitor', { error })
+      void notifications.error(i18n.t('toast.error.generic'))
+    })
   void emitProjectionAction({ kind: 'reload-monitor' })
 }
 
@@ -391,13 +397,6 @@ export async function buildAppMenu(): Promise<Menu> {
           action: () => toggleMasterMute(),
         }),
         await MenuItem.new({
-          id: 'reload-monitor',
-          text: t('menu.reloadMonitor'),
-          accelerator: 'Cmd+Shift+R',
-          // v1.5.0 (#131): both windows' monitors, one chord.
-          action: reloadBothMonitors,
-        }),
-        await MenuItem.new({
           id: 'restore-creation-workspace',
           text: t('creation.restoreWorkspace'),
           accelerator: 'Escape',
@@ -476,6 +475,14 @@ export async function buildAppMenu(): Promise<Menu> {
     const windowSubmenu = await Submenu.new({
       text: t('menu.window'),
       items: [
+        await MenuItem.new({
+          id: 'reload-monitor',
+          text: t('menu.reloadMonitor'),
+          accelerator: 'Cmd+Shift+R',
+          // v1.5.0 (#131): both windows' monitors, one chord.
+          action: reloadBothMonitors,
+        }),
+
         await MenuItem.new({
           id: 'performer-address',
           text: addressUrls

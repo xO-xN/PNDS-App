@@ -1,8 +1,10 @@
+import { creationProjectAction } from '@/test/desktop-actions'
 import { beforeEach, expect, it, vi } from 'vitest'
 import userEvent from '@testing-library/user-event'
 import { act, render, screen, waitFor, within } from '@/test/test-utils'
 import { commands, type CreationModuleCatalog } from '@/lib/tauri-bindings'
 import { useCreationStore } from '@/store/creation-store'
+import { useCreationReadingStore } from '@/store/creation-reading-store'
 import { useCreationFilesStore } from '@/store/creation-files-store'
 import { useSessionStore } from '@/store/session-store'
 import { useCreationTestStore } from '@/store/creation-test-store'
@@ -83,7 +85,7 @@ beforeEach(() => {
 
 it('opens six offline choices from an empty module group and cancels without writes', async () => {
   render(<CreationView />)
-  await userEvent.click(screen.getByRole('button', { name: 'Add PNDS module' }))
+  await creationProjectAction('Add PNDS module')
   expect(
     await screen.findByRole('button', { name: 'QR joining' })
   ).toBeInTheDocument()
@@ -96,10 +98,10 @@ it('opens six offline choices from an empty module group and cancels without wri
   ).not.toBeInTheDocument()
   await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
   expect(commands.addCreationModule).not.toHaveBeenCalled()
-  expect(screen.getByRole('button', { name: 'Add PNDS module' })).toHaveFocus()
+  expect(screen.getByRole('button', { name: 'Add resources' })).toHaveFocus()
 })
 
-it('waits for the catalog before the first dialog paint instead of resizing a loading dialog', async () => {
+it('opens one stable loading dialog and prevents duplicate catalog requests', async () => {
   let resolve!: (
     result: Awaited<ReturnType<typeof commands.getCreationModules>>
   ) => void
@@ -109,12 +111,10 @@ it('waits for the catalog before the first dialog paint instead of resizing a lo
     })
   )
   render(<CreationView />)
-  const trigger = screen.getByRole('button', { name: 'Add PNDS module' })
+  const trigger = screen.getByRole('button', { name: 'Add resources' })
   await userEvent.click(trigger)
-  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-  expect(trigger).toBeDisabled()
-  expect(trigger).toHaveAttribute('aria-busy', 'true')
-  await userEvent.click(trigger)
+  expect(screen.getByRole('dialog')).toBeVisible()
+  expect(screen.getByRole('tab', { name: 'Local modules' })).toBeDisabled()
   expect(commands.getCreationModules).toHaveBeenCalledTimes(1)
   await act(async () => resolve({ status: 'ok', data: catalog }))
   const dialog = screen.getByRole('dialog')
@@ -128,7 +128,7 @@ it('opens a recoverable error when the initial catalog read fails', async () => 
     new Error('Catalog read failed')
   )
   render(<CreationView />)
-  await userEvent.click(screen.getByRole('button', { name: 'Add PNDS module' }))
+  await creationProjectAction('Add PNDS module')
   expect(await screen.findByRole('alert')).toHaveTextContent(
     'Catalog read failed'
   )
@@ -139,7 +139,7 @@ it('opens a recoverable error when the initial catalog read fails', async () => 
     await screen.findByRole('button', { name: 'QR joining' })
   ).toBeInTheDocument()
   await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-  const trigger = screen.getByRole('button', { name: 'Add PNDS module' })
+  const trigger = screen.getByRole('button', { name: 'Add resources' })
   expect(trigger).toBeEnabled()
   expect(trigger).toHaveFocus()
 })
@@ -176,10 +176,15 @@ it('adds through the trusted command, refreshes real files and keeps the runtime
     },
   }))
   render(<CreationView />)
-  await userEvent.click(screen.getByRole('button', { name: 'Add PNDS module' }))
+  await creationProjectAction('Add PNDS module')
   await userEvent.click(
     await screen.findByRole('button', { name: 'QR joining' })
   )
+  const filePath = screen.getByText('modules/pnds-qr/qr.js')
+  expect(filePath).not.toBeVisible()
+  await userEvent.click(screen.getByText('Version, source and files'))
+  expect(filePath).toBeVisible()
+  await userEvent.click(screen.getByText('Version, source and files'))
   await userEvent.click(
     screen.getByRole('button', { name: 'Add files and handoff' })
   )
@@ -208,7 +213,7 @@ it('refuses to append over an unsaved handoff draft', async () => {
     .getState()
     .edit('docs/creator-handoff.md', 'unsaved task')
   render(<CreationView />)
-  await userEvent.click(screen.getByRole('button', { name: 'Add PNDS module' }))
+  await creationProjectAction('Add PNDS module')
   await userEvent.click(
     await screen.findByRole('button', { name: 'QR joining' })
   )
@@ -244,7 +249,7 @@ it('reports partial file publication and retries only the handoff after reloadin
     .mockResolvedValueOnce({ status: 'ok', data: catalog })
     .mockResolvedValue({ status: 'ok', data: pending })
   render(<CreationView />)
-  await userEvent.click(screen.getByRole('button', { name: 'Add PNDS module' }))
+  await creationProjectAction('Add PNDS module')
   await userEvent.click(
     await screen.findByRole('button', { name: 'QR joining' })
   )
@@ -300,7 +305,7 @@ it('discards a late add result after a project switch', async () => {
     })
   )
   render(<CreationView />)
-  await userEvent.click(screen.getByRole('button', { name: 'Add PNDS module' }))
+  await creationProjectAction('Add PNDS module')
   await userEvent.click(
     await screen.findByRole('button', { name: 'QR joining' })
   )
@@ -339,7 +344,7 @@ it('discards a late add result after a project switch', async () => {
 
 it('shows hub compatibility before adding through the same trusted workflow', async () => {
   render(<CreationView />)
-  await userEvent.click(screen.getByRole('button', { name: 'Add PNDS module' }))
+  await creationProjectAction('Add PNDS module')
   await userEvent.click(
     await screen.findByRole('button', {
       name: 'Hub connection and remote nodes',
@@ -380,7 +385,7 @@ it('shows the installed older version and preserves the disabled added state', a
     },
   })
   render(<CreationView />)
-  await userEvent.click(screen.getByRole('button', { name: 'Add PNDS module' }))
+  await creationProjectAction('Add PNDS module')
   await userEvent.click(
     await screen.findByRole('button', { name: 'QR joining' })
   )
@@ -400,7 +405,7 @@ it('shows the installed older version and preserves the disabled added state', a
 
 it('opens complete module facts and returns keyboard focus to the same library card', async () => {
   render(<CreationView />)
-  await userEvent.click(screen.getByRole('button', { name: 'Add PNDS module' }))
+  await creationProjectAction('Add PNDS module')
   const hub = await screen.findByRole('button', {
     name: 'Hub connection and remote nodes',
   })
@@ -459,7 +464,7 @@ it('opens an added module handoff in the editor without overwriting the current 
     },
   })
   render(<CreationView />)
-  await userEvent.click(screen.getByRole('button', { name: 'Add PNDS module' }))
+  await creationProjectAction('Add PNDS module')
   await userEvent.click(
     await screen.findByRole('button', { name: 'QR joining' })
   )
@@ -467,9 +472,13 @@ it('opens an added module handoff in the editor without overwriting the current 
     screen.getByRole('button', { name: 'View wiring handoff' })
   )
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(useCreationReadingStore.getState().view).toBe('file')
   expect(useCreationFilesStore.getState().activePath).toBe(
     'docs/creator-handoff.md'
   )
+  expect(
+    screen.getByRole('button', { name: /creator-handoff\.md/ })
+  ).toHaveAttribute('aria-pressed', 'true')
   expect(
     useCreationFilesStore.getState().drafts['docs/creator-handoff.md']?.text
   ).toBe('Author task draft')
@@ -496,7 +505,7 @@ it('shows a conflict in the library and details while refusing to overwrite', as
     },
   })
   render(<CreationView />)
-  await userEvent.click(screen.getByRole('button', { name: 'Add PNDS module' }))
+  await creationProjectAction('Add PNDS module')
   const card = await screen.findByRole('button', { name: 'QR joining' })
   expect(within(card).getByText('Target conflict')).toBeInTheDocument()
   await userEvent.click(card)

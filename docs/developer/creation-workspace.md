@@ -6,15 +6,42 @@ external disk tracking, and #156 adds manual testing, monitor and console.
 The visual baseline is the confirmed [r6-final desktop](../prototypes/desktop-1.6/README.md).
 The shared bottom bar keeps its mode control mounted across both workspaces;
 creation uses a compact file sidebar with manifest and the localized README
-pinned. The compact 32px titlebar puts the existing project menu beside the
-native traffic lights and a saved-file `.pnds` packaging button on the right.
+pinned. The compact 32px titlebar puts the project-switch button beside the
+native traffic lights, followed by the independent Git menu. Checks, preview
+visibility and saved-file `.pnds` buttons remain on the right.
 The packaging button is available only for a writable folder source and opens
 the existing packaging dialog, retaining destination/overwrite and draft/test
-warning behavior. The same menu and
-picker retain draft/discard and project-switch boundaries. It remains visible,
+warning behavior. Project switching uses an anchored DropdownMenu with recent
+projects, Open folder and New project. Menu dismissal preserves the current
+workspace; selection still uses the existing draft/discard and switch boundaries.
+The trigger remains visible,
 but disabled, when the editing surface hides for expanded Monitor mode.
 See [the entry mapping and acceptance record](desktop-1.6-implementation.md).
-File grouping describes actual paths, not module provenance. #160 adds blank-project creation; the Modules heading adds the offline file workflow from #210.
+File grouping describes actual paths, not module provenance. #160 adds blank-project creation;
+the file-list heading exposes the offline module workflow from #210.
+
+The compact workspace keeps pinned manifest/README rows on one line, with their
+actual paths available through accessible labels and tooltips. File filtering
+stays inline; the adjacent small Quick Open action and Command+P share the same
+picker. Empty groups are omitted, including during filtering. The file-list
+heading always retains New file, Modules and Libraries for writable workspaces,
+so an empty tree cannot strand these actions. Nonempty groups retain their own
+directory-aware New file action.
+
+The titlebar Checks menu opens either static Doctor or controlled runtime checks;
+neither starts until its existing explicit action. The reading toolbar keeps a
+single Handoff menu for creating/viewing handoffs, README synchronization and
+baseline comparisons. Actions that change focus run after the menu closes;
+closing the handoff dialog restores focus to that stable menu trigger.
+
+Public HTML entries stay under Pages; JavaScript/TypeScript files are presented
+under Scripts and CSS under Styles. These groups change presentation only:
+actual paths, editable capabilities, draft identity and runtime invalidation
+still use native file facts. The embedded Blank server reads public files for
+each GET/HEAD request, serves recognized MIME types with `Cache-Control: no-store`,
+and rejects hidden or escaping canonical paths. Saving then manually refreshing
+can therefore adopt a newly saved page/script/style without restarting Node.
+Changes to the Node server itself still require a project restart.
 
 Recent creation rows reveal their named remove-history button on row hover or
 keyboard focus, reserving its space so the project name does not shift. The row
@@ -30,15 +57,19 @@ requires a workspace. Pane-only test controls retain their existing visibility.
 
 ## Template-project creation (#160, #200)
 
-The home and project picker open the same `CreationNewProject` form. Native
-selection chooses an existing parent and a single kebab-case folder name.
+The home and project menu open the same `CreationNewProject` form. Native
+selection chooses an existing parent and a single folder name.
 Blank is selected initially; PNDS Classic is the fixed second starting point.
-The folder input normalizes ASCII uppercase letters to lowercase as the user
-edits it; the actual target preview and typed command use that same value.
-Work names are never transformed or used to derive a folder slug. Empty names,
+The folder suggestion follows the lowercase work name with `-pnds` appended;
+separators become hyphens. The first manual folder edit stops name-following
+for that form. Unicode letters/numbers are supported; uppercase input becomes
+lowercase. The actual target preview and typed command use the same value.
+The work name itself is preserved. Empty names,
 invalid characters and leading/trailing hyphens expose a localized inline reason
 through `aria-describedby`; correcting the folder clears that error. The input
-retains its 64-character maximum and the backend's lowercase ASCII contract.
+retains its 64-character maximum. The backend checks lowercase Unicode alphanumeric
+characters and hyphens; the independent manifest/package ID retains an ASCII
+stem plus random suffix.
 The new-project work-name and folder-name inputs explicitly set
 `autoCorrect="off"`, `autoCapitalize="none"` and `spellCheck={false}`. These
 fields carry creator-chosen names rather than natural-language prose; system
@@ -102,6 +133,37 @@ for `/done` and `/synced`, releases its own group on stop and never quits the
 Host's scsynth. External sends no piece messages; None opens no audio socket.
 No production dependencies, performer business protocol or sound assets ship.
 
+Blank source version **1.7.0** separates `public/monitor.html` and `monitor.js`,
+`public/performer.html` and `performer.js`, plus initial shared `public/style.css`.
+It copies the shipped `public/pnds-preview.mjs` adapter and an empty schema-1
+`pnds.preview.json`; no artistic parameter, fader or dependency is preselected.
+`monitor.js` owns an empty `previewParameters` callback map and activates the
+adapter only with actual callbacks and a Host origin. The monitor HTTP response
+captures its source and declaration bytes, embeds their digests, and serves that
+source through `/monitor.js?pndsSnapshot=<id>`. The last eight source snapshots
+are retained; unknown/evicted IDs return 404 rather than newer disk bytes.
+The normal script URL preserves relative imports. The default evidence covers
+`public/monitor.js`; parameter callbacks moved to other files require extending
+their actual load evidence. Source/declaration edits need a monitor refresh
+before new-version live preview; they do not restart the Node server.
+
+Generated `docs/implementation.md` follows the creation-time language, documents
+file responsibilities and refresh/restart boundaries, and provides a native-bound
+parameter recipe. AGENTS points there for page/style/script/preview work while
+retaining installed platform-contract pointers. Only the current assigned task
+is implemented; handoff content remains reference. Untouched template JS/MJS/CSS
+and role-specific HTML are recognized as placeholders in assistant overviews;
+modified JS, MJS or CSS become authored source. Opening an existing project never
+rewrites its layout or provenance. See
+[Blank layout acceptance](../acceptance/blank-1.7.0-layout.md).
+
+The new-project form presents template, work name, folder name and location
+before optional metadata. Author, description and the independent Git identity
+live in a native disclosure with mounted fields, retaining both manual edits and
+preference defaults. Invalid optional inputs synchronously open that disclosure
+before native form validation focuses them. Collapsing it never changes the
+creation payload or creates a second draft.
+
 The initial README is in the creation-time App language (`README.md` for English,
 `README.zh-CN.md` for Chinese). A pending other-language task reuses
 `project/handoff.rs`; AGENTS points at that handoff and the installed platform
@@ -144,7 +206,8 @@ description, page title and both READMEs. The client token key derives from the
 new manifest ID. AGENTS, start and implementation docs state that initialization
 already happened; the agent entry retains ADR-0003's installed-contract pointers.
 `docs/template-source.json` records the starting template separately from module
-addition records. Blank records its original v1.6.0 starting source too.
+addition records. New Blank projects record their v1.7.0 starting source;
+existing provenance remains unchanged.
 Generated AGENTS and implementation publication instructions point at the App's
 saved-file `.pnds` workflow and exact shared references. The frozen upstream
 release-workflow and preinstalled-dependency claims are replaced only during
@@ -320,6 +383,52 @@ proceeds. Late save/rename/read results re-check the workspace identity before
 touching store state, so an old project's return cannot modify the new one.
 ⌘S saves the active draft from any focus position in creation mode.
 
+## Native file export
+
+Pinned and ordinary saved-file rows start `dragCreationFile(identity, path)`
+through HTML dragstart. Rust resolves the current issued identity and contained
+regular saved file immediately before starting an AppKit `NSDraggingSession`.
+The pasteboard carries a file URL and the system file icon. Only Copy is offered,
+so Finder or another receiving app gets the saved file; drafts are not saved and
+the project file cannot be moved by this export. Removed recoverable drafts do
+not offer dragging. OS acceptance and the end of an actual gesture remain native
+manual checks; contained-path and obsolete-identity refusals have native tests.
+
+## Manual code and text file creation
+
+Editable folder projects expose a labelled plus at each file-group heading.
+It opens a focused inline filename row with its actual parent directory shown.
+File groups remain virtual categories: a bare filename uses the suggested real
+parent, while an input containing `/` is a path relative to the project root.
+The inline hint shows the final destination, so `public/sketch.js` entered under
+Pages does not become `public/public/sketch.js`. No group label becomes a folder.
+Enter/check creates, Escape/cancel keeps current files, and IME composition
+cannot submit. Errors preserve the name and return focus for correction.
+The creator enters a filename in an existing parent directory, creates an
+empty text file, then pastes code into the editor and saves normally. Unknown
+binary extensions are refused. Cancellation and errors retain the current file
+and drafts; success clears file search, expands the destination group and opens
+the new file without starting, refreshing or restarting the project.
+
+`createCreationFile` resolves the issued identity through `CreationAccess`, checks
+editable source, text classification, bounded inventory/depth, and recoverable
+draft destinations. It refuses traversal, control characters, `.git`,
+`node_modules` and reserved save-temp names, including canonical aliases.
+Existing draft paths use the same harmless leading-`./` semantics as reads when
+checking destination collisions; parent escapes and external symlinks remain
+rejected, and aliased recoverable drafts still block creation.
+Creation opens the canonical parent through the held root-directory capability
+and uses `openat(O_CREAT | O_EXCL | O_NOFOLLOW)`. Existing targets, including
+symlinks and concurrent creations, are never overwritten. It creates no folders
+and does not replace the version-checked normal save path.
+
+The shared file module's `create` action owns duplicate dispatch and the workspace
+epoch. It commits the returned file through the existing directory seam and
+advances the local revision, so an older watcher list cannot undo creation.
+Late results cannot select or populate files after workspace replacement, even
+when reopening the same identity. A missing saved file's recoverable draft
+blocks creation rather than being silently replaced.
+
 ## Manifest declaration form (#158)
 
 `manifest.json` stays a normal draft-backed text file — the form
@@ -376,9 +485,26 @@ a text-edit toggle and intercepted links using the existing project README
 policy. Unsafe cover candidates explain their duplicate fields, missing first
 section or unclosed fence and stay in read-only preview.
 
+Covers are edited directly on the finished composition. Hover/focus reveals an
+edit target on title, all four top metadata fields (composer, duration,
+performers, contact), first-section heading/body and the palette mark;
+click opens a small anchored field editor. Palette details retain URL metadata.
+Edits update the existing draft immediately; Done/Escape only close the field,
+while explicit Save remains the disk-write boundary. No form/preview switch or
+second preview exists. Empty title/heading and unfinished Markdown fences retain
+the same cover instance and field editor; preview values come from the known
+source-span document instead of reclassifying each keystroke.
+
+A definite flex viewport owns the editor cover. `readme/cover-frame.ts` observes
+that viewport and uniformly scales the complete 1200 × 800 artwork with 24px
+safety gutters. App, creation preview and projection use this same composition;
+there is no second 16:9 preview frame or theme-separated paper card. Inline
+popovers live in a portal; prose auto-scroll pauses while a field is open. Plain
+README documents retain their bounded reading measure and text-edit toggle.
+
 `creation-readme.ts` edits source spans rather than serializing the presentation
 parser's sanitized values. It preserves every unedited byte, including unknown
-metadata, whitespace, line endings, fenced content and later sections. Form
+metadata, whitespace, line endings, fenced content and later sections. Inline
 fields remain views over the existing file draft, save version and conflict flow.
 The heading and title may be temporarily empty while being edited.
 
@@ -446,6 +572,35 @@ per-file operation generation, so an older same-project result cannot undo a
 newer operation or new keystrokes. Non-text and read-only previews re-read only
 when the selected file's disk revision changes.
 
+### Saved mutation synchronization
+
+Assistant writes, task-bound parameter saves, task undo, Git restoration and
+shared-library adoption use `creation-files-store.synchronizeSaved(identity)`
+after their own native operation succeeds. This interface drains any scan
+already dispatched before the save and requires a new scan afterward. The file
+module adopts the actual directory and saved-file observations, retains dirty
+drafts as conflicts and fences workspace replacement. Callers never publish
+the cumulative task journal as a list of newly changed files. A no-op native
+write therefore raises no file revision or runtime refresh/restart prompt.
+
+`pollCreationChanges` also returns optional `changeRevisions`, the stable native
+observation revision for each pending path. Frontend notification is separate
+from batch acknowledgement: replaying an incomplete batch retries source reads
+and directory adoption without raising those paths' revisions again. A new
+path in a later batch does not republish older pending paths. Failed source
+reads remain unacknowledged; a confirmed missing file keeps its recoverable
+draft while the current directory drops the deleted entry. Older native replies
+without per-path revisions conservatively use the batch revision.
+
+Native mutation success and frontend synchronization success remain separate.
+The assistant returns `status: saved` with `workspaceSync: pending` when needed,
+and never repeats a completed write to repair synchronization. The workspace
+retains the synchronization error for its normal watcher/retry. Git restoration
+consumes its native preview once and offers a synchronization-only retry after
+a successful restore; it reports completion only after synchronization succeeds.
+Task undo retains its independent journal and draft guard. Neither Git nor task
+undo is implemented in the file synchronization module.
+
 Page paths and HTML/CSS changes flag refresh; server/module source, manifest,
 audio declarations and SynthDef artifacts flag restart. SuperCollider source
 also flags compilation. These are action prompts over saved disk facts, never
@@ -509,6 +664,16 @@ Escape restoration covers iframe focus only while the main creation monitor is
 expanded, has focus and has no App dialog/submission. The web fallback has the
 same plain-key guard. Menu focus and dialog subscriptions preserve other
 windows' Escape behavior; late menu actions check identity and expansion revision.
+
+The preview pane defaults to automatic visibility: idle/error workspaces keep it
+closed, while starting, running and stopping tests show it. A titlebar toggle
+can explicitly show or hide it, including before testing to reach audio-mode
+and performer controls. That workspace-local choice survives ordinary runtime
+snapshots and resets on project replacement; it is not persisted. Collapsing a
+running pane retains its dimensions, mounted iframe and URL through an invisible,
+inert positioned surface rather than `display: none`. Its focus-reclaim callback
+stands down while collapsed. Layout toggles never start, stop or refresh a run;
+expanded Monitor remains a separate layout with its existing restore action.
 
 The second tab reads the existing bounded session output tail, now retaining
 `[node]` / `[scsynth]` source prefixes, with generation-fenced session snapshots.
@@ -631,8 +796,8 @@ from retired clients cannot pollute the next workspace. A DOM load event records
 browser error documents. The list displays these navigation facts, while the
 shell directs users to the project page or monitor for performer connection
 status. A shared explanatory tooltip distinguishes navigation from connection:
-the platform has no public performer connection-status contract. No fake
-connection success or optional music-protocol adaptation is introduced.
+projects that omit the optional health roster do not report connection status.
+See the roster contract below; page loads never stand in for joined clients.
 
 The registered creation participant cleans up after confirmed project close,
 project switch or creation-mode exit. It waits for pending native creation,
@@ -665,6 +830,36 @@ Automated coverage uses native window substitutes through the App workflow and
 shell interface, plus the Rust scoped close boundary. WKWebView verification of
 independent client identities, phone/tablet orientations and actual keyboard /
 pointer input remains a real macOS check; jsdom dimensions are not that evidence.
+
+### Connected performers, pinning and expanded monitor
+
+The optional `/__pnds/health.performers` schema is a read-only list of clients
+accepted by the work's own join policy. `inspectCreationRuntime(identity, false)`
+reads it from the native ready session's loopback performer port; the roster is
+not a socket subscription and never joins an observer or player. One sequential
+two-second polling owner serves every list surface. Workspace/run revision
+changes fence late replies; a failed request clears stale rows. Unsupported or
+invalid rosters mean unknown connection status, not zero devices. See
+[runtime-contract.md](../zh-CN/reference/runtime-contract.md#optional-connected-performer-roster).
+
+Virtual page URLs carry `pndsTestClient=<issued native UUID label>`. Supporting
+projects pass that marker in their own join payload and echo it in a roster row;
+the Host correlates it with the native list to avoid counting one test client
+twice. Unmarked rows appear as external performers (which can be phones or other
+browsers). This is diagnostic metadata, never identity, recovery or permission.
+The Host never invents music join/control events or exposes claim tokens. Runes
+has a small work-side adapter attached to its existing accepted join, controls
+and release callbacks; observers remain absent. Other works require equivalent
+explicit support and continue to run without it.
+
+The local performer shell has a visible **Keep on top** toggle. A native scoped
+command queries/sets actual `always_on_top` only for issued performer labels;
+it does not reload the iframe or persist a global preference. The expanded
+creation monitor strip opens the same performer list in a compact popover, so
+existing windows can be shown/focused/hidden or deleted without leaving the
+monitor. The score iframe stays mounted. Physical phone and macOS window-level
+acceptance remain real-device checks; isolated Socket.IO replay covers joins,
+observer exclusion, disconnect removal and reconnect correlation.
 
 ## Performer JavaScript dialogs and simulated input
 
@@ -711,7 +906,7 @@ it does not replace other real-device or multi-client identity acceptance checks
 The creation preview follows r6-final: the right pane retains the applied
 runtime badge, saved audio-mode choices, real monitor with expand action and
 independent performer list. Manual start/restart, close, refresh and live gain
-move to the shared bottom bar. Packaging opens from the titlebar right button; handoff lives in the project menu;
+move to the shared bottom bar. Packaging opens from the titlebar right button; handoff opens from its pinned document in the file list;
 Save and Compile remain in the compact file toolbar, with Finder/reload/rename
 in its actions menu. The console starts closed and is creation-only, toggled by
 the bottom control or Command + backtick. Opening it docks the console below the same mounted editor and does not discard drafts.
@@ -992,6 +1187,15 @@ Long lines scroll horizontally; the editor owns its scroller, and toolbar rows
 wrap within the existing workspace. No monitor/dock ancestry or runtime action
 changes when a text surface mounts.
 
+File paths and save/compile/file actions share one header row; file type and size
+live in the file-actions menu. The text editor keeps compact undo/redo/find and
+selection-discussion controls, with line navigation, indentation and keyboard
+guidance in More editing tools. Those menu actions restore the editor selection
+and focus after menu dismissal. The editor's one status bar combines save/conflict
+state with cursor position and language/encoding; non-editor previews keep the
+outer save status. Saved changes default to a collapsed review with guarded undo
+still directly available; each new saved record starts collapsed again.
+
 `TextBuffer` owns document, selection, history, search and scroll independently
 of React mounting. `CreationDraft.editor` retains that object for the workspace
 session, including file, form/preview and layout switches. Rename moves the same
@@ -1045,3 +1249,55 @@ invalid manifest/README content, size/UTF-8 limits, protected sources and escape
 Native IME, clipboard, menu delivery, narrow layout and running monitor evidence
 remain in [#224 acceptance](../acceptance/224-basic-editor.md). #166/#208/#172
 must record actual downstream integration separately from this verified seam.
+
+## Reviewed workspace navigation and real directory tree (2026-10-19)
+
+The middle workspace has fixed Discussion / Git versions controls and one
+closable current-file tab. The dedicated Handoff control is removed. Opening
+`docs/creator-handoff.md` from the file list uses the ordinary file tab and safe
+Markdown preview/source editing with version-checked Save and `⌘S`. Existing
+explicit handoff-document links normalize their old reading-view request into
+that same file view. Closing it returns to Discussion and retains every draft.
+Page navigation never stops runtime or resumes an assistant task. Git remains
+mounted while hidden; file drafts stay in the shared file store.
+
+The handoff document is not created by visiting. If an explicit document link
+opens an absent document, the existing explicit create action remains available.
+The old manual-task/baseline dropdown is not restored; baseline records and
+confirmed proposal workflows remain independent.
+
+`CreationFileTree` pins the actual root `manifest.json`, all root README variants
+(default first, even when no default exists), then `docs/creator-handoff.md`.
+Each appears once, with a quiet purpose label, separator and smaller monospace
+basename: File contract / Project guide / Handoff. This is presentation only;
+no path is moved or renamed. Full relative paths remain in title, selection,
+keyboard actions, drag/export, creation and conflict handling. Other docs and
+nested READMEs keep their directory positions. Git comparison files use the same
+pin order and labels while retaining comparison-only selection. Real empty
+directories from the trusted inventory remain visible.
+File rows display basenames and expose full paths. New file/folder uses the
+focused directory. F2 and context-menu rename share `creation-files-store.rename`
+and its draft/conflict protections; the inline field selects the filename stem.
+References are not rewritten. The existing manifest rename restriction remains.
+Quick open stays available with `⌘P`; rescan and Finder move to the file-list menu,
+while the ordinary one-second poll continues. Add resources opens one picker with
+local-module/shared-package categories and each category's existing native policy.
+
+`CreationWorkspace.directories` and `CreationChanges.directories` are optional for
+older fixtures/readers but issued by the native inventory. Directory-only changes
+update the tree without attributing a file write to the assistant task. Native
+`create_creation_directory` uses the issued project identity, held parent fd,
+containment/private-path/depth/count checks and exclusive `mkdirat`; no overwrite,
+recursive arbitrary directory creation or symlink escape is allowed. Reopening a
+project reconstructs empty directories from disk. Directory creation does not
+select an editor or alter another draft. Tests use temporary projects, never the
+creator's live workspace.
+
+2026-10-19 UI refinement: runtime/command errors no longer expand the console
+automatically. Shell project, watcher, file-export/Finder and test failures use
+`CreationErrorToast` (4 seconds, Sonner fade transitions) without changing layout.
+The stored error, retry action and manually opened console remain available;
+repeated watcher results with the same code/detail do not re-notify. The details
+action checks project identity before opening a console. Form validation and
+version-conflict recovery remain beside their controls. Saved-page refresh moves
+from transport/change prompts to Window → Refresh Score Pages (`⌘⇧R`).

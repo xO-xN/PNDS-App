@@ -35,6 +35,10 @@ export interface MonitorUrlParams {
   /** Which window's surface the page copy loads onto ("venue" = the
    *  projection window); absent = the main window's ordinary monitor. */
   surface?: string
+  /** Exact Host origin for the optional creation preview adapter. */
+  previewHostOrigin?: string
+  /** Optional test-shell correlation only; never an identity or authorization. */
+  testClient?: string
   /** Reload nonce (0/absent = ordinary navigation; >0 = cache-busted). */
   reload?: number
 }
@@ -48,6 +52,9 @@ export function buildMonitorUrl(
   if (params.theme) search.set('theme', params.theme)
   if (params.lang) search.set('lang', params.lang)
   if (params.surface) search.set('surface', params.surface)
+  if (params.previewHostOrigin)
+    search.set('pndsHostOrigin', params.previewHostOrigin)
+  if (params.testClient) search.set('pndsTestClient', params.testClient)
   // Falsy (0/undefined) reads as "no reload yet" — the first navigation
   // keeps the plain address and normal HTTP semantics.
   if (params.reload) search.set('_r', String(params.reload))

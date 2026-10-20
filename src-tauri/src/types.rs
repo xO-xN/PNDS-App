@@ -230,6 +230,10 @@ pub struct AppPreferences {
     #[serde(default)]
     pub model_service: Option<ModelServiceConfig>,
     #[serde(default)]
+    pub git_name: Option<String>,
+    #[serde(default)]
+    pub git_email: Option<String>,
+    #[serde(default)]
     pub model_context_profiles: Vec<ModelServiceConfig>,
     /// Monitor fraction within the resizable creation workspace (not sidebar).
     #[serde(default)]
@@ -289,6 +293,8 @@ impl Default for AppPreferences {
             dns_enabled: None,
             lan_ip: None,
             model_service: None,
+            git_name: None,
+            git_email: None,
             model_context_profiles: Vec::new(),
             assistant_monitor_ratio: None,
         }
@@ -915,5 +921,41 @@ mod tests {
         assert!(validate_https_port_field(Some(8443)).is_ok());
         let err = validate_https_port_field(Some(443)).expect_err("443 must be rejected");
         assert!(err.contains("non-privileged"), "got: {err}");
+    }
+}
+
+pub fn validate_git_identity_fields(name: Option<&str>, email: Option<&str>) -> Result<(), String> {
+    for (field, value, limit) in [("name", name, 128), ("email", email, 254)] {
+        if value.is_some_and(|value| {
+            value.chars().count() > limit
+                || value
+                    .chars()
+                    .any(|char| char.is_control() || matches!(char, '<' | '>'))
+        }) {
+            return Err(format!("Invalid Git {field}"));
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod git_identity_tests {
+    use super::*;
+    #[test]
+    fn defaults_round_trip_without_affecting_legacy_preferences() {
+        let legacy: AppPreferences = serde_json::from_str(r#"{"theme":"system"}"#).unwrap();
+        assert!(legacy.git_name.is_none());
+        assert!(legacy.git_email.is_none());
+        let saved = AppPreferences {
+            git_name: Some("Composer".into()),
+            git_email: Some("composer@example.com".into()),
+            ..legacy
+        };
+        let restored: AppPreferences =
+            serde_json::from_str(&serde_json::to_string(&saved).unwrap()).unwrap();
+        assert_eq!(restored.git_name.as_deref(), Some("Composer"));
+        assert_eq!(restored.git_email.as_deref(), Some("composer@example.com"));
+        assert!(validate_git_identity_fields(Some("bad\nname"), None).is_err());
+        assert!(validate_git_identity_fields(None, Some(&"a".repeat(255))).is_err());
     }
 }

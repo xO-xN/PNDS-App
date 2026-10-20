@@ -1,3 +1,4 @@
+import { creationProjectAction } from '@/test/desktop-actions'
 import { beforeEach, expect, it, vi } from 'vitest'
 import userEvent from '@testing-library/user-event'
 import { act, render, screen, waitFor, within } from '@/test/test-utils'
@@ -78,9 +79,7 @@ it('adopts the chosen exact App shared package and new project version through t
       },
     })
   render(<CreationView />)
-  await userEvent.click(
-    screen.getByRole('button', { name: 'Add shared package' })
-  )
+  await creationProjectAction('Add shared package')
   await userEvent.click(await screen.findByRole('button', { name: 'ml5' }))
   await userEvent.type(
     screen.getByRole('textbox', { name: 'New project version' }),
@@ -116,9 +115,7 @@ it('adopts the chosen exact App shared package and new project version through t
 
 it('retains an unsaved manifest draft and refuses adoption', async () => {
   render(<CreationView />)
-  await userEvent.click(
-    screen.getByRole('button', { name: 'Add shared package' })
-  )
+  await creationProjectAction('Add shared package')
   await userEvent.click(await screen.findByRole('button', { name: 'p5' }))
   await userEvent.type(
     screen.getByRole('textbox', { name: 'New project version' }),
@@ -138,8 +135,8 @@ it('retains an unsaved manifest draft and refuses adoption', async () => {
 
 it('opens seven package cards and cancels without writing, restoring entry focus', async () => {
   render(<CreationView />)
-  const trigger = screen.getByRole('button', { name: 'Add shared package' })
-  await userEvent.click(trigger)
+  const trigger = screen.getByRole('button', { name: 'Add resources' })
+  await creationProjectAction('Add shared package')
   const packages = await screen.findByRole('list', {
     name: 'App shared packages',
   })
@@ -172,12 +169,9 @@ it('waits for the first catalog response and prevents repeated opens', async () 
     })
   )
   render(<CreationView />)
-  const trigger = screen.getByRole('button', { name: 'Add shared package' })
-  await userEvent.click(trigger)
-  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-  expect(trigger).toBeDisabled()
-  expect(trigger).toHaveAttribute('aria-busy', 'true')
-  await userEvent.click(trigger)
+  await creationProjectAction('Add shared package')
+  expect(screen.getByRole('dialog')).toBeVisible()
+  expect(screen.getByRole('tab', { name: 'Shared packages' })).toBeDisabled()
   expect(commands.getCreationLibraries).toHaveBeenCalledTimes(1)
   await act(async () => resolve({ status: 'ok', data: catalog }))
   expect(
@@ -190,9 +184,7 @@ it('waits for the first catalog response and prevents repeated opens', async () 
 
 it('shows package facts, restores the card focus and clears the previous version input on another selection', async () => {
   render(<CreationView />)
-  await userEvent.click(
-    screen.getByRole('button', { name: 'Add shared package' })
-  )
+  await creationProjectAction('Add shared package')
   const card = await screen.findByRole('button', { name: 'p5' })
   card.focus()
   await userEvent.keyboard('{Enter}')
@@ -222,9 +214,7 @@ it('shows package facts, restores the card focus and clears the previous version
   ).toHaveValue('')
   await userEvent.keyboard('{Escape}')
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-  expect(
-    screen.getByRole('button', { name: 'Add shared package' })
-  ).toHaveFocus()
+  expect(screen.getByRole('button', { name: 'Add resources' })).toHaveFocus()
 })
 
 it('shows existing and differing references without assuming that the project is wired', async () => {
@@ -244,9 +234,7 @@ it('shows existing and differing references without assuming that the project is
     },
   })
   render(<CreationView />)
-  await userEvent.click(
-    screen.getByRole('button', { name: 'Add shared package' })
-  )
+  await creationProjectAction('Add shared package')
   const p5 = await screen.findByRole('button', { name: 'p5' })
   expect(p5).toHaveTextContent('Referenced')
   await userEvent.click(p5)
@@ -277,9 +265,7 @@ it('opens a recoverable read error and retries the catalog', async () => {
     new Error('Catalog unavailable')
   )
   render(<CreationView />)
-  await userEvent.click(
-    screen.getByRole('button', { name: 'Add shared package' })
-  )
+  await creationProjectAction('Add shared package')
   expect(await screen.findByRole('alert')).toHaveTextContent(
     'Catalog unavailable'
   )
@@ -315,9 +301,7 @@ it('discards a late catalog response after switching projects', async () => {
     })
   )
   render(<CreationView />)
-  await userEvent.click(
-    screen.getByRole('button', { name: 'Add shared package' })
-  )
+  await creationProjectAction('Add shared package')
   act(() =>
     useCreationStore.setState({
       workspace: {
@@ -333,9 +317,7 @@ it('discards a late catalog response after switching projects', async () => {
   )
   await act(async () => resolve({ status: 'ok', data: catalog }))
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-  expect(
-    screen.getByRole('button', { name: 'Add shared package' })
-  ).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'Add resources' })).toBeEnabled()
 })
 
 it('discards a late adoption result after switching projects', async () => {
@@ -348,9 +330,7 @@ it('discards a late adoption result after switching projects', async () => {
     })
   )
   render(<CreationView />)
-  await userEvent.click(
-    screen.getByRole('button', { name: 'Add shared package' })
-  )
+  await creationProjectAction('Add shared package')
   await userEvent.click(await screen.findByRole('button', { name: 'p5' }))
   await userEvent.type(
     screen.getByRole('textbox', { name: 'New project version' }),

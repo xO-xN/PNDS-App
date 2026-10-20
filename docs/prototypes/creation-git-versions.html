@@ -1,0 +1,2807 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="pond">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>PNDS · 创作模式工程版本</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f1f5f8;
+        --sidebar: #e6edf3;
+        --surface: #fcfdff;
+        --subtle: #e6edf3;
+        --hover: #dbe5ed;
+        --selection: #d4e3f0;
+        --accent: #1476cc;
+        --accent-ink: #285a8d;
+        --on-accent: #fff;
+        --text: #293541;
+        --muted: #495b68;
+        --border: #bdcbd6;
+        --success: #30634f;
+        --danger: #9d3043;
+        --warning: #755015;
+        --branch: #786092;
+        --diff-plus: #e2efe8;
+        --diff-minus: #f5e5e8;
+        font-family:
+          -apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'PingFang SC',
+          sans-serif;
+        font-size: 13px;
+      }
+      [data-theme='sand'] {
+        --bg: #e6ddcd;
+        --sidebar: #e5daca;
+        --surface: #f1eadf;
+        --subtle: #e5daca;
+        --hover: #daceba;
+        --selection: #ddc6a5;
+        --accent: #93622e;
+        --accent-ink: #6f481e;
+        --text: #352e24;
+        --muted: #60523f;
+        --border: #b8aa92;
+        --success: #315943;
+        --danger: #93332b;
+        --warning: #6b4918;
+        --branch: #704764;
+        --diff-plus: #dce8dc;
+        --diff-minus: #edd9d2;
+      }
+      [data-theme='stage'] {
+        color-scheme: dark;
+        --bg: #171b1c;
+        --sidebar: #1c2222;
+        --surface: #232a29;
+        --subtle: #2c3432;
+        --hover: #35403b;
+        --selection: #354d41;
+        --accent: #a5c8b6;
+        --accent-ink: #b7d8c6;
+        --on-accent: #15231b;
+        --text: #e7ece9;
+        --muted: #adbbb4;
+        --border: #46554e;
+        --success: #a5c8b6;
+        --danger: #f4a3ac;
+        --warning: #e4c388;
+        --branch: #ccafd9;
+        --diff-plus: #2d4539;
+        --diff-minus: #493238;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+      }
+      button,
+      input,
+      select,
+      textarea {
+        font: inherit;
+      }
+      button {
+        color: inherit;
+        cursor: pointer;
+      }
+      button:disabled {
+        cursor: default;
+        opacity: 0.45;
+      }
+      button:focus-visible,
+      input:focus-visible,
+      select:focus-visible,
+      textarea:focus-visible,
+      summary:focus-visible,
+      [tabindex]:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 3px;
+      }
+      button,
+      input,
+      select {
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--surface);
+      }
+      button {
+        display: inline-flex;
+        gap: 7px;
+        align-items: center;
+        justify-content: center;
+        min-height: 30px;
+        padding: 5px 10px;
+        white-space: nowrap;
+      }
+      button:hover:not(:disabled) {
+        background: var(--hover);
+      }
+      .primary {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: var(--on-accent);
+      }
+      .primary:hover:not(:disabled) {
+        background: var(--accent);
+        filter: brightness(0.94);
+      }
+      .quiet {
+        background: transparent;
+        border-color: transparent;
+      }
+      .icon-button {
+        width: 30px;
+        padding: 5px;
+      }
+      .danger {
+        color: var(--danger);
+      }
+      .icon {
+        width: 16px;
+        height: 16px;
+        display: inline-block;
+        flex: none;
+        vertical-align: middle;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.6;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      i[data-icon] {
+        display: inline-flex;
+        font-style: normal;
+      }
+      .muted {
+        color: var(--muted);
+      }
+      .small {
+        font-size: 11px;
+      }
+      .grow {
+        flex: 1;
+      }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        border-radius: 5px;
+        background: var(--subtle);
+        padding: 3px 7px;
+        font-size: 11px;
+      }
+      .dot {
+        display: inline-block;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: currentColor;
+      }
+      .rule {
+        width: 1px;
+        height: 15px;
+        background: var(--border);
+        margin-inline: 4px;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      .prototype-bar {
+        height: 38px;
+        padding: 0 16px;
+        display: flex;
+        align-items: center;
+        gap: 11px;
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .prototype-bar strong {
+        font-weight: 600;
+        color: var(--text);
+      }
+      .prototype-bar label {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+      }
+      .prototype-bar select {
+        max-width: 160px;
+        padding: 3px 7px;
+        font-size: 11px;
+        min-height: 25px;
+      }
+      .prototype-bar button {
+        font-size: 11px;
+        min-height: 25px;
+        padding: 3px 8px;
+      }
+      .window {
+        margin: 0 12px 12px;
+        border: 1px solid var(--border);
+        border-radius: 11px;
+        overflow: hidden;
+        height: calc(100dvh - 50px);
+        min-height: 610px;
+        background: var(--surface);
+        box-shadow: 0 8px 26px #2935410d;
+        display: flex;
+        flex-direction: column;
+      }
+      .titlebar {
+        height: 44px;
+        flex: none;
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        padding: 0 15px;
+        background: var(--bg);
+        border-block-end: 1px solid var(--border);
+      }
+      .traffic {
+        display: flex;
+        gap: 7px;
+        margin-inline-end: 10px;
+      }
+      .traffic span {
+        width: 11px;
+        height: 11px;
+        border-radius: 50%;
+        background: #f16b65;
+        border: 1px solid #00000012;
+      }
+      .traffic span:nth-child(2) {
+        background: #e6bb48;
+      }
+      .traffic span:nth-child(3) {
+        background: #61ba6a;
+      }
+      .app-name {
+        font-weight: 700;
+        letter-spacing: 0.5px;
+        font-size: 13px;
+      }
+      .project-name {
+        font-weight: 500;
+      }
+      .mode-tag {
+        font-size: 11px;
+        padding: 3px 8px;
+        border: 1px solid var(--border);
+        border-radius: 5px;
+      }
+      .git-entry {
+        position: relative;
+      }
+      .git-menu {
+        position: absolute;
+        inset-block-start: 35px;
+        inset-inline-start: 0;
+        z-index: 20;
+        min-width: 188px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        padding: 5px;
+        border-radius: 8px;
+        box-shadow: 0 8px 24px #29354122;
+      }
+      .git-menu button {
+        border: 0;
+        width: 100%;
+        justify-content: flex-start;
+        background: transparent;
+      }
+      .runtime {
+        font-size: 12px;
+      }
+      .runtime.live {
+        color: var(--success);
+      }
+      .title-version {
+        max-width: 230px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .main {
+        min-height: 0;
+        flex: 1;
+        display: grid;
+        grid-template-columns: 176px minmax(0, 1fr) 270px;
+      }
+      .files {
+        border-inline-end: 1px solid var(--border);
+        background: color-mix(in srgb, var(--sidebar) 54%, var(--surface));
+        padding: 14px 9px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        overflow: auto;
+      }
+      .files-title {
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        padding: 0 6px 8px;
+      }
+      .file-group {
+        color: var(--muted);
+        font-size: 11px;
+        padding: 12px 8px 4px;
+      }
+      .file-item {
+        justify-content: flex-start;
+        border: 0;
+        background: transparent;
+        border-radius: 5px;
+        padding: 7px 8px;
+        min-width: 0;
+        text-align: start;
+        font-size: 12px;
+      }
+      .file-item span.name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .file-item.active {
+        background: var(--selection);
+        color: var(--accent-ink);
+      }
+      .file-item .file-mark {
+        margin-inline-start: auto;
+        color: var(--warning);
+        font-size: 10px;
+      }
+      .file-foot {
+        margin-block-start: auto;
+        border-block-start: 1px solid var(--border);
+        padding: 12px 7px 0;
+        color: var(--muted);
+        font-size: 11px;
+        line-height: 1.8;
+      }
+      .workbench {
+        min-width: 0;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
+      .workspace-top {
+        min-height: 0;
+        flex: 1;
+        display: flex;
+      }
+      .workspace-top > .pane {
+        flex: 1;
+        border: 0;
+      }
+      .main > .chat-pane {
+        border-inline-start: 1px solid var(--border);
+      }
+      .workspace-tabs {
+        display: flex;
+        align-items: stretch;
+        flex: none;
+        height: 42px;
+        padding-inline: 12px;
+        gap: 14px;
+        border-block-end: 1px solid var(--border);
+        background: color-mix(in srgb, var(--bg) 40%, var(--surface));
+      }
+      .workspace-tabs button {
+        min-height: 0;
+        padding: 0 5px;
+        border: 0;
+        border-block-end: 2px solid transparent;
+        border-radius: 0;
+        background: transparent;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .workspace-tabs button.active {
+        border-block-end-color: var(--accent);
+        color: var(--accent-ink);
+      }
+      .pane {
+        min-width: 0;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
+      .pane-title {
+        height: 37px;
+        flex: none;
+        border-block-end: 1px solid var(--border);
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        padding: 0 12px;
+        font-size: 12px;
+      }
+      .pane-title .pill {
+        font-size: 10px;
+        padding: 2px 5px;
+      }
+      .editor-breadcrumb {
+        font-size: 11px;
+        color: var(--muted);
+        padding: 9px 14px 0;
+      }
+      .code-area {
+        min-height: 0;
+        flex: 1;
+        display: flex;
+        overflow: hidden;
+        padding: 10px 0 12px;
+      }
+      .line-numbers {
+        width: 36px;
+        padding-inline-end: 9px;
+        text-align: end;
+        white-space: pre;
+        color: var(--muted);
+        opacity: 0.65;
+        font:
+          11px/1.9 ui-monospace,
+          SFMono-Regular,
+          Menlo,
+          monospace;
+        user-select: none;
+      }
+      .code-area textarea {
+        min-height: 0;
+        width: calc(100% - 36px);
+        resize: none;
+        border: 0;
+        border-radius: 0;
+        outline-offset: -3px;
+        background: transparent;
+        color: var(--text);
+        font:
+          11px/1.9 ui-monospace,
+          SFMono-Regular,
+          Menlo,
+          monospace;
+        tab-size: 2;
+        white-space: pre;
+        overflow: auto;
+        padding: 0 12px 0 0;
+      }
+      .editor-status {
+        height: 25px;
+        border-block-start: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        padding-inline: 12px;
+        font-size: 10px;
+        color: var(--muted);
+      }
+      .preview-body {
+        flex: 1;
+        min-height: 0;
+        background: #fafbf8;
+        position: relative;
+        overflow: hidden;
+      }
+      .score {
+        width: 100%;
+        height: 100%;
+        min-height: 120px;
+      }
+      .preview-foot {
+        padding: 10px 13px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        border-block-start: 1px solid var(--border);
+        font-size: 11px;
+      }
+      .preview-foot input {
+        min-width: 50px;
+        flex: 1;
+        accent-color: var(--accent);
+        cursor: ew-resize;
+        padding: 0;
+      }
+      .preview-foot output {
+        font-variant-numeric: tabular-nums;
+        min-width: 32px;
+        text-align: end;
+      }
+      .stopped-label {
+        position: absolute;
+        inset-inline-start: 10px;
+        inset-block-end: 9px;
+        background: #fafbf8db;
+        color: #495b68;
+        padding: 4px 7px;
+        font-size: 10px;
+        border-radius: 4px;
+      }
+      .chat-scroll {
+        flex: 1;
+        min-height: 0;
+        overflow: auto;
+        padding: 14px 13px;
+        font-size: 12px;
+        line-height: 1.75;
+      }
+      .chat-user {
+        background: var(--selection);
+        padding: 10px 12px;
+        border-radius: 8px;
+        max-width: 95%;
+        margin-inline-start: auto;
+      }
+      .chat-assistant {
+        padding: 13px 2px 0;
+      }
+      .assistant-label {
+        display: flex;
+        gap: 7px;
+        align-items: center;
+        color: var(--muted);
+        font-size: 11px;
+        margin-block-end: 5px;
+      }
+      .chat-log {
+        margin-block-start: 12px;
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .chat-input {
+        margin: 0 11px 11px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 10px;
+        color: var(--muted);
+        font-size: 11px;
+        min-height: 55px;
+      }
+      .version-panel {
+        min-height: 0;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        background: var(--surface);
+      }
+      .version-toolbar {
+        height: 54px;
+        flex: none;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 13px;
+        border-block-end: 1px solid var(--border);
+      }
+      .version-toolbar h1 {
+        font-size: 13px;
+        font-weight: 600;
+        margin: 0;
+        display: flex;
+        gap: 7px;
+        align-items: center;
+      }
+      .version-toolbar .primary {
+        min-height: 28px;
+        font-size: 12px;
+      }
+      .version-toolbar input {
+        padding: 5px 8px;
+        min-width: 90px;
+        width: 170px;
+        font-size: 11px;
+      }
+      .version-count {
+        font-size: 10px;
+        color: var(--muted);
+      }
+      .save-name-toggle {
+        font-size: 11px;
+        color: var(--muted);
+        padding: 3px 6px;
+        min-height: 25px;
+      }
+      .panel-context {
+        height: 32px;
+        flex: none;
+        border-block-end: 1px solid var(--border);
+        padding: 0 14px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 11px;
+      }
+      .current-description {
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+      .changes {
+        color: var(--warning);
+      }
+      .fork-note {
+        color: var(--branch);
+      }
+      .version-content {
+        flex: 1;
+        min-height: 0;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 280px;
+      }
+      .graph-wrap {
+        min-width: 0;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        position: relative;
+        background: radial-gradient(
+          circle,
+          color-mix(in srgb, var(--border) 42%, transparent) 0.65px,
+          transparent 0.8px
+        );
+        background-size: 15px 15px;
+      }
+      .graph-tools {
+        position: absolute;
+        inset-block-start: 10px;
+        inset-inline-end: 10px;
+        display: flex;
+        gap: 3px;
+        z-index: 2;
+        padding: 3px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--surface);
+      }
+      .graph-tools button {
+        min-height: 24px;
+        font-size: 10px;
+        border: 0;
+        padding: 3px 6px;
+        background: transparent;
+      }
+      .graph-scroll {
+        min-height: 0;
+        flex: 1;
+        overflow: auto;
+        scrollbar-width: thin;
+        display: flex;
+      }
+      .graph-outer {
+        min-width: 100%;
+        position: relative;
+        flex: none;
+        margin-block: auto;
+      }
+      .graph-stage {
+        position: relative;
+        transform-origin: top left;
+      }
+      .graph-lines {
+        position: absolute;
+        inset: 0;
+        overflow: visible;
+      }
+      .edge {
+        fill: none;
+        stroke: var(--accent);
+        stroke-width: 2;
+        opacity: 0.5;
+      }
+      .edge.alternate {
+        stroke: var(--branch);
+      }
+      .edge.pending {
+        stroke: var(--muted);
+        stroke-dasharray: 4 5;
+        opacity: 0.55;
+      }
+      .version-node {
+        position: absolute;
+        width: 154px;
+        transform: translateX(-50%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0;
+        border: 0;
+        border-radius: 8px;
+        background: transparent;
+        padding: 0 5px 6px;
+        min-height: 76px;
+        white-space: normal;
+        isolation: isolate;
+      }
+      .version-node:hover:not(:disabled) {
+        background: color-mix(in srgb, var(--surface) 82%, transparent);
+      }
+      .node-date {
+        font-size: 9px;
+        line-height: 16px;
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+        min-height: 16px;
+      }
+      .node-dot {
+        display: block;
+        width: 15px;
+        height: 15px;
+        background: var(--surface);
+        border: 2px solid var(--accent);
+        border-radius: 50%;
+        margin-block: 4px 10px;
+        flex: none;
+        box-shadow: 0 0 0 5px var(--surface);
+      }
+      .version-node.alternate .node-dot {
+        border-color: var(--branch);
+      }
+      .version-node.current .node-dot {
+        background: var(--accent);
+        border-color: var(--accent);
+      }
+      .version-node.selected .node-dot {
+        outline: 2px solid var(--accent);
+        outline-offset: 4px;
+      }
+      .version-node.alternate.selected .node-dot {
+        outline-color: var(--branch);
+      }
+      .version-node.pending .node-dot {
+        border: 1.5px dashed var(--muted);
+        width: 15px;
+        height: 15px;
+      }
+      .node-title {
+        max-width: 145px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 11px;
+        line-height: 19px;
+        font-weight: 500;
+      }
+      .node-meta {
+        font-size: 9px;
+        line-height: 15px;
+        color: var(--muted);
+      }
+      .node-now {
+        color: var(--accent-ink);
+        font-weight: 600;
+      }
+      .lane-label {
+        position: absolute;
+        font-size: 10px;
+        color: var(--muted);
+        padding: 2px 5px;
+        background: var(--surface);
+        border-radius: 3px;
+      }
+      .lane-label.alt {
+        color: var(--branch);
+      }
+      .graph-legend {
+        height: 26px;
+        flex: none;
+        display: flex;
+        gap: 14px;
+        align-items: center;
+        padding-inline: 13px;
+        font-size: 10px;
+        color: var(--muted);
+        border-block-start: 1px solid
+          color-mix(in srgb, var(--border) 45%, transparent);
+        background: var(--surface);
+      }
+      .legend-dot {
+        width: 7px;
+        height: 7px;
+        border: 1.5px solid var(--accent);
+        display: inline-block;
+        border-radius: 50%;
+        margin-inline-end: 4px;
+      }
+      .legend-dot.active {
+        background: var(--accent);
+      }
+      .legend-dot.selected {
+        outline: 1px solid var(--accent);
+        outline-offset: 2px;
+      }
+      .empty-graph {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-content: center;
+        text-align: center;
+        padding: 35px;
+        gap: 8px;
+      }
+      .empty-graph .icon {
+        margin: 0 auto;
+        width: 28px;
+        height: 28px;
+        color: var(--accent-ink);
+      }
+      .empty-graph p {
+        margin: 0;
+        font-size: 12px;
+        line-height: 1.7;
+      }
+      .inspector {
+        border-inline-start: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        background: var(--surface);
+      }
+      .inspector-head {
+        padding: 12px 14px 9px;
+      }
+      .inspector-eyebrow {
+        font-size: 10px;
+        color: var(--muted);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-block-end: 5px;
+      }
+      .inspector h2 {
+        font-size: 13px;
+        font-weight: 600;
+        line-height: 1.5;
+        margin: 0 0 4px;
+      }
+      .inspector-meta {
+        color: var(--muted);
+        font-size: 10px;
+        line-height: 1.8;
+      }
+      .inspector-tabs {
+        display: flex;
+        padding-inline: 13px;
+        gap: 15px;
+        border-block-end: 1px solid var(--border);
+      }
+      .inspector-tabs button {
+        padding: 5px 0 7px;
+        min-height: 28px;
+        background: transparent;
+        border: 0;
+        border-radius: 0;
+        font-size: 11px;
+        color: var(--muted);
+        border-block-end: 2px solid transparent;
+      }
+      .inspector-tabs button.active {
+        color: var(--accent-ink);
+        border-block-end-color: var(--accent);
+      }
+      .inspector-body {
+        min-height: 0;
+        flex: 1;
+        overflow: auto;
+        padding: 10px 13px;
+        font-size: 11px;
+        line-height: 1.6;
+      }
+      .change-file {
+        width: 100%;
+        display: flex;
+        gap: 7px;
+        align-items: center;
+        justify-content: space-between;
+        text-align: start;
+        padding: 5px 0;
+        border: 0;
+        border-radius: 3px;
+        min-height: 25px;
+        background: transparent;
+        font-size: 10px;
+      }
+      .change-file .name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .change-stat {
+        font-size: 9px;
+        white-space: nowrap;
+        color: var(--muted);
+      }
+      .change-stat b {
+        color: var(--success);
+        font-weight: 500;
+      }
+      .change-stat em {
+        font-style: normal;
+        color: var(--danger);
+      }
+      .diff-label {
+        font-size: 10px;
+        margin: 0 0 8px;
+        color: var(--muted);
+      }
+      .diff-code {
+        font:
+          10px/1.8 ui-monospace,
+          SFMono-Regular,
+          Menlo,
+          monospace;
+        overflow: auto;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        margin: 7px 0;
+      }
+      .diff-line {
+        display: block;
+        white-space: pre;
+        padding: 1px 7px;
+        min-height: 20px;
+      }
+      .diff-line.plus {
+        background: var(--diff-plus);
+        color: var(--success);
+      }
+      .diff-line.minus {
+        background: var(--diff-minus);
+        color: var(--danger);
+      }
+      .inspector-actions {
+        padding: 10px 13px;
+        border-block-start: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+      }
+      .inspector-actions button {
+        font-size: 11px;
+        min-height: 28px;
+      }
+      .version-technical {
+        font-size: 10px;
+        color: var(--muted);
+        margin-block-start: 8px;
+      }
+      .version-technical summary {
+        cursor: pointer;
+      }
+      .status-footer {
+        height: 24px;
+        border-block-start: 1px solid var(--border);
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        padding: 0 12px;
+        font-size: 10px;
+        color: var(--muted);
+        flex: none;
+        background: var(--bg);
+      }
+      dialog {
+        padding: 0;
+        width: min(510px, calc(100vw - 32px));
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: var(--surface);
+        color: var(--text);
+        box-shadow: 0 16px 55px #00000025;
+      }
+      dialog::backdrop {
+        background: #17253445;
+        backdrop-filter: blur(2px);
+      }
+      .dialog-body {
+        padding: 22px 23px 17px;
+      }
+      .dialog-symbol {
+        width: 33px;
+        height: 33px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+        background: var(--subtle);
+        color: var(--accent-ink);
+        margin-block-end: 13px;
+      }
+      .dialog-body h2 {
+        font-size: 17px;
+        font-weight: 600;
+        margin: 0 0 10px;
+      }
+      .dialog-body p {
+        font-size: 12px;
+        line-height: 1.8;
+        color: var(--muted);
+        margin: 8px 0;
+      }
+      .switch-target {
+        padding: 10px 12px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 12px;
+        margin-block: 13px;
+      }
+      .dialog-body label {
+        display: block;
+        font-size: 11px;
+        color: var(--muted);
+        margin-block: 14px 6px;
+      }
+      .dialog-body input {
+        padding: 8px 9px;
+        width: 100%;
+        color: var(--text);
+      }
+      .dialog-files {
+        font-size: 11px;
+        color: var(--muted);
+        margin-block: 8px;
+        padding-inline-start: 17px;
+        line-height: 1.9;
+      }
+      .dialog-actions {
+        border-block-start: 1px solid var(--border);
+        padding: 13px 20px;
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        background: color-mix(in srgb, var(--bg) 45%, var(--surface));
+      }
+      .dialog-other {
+        font-size: 11px;
+        color: var(--muted);
+        margin-block-start: 15px;
+      }
+      .dialog-other summary {
+        cursor: pointer;
+        padding-block: 4px;
+      }
+      .dialog-other button {
+        margin-block-start: 7px;
+        font-size: 11px;
+      }
+      .toast {
+        position: fixed;
+        inset-block-end: 23px;
+        inset-inline-start: 50%;
+        transform: translateX(-50%);
+        z-index: 40;
+        background: var(--text);
+        color: var(--surface);
+        padding: 10px 15px;
+        border-radius: 7px;
+        font-size: 12px;
+        box-shadow: 0 4px 16px #0002;
+        max-width: calc(100vw - 40px);
+        line-height: 1.5;
+        pointer-events: none;
+      }
+      .save-busy {
+        opacity: 0.6;
+        pointer-events: none;
+      }
+      @media (min-width: 1600px) {
+        .main {
+          grid-template-columns: 192px minmax(0, 1fr) 300px;
+        }
+        .version-content {
+          grid-template-columns: minmax(0, 1fr) 320px;
+        }
+        .code-area textarea,
+        .line-numbers {
+          font-size: 12px;
+        }
+      }
+      @media (max-width: 1150px) {
+        .main {
+          grid-template-columns: 148px minmax(0, 1fr) 230px;
+        }
+        .version-content {
+          grid-template-columns: minmax(0, 1fr) 264px;
+        }
+        .title-version {
+          max-width: 160px;
+        }
+        .version-toolbar input {
+          width: 140px;
+        }
+      }
+      @media (max-width: 1000px) {
+        .main {
+          grid-template-columns: 148px minmax(0, 1fr);
+        }
+        .main > .chat-pane {
+          display: none;
+        }
+      }
+      @media (max-width: 850px) {
+        .files {
+          display: none;
+        }
+        .main {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .prototype-bar .proto-explanation {
+          display: none;
+        }
+        .title-version {
+          display: none;
+        }
+        .version-count {
+          display: none;
+        }
+        .version-toolbar {
+          padding-inline: 9px;
+        }
+        .version-content {
+          grid-template-columns: minmax(0, 1fr) 250px;
+        }
+        .prototype-bar {
+          padding-inline: 10px;
+          gap: 7px;
+        }
+        .window {
+          margin-inline: 6px;
+        }
+        .titlebar {
+          padding-inline: 10px;
+          gap: 8px;
+        }
+        .traffic {
+          margin-inline-end: 2px;
+        }
+      }
+      @media (max-width: 620px) {
+        .prototype-bar {
+          height: auto;
+          min-height: 45px;
+          flex-wrap: wrap;
+          padding-block: 5px;
+          gap: 5px 8px;
+        }
+        .prototype-bar .grow {
+          display: none;
+        }
+        .prototype-bar label {
+          font-size: 10px;
+        }
+        .prototype-bar select {
+          max-width: 112px;
+        }
+        .window {
+          height: calc(100dvh - 63px);
+          min-height: 650px;
+        }
+        .mode-tag,
+        .project-menu-chevron,
+        .app-name,
+        .rule {
+          display: none;
+        }
+        .titlebar {
+          gap: 6px;
+        }
+        .project-name {
+          font-size: 12px;
+        }
+        .runtime {
+          font-size: 10px;
+          padding-inline: 5px;
+        }
+        .workspace-tabs {
+          height: 38px;
+          padding-inline: 9px;
+          gap: 12px;
+        }
+        .version-toolbar {
+          gap: 6px;
+        }
+        .version-toolbar h1 {
+          font-size: 12px;
+        }
+        .version-toolbar .pill {
+          display: none;
+        }
+        .version-toolbar {
+          height: auto;
+          min-height: 52px;
+          padding-block: 8px;
+          flex-wrap: wrap;
+        }
+        .save-name-toggle {
+          font-size: 10px;
+        }
+        .version-toolbar .primary {
+          font-size: 10px;
+          padding-inline: 7px;
+        }
+        .version-toolbar input {
+          width: 100px;
+        }
+        .version-content {
+          display: flex;
+          flex-direction: column;
+          overflow: auto;
+        }
+        .graph-wrap {
+          flex: none;
+          height: 280px;
+        }
+        .inspector {
+          flex: none;
+          min-height: 330px;
+          border-inline-start: 0;
+          border-block-start: 1px solid var(--border);
+        }
+        .inspector-body {
+          overflow: visible;
+        }
+        .inspector-head {
+          padding: 9px;
+        }
+        .inspector h2 {
+          font-size: 12px;
+        }
+        .inspector-meta {
+          font-size: 9px;
+        }
+        .inspector-body {
+          padding: 8px;
+        }
+        .inspector-actions {
+          padding: 8px;
+        }
+        .graph-tools button {
+          font-size: 9px;
+          padding-inline: 4px;
+        }
+        .graph-legend {
+          gap: 9px;
+          font-size: 9px;
+          padding-inline: 7px;
+        }
+        .panel-context {
+          font-size: 10px;
+          padding-inline: 9px;
+        }
+        .status-footer span.optional {
+          display: none;
+        }
+        .dialog-body {
+          padding: 18px;
+        }
+        .dialog-actions {
+          padding: 12px;
+        }
+        .dialog-actions button {
+          font-size: 11px;
+        }
+        .status-footer {
+          font-size: 9px;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          scroll-behavior: auto !important;
+          transition: none !important;
+          animation: none !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="prototype-bar">
+      <strong>PNDS · 工程版本原型</strong>
+      <span class="proto-explanation">示例数据，不读写真实工程</span>
+      <span class="grow"></span>
+      <label
+        >演示场景
+        <select id="scenario" aria-label="演示场景">
+          <option value="dirty">有未保存修改</option>
+          <option value="clean">所有修改已记录</option>
+          <option value="running">工程运行中</option>
+          <option value="assistant">助手任务未完成</option>
+          <option value="conflict">文件保存冲突</option>
+          <option value="empty">首次保存版本</option>
+        </select></label
+      >
+      <label
+        >主题
+        <select id="theme" aria-label="界面主题">
+          <option value="pond">池塘</option>
+          <option value="sand">暖沙</option>
+          <option value="stage">暗场</option>
+        </select></label
+      >
+      <button id="reset-demo" title="重置示例数据">
+        <i data-icon="reset"></i>重置
+      </button>
+    </div>
+    <div class="window" id="app">
+      <header class="titlebar">
+        <div class="traffic" aria-hidden="true">
+          <span></span><span></span><span></span>
+        </div>
+        <span class="app-name">PNDS</span>
+        <span class="rule"></span>
+        <span class="project-name">runes-pnds</span
+        ><i class="project-menu-chevron" data-icon="chevron"></i>
+        <span class="mode-tag">创作模式</span>
+        <div class="git-entry">
+          <button
+            class="quiet"
+            id="git-menu-button"
+            aria-haspopup="menu"
+            aria-expanded="false"
+          >
+            <i data-icon="branch"></i>Git<i data-icon="chevron"></i>
+          </button>
+          <div class="git-menu" role="menu" id="git-menu" hidden>
+            <button role="menuitem" id="menu-save">
+              <i data-icon="save"></i>保存当前版本</button
+            ><button role="menuitem" id="menu-history">
+              <i data-icon="branch"></i>工程版本</button
+            ><button role="menuitem" id="menu-changes">
+              <i data-icon="diff"></i>当前修改与差异
+            </button>
+          </div>
+        </div>
+        <span class="grow"></span
+        ><span class="title-version" id="title-version"></span>
+        <button id="runtime-button" class="runtime quiet"></button>
+      </header>
+      <main class="main">
+        <aside class="files" aria-label="工程文件">
+          <div class="files-title"><i data-icon="folder"></i>工程文件</div>
+          <div class="file-group">页面与脚本</div>
+          <div
+            id="file-list"
+            style="display: flex; flex-direction: column; gap: 3px"
+          ></div>
+          <div class="file-group">工程配置</div>
+          <button class="file-item" data-file="manifest.json">
+            <i data-icon="file"></i><span class="name">manifest.json</span
+            ><span class="file-mark"></span>
+          </button>
+          <button class="file-item" data-file="pnds.preview.json">
+            <i data-icon="sliders"></i
+            ><span class="name">pnds.preview.json</span
+            ><span class="file-mark"></span>
+          </button>
+          <div class="file-group">说明</div>
+          <span class="file-item muted small"
+            ><i data-icon="file"></i>README.md</span
+          >
+          <div class="file-foot">
+            全部依赖来自本机<br /><span id="file-status"></span>
+          </div>
+        </aside>
+        <div class="workbench">
+          <div class="workspace-tabs" role="tablist" aria-label="中间工作区">
+            <button
+              id="tab-code"
+              role="tab"
+              data-view="code"
+              aria-controls="code-page"
+              aria-selected="false"
+              tabindex="-1"
+            >
+              <i data-icon="file"></i>编辑器
+            </button>
+            <button
+              id="tab-preview"
+              role="tab"
+              data-view="preview"
+              aria-controls="preview-page"
+              aria-selected="false"
+              tabindex="-1"
+            >
+              <i data-icon="preview"></i>预览
+            </button>
+            <button
+              id="tab-git"
+              role="tab"
+              data-view="git"
+              aria-controls="version-panel"
+              class="active"
+              aria-selected="true"
+              tabindex="0"
+            >
+              <i data-icon="branch"></i>Git 版本
+            </button>
+          </div>
+          <div class="workspace-top" id="workspace-top" hidden>
+            <section
+              class="pane editor-pane"
+              id="code-page"
+              role="tabpanel"
+              aria-labelledby="tab-code"
+              tabindex="0"
+              hidden
+            >
+              <div class="pane-title">
+                <i data-icon="file"></i
+                ><span id="editor-filename">monitor.js</span
+                ><span class="pill" id="draft-badge">未保存</span
+                ><span class="grow"></span
+                ><span class="muted small">JavaScript</span>
+              </div>
+              <div class="editor-breadcrumb" id="editor-path">
+                public / monitor.js
+              </div>
+              <div class="code-area">
+                <div
+                  class="line-numbers"
+                  id="line-numbers"
+                  aria-hidden="true"
+                ></div>
+                <textarea
+                  id="code-editor"
+                  aria-label="示例工程文件内容"
+                  spellcheck="false"
+                ></textarea>
+              </div>
+              <div class="editor-status">
+                <span id="editor-state"></span><span class="grow"></span>UTF-8
+              </div>
+            </section>
+            <section
+              class="pane preview-pane"
+              id="preview-page"
+              role="tabpanel"
+              aria-labelledby="tab-preview"
+              tabindex="0"
+              hidden
+            >
+              <div class="pane-title">
+                <i data-icon="preview"></i>monitor<span class="grow"></span
+                ><span class="muted small" id="preview-state">运行中</span>
+              </div>
+              <div class="preview-body">
+                <svg
+                  class="score"
+                  id="score-svg"
+                  viewBox="0 0 380 240"
+                  aria-label="数字乐谱字号预览"
+                ></svg
+                ><span class="stopped-label" id="stopped-label" hidden
+                  >预览已停止 · 可手动运行此版本</span
+                >
+              </div>
+              <label class="preview-foot" for="size-slider"
+                >数字字号<input
+                  id="size-slider"
+                  type="range"
+                  min="0.6"
+                  max="2.8"
+                  step="0.05"
+                  value="1.65"
+                /><output id="size-output" for="size-slider"
+                  >1.65</output
+                ></label
+              >
+            </section>
+          </div>
+          <section
+            class="version-panel"
+            id="version-panel"
+            role="tabpanel"
+            aria-labelledby="tab-git"
+            tabindex="0"
+          >
+            <div class="version-toolbar">
+              <h1><i data-icon="branch"></i>工程版本</h1>
+              <span class="pill">仅本机</span
+              ><span class="version-count" id="version-count"></span
+              ><span class="grow"></span>
+              <button class="quiet save-name-toggle" id="show-name">
+                添加版本名称</button
+              ><input
+                id="version-name"
+                aria-label="版本名称，可留空"
+                placeholder="版本名称（可选）"
+                hidden
+                maxlength="60"
+              />
+              <button class="primary" id="save-version">
+                <i data-icon="save"></i>保存当前版本
+              </button>
+            </div>
+            <div class="panel-context">
+              <span
+                class="dot"
+                style="color: var(--accent)"
+                aria-hidden="true"
+              ></span
+              ><span class="current-description" id="current-description"></span
+              ><span class="grow"></span
+              ><span class="changes" id="change-count"></span>
+            </div>
+            <div class="version-content">
+              <div class="graph-wrap">
+                <div class="graph-tools">
+                  <button id="zoom-out" aria-label="缩小版本图">−</button
+                  ><button id="zoom-level" title="适应全部版本">100%</button
+                  ><button id="zoom-in" aria-label="放大版本图">＋</button
+                  ><span class="rule"></span
+                  ><button id="locate-current">定位当前</button>
+                </div>
+                <div class="graph-scroll" id="graph-scroll">
+                  <div class="graph-outer" id="graph-outer">
+                    <div class="graph-stage" id="graph-stage"></div>
+                  </div>
+                </div>
+                <div class="graph-legend">
+                  <span><i class="legend-dot active"></i>当前版本</span
+                  ><span><i class="legend-dot selected"></i>正在查看</span
+                  ><span class="grow"></span><span>单击查看，确认后切换</span>
+                </div>
+              </div>
+              <aside class="inspector" aria-label="查看版本">
+                <div class="inspector-head">
+                  <div class="inspector-eyebrow">
+                    <i data-icon="eye"></i
+                    ><span id="inspector-kind">正在查看</span>
+                  </div>
+                  <h2 id="inspector-title"></h2>
+                  <div class="inspector-meta" id="inspector-meta"></div>
+                </div>
+                <div
+                  class="inspector-tabs"
+                  role="tablist"
+                  aria-label="版本详情"
+                >
+                  <button
+                    class="active"
+                    data-detail="summary"
+                    role="tab"
+                    aria-selected="true"
+                  >
+                    版本摘要</button
+                  ><button data-detail="diff" role="tab" aria-selected="false">
+                    文件差异
+                  </button>
+                </div>
+                <div class="inspector-body" id="inspector-body"></div>
+                <div class="inspector-actions">
+                  <input
+                    id="branch-name"
+                    aria-label="新分支名称，可留空"
+                    placeholder="新分支名称（可选）"
+                    maxlength="40"
+                    hidden
+                  /><button class="primary" id="switch-version"></button
+                  ><span class="small muted" id="switch-hint"></span>
+                </div>
+              </aside>
+            </div>
+          </section>
+        </div>
+        <section class="pane chat-pane" aria-label="创作助手对话">
+          <div class="pane-title">
+            <i data-icon="spark"></i>创作助手<span class="pill">edit</span
+            ><span class="grow"></span><span class="muted small">DeepSeek</span>
+          </div>
+          <div class="chat-scroll">
+            <div class="chat-user">
+              增加锚点数字的字号，并提供一个可以调整大小的推子。
+            </div>
+            <div class="chat-assistant">
+              <div class="assistant-label"><i data-icon="spark"></i>助手</div>
+              <div id="assistant-message"></div>
+              <details class="chat-log">
+                <summary>工作记录</summary>
+                读取页面脚本，接入本地参数，完成静态检查。
+              </details>
+            </div>
+            <div class="chat-assistant muted small" id="assistant-retained">
+              对话属于工程，切换代码版本后仍会保留。
+            </div>
+          </div>
+          <div class="chat-input" aria-disabled="true">继续描述你的想法…</div>
+        </section>
+      </main>
+      <footer class="status-footer">
+        <i data-icon="branch"></i><span id="footer-route"></span
+        ><span class="grow"></span
+        ><span class="optional">版本记录保存在本机</span
+        ><span>交互演示 · 无真实文件写入</span>
+      </footer>
+    </div>
+    <dialog id="action-dialog" aria-labelledby="dialog-title"></dialog>
+    <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+    <script>
+      'use strict'
+      const $ = id => document.getElementById(id)
+      const icons = {
+        branch:
+          '<path d="M6 3v11a4 4 0 0 0 4 4h2"/><path d="M18 6v3a5 5 0 0 1-5 5H6"/><circle cx="6" cy="3" r="2"/><circle cx="18" cy="4" r="2"/><circle cx="15" cy="18" r="2"/>',
+        save: '<path d="M4 3h13l3 3v15H3V3z"/><path d="M7 3v6h10V3M7 21v-8h10v8"/>',
+        file: '<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v5h5M9 12h6M9 16h6"/>',
+        folder: '<path d="M3 6h7l2 2h9v12H3z"/><path d="M3 6V4h7l2 2"/>',
+        chevron: '<path d="m7 9 5 5 5-5"/>',
+        preview:
+          '<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/>',
+        sliders:
+          '<path d="M5 3v7m0 4v7M12 3v3m0 4v11M19 3v11m0 4v3"/><path d="M2 10h6M9 6h6M16 14h6"/>',
+        spark:
+          '<path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5z"/>',
+        eye: '<path d="M2 12s4-6 10-6 10 6 10 6-4 6-10 6-10-6-10-6z"/><circle cx="12" cy="12" r="2"/>',
+        diff: '<path d="M6 3h12v18H6zM9 8h6M9 15h6M12 12v6"/>',
+        reset: '<path d="M4 8a8 8 0 1 1-1 7M4 3v5h5"/>',
+        play: '<path d="m8 4 12 8-12 8z"/>',
+        stop: '<rect x="5" y="5" width="14" height="14" rx="2"/>',
+        arrow: '<path d="M4 12h16m-6-6 6 6-6 6"/>',
+        check: '<path d="m5 12 4 4L19 6"/>',
+        warning: '<path d="m12 3 10 18H2zM12 9v5M12 17v1"/>',
+      }
+      function icon(name) {
+        return (
+          '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">' +
+          (icons[name] || icons.file) +
+          '</svg>'
+        )
+      }
+      document.querySelectorAll('[data-icon]').forEach(el => {
+        el.innerHTML = icon(el.dataset.icon)
+      })
+      function escapeHTML(value) {
+        return String(value).replace(
+          /[&<>"']/g,
+          c =>
+            ({
+              '&': '&amp;',
+              '<': '&lt;',
+              '>': '&gt;',
+              '"': '&quot;',
+              "'": '&#39;',
+            })[c]
+        )
+      }
+      function clone(value) {
+        return JSON.parse(JSON.stringify(value))
+      }
+      function filesFor(scale, contrast, controls) {
+        return {
+          'public/monitor.js': [
+            'const pointNumberScale = ' + scale.toFixed(2) + ';',
+            'const contrast = "' + contrast + '";',
+            '',
+            'function drawAnchor(point) {',
+            '  push();',
+            '  translate(point.x, point.y);',
+            '  textSize(18 * pointNumberScale);',
+            '  text(point.id, 0, 0);',
+            '  pop();',
+            '}',
+            '',
+            'function draw() {',
+            '  clear();',
+            '  points.forEach(drawAnchor);',
+            '}',
+          ].join('\n'),
+          'public/monitor.html':
+            '<!doctype html>\n<html lang="zh-CN">\n<meta charset="utf-8">\n<title>Runes · monitor</title>\n<main id="score" aria-label="数字乐谱"></main>\n</html>',
+          'public/monitor.css':
+            'body { margin: 0; background: ' +
+            (contrast === 'high' ? '#172029' : '#fafbf8') +
+            '; }\n#score { width: 100vw; height: 100vh; }',
+          'manifest.json': JSON.stringify(
+            {
+              id: 'runes-pnds',
+              name: 'Runes',
+              version: '0.1.0',
+              pages: { monitor: 'public/monitor.html' },
+            },
+            null,
+            2
+          ),
+          'pnds.preview.json': JSON.stringify(
+            {
+              schemaVersion: 1,
+              parameters: controls
+                ? [
+                    {
+                      id: 'pointNumberScale',
+                      label: '数字字号',
+                      min: 0.6,
+                      max: 2.4,
+                      step: 0.05,
+                    },
+                  ]
+                : [],
+            },
+            null,
+            2
+          ),
+        }
+      }
+      const seedVersions = [
+        {
+          id: 'v1',
+          parent: null,
+          branch: 'main',
+          title: 'starting point',
+          time: '昨天 18:20',
+          files: filesFor(1, 'standard', false),
+          note: '保留最初可以运行的工程。',
+        },
+        {
+          id: 'v2',
+          parent: 'v1',
+          branch: 'main',
+          title: '整理页面与脚本',
+          time: '昨天 18:42',
+          files: filesFor(1.1, 'standard', false),
+          note: '将页面与脚本分开，为后续参数调整整理入口。',
+        },
+        {
+          id: 'v3',
+          parent: 'v2',
+          branch: 'main',
+          title: '接入字号推子',
+          time: '昨天 19:15',
+          files: filesFor(1.25, 'standard', true),
+          note: '接入本地字号参数，在预演中直接调整。',
+        },
+        {
+          id: 'v4',
+          parent: 'v3',
+          branch: 'main',
+          title: '现场字号微调',
+          time: '昨天 19:36',
+          files: filesFor(1.5, 'standard', true),
+          note: '微调数字字号，保留参数范围。',
+        },
+        {
+          id: 'v5',
+          parent: 'v2',
+          branch: 'large',
+          title: '高对比预览方案',
+          time: '昨天 19:02',
+          files: filesFor(1.3, 'high', false),
+          note: '从页面整理版本分出另一条尝试，测试暗色高对比。',
+        },
+        {
+          id: 'v6',
+          parent: 'v5',
+          branch: 'large',
+          title: '测试大字号',
+          time: '昨天 19:28',
+          files: filesFor(2, 'high', true),
+          note: '保留大字号方案，未覆盖默认路线。',
+        },
+      ]
+      let state,
+        toastTimer,
+        dialogTarget = null,
+        returnFocus = null
+      function reset(scenario = 'dirty') {
+        state = {
+          versions: clone(seedVersions),
+          branches: [
+            { id: 'main', name: '默认方案', lane: 0, tip: 'v4' },
+            { id: 'large', name: '大字号方案', lane: 1, tip: 'v6' },
+          ],
+          current: 'v4',
+          selected: 'v3',
+          activeBranch: 'main',
+          disk: clone(seedVersions[3].files),
+          drafts: {},
+          file: 'public/monitor.js',
+          running: false,
+          assistantPending: false,
+          assistantEnded: false,
+          conflict: false,
+          detail: 'summary',
+          diffFile: 'public/monitor.js',
+          zoom: 1,
+          view: 'git',
+          serial: 7,
+        }
+        if (
+          scenario === 'dirty' ||
+          scenario === 'assistant' ||
+          scenario === 'conflict'
+        ) {
+          state.drafts['public/monitor.js'] = state.disk[
+            'public/monitor.js'
+          ].replace('1.50', '1.65')
+          state.disk['pnds.preview.json'] = state.disk[
+            'pnds.preview.json'
+          ].replace('2.4', '2.8')
+        }
+        if (scenario === 'dirty' || scenario === 'running') state.running = true
+        if (scenario === 'assistant') state.assistantPending = true
+        if (scenario === 'conflict') state.conflict = true
+        if (scenario === 'empty') {
+          state.serial = 1
+          state.versions = []
+          state.branches = []
+          state.current = null
+          state.selected = null
+          state.activeBranch = null
+          state.disk = filesFor(1, 'standard', false)
+        }
+        $('version-name').value = ''
+        $('version-name').hidden = true
+        $('show-name').hidden = false
+        $('branch-name').value = ''
+        $('toast').hidden = true
+        closeDialog()
+        render()
+      }
+      function version(id) {
+        return state.versions.find(v => v.id === id)
+      }
+      function workingFiles() {
+        return { ...state.disk, ...state.drafts }
+      }
+      function differences(a, b) {
+        const paths = [
+          ...new Set([...Object.keys(a || {}), ...Object.keys(b || {})]),
+        ]
+        return paths.filter(p => (a || {})[p] !== (b || {})[p])
+      }
+      function changedFiles() {
+        return differences(version(state.current)?.files || {}, workingFiles())
+      }
+      function activeBranch() {
+        return state.branches.find(b => b.id === state.activeBranch)
+      }
+      function needsFork() {
+        return Boolean(
+          state.current &&
+          activeBranch() &&
+          activeBranch().tip !== state.current
+        )
+      }
+      function toast(message) {
+        clearTimeout(toastTimer)
+        $('toast').textContent = message
+        $('toast').hidden = false
+        toastTimer = setTimeout(() => {
+          $('toast').hidden = true
+        }, 4800)
+      }
+      function changedLabel() {
+        const n = changedFiles().length,
+          d = Object.keys(state.drafts).length
+        return n
+          ? n + ' 项改动' + (d ? ' · ' + d + ' 份草稿' : '')
+          : '所有修改已记录'
+      }
+      function render() {
+        renderFiles()
+        renderEditor()
+        renderPreview()
+        renderRuntime()
+        renderChat()
+        renderGraph()
+        renderInspector()
+        const current = version(state.current)
+        $('title-version').textContent = current
+          ? '当前版本：' + current.title
+          : '尚未保存版本'
+        $('current-description').textContent = current
+          ? '当前：' + current.title
+          : '当前工程尚无已保存版本'
+        $('change-count').textContent = changedLabel()
+        $('version-count').textContent = state.versions.length + ' 个版本'
+        $('footer-route').textContent = needsFork()
+          ? '位于历史版本 · 下次保存会分叉'
+          : activeBranch()?.name || '尚无创作路线'
+        $('file-status').textContent = Object.keys(state.drafts).length
+          ? '编辑器中有未保存草稿'
+          : '编辑器草稿已保存'
+        $('branch-name').hidden = !needsFork()
+        $('branch-name').placeholder = '新分支名称（可选）'
+        renderWorkspace()
+        $('save-version').disabled =
+          changedFiles().length === 0 && state.current !== null
+      }
+      function renderWorkspace() {
+        $('workspace-top').hidden = state.view === 'git'
+        $('code-page').hidden = state.view !== 'code'
+        $('preview-page').hidden = state.view !== 'preview'
+        $('version-panel').hidden = state.view !== 'git'
+        document.querySelectorAll('[data-view]').forEach(tab => {
+          const selected = tab.dataset.view === state.view
+          tab.classList.toggle('active', selected)
+          tab.setAttribute('aria-selected', String(selected))
+          tab.tabIndex = selected ? 0 : -1
+        })
+      }
+      function showView(view) {
+        if (!['code', 'preview', 'git'].includes(view)) return
+        state.view = view
+        renderWorkspace()
+      }
+      function renderFiles() {
+        $('file-list').innerHTML = [
+          'public/monitor.html',
+          'public/monitor.js',
+          'public/monitor.css',
+        ]
+          .map(
+            path =>
+              '<button class="file-item' +
+              (path === state.file ? ' active' : '') +
+              '" data-file="' +
+              path +
+              '">' +
+              icon('file') +
+              '<span class="name">' +
+              path.split('/').pop() +
+              '</span><span class="file-mark">' +
+              (state.drafts[path]
+                ? '●'
+                : changedFiles().includes(path)
+                  ? 'M'
+                  : '') +
+              '</span></button>'
+          )
+          .join('')
+        document.querySelectorAll('[data-file]').forEach(el => {
+          const path = el.dataset.file
+          el.classList.toggle('active', path === state.file)
+          const mark = el.querySelector('.file-mark')
+          if (mark)
+            mark.textContent = state.drafts[path]
+              ? '●'
+              : changedFiles().includes(path)
+                ? 'M'
+                : ''
+          el.onclick = () => {
+            state.file = path
+            showView('code')
+            renderFiles()
+            renderEditor()
+          }
+        })
+      }
+      function renderEditor() {
+        const source = workingFiles()[state.file] || ''
+        if (
+          document.activeElement !== $('code-editor') ||
+          $('code-editor').value !== source
+        )
+          $('code-editor').value = source
+        $('editor-filename').textContent = state.file.split('/').pop()
+        $('editor-path').textContent = state.file.replaceAll('/', ' / ')
+        $('draft-badge').hidden = !(state.file in state.drafts)
+        $('line-numbers').textContent = source
+          .split('\n')
+          .map((_, i) => i + 1)
+          .join('\n')
+        $('editor-state').textContent =
+          state.file in state.drafts
+            ? '草稿尚未保存'
+            : changedFiles().includes(state.file)
+              ? '文件已保存 · 尚未记录版本'
+              : '与当前版本一致'
+      }
+      function scaleValue() {
+        const match = (workingFiles()['public/monitor.js'] || '').match(
+          /pointNumberScale\s*=\s*([\d.]+)/
+        )
+        return match ? Number(match[1]) : 1
+      }
+      function renderPreview() {
+        const scale = scaleValue(),
+          contrast = (workingFiles()['public/monitor.js'] || '').includes(
+            '"high"'
+          )
+        const bg = contrast ? '#172029' : '#fafbf8',
+          ink = contrast ? '#e5ebed' : '#53626b',
+          line = contrast ? '#536574' : '#bbc8ca'
+        const points = [
+          [32, 100],
+          [82, 64],
+          [126, 107],
+          [180, 49],
+          [222, 96],
+          [276, 67],
+          [335, 117],
+          [293, 167],
+          [232, 191],
+          [175, 145],
+          [118, 185],
+          [65, 153],
+        ]
+        let svg =
+          '<rect width="380" height="240" fill="' +
+          bg +
+          '"/><path d="M32 100 C80 10 95 190 180 49 S260 12 335 117 S270 233 232 191 S150 89 118 185 S27 189 32 100" fill="none" stroke="' +
+          line +
+          '" stroke-width="1"/><path d="M82 64 175 145 276 67 293 167 126 107 232 191 65 153 222 96" fill="none" stroke="' +
+          line +
+          '" stroke-width=".6" opacity=".7"/>'
+        points.forEach((p, i) => {
+          svg +=
+            '<circle cx="' +
+            p[0] +
+            '" cy="' +
+            p[1] +
+            '" r="2.5" fill="' +
+            ink +
+            '"/><text x="' +
+            (p[0] + 5) +
+            '" y="' +
+            (p[1] - 7) +
+            '" fill="' +
+            ink +
+            '" font-family="Georgia,serif" font-size="' +
+            10 * scale +
+            '">' +
+            (i + 1) +
+            '</text>'
+        })
+        svg +=
+          '<text x="17" y="222" fill="' +
+          ink +
+          '" opacity=".6" font-size="8" letter-spacing="2">RUNES</text>'
+        $('score-svg').innerHTML = svg
+        $('size-slider').value = String(scale)
+        $('size-output').value = scale.toFixed(2)
+        $('preview-state').textContent = state.running ? '运行中' : '已停止'
+        $('stopped-label').hidden = state.running
+      }
+      function renderRuntime() {
+        $('runtime-button').innerHTML =
+          icon(state.running ? 'stop' : 'play') +
+          (state.running ? '运行中' : '运行工程')
+        $('runtime-button').classList.toggle('live', state.running)
+      }
+      function renderChat() {
+        $('assistant-message').textContent = state.assistantPending
+          ? '正在接入字号参数。当前任务尚未完成。'
+          : state.assistantEnded
+            ? '任务已结束。保留了结束前的代码修改，未继续执行。'
+            : '已接好字号推子，可以在预演中调整大小。静态检查通过。'
+        document.querySelector('.chat-log').hidden =
+          state.assistantPending || state.assistantEnded
+        $('assistant-retained').textContent = state.assistantPending
+          ? '切换代码版本前，需要先结束当前助手任务。'
+          : '对话属于工程，切换代码版本后仍会保留。'
+      }
+      function layoutGraph() {
+        const depths = {}
+        const depth = v => {
+          if (depths[v.id] !== undefined) return depths[v.id]
+          return (depths[v.id] = v.parent ? depth(version(v.parent)) + 1 : 0)
+        }
+        const positions = {}
+        state.versions.forEach(v => {
+          positions[v.id] = {
+            x: 82 + depth(v) * 168,
+            y:
+              65 +
+              (state.branches.find(b => b.id === v.branch)?.lane || 0) * 105,
+          }
+        })
+        const pending = changedFiles().length > 0 && state.current
+        if (pending)
+          positions.working = {
+            x: positions[state.current].x + 168,
+            y: positions[state.current].y,
+          }
+        const width = Math.max(
+          680,
+          ...Object.values(positions).map(p => p.x + 100)
+        )
+        const height = Math.max(
+          225,
+          ...Object.values(positions).map(p => p.y + 85)
+        )
+        return { positions, width, height, pending }
+      }
+      function renderGraph() {
+        const stage = $('graph-stage')
+        if (!state.versions.length) {
+          stage.innerHTML =
+            '<div class="empty-graph">' +
+            icon('branch') +
+            '<strong>从第一个工程版本开始</strong><p>保存当前工程，随时回到这个起点。<br>聊天不会自动创建版本。</p></div>'
+          stage.style.width = '100%'
+          stage.style.height = '225px'
+          stage.style.transform = ''
+          $('graph-outer').style.height = '225px'
+          $('graph-outer').style.width = '100%'
+          return
+        }
+        const { positions, width, height, pending } = layoutGraph()
+        let html =
+          '<svg class="graph-lines" width="' +
+          width +
+          '" height="' +
+          height +
+          '" aria-hidden="true">'
+        state.versions.forEach(v => {
+          if (!v.parent) return
+          const a = positions[v.parent],
+            b = positions[v.id]
+          html +=
+            '<path class="edge' +
+            (v.branch !== 'main' ? ' alternate' : '') +
+            '" d="M ' +
+            a.x +
+            ' ' +
+            a.y +
+            ' C ' +
+            (a.x + 84) +
+            ' ' +
+            a.y +
+            ' ' +
+            (b.x - 84) +
+            ' ' +
+            b.y +
+            ' ' +
+            b.x +
+            ' ' +
+            b.y +
+            '"/>'
+        })
+        if (pending) {
+          const a = positions[state.current],
+            b = positions.working
+          html +=
+            '<path class="edge pending" d="M ' +
+            a.x +
+            ' ' +
+            a.y +
+            ' H ' +
+            b.x +
+            '"/>'
+        }
+        html += '</svg>'
+        state.branches.forEach(branch => {
+          html +=
+            '<span class="lane-label' +
+            (branch.id !== 'main' ? ' alt' : '') +
+            '" style="left:16px;top:' +
+            (17 + branch.lane * 105) +
+            'px">' +
+            escapeHTML(branch.name) +
+            '</span>'
+        })
+        state.versions.forEach(v => {
+          const p = positions[v.id]
+          html +=
+            '<button class="version-node' +
+            (v.branch !== 'main' ? ' alternate' : '') +
+            (v.id === state.current ? ' current' : '') +
+            (v.id === state.selected ? ' selected' : '') +
+            '" data-version="' +
+            v.id +
+            '" style="left:' +
+            p.x +
+            'px;top:' +
+            (p.y - 24) +
+            'px" aria-label="查看版本：' +
+            escapeHTML(v.title) +
+            '" aria-pressed="' +
+            (v.id === state.selected) +
+            '"' +
+            (v.id === state.current ? ' aria-current="true"' : '') +
+            '><span class="node-date">' +
+            escapeHTML(v.time) +
+            '</span><span class="node-dot"></span><span class="node-title">' +
+            escapeHTML(v.title) +
+            '</span><span class="node-meta' +
+            (v.id === state.current ? ' node-now' : '') +
+            '">' +
+            (v.id === state.current
+              ? '当前工程版本'
+              : v.id === state.selected
+                ? '正在查看'
+                : escapeHTML(v.id.toUpperCase())) +
+            '</span></button>'
+        })
+        if (pending) {
+          const p = positions.working
+          html +=
+            '<button class="version-node pending' +
+            (state.selected === 'working' ? ' selected' : '') +
+            '" data-version="working" style="left:' +
+            p.x +
+            'px;top:' +
+            (p.y - 24) +
+            'px" aria-label="查看未记录修改" aria-pressed="' +
+            (state.selected === 'working') +
+            '"><span class="node-date">尚未形成版本</span><span class="node-dot"></span><span class="node-title">未记录的修改</span><span class="node-meta">' +
+            changedFiles().length +
+            ' 个文件</span></button>'
+        }
+        stage.innerHTML = html
+        stage.style.width = width + 'px'
+        stage.style.height = height + 'px'
+        stage.style.transform = 'scale(' + state.zoom + ')'
+        $('graph-outer').style.width = width * state.zoom + 'px'
+        $('graph-outer').style.height = height * state.zoom + 'px'
+        $('zoom-level').textContent = Math.round(state.zoom * 100) + '%'
+        stage.querySelectorAll('[data-version]').forEach(button => {
+          button.onclick = () => {
+            state.selected = button.dataset.version
+            state.detail = 'summary'
+            renderGraph()
+            renderInspector()
+          }
+        })
+      }
+      function lineStats(a = '', b = '') {
+        const old = a.split('\n'),
+          next = b.split('\n')
+        return {
+          plus: next.filter(v => !old.includes(v)).length,
+          minus: old.filter(v => !next.includes(v)).length,
+        }
+      }
+      function renderInspector() {
+        const selected = version(state.selected),
+          current = version(state.current),
+          working = state.selected === 'working'
+        const files = working ? workingFiles() : selected?.files || {},
+          compare = current?.files || {}
+        const paths = differences(compare, files)
+        $('inspector-kind').textContent = working ? '未记录的修改' : '正在查看'
+        $('inspector-title').textContent = working
+          ? '当前工作状态'
+          : selected?.title || '尚无工程版本'
+        const parent = selected?.parent ? version(selected.parent) : null
+        $('inspector-meta').textContent = working
+          ? changedLabel()
+          : selected
+            ? selected.time +
+              ' · ' +
+              (state.branches.find(b => b.id === selected.branch)?.name || '') +
+              (parent ? ' · 基于「' + parent.title + '」' : ' · 起点版本')
+            : '保存后，这里会显示版本内容与关系。'
+        document.querySelectorAll('[data-detail]').forEach(el => {
+          el.classList.toggle('active', el.dataset.detail === state.detail)
+          el.setAttribute(
+            'aria-selected',
+            String(el.dataset.detail === state.detail)
+          )
+        })
+        const body = $('inspector-body')
+        if (!selected && !working) {
+          body.innerHTML =
+            '<p class="muted">可以留空名称，直接保存第一个版本。</p>'
+        } else if (state.detail === 'summary') {
+          const note = working
+            ? '这些修改尚未成为一个工程版本。保存会先写入全部编辑器草稿。'
+            : selected.note
+          body.innerHTML =
+            '<p style="margin:0 0 7px">' +
+            escapeHTML(note) +
+            '</p><div class="diff-label">' +
+            (selected?.id === state.current
+              ? '此版本就是当前工程版本。'
+              : working
+                ? '相对当前工程版本的修改：'
+                : '与当前工程版本比较：') +
+            '</div>' +
+            paths
+              .map(path => {
+                const stats = lineStats(compare[path], files[path])
+                return (
+                  '<button class="change-file" data-diff-file="' +
+                  path +
+                  '">' +
+                  icon('file') +
+                  '<span class="name">' +
+                  escapeHTML(path) +
+                  '</span><span class="change-stat"><b>+' +
+                  stats.plus +
+                  '</b> <em>−' +
+                  stats.minus +
+                  '</em></span></button>'
+                )
+              })
+              .join('') +
+            (selected
+              ? '<details class="version-technical"><summary>版本信息</summary><div>演示编号 ' +
+                selected.id.toUpperCase() +
+                '<br>内容存于本机 · 未记录运行状态</div></details>'
+              : '')
+          if (needsFork() && selected?.id === state.current)
+            body.innerHTML +=
+              '<p class="fork-note small">再次保存将建立新分支，已有路线完整保留。</p>'
+          body.querySelectorAll('[data-diff-file]').forEach(el => {
+            el.onclick = () => {
+              state.detail = 'diff'
+              state.diffFile = el.dataset.diffFile
+              renderInspector()
+            }
+          })
+        } else {
+          if (!paths.length) {
+            body.innerHTML = '<p class="muted">与当前工程版本一致。</p>'
+          } else {
+            if (!paths.includes(state.diffFile)) state.diffFile = paths[0]
+            const path = state.diffFile
+            body.innerHTML =
+              '<p class="diff-label">' +
+              (working ? '当前版本 → 未记录的修改' : '当前版本 → 查看版本') +
+              '</p><select id="diff-file-select" aria-label="查看文件差异" style="width:100%;padding:5px;font-size:10px">' +
+              paths
+                .map(
+                  p =>
+                    '<option value="' +
+                    p +
+                    '"' +
+                    (p === path ? ' selected' : '') +
+                    '>' +
+                    escapeHTML(p) +
+                    '</option>'
+                )
+                .join('') +
+              '</select><pre class="diff-code" id="diff-code"></pre>'
+            const before = (compare[path] || '').split('\n'),
+              after = (files[path] || '').split('\n')
+            let count = 0
+            const lines = []
+            for (let i = 0; i < Math.max(before.length, after.length); i++) {
+              if (before[i] === after[i]) {
+                if (i < 3 || i > Math.max(before.length, after.length) - 3)
+                  lines.push(
+                    '<span class="diff-line">  ' +
+                      escapeHTML(before[i] || '') +
+                      '</span>'
+                  )
+              } else {
+                if (before[i] !== undefined)
+                  lines.push(
+                    '<span class="diff-line minus">− ' +
+                      escapeHTML(before[i]) +
+                      '</span>'
+                  )
+                if (after[i] !== undefined)
+                  lines.push(
+                    '<span class="diff-line plus">+ ' +
+                      escapeHTML(after[i]) +
+                      '</span>'
+                  )
+                count++
+              }
+            }
+            $('diff-code').innerHTML =
+              lines.join('') || '<span class="diff-line">无差异</span>'
+            $('diff-file-select').onchange = e => {
+              state.diffFile = e.target.value
+              renderInspector()
+            }
+          }
+        }
+        const button = $('switch-version')
+        button.disabled = !selected || selected.id === state.current
+        button.innerHTML =
+          icon('branch') +
+          (selected?.id === state.current ? '已位于此版本' : '切换到此版本')
+        $('switch-hint').textContent = working
+          ? '可使用上方“保存当前版本”。'
+          : selected?.id === state.current
+            ? needsFork()
+              ? '下一次保存会从此处建立新分支。'
+              : '可以继续编辑并保存。'
+            : '仅查看不会更改上方代码。'
+      }
+      function updateEditor(value) {
+        if (value === state.disk[state.file]) delete state.drafts[state.file]
+        else state.drafts[state.file] = value
+        render()
+      }
+      function openDialog(title, body, buttons, after) {
+        returnFocus = document.activeElement
+        const dialog = $('action-dialog')
+        if (dialog.open) dialog.close()
+        dialog.innerHTML =
+          '<div class="dialog-body"><div class="dialog-symbol">' +
+          icon('branch') +
+          '</div><h2 id="dialog-title">' +
+          escapeHTML(title) +
+          '</h2>' +
+          body +
+          '</div><div class="dialog-actions"></div>'
+        const actions = dialog.querySelector('.dialog-actions')
+        buttons.forEach(def => {
+          const button = document.createElement('button')
+          button.textContent = def.label
+          button.className = def.primary
+            ? 'primary'
+            : def.danger
+              ? 'danger'
+              : ''
+          button.onclick = def.action
+          actions.append(button)
+        })
+        dialog.showModal()
+        if (after) after()
+      }
+      function closeDialog() {
+        const d = $('action-dialog')
+        if (d.open) d.close()
+        if (returnFocus?.isConnected) returnFocus.focus()
+      }
+      function conflictDialog() {
+        openDialog(
+          '先解决文件保存冲突',
+          '<p>public/monitor.js 已在外部更改，不能覆盖。当前草稿仍然保留。</p><p>请先比较并解决冲突，再保存版本。可以从顶部“演示场景”切换到其他状态继续体验。</p>',
+          [
+            {
+              label: '返回编辑器',
+              primary: true,
+              action: () => {
+                closeDialog()
+                showView('code')
+                $('code-editor').focus()
+              },
+            },
+          ]
+        )
+      }
+      function commitWorking(name, routeName) {
+        if (state.conflict) {
+          conflictDialog()
+          return null
+        }
+        const files = workingFiles()
+        if (
+          state.current &&
+          differences(version(state.current).files, files).length === 0
+        ) {
+          toast('没有新的工程修改，未创建重复版本。')
+          return null
+        }
+        const parent = state.current,
+          serial = state.serial++
+        let branch = activeBranch()
+        if (!branch) {
+          branch = { id: 'main', name: '默认方案', lane: 0, tip: null }
+          state.branches.push(branch)
+        } else if (needsFork()) {
+          branch = {
+            id: 'route-' + serial,
+            name: routeName?.trim() || '方案 ' + (state.branches.length + 1),
+            lane: state.branches.length,
+            tip: null,
+          }
+          state.branches.push(branch)
+        }
+        const now = new Date()
+        const time = now.toLocaleTimeString('zh-CN', {
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+          timeZone: 'Asia/Shanghai',
+        })
+        const title =
+          name?.trim() ||
+          '版本 ' + String(serial).padStart(2, '0') + ' · ' + time
+        const next = {
+          id: 'v' + serial,
+          parent,
+          branch: branch.id,
+          title,
+          time: '今天 ' + time,
+          files: clone(files),
+          note: '已保存全部编辑器草稿，记录当前工程内容。',
+        }
+        state.versions.push(next)
+        branch.tip = next.id
+        state.activeBranch = branch.id
+        state.current = next.id
+        state.disk = clone(files)
+        state.drafts = {}
+        return next
+      }
+      function saveVersion() {
+        const fork = needsFork(),
+          parent = version(state.current)?.title || ''
+        const next = commitWorking(
+          $('version-name').value,
+          $('branch-name').value
+        )
+        if (!next) return
+        state.selected = next.id
+        $('version-name').value = ''
+        $('branch-name').value = ''
+        render()
+        locateCurrent()
+        toast(
+          fork
+            ? '已从「' + parent + '」保存新分支，原路线保留。'
+            : '已保存「' + next.title + '」。'
+        )
+      }
+      function targetMarkup(target) {
+        return (
+          '<div class="switch-target"><span>' +
+          escapeHTML(version(state.current)?.title || '当前工程') +
+          '</span>' +
+          icon('arrow') +
+          '<strong>' +
+          escapeHTML(target.title) +
+          '</strong></div>'
+        )
+      }
+      function requestSwitch() {
+        const target = version(state.selected)
+        if (!target || target.id === state.current) return
+        dialogTarget = target.id
+        if (state.assistantPending) {
+          openDialog(
+            '先结束当前助手任务',
+            '<p>当前任务尚未完成。结束后会保留已经修改的代码和全部聊天记录，再继续切换版本。</p><p>这个任务不会在目标版本中自动接续。</p>' +
+              targetMarkup(target),
+            [
+              { label: '取消', action: closeDialog },
+              {
+                label: '结束任务并继续',
+                primary: true,
+                action: () => {
+                  state.assistantPending = false
+                  state.assistantEnded = true
+                  closeDialog()
+                  renderChat()
+                  continueSwitch()
+                },
+              },
+            ]
+          )
+          return
+        }
+        continueSwitch()
+      }
+      function continueSwitch() {
+        const target = version(dialogTarget)
+        if (!target) return
+        const changed = changedFiles()
+        if (changed.length) {
+          openDialog(
+            '切换前，保留当前修改',
+            '<p>有 ' +
+              changed.length +
+              ' 个文件尚未记录为工程版本。先保存，就能随时回到这里。</p>' +
+              targetMarkup(target) +
+              '<ul class="dialog-files">' +
+              changed
+                .map(
+                  p =>
+                    '<li>' +
+                    escapeHTML(p) +
+                    (p in state.drafts ? ' · 编辑器草稿' : '') +
+                    '</li>'
+                )
+                .join('') +
+              '<label for="switch-save-name">当前版本名称（可选）</label><input id="switch-save-name" placeholder="留空自动命名" maxlength="60">' +
+              (state.running
+                ? '<p>' +
+                  icon('stop') +
+                  ' 保存成功后将停止运行，再切换版本。之后不会自动启动。</p>'
+                : '') +
+              '<details class="dialog-other"><summary>其他操作</summary><button class="danger" id="discard-choice">放弃修改并切换</button></details>',
+            [
+              { label: '取消', action: closeDialog },
+              {
+                label: '保存当前版本并切换',
+                primary: true,
+                action: () => {
+                  const next = commitWorking(
+                    $('switch-save-name').value,
+                    $('branch-name').value
+                  )
+                  if (next) {
+                    applySwitch(
+                      target.id,
+                      '已保存当前修改，并切换到「' + target.title + '」。'
+                    )
+                  }
+                },
+              },
+            ],
+            () => {
+              $('discard-choice').onclick = () => discardConfirm(target)
+            }
+          )
+        } else if (state.running) {
+          openDialog(
+            '停止运行并切换版本',
+            '<p>当前工程仍在运行。切换前将先停止运行，避免预览与代码来自不同版本。</p>' +
+              targetMarkup(target) +
+              '<p>切换后保持停止，你可以手动运行目标版本。</p>',
+            [
+              { label: '取消', action: closeDialog },
+              {
+                label: '停止运行并切换',
+                primary: true,
+                action: () =>
+                  applySwitch(
+                    target.id,
+                    '已停止运行，切换到「' + target.title + '」。'
+                  ),
+              },
+            ]
+          )
+        } else {
+          applySwitch(target.id, '已切换到「' + target.title + '」。')
+        }
+      }
+      function discardConfirm(target) {
+        openDialog(
+          '放弃尚未记录的修改？',
+          '<p>将放弃 ' +
+            changedFiles().length +
+            ' 个文件中的当前修改和编辑器草稿。已经保存的工程版本不会被删除。</p>' +
+            targetMarkup(target) +
+            (state.running ? '<p>当前运行也将停止。</p>' : ''),
+          [
+            { label: '返回', action: () => continueSwitch() },
+            {
+              label: '放弃修改并切换',
+              danger: true,
+              action: () =>
+                applySwitch(
+                  target.id,
+                  '已放弃未记录修改，切换到「' + target.title + '」。'
+                ),
+            },
+          ]
+        )
+      }
+      function applySwitch(id, message) {
+        const target = version(id)
+        if (!target) return
+        closeDialog()
+        state.running = false
+        state.current = id
+        state.selected = id
+        state.activeBranch = target.branch
+        state.disk = clone(target.files)
+        state.drafts = {}
+        state.conflict = false
+        state.detail = 'summary'
+        $('version-name').value = ''
+        $('branch-name').value = ''
+        render()
+        locateCurrent()
+        toast(message)
+      }
+      function locateCurrent() {
+        requestAnimationFrame(() => {
+          const el = $('graph-stage').querySelector(
+            '[data-version="' + state.current + '"]'
+          )
+          if (el)
+            el.scrollIntoView({
+              block: 'nearest',
+              inline: 'center',
+              behavior: matchMedia('(prefers-reduced-motion: reduce)').matches
+                ? 'auto'
+                : 'smooth',
+            })
+        })
+      }
+      $('save-version').onclick = saveVersion
+      $('switch-version').onclick = requestSwitch
+      $('show-name').onclick = () => {
+        $('version-name').hidden = false
+        $('show-name').hidden = true
+        $('version-name').focus()
+      }
+      $('code-editor').oninput = event => updateEditor(event.target.value)
+      $('code-editor').onscroll = () => {
+        $('line-numbers').scrollTop = $('code-editor').scrollTop
+      }
+      $('size-slider').oninput = event => {
+        const path = 'public/monitor.js',
+          source = workingFiles()[path] || ''
+        state.drafts[path] = source.replace(
+          /(pointNumberScale\s*=\s*)[\d.]+/,
+          '$1' + Number(event.target.value).toFixed(2)
+        )
+        if (state.drafts[path] === state.disk[path]) delete state.drafts[path]
+        render()
+      }
+      $('runtime-button').onclick = () => {
+        state.running = !state.running
+        renderRuntime()
+        renderPreview()
+        toast(state.running ? '正在运行当前工程版本。' : '工程已停止。')
+      }
+      document.querySelectorAll('[data-detail]').forEach(el => {
+        el.onclick = () => {
+          state.detail = el.dataset.detail
+          renderInspector()
+        }
+      })
+      const viewTabs = [...document.querySelectorAll('[data-view]')]
+      viewTabs.forEach((tab, index) => {
+        tab.onclick = () => showView(tab.dataset.view)
+        tab.onkeydown = event => {
+          let next = index
+          if (event.key === 'ArrowRight') next = (index + 1) % viewTabs.length
+          else if (event.key === 'ArrowLeft')
+            next = (index - 1 + viewTabs.length) % viewTabs.length
+          else if (event.key === 'Home') next = 0
+          else if (event.key === 'End') next = viewTabs.length - 1
+          else return
+          event.preventDefault()
+          showView(viewTabs[next].dataset.view)
+          viewTabs[next].focus()
+        }
+      })
+      $('scenario').onchange = e => reset(e.target.value)
+      $('theme').onchange = e => {
+        document.documentElement.dataset.theme = e.target.value
+      }
+      $('reset-demo').onclick = () => reset($('scenario').value)
+      $('zoom-out').onclick = () => {
+        state.zoom = Math.max(0.55, state.zoom - 0.1)
+        renderGraph()
+      }
+      $('zoom-in').onclick = () => {
+        state.zoom = Math.min(1.5, state.zoom + 0.1)
+        renderGraph()
+      }
+      $('zoom-level').onclick = () => {
+        const { width, height } = layoutGraph()
+        state.zoom = Math.min(
+          1,
+          Math.max(0.55, ($('graph-scroll').clientWidth - 12) / width),
+          Math.max(0.55, ($('graph-scroll').clientHeight - 10) / height)
+        )
+        renderGraph()
+      }
+      $('locate-current').onclick = locateCurrent
+      $('git-menu-button').onclick = () => {
+        const open = $('git-menu').hidden
+        $('git-menu').hidden = !open
+        $('git-menu-button').setAttribute('aria-expanded', String(open))
+      }
+      function closeMenu() {
+        $('git-menu').hidden = true
+        $('git-menu-button').setAttribute('aria-expanded', 'false')
+      }
+      $('menu-save').onclick = () => {
+        closeMenu()
+        saveVersion()
+      }
+      $('menu-history').onclick = () => {
+        closeMenu()
+        showView('git')
+      }
+      $('menu-changes').onclick = () => {
+        closeMenu()
+        state.view = 'git'
+        state.selected = changedFiles().length ? 'working' : state.current
+        state.detail = 'diff'
+        render()
+      }
+      document.addEventListener('pointerdown', event => {
+        if (!event.target.closest('.git-entry')) closeMenu()
+      })
+      document.addEventListener('keydown', event => {
+        if (event.key === 'Escape') closeMenu()
+      })
+      $('action-dialog').addEventListener('cancel', () => {
+        dialogTarget = null
+      })
+      reset()
+    </script>
+  </body>
+</html>

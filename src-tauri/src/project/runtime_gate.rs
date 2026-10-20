@@ -11,6 +11,9 @@ pub fn default_gate_path() -> Result<PathBuf, String> {
     Ok(PathBuf::from(home).join("Library/Application Support/com.xo-xn.pnds-app/runtime.lock"))
 }
 
+pub const RUNTIME_BUSY: &str =
+    "A PNDS performance or controlled check is active; wait for it to finish";
+
 /// The OS releases the lock after the owner exits; the durable journal still
 /// rejects ownership until prior check resources are confirmed absent. Never unlink:
 /// unlinking would let another opener lock a different inode at the same path.
@@ -153,10 +156,7 @@ impl RuntimeLease {
         if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0 {
             let error = std::io::Error::last_os_error();
             if error.kind() == std::io::ErrorKind::WouldBlock {
-                return Err(
-                    "A PNDS performance or controlled check is active; wait for it to finish"
-                        .into(),
-                );
+                return Err(RUNTIME_BUSY.into());
             }
             return Err(format!("Cannot acquire runtime coordination: {error}"));
         }

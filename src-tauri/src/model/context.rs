@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use specta::Type;
 
-pub(super) const MAX_CONTEXT_BYTES: usize = 128 * 1024;
+pub(super) const MAX_CONTEXT_BYTES: usize = 512 * 1024;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Type, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -27,21 +27,34 @@ pub enum CapacitySource {
 #[derive(Debug, Clone, Serialize, Deserialize, Type, PartialEq, Eq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ModelContextConfig {
+    // Missing in pre-auto preferences: legacy targets no longer block input.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mode: Option<ContextMode>,
     pub capacity: Option<u32>,
     pub input_target: Option<u32>,
-    pub max_output: u32,
+    /// None leaves the output limit to the provider, including reasoning.
+    #[serde(default)]
+    pub max_output: Option<u32>,
     pub reasoning_reserve: u32,
     pub safety_margin: u32,
     pub tokenizer: ContextTokenizer,
     pub source: CapacitySource,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum ContextMode {
+    Auto,
+    Manual,
+}
+
 impl Default for ModelContextConfig {
     fn default() -> Self {
         Self {
+            mode: None,
             capacity: None,
             input_target: None,
-            max_output: 4096,
+            max_output: None,
             reasoning_reserve: 0,
             safety_margin: 256,
             tokenizer: ContextTokenizer::Unknown,
@@ -52,20 +65,26 @@ impl Default for ModelContextConfig {
 
 impl ModelContextConfig {
     pub(super) fn validate(&self) -> Result<(), ModelServiceError> {
-        let reserve = u64::from(self.max_output)
+        let reserve = u64::from(self.max_output.unwrap_or(0))
             + u64::from(self.reasoning_reserve)
             + u64::from(self.safety_margin);
-        if self.max_output == 0
+        if self.max_output == Some(0)
+            || self.max_output.is_none()
+                && (self.reasoning_reserve > 0
+                    || self.mode == Some(ContextMode::Manual) && self.capacity.is_some())
             || reserve > 16_000_000
             || self.capacity.is_some_and(|capacity| {
-                capacity == 0 || capacity > 16_000_000 || reserve >= u64::from(capacity)
+                capacity == 0
+                    || capacity > 16_000_000
+                    || self.mode == Some(ContextMode::Manual) && reserve >= u64::from(capacity)
             })
             || self.input_target.is_some_and(|target| {
                 target == 0
                     || target > 16_000_000
-                    || self
-                        .capacity
-                        .is_some_and(|capacity| u64::from(target) + reserve > u64::from(capacity))
+                    || self.mode == Some(ContextMode::Manual)
+                        && self.capacity.is_some_and(|capacity| {
+                            u64::from(target) + reserve > u64::from(capacity)
+                        })
             })
         {
             return Err(ModelServiceError::InvalidConfig);
@@ -74,9 +93,15 @@ impl ModelContextConfig {
     }
 
     fn input_budget(&self) -> Option<u32> {
-        let available = self.capacity.map(|capacity| {
-            capacity - self.max_output - self.reasoning_reserve - self.safety_margin
-        });
+        if self.mode != Some(ContextMode::Manual) {
+            return None;
+        }
+        let available = self
+            .capacity
+            .zip(self.max_output)
+            .map(|(capacity, output)| {
+                capacity - output - self.reasoning_reserve - self.safety_margin
+            });
         match (available, self.input_target) {
             (Some(a), Some(b)) => Some(a.min(b)),
             (a, b) => a.or(b),
@@ -99,14 +124,14 @@ pub struct ContextMeasurement {
     pub characters: u32,
     pub utf8_bytes: u32,
     pub estimated_tokens: Option<u32>,
-    /// Portable display-only fallback. Never used for admission or server usage.
+    /// Portable token estimate for unknown encoders; never measured server usage.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reference_estimated_tokens: Option<u32>,
     pub admission_estimate: u32,
     pub tokenizer: ContextTokenizer,
     pub capacity: Option<u32>,
     pub effective_input: Option<u32>,
-    pub output_reserve: u32,
+    pub output_reserve: Option<u32>,
     pub safety_margin: u32,
     pub parts: Vec<ContextPart>,
     pub exceeded: Option<String>,
@@ -122,18 +147,31 @@ pub(super) fn assemble(
         .iter()
         .map(|message| message.context_kind)
         .collect();
-    let messages = chat::wire_messages(messages)?;
+    let deepseek = super::provider::is_deepseek(&config.base_url);
+    let messages = chat::wire_messages(messages, deepseek)?;
     let project_reading = matches!(
         kinds.first(),
         Some(Some(chat::ContextContentKind::ProjectPolicy))
     );
-    let tools = chat::document_tools(project_reading);
+    let tools = match kinds.first().copied().flatten() {
+        Some(
+            kind @ (chat::ContextContentKind::HandoffPolicy | chat::ContextContentKind::EditPolicy),
+        ) => chat::task_tools(kind),
+        _ => chat::document_tools(project_reading),
+    };
     let mut body = json!({"model":config.model,"messages":messages,"stream":true,"stream_options":{"include_usage":true},"tools":tools,"tool_choice":"auto"});
-    let output = context.max_output + context.reasoning_reserve;
-    if context.reasoning_reserve > 0 {
-        body["max_completion_tokens"] = json!(output);
-    } else {
-        body["max_tokens"] = json!(output);
+    let output = context
+        .max_output
+        .map(|maximum| maximum + context.reasoning_reserve);
+    if deepseek {
+        body["thinking"] = json!({"type":"enabled"});
+    }
+    if let Some(output) = output {
+        if context.reasoning_reserve > 0 && !deepseek {
+            body["max_completion_tokens"] = json!(output);
+        } else {
+            body["max_tokens"] = json!(output);
+        }
     }
     let encoded = serde_json::to_string(&body).map_err(|_| ModelServiceError::Protocol)?;
     let count = |text: &str| -> Option<u32> {
@@ -173,7 +211,9 @@ pub(super) fn assemble(
             let role = message["role"].as_str().unwrap_or("");
             let category = if let Some(kind) = kinds[index] {
                 match kind {
-                    chat::ContextContentKind::ProjectPolicy => "policyTools",
+                    chat::ContextContentKind::ProjectPolicy
+                    | chat::ContextContentKind::HandoffPolicy
+                    | chat::ContextContentKind::EditPolicy => "policyTools",
                     chat::ContextContentKind::History => "history",
                     chat::ContextContentKind::Input => "input",
                     chat::ContextContentKind::Documents => "documents",
@@ -223,9 +263,14 @@ pub(super) fn assemble(
             .encode_ordinary(&encoded)
             .len() as u32
     });
-    // Without a selected encoder, use a deliberately conservative byte-sized
-    // admission estimate, while keeping actual token occupancy unknown.
-    let admission_estimate = estimated_tokens.unwrap_or(encoded.len() as u32);
+    // Token budgets are compared with token estimates. Applying another
+    // multiplier here silently shrinks the configured working context and can
+    // reject a normal project before its final candidate. The configured output
+    // and safety reserves plus the independent byte bound remain in force.
+    // No model name implies a matching provider tokenizer.
+    let admission_estimate = estimated_tokens
+        .or(reference_estimated_tokens)
+        .unwrap_or(encoded.len() as u32);
     let effective_input = context.input_budget();
     let exceeded = if encoded.len() > MAX_CONTEXT_BYTES {
         Some("contextBytes".into())

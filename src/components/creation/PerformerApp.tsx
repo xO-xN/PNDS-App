@@ -6,6 +6,7 @@ import {
   emitPerformerReleased,
 } from '@/lib/events'
 import { useEffect, useRef, useState } from 'react'
+import { Pin } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import i18n from '@/i18n/config'
@@ -30,6 +31,47 @@ export function PerformerApp() {
   const [preparationError, setPreparationError] = useState<string | null>(null)
   const [optionsPending, setOptionsPending] = useState(false)
   const [optionsError, setOptionsError] = useState<string | null>(null)
+  const [pinned, setPinned] = useState(false)
+  const [pinPending, setPinPending] = useState(true)
+  const pinRequest = useRef(false)
+  useEffect(() => {
+    let disposed = false
+    void commands
+      .creationPerformerPinned(getCurrentWebviewWindow().label, null)
+      .then(result => {
+        if (disposed) return
+        if (result.status === 'ok') setPinned(result.data)
+        else setOptionsError(result.error.detail)
+      })
+      .catch(error => {
+        if (!disposed) setOptionsError(String(error))
+      })
+      .finally(() => {
+        if (!disposed) setPinPending(false)
+      })
+    return () => {
+      disposed = true
+    }
+  }, [])
+  const togglePinned = async () => {
+    if (pinRequest.current || pinPending) return
+    pinRequest.current = true
+    setPinPending(true)
+    setOptionsError(null)
+    try {
+      const result = await commands.creationPerformerPinned(
+        getCurrentWebviewWindow().label,
+        !pinned
+      )
+      if (result.status === 'error') throw new Error(result.error.detail)
+      setPinned(result.data)
+    } catch (error) {
+      setOptionsError(error instanceof Error ? error.message : String(error))
+    } finally {
+      pinRequest.current = false
+      setPinPending(false)
+    }
+  }
   const nativeRevealed = useRef(false)
   const optionsRequest = useRef<object | null>(null)
   const [loaded, setLoaded] = useState(-1)
@@ -235,6 +277,17 @@ export function PerformerApp() {
           </span>
         </div>
         <div className="performer-tools">
+          <button
+            className="performer-pin pnds-focus-ring"
+            aria-pressed={pinned}
+            disabled={pinPending || !!config?.disposing}
+            onClick={() => {
+              void togglePinned()
+            }}
+          >
+            <Pin size={13} aria-hidden="true" />
+            {t('creation.performers.pin')}
+          </button>
           <div
             className="performer-segmented"
             role="group"

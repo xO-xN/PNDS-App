@@ -18,6 +18,7 @@ import { openCreationFileAtLine } from '@/lib/creation-editor-navigation'
 import { useCommandKeyboard } from '@/hooks/use-command-keyboard'
 import { TextBuffer } from '@/lib/text-buffer'
 import { CreationView } from './CreationView'
+import { CreationFileEditor } from './CreationFileEditor'
 import { TextEditor } from './TextEditor'
 import { useAssistantStore } from '@/store/assistant-store'
 import { useAssistantProjectStore } from '@/store/assistant-project-store'
@@ -71,6 +72,30 @@ beforeEach(() => {
             },
           }
   )
+})
+
+it('shows draft status with cursor information once in the file editor', async () => {
+  render(
+    <CreationFileEditor
+      identity="editor-project"
+      file={{
+        path: 'public/score.js',
+        category: 'pages',
+        kind: 'text',
+        size: 20,
+      }}
+      editable
+    />
+  )
+  const editor = await findEditorWithText('// 潮汐\nconst a = 1')
+  expect(screen.getAllByText(/UTF-8/)).toHaveLength(1)
+  expect(screen.getByText('Saved')).toBeVisible()
+  editText(editor, '// new draft')
+  expect(screen.getByText('Unsaved changes')).toBeVisible()
+  expect(screen.queryByText('Saved')).toBeNull()
+  expect(screen.getAllByText(/UTF-8/)).toHaveLength(1)
+  expect(screen.getByRole('button', { name: 'Find and replace' })).toBeVisible()
+  expect(commands.saveCreationFile).not.toHaveBeenCalled()
 })
 
 it('adds the real editor selection as a fixed draft attachment without saving or sending (#225)', async () => {

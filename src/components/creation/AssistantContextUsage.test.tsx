@@ -6,9 +6,18 @@ import { useAssistantStore } from '@/store/assistant-store'
 import { CreationAssistant } from './CreationAssistant'
 import { useAssistantProjectStore } from '@/store/assistant-project-store'
 import { useAssistantOverviewStore } from '@/store/assistant-overview-store'
-import { modelConfigurationKey } from '@/lib/model-context-settings'
 import { HELP_BOOKS } from '@/lib/help-corpus'
 
+const manualContext = {
+  mode: 'manual' as const,
+  capacity: 16000,
+  inputTarget: 11000,
+  maxOutput: 4000,
+  reasoningReserve: 0,
+  safetyMargin: 1000,
+  tokenizer: 'cl100kBase' as const,
+  source: 'manualUnverified' as const,
+}
 const measurement: ContextMeasurement = {
   characters: 3100,
   utf8Bytes: 4200,
@@ -41,7 +50,11 @@ beforeEach(() => {
     historySaveError: null,
     messages: [],
     input: 'Explain outputChannels',
-    modelConfig: { baseUrl: 'https://example.test/v1', model: 'fixture' },
+    modelConfig: {
+      baseUrl: 'https://example.test/v1',
+      model: 'fixture',
+      context: manualContext,
+    },
     contextMeasurement: null,
   })
   vi.mocked(commands.measureAssistantContext).mockResolvedValue({
@@ -51,8 +64,29 @@ beforeEach(() => {
 })
 
 describe('context and usage through the discussion (#233)', () => {
+  it('keeps a visible usage ring in automatic mode and uses configured capacity as a reference', async () => {
+    useAssistantStore.setState({
+      modelConfig: {
+        baseUrl: 'https://example.test/v1',
+        model: 'fixture',
+        context: { ...manualContext, mode: undefined },
+      },
+    })
+    const user = userEvent.setup()
+    render(<CreationAssistant identity="usage-ui" />)
+    const indicator = await screen.findByRole('button', {
+      name: 'Context: Estimated 6.6%',
+    })
+    expect(indicator.querySelector('svg')).toBeInTheDocument()
+    await user.click(indicator)
+    expect(screen.getByText(/Automatic: organize read evidence/)).toBeVisible()
+  })
   it('measures the same authorized overview that the highest workflow actually sends (#168/#169)', async () => {
-    const config = { baseUrl: 'https://example.test/v1', model: 'fixture' }
+    const config = {
+      baseUrl: 'https://example.test/v1',
+      model: 'fixture',
+      context: manualContext,
+    }
     const snapshot = {
       files: [{ path: 'README.md', bytes: 12, version: 'v1', reason: null }],
       fingerprint: 'v1',
@@ -77,13 +111,7 @@ describe('context and usage through the discussion (#233)', () => {
     }
     useAssistantProjectStore.getState().syncWorkspace('usage-ui')
     useAssistantProjectStore.setState({
-      reading: true,
       snapshot,
-      authorization: {
-        owner: 'usage-ui',
-        service: modelConfigurationKey(config),
-        paths: ['README.md'],
-      },
     })
     useAssistantOverviewStore.getState().syncWorkspace('usage-ui')
     useAssistantOverviewStore.setState({ overview, stale: false })
@@ -131,7 +159,6 @@ describe('context and usage through the discussion (#233)', () => {
     expect(
       vi.mocked(commands.assistantModelTurn).mock.calls.at(-1)?.[1]
     ).toEqual(preview)
-    useAssistantProjectStore.getState().setReading(false)
   })
   it.each([
     [20, 'var(--pnds-context-low)'],
@@ -168,6 +195,7 @@ describe('context and usage through the discussion (#233)', () => {
     useAssistantStore.setState({
       modelConfig: {
         model: 'any-vendor-model',
+        context: manualContext,
         baseUrl: 'https://other-provider.example/v1',
       },
     })
@@ -178,6 +206,8 @@ describe('context and usage through the discussion (#233)', () => {
         estimatedTokens: null,
         tokenizer: 'unknown',
         referenceEstimatedTokens: 3000,
+        admissionEstimate: 3000,
+        effectiveInput: 32000,
         capacity: 1_000_000,
       },
     })
@@ -189,6 +219,9 @@ describe('context and usage through the discussion (#233)', () => {
     expect(indicator).toHaveTextContent('Estimated 0.3%')
     await user.click(indicator)
     expect(screen.getByText(/Generic reference estimate/)).toBeVisible()
+    expect(
+      screen.getByText('Estimated input: 3,000 / 32,000 tokens')
+    ).toBeVisible()
     expect(screen.getByText(/Smart zone/)).toBeVisible()
     expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
   })
@@ -246,11 +279,14 @@ describe('context and usage through the discussion (#233)', () => {
       },
     })
     render(<CreationAssistant identity="usage-ui" />)
-    expect(
-      await screen.findByRole('button', {
-        name: 'Context: Context capacity not set',
-      })
-    ).toBeVisible()
+    const indicator = await screen.findByRole('button', {
+      name: 'Context: Context capacity not set',
+    })
+    expect(indicator).toBeVisible()
+    expect(indicator.querySelector('svg circle')).toHaveAttribute(
+      'stroke-dasharray',
+      '4 4'
+    )
     expect(screen.queryByText(/\d+%/)).not.toBeInTheDocument()
   })
 

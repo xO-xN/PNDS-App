@@ -1,3 +1,4 @@
+import { loadPreferences } from '@/lib/preferences'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
@@ -71,7 +72,8 @@ export function CreationGitRecord({
     const captured = useCreationFilesStore.getState().revision
     void commands
       .previewCreationGitRecord(identity)
-      .then(result => {
+      .then(async result => {
+        const prefs = await loadPreferences()
         if (
           cancelled ||
           !currentOwner.live ||
@@ -86,9 +88,12 @@ export function CreationGitRecord({
               .filter(file => file.defaultSelected)
               .map(file => file.path)
           )
-          setName(result.data.name)
+          setName(prefs?.gitName?.trim() || result.data.name)
           setEmail(
-            result.data.email === 'creator@pnds.local' ? '' : result.data.email
+            prefs?.gitEmail?.trim() ||
+              (result.data.email === 'creator@pnds.local'
+                ? ''
+                : result.data.email)
           )
           setMessage(
             previous =>
@@ -152,15 +157,20 @@ export function CreationGitRecord({
     return (
       <section className="grid gap-3 text-sm" role="status">
         <p>{t('creation.version.success')}</p>
-        <code className="break-all">{receipt.commit}</code>
         <p className="whitespace-pre-wrap">{receipt.message}</p>
-        <ul>
-          {receipt.paths.map(path => (
-            <li key={path} className="break-all font-mono">
-              {path}
-            </li>
-          ))}
-        </ul>
+        <details className="creation-details">
+          <summary className="pnds-focus-ring">
+            {t('creation.version.recordDetails')}
+          </summary>
+          <code className="break-all">{receipt.commit}</code>
+          <ul>
+            {receipt.paths.map(path => (
+              <li key={path} className="break-all font-mono">
+                {path}
+              </li>
+            ))}
+          </ul>
+        </details>
         {receipt.warning && <p role="alert">{receipt.warning}</p>}
         <p>{t('creation.version.resultScope')}</p>
         <Button variant="outline" onClick={onBack}>
@@ -178,8 +188,6 @@ export function CreationGitRecord({
       className="grid gap-3 text-sm"
       aria-busy={(!preview && !error) || busy}
     >
-      <p className="break-all font-mono">{root}</p>
-      <p className="text-xs">{t('creation.version.policy')}</p>
       <p className="text-xs">
         {t('creation.version.pending', {
           count: proposals,
@@ -199,35 +207,10 @@ export function CreationGitRecord({
       {!preview && !error && <p role="status">{t('creation.git.loading')}</p>}
       {preview && (
         <>
-          <p className="break-all font-mono">
-            {(preview.branch || preview.head) && (
-              <>{preview.branch ?? t('creation.git.detached')} · </>
-            )}
-            {preview.head ?? t('creation.git.unborn')}
-          </p>
           {revision !== diskRevision && (
             <p role="alert">{t('creation.git.stale')}</p>
           )}
           <fieldset disabled={busy || review} className="grid gap-3">
-            <label className="grid gap-1">
-              <span>{t('creation.version.name')}</span>
-              <Input
-                required
-                value={name}
-                maxLength={128}
-                onChange={event => setName(event.target.value)}
-              />
-            </label>
-            <label className="grid gap-1">
-              <span>{t('creation.version.email')}</span>
-              <Input
-                type="email"
-                value={email}
-                maxLength={254}
-                onChange={event => setEmail(event.target.value)}
-              />
-            </label>
-            <p className="text-xs">{t('creation.version.placeholder')}</p>
             <label className="grid gap-1">
               <span>{t('creation.version.message')}</span>
               <textarea
@@ -316,6 +299,46 @@ export function CreationGitRecord({
               ).toFixed(2),
             })}
           </p>
+
+          <details className="creation-details">
+            <summary className="pnds-focus-ring">
+              {t('creation.version.identityDetails')}
+            </summary>
+            <fieldset disabled={busy || review} className="grid gap-3">
+              <label className="grid gap-1">
+                <span>{t('creation.version.name')}</span>
+                <Input
+                  required
+                  value={name}
+                  maxLength={128}
+                  onChange={event => setName(event.target.value)}
+                />
+              </label>
+              <label className="grid gap-1">
+                <span>{t('creation.version.email')}</span>
+                <Input
+                  type="email"
+                  value={email}
+                  maxLength={254}
+                  onChange={event => setEmail(event.target.value)}
+                />
+              </label>
+              <p className="text-xs">{t('creation.version.placeholder')}</p>
+            </fieldset>
+          </details>
+          <details className="creation-details">
+            <summary className="pnds-focus-ring">
+              {t('creation.git.repositoryDetails')}
+            </summary>
+            <p className="break-all font-mono">{root}</p>
+            <p className="text-xs">{t('creation.version.policy')}</p>
+            <p className="break-all font-mono">
+              {(preview.branch || preview.head) && (
+                <>{preview.branch ?? t('creation.git.detached')} · </>
+              )}
+              {preview.head ?? t('creation.git.unborn')}
+            </p>
+          </details>
           {review && (
             <div role="status" className="rounded border border-border p-3">
               <p>{t('creation.version.confirmHint')}</p>

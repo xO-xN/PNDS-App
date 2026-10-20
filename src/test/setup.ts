@@ -150,6 +150,15 @@ vi.mock('@/lib/tauri-bindings', async () => {
       performerVisibilityEvent: makeEvent('performer-visibility-event'),
     },
     commands: {
+      saveCreationAssistantResume: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      loadCreationAssistantResume: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      clearCreationAssistantResume: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
       getCreationParameterContract: vi
         .fn()
         .mockResolvedValue({ status: 'ok', data: null }),
@@ -231,6 +240,19 @@ vi.mock('@/lib/tauri-bindings', async () => {
       preparePerformerWindow: vi
         .fn()
         .mockResolvedValue({ status: 'ok', data: null }),
+      creationPerformerPinned: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: false }),
+      inspectCreationRuntime: vi.fn().mockResolvedValue({
+        status: 'ok',
+        data: {
+          generation: '0',
+          passed: true,
+          checks: [],
+          performers: null,
+          savedChangesVerified: false,
+        },
+      }),
       getCreationRuntime: vi
         .fn()
         .mockResolvedValue({ status: 'ok', data: idleRuntime }),
@@ -251,6 +273,53 @@ vi.mock('@/lib/tauri-bindings', async () => {
           detail: 'openCreationProject not mocked',
         },
       }),
+      getCreationGitTaskPending: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: false }),
+      getCreationGitComparison: vi.fn().mockResolvedValue({
+        status: 'ok',
+        data: {
+          token: 'comparison',
+          before: { commit: null, message: null, saved: false },
+          after: { commit: null, message: null, saved: true },
+          files: [],
+        },
+      }),
+      readCreationGitComparisonFile: vi.fn().mockResolvedValue({
+        status: 'ok',
+        data: {
+          token: 'comparison',
+          path: 'server.js',
+          hunks: [],
+          added: 0,
+          deleted: 0,
+          reason: null,
+        },
+      }),
+      getCreationGitVersions: vi.fn().mockResolvedValue({
+        status: 'ok',
+        data: {
+          head: null,
+          branches: [],
+          versions: [],
+          nextOffset: null,
+          limited: false,
+        },
+      }),
+      readCreationGitVersionFile: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: { code: 'io', detail: 'Version file not mocked' },
+      }),
+      getCreationGitVersionPaths: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: [] }),
+      confirmCreationGitVersion: vi.fn(),
+      endCreationGitAssistantTask: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      previewCreationGitSwitch: vi.fn(),
+      previewCreationGitBranchSwitch: vi.fn(),
+      confirmCreationGitSwitch: vi.fn(),
       getCreationGitHistory: vi.fn().mockResolvedValue({
         status: 'ok',
         data: { head: null, commits: [], limited: false },
@@ -346,6 +415,14 @@ vi.mock('@/lib/tauri-bindings', async () => {
         status: 'error',
         error: { code: 'io', detail: 'saveCreationFile not mocked' },
       }),
+      createCreationDirectory: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: { code: 'io', detail: 'createCreationDirectory not mocked' },
+      }),
+      createCreationFile: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: { code: 'io', detail: 'createCreationFile not mocked' },
+      }),
       beginHandoffOperation: vi
         .fn()
         .mockResolvedValue({ status: 'ok', data: 'operation' }),
@@ -409,6 +486,9 @@ vi.mock('@/lib/tauri-bindings', async () => {
         status: 'error',
         error: { code: 'io', detail: 'renameCreationFile not mocked' },
       }),
+      dragCreationFile: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
+      previewCreationGitRestore: vi.fn(),
+      confirmCreationGitRestore: vi.fn(),
       revealCreationPath: vi
         .fn()
         .mockResolvedValue({ status: 'ok', data: null }),
@@ -422,6 +502,60 @@ vi.mock('@/lib/tauri-bindings', async () => {
       getModelCredentialStatus: vi
         .fn()
         .mockResolvedValue({ status: 'ok', data: { hasKey: false } }),
+      listCreationAssistantTasks: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: [] }),
+      getCreationAssistantResourcePlans: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: [] }),
+      proposeCreationAssistantResources: vi
+        .fn()
+        .mockImplementation((_identity, taskId) =>
+          Promise.resolve({
+            status: 'ok',
+            data: { id: taskId, mode: 'edit', files: [] },
+          })
+        ),
+      decideCreationAssistantResources: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: {
+          code: 'testValidation',
+          detail: 'Resource decision not mocked',
+        },
+      }),
+      adoptCreationAssistantModule: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: {
+          code: 'testValidation',
+          detail: 'Module adoption not mocked',
+        },
+      }),
+      beginCreationAssistantTask: vi
+        .fn()
+        .mockImplementation((_identity, mode) =>
+          Promise.resolve({
+            status: 'ok',
+            data: { id: 'task-test', mode, files: [] },
+          })
+        ),
+      endCreationAssistantTask: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      writeCreationAssistantFile: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: { code: 'testValidation', detail: 'No write fixture' },
+      }),
+      adoptCreationAssistantLibrary: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: { code: 'testValidation', detail: 'No library fixture' },
+      }),
+      undoCreationAssistantTask: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: { code: 'testValidation', detail: 'No undo fixture' },
+      }),
+      startAssistantCheck: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: 'test-check' }),
       assistantProjectInventory: assistantInventory,
       assistantProjectOverview: vi.fn(async (identity: string) => {
         const result = await assistantInventory(identity)

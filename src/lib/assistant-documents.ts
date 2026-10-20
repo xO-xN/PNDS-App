@@ -31,6 +31,14 @@ export class AssistantDocuments {
     this.index = buildHelpIndex(corpus)
   }
 
+  resetContextReferences() {
+    this.ranges.clear()
+    this.versions.clear()
+    // Compaction can require legitimately re-reading omitted exact ranges.
+    for (const key of this.attempts.keys())
+      if (key.startsWith('read:')) this.attempts.delete(key)
+  }
+
   private attempt(signature: string) {
     const count = (this.attempts.get(signature) ?? 0) + 1
     if (count > 2) throw new AssistantFlowError('noProgress')
